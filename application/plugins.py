@@ -10,7 +10,7 @@ import re
 from typing import Any, Callable, Iterable
 
 from django.core.exceptions import ImproperlyConfigured
-from django.urls import include, path, reverse
+from django.urls import URLResolver, include, path, reverse
 
 from .ui import STATUS_VALUES, DomainOverview
 
@@ -114,7 +114,7 @@ def _load_manifest(reference: str) -> PluginManifest:
     """Load identity metadata, translating only manifest-constructor breaks."""
 
     try:
-        return _import(reference)
+        manifest = _import(reference)
     except TypeError as exc:
         detail = str(exc)
         if not detail.startswith("PluginManifest.__init__()"):
@@ -134,6 +134,9 @@ def _load_manifest(reference: str) -> PluginManifest:
                 f"HQ supports {PLUGIN_API_VERSION}."
             ) from exc
         raise
+    if not isinstance(manifest, PluginManifest):
+        raise ImproperlyConfigured(f"{reference!r} did not expose PluginManifest.")
+    return manifest
 
 
 def _references() -> tuple[str, ...]:
@@ -141,11 +144,9 @@ def _references() -> tuple[str, ...]:
     return tuple(part.strip() for part in raw.split(",") if part.strip())
 
 
-def _validate_identity(manifest: PluginManifest, reference: str) -> None:
+def _validate_identity(manifest: PluginManifest) -> None:
     """Who the plugin says it is, and whether HQ can run it at all."""
 
-    if not isinstance(manifest, PluginManifest):
-        raise ImproperlyConfigured(f"{reference!r} did not expose PluginManifest.")
     if not PLUGIN_ID.fullmatch(manifest.id):
         raise ImproperlyConfigured(f"Invalid HQ plugin id {manifest.id!r}.")
     if not manifest.name.strip() or not manifest.version.strip():
@@ -273,7 +274,7 @@ def _validate_capabilities(manifest: PluginManifest) -> None:
         )
 
 
-def _validate(manifest: PluginManifest, reference: str) -> None:
+def _validate(manifest: PluginManifest) -> None:
     """Everything a manifest must satisfy before HQ will boot with it.
 
     Grouped rather than tabulated: this is fail-closed startup validation, and
@@ -284,7 +285,7 @@ def _validate(manifest: PluginManifest, reference: str) -> None:
     the plugin by the id validated there.
     """
 
-    _validate_identity(manifest, reference)
+    _validate_identity(manifest)
     _validate_mount(manifest)
     _validate_providers(manifest)
     _validate_token_routes(manifest)
@@ -328,7 +329,7 @@ def _installed_plugins() -> tuple[PluginManifest, ...]:
     ids = set()
     for reference in _references():
         manifest = _load_manifest(reference)
-        _validate(manifest, reference)
+        _validate(manifest)
         if manifest.id in ids:
             raise ImproperlyConfigured(f"Duplicate HQ plugin id {manifest.id!r}.")
         ids.add(manifest.id)
@@ -360,7 +361,7 @@ def installed_plugin_apps() -> list[str]:
     return [app for plugin in installed_plugins() for app in plugin.django_apps]
 
 
-def plugin_urlpatterns() -> list:
+def plugin_urlpatterns() -> list[URLResolver]:
     return [
         path(plugin.url_prefix, include(plugin.urlconf))
         for plugin in installed_plugins()
@@ -510,7 +511,7 @@ def plugin_overviews() -> tuple[dict[str, Any], ...]:
     return tuple(sections)
 
 
-def _validate_dashboard_cards(cards: Iterable[dict[str, Any]]) -> None:
+def _validate_dashboard_cards(cards: Iterable[object]) -> None:
     for card in cards:
         if not isinstance(card, dict) or not CARD_REQUIRED_KEYS <= card.keys():
             raise ImproperlyConfigured(

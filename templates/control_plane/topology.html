@@ -106,15 +106,15 @@
     <span class="muted">{{ topology_edges|length|counted:"relationship" }}</span>
   </header>
   <div class="table-scroll">
-    <table class="data-table stacks">
+    <table class="data-table">
       <thead><tr><th>From</th><th>Relationship</th><th>To</th><th>State</th></tr></thead>
       <tbody>
         {% for item in topology_edges %}
           <tr data-topology-edge="{{ item.edge.source }} {{ item.edge.target }}">
-            <td data-label="From">{% entity item.source_link %}<br><span class="muted">{{ item.source_link.kind_label }}</span></td>
-            <td data-label="Relationship">{{ item.edge.label }}</td>
-            <td data-label="To">{% entity item.target_link %}<br><span class="muted">{{ item.target_link.kind_label }}</span></td>
-            <td data-label="State"><span class="pill pill-{{ item.edge.status }}">{{ item.edge.status|title }}</span></td>
+            <td>{% entity item.source_link %}<br><span class="muted">{{ item.source_link.kind_label }}</span></td>
+            <td>{{ item.edge.label }}</td>
+            <td>{% entity item.target_link %}<br><span class="muted">{{ item.target_link.kind_label }}</span></td>
+            <td><span class="pill pill-{{ item.edge.status }}">{{ item.edge.status|title }}</span></td>
           </tr>
         {% endfor %}
       </tbody>

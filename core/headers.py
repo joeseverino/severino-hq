@@ -4,8 +4,8 @@
 class LowercaseHeaders:
     """Lowercase response header names, which ASGI requires and Django skips.
 
-    Django emits header names in the case they were set -- `Content-Length`,
-    `Vary`: deliberately, for clients that cannot cope with lowercase. ASGI
+    Django emits header names in the case they were set (`Content-Length`,
+    `Vary`), deliberately, for clients that cannot cope with lowercase. ASGI
     says the opposite, so every middleware downstream is entitled to match on
     lowercase, and Starlette's does: setting a header it believes is absent
     appends a second one instead of replacing the first.

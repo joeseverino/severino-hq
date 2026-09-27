@@ -1,0 +1,9 @@
+{% comment %}
+A command an operator runs on their own machine. HQ offers it and never runs
+it; it is built from references, so it carries no secret.
+{% endcomment %}
+<div class="operator-step">
+  <strong>{{ step.label }}</strong>
+  {% if step.command %}<pre class="operator-command"><code>{{ step.command }}</code></pre>{% endif %}
+  {% for note in step.notes %}<p class="muted">{{ note }}</p>{% endfor %}
+</div>

@@ -27,6 +27,7 @@ from django.utils import timezone
 
 from control_plane.names import in_zone
 from control_plane.observations import OBSERVATIONS, ObservationSpec
+from control_plane.reading_parts import PartRefusal, refused_parts
 from control_plane.providers import (
     CONTAINER_KIND,
     PROVIDERS,
@@ -36,6 +37,7 @@ from control_plane.providers import (
 )
 
 from .entity_links import kind_label
+from .freshness import stale_after
 from .locate import host_of
 from .projection import read_once
 from .tailnet import TAILNET_KIND
@@ -103,6 +105,10 @@ class Subject:
 
     def __bool__(self) -> bool:
         return bool(self.hostnames or self.addresses or self.zones)
+
+    @property
+    def dns_names(self) -> frozenset[str]:
+        return frozenset(name for name in self.hostnames if "." in name)
 
     def matches(self, name: str) -> bool:
         """Whether one hostname key names this subject: exactly, by wildcard, or by zone."""
@@ -290,6 +296,19 @@ class Readings:
             )
         return tuple(joined)
 
+    def hostnames(self, *, names_services: bool = False) -> tuple[str, ...]:
+        """Every hostname key the stored records hold; with ``names_services``,
+        only those of kinds whose names are services."""
+
+        return tuple(
+            dict.fromkeys(
+                name
+                for entry in self._entries
+                if entry.spec.names_services or not names_services
+                for name in entry.hostnames
+            )
+        )
+
     def _fronted_names(
         self, entry: _Entry, names: tuple[str, ...], subject: Subject
     ) -> tuple[str, ...]:
@@ -411,12 +430,117 @@ def fronted_names(kind: str) -> frozenset[str]:
     return read_once(f"facts.fronted:{kind}", build)
 
 
-def unreadable_labels() -> tuple[str, ...]:
-    """The labels of every joined kind whose last read was refused."""
+def reading_could_join(spec: ObservationSpec, subject: Subject) -> bool:
+    """Whether a record of ``spec`` could say anything about ``subject``.
 
-    labels = {item.spec.label for item in readings().unread()}
+    A reading names DNS names, so a subject's bare machine name (no dot) is not
+    one it could join.
+    """
+
+    return bool(
+        (spec.joins_hostnames and (subject.dns_names or subject.zones))
+        or (spec.joins_addresses and subject.addresses)
+    )
+
+
+def inventory_could_join(kind: str, subject: Subject) -> bool:
+    """Whether a record of resource ``kind`` could say anything about ``subject``."""
+
+    if kind == CONTAINER_KIND:
+        return bool(subject.addresses)
+    provider = PROVIDERS.get(kind)
+    if provider is None or provider.from_record is None:
+        return False
+    by_name = provider.hostnames is not None or provider.identity is not None
+    by_address = provider.answers is not None or provider.origin is not None
+    return bool(
+        (by_name and (subject.hostnames or subject.zones))
+        or (by_address and (subject.addresses or subject.hostnames))
+    )
+
+
+def part_refusals(kinds: Iterable[str] | None = None) -> tuple[PartRefusal, ...]:
+    """Every part refused on a connected snapshot that otherwise read."""
+
+    def load() -> tuple[PartRefusal, ...]:
+        return tuple(
+            refused
+            for rows in _stored().values()
+            for snapshot in rows
+            if snapshot.connected and snapshot.reachable
+            for refused in refused_parts(snapshot)
+        )
+
+    wanted = frozenset(kinds) if kinds is not None else None
+    return tuple(
+        refused
+        for refused in read_once("facts.part_refusals", load)
+        if wanted is None or refused.kind in wanted
+    )
+
+
+def refusals_about(
+    subject: Subject, kinds: Iterable[str] | None = None
+) -> tuple[PartRefusal, ...]:
+    """The refused parts that could hide something about ``subject``."""
+
+    return tuple(refused for refused in part_refusals(kinds) if _refusal_about(refused, subject))
+
+
+def _refusal_about(refused: PartRefusal, subject: Subject) -> bool:
+    if not refused.scope:
+        spec = OBSERVATIONS.get(refused.kind)
+        if spec is not None:
+            return reading_could_join(spec, subject)
+        return bool(inventory_about(refused.kind, subject))
+    return (
+        refused.holds(subject.addresses)
+        or any(refused.covers(name) for name in subject.hostnames)
+        or any(
+            in_zone(refused.scope, zone) or in_zone(zone, refused.scope)
+            for zone in subject.zones
+        )
+    )
+
+
+def _part_fact(refused: PartRefusal) -> Fact:
+    return Fact(
+        label=refused.part.label,
+        value="",
+        source_kind=refused.kind,
+        source_label=kind_label(refused.kind),
+        connection_ref=refused.connection_ref,
+        state=UNREADABLE,
+        detail=refused.phrase,
+    )
+
+
+def _part_facts(subject: Subject) -> Iterator[Fact]:
+    for refused in refusals_about(subject):
+        yield _part_fact(refused)
+
+
+def unreadable_labels(subject: Subject | None = None) -> tuple[str, ...]:
+    """The labels of joined kinds whose last read was refused, and of refused
+    parts.
+
+    With ``subject``, only kinds that could say something about it: a refused
+    kind that joins nothing a page is about cannot change that page.
+    """
+
+    labels = {
+        item.spec.label
+        for item in readings().unread()
+        if subject is None or reading_could_join(item.spec, subject)
+    }
+    labels.update(
+        refused.part.label
+        for refused in (part_refusals() if subject is None else refusals_about(subject))
+    )
     for kind, provider in PROVIDERS.items():
         if provider.from_record is None and kind != CONTAINER_KIND:
+            continue
+        if subject is not None and not inventory_could_join(kind, subject):
             continue
         if any(not snapshot.reachable for snapshot in _inventory(kind)):
             labels.add(kind_label(kind))
@@ -475,6 +599,7 @@ def facts_about(hostnames: Iterable[str], addresses: Iterable[str]) -> tuple[Fac
     now = timezone.now()
     found = [
         *_reading_facts(subject),
+        *_part_facts(subject),
         *_provider_facts(subject),
         *_container_facts(subject),
         *_tailnet_facts(subject),
@@ -523,22 +648,6 @@ def disagreements(facts: Iterable[Fact]) -> dict[Fact, tuple[str, ...]]:
     return found
 
 
-def stale_after(kind: str = ""):
-    """How old a reading of ``kind`` may be before it is stale.
-
-    A controller reads on the sweep; HQ reads the public registries daily.
-    """
-
-    from .cadence import slowest_sweep_interval
-
-    spec = OBSERVATIONS.get(kind)
-    if spec is not None and spec.read_by == "hq":
-        from .public_registry import REFRESH_AFTER
-
-        return 2 * REFRESH_AFTER
-    return slowest_sweep_interval()
-
-
 def _aged(fact: Fact, stale_before: datetime) -> Fact:
     if fact.state != OBSERVED or fact.observed_at is None:
         return fact
@@ -573,26 +682,61 @@ def _joinable_providers() -> Iterator[tuple[str, Any]]:
             yield kind, provider
 
 
+def connection_facts(
+    connection_ref: str, provider: str
+) -> tuple[tuple[str, str], ...]:
+    """What the readings this connection took say about it, through ``ObservationSpec.facts``.
+
+    A record naming no connection speaks for every connection of its provider.
+    """
+
+    found: list[tuple[str, str]] = []
+    for spec in OBSERVATIONS.values():
+        if spec.provider != provider:
+            continue
+        for snapshot in _inventory(spec.kind):
+            if not snapshot.reachable:
+                continue
+            for record in snapshot.records:
+                ref = str(record.get("connection_ref", "") or "")
+                if ref and ref != connection_ref:
+                    continue
+                found.extend(fact for fact in spec.facts(record) if fact not in found)
+    return tuple(found)
+
+
 def snapshots_of(kind: str) -> tuple[Any, ...]:
     """Connected snapshots of one kind the engine reads, from its one read."""
 
     return _inventory(kind)
 
 
-def _inventory(kind: str) -> tuple[Any, ...]:
-    """Snapshots of one kind, from one read of every kind this module joins."""
+def stored_snapshots() -> Mapping[str, tuple[Any, ...]]:
+    """Every stored snapshot by kind, connected or not, from the same read."""
+
+    return _stored()
+
+
+def _stored() -> dict[str, tuple[Any, ...]]:
+    """One read of every stored snapshot, shared by the joins and credential sight."""
 
     from control_plane.models import ProviderInventory
 
     def load() -> dict[str, tuple[Any, ...]]:
         grouped: dict[str, list[Any]] = {}
-        for snapshot in ProviderInventory.objects.filter(
-            kind__in=_joined_kinds(), connected=True
-        ):
+        for snapshot in ProviderInventory.objects.all():
             grouped.setdefault(snapshot.kind, []).append(snapshot)
         return {name: tuple(rows) for name, rows in grouped.items()}
 
-    return read_once(_INVENTORY_KEY, load).get(kind, ())
+    return read_once(_INVENTORY_KEY, load)
+
+
+def _inventory(kind: str) -> tuple[Any, ...]:
+    """Connected snapshots of one kind the engine joins, from the one read."""
+
+    if kind not in _joined_kinds():
+        return ()
+    return tuple(snapshot for snapshot in _stored().get(kind, ()) if snapshot.connected)
 
 
 def _unreadable(
@@ -645,6 +789,8 @@ def _frozen(record: Mapping[str, Any]) -> Mapping[str, Any]:
 def _reading_facts(subject: Subject) -> Iterator[Fact]:
     index = readings()
     for item in index.unread():
+        if not reading_could_join(item.spec, subject):
+            continue
         yield Fact(
             label=item.spec.label,
             value="",
@@ -673,6 +819,18 @@ def _reading_facts(subject: Subject) -> Iterator[Fact]:
             joined.connection_ref,
             joined.record,
         )
+        yield from _record_part_facts(joined)
+
+
+def _record_part_facts(joined: Joined) -> Iterator[Fact]:
+    """The parts refused on this one record, named by its title."""
+
+    title = joined.title.strip().lower()
+    if not title:
+        return
+    for refused in part_refusals((joined.kind,)):
+        if refused.scope == title:
+            yield _part_fact(refused)
 
 
 def _joined_source(joined: Joined) -> Callable[..., Fact]:

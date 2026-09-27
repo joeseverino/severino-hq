@@ -33,6 +33,7 @@ earlier sketch of this:
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from functools import cached_property
 from typing import Any
 from urllib.parse import urlparse
 
@@ -60,7 +61,6 @@ from projects.models import Project
 from .entity_links import EntityLink, entity_link, kind_label
 from .facts import Joined, Readings, Subject, readings as stored_readings
 from .infrastructure import (
-    NotFoundError,
     context_for_resolution,
     declared_machines,
     enabled_resources,
@@ -270,18 +270,36 @@ class Facet:
         offer carries the provider's label, never its identifier.
         """
 
+        public_first = self._in_public_zone()
         return tuple(
-            sorted(
+            (kind, label)
+            for _first, kind, label in sorted(
                 # Only the first letter is lowered. Lowercasing the whole
                 # label turned "Internal DNS record" into "internal dns
                 # record" and shouted at nobody about the acronym.
-                (kind, _lower_first(kind_label(kind)))
+                (
+                    not (public_first and provider.public_effect),
+                    kind,
+                    _lower_first(kind_label(kind)),
+                )
                 for kind, provider in PROVIDERS.items()
                 if provider.facet == self.id
                 and provider.seed is not None
                 and not self._refused(provider)
             )
         )
+
+    def _in_public_zone(self) -> bool:
+        """Whether the name sits in a public zone HQ holds: one a connected
+        credential edits, or one a public zone declaration manages. There a
+        public provider is offered first."""
+
+        from .naming import public_zones_declared
+
+        name = self.context.hostname
+        if not name:
+            return False
+        return bool(zone_holding(name, {*self.context.public_zones, *public_zones_declared()}))
 
     @property
     def unavailable(self) -> tuple[tuple[str, str], ...]:
@@ -587,6 +605,10 @@ class Origin:
         return "" if self.parked or self.external or self.known else "unknown host"
 
 
+HQ_MARK = "hq"
+OBSERVED_MARK = "observed"
+
+
 @dataclass(frozen=True)
 class Service:
     hostname: str
@@ -612,7 +634,25 @@ class Service:
     served_by: tuple[str, ...] = ()
     # Readings joined to the name that supply no facet: an Access application.
     observed: tuple[Joined, ...] = ()
+    # ``HQ_MARK`` for HQ's own name, ``OBSERVED_MARK`` for a name readings
+    # name and nothing declares, "" for a declared service.
+    mark: str = ""
 
+    @property
+    def is_hq(self) -> bool:
+        return self.mark == HQ_MARK
+
+    @property
+    def is_observed(self) -> bool:
+        return self.mark == OBSERVED_MARK
+
+    @property
+    def path(self):
+        """The request path to this name, walked from the readings."""
+
+        from .paths import path_to
+
+        return path_to(self.hostname)
 
     @property
     def alias_summary(self) -> str:
@@ -728,51 +768,36 @@ class Service:
             if not (PROVIDERS.get(claim.kind) and PROVIDERS[claim.kind].covers)
         )
 
+    @cached_property
+    def health(self):
+        """The one health rule's answer for this name (``service_health``)."""
+
+        from .service_health import service_health
+
+        return service_health(self)
+
+    @cached_property
+    def base_health(self):
+        """The same rule without HQ's own findings: what the topology, and so
+        the findings, are derived from."""
+
+        from .service_health import service_health
+
+        return service_health(self, own_findings=False)
+
     @property
     def status(self) -> str:
-        """Worst news first, with a live failure outranking a wiring gap.
+        """``good``, ``attention``, ``serious``, or ``unknown`` for no health reading."""
 
-        A degraded resource is something that was working and is not. A fault is
-        a name that was never fully wired. Both need attention and only one is
-        an outage, so they are not the same colour.
-        """
+        return self.health.state
 
-        if not self.declared_claims:
-            # Nothing declares this name, which is not health. Reported as
-            # "Wired", it was the most confident statement on a page about a
-            # service that did not exist.
-            #
-            # Covering claims do not count. A wildcard certificate answers for
-            # a name without anyone having declared it, so a hostname nobody
-            # has built anything for still arrives here holding one, and
-            # "this name has TLS" is true and is not the same as "this name
-            # works".
-            return "unknown"
-        states = {facet.state for facet in self.facets}
-        if "serious" in states:
-            return "serious"
-        return "attention" if self.faults or "attention" in states else "good"
+    @property
+    def tone(self) -> str:
+        return self.health.tone
 
     @property
     def status_label(self) -> str:
-        """Why the state is what it is, not just how bad it is.
-
-        Two quite different things share ``attention`` and must not share a
-        word. A name with a gap in its wiring is missing something an operator
-        has to go and declare. A name whose parts are all declared but which no
-        controller has observed yet is complete and merely unproven: it is
-        what every service looks like for the first few minutes of its life, and
-        calling that "Incomplete" sends someone looking for a hole that is not
-        there.
-        """
-
-        if self.status == "serious":
-            return "Degraded"
-        if self.status == "unknown":
-            return "Nothing declared"
-        if self.status == "good":
-            return "Wired"
-        return "Incomplete" if self.faults else "Unverified"
+        return self.health.label
 
     @property
     def fault_rows(self) -> tuple[ListRow, ...]:
@@ -870,7 +895,13 @@ def _declarations():
 
     Shared by the catalogue and by a name nobody has declared anything for yet,
     so a prospective service is assembled from the same reading of the world.
+    Read once per projection.
     """
+
+    return read_once("services.declarations", _read_declarations)
+
+
+def _read_declarations():
 
     machines, targets = context_for_resolution()
     ledger = _Ledger()
@@ -930,7 +961,7 @@ def _certificates_in_use() -> dict[str, dict[str, Any]]:
     for snapshot in ProviderInventory.objects.filter(kind__in=tuple(readers)):
         for record in snapshot.records:
             served = readers[snapshot.kind](record) if isinstance(record, dict) else None
-            if served is None:
+            if served is None or served.unread:
                 continue
             for hostname in served.hostnames:
                 found[hostname] = dict(served.certificate)
@@ -1010,10 +1041,14 @@ def _service_catalog(favorites: tuple[str, ...]) -> tuple[Service, ...]:
         )
         for hostname, facets in sorted(declared.items())
     )
+    return _ordered(found, favorites)
+
+
+def _ordered(found: tuple[Service, ...], favorites: tuple[str, ...]) -> tuple[Service, ...]:
+    """The operator's favorites first, in their order, then the rest by name."""
+
     if not favorites:
         return found
-    from dataclasses import replace
-
     rank = {name: index for index, name in enumerate(favorites)}
     return tuple(
         sorted(
@@ -1062,19 +1097,12 @@ def zone_holding(hostname: str, zones) -> str:
 def services_by_zone(zones) -> dict[str, tuple[ZoneMember, ...]]:
     """Each domain's services, HQ's own included, under the most specific domain."""
 
-    from .connections import machines_once
-    from .entity_links import entity_link
-    from .hq_self import hq_service
+    from .service_list import listed_services as _listed_services
 
     members = [
-        ZoneMember(service.hostname, service.url, service.status, service.status_label, service)
-        for service in service_catalog()
+        ZoneMember(service.hostname, service.url, service.tone, service.status_label, service)
+        for service in _listed_services()
     ]
-    own = hq_service(catalog=machines_once())
-    if own is not None and own.hostname not in {member.hostname for member in members}:
-        members.append(
-            ZoneMember(own.hostname, entity_link("service", own.hostname).url, "good", own.label)
-        )
     found: dict[str, list[ZoneMember]] = {}
     for member in members:
         zone = zone_holding(member.hostname, zones)
@@ -1146,21 +1174,30 @@ def service_or_prospect(hostname: str) -> Service:
     or not anything answers for it yet.
     """
 
-    wanted = normalized_hostname(hostname)
+    return prospects((normalized_hostname(hostname),))[0]
+
+
+def prospects(hostnames: tuple[str, ...]) -> tuple[Service, ...]:
+    """``service_or_prospect`` for several names, from one reading of the declarations."""
+
     (
         declared, covering, origins, aliases, alias_claims, machines, answers, routed,
         served_with,
     ) = _declarations()
-    return _assemble(
-        wanted,
-        declared.get(wanted, {}),
-        _Estate.read(covering, machines),
-        origins.get(wanted, ""),
-        tuple(alias for alias, target in sorted(aliases.items()) if target == wanted),
-        tuple(alias_claims.get(wanted, ())),
-        answers=tuple(answers.get(wanted, ())),
-        routed=wanted in routed,
-        served_with=served_with.get(wanted, frozenset()),
+    estate = _Estate.read(covering, machines) if hostnames else None
+    return tuple(
+        _assemble(
+            name,
+            declared.get(name, {}),
+            estate,
+            origins.get(name, ""),
+            tuple(alias for alias, target in sorted(aliases.items()) if target == name),
+            tuple(alias_claims.get(name, ())),
+            answers=tuple(answers.get(name, ())),
+            routed=name in routed,
+            served_with=served_with.get(name, frozenset()),
+        )
+        for name in hostnames
     )
 
 
@@ -1197,6 +1234,7 @@ class MachineLink:
 
 RUNTIME_FACET = "runtime"
 DNS_FACET = "dns"
+CERTIFICATE_FACET = "certificate"
 
 
 def _container_declarations() -> dict[tuple[str, str], Any]:
@@ -1392,13 +1430,20 @@ _SERVES = ("runtime", "network")
 
 
 def _serving(index: "Readings | None", origin_address: str) -> tuple[str, ...]:
-    """Titles of readings joined to an origin that say what serves it."""
+    """Readings joined to an origin that say what serves it: what runs it by
+    its title, anything else (who holds the address) by its relation."""
 
     if index is None:
         return ()
     host = host_of(origin_address)
     found = index.about(Subject.of(hostnames=(host,), addresses=(host,)), facets=_SERVES)
-    return tuple(dict.fromkeys(item.title for item in found if item.title))
+    return tuple(
+        dict.fromkeys(
+            item.title if item.facet == "runtime" else f"{item.relation} {item.title}"
+            for item in found
+            if item.title
+        )
+    )
 
 
 # The provider whose inventory records are containers. Named once, here, because
@@ -1654,6 +1699,7 @@ def _locate(
     address: str,
     machines: tuple[dict[str, Any], ...],
     at: "_Whereabouts | None" = None,
+    near: str = "",
 ) -> Origin:
     """Match a forwarding address to a machine, and if certain, a container.
 
@@ -1669,6 +1715,9 @@ def _locate(
     ``at`` is passed by anything resolving more than one address, because both
     readings behind this are estate-wide. Left out, they are taken here, which
     is right for a single lookup and wrong in a loop.
+
+    ``near`` is the machine the forwarding proxy runs on: a container name on a
+    docker network resolves there first, since that network is on that machine.
     """
 
     at = at if at is not None else _Whereabouts(machines)
@@ -1704,6 +1753,8 @@ def _locate(
         # other ambiguity here is silent: a guess printed beside four facts reads
         # as a fifth.
         hosts = _hosting(host_address, at)
+        if near and near in hosts:
+            return Origin(address=address, host=near, container=host_address)
         if len(hosts) == 1:
             return Origin(address=address, host=hosts[0], container=host_address)
         # Nothing HQ holds says what is there. The address stays on the page,
@@ -1715,6 +1766,18 @@ def _locate(
         host=name,
         container=claimed[0] if len(claimed) == 1 else "",
     )
+
+
+def locate(
+    address: str,
+    machines: "tuple[dict[str, Any], ...] | None" = None,
+    at: "_Whereabouts | None" = None,
+    near: str = "",
+) -> Origin:
+    """Where an address is served: the machine and, when certain, the container."""
+
+    machines = _machines() if machines is None else machines
+    return _locate(address, machines, at, near)
 
 
 def _is_loopback(address: str) -> bool:
@@ -1864,53 +1927,6 @@ def projects_by_hostname() -> dict[str, Project]:
 # cannot disagree about which names a certificate covers.
 _resolved = resolved_spec
 _machines = declared_machines
-
-
-# ----- Machine-readable projection -------------------------------------------
-
-
-def serialize_service(service: Service) -> dict[str, Any]:
-    return {
-        "hostname": service.hostname,
-        "status": service.status,
-        "facets": [
-            {
-                "id": facet.id,
-                "label": facet.label,
-                "present": facet.present,
-                "state": facet.state,
-                "resources": [claim.resource_key for claim in facet.claims],
-            }
-            for facet in service.facets
-        ],
-        "origin": (
-            {
-                "address": service.origin.address,
-                "host": service.origin.host,
-                "container": service.origin.container,
-            }
-            if service.origin
-            else None
-        ),
-        "project": service.project["name"] if service.project else None,
-        "faults": list(service.faults),
-    }
-
-
-def list_services() -> dict[str, Any]:
-    """Every declared hostname and the state of its wiring."""
-
-    items = [serialize_service(service) for service in service_catalog()]
-    return {"items": items, "count": len(items)}
-
-
-def get_service(hostname: str) -> dict[str, Any]:
-    """One hostname, with the resources behind each facet named."""
-
-    found = find_service(hostname)
-    if found is None:
-        raise NotFoundError(f"No service is declared for {hostname!r}.")
-    return {"service": serialize_service(found)}
 
 
 def public_sites() -> tuple[tuple[str, str, str], ...]:

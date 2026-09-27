@@ -56,6 +56,22 @@ def name_context(hostname: str) -> NameContext:
         )
 
 
+def public_zones_declared() -> tuple[str, ...]:
+    """Zones an enabled declaration of a public, record-holding provider manages."""
+
+    def load() -> tuple[str, ...]:
+        found = set()
+        for resource in enabled_resources():
+            provider = PROVIDERS.get(resource.kind)
+            if provider is not None and provider.contains and provider.public_effect:
+                zone = normalized_hostname(resource.spec.get("zone"))
+                if zone:
+                    found.add(zone)
+        return tuple(sorted(found))
+
+    return read_once("naming.public_zones_declared", load)
+
+
 def _reported_zones() -> tuple[tuple[str, ...], bool]:
     return read_once("naming.reported_zones", _load_reported_zones)
 

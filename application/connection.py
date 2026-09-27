@@ -22,7 +22,8 @@ from __future__ import annotations
 from ipaddress import ip_address
 
 from dataclasses import dataclass
-from datetime import datetime, timezone as utc
+from datetime import datetime
+from typing import Any
 from django.conf import settings
 from django.utils.csp import CSP
 
@@ -31,7 +32,7 @@ from core.network import client_ip, is_trusted_proxy, split_host_port
 
 from . import tailnet
 from .reach import network_of, on_link_networks
-from .ui import MISSING, counted, elapsed, moment
+from .ui import MISSING, counted, moment
 
 
 @dataclass(frozen=True)
@@ -206,22 +207,21 @@ PEERING_UNOBSERVED = Peering(
 )
 
 
-def _peering(device: tailnet.Device | None) -> Peering:
-    if device is None:
+def _peering(presence) -> Peering:
+    """Which network a tailnet session rides over, from the caller's presence."""
+
+    if presence is None or not presence.peer_path or presence.peer_path == "negotiating":
         return PEERING_UNKNOWN
-    if device.path == "relayed":
+    if presence.peer_path == "relayed":
         return Peering(
             "relay",
-            f"Relayed via {device.relay}" if device.relay else "Relayed",
+            f"Relayed via {presence.relay}" if presence.relay else "Relayed",
             "The two nodes could not open a direct path to each other, so "
             "Tailscale is forwarding this session through one of its relays. "
             "The relay carries ciphertext and holds no key to it, but the "
             "traffic does cross a machine neither end owns.",
         )
-    endpoint = device.direct_endpoint
-    if not endpoint:
-        return PEERING_UNKNOWN
-    host, _ = split_host_port(endpoint)
+    host, _ = split_host_port(presence.direct_endpoint)
     where = network_of(host)
     # A global IPv6 address in one of this host's own prefixes is the same
     # network, whatever its type says.
@@ -386,6 +386,9 @@ class Connection:
     untrusted_forwarding: bool = False
     serves_verified: bool = False
     serving_basis: str = ""
+    # The caller device's tailnet presence, as the machine page reads it: the
+    # one account of the link's path, handshake and traffic.
+    presence: Any = None
 
     @property
     def holds(self) -> bool:
@@ -454,19 +457,29 @@ class Connection:
 
     @property
     def path(self) -> str:
-        return self.caller_device.path if self.caller_device else "unknown"
+        """direct, relayed or idle, from the caller's presence; unknown without one."""
+
+        if self.presence is None:
+            return "unknown"
+        return self.presence.peer_path if self.presence.peer_path in {"direct", "relayed"} else "idle"
+
+    @property
+    def leg_label(self) -> str:
+        """The tailnet leg in a word or two: direct, relayed and where, or not yet."""
+
+        if self.presence is None:
+            return "Unknown"
+        return {
+            "direct": "Direct",
+            "relayed": f"Relayed via {self.presence.relay}",
+            "idle": "Not negotiated",
+        }[self.path]
 
     @property
     def path_label(self) -> str:
         if self.forwarded:
             return f"Via {self.forwarder_name or 'forwarding peer'}"
-        if self.caller_device is None:
-            return "Unknown"
-        return {
-            "direct": "Direct",
-            "relayed": f"Relayed via {self.caller_device.relay}",
-            "idle": "Not negotiated",
-        }[self.caller_device.path]
+        return self.leg_label
 
     @property
     def link_observed_by_hq(self) -> bool:
@@ -489,16 +502,13 @@ class Connection:
 
     @property
     def handshake(self) -> str:
-        return elapsed(self.caller_device.last_handshake) if self.caller_device else MISSING
+        return self.presence.handshake if self.presence is not None else MISSING
 
     @property
     def carried(self) -> str:
-        if self.caller_device is None:
+        if self.presence is None:
             return ""
-        return (
-            f"{_bytes(self.caller_device.rx_bytes)} in · "
-            f"{_bytes(self.caller_device.tx_bytes)} out"
-        )
+        return f"{_bytes(self.presence.rx_bytes)} in · {_bytes(self.presence.tx_bytes)} out"
 
     @property
     def peer_keys(self) -> tuple[tuple[str, str], ...]:
@@ -542,21 +552,21 @@ class Connection:
             if self.observer is None:
                 return PEERING_UNOBSERVED
             return PEERING_UNKNOWN
-        return _peering(self.caller_device)
+        return _peering(self.presence)
 
     @property
     def tailnet_observed_at(self) -> datetime | None:
         """When the device/path evidence was last swept from Tailscale."""
 
-        return self.caller_device.observed_at if self.caller_device else None
+        return self.presence.observed_at if self.presence is not None else None
 
 
 def connection(request, *, edge=None, firewall=None) -> Connection:
     """Everything HQ can say about the request in front of it."""
 
     address = client_ip(request)
-    peer = str(request.META.get("REMOTE_ADDR", "") or "").strip()
-    forwarded = bool(request.META.get("HTTP_X_FORWARDED_FOR"))
+    peer = socket_peer(request)
+    forwarded = bool(forwarded_chain(request))
     forwarding_trusted = forwarded and is_trusted_proxy(peer)
     untrusted_forwarding = forwarded and not forwarding_trusted
     # (see `_serving_device_resolution` for why the observer flag is not the answer)
@@ -575,14 +585,20 @@ def connection(request, *, edge=None, firewall=None) -> Connection:
     from .infrastructure import declared_machines
 
     declared = declared_machines()
-    from .hq_self import served_at
+    from .connections import machines_once
+    from .hq_self import hq_service, served_at
+    from .machines import tailnet_presence
 
-    serving = _serving_device_resolution(known, declared, served_at(request))
+    own = hq_service(request, catalog=machines_once())
+    serving = _serving_device_resolution(
+        known, declared, served_at(request), machine=own.machine if own else ""
+    )
     # A fallback observer is useful provenance, but it is not a placement
     # result. Never use it as HQ's policy target or draw it as HQ's endpoint.
     serves = serving.device if serving.verified else None
     observer = tailnet.observer(known)
     peer_device = reported_device if untrusted_forwarding else device
+    presence = tailnet_presence().get(peer_device.name) if peer_device else None
     machine_name = _machine_name(peer_device.addresses if peer_device else (), declared)
     forwarder_name = _machine_name((peer,), declared) if forwarded else ""
     serves_name = _machine_name(serves.addresses if serves else (), declared)
@@ -606,6 +622,7 @@ def connection(request, *, edge=None, firewall=None) -> Connection:
         untrusted_forwarding=untrusted_forwarding,
         serves_verified=serving.verified,
         serving_basis=serving.basis,
+        presence=presence,
         secure_transport=bool(request.is_secure()),
         host=request.get_host(),
         layers=_layers(
@@ -637,26 +654,34 @@ def displayed_client_ip(request) -> str:
     prevents that useful knowledge from quietly becoming network authority.
     """
 
-    peer = str(request.META.get("REMOTE_ADDR", "") or "").strip()
-    forwarded = [
-        hop.strip()
-        for hop in str(request.META.get("HTTP_X_FORWARDED_FOR", "")).split(",")
-        if hop.strip()
-    ]
+    peer = socket_peer(request)
+    forwarded = forwarded_chain(request)
     if forwarded and not is_trusted_proxy(peer):
         return split_host_port(forwarded[-1])[0]
     return client_ip(request)
 
 
-def _chain_is_all_proxies(request) -> bool:
-    """Whether the forwarded chain identified anybody at all."""
+def socket_peer(request) -> str:
+    """The address that opened the socket to HQ."""
 
-    peer = str(request.META.get("REMOTE_ADDR", "") or "").strip()
-    forwarded = [
-        split_host_port(hop.strip())[0]
+    return str(request.META.get("REMOTE_ADDR", "") or "").strip()
+
+
+def forwarded_chain(request) -> list[str]:
+    """The X-Forwarded-For entries, in the order the hops occurred."""
+
+    return [
+        hop.strip()
         for hop in str(request.META.get("HTTP_X_FORWARDED_FOR", "")).split(",")
         if hop.strip()
     ]
+
+
+def _chain_is_all_proxies(request) -> bool:
+    """Whether the forwarded chain identified anybody at all."""
+
+    peer = socket_peer(request)
+    forwarded = [split_host_port(hop)[0] for hop in forwarded_chain(request)]
     return (
         bool(forwarded)
         and is_trusted_proxy(peer)
@@ -1362,7 +1387,9 @@ def _expiry_phrase(stamp: str) -> str:
     parsed = moment(stamp)
     if parsed is None:
         return "has an expiry HQ could not read"
-    days = (parsed - datetime.now(utc.utc)).days
+    from .expiry import days_until
+
+    days = days_until(parsed)
     if days < 0:
         return f"expired {abs(days)} days ago"
     return f"expires in {days} days"
@@ -1640,15 +1667,17 @@ def addresses_of(found: Connection) -> tuple[Address, ...]:
             for address in device.addresses
             if address != current
         )
+    presence = found.presence
+    if presence is not None:
         rows.append(
             _address_row(
-                device.direct_endpoint,
+                presence.direct_endpoint,
                 "the last Tailnet sweep observed this tunnel endpoint",
             )
         )
         rows.extend(
             _address_row(endpoint, "the last Tailnet sweep observed this endpoint")
-            for endpoint in device.endpoints
+            for endpoint in presence.endpoints
         )
     return tuple(_deduplicated(rows))
 
@@ -1657,6 +1686,8 @@ def _serving_device_resolution(
     known: dict[str, tailnet.Device],
     declared: tuple[dict[str, object], ...],
     served: tuple[str, ...] = (),
+    *,
+    machine: str = "",
 ) -> ServingDeviceResolution:
     """The tailnet node HQ is actually running on.
 
@@ -1665,7 +1696,9 @@ def _serving_device_resolution(
     through ``hq_self``: a device holding one of HQ's own addresses, else the
     device holding an address of the machine ``hq_machine`` places HQ on.
 
-    Falls back to the observer flag when nothing resolves.
+    ``machine`` is the machine catalogue's answer for HQ, the one every page
+    shows; a device holding one of its addresses is the next placement. Falls
+    back to the observer flag when nothing resolves.
     """
 
     from .hq_self import hq_machine, own_addresses
@@ -1676,18 +1709,34 @@ def _serving_device_resolution(
         if device is not None:
             return ServingDeviceResolution(device, True, "matched to an address on this host")
     index = index_of(declared=declared)
-    machine = hq_machine(index, (), {}, served_at=served, devices=known.values())
-    if machine:
-        for device in known.values():
-            if any(index.at(address) == machine for address in device.addresses):
-                return ServingDeviceResolution(
-                    device, True, "matched through HQ's machine declaration"
-                )
+    for placed, basis in (
+        (hq_machine(index, (), {}, served_at=served, devices=known.values()),
+         "matched through HQ's machine declaration"),
+        (machine, "matched through the machine HQ's names lead to"),
+    ):
+        device = _device_on(placed, index, known)
+        if device is not None:
+            return ServingDeviceResolution(device, True, basis)
     observer = tailnet.observer(known)
     return ServingDeviceResolution(
         observer,
         False,
         "fallback to the sweep observer" if observer else "not resolved",
+    )
+
+
+def _device_on(machine: str, index, known: dict[str, tailnet.Device]) -> tailnet.Device | None:
+    """The tailnet device holding an address of ``machine``, or None."""
+
+    if not machine:
+        return None
+    return next(
+        (
+            device
+            for device in known.values()
+            if any(index.at(address) == machine for address in device.addresses)
+        ),
+        None,
     )
 
 
@@ -1853,89 +1902,6 @@ def headers_of(request) -> tuple[Header, ...]:
     # Acted on first, then deliberately declined, then everything else.
     order = {"read": 0, "declined": 1, "ignored": 2}
     return tuple(sorted(found, key=lambda header: order[header.state]))
-
-
-@dataclass(frozen=True)
-class Hop:
-    """One address in the chain, and what HQ decided about it."""
-
-    value: str
-    role: str
-    detail: str
-
-
-def hops_of(request) -> tuple[Hop, ...]:
-    """How HQ arrived at the address it is judging this request by.
-
-    The most quietly consequential decision on the page. Behind a proxy every
-    request arrives from the proxy, and the caller's address is in a header
-    anyone can write, so which hop HQ believes is the whole of whether the
-    network gate means anything. Showing the working is how a misconfigured
-    proxy list becomes visible instead of silently trusting a stranger.
-    """
-
-    from core.network import is_trusted_proxy
-
-    peer = str(request.META.get("REMOTE_ADDR", "") or "").strip()
-    forwarded = [
-        hop.strip()
-        for hop in str(request.META.get("HTTP_X_FORWARDED_FOR", "")).split(",")
-        if hop.strip()
-    ]
-    judged = client_ip(request)
-    if not forwarded or not is_trusted_proxy(peer):
-        return (
-            Hop(
-                peer,
-                "judged",
-                "The socket peer is not in HQ's proxy allowlist, so any "
-                "forwarded client address is ignored."
-                if forwarded
-                else "The socket peer is the caller address HQ evaluates.",
-            ),
-        )
-    # Walked right to left, the way it is decided: from the hop the trusted
-    # proxy observed, discarding proxies HQ knows, stopping at the first it
-    # does not. Everything left of that is text a caller can choose.
-    chain = [*forwarded, peer]
-    # Decided right to left, but read left to right, which is the order the
-    # hops actually occurred in. Walking one way and printing the other is how
-    # this ends up looking like the answer came from the wrong end.
-    roles: dict[int, str] = {}
-    settled = False
-    for index in range(len(chain) - 1, -1, -1):
-        if settled:
-            roles[index] = "ignored"
-        elif is_trusted_proxy(chain[index]):
-            roles[index] = "proxy"
-        else:
-            roles[index] = "judged"
-            settled = True
-    detail = {
-        "proxy": (
-            "Local reverse proxy. HQ accepts client-address headers only from "
-            "this exact socket peer."
-        ),
-        "judged": "The closest address to the caller that HQ can prove.",
-        "ignored": (
-            "Further from the connection than the address HQ settled on, so it "
-            "is text a caller could have written. Not believed."
-        ),
-    }
-    found = [
-        Hop(value, roles[index], detail[roles[index]])
-        for index, value in enumerate(chain)
-    ]
-    if not settled:
-        # Every hop was a known proxy, so the peer is as close as this gets,
-        # and nothing in the chain identified the caller at all.
-        found[-1] = Hop(
-            judged,
-            "judged",
-            "Every address in the chain is in HQ's proxy allowlist, so no "
-            "distinct caller address was supplied. HQ evaluates the socket peer.",
-        )
-    return tuple(found)
 
 
 def _bytes(count: int) -> str:

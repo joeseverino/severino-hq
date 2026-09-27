@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 
 from dataclasses import dataclass, replace
-from datetime import timedelta
 from typing import Any
 
 from django.db import transaction
@@ -24,13 +23,11 @@ from control_plane.models import (
 
 from . import readings
 from .cadence import ring_doorbell
+from .freshness import DASHBOARD_GLANCE, freshness
 from .connections import machines_once
 from .security import AuthorizationError, Capability, Principal
 
 
-# Older than this, opening the dashboard asks for a refresh (a POST from the
-# page), since a reading costs a trip to a machine.
-GLANCE_STALE_AFTER = timedelta(minutes=5)
 
 
 def connection_specs():
@@ -365,18 +362,8 @@ def dashboard_panels(
             )
         )
     now = timezone.now()
-    cutoff = now - GLANCE_STALE_AFTER
-    outdated_before = now - expected_cadence()
     shown = tuple(
-        {
-            **panel,
-            "stale": bool(panel["observed_at"] and panel["observed_at"] <= cutoff),
-            # Past the cadence a refresh is answered within: not a current
-            # reading, so it is shown as of its age.
-            "outdated": bool(
-                panel["observed_at"] and panel["observed_at"] <= outdated_before
-            ),
-        }
+        _with_freshness(panel, freshness(DASHBOARD_GLANCE, panel["observed_at"], now))
         for panel in panels
     )
     # Current readings lead; an outdated one steps aside.
@@ -398,16 +385,14 @@ def glance_context(
     }
 
 
-def expected_cadence() -> timedelta:
-    """How old a glance reading may be and still be current.
+def _with_freshness(panel: dict[str, Any], found) -> dict[str, Any]:
+    """A panel with whether to ask for it again and whether it is out of date.
 
-    A refresh is asked for when the dashboard opens and answered by the
-    controller's next pass, which the sweep cadence bounds.
+    Due asks for a refresh when the dashboard opens; only stale says "Out of
+    date" and shows the reading as of its age.
     """
 
-    from .facts import stale_after
-
-    return max(stale_after(), GLANCE_STALE_AFTER)
+    return {**panel, "due": found.due, "outdated": found.stale, "freshness": found}
 
 
 def _glance_reading(
@@ -466,11 +451,11 @@ def request_dashboard_refresh(*, principal: Principal) -> dict[str, Any]:
 def request_stale_panel_refresh(
     panels: list[dict[str, Any]], *, principal: Principal
 ) -> tuple[str, ...]:
-    """Ask for the panels that already know they are out of date.
+    """Ask for the panels whose reading is due again.
 
-    The dashboard posts this when it opens on a stale reading. Only panels that
-    are stale, refreshable and not already waiting on a refresh are asked for,
-    so repeat views of one stale card ask once.
+    The dashboard posts this when it opens on a due reading. Only panels that
+    are due, refreshable and not already waiting on a refresh are asked for,
+    so repeat views of one card ask once.
 
     Silent for a principal who cannot ask: the page still renders.
     """
@@ -478,7 +463,7 @@ def request_stale_panel_refresh(
     wanted = tuple(
         str(panel["id"])
         for panel in panels
-        if panel.get("stale") and panel.get("refreshable") and not panel.get("refreshing")
+        if panel.get("due") and panel.get("refreshable") and not panel.get("refreshing")
     )
     if not wanted:
         return ()

@@ -5,12 +5,18 @@ from __future__ import annotations
 import ipaddress
 import logging
 from collections.abc import Awaitable, Callable, Iterable
+from typing import TYPE_CHECKING, Any
 
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
+from application import request_context
 from core.network import strict_host
 from hq_mcp.identity import reset_principal, set_principal
+
+if TYPE_CHECKING:
+    from application.security import Principal
 
 logger = logging.getLogger("severino.mcp")
 
@@ -18,16 +24,16 @@ logger = logging.getLogger("severino.mcp")
 class MCPBoundary:
     def __init__(
         self,
-        app,
+        app: ASGIApp,
         *,
         allowed_hosts: Iterable[str],
         allowed_networks: Iterable[str],
         allowed_origins: Iterable[str] = (),
-        verifier: Callable[[str], object] | None = None,
+        verifier: Callable[[str], Principal] | None = None,
         gate: Callable[[], Awaitable[bool]] | None = None,
         on_denied: Callable[..., Awaitable[None]] | None = None,
-        observer: Callable[[object], Awaitable[None]] | None = None,
-    ):
+        observer: Callable[[Principal], Awaitable[None]] | None = None,
+    ) -> None:
         self.app = app
         # Injected rather than imported so this module keeps knowing only about
         # ASGI and bytes. The adapter that owns token verification lives in
@@ -57,7 +63,7 @@ class MCPBoundary:
             and bool(self.allowed_networks)
         )
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "lifespan":
             await self.app(scope, receive, send)
             return
@@ -88,8 +94,8 @@ class MCPBoundary:
             await self._unauthorized(scope, receive, send)
             return
 
-        authenticated, principal = self._authenticate(supplied)
-        if not authenticated:
+        principal = self._authenticate(supplied)
+        if principal is None:
             await self._note_denial(reason="invalid_credential", source=source, authenticated=False)
             await self._unauthorized(scope, receive, send)
             return
@@ -111,15 +117,18 @@ class MCPBoundary:
         # Bound to this request and unbound when it ends, so a task that
         # outlives the response cannot keep acting as whoever last called.
         reset = set_principal(principal)
+        # The caller's own request, for the read that describes how it arrived.
+        bound = request_context.bind(request_context.from_scope(scope))
         try:
             await self.app(scope, receive, send)
         finally:
+            request_context.unbind(bound)
             reset_principal(reset)
 
-    async def _observe(self, principal) -> None:
+    async def _observe(self, principal: Principal) -> None:
         """Report an authenticated identity if an observer is wired. Never raises."""
 
-        if self.observer is None or principal is None:
+        if self.observer is None:
             return
         try:
             await self.observer(principal)
@@ -130,7 +139,7 @@ class MCPBoundary:
                 extra={"event": "mcp.identity.unobserved"},
             )
 
-    async def _note_denial(self, **fields) -> None:
+    async def _note_denial(self, **fields: Any) -> None:
         """Record a refusal if a recorder is wired. Never raises."""
 
         if self.on_denied is None:
@@ -159,15 +168,17 @@ class MCPBoundary:
             )
             return False
 
-    def _authenticate(self, supplied: str):
-        """Authenticate one bearer: `(authenticated, principal)`.
+    def _authenticate(self, supplied: str) -> Principal | None:
+        """The principal one bearer authenticates as, or None.
 
         Only an access token the verifier accepts authenticates, and it always
         names its agent.
         """
 
+        if self.verifier is None:
+            return None
         try:
-            return True, self.verifier(supplied)
+            return self.verifier(supplied)
         except Exception as exc:  # noqa: BLE001 - a boundary fails closed
             # Deliberately broad. The verifier may raise anything its library
             # does, and any of it means "not authenticated" here. The reason is
@@ -178,10 +189,10 @@ class MCPBoundary:
                 exc,
                 extra={"event": "mcp.token.rejected"},
             )
-            return False, None
+            return None
 
     @staticmethod
-    async def _unauthorized(scope, receive, send):
+    async def _unauthorized(scope: Scope, receive: Receive, send: Send) -> None:
         response = JSONResponse(
             {"error": "unauthorized"},
             status_code=401,
@@ -192,7 +203,7 @@ class MCPBoundary:
         )
         await response(scope, receive, send)
 
-    def _tailnet_peer(self, scope) -> bool:
+    def _tailnet_peer(self, scope: Scope) -> bool:
         client = scope.get("client")
         if not client:
             return False
@@ -203,7 +214,9 @@ class MCPBoundary:
         return any(address in network for network in self.allowed_networks)
 
     @staticmethod
-    async def _deny(scope, receive, send, status: int, error: str):
+    async def _deny(
+        scope: Scope, receive: Receive, send: Send, status: int, error: str
+    ) -> None:
         response = JSONResponse(
             {"error": error},
             status_code=status,

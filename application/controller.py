@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import timedelta, timezone as datetime_timezone
+from datetime import timedelta
 from typing import Any
 
 from django.db import transaction
@@ -129,18 +129,11 @@ def _scheduler_now():
 
 
 def _certificate_expiry(resource: ManagedResource):
-    """Parse the provider's public expiry observation once, preserving UTC."""
+    """The provider's public expiry observation, parsed once, preserving UTC."""
 
-    not_after = resource.status.get("not_after")
-    if not not_after:
-        return None
-    try:
-        expiry = timezone.datetime.fromisoformat(not_after.replace("Z", "+00:00"))
-    except (AttributeError, TypeError, ValueError):
-        return None
-    if expiry.tzinfo is None:
-        expiry = expiry.replace(tzinfo=datetime_timezone.utc)
-    return expiry
+    from .expiry import certificate_expiry
+
+    return certificate_expiry(resource.status)
 
 
 def _automatic_reconcile(resource: ManagedResource) -> tuple[bool, str, str]:
@@ -165,8 +158,9 @@ def _automatic_renewal(resource: ManagedResource, now) -> tuple[bool, str, str]:
     expiry = _certificate_expiry(resource)
     if expiry is None:
         return False, "", ""
-    renewal_at = expiry - timedelta(days=resource.spec.get("renewal_window_days", 30))
-    if now >= renewal_at:
+    from .expiry import renewal_opens_at, renewal_window
+
+    if now >= renewal_opens_at(expiry, renewal_window(resource.spec)):
         return True, "Automatic renewal window reached.", resource.status["not_after"]
     return False, "", ""
 

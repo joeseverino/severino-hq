@@ -141,7 +141,9 @@ class RelationKind:
 RELATIONS: dict[str, RelationKind] = {
     "runs_on": RelationKind("Runs on", "Serves", 10),
     "runs": RelationKind("Runs", "Runs on", 15),
+    "talks_to": RelationKind("Talks to", "Talks to", 20),
     "contains": RelationKind("Contains", "In domain", 30),
+    "redirects_to": RelationKind("Redirects to", "Redirected from", 25),
     "reaches": RelationKind("Reaches", "Reached through", 70),
     "on_tailnet": RelationKind("On the tailnet as", "Tailnet device of", 75),
     "declared_by": RelationKind("Declared by", "Declares", 80),
@@ -672,6 +674,20 @@ def _inventory_of(kind: str) -> tuple[Any, ...]:
     return snapshots_of(kind)
 
 
+def perimeter_unchecked(record: dict[str, Any]) -> str:
+    """Why a perimeter reading proves nothing, or "" when it tried something.
+
+    No address or no port means no connection was attempted, so "nothing
+    answered" is not evidence of a shut perimeter.
+    """
+
+    if not record.get("public_addresses"):
+        return "no public address"
+    if not record.get("ports_checked"):
+        return "no port to try"
+    return ""
+
+
 def _perimeter_facts() -> dict[str, tuple[tuple[str, str], ...]]:
     """Each machine's perimeter reading, keyed by the connection that took it."""
 
@@ -684,6 +700,9 @@ def _perimeter_facts() -> dict[str, tuple[tuple[str, str], ...]]:
             if not connection_ref:
                 continue
             entries: list[tuple[str, str]] = []
+            unchecked = perimeter_unchecked(record)
+            if unchecked:
+                entries.append(("perimeter-unchecked", unchecked))
             unit = str(record.get("firewall_unit", "")).strip()
             if unit and unit != "active":
                 entries.append(("firewall-unit", unit))
@@ -733,7 +752,7 @@ def _tailnet_facts() -> tuple[tuple[str, str], ...]:
     entries.extend(
         ("tailnet-address", address)
         for address in sorted(addresses)
-        if getattr(parse_ip(address), "version", 0) == 4
+        if parse_ip(address) is not None
     )
     entries.extend(("tailnet-route", route) for route in sorted(routes))
     return tuple(entries)
@@ -1000,28 +1019,38 @@ def _add_connection_facts(nodes: dict[str, TopologyNode]) -> None:
     """Facts a connection node carries for the findings that read them.
 
     What each edge relies on to stay shut (joined on the connection's ref), a
-    credential its provider refused, work the last pass could not finish, and
-    the tailnet's own readings on the connections of the tailnet's providers.
+    credential its provider refused or that lacks permissions or is expiring,
+    with its fix, work the last pass could not finish, the tailnet's own
+    readings on the connections of the tailnet's providers, and what each
+    reading's ``facts`` say about the connection that took it.
     """
 
     from .connections import unfinished_work
+    from .credential_findings import credential_facts
+    from .facts import connection_facts
+    from .credential_mint import credential_fixes
     from .estate import refused_connections
     from .tailnet import TAILNET_KIND, posture_facts
 
     perimeter = _perimeter_facts()
+    unanswered = _unanswered()
     refused = refused_connections()
+    fixes = credential_fixes()
     unfinished = unfinished_work()
     tailnet = _tailnet_facts() + posture_facts()
     tailnet_providers = PROVIDERS[TAILNET_KIND].connection_providers
 
     def facts_for(node: TopologyNode) -> tuple[tuple[str, str], ...]:
         found = tuple(perimeter.get(node.connection_ref, ()))
+        found += unanswered.get((node.controller_id, node.connection_ref), ())
         if node.connection_ref in refused:
             found += (("credential-refused", refused[node.connection_ref]),)
+        found += credential_facts(fixes.get(node.connection_ref))
         steps = unfinished.get((node.controller_id, node.connection_ref), ())
         found += tuple(("work-unfinished", step) for step in steps)
         if node.provider in tailnet_providers:
             found += tailnet
+        found += connection_facts(node.connection_ref, node.provider)
         return found
 
     for node_id, node in list(nodes.items()):
@@ -1030,6 +1059,22 @@ def _add_connection_facts(nodes: dict[str, TopologyNode]) -> None:
         extra = facts_for(node)
         if extra:
             nodes[node_id] = replace(node, facts=node.facts + extra)
+
+
+def _unanswered() -> dict[tuple[str, str], tuple[tuple[str, str], ...]]:
+    """Why each connection that did not answer failed, and where it points."""
+
+    from .connections import connection_rows
+    from .credential_findings import ENDPOINT, FAILURE
+
+    return {
+        (row.controller_id, row.connection_ref): (
+            *(((FAILURE, row.failure),) if row.failure else ()),
+            *(((ENDPOINT, row.endpoint),) if row.endpoint else ()),
+        )
+        for row in connection_rows()
+        if not row.reachable
+    }
 
 
 def _governs_edges(groups, resources, edges: dict[str, TopologyEdge]) -> None:

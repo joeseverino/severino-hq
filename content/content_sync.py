@@ -82,6 +82,41 @@ def index_project() -> Project | None:
     return matches[0] if len(matches) == 1 else None
 
 
+def _live_fields(entry: dict, slug: str) -> dict:
+    """What the published index says about one item, as ContentItem fields."""
+    technologies = entry.get("technologies") or []
+    return {
+        "title": (entry.get("title") or slug)[:200],
+        "status": ContentItem.Status.PUBLISHED,
+        "topic": (entry.get("description") or "").strip()[:160],
+        "tags": ", ".join(str(t) for t in technologies if t)[:300],
+        "published_url": entry.get("url") or "",
+        "published_at": _parse_date(entry.get("published_at")),
+    }
+
+
+def _upsert(slug: str, live_fields: dict) -> tuple[ContentItem, str]:
+    """Create or refresh one item: ``created``, ``updated`` or ``unchanged``.
+
+    Content type is set on create only, so a manual classification survives.
+    """
+    item, was_created = ContentItem.objects.get_or_create(
+        slug=slug,
+        defaults={**live_fields, "content_type": ContentItem.Type.LAB_WRITEUP},
+    )
+    if was_created:
+        return item, "created"
+    changed = False
+    for key, value in live_fields.items():
+        if getattr(item, key) != value:
+            setattr(item, key, value)
+            changed = True
+    if not changed:
+        return item, "unchanged"
+    item.save(update_fields=[*live_fields.keys(), "updated_at"])
+    return item, "updated"
+
+
 def sync_content_index(payload: dict | None = None) -> dict:
     """Upsert ContentItems from the index, related to the site project.
 
@@ -95,52 +130,19 @@ def sync_content_index(payload: dict | None = None) -> dict:
         raise ContentSyncError("Content index payload has no 'items' list.")
 
     project = index_project()
-
-    created = updated = total = 0
+    counts = {"created": 0, "updated": 0, "unchanged": 0}
     for entry in items:
-        if not isinstance(entry, dict):
-            continue
-        slug = (entry.get("slug") or "").strip()
+        slug = (entry.get("slug") or "").strip() if isinstance(entry, dict) else ""
         if not slug:
             continue
-        total += 1
-
-        technologies = entry.get("technologies") or []
-        tags_str = ", ".join(str(t) for t in technologies if t)[:300]
-        live_fields = {
-            "title": (entry.get("title") or slug)[:200],
-            "status": ContentItem.Status.PUBLISHED,
-            "topic": (entry.get("description") or "").strip()[:160],
-            "tags": tags_str,
-            "published_url": entry.get("url") or "",
-            "published_at": _parse_date(entry.get("published_at")),
-        }
-        create_defaults = {
-            **live_fields,
-            "content_type": ContentItem.Type.LAB_WRITEUP,
-        }
-
-        item, was_created = ContentItem.objects.get_or_create(
-            slug=slug, defaults=create_defaults
-        )
-        if was_created:
-            created += 1
-        else:
-            changed = False
-            for key, value in live_fields.items():
-                if getattr(item, key) != value:
-                    setattr(item, key, value)
-                    changed = True
-            if changed:
-                item.save(update_fields=[*live_fields.keys(), "updated_at"])
-                updated += 1
-
+        item, outcome = _upsert(slug, _live_fields(entry, slug))
+        counts[outcome] += 1
         if project is not None:
             item.related_projects.add(project)
 
     return {
-        "created": created,
-        "updated": updated,
-        "total": total,
+        "created": counts["created"],
+        "updated": counts["updated"],
+        "total": sum(counts.values()),
         "project": project.slug if project else None,
     }

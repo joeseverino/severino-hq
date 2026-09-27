@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import math
 from typing import Any
 
 from django.conf import settings
@@ -29,7 +28,9 @@ from .adoption import OBSERVES_ONLY, observes_only
 from .approvals import consent_gap
 from .projection import page_size, read_once
 from .cadence import ring_doorbell
+from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .security import Capability, Principal
+from .ui import counted
 
 
 class NotFoundError(ValueError):
@@ -220,20 +221,6 @@ def suggest_key(kind: str, spec: dict[str, Any]) -> str:
         if not ManagedResource.objects.filter(key=candidate).exists():
             return candidate
     return base
-
-
-def get_managed_resource(key: str) -> dict[str, Any]:
-    """Return resource state and structured operation history as one contract."""
-    try:
-        resource = ManagedResource.objects.get(key=key)
-    except ManagedResource.DoesNotExist as exc:
-        raise NotFoundError(f"Managed resource {key!r} was not found.") from exc
-    return {
-        "resource": serialize_resource(resource),
-        "operations": [
-            operation_summary(operation) for operation in resource.operations.all()[:20]
-        ],
-    }
 
 
 def serialize_resource(resource: ManagedResource) -> dict[str, Any]:
@@ -839,24 +826,19 @@ def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, str]:
     ):
         return True, "A consumer is drifted or degraded."
 
-    not_after = resource.status.get("not_after")
-    if not not_after:
+    if not resource.status.get("not_after"):
         return True, "No verified certificate expiry has been reported."
-    try:
-        expiry = datetime.fromisoformat(not_after.replace("Z", "+00:00"))
-    except (TypeError, ValueError):
+    expiry = certificate_expiry(resource.status)
+    if expiry is None:
         return True, "The reported certificate expiry is invalid."
-    if expiry.tzinfo is None:
-        expiry = expiry.replace(tzinfo=timezone.utc)
-    days_left = (expiry - datetime.now(timezone.utc)).total_seconds() / 86400
-    whole_days_left = max(0, math.ceil(days_left))
-    renewal_window = resource.spec.get("renewal_window_days", 30)
-    if days_left <= renewal_window:
-        return True, f"{whole_days_left} days remaining."
+    window = renewal_window(resource.spec)
+    left = max(0, days_until(expiry))
+    if datetime.now(timezone.utc) >= renewal_opens_at(expiry, window):
+        return True, f"{counted(left, 'day')} remaining."
     return (
         False,
-        f"{whole_days_left} days remaining. Renewal opens at "
-        f"{renewal_window} days.",
+        f"{counted(left, 'day')} remaining. Renewal opens at "
+        f"{counted(window, 'day')}.",
     )
 
 

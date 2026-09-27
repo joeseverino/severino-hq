@@ -28,6 +28,7 @@ import inspect
 import json
 import pkgutil
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 from pydantic import BaseModel
@@ -48,7 +49,7 @@ def module_names() -> tuple[str, ...]:
     )
 
 
-def exports(module) -> tuple[str, ...]:
+def exports(module: ModuleType) -> tuple[str, ...]:
     """What a module offers: its ``__all__``, or what it defines itself."""
 
     declared = getattr(module, "__all__", None)
@@ -64,7 +65,7 @@ def exports(module) -> tuple[str, ...]:
     )
 
 
-def _parameters(target) -> list[str] | None:
+def _parameters(target: Any) -> list[str] | None:
     """A signature as short strings: ``name``, ``name=`` when it has a default,
     ``*args``/``**kwargs``, and the bare ``*`` and ``/`` markers Python uses."""
 
@@ -97,7 +98,7 @@ def _parameters(target) -> list[str] | None:
     return rendered
 
 
-def _members(cls) -> dict[str, Any]:
+def _members(cls: type) -> dict[str, Any]:
     """What the class itself defines, not what it inherits."""
 
     members: dict[str, Any] = {}
@@ -116,7 +117,7 @@ def _members(cls) -> dict[str, Any]:
     return members
 
 
-def _class(cls) -> dict[str, Any]:
+def _class(cls: type) -> dict[str, Any]:
     if issubclass(cls, enum.Enum):
         return {"kind": "enum", "members": [member.name for member in cls]}
     shape: dict[str, Any] = {
@@ -141,7 +142,7 @@ def _class(cls) -> dict[str, Any]:
     return shape
 
 
-def _shape(value) -> dict[str, Any]:
+def _shape(value: object) -> dict[str, Any]:
     if inspect.isclass(value):
         return _class(value)
     if inspect.isroutine(value):
@@ -163,7 +164,8 @@ def describe() -> dict[str, Any]:
         "sdk_version": hq_sdk.SDK_VERSION,
         "modules": modules,
     }
-    return json.loads(json.dumps(contract, sort_keys=True))
+    plain: dict[str, Any] = json.loads(json.dumps(contract, sort_keys=True))
+    return plain
 
 
 def render(contract: dict[str, Any]) -> str:
@@ -173,7 +175,8 @@ def render(contract: dict[str, Any]) -> str:
 def load_committed() -> dict[str, Any]:
     if not CONTRACT_PATH.exists():
         return {}
-    return json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+    committed: dict[str, Any] = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+    return committed
 
 
 def _summary(before: dict[str, Any], after: dict[str, Any]) -> str:
@@ -201,30 +204,37 @@ def _summary(before: dict[str, Any], after: dict[str, Any]) -> str:
     return "; ".join(parts)
 
 
+def _module_drift(module: str, before: dict[str, Any], after: dict[str, Any]) -> list[str]:
+    """Each export added, removed or reshaped in one module present in both."""
+
+    lines = []
+    for name in sorted(set(before) | set(after)):
+        if name not in before:
+            lines.append(f"+ hq_sdk.{module}.{name}")
+        elif name not in after:
+            lines.append(f"- hq_sdk.{module}.{name}")
+        elif before[name] != after[name]:
+            lines.append(
+                f"~ hq_sdk.{module}.{name}: {_summary(before[name], after[name])}"
+            )
+    return lines
+
+
 def drift(committed: dict[str, Any], current: dict[str, Any]) -> list[str]:
     """Every difference between two contracts, one line each, empty when none."""
 
-    lines = []
-    for key in ("api_version", "sdk_version"):
-        if committed.get(key) != current.get(key):
-            lines.append(f"{key}: {committed.get(key)!r} -> {current.get(key)!r}")
+    lines = [
+        f"{key}: {committed.get(key)!r} -> {current.get(key)!r}"
+        for key in ("api_version", "sdk_version")
+        if committed.get(key) != current.get(key)
+    ]
     before = committed.get("modules", {})
     after = current.get("modules", {})
     for module in sorted(set(before) | set(after)):
         if module not in before:
             lines.append(f"+ hq_sdk.{module}: {', '.join(sorted(after[module]))}")
-            continue
-        if module not in after:
+        elif module not in after:
             lines.append(f"- hq_sdk.{module}")
-            continue
-        for name in sorted(set(before[module]) | set(after[module])):
-            if name not in before[module]:
-                lines.append(f"+ hq_sdk.{module}.{name}")
-            elif name not in after[module]:
-                lines.append(f"- hq_sdk.{module}.{name}")
-            elif before[module][name] != after[module][name]:
-                lines.append(
-                    f"~ hq_sdk.{module}.{name}: "
-                    f"{_summary(before[module][name], after[module][name])}"
-                )
+        else:
+            lines.extend(_module_drift(module, before[module], after[module]))
     return lines

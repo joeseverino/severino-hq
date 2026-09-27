@@ -17,7 +17,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from control_plane.models import ManagedResource, ProviderConnection
@@ -98,6 +97,8 @@ class Presence:
     rx_bytes: int = 0
     tx_bytes: int = 0
     tags: tuple[str, ...] = ()
+    # When this device last reached HQ, and how: ``arrivals.Arrival``.
+    reached_hq: Any = None
     # Who the policy admits, per port. Already swept for the reachability
     # panel, and the same answer a machine's own page should be able to give
     # without anybody having to go and ask it.
@@ -208,7 +209,9 @@ class Presence:
         moment = parse_datetime(self.key_expires)
         if moment is None:
             return None
-        return (moment - timezone.now()).days
+        from .expiry import days_until
+
+        return days_until(moment)
 
 
 @dataclass(frozen=True)
@@ -281,10 +284,6 @@ class Machine:
     hq_hostnames: tuple[str, ...] = ()
     # What it does for the estate, derived; see ``application.machine_roles``.
     roles: tuple[Any, ...] = ()
-
-    @property
-    def serves_count(self) -> int:
-        return len(self.hostnames) + (1 if self.runs_hq else 0) + len(self.roles)
 
     @property
     def public_addresses(self) -> tuple[str, ...]:
@@ -714,10 +713,15 @@ def tailnet_presence() -> dict[str, Presence]:
     """Presence by machine name, as the tailnet last reported it."""
 
     found: dict[str, Presence] = {}
-    # The same read the policy uses. Two kinds in one table, asked once.
+    # The same read the policy uses. Three kinds in one table, asked once.
+    from control_plane.observations.hq import ARRIVAL_KIND
+
+    from .arrivals import arrivals
     from .tailnet import snapshots
 
-    for snapshot in snapshots()[TAILNET_KIND]:
+    read = snapshots()
+    arrived = arrivals(read[ARRIVAL_KIND])
+    for snapshot in read[TAILNET_KIND]:
         for record in snapshot.records:
             name = str(record.get("name", ""))
             if not name:
@@ -755,6 +759,7 @@ def tailnet_presence() -> dict[str, Presence]:
                 rx_bytes=int(record.get("rx_bytes") or 0),
                 tx_bytes=int(record.get("tx_bytes") or 0),
                 tags=tuple(str(tag) for tag in record.get("tags") or ()),
+                reached_hq=arrived.get(name),
                 openings=tuple(
                     (int(entry["port"]), tuple(entry.get("who") or ()))
                     for entry in record.get("reach") or ()

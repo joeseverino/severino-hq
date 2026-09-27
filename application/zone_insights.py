@@ -25,7 +25,7 @@ from django.urls import reverse
 
 from control_plane.credential_reads import REGISTRAR_READ
 from control_plane.models import ManagedResource
-from control_plane.provider_adapters.contracts import PERMISSION_REFUSAL, cloudflare_refusal
+from control_plane.provider_adapters.contracts import PERMISSION_REFUSAL
 from control_plane.providers import (
     CERTIFICATE_KIND,
     PROVIDERS,
@@ -37,6 +37,7 @@ from control_plane.providers import (
 from control_plane.names import in_zone, normalized_hostname
 
 from .entity_links import entity_link
+from .expiry import days_until
 from .facts import (
     Subject,
     inventory_about,
@@ -294,7 +295,7 @@ _SSL_ORDER = ("off", "flexible", "full", "strict")
 def _strength(found: dict) -> tuple[int, tuple[int, ...]] | None:
     """A readable posture as (mode rank, minimum TLS version), or None."""
 
-    if not found or found.get("unread"):
+    if not found:
         return None
     mode = str(found.get("ssl", "")).lower().replace("full_strict", "strict")
     if mode not in _SSL_ORDER:
@@ -506,15 +507,16 @@ def posture(zone) -> ZoneInsight | None:
     found: dict[str, str] = {}
     for _snapshot, record in inventory_about(ZONE_KIND, Subject.of(hostnames=(zone.zone,))):
         found = dict(record.get("posture") or {})
-    if not found:
-        return None
-    if found.get("unread"):
+    refused = _zone_part_refused(zone.zone, "posture")
+    if refused is not None:
         return ZoneInsight(
             label="TLS posture",
             value="Not readable",
-            detail=f"The Cloudflare account credential could not read it: {found['unread']}",
+            detail=f"{refused.phrase}.",
             concern=True,
         )
+    if not found:
+        return None
 
     mode = str(found.get("ssl", "")).lower()
     label, explanation = _TLS_MODE.get(mode, (mode.replace("_", " ").title(), ""))
@@ -544,17 +546,17 @@ def registration(zone) -> ZoneInsight | None:
     found: dict[str, object] = {}
     for _snapshot, record in inventory_about(ZONE_KIND, subject):
         found = dict(record.get("registration") or {})
-    refused = str(found.get("unread", "") or "")
-    expires = "" if refused else str(found.get("expires_at", ""))
+    part = _zone_part_refused(zone.zone, "registration")
+    refused = (part.reason or part.phrase) if part is not None else ""
+    expires = "" if part is not None else str(found.get("expires_at", ""))
     if not expires:
-        refusal = str(found.get("refusal", "") or "") or cloudflare_refusal(refused)
-        return _public_registration(subject, refused, refusal)
+        return _public_registration(subject, refused, part.refusal if part is not None else "")
     try:
         when = datetime.fromisoformat(expires).replace(tzinfo=timezone.utc)
     except ValueError:
         return None
     renews = bool(found.get("auto_renew"))
-    days = (when - datetime.now(timezone.utc)).days
+    days = days_until(when)
     return ZoneInsight(
         label="Registration",
         value=expiry_phrase(when.isoformat()),
@@ -565,6 +567,21 @@ def registration(zone) -> ZoneInsight | None:
         ),
         # Only when both halves are true. A date alone is a calendar entry.
         concern=days <= 90 and not renews,
+    )
+
+
+def _zone_part_refused(zone: str, part: str):
+    """The zone sweep's refusal of one part on this zone, or None."""
+
+    from .facts import refusals_about
+
+    return next(
+        (
+            refused
+            for refused in refusals_about(Subject.of(hostnames=(zone,)), (ZONE_KIND,))
+            if refused.part.name == part
+        ),
+        None,
     )
 
 

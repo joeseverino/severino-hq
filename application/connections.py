@@ -56,6 +56,7 @@ from .action_links import (
     recommend_connection_action,
 )
 from .security import AuthorizationError, Capability, Principal
+from .ui import ago
 
 # The family the controller observes on HQ's behalf. It leads every inventory
 # because it is the one the page is about; the gateways beside it are the
@@ -84,7 +85,11 @@ class ConnectionReading:
     reachable: bool
     probed: bool
     detail: str
+    # When a controller last reported it. See ``probed_at``.
     observed_at: datetime
+    # When it was last probed, where that trails the report: an SSH connection
+    # is probed on its own clock and carried between probes.
+    probed_at: datetime | None = None
     # The machines this reaches, as (name, url): what a credential opens.
     machines: tuple[tuple[str, str], ...] = ()
     # Declarations that name this connection, as (key, url). The reverse of the
@@ -498,7 +503,12 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
             reachable=row.reachable,
             probed=row.probed,
             detail=row.detail,
-            observed_at=row.observed_at,
+            observed_at=row.reported_at or row.observed_at,
+            probed_at=(
+                row.observed_at
+                if row.reported_at and row.reported_at > row.observed_at
+                else None
+            ),
             machines=_machines_reached(row, known, located),
             resources=tuple(sorted(using.get(row.connection_ref, ()))),
             named=tuple(sorted(named.get(row.connection_ref, ()))),
@@ -622,6 +632,9 @@ def _controller_instances(
                     for fact in (
                         ConnectionFact("Controller", reading.controller_id)
                         if name_controller and reading.controller_id
+                        else None,
+                        ConnectionFact("Probed", ago(reading.probed_at))
+                        if reading.probed_at
                         else None,
                         *(
                             ConnectionFact("Could not finish", f"{step} ({reason})")
@@ -917,7 +930,7 @@ def list_connections(*, principal: Principal) -> dict:
                 "summary": group.spec.summary,
                 "secret_store": group.spec.secret_store or None,
                 "instances": [
-                    _serialize_instance(connection) for connection in group.connections
+                    serialize_connection(connection) for connection in group.connections
                 ],
             }
             for group in groups
@@ -925,7 +938,7 @@ def list_connections(*, principal: Principal) -> dict:
     }
 
 
-def _serialize_instance(connection: ConnectionView) -> dict:
+def serialize_connection(connection: ConnectionView) -> dict:
     instance = connection.instance
     return {
         "id": instance.id,

@@ -40,20 +40,26 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone as dt_timezone
-from ipaddress import ip_network
 from typing import Any, Callable
 from urllib.parse import urlencode
 
-from django.conf import settings
 from django.utils import timezone
 
+from control_plane.provider_adapters.contracts import ADDRESS_FAILURE
 from control_plane.providers import CONTAINER_KIND, PROVIDERS
 
-from .action_links import ActionLink, action_with_return, topology_investigation_links
+from . import certificate_expiry, credential_findings, dns_findings, docker_estate, trusted_networks
+from .action_links import (
+    ActionLink,
+    action_with_return,
+    read_now_link,
+    topology_investigation_links,
+)
 from .integrations import IntegrationGraph, integration_graph
-from .reach import TAILNET
 from .cadence import slowest_sweep_interval as _slowest_sweep_interval, sweep_interval
 from .contracts import route_url
+from .credential_findings import OperatorStep, mint_steps
+from .expiry import days_until
 from .security import AuthorizationError, Principal
 from .topology import (
     _STALE_AFTER,
@@ -64,10 +70,12 @@ from .topology import (
 )
 from .ui import counted, duration
 from .workflows import (
+    WorkflowLayout,
     WorkflowPlan,
     claim_identity,
     claim_resolution_plan,
     serialize_workflow,
+    workflow_layout,
 )
 
 
@@ -132,6 +140,8 @@ class Finding:
     # while an effortless surface can lead with the shared cause once.
     affected_scopes: tuple[str, ...] = ()
     workflow: WorkflowPlan | None = None
+    # Commands an operator runs on their own machine; HQ never runs them.
+    steps: tuple[OperatorStep, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -147,7 +157,15 @@ class FindingRule:
     title: str
     severity: str
     detect: Callable[["_Estate"], tuple[Finding, ...]]
+    # The precise action that resolves a finding of this rule by hand. Required:
+    # a finding either offers an operation through the gated queue or says
+    # exactly what to do. A finding may state a more specific one.
+    operator_action: str
     subsumes: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.operator_action.strip():
+            raise ValueError(f"Finding rule {self.name!r} must say how it is resolved.")
 
 
 @dataclass(frozen=True)
@@ -346,61 +364,6 @@ def _skipped_by_a_sweep(estate: _Estate) -> tuple[Finding, ...]:
             )
         )
     return tuple(found)
-
-
-def _unrecognised_containers(estate: _Estate) -> tuple[Finding, ...]:
-    """A container a sweep found that no compose project declares.
-
-    Every container that belongs on a machine is created by a compose project,
-    and HQ takes those on by itself. Anything else was started by hand or by
-    something HQ does not know, so it is reported rather than adopted: a
-    container nobody declared must never look like one somebody did.
-    """
-
-    from django.urls import NoReverseMatch, reverse
-
-    from .inventory import record_token
-
-    found: list[Finding] = []
-    for node in estate.nodes():
-        for key, value in node.facts:
-            if key != "unrecognised-container":
-                continue
-            name, _, host = value.rpartition("@")
-            try:
-                adopt_url = reverse(
-                    "control_plane:adopt_record",
-                    args=[
-                        CONTAINER_KIND,
-                        record_token(CONTAINER_KIND, (host, name)),
-                    ],
-                )
-            except NoReverseMatch:
-                adopt_url = ""
-            found.append(
-                Finding(
-                    rule="unrecognised-container",
-                    subject=node.id,
-                    title=f"Unrecognised container {name} on {node.label}",
-                    severity="serious",
-                    explanation=(
-                        "No compose project started it, so HQ has not taken it on. "
-                        "Adopt it if you started it. Otherwise find what did and remove it."
-                    ),
-                    evidence=(("Container", name), ("Machine", node.label)),
-                    remedies=(
-                        Remedy(
-                            capability="infrastructure.resource.create",
-                            target=name,
-                            label="Adopt it",
-                            effect="HQ starts watching it like any other container.",
-                            url=adopt_url,
-                            method="POST",
-                        ),
-                    ),
-                )
-            )
-    return tuple(sorted(found, key=lambda finding: finding.title))
 
 
 def _skipped_remedies(node: TopologyNode) -> tuple[Remedy, ...]:
@@ -857,7 +820,7 @@ def _registration_lapsing(estate: _Estate) -> tuple[Finding, ...]:
         # made explicit here: a renewal date is a UTC day.
         if expires.tzinfo is None:
             expires = expires.replace(tzinfo=dt_timezone.utc)
-        days = (expires - estate.now).days
+        days = days_until(expires, estate.now)
         if days > 90:
             continue
         domain = facts.get("domain", node.label)
@@ -922,6 +885,42 @@ def _perimeter_open(estate: _Estate) -> tuple[Finding, ...]:
     return tuple(sorted(found, key=lambda finding: finding.title))
 
 
+def _perimeter_unchecked(estate: _Estate) -> tuple[Finding, ...]:
+    """A perimeter reading that tried nothing, which proves nothing either way."""
+
+    found: list[Finding] = []
+    for node in estate.nodes():
+        if node.kind != "connection":
+            continue
+        reasons = _fact_values(node, "perimeter-unchecked")
+        if not reasons:
+            continue
+        found.append(
+            Finding(
+                rule="perimeter-unchecked",
+                subject=node.id,
+                title=f"{node.label}'s public perimeter was not checked",
+                steps=(
+                    (
+                        OperatorStep(
+                            label="Make the perimeter command on this machine report "
+                            "its public addresses, then request a fresh sweep."
+                        ),
+                    )
+                    if "no public address" in reasons
+                    else ()
+                ),
+                severity="attention",
+                explanation=(
+                    "The last reading dialled nothing, so it cannot say whether "
+                    "anything answers from the public internet."
+                ),
+                evidence=tuple(("Not checked", reason) for reason in reasons),
+            )
+        )
+    return tuple(sorted(found, key=lambda finding: finding.title))
+
+
 def _firewall_stopped(estate: _Estate) -> tuple[Finding, ...]:
     """A firewall that is installed, configured, and not running.
 
@@ -970,6 +969,7 @@ def _connection_not_answering(estate: _Estate) -> tuple[Finding, ...]:
         if node.status != "serious" and not refused:
             continue
         reason = refusal or node.detail
+        failure = credential_findings.failure_of_node(node)
         found.append(
             Finding(
                 rule="connection-not-answering",
@@ -977,14 +977,16 @@ def _connection_not_answering(estate: _Estate) -> tuple[Finding, ...]:
                 title=(
                     f"{node.label}'s credential is refused"
                     if refused
+                    else f"{node.label} does not answer as its API"
+                    if failure == ADDRESS_FAILURE
                     else f"{node.label} is not answering"
                 ),
                 severity="attention",
                 explanation=(
                     (f"{reason.rstrip('.')}. " if reason else "")
                     + (
-                        "The provider refuses the credential, so HQ reads nothing "
-                        "through it until it is replaced."
+                        "The provider refuses the credential itself, so HQ reads "
+                        "nothing through it until it is replaced."
                         if refused
                         else "HQ reads nothing through it until it answers, so what "
                         "it reaches may be out of date."
@@ -992,8 +994,14 @@ def _connection_not_answering(estate: _Estate) -> tuple[Finding, ...]:
                 ),
                 evidence=(
                     ("State", "Refused" if refused else node.status_label or "Unreachable"),
+                    *(
+                        (("Cause", credential_findings.FAILURE_LABELS[failure]),)
+                        if failure and not refused
+                        else ()
+                    ),
                     *((("Last observed", node.observed_at),) if node.observed_at else ()),
                 ),
+                steps=mint_steps(node) if refused else credential_findings.answer_steps(node),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))
@@ -1046,9 +1054,56 @@ def _empty_group_granted(estate: _Estate) -> tuple[Finding, ...]:
                     "from the policy, or add the members it was meant for."
                 ),
                 evidence=tuple(("Empty group", name) for name in empty),
+                remedies=_policy_remedy(
+                    estate,
+                    "tailnet.policy.remove_empty_groups",
+                    "Remove empty groups",
+                ),
+                steps=(
+                    OperatorStep(
+                        label=f"Remove {', '.join(empty)} from the policy's groups and "
+                        "from every rule that names them, or add their members."
+                    ),
+                ),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))
+
+
+def _policy_remedy(estate: _Estate, capability: str, label: str) -> tuple[Remedy, ...]:
+    """A policy amendment, offered when a tailnet policy is declared to amend.
+
+    The capability re-derives the change from the declaration and writes it
+    through the gated policy kind, so a person still consents.
+    """
+
+    from django.urls import NoReverseMatch, reverse
+
+    from control_plane.providers import TAILNET_POLICY_KIND
+
+    policy = next(
+        (
+            node
+            for node in estate.nodes()
+            if node.kind == "resource" and node.kind_key == TAILNET_POLICY_KIND
+        ),
+        None,
+    )
+    if policy is None:
+        return ()
+    try:
+        url = reverse("command", kwargs={"name": capability})
+    except NoReverseMatch:
+        return ()
+    return (
+        Remedy(
+            capability=capability,
+            target=policy.label,
+            label=label,
+            effect="",
+            url=f"{url}?{urlencode({'target': policy.label})}",
+        ),
+    )
 
 
 def _work_that_keeps_failing(estate: _Estate) -> tuple[Finding, ...]:
@@ -1187,55 +1242,21 @@ def _tailnet_dns_off_tailnet(estate: _Estate) -> tuple[Finding, ...]:
     return tuple(sorted(found, key=lambda finding: finding.title))
 
 
-_TAILNET_RANGE = TAILNET[0]
-
-
 def _trusted_wider_than_tailnet(estate: _Estate) -> tuple[Finding, ...]:
-    """Trusted networks admit the whole Tailscale IPv4 range; the tailnet uses less.
+    return _built(trusted_networks.wider_than_tailnet(estate))
 
-    Informational. Trust is configuration, and HQ never narrows it itself.
-    """
 
-    wide = []
-    for cidr in settings.SEVERINO_TRUSTED_NETWORKS:
-        try:
-            network = ip_network(str(cidr).strip(), strict=False)
-        except ValueError:
-            continue
-        if network.version == 4 and network.supernet_of(_TAILNET_RANGE):
-            wide.append(str(network))
-    if not wide:
-        return ()
-    found: list[Finding] = []
-    for node in estate.nodes():
-        if node.kind != "connection":
-            continue
-        addresses = tuple(v for k, v in node.facts if k == "tailnet-address" and v)
-        routes = tuple(v for k, v in node.facts if k == "tailnet-route" and v)
-        if not addresses:
-            continue
-        uses = counted(len(addresses), "device address", "device addresses")
-        if routes:
-            uses += f" and {counted(len(routes), 'subnet route', 'subnet routes')}"
-        found.append(
-            Finding(
-                rule="trusted-wider-than-tailnet",
-                subject=node.id,
-                title=f"HQ trusts all of {_TAILNET_RANGE}; the tailnet uses {uses}",
-                severity="neutral",
-                explanation=(
-                    "SEVERINO_TRUSTED_NETWORKS admits every address in the range. "
-                    "Narrowing it to what the tailnet uses is an operator's "
-                    "decision; HQ does not change it."
-                ),
-                evidence=(
-                    *(("Trusted", network) for network in wide),
-                    *(("Device address", address) for address in addresses),
-                    *(("Subnet route", route) for route in routes),
-                ),
-            )
-        )
-    return tuple(sorted(found, key=lambda finding: finding.title))
+def _built(fields: tuple[dict[str, Any], ...]) -> tuple[Finding, ...]:
+    return tuple(Finding(**item) for item in fields)
+
+
+def _rules_of(specs: tuple[dict[str, Any], ...]) -> tuple[FindingRule, ...]:
+    """Rules declared in their own module, whose detectors return a finding's fields."""
+
+    return tuple(
+        FindingRule(**{**spec, "detect": lambda estate, detect=spec["detect"]: _built(detect(estate))})
+        for spec in specs
+    )
 
 
 RULES: tuple[FindingRule, ...] = (
@@ -1243,37 +1264,82 @@ RULES: tuple[FindingRule, ...] = (
         "unrecognised-container",
         "A container no compose project declares",
         "serious",
-        _unrecognised_containers,
+        lambda estate: _built(docker_estate.unrecognised_containers(estate)),
+        operator_action=(
+            "Adopt it if you started it; otherwise remove it on its machine with docker rm -f and the container's name."
+        ),
     ),
     FindingRule(
         "perimeter-open",
         "Port open to the public internet",
         "serious",
         _perimeter_open,
+        operator_action=(
+            "Close each port at the machine's firewall so it answers only on the tailnet, then request a fresh sweep."
+        ),
+    ),
+    FindingRule(
+        "perimeter-unchecked",
+        "Public perimeter not checked",
+        "attention",
+        _perimeter_unchecked,
+        operator_action=(
+            "Make the machine's perimeter reading report its public addresses and published ports, then request a fresh sweep."
+        ),
     ),
     FindingRule(
         "firewall-stopped",
         "Firewall not running",
         "serious",
         _firewall_stopped,
+        operator_action=(
+            "Start the firewall unit on the machine (systemctl start with the unit's name) and check it stays active."
+        ),
     ),
     FindingRule(
         "connection-not-answering",
         "Connection not answering or refused",
         "attention",
         _connection_not_answering,
+        operator_action=(
+            "Fix what the connection's error names (its address, its credential, or the route to it) in its 1Password item or on the network, then request a fresh sweep."
+        ),
+    ),
+    FindingRule(
+        "credential-missing-permissions",
+        "Credential missing permissions",
+        "attention",
+        lambda estate: _built(credential_findings.missing_permissions(estate)),
+        operator_action=(
+            "Mint a credential with the missing permissions using the command on the connection's row, then request a fresh sweep."
+        ),
+    ),
+    FindingRule(
+        "credential-expiring",
+        "Credential expiring",
+        "attention",
+        lambda estate: _built(credential_findings.expiring(estate)),
+        operator_action=(
+            "Mint a replacement using the command on the connection's row before it expires, then request a fresh sweep."
+        ),
     ),
     FindingRule(
         "work-that-keeps-failing",
         "Work through a connection fails",
         "attention",
         _work_that_keeps_failing,
+        operator_action=(
+            "Read the controller log for the failing step on this connection and fix what it names."
+        ),
     ),
     FindingRule(
         "unreachable-consumer",
         "Consumer could not be read",
         "serious",
         _unreachable_consumer,
+        operator_action=(
+            "Make the consumer reachable from the controller, or allow the path in the tailnet policy, then reconcile."
+        ),
         # Says the same thing with the name of the consumer in it. The generic
         # rule would otherwise put this in front of an operator twice.
         subsumes=("reporting-a-fault",),
@@ -1283,12 +1349,45 @@ RULES: tuple[FindingRule, ...] = (
         "Domain registration expiring",
         "serious",
         _registration_lapsing,
+        operator_action=(
+            "Renew the domain or turn on auto-renew at its registrar."
+        ),
+    ),
+    FindingRule(
+        "certificate-expiring",
+        "Certificate expiring",
+        "attention",
+        lambda estate: _built(certificate_expiry.expiring(estate)),
+        operator_action=(
+            "Renew the certificate where it is held, or fix the automatic renewal that should have renewed it, then request a fresh sweep."
+        ),
+    ),
+    FindingRule(
+        "container-image-behind",
+        "Container runs an older image than its tag",
+        "attention",
+        lambda estate: _built(docker_estate.images_behind(estate)),
+        operator_action=(
+            "Recreate the container from its compose project so it runs the image its tag names now."
+        ),
+    ),
+    FindingRule(
+        "container-image-untagged",
+        "Container runs an untagged image",
+        "attention",
+        lambda estate: _built(docker_estate.images_untagged(estate)),
+        operator_action=(
+            "Pin a tag for the image in the container's compose file and recreate it."
+        ),
     ),
     FindingRule(
         "controller-sweep-stale",
         "Controller stopped reporting",
         "serious",
         _controller_sweep_stale,
+        operator_action=(
+            "Check that the controller runs and can reach HQ, then request a fresh sweep."
+        ),
         subsumes=("kind-never-swept",),
     ),
     FindingRule(
@@ -1296,12 +1395,18 @@ RULES: tuple[FindingRule, ...] = (
         "Missing from the last sweep",
         "serious",
         _skipped_by_a_sweep,
+        operator_action=(
+            "Mark it on demand if it only runs sometimes, or remove its declaration."
+        ),
     ),
     FindingRule(
         "kind-never-swept",
         "Kind not seen by the sweep",
         "serious",
         _kind_never_swept,
+        operator_action=(
+            "Check the connection that reads this kind, then request a fresh sweep."
+        ),
         # When the sweep itself is the fault, every record of the kind looks
         # skipped. Saying it once about the kind beats saying it about each.
         subsumes=("skipped-by-a-sweep", "never-observed"),
@@ -1311,58 +1416,104 @@ RULES: tuple[FindingRule, ...] = (
         "Resource reports a fault",
         "serious",
         _reporting_a_fault,
+        operator_action=(
+            "Read the provider's message on the resource, fix the cause, then reconcile."
+        ),
     ),
     FindingRule(
         "reconciled-but-still-wrong",
         "Still wrong after reconciling",
         "serious",
         _reconciled_but_still_wrong,
+        operator_action=(
+            "Correct the declaration so it describes what the provider can hold, then reconcile."
+        ),
     ),
     FindingRule(
         "weakly-verified",
         "Unconfirmed fields",
         "attention",
         _weakly_verified,
+        operator_action=(
+            "Make the provider report these fields, or declare them unobservable on the kind."
+        ),
     ),
     FindingRule(
         "never-observed",
         "Never seen",
         "attention",
         _never_observed,
+        operator_action=(
+            "Check that the record exists at the provider under its declared name, or remove the declaration."
+        ),
     ),
     FindingRule(
         "reached-but-unmeasured",
         "Traffic not measured",
         "attention",
         _reached_but_unmeasured,
+        operator_action=(
+            "Add the hostname to the analytics source that measures its neighbours."
+        ),
     ),
     FindingRule(
         "tailnet-dns-off-tailnet",
         "Tailnet DNS is not a tailnet address",
         "attention",
         _tailnet_dns_off_tailnet,
+        operator_action=(
+            "Set the tailnet nameserver to the DNS server's tailnet address in the tailnet DNS settings."
+        ),
     ),
     FindingRule(
         "devices-join-without-approval",
         "New devices join without approval",
         "attention",
         _devices_join_without_approval,
+        operator_action=(
+            "In the Tailscale admin console, open Settings, then Device management, and turn on Device approval."
+        ),
     ),
     FindingRule(
         "empty-group-granted",
         "Empty group still granted access",
         "neutral",
         _empty_group_granted,
+        operator_action=(
+            "Remove the group from the policy's groups and from every rule that names it, or add its members."
+        ),
     ),
+    *_rules_of(dns_findings.RULES),
     FindingRule(
         "trusted-wider-than-tailnet",
         "Trusted networks wider than the tailnet",
         "neutral",
         _trusted_wider_than_tailnet,
+        operator_action=(
+            "Set SEVERINO_TRUSTED_NETWORKS to the addresses and routes the tailnet uses, then restart HQ."
+        ),
     ),
 )
 
 _RULE_BY_NAME = {rule.name: rule for rule in RULES}
+
+
+def finding_steps(finding: Finding) -> tuple[OperatorStep, ...]:
+    """What a person does to resolve it: its own steps, else its rule's."""
+
+    if finding.steps:
+        return finding.steps
+    found = _RULE_BY_NAME.get(finding.rule)
+    return (OperatorStep(label=found.operator_action),) if found else ()
+
+
+def finding_layout(finding: Finding) -> WorkflowLayout:
+    """How a card shows a finding's actions: its plan's, or, for a finding built
+    without one, its own investigations and offers as links."""
+
+    if finding.workflow is not None:
+        return workflow_layout(finding.workflow)
+    return WorkflowLayout(impact=finding.investigations, related=finding.offers)
 
 
 def finding_rules() -> tuple[FindingRule, ...]:
@@ -1455,18 +1606,7 @@ def _resolved(
         for remedy in resolved_remedies
         if remedy.url
     )
-    findings_url = route_url("control_plane:findings")
-    verification = (
-        ActionLink(
-            "verify",
-            "Check again",
-            "read",
-            f"{findings_url}?{urlencode({'rule': finding.rule})}",
-            reason="Runs this check against current data.",
-        )
-        if findings_url
-        else None
-    )
+    verification = _verification(finding, principal, subject)
     workflow = claim_resolution_plan(
         namespace=_CLAIM_NAMESPACE,
         rule=finding.rule,
@@ -1490,6 +1630,59 @@ def _resolved(
         scope=finding.scope,
         affected_scopes=finding.affected_scopes,
         workflow=workflow,
+        steps=finding_steps(finding),
+    )
+
+
+def _read_subject(finding: Finding, subject: TopologyNode | None) -> dict[str, Any] | None:
+    """What to read now so the check re-runs on fresh data; None when no reading
+    is involved."""
+
+    from control_plane.observations import OBSERVATIONS
+
+    if subject is not None and subject.kind == "connection" and subject.connection_ref:
+        return {"connection_ref": subject.connection_ref}
+    kind = finding.scope or (subject.kind_key if subject is not None else "")
+    if kind in OBSERVATIONS or (kind in PROVIDERS and _is_observable(kind)):
+        return {"kind": kind}
+    if finding.affected_scopes:
+        return {"every_connection": True}
+    return None
+
+
+def _verification(
+    finding: Finding, principal: Principal, subject: TopologyNode | None
+) -> ActionLink | None:
+    """Read now and check again where a reading is involved; else check again."""
+
+    findings_url = route_url("control_plane:findings")
+    if not findings_url:
+        return None
+    wanted = _read_subject(finding, subject)
+    read = (
+        read_now_link(principal, label="Read now and check again", **wanted)
+        if wanted is not None
+        else None
+    )
+    again = f"{findings_url}?{urlencode({'rule': finding.rule})}"
+    if read is not None:
+        separator = "&" if "?" in read.url else "?"
+        return ActionLink(
+            "verify",
+            read.label,
+            read.effect,
+            f"{read.url}{separator}{urlencode({'next': again})}",
+            method="POST",
+            capability=read.capability,
+            target=read.target,
+            reason="Reads it now; the check runs again on what the controller reports.",
+        )
+    return ActionLink(
+        "verify",
+        "Check again",
+        "read",
+        again,
+        reason="Runs this check against current data.",
     )
 
 
@@ -1607,7 +1800,7 @@ def derive_findings(
     )
 
 
-def _serialize(finding: Finding) -> dict[str, Any]:
+def serialize_finding(finding: Finding) -> dict[str, Any]:
     return {
         "id": claim_identity(
             _CLAIM_NAMESPACE, finding.rule, finding.subject, finding.scope
@@ -1637,6 +1830,7 @@ def _serialize(finding: Finding) -> dict[str, Any]:
         "offers": [asdict(action) for action in finding.offers],
         "investigations": [asdict(action) for action in finding.investigations],
         "workflow": serialize_workflow(finding.workflow),
+        "operator_steps": [asdict(step) for step in finding.steps],
     }
 
 
@@ -1663,7 +1857,7 @@ def findings(*, principal: Principal, rule: str = "") -> dict[str, Any]:
             for item in RULES
         ],
         "summary": {"findings": len(raised), "severities": counts},
-        "findings": [_serialize(finding) for finding in raised],
+        "findings": [serialize_finding(finding) for finding in raised],
     }
 
 

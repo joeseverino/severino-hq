@@ -205,16 +205,93 @@ class CredentialSightTests(TestCase):
             credential_sight()
 
     def test_providers_without_a_connection_are_split_out(self):
-        connected, unconnected = sight_by_connection({"ssh"})
+        connected, unconnected = sight_by_connection({"edge": "ssh"})
 
-        self.assertEqual(set(connected), {"ssh"})
+        self.assertEqual(set(connected), {"edge"})
+        self.assertEqual(connected["edge"].provider, "ssh")
         self.assertEqual(
             {provider.provider for provider in unconnected},
             set(CONNECTION_CREDENTIALS) - {"ssh"},
         )
 
     def test_with_nothing_connected_no_provider_is_said_to_be_missing(self):
-        self.assertEqual(sight_by_connection(set()), ({}, ()))
+        self.assertEqual(sight_by_connection({}), ({}, ()))
+
+
+class PerConnectionSightTests(TestCase):
+    """Two connections of one provider never show each other's readings."""
+
+    def setUp(self):
+        now = timezone.now()
+        ProviderInventory.objects.create(
+            kind="host.perimeter",
+            records=[{"record": "perimeter", "connection_ref": "edge"}],
+            observed_at=now,
+        )
+        ProviderInventory.objects.create(
+            kind="caddy.route",
+            records=[
+                {"connection_ref": "edge", "domain": name, "upstream": "app:80"}
+                for name in ("a.example.com", "b.example.com", "c.example.com")
+            ],
+            observed_at=now,
+        )
+
+    def labels(self, found):
+        return {sight.kind: sight.records for sight in found.sights}
+
+    def test_each_connection_counts_only_what_was_read_through_it(self):
+        connected, _ = sight_by_connection({"edge": "ssh", "shared-host": "ssh"})
+
+        self.assertEqual(
+            self.labels(connected["edge"]), {"host.perimeter": 1, "caddy.route": 3}
+        )
+        seen = self.labels(connected["shared-host"])
+        self.assertNotIn("host.perimeter", seen)
+        self.assertNotIn("caddy.route", seen)
+
+    def test_the_provider_view_still_counts_every_connection(self):
+        found = sights_by_kind()
+
+        self.assertEqual(found[("ssh", "caddy.route")].records, 3)
+
+    def test_a_failed_read_is_said_on_every_connection_it_could_be(self):
+        ProviderInventory.objects.filter(kind="host.perimeter").update(
+            reachable=False, error="exit 255"
+        )
+
+        connected, _ = sight_by_connection({"edge": "ssh", "shared-host": "ssh"})
+
+        for ref in ("edge", "shared-host"):
+            states = {sight.kind: sight.state for sight in connected[ref].sights}
+            self.assertEqual(states["host.perimeter"], UNREADABLE)
+
+    def test_one_query_for_every_connection(self):
+        with self.assertNumQueries(1):
+            sight_by_connection({"edge": "ssh", "shared-host": "ssh", "dns": "cloudflare_dns"})
+
+    def test_a_per_connection_kind_that_names_no_connection_is_refused(self):
+        from control_plane.attribution import PER_CONNECTION_PROVIDERS, unattributed_kinds
+
+        class Unnamed(ObservationRecord):
+            record: str
+
+        class Named(ObservationRecord):
+            connection_ref: str
+
+        (provider,) = sorted(PER_CONNECTION_PROVIDERS)
+        observations = registry(
+            (
+                ObservationSpec("example.unnamed", provider, "Unnamed", Unnamed),
+                ObservationSpec("example.named", provider, "Named", Named),
+                ObservationSpec("example.other", "tailscale", "Other", Unnamed),
+            )
+        )
+
+        self.assertEqual(unattributed_kinds(observations, ()), ["example.unnamed"])
+        self.assertEqual(
+            unattributed_kinds(OBSERVATIONS, tuple(PROVIDERS.values())), []
+        )
 
 
 class CanDoTests(TestCase):
@@ -387,13 +464,52 @@ class CredentialSightPageTests(TestCase):
         self.assertContains(response, "2 readable")
         # Not connected, once each, with what it would let HQ see.
         self.assertContains(response, "<strong>AdGuard Home</strong>", count=1)
-        self.assertContains(response, "Would let HQ see: Internal DNS record")
+        self.assertContains(
+            response, "Would let HQ see: DNS client, DNS lookups, DNS server, Internal DNS record"
+        )
         self.assertContains(response, "<strong>1Password</strong>", count=1)
         self.assertContains(response, "Would let HQ manage: Certificate target")
         # Nothing sweeps these, so no credential is said to see them.
         self.assertNotIn("Nothing to observe", body)
         self.assertNotIn("Onepassword", body)
         self.assertNotIn("Adguard", body)
+
+    def test_a_second_ssh_connection_does_not_show_the_first_ones_readings(self):
+        ProviderConnection.objects.create(
+            connection_ref="example-shared-host",
+            controller_id="example-controller",
+            provider="ssh",
+            endpoint="",
+            observed_at=timezone.now(),
+        )
+        ProviderInventory.objects.filter(kind="caddy.route").update(
+            records=[
+                {"connection_ref": "example-ssh", "domain": f"{n}.example.com"}
+                for n in ("a", "b", "c")
+            ]
+        )
+        ProviderInventory.objects.filter(kind="host.perimeter").update(
+            records=[{"record": "perimeter", "connection_ref": "example-ssh"}]
+        )
+
+        response = self.client.get(reverse("control_plane:connections"))
+        # Each row's "Can see" block alone: its abilities name the same kinds.
+        rows = {
+            chunk.split('"', 1)[0]: "".join(
+                block.split("</details>", 1)[0]
+                for block in chunk.split('<details class="connection-sight">')[1:]
+            )
+            for chunk in response.content.decode().split('<tr id="')[1:]
+        }
+        own = next(row for anchor, row in rows.items() if anchor.endswith("example-ssh"))
+        other = next(
+            row for anchor, row in rows.items() if anchor.endswith("example-shared-host")
+        )
+
+        self.assertIn("Caddy route", own)
+        self.assertIn("3 records", own)
+        self.assertNotIn("Caddy route", other)
+        self.assertNotIn("Public perimeter", other)
 
     def test_can_do_lists_every_reading_of_the_provider(self):
         response = self.client.get(reverse("control_plane:connections"))

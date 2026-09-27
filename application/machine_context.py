@@ -26,6 +26,7 @@ from django.urls import reverse
 from core.models import AuditLog
 
 from control_plane.names import normalized_hostname
+from . import docker_sections
 from .action_links import topology_url
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import entity_link, kind_label
@@ -216,7 +217,26 @@ def _activity(machine) -> ServiceSection | None:
     )
 
 
-def machine_links(machine) -> dict[str, object]:
+def serves_links(machine, relationships) -> tuple:
+    """What the machine serves, read off the same relation query as its
+    Relationships panel, so the header and the panel cannot disagree. HQ's
+    own service leads where HQ runs here."""
+
+    from .connections import machines_once
+    from .hq_self import hq_service
+    from .topology import RELATIONS
+
+    group = relationships.group(RELATIONS["runs_on"].inverse)
+    serves = [item.entity for item in (group.items if group else ())]
+    if getattr(machine, "runs_hq", False):
+        own = hq_service(catalog=machines_once())
+        if own is not None:
+            first = entity_link("service", own.hostname)
+            serves = [first, *(link for link in serves if link.label != first.label)]
+    return tuple(dict.fromkeys(serves))
+
+
+def machine_links(machine, relationships) -> dict[str, object]:
     """Every entity the machine page names outside its sections, as links.
 
     What it is reached through, what it serves, what else is declared on it,
@@ -224,24 +244,18 @@ def machine_links(machine) -> dict[str, object]:
     names an address; it links to the machine answering there.
     """
 
-    from .connections import machines_once
-    from .hq_self import hq_service
     from .policy_links import PolicyNames
     from .tailnet import TAILNET_KIND
 
     presence = getattr(machine, "presence", None)
-    serves = []
-    if getattr(machine, "runs_hq", False):
-        own = hq_service(catalog=machines_once())
-        if own is not None:
-            serves.append(entity_link("service", own.hostname))
-    serves.extend(entity_link("service", name) for name in machine.hostnames)
+    serves = serves_links(machine, relationships)
     links: dict[str, object] = {
         "reached_links": tuple(
             (entity_link("connection", ref), ref in machine.unanswered)
             for ref in machine.reached_by
         ),
-        "serves_links": tuple(dict.fromkeys(serves)),
+        "serves_links": serves,
+        "serves_count": len(serves) + len(getattr(machine, "roles", ()) or ()),
         "declaration_links": tuple(
             entity_link("resource", key) for key in machine.other_declarations
         ),
@@ -297,5 +311,6 @@ def header_addresses(machine) -> tuple[tuple[str, str, str], ...]:
 SECTIONS: tuple[Callable[[object], ServiceSection | None], ...] = (
     _identity,
     _names,
+    *docker_sections.SECTIONS,
     _activity,
 )

@@ -18,12 +18,13 @@ from datetime import datetime
 from typing import Any
 
 
-from control_plane.providers import CONTAINER_KIND, PROVIDERS, normalized_hostname
+from control_plane.providers import PROVIDERS, normalized_hostname
 
 from .action_links import ActionLink as TopologyAction
 from .entity_links import entity_link
 from .facts import Joined, Subject, inventory_records, readings
 from .locate import Machines, index_of
+from .paths import path_to
 from .connections import machines_once
 from .topology import TopologyEdge, TopologyNode, _derived_id, _edge, newest_stamp
 
@@ -79,9 +80,9 @@ def add_estate(
     zones = _zones(nodes, edges, resources, estate)
     _services(nodes, edges, estate, zones)
     _fold(nodes, edges, estate)
-    _unrecognised_containers(nodes, estate)
     _hosted(nodes, edges, resources, estate)
     _reading_edges(nodes, edges, estate)
+    _derived_from_readings(nodes, edges, resources, estate)
     _observed(nodes, edges, estate)
     return dict(estate.subjects)
 
@@ -189,27 +190,40 @@ def _zones(nodes, edges, resources, estate: _Estate) -> tuple[str, ...]:
     return names
 
 
-def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
-    from .services import service_catalog, zone_holding
+# What a service node is called under its name, by the service's mark.
+_SERVICE_SUBTITLES = {"observed": "Observed service"}
 
-    # Longest first, so a name joins the most specific domain holding it.
-    by_length = sorted(zones, key=len, reverse=True)
-    for service in service_catalog():
+
+def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
+    from .hq_self import hq_service
+    from .service_list import listed_services
+    from .services import zone_holding
+
+    own = hq_service(catalog=machines_once())
+    for service in listed_services():
         node_id = f"service:{service.hostname}"
         nodes[node_id] = TopologyNode(
             id=node_id,
             kind="service",
             label=service.hostname,
-            subtitle="Service",
-            status=_SERVICE_STATUS.get(service.status, "neutral"),
-            status_label=service.status_label,
+            subtitle=(
+                own.label
+                if service.is_hq and own is not None
+                else _SERVICE_SUBTITLES.get(service.mark, "Service")
+            ),
+            status=_SERVICE_STATUS.get(service.base_health.state, "neutral"),
+            status_label=service.base_health.label,
             detail=service.faults[0] if service.faults else "",
             url=service.url,
             kind_key="service",
             actions=_open(service.url),
         )
         estate.subjects[node_id] = Subject.of(
-            hostnames=(service.hostname, *service.aliases)
+            hostnames=(
+                service.hostname,
+                *service.aliases,
+                *(own.hostnames if service.is_hq and own is not None else ()),
+            )
         )
         estate.saw(
             node_id,
@@ -217,49 +231,33 @@ def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
         )
         for claim in service.declared_claims:
             _declared_by(edges, node_id, f"resource:{claim.resource_key}", nodes)
-        if service.origin is not None and service.origin.host:
-            machine = estate.machine(service.origin.host)
-            if machine:
-                relation = _edge(node_id, machine, "runs_on", "Runs on")
-                edges[relation.id] = relation
+        machine = estate.machine(_runs_on(service, own))
+        if machine:
+            relation = _edge(node_id, machine, "runs_on", "Runs on")
+            edges[relation.id] = relation
         zone = zone_holding(service.hostname, zones)
         if zone:
             relation = _edge(f"zone:{zone}", node_id, "contains", "Contains")
             edges[relation.id] = relation
-    _hq_service(nodes, edges, estate, by_length)
+    _redirect_edges(nodes, edges)
 
 
-def _hq_service(nodes, edges, estate: _Estate, zones: list[str]) -> None:
-    """HQ's own service, on the machine the catalogue says runs it. Read-only."""
+def _runs_on(service, own) -> str:
+    """The machine a service runs on: its origin's, or HQ's own for HQ."""
 
-    from .hq_self import hq_service
-    from .services import zone_holding
+    if service.origin is not None and service.origin.host:
+        return service.origin.host
+    return own.machine if service.is_hq and own is not None else ""
 
-    own = hq_service(catalog=machines_once())
-    if own is None:
-        return
-    node_id = f"service:{own.hostname}"
-    if node_id not in nodes:
-        url = entity_link("service", own.hostname).url
-        nodes[node_id] = TopologyNode(
-            id=node_id,
-            kind="service",
-            label=own.hostname,
-            subtitle=own.label,
-            detail="Read-only",
-            url=url,
-            kind_key="service",
-            actions=_open(url),
-        )
-        estate.subjects[node_id] = Subject.of(hostnames=own.hostnames)
-    machine = estate.machine(own.machine)
-    if machine:
-        relation = _edge(node_id, machine, "runs_on", "Runs on")
-        edges[relation.id] = relation
-    zone = zone_holding(own.hostname, zones)
-    if zone:
-        relation = _edge(f"zone:{zone}", node_id, "contains", "Contains")
-        edges[relation.id] = relation
+
+def _redirect_edges(nodes, edges) -> None:
+    """A service whose name a reading redirects to another service's name."""
+
+    for node_id in [key for key, node in nodes.items() if node.kind == "service"]:
+        target = path_to(nodes[node_id].label).redirects_to
+        if target and f"service:{target}" in nodes:
+            relation = _edge(node_id, f"service:{target}", "redirects_to", "Redirects to")
+            edges[relation.id] = relation
 
 
 def _fold(nodes, edges, estate: _Estate) -> None:
@@ -318,29 +316,6 @@ def _fold(nodes, edges, estate: _Estate) -> None:
         del nodes[node_id]
 
 
-def _unrecognised_containers(nodes, estate: _Estate) -> None:
-    """A container on a machine that no compose project declares, as its fact.
-
-    The sweep did not adopt it, so it has no node of its own; its machine
-    carries it, and a finding reads it from there.
-    """
-
-    from .inventory import unmanaged
-
-    if not estate.machine_ids:
-        return
-    for item in unmanaged():
-        if item.adoptable or item.kind != CONTAINER_KIND:
-            continue
-        host = str(item.spec.get("host", ""))
-        machine_id = estate.machine(host)
-        if machine_id:
-            fact = ("unrecognised-container", f"{item.spec.get('name', '')}@{host}")
-            machine = nodes[machine_id]
-            if fact not in machine.facts:
-                nodes[machine_id] = replace(machine, facts=machine.facts + (fact,))
-
-
 def _hosted(nodes, edges, resources, estate: _Estate) -> None:
     """What declares the machine it runs on, and a machine's tailnet device."""
 
@@ -372,7 +347,12 @@ def _tailnet_edges(nodes, edges, resources, estate: _Estate) -> None:
             continue
         devices = tailnet.devices() if devices is None else devices
         name = str((resource.spec or {}).get("name") or "")
-        for host in _device_hosts(devices.get(name), estate):
+        device = devices.get(name)
+        # A device is a subject by its addresses, so a reading about an address
+        # (its DNS client identity) reaches the device's own page.
+        if device is not None and device.addresses:
+            estate.subjects[device_id] = Subject.of(addresses=device.addresses)
+        for host in _device_hosts(device, estate):
             relation = _edge(host, device_id, "on_tailnet", "On the tailnet as")
             edges[relation.id] = relation
         # The connection that reads the device: the record's own, else the
@@ -408,8 +388,8 @@ def _device_reader_edges(nodes, edges, device_id: str, ref: str) -> None:
             edges[relation.id] = relation
 
 
-def _reading_edges(nodes, edges, estate: _Estate) -> None:
-    """One edge per reading kind from the connection that read it to its subject."""
+def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """Connection nodes by ref and by provider."""
 
     by_ref: dict[str, list[str]] = {}
     by_provider: dict[str, list[str]] = {}
@@ -418,6 +398,26 @@ def _reading_edges(nodes, edges, estate: _Estate) -> None:
             continue
         by_ref.setdefault(node.connection_ref, []).append(node.id)
         by_provider.setdefault(node.provider, []).append(node.id)
+    return by_ref, by_provider
+
+
+def _derived_from_readings(nodes, edges, resources, estate: _Estate) -> None:
+    """What provider-specific joins add: container edges, image and certificate facts."""
+
+    from . import certificate_expiry, docker_estate
+
+    if estate.machine_ids:
+        docker_estate.add(nodes, edges, resources, estate.machine)
+    by_ref, by_provider = _reader_index(nodes)
+    certificate_expiry.add(
+        nodes, lambda joined: _readers(joined, by_ref, by_provider, nodes)
+    )
+
+
+def _reading_edges(nodes, edges, estate: _Estate) -> None:
+    """One edge per reading kind from the connection that read it to its subject."""
+
+    by_ref, by_provider = _reader_index(nodes)
     index = readings()
     grouped: dict[tuple[str, str, str], list[Joined]] = {}
     for node_id, subject in estate.subjects.items():

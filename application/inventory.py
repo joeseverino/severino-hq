@@ -28,7 +28,8 @@ from control_plane.models import (
     ProviderInventory,
 )
 from control_plane.observations import OBSERVATIONS
-from control_plane.provider_adapters.contracts import REFUSALS
+from control_plane.provider_adapters.contracts import FAILURES, REFUSALS
+from control_plane.reading_parts import clean_refused_parts, refused_parts
 from control_plane.providers import OBSERVATION_KINDS, PROVIDERS, registry_label, service_facets
 from core.audit import CONNECTION_AUDIT_TYPE, record_event
 from core.models import AuditLog
@@ -36,6 +37,7 @@ from core.models import AuditLog
 from control_plane.names import normalized_hostname
 
 from .contracts import endpoint_has_private_parts
+from .credential_mint import parse_expiry, store_references
 
 from .security import Capability, Principal
 from .ui import counted
@@ -146,6 +148,7 @@ def record_inventory(
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     observed_at = timezone.now()
     stored = []
+    summary: dict[str, dict[str, Any]] = {}
     for kind, report in sorted(payload.items()):
         if kind not in PROVIDERS and kind not in OBSERVATION_KINDS:
             # A controller ahead of this HQ. Ignored rather than rejected: the
@@ -168,7 +171,9 @@ def record_inventory(
                     f"{counted(refused, 'record')} did not match the {kind} schema."
                 )
         seen = {"records": records, "observed_at": observed_at}
-        ProviderInventory.objects.update_or_create(
+        # A refused read refuses every part; only a read that answered has some.
+        parts = clean_refused_parts(kind, report.get("refused_parts")) if reached else []
+        row, _ = ProviderInventory.objects.update_or_create(
             kind=kind,
             # An unreachable provider leaves the last sweep's records and the
             # moment it took them exactly where they were.
@@ -177,6 +182,7 @@ def record_inventory(
                 "connected": connected,
                 "error": error[:500],
                 "refusal": refusal,
+                "refused_parts": parts,
                 "controller_id": controller_id,
                 **(seen if reached else {}),
             },
@@ -185,11 +191,13 @@ def record_inventory(
                 "connected": connected,
                 "error": error[:500],
                 "refusal": refusal,
+                "refused_parts": parts,
                 "controller_id": controller_id,
                 **seen,
             },
         )
         stored.append(kind)
+        summary[kind] = _summary(row)
 
     # Adoption is not done here. A record in a domain HQ has been made
     # responsible for is HQ's, but which records those are is `zones`' to say,
@@ -199,6 +207,22 @@ def record_inventory(
         "ok": True,
         "recorded": stored,
         "observed_at": observed_at.isoformat(),
+        "kinds": summary,
+    }
+
+
+def _summary(row: ProviderInventory) -> dict[str, Any]:
+    """One kind as the sweep's own summary says it: its state in credential
+    sight's words, its record count, and each part refused."""
+
+    from .credential_sight import standing
+
+    state, label = standing(row)
+    return {
+        "state": state,
+        "label": label,
+        "records": len(row.records or ()) if row.connected and row.reachable else None,
+        "refused_parts": [refused.phrase for refused in refused_parts(row)],
     }
 
 
@@ -435,15 +459,18 @@ def record_connections(
             )
         if connection.get("carried"):
             # Reported without being asked again, because HQ said its last
-            # answer was recent and good. Kept as it was (result and the time
-            # it was taken) so the page says when it was last really checked.
-            # A connection HQ has never seen answer cannot be carried.
+            # answer was recent and good. The probe's result and time are kept,
+            # so the page says when it was last really checked; the report is
+            # this pass's. A connection HQ has never seen answer cannot be
+            # carried.
             carried = ProviderConnection.objects.filter(
                 controller_id=controller_id, connection_ref=connection_ref
             ).update(
                 provider=str(connection.get("provider", ""))[:64],
                 endpoint=endpoint,
                 manages=connection.get("manages") is True,
+                store=store_references(connection.get("store")),
+                reported_at=observed_at,
             )
             if carried:
                 stored.append(connection_ref)
@@ -467,9 +494,13 @@ def record_connections(
                 "reachable": bool(connection.get("ok", True)),
                 "probed": bool(connection.get("probed", True)),
                 "detail": str(connection.get("detail", ""))[:500],
+                "failure": _failure(connection),
                 # Only an explicit true manages; anything else observes.
                 "manages": connection.get("manages") is True,
+                "expires_at": parse_expiry(connection.get("expires_at")),
+                "store": store_references(connection.get("store")),
                 "observed_at": observed_at,
+                "reported_at": observed_at,
             },
         )
         # The row carries when it was last checked; the audit log carries changes.
@@ -486,6 +517,15 @@ def record_connections(
         "recorded": sorted(stored),
         "observed_at": observed_at.isoformat(),
     }
+
+
+def _failure(connection: dict[str, Any]) -> str:
+    """Why a reported probe failed, when it failed for a cause HQ knows; else ""."""
+
+    if connection.get("ok", True):
+        return ""
+    found = str(connection.get("failure", "") or "")
+    return found if found in FAILURES else ""
 
 
 def _record_probe(row: ProviderConnection) -> None:
@@ -647,7 +687,7 @@ class UnmanagedService:
         by_facet = {
             PROVIDERS[item.kind].facet: item.readout
             for item in self.items
-            if PROVIDERS[item.kind].facet
+            if PROVIDERS[item.kind].facet and item.readout
         }
         return tuple(
             (
@@ -877,18 +917,26 @@ def suggested_key(item: Unmanaged) -> str:
 def inventory_state() -> tuple[dict[str, Any], ...]:
     """Each provider's last sweep, for a surface that has to say how stale it is."""
 
-    return tuple(
-        {
-            "kind": snapshot.kind,
-            "label": registry_label(snapshot.kind),
-            "count": len(snapshot.records),
-            "reachable": snapshot.reachable,
-            "error": snapshot.error,
-            "observed_at": snapshot.observed_at,
-        }
-        # A kind no connection could read is not a reading of zero.
-        for snapshot in ProviderInventory.objects.filter(connected=True)
-    )
+    from .credential_sight import standing
+
+    found = []
+    # A kind no connection could read is not a reading of zero.
+    for snapshot in ProviderInventory.objects.filter(connected=True):
+        state, state_label = standing(snapshot)
+        found.append(
+            {
+                "kind": snapshot.kind,
+                "label": registry_label(snapshot.kind),
+                "count": len(snapshot.records),
+                "reachable": snapshot.reachable,
+                "error": snapshot.error,
+                "observed_at": snapshot.observed_at,
+                "state": state,
+                "state_label": state_label,
+                "refused_parts": tuple(refused.phrase for refused in refused_parts(snapshot)),
+            }
+        )
+    return tuple(found)
 
 
 def adopt_discovered(kind: str, *, principal) -> dict[str, Any]:

@@ -26,8 +26,8 @@ from .connection import (
     channel_of,
     connection,
     headers_of,
-    hops_of,
 )
+from .request_path import address_chain
 
 A_TAILNET_ADDRESS = "100.64.0.5"
 A_LAN_ADDRESS = "10.0.0.50"
@@ -53,6 +53,8 @@ def a_tailnet(*devices):
 
 
 def a_device(name, address, *, user="", tags=(), observer=False, reach=(), **extra):
+    """A swept device; a peer has a key and a completed handshake unless told otherwise."""
+
     return {
         "name": name,
         "addresses": [address],
@@ -63,6 +65,8 @@ def a_device(name, address, *, user="", tags=(), observer=False, reach=(), **ext
             {"port": port, "who": list(who), "rules": [{"who": list(who), "line": 1}]}
             for port, who in reach
         ],
+        "public_key": f"test-key-{name}",
+        "last_handshake": timezone.now().isoformat(),
         **extra,
     }
 
@@ -660,7 +664,7 @@ class HopTests(TestCase):
             "/connection/", HTTP_HOST="hq.example.test", REMOTE_ADDR=peer,
             **({"HTTP_X_FORWARDED_FOR": forwarded} if forwarded else {}),
         )
-        return hops_of(request)
+        return address_chain(request)
 
     def test_the_caller_is_the_last_hop_a_known_proxy_observed(self):
         found = self.hops(peer="10.0.0.9", forwarded="100.64.0.5")
@@ -774,12 +778,24 @@ class CostTests(TestCase):
 
         self.client.force_login(self.user)
 
-        # Seven for the panel, plus one for the agent brake: this is a full
-        # page, so it draws the operator's menu, and the switch there shows its
-        # state. Read once however many times the template asks, and not cached
-        # across requests: a brake must never display a state that no longer
-        # holds.
-        with self.assertNumQueries(8):
+        # The panel's reads, the path walk's (the machine catalogue and the
+        # reading index, once each for the projection), plus one for the agent
+        # brake: this is a full page, so it draws the operator's menu, and the
+        # switch there shows its state. Read once however many times the
+        # template asks, and not cached across requests: a brake must never
+        # display a state that no longer holds.
+        with self.assertNumQueries(11):
+            self.client.get(reverse("connection"))
+
+    def test_the_panel_costs_the_same_however_many_devices_there_are(self):
+        self.client.force_login(self.user)
+        a_tailnet(
+            a_device("a-laptop", A_TAILNET_ADDRESS, user="someone@example.test"),
+            a_device("hq-host", "100.64.0.9", observer=True),
+            *(a_device(f"another-{index}", f"100.64.1.{index}") for index in range(12)),
+        )
+
+        with self.assertNumQueries(11):
             self.client.get(reverse("connection"))
 
 

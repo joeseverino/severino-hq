@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from typing import Any
+
 from asgiref.sync import sync_to_async
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -26,7 +29,7 @@ mcp = FastMCP(
 mcp.settings.streamable_http_path = "/"
 
 
-def register_tool(function):
+def register_tool(function: Callable[..., Any]) -> Callable[..., Awaitable[Any]]:
     """Run synchronous Django ORM services on the thread-sensitive executor."""
 
     return mcp.tool()(sync_to_async(function, thread_sensitive=True))

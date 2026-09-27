@@ -25,7 +25,7 @@ from control_plane.providers import (
 )
 from core.network import split_host_port
 
-from .connection import channel_for_request, hops_of
+from .connection import channel_for_request
 from .connections import ConnectionGroup
 from .reach import TAILNET
 from .ui import counted
@@ -57,7 +57,8 @@ class ConnectionSecurityPosture:
     channel_label: str
     trusted_proxy_count: int
     network_gate_enforced: bool
-    secure_transport: bool
+    # None when no request is being answered.
+    secure_transport: bool | None
     connection_count: int
     healthy_count: int
     attention_count: int
@@ -341,14 +342,100 @@ def observed_connection_controls(
     )
 
 
+@dataclass(frozen=True)
+class _Admission:
+    """How the request being answered reached HQ: the three controls it decides."""
+
+    network: SecurityControl
+    transport: SecurityControl
+    proxy: SecurityControl
+    holds: bool
+    channel_id: str
+    channel_label: str
+    trusted_proxies: int
+    secure: bool
+
+
+# Controls that describe the request being answered rather than the estate.
+REQUEST_CONTROLS = frozenset({"network", "transport", "proxy"})
+
+
+def _admission(request, gate: bool) -> _Admission:
+    channel = channel_for_request(request)
+    secure = bool(request.is_secure())
+    from .request_path import address_chain
+
+    trusted_proxies = sum(item.role == "proxy" for item in address_chain(request))
+    forwarded = bool(request.META.get("HTTP_X_FORWARDED_FOR", ""))
+    return _Admission(
+        network=SecurityControl(
+            "network",
+            "Network admission",
+            "good" if gate and channel.private else "serious",
+            f"{channel.label} · {'enforced' if gate else 'not enforced'}",
+            "HQ refuses addresses outside its private ranges before sessions, "
+            "authentication, static assets, or views run."
+            if gate
+            else "This deployment is not enforcing HQ's trusted-network gate.",
+        ),
+        transport=SecurityControl(
+            "transport",
+            "Transport",
+            "good" if secure else "attention",
+            "TLS" if secure else "Plain HTTP",
+            "This request arrived over TLS. Tailnet traffic has its own "
+            "WireGuard layer when the caller channel is Tailnet."
+            if secure
+            else "This request did not arrive over TLS.",
+        ),
+        proxy=SecurityControl(
+            "proxy",
+            "Proxy identity",
+            "good" if trusted_proxies else "neutral",
+            (
+                counted(trusted_proxies, "trusted proxy hop", "trusted proxy hops")
+                if trusted_proxies
+                else "Forwarded identity ignored"
+                if forwarded
+                else "Direct request"
+            ),
+            "HQ walks the forwarded chain from the trusted peer inward and "
+            "judges the first address it can prove."
+            if trusted_proxies
+            else "No trusted proxy supplied the caller identity for this request."
+            if forwarded
+            else "No proxy assertion was needed for this request.",
+        ),
+        holds=gate and channel.private and secure,
+        channel_id=channel.id,
+        channel_label=channel.label,
+        trusted_proxies=trusted_proxies,
+        secure=secure,
+    )
+
+
+def _headline(admission: _Admission | None) -> str:
+    if admission is None:
+        return ""
+    if admission.holds and admission.channel_id == "tailnet":
+        return "Tailnet ingress. Explicit authority."
+    if admission.holds:
+        return "Private ingress. Explicit authority."
+    return "Ingress needs attention. Authority stays explicit."
+
+
 def connection_security_posture(
     groups: tuple[ConnectionGroup, ...],
     *,
-    request,
+    request=None,
     tailnet_policy: SecurityControl | None = None,
     edge: SecurityControl | None = None,
 ) -> ConnectionSecurityPosture:
-    """Derive security posture from already-authorized, already-cached input."""
+    """Derive security posture from already-authorized, already-cached input.
+
+    Without ``request`` it is the estate alone: the controls in
+    ``REQUEST_CONTROLS`` are absent and the headline is blank.
+    """
 
     connections = tuple(
         connection for group in groups for connection in group.connections
@@ -381,56 +468,15 @@ def connection_security_posture(
         len(connection.instance.dependencies) for connection in connections
     )
 
-    channel = channel_for_request(request)
     gate = bool(getattr(settings, "SEVERINO_ENFORCE_TRUSTED_NETWORK", False))
-    secure = bool(request.is_secure())
-    hops = hops_of(request)
-    trusted_proxies = sum(hop.role == "proxy" for hop in hops)
-    forwarded = bool(request.META.get("HTTP_X_FORWARDED_FOR", ""))
-    ingress_holds = gate and channel.private and secure
+    admission = _admission(request, gate) if request is not None else None
     tailnet_policy_control = tailnet_policy or _unattested_tailnet_policy()
     edge_control = edge or _unattested_edge()
 
     controls = (
-        SecurityControl(
-            "network",
-            "Network admission",
-            "good" if gate and channel.private else "serious",
-            f"{channel.label} · {'enforced' if gate else 'not enforced'}",
-            "HQ refuses addresses outside its private ranges before sessions, "
-            "authentication, static assets, or views run."
-            if gate
-            else "This deployment is not enforcing HQ's trusted-network gate.",
-        ),
+        *((admission.network,) if admission else ()),
         tailnet_policy_control,
-        SecurityControl(
-            "transport",
-            "Transport",
-            "good" if secure else "attention",
-            "TLS" if secure else "Plain HTTP",
-            "This request arrived over TLS. Tailnet traffic has its own "
-            "WireGuard layer when the caller channel is Tailnet."
-            if secure
-            else "This request did not arrive over TLS.",
-        ),
-        SecurityControl(
-            "proxy",
-            "Proxy identity",
-            "good" if trusted_proxies else "neutral",
-            (
-                counted(trusted_proxies, "trusted proxy hop", "trusted proxy hops")
-                if trusted_proxies
-                else "Forwarded identity ignored"
-                if forwarded
-                else "Direct request"
-            ),
-            "HQ walks the forwarded chain from the trusted peer inward and "
-            "judges the first address it can prove."
-            if trusted_proxies
-            else "No trusted proxy supplied the caller identity for this request."
-            if forwarded
-            else "No proxy assertion was needed for this request.",
-        ),
+        *((admission.transport, admission.proxy) if admission else ()),
         SecurityControl(
             "credentials",
             "Credential custody",
@@ -501,15 +547,9 @@ def connection_security_posture(
         edge_control,
     )
 
-    if ingress_holds and channel.id == "tailnet":
-        headline = "Tailnet ingress. Explicit authority."
-    elif ingress_holds:
-        headline = "Private ingress. Explicit authority."
-    else:
-        headline = "Ingress needs attention. Authority stays explicit."
     state = (
         "serious"
-        if not ingress_holds
+        if (admission is not None and not admission.holds)
         or attention
         or scope_missing
         or tailnet_policy_control.state == "serious"
@@ -520,16 +560,19 @@ def connection_security_posture(
     )
     return ConnectionSecurityPosture(
         state=state,
-        headline=headline,
+        headline=_headline(admission),
         summary=(
             "Current request admission joined to every connection's cached "
             "reach, abilities, scopes, and dependents. This page triggers no probe."
+            if admission
+            else "Every connection's cached reach, abilities, scopes, and "
+            "dependents. Reading it triggers no probe."
         ),
-        controls=controls,
-        channel_label=channel.label,
-        trusted_proxy_count=trusted_proxies,
+        controls=tuple(controls),
+        channel_label=admission.channel_label if admission else "",
+        trusted_proxy_count=admission.trusted_proxies if admission else 0,
         network_gate_enforced=gate,
-        secure_transport=secure,
+        secure_transport=admission.secure if admission else None,
         connection_count=len(connections),
         healthy_count=healthy,
         attention_count=attention,

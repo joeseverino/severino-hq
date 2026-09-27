@@ -76,7 +76,6 @@ class MachineTests(TestCase):
 
         self.assertTrue(found.runs_hq)
         self.assertEqual(found.hq_hostnames, ("hq.example.com",))
-        self.assertEqual(found.serves_count, 1)
         self.assertFalse(other.runs_hq)
 
     def test_the_machine_at_its_listen_address_runs_it(self):
@@ -112,14 +111,18 @@ class PageTests(TestCase):
         )
         self.assertNotContains(response, "No managed services")
 
-    def test_the_services_list_includes_it_read_only(self):
+    def test_the_services_list_includes_it_with_its_health(self):
         with own("192.0.2.44"):
             service = hq_service()
             response = self.client.get(reverse("control_plane:services"))
 
         self.assertEqual(service.machine, "example-host")
-        self.assertContains(response, "<th>Hostname</th><th>Runs on</th><th>State</th>", html=False)
-        self.assertContains(response, LABEL)
+        # A row of the services table, marked, not a table of its own.
+        self.assertNotContains(response, "<th>Hostname</th><th>Runs on</th><th>State</th>", html=False)
+        self.assertContains(response, '<span class="pill">HQ</span>', html=False)
+        # The mark is the badge; the state is HQ's health, never its mode.
+        self.assertContains(response, '<span class="pill pill-good" title="Answering this request.">Up</span>', html=False)
+        self.assertNotContains(response, ">Read-only<")
         self.assertContains(response, "hq.example.com")
         self.assertContains(
             response, reverse("control_plane:machine", kwargs={"name": "example-host"})

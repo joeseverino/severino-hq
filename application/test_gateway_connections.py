@@ -5,7 +5,11 @@ from unittest import mock
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from control_plane.models import DashboardConfiguration, WeatherObservation
+from control_plane.models import (
+    DashboardConfiguration,
+    ProviderInventory,
+    WeatherObservation,
+)
 from projects.models import Project
 
 from .capabilities import capability_registry, execute_capability
@@ -31,8 +35,6 @@ OPERATOR = Principal(
 
 @override_settings(
     GITHUB_API_TOKEN="github-secret",
-    CLOUDFLARE_ACCOUNT_ID="account-id",
-    CLOUDFLARE_D1_DATABASE_ID="database-id",
     CLOUDFLARE_API_TOKEN="cloudflare-secret",
     SEVERINO_LOOKUP_ENDPOINT="https://resolver.example",
     SEVERINO_RDAP_ENDPOINT="https://rdap.example",
@@ -46,6 +48,12 @@ class GatewayConnectionTests(TestCase):
         )
         DashboardConfiguration.objects.create(
             weather_point="41.8781,-87.6298", weather_label="Chicago"
+        )
+        # The account and database come from the observer's D1 reading.
+        ProviderInventory.objects.create(
+            kind="cloudflare.d1_database",
+            records=[{"account_id": "a" * 32, "name": "contacts", "uuid": "database-id"}],
+            observed_at=timezone.now(),
         )
         WeatherObservation.objects.create(
             point="41.8781,-87.6298",

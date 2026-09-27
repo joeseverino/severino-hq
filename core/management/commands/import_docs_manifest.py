@@ -140,7 +140,7 @@ class Command(BaseCommand):
         verb = "pruned" if pruned else "found"
         self.stdout.write(
             self.style.WARNING(
-                f"Orphans {verb} ({counted(len(orphans), 'HQ row')} with no manifest entry):"
+                f"Orphans {verb} ({counted(len(orphans), 'HQ row', 'HQ rows')} with no manifest entry):"
             )
         )
         for doc_id in orphans:

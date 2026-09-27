@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from pydantic import (
@@ -25,12 +26,16 @@ from receipts.models import Receipt
 from . import (
     analytics,
     assets,
+    connection_context,
     contact_submissions,
     derived_reads,
     infrastructure,
     projects,
     read_models,
+    resource_context,
+    service_list,
     services,
+    tailnet_context,
 )
 from .contracts import DOTTED_NAME
 from .integration_specs import ResourceSpec
@@ -44,7 +49,7 @@ from .security import Capability, Principal
 class ResourceSearchDefinition(SearchDefinition):
     """A declaration's result opens the machine, service or domain it belongs to."""
 
-    def url(self, instance) -> str:
+    def url(self, instance: Any) -> str:
         return services.home_url(instance)
 
 
@@ -294,7 +299,7 @@ CORE_RESOURCE_SPECS = (
         Capability.READ,
         infrastructure.list_managed_resources,
         InfrastructureResourceQuery,
-        infrastructure.get_managed_resource,
+        resource_context.get_managed_resource,
         "key",
         not_found_errors=(infrastructure.NotFoundError,),
         search=ResourceSearchDefinition(
@@ -314,11 +319,11 @@ CORE_RESOURCE_SPECS = (
         "Services",
         "Declared hostnames and the state of their DNS, ingress, and TLS.",
         Capability.READ,
-        services.list_services,
+        service_list.list_services,
         EmptyQuery,
-        services.get_service,
+        service_list.get_service,
         "hostname",
-        not_found_errors=(services.NotFoundError,),
+        not_found_errors=(service_list.NotFoundError,),
         web_route="control_plane:services",
     ),
     ResourceSpec(
@@ -375,6 +380,26 @@ CORE_RESOURCE_SPECS = (
         pass_principal=True,
     ),
     ResourceSpec(
+        "paths",
+        "Request paths",
+        "The path a request for a hostname takes, hop by hop, with each hop's reading and certificate.",
+        Capability.READ,
+        detail_handler=derived_reads.get_path,
+        identifier="hostname",
+        not_found_errors=(derived_reads.NotFoundError,),
+        web_route="control_plane:services",
+    ),
+    ResourceSpec(
+        "request.path",
+        "Request path",
+        "How the calling request reached HQ: HQ's own path hop by hop, each hop "
+        "checked against what the request shows, with the admission layers decided there.",
+        Capability.READ,
+        derived_reads.list_request_path,
+        EmptyQuery,
+        web_route="connection",
+    ),
+    ResourceSpec(
         "readings",
         "Readings",
         "Each reading kind, its last read, and its stored records as its schema admits them.",
@@ -397,6 +422,31 @@ CORE_RESOURCE_SPECS = (
         "provider",
         not_found_errors=(derived_reads.NotFoundError,),
         web_route="control_plane:connections",
+    ),
+    ResourceSpec(
+        "tailnet",
+        "Tailnet",
+        "The tailnet policy: settings, grants, shell rules, groups and tags with their "
+        "machines, services, app connectors, tests, findings, and what could not be read.",
+        Capability.READ,
+        tailnet_context.get_tailnet,
+        EmptyQuery,
+        web_route="control_plane:tailnet",
+        pass_principal=True,
+    ),
+    ResourceSpec(
+        "connection.standing",
+        "Connection standing",
+        "Each connection with what its credential sees, how fresh each reading is, what "
+        "was refused and the fix; the summary counts, the security posture and HQ's path.",
+        Capability.READ,
+        connection_context.list_connection_standing,
+        EmptyQuery,
+        connection_context.get_connection_standing,
+        "connection_ref",
+        not_found_errors=(derived_reads.NotFoundError,),
+        web_route="control_plane:connections",
+        pass_principal=True,
     ),
     ResourceSpec(
         "search",
@@ -432,7 +482,7 @@ class UnsupportedResourceOperation(ResourceError):
 
 
 class InvalidResourceInput(ResourceError):
-    def __init__(self, name: str, errors: list[dict[str, Any]]):
+    def __init__(self, name: str, errors: Iterable[Mapping[str, Any]]) -> None:
         refusal = pydantic_refusal(name, errors)
         super().__init__(refusal.message)
         self.errors = refusal.details
@@ -540,7 +590,7 @@ def get_resource(
     if not spec.detail_handler or not spec.identifier:
         raise UnsupportedResourceOperation(f"Resource {name!r} has no detail view.")
     try:
-        parsed = TypeAdapter(spec.identifier_type).validate_python(
+        parsed: Any = TypeAdapter(spec.identifier_type).validate_python(
             identifier, strict=strict
         )
     except ValidationError as exc:

@@ -13,14 +13,32 @@ from django.core.exceptions import ImproperlyConfigured
 
 
 class AdmittedPlugin(Protocol):
-    """The admission-facing slice of a plugin manifest."""
+    """The admission-facing slice of a plugin manifest. Read-only, as the
+    frozen manifest is."""
 
-    id: str
-    version: str
-    distribution: str
-    api_version: int
-    source_repository: str
-    source_workflow: str
+    @property
+    def id(self) -> str:
+        """The plugin id."""
+
+    @property
+    def version(self) -> str:
+        """The release the manifest declares."""
+
+    @property
+    def distribution(self) -> str:
+        """The wheel distribution name."""
+
+    @property
+    def api_version(self) -> int:
+        """The plugin API the manifest targets."""
+
+    @property
+    def source_repository(self) -> str:
+        """The repository the wheel was built from."""
+
+    @property
+    def source_workflow(self) -> str:
+        """The workflow that built and signed it."""
 
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")

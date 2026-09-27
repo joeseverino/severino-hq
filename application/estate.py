@@ -22,6 +22,7 @@ from control_plane.providers import (
 )
 
 from .entity_links import entity_link
+from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
 from .projection import read_once
 from .ui import Insight, Kpi, ago, counted
 from .workflow_contracts import ActionLink
@@ -30,7 +31,6 @@ from .workflow_contracts import ActionLink
 # is an action item. Shorter gaps are restarts.
 OFFLINE_AFTER = timedelta(hours=1)
 # Used when a certificate declares no renewal window of its own.
-DEFAULT_RENEWAL_WINDOW_DAYS = 30
 CERTIFICATE_SERIOUS_DAYS = 7
 # An edge certificate renews itself well before this; inside it, renewal is failing.
 EDGE_RENEWAL_OVERDUE_DAYS = 14
@@ -75,7 +75,7 @@ class Expiry:
 
     @property
     def days(self) -> int:
-        return (self.expires - timezone.now()).days
+        return days_until(self.expires)
 
     @property
     def phrase(self) -> str:
@@ -174,17 +174,13 @@ def refused_connections() -> dict[str, str]:
 def _connections() -> tuple[ConnectionState, ...]:
     """Connections that did not answer, or whose provider refused the credential."""
 
-    from control_plane.observations import OBSERVATIONS
-    from control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL
-
     from .connections import connection_rows
-    from .facts import snapshots_of
+    from .credential_sight import credential_sight
 
     refused = {
-        spec.provider: snapshot.error
-        for kind, spec in OBSERVATIONS.items()
-        for snapshot in snapshots_of(kind)
-        if not snapshot.reachable and snapshot.refusal == CREDENTIAL_REFUSAL
+        found.provider: found.credential_refusal
+        for found in credential_sight()
+        if found.credential_refusal
     }
     found = []
     for row in connection_rows():
@@ -262,9 +258,7 @@ def _certificates(domains: tuple[str, ...], hostnames: set[str]) -> tuple[Expiry
                 when,
                 subject_link("resource", resource.key),
                 resource_key=resource.key,
-                renewal_window_days=int(
-                    spec.get("renewal_window_days") or DEFAULT_RENEWAL_WINDOW_DAYS
-                ),
+                renewal_window_days=renewal_window(spec),
             )
         )
     return tuple(sorted(found, key=lambda item: item.expires))

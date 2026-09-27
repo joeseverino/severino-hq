@@ -281,8 +281,18 @@ class DashboardGlanceTests(TestCase):
         self.assertEqual(len(expanded), len(baseline))
 
     def test_snapshot_age_is_explicit_at_the_freshness_boundary(self):
+        """Due at one refresh interval; out of date only past the tolerance.
+
+        A seven-minute-old reading is asked for again and is still current.
+        """
+
         now = timezone.now()
-        for age, stale in ((4, False), (5, True), (6, True)):
+        for age, due, stale in (
+            (4, False, False),
+            (5, True, False),
+            (7, True, False),
+            (15, True, True),
+        ):
             with self.subTest(age=age):
                 WeatherObservation.objects.update_or_create(
                     point="41.0000,-87.0000",
@@ -297,7 +307,8 @@ class DashboardGlanceTests(TestCase):
                 with patch("application.glance.timezone.now", return_value=now):
                     panels = dashboard_panels()
                 weather = next(panel for panel in panels if panel["id"] == "weather")
-                self.assertEqual(weather["stale"], stale)
+                self.assertEqual(weather["due"], due)
+                self.assertEqual(weather["outdated"], stale)
                 self.assertEqual(weather["payload"]["status"], "good")
                 html = render_to_string(
                     "core/_dashboard_glance.html", {"dashboard_panels": [weather]}
@@ -325,11 +336,11 @@ class DashboardGlanceTests(TestCase):
         self.assertNotIn("Out of date", html)
         self.assertIn("4%", html)
         machine = next(panel for panel in panels if panel["id"] == self.machine_request_id)
-        self.assertTrue(machine["stale"])
+        self.assertTrue(machine["due"])
 
     def test_never_observed_panels_are_not_reported_as_stale_readings(self):
         panels = dashboard_panels()
-        self.assertTrue(all(not panel["stale"] for panel in panels))
+        self.assertTrue(all(not panel["due"] for panel in panels))
         self.assertTrue(all(panel["observed_at"] is None for panel in panels))
 
     def test_unknown_machine_is_rejected_and_not_created(self):

@@ -14,25 +14,6 @@ which now shares the "Runs on" column with the origin it was duplicating.
 {% if favorites %}<h2 class="section-heading">Other services</h2>{% endif %}
 {% include "control_plane/_service_rows.html" with rows=services show_service_projects=service_projects empty_message="No services. Add a DNS record or a proxy host to create one." %}
 
-{% if hq_service %}
-  {% comment %}HQ itself. Derived from its own hosts and addresses; read-only.{% endcomment %}
-  <h2 class="section-heading">HQ</h2>
-  <div class="table-scroll">
-    <table class="data-table">
-      <thead>
-        <tr><th>Hostname</th><th>Runs on</th><th>State</th></tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>{{ hq_service.hostname }}</strong><br><span class="muted">{{ hq_service.label }}</span></td>
-          <td>{% if hq_service.machine %}{% entity "machine"|entity_of:hq_service.machine %}{% else %}{% empty_value %}{% endif %}</td>
-          <td><span class="pill">Read-only</span></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-{% endif %}
-
 {% if unmanaged %}
   {% comment %}
   A sweep adopts what a connection that manages reached. What remains is

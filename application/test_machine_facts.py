@@ -165,13 +165,21 @@ class PanelTests(TestCase):
         (item,) = found.group("Reached through").items
         self.assertIn("#connection-", item.entity.url)
 
-    def test_the_refused_kind_is_not_readable_and_the_unconnected_one_is_absent(self):
+    def test_a_refused_kind_is_named_only_where_it_could_join(self):
+        """Pages joins DNS names; a machine known by its bare name is not one."""
+
+        from application.facts import Subject, unreadable_labels
+
         found = self.relationships("example-host")
 
-        self.assertIn(OBSERVATIONS[PAGES].label, found.unreadable)
+        self.assertNotIn(OBSERVATIONS[PAGES].label, found.unreadable)
         self.assertNotIn(PROVIDERS[npm_kind()].label, found.unreadable)
+        self.assertIn(
+            OBSERVATIONS[PAGES].label,
+            unreadable_labels(Subject.of(hostnames=("app.example.com",))),
+        )
 
-    def test_the_page_renders_the_section_with_one_not_readable_line(self):
+    def test_the_page_renders_the_section_without_an_unrelated_not_readable_line(self):
         user = get_user_model().objects.create_user("panel-op", password="x" * 20)
         self.client.force_login(user)
 
@@ -179,7 +187,7 @@ class PanelTests(TestCase):
 
         self.assertContains(page, "<h2>Relationships</h2>")
         self.assertNotContains(page, "What HQ knows")
-        self.assertContains(page, "Not readable:", count=1)
+        self.assertNotContains(page, "Not readable:")
         self.assertContains(page, "?focus=machine%3Aexample-host")
         self.assertContains(page, "Raw readings")
 

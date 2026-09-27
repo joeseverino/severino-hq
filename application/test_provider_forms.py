@@ -315,6 +315,77 @@ class ResourceFormViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/accounts/login/", response["Location"])
 
+    def test_an_unknown_kind_is_not_found(self):
+        response = self.client.post(
+            reverse("control_plane:create"), {"kind": "example.nothing"}
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_saving_says_whether_it_added_or_updated(self):
+        created = self.client.post(
+            reverse("control_plane:create"),
+            {"kind": "adguard.rewrite", **REWRITE},
+            follow=True,
+        )
+        key = ManagedResource.objects.get().key
+        updated = self.client.post(
+            reverse("control_plane:edit", kwargs={"key": key}),
+            {"enabled": "on", **REWRITE, "answer": "10.0.0.11"},
+            follow=True,
+        )
+
+        self.assertContains(created, f"Added “{key}”")
+        self.assertContains(updated, f"Updated “{key}”")
+
+    def test_a_refused_save_rerenders_the_form_with_the_reason(self):
+        from unittest import mock
+
+        from application.infrastructure import PolicyError
+
+        with mock.patch(
+            "control_plane.views.save_managed_resource",
+            side_effect=PolicyError("Refused for the example."),
+        ):
+            response = self.client.post(
+                reverse("control_plane:create"),
+                {"kind": "adguard.rewrite", **REWRITE},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Refused for the example.")
+        self.assertFalse(ManagedResource.objects.exists())
+
+    def test_material_that_cannot_be_stored_sends_the_operator_to_upload_it(self):
+        """The declaration landed and the material did not, so it says which."""
+
+        from unittest import mock
+
+        from django import forms
+
+        from application.certificates import CertificateError
+
+        with (
+            mock.patch(
+                "control_plane.views._material_form", return_value=forms.Form
+            ),
+            mock.patch(
+                "control_plane.views._store_material",
+                side_effect=CertificateError("The example material was refused."),
+            ),
+        ):
+            response = self.client.post(
+                reverse("control_plane:create"),
+                {"kind": "adguard.rewrite", **REWRITE},
+                follow=True,
+            )
+
+        key = ManagedResource.objects.get().key
+        self.assertRedirects(
+            response, reverse("control_plane:upload_certificate", kwargs={"key": key})
+        )
+        self.assertContains(response, "The example material was refused.")
+
 
 class RoutineKnobTests(TestCase):
     """A knob nobody has touched stays behind the disclosure, and no further."""

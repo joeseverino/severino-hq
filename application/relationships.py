@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from control_plane.observations import OBSERVATIONS
+
 from .entity_links import EntityLink, entity_link, node_link
 from .facts import readings, unreadable_labels
 from .security import Principal
@@ -93,6 +95,8 @@ def _rows(edge: TopologyEdge, node_id: str, nodes: dict[str, Any]):
         if outbound:
             yield RELATIONS["reading"].inverse, Relationship(node_link(other), None, observed, stale)
             return
+        if _stated_between_services(edge):
+            return
         source = node_link(other)
         for entity in edge.entities or (EntityLink(edge.detail or edge.label),):
             yield edge.label, Relationship(entity, source, observed, stale)
@@ -105,6 +109,13 @@ def _rows(edge: TopologyEdge, node_id: str, nodes: dict[str, Any]):
     yield phrase, Relationship(node_link(other))
 
 
+def _stated_between_services(edge: TopologyEdge) -> bool:
+    """A redirect reading is shown as the ``redirects_to`` edge between the two services."""
+
+    spec = OBSERVATIONS.get(edge.source_kind)
+    return spec is not None and spec.redirects
+
+
 def relationships_for(node_id: str, *, principal: Principal) -> Relationships:
     """Every edge of one node, grouped by what it says from that node."""
 
@@ -113,7 +124,7 @@ def relationships_for(node_id: str, *, principal: Principal) -> Relationships:
     graph = relation_graph(principal=principal)
     nodes = {node.id: node for node in graph.topology.nodes}
     if node_id not in nodes:
-        return Relationships(node_id=node_id, unreadable=unreadable_labels(), known=False)
+        return Relationships(node_id=node_id, known=False)
     # An end whose page is this page (a zone's own declaration) says nothing here.
     own_url = node_link(nodes[node_id]).url
     grouped: dict[str, tuple[int, list[Relationship]]] = {}
@@ -143,8 +154,15 @@ def relationships_for(node_id: str, *, principal: Principal) -> Relationships:
         groups=groups,
         focus_url=topology_url(node_id),
         readouts=_readouts(graph.subjects.get(node_id)),
-        unreadable=unreadable_labels(),
+        unreadable=_unreadable_for(graph.subjects.get(node_id)),
     )
+
+
+def _unreadable_for(subject) -> tuple[str, ...]:
+    """Refused kinds that could change what this node's page says; none without
+    a subject, since nothing joins to it."""
+
+    return unreadable_labels(subject) if subject else ()
 
 
 def readout_records(subject) -> tuple[tuple[str, str, str, tuple[dict[str, Any], ...]], ...]:

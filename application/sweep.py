@@ -20,6 +20,7 @@ from typing import Any
 
 from django.db import transaction
 
+from .cadence import settle_read_requests
 from .inventory import (
     adopt_discovered,
     confirm_observed,
@@ -56,6 +57,7 @@ def record_sweep(
     # And everything already declared that the sweep just found unchanged, so
     # a declaration nothing touched still reads as observed.
     confirmed = confirm_observed(payload)
+    settle_read_requests()
     return {**result, "adopted": adopted, "confirmed": confirmed}
 
 

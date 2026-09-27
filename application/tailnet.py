@@ -48,13 +48,7 @@ class Device:
     os: str = ""
     online: bool = False
     observer: bool = False
-    # How the observer is talking to it, as that node's own daemon reports it.
-    direct_endpoint: str = ""
-    relay: str = ""
-    last_handshake: str = ""
-    active: bool = False
-    rx_bytes: int = 0
-    tx_bytes: int = 0
+    # The link itself (path, handshake, traffic) is ``machines.Presence``'s.
     endpoints: tuple[str, ...] = ()
     key_expires: str = ""
     # The WireGuard public key. A peering is not a claim in an inventory, it is
@@ -82,21 +76,6 @@ class Device:
 
         magic = self.dns_name.partition(".")[0]
         return magic or self.name
-
-    @property
-    def path(self) -> str:
-        """Direct, relayed, or not currently negotiated: in those words.
-
-        A relayed peer still works; it is slower and it crosses a machine
-        neither end owns. Saying which is the point: the two look identical
-        from every other surface in HQ.
-        """
-
-        if self.direct_endpoint:
-            return "direct"
-        if self.relay:
-            return "relayed"
-        return "idle"
 
     @property
     def principals(self) -> frozenset[str]:
@@ -197,12 +176,6 @@ def devices() -> dict[str, Device]:
                 public_key=str(record.get("public_key", "")),
                 authorized=bool(record.get("authorized", True)),
                 lock_error=str(record.get("lock_error", "")),
-                direct_endpoint=str(record.get("direct_endpoint", "")),
-                relay=str(record.get("relay", "")),
-                last_handshake=str(record.get("last_handshake", "")),
-                active=bool(record.get("active")),
-                rx_bytes=int(record.get("rx_bytes") or 0),
-                tx_bytes=int(record.get("tx_bytes") or 0),
                 endpoints=tuple(
                     str(endpoint) for endpoint in record.get("endpoints") or ()
                 ),
@@ -469,19 +442,21 @@ def proposed_grant(source: str, target: str, port: int) -> dict:
 
 
 def snapshots() -> dict[str, list]:
-    """Both tailnet readings, in one query, once per projection.
+    """The tailnet readings, and HQ's record of which devices reached it, in
+    one query, once per projection.
 
-    The devices and the policy live in the same table under two kinds, and the
-    dashboard wants both: what each machine reports, and what lock is
-    filtering out. Read separately that was two queries for one table, and the
-    second pushed the host's page over its budget. Read together it is one, and
+    They live in the same table under three kinds, and the dashboard wants
+    them together: what each machine reports, what lock is filtering out, and
+    when each device last reached HQ. Read together they are one query, and
     every caller inside the projection shares it.
     """
 
+    from control_plane.observations.hq import ARRIVAL_KIND
+
     def load() -> dict[str, list]:
-        found: dict[str, list] = {TAILNET_KIND: [], POLICY_KIND: []}
+        found: dict[str, list] = {TAILNET_KIND: [], POLICY_KIND: [], ARRIVAL_KIND: []}
         for snapshot in ProviderInventory.objects.filter(
-            kind__in=(TAILNET_KIND, POLICY_KIND)
+            kind__in=(TAILNET_KIND, POLICY_KIND, ARRIVAL_KIND)
         ):
             found.setdefault(snapshot.kind, []).append(snapshot)
         return found

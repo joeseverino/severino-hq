@@ -7,27 +7,14 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from control_plane.models import ProviderConnection, ProviderInventory
+from control_plane.models import ProviderConnection
 
 from .findings import findings
+from .inventory_testing import store
 from .security import Capability, Principal
 from .tailnet import WELL_KNOWN_PORTS, grant_ports
 
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
-
-
-def store(kind, *records, **extra):
-    ProviderInventory.objects.update_or_create(
-        kind=kind,
-        defaults={
-            "records": list(records),
-            "reachable": True,
-            "connected": True,
-            "observed_at": timezone.now(),
-            "controller_id": "example-controller",
-            **extra,
-        },
-    )
 
 
 def tailnet_connection(ref="example-tailnet", provider="tailscale"):

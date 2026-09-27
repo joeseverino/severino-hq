@@ -18,8 +18,13 @@ def counted(count, phrases):
     One word may stand alone (``{{ n|counted:"change" }}``); a phrase gives both
     forms, comma separated, so its verb agrees too. See ``application.ui.counted``.
     """
+    return _counted(int(count or 0), *counted_phrases(phrases))
+
+
+def counted_phrases(phrases) -> tuple[str, str | None]:
+    """The filter argument as ``(one, many)``; ``many`` is None when it is left out."""
     one, _, many = str(phrases).partition(",")
-    return _counted(int(count or 0), one.strip(), many.strip() or None)
+    return one.strip(), many.strip() or None
 
 
 @register.simple_tag

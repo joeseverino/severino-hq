@@ -126,3 +126,48 @@ class FindingResolutionWorkflowTests(SimpleTestCase):
         self.assertIn("Steps to resolve", html)
         self.assertIn("Inspect bill", html)
         self.assertIn("Confirm the fix", html)
+
+
+class WorkflowLayoutTests(SimpleTestCase):
+    """A card leads with the gated remedy; the rest is one line of links."""
+
+    def plan(self, remedies=()):
+        return claim_resolution_plan(
+            namespace="example.claim",
+            rule="example",
+            subject="resource:one",
+            scope="",
+            investigations=(ActionLink("open", "Show in topology", "read", "/topology/"),),
+            offers=(ActionLink("open", "Open connections", "read", "/connections/"),),
+            remedies=remedies,
+            verification=ActionLink("verify", "Check again", "read", "/findings/"),
+        )
+
+    def test_remedies_lead_and_offers_are_only_links(self):
+        from .workflows import workflow_layout
+
+        remedy = ActionLink(
+            "remedy", "Remove it", "write", "/remove/", method="POST", recommended=True
+        )
+
+        layout = workflow_layout(self.plan((remedy,)))
+
+        self.assertEqual(layout.fix, (remedy,))
+        self.assertEqual([action.label for action in layout.related], ["Open connections"])
+        self.assertEqual([action.label for action in layout.impact], ["Show in topology"])
+        self.assertEqual([action.label for action in layout.confirm], ["Check again"])
+
+    def test_without_a_remedy_nothing_is_offered_as_the_fix(self):
+        from .workflows import workflow_layout
+
+        layout = workflow_layout(self.plan())
+
+        self.assertEqual(layout.fix, ())
+        self.assertTrue(layout.links)
+
+    def test_no_plan_is_an_empty_layout(self):
+        from .workflows import workflow_layout
+
+        layout = workflow_layout(None)
+
+        self.assertEqual((layout.fix, layout.links), ((), False))
