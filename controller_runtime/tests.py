@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import TestCase, mock
 
 from control_plane.provider_adapters import caddy, onepassword
@@ -1610,6 +1611,51 @@ class WorkerTests(TestCase):
         connections.assert_called_once_with()
         execute.assert_called_once()
 
+    @mock.patch("controller_runtime.worker.analytics_sites")
+    @mock.patch("controller_runtime.worker.inventory", return_value={})
+    @mock.patch("controller_runtime.worker.connections", return_value=[])
+    @mock.patch("controller_runtime.worker._manage")
+    def test_a_kind_hq_forces_is_read_when_nothing_else_is_due(
+        self, manage, connections, inventory, sites
+    ):
+        manage.side_effect = _bridge(
+            **{
+                "sweep-due": {
+                    "ok": True,
+                    "due": True,
+                    "carry": ["example-ssh"],
+                    "only_kinds": ["tailscale.device"],
+                },
+                "connections": {"ok": True},
+                "inventory": {"ok": True},
+            }
+        )
+
+        worker._report_findings("test")
+
+        inventory.assert_called_once_with(only=frozenset({"tailscale.device"}))
+        connections.assert_called_once_with(carry=frozenset({"example-ssh"}))
+        # Only what was asked for: no analytics read rides along.
+        sites.assert_not_called()
+
+    def test_inventory_reads_only_the_kinds_named(self):
+        read = mock.Mock(return_value=[])
+        unread = mock.Mock(return_value=[])
+        with (
+            mock.patch.dict(
+                providers.PROVIDER_INVENTORY,
+                {"example.read": read, "example.unread": unread},
+                clear=True,
+            ),
+            mock.patch.object(providers, "_has_source", return_value=True),
+            mock.patch.object(providers, "connection_prefixes", return_value={}),
+        ):
+            found = providers.inventory(only=frozenset({"example.read"}))
+
+        self.assertEqual(set(found), {"example.read"})
+        read.assert_called_once_with()
+        unread.assert_not_called()
+
     @mock.patch("controller_runtime.worker.connections", return_value=[])
     @mock.patch("controller_runtime.worker._manage")
     def test_idle_apply_claims_after_reporting_findings(self, manage, _connections):
@@ -2322,6 +2368,103 @@ class CloudflareAnalyticsTests(TestCase):
 
         self.assertEqual(urlopen.call_count, 2)
 
+    @staticmethod
+    def _per_endpoint(verify_body, status=401):
+        """Refuse every call with 10000 except the token verification."""
+
+        import io
+        import urllib.error
+
+        def respond(request, timeout=None, context=None):
+            if request.full_url.endswith("/user/tokens/verify"):
+                return _Page(verify_body, landed=request.full_url)
+            raise urllib.error.HTTPError(
+                "u", status, "Refused", {},
+                io.BytesIO(b'{"success": false, "errors": [{"code": 10000, '
+                           b'"message": "Authentication error"}]}'),
+            )
+
+        return respond
+
+    def test_an_authentication_error_under_401_is_a_permission_when_the_token_verifies(self):
+        verified = (
+            b'{"success": true, "result": {"id": "t1", "status": "active", '
+            b'"expires_on": "2030-01-01T00:00:00Z"}}'
+        )
+        env = {"CF_CONNECTION_REF": "example-api", "CF_PROVIDER": "cloudflare_api",
+               "CF_API_TOKEN": "t"}
+        with (
+            mock.patch.dict("os.environ", env, clear=True),
+            mock.patch.object(
+                providers.urllib.request, "urlopen", side_effect=self._per_endpoint(verified)
+            ) as urlopen,
+            providers.provider_snapshot(),
+        ):
+            for path in ("/accounts/a/access/apps", "/accounts/a/d1/database"):
+                with self.assertRaises(providers.ProviderError) as raised:
+                    providers._cloudflare_api_request(path, "example-api")
+                self.assertEqual(raised.exception.refusal, providers.PERMISSION_REFUSAL)
+            refused = dict(providers._refused_credentials())
+
+        self.assertEqual(refused, {})
+        # Two refused reads and one verification, shared by both.
+        self.assertEqual(urlopen.call_count, 3)
+
+    def test_an_authentication_error_under_401_is_the_credential_when_it_does_not_verify(self):
+        unverified = b'{"success": false, "errors": [{"code": 1000, "message": "Invalid API Token"}]}'
+        env = {"CF_CONNECTION_REF": "example-api", "CF_PROVIDER": "cloudflare_api",
+               "CF_API_TOKEN": "t"}
+        with (
+            mock.patch.dict("os.environ", env, clear=True),
+            mock.patch.object(
+                providers.urllib.request, "urlopen", side_effect=self._per_endpoint(unverified)
+            ),
+            providers.provider_snapshot(),
+        ):
+            with self.assertRaises(providers.ProviderError) as raised:
+                providers._cloudflare_api_request("/accounts/a/access/apps", "example-api")
+
+        self.assertEqual(raised.exception.refusal, providers.CREDENTIAL_REFUSAL)
+
+    def test_the_probe_reports_the_token_expiry(self):
+        def respond(request, timeout=None, context=None):
+            if request.full_url.endswith("/user/tokens/verify"):
+                body = (
+                    b'{"success": true, "result": {"status": "active", '
+                    b'"expires_on": "2030-01-01T00:00:00Z"}}'
+                )
+            else:
+                body = b'{"success": true, "result": [], "result_info": {"total_pages": 1}}'
+            return _Page(body, landed=request.full_url)
+
+        env = {"CLOUDFLARE_DNS_CONNECTION_REF": "example-dns",
+               "CLOUDFLARE_DNS_API_TOKEN": "t"}
+        with (
+            mock.patch.dict("os.environ", env, clear=True),
+            mock.patch.object(providers.urllib.request, "urlopen", side_effect=respond),
+        ):
+            probed = providers._probe_cloudflare_dns("example-dns")
+
+        self.assertEqual(probed["expires_at"], "2030-01-01T00:00:00Z")
+
+    def test_a_connection_reports_where_its_credential_is_kept(self):
+        env = {
+            "CLOUDFLARE_DNS_CONNECTION_REF": "example-dns",
+            "CLOUDFLARE_DNS_API_TOKEN": "secret-value",
+            "CLOUDFLARE_DNS_STORE_VAULT": "Example Vault",
+            "CLOUDFLARE_DNS_STORE_ITEM": "item-1",
+            "CLOUDFLARE_DNS_BOOTSTRAP": "op://Operator/Example bootstrap",
+        }
+        with mock.patch.dict("os.environ", env, clear=True):
+            store = providers.connection_store("CLOUDFLARE_DNS")
+
+        self.assertEqual(
+            store,
+            {"vault": "Example Vault", "item": "item-1",
+             "bootstrap": "op://Operator/Example bootstrap"},
+        )
+        self.assertNotIn("secret-value", json.dumps(store))
+
     BOTH = {
         "CF_CONNECTION_REF": "example-api",
         "CF_PROVIDER": "cloudflare_api",
@@ -2453,9 +2596,11 @@ class CloudflareAnalyticsTests(TestCase):
         account.return_value = "account-id"
         request.side_effect = providers.ProviderError("Cloudflare refused: 403")
 
-        found = providers._registrar_domains()
+        with providers.part_ledger() as refused:
+            found = providers._registrar_domains()
 
-        self.assertEqual(found, {"": {"unread": "Cloudflare refused: 403"}})
+        self.assertEqual(found, {})
+        self.assertEqual([entry["reason"] for entry in refused], ["Cloudflare refused: 403"])
 
     @mock.patch("controller_runtime.providers._analytics_sites")
     @mock.patch("controller_runtime.providers._analytics_account")
@@ -2967,7 +3112,7 @@ class MachineNameTests(TestCase):
 
     @mock.patch.dict("os.environ", {"HQ_CONTROLLER_ID": ""})
     def test_the_local_socket_is_the_machine_this_runs_on(self):
-        record = providers._container_record(
+        record = providers.portainer.container_record(
             {"Names": ["/app"], "State": "running"}, providers.controller_id(), ""
         )
 
@@ -3648,6 +3793,311 @@ class RouteApprovalTests(TestCase):
             providers.approve_tailnet_routes({"name": "a-router"})
 
 
+class _Scripted:
+    """urlopen answering each call in turn; an exception in the script is raised."""
+
+    def __init__(self, script):
+        self.script = list(script)
+        self.sent = []
+
+    def __call__(self, request, timeout=None, context=None):
+        del timeout, context
+        self.sent.append(request)
+        answer = self.script[len(self.sent) - 1]
+        if isinstance(answer, BaseException):
+            raise answer
+        body, etag = answer if isinstance(answer, tuple) else (answer, "")
+        response = _Answer(body)
+        response.headers = {"etag": etag}
+        return response
+
+
+def _refused(code):
+    return providers.urllib.error.HTTPError(
+        "https://example.invalid", code, "Refused", {}, None
+    )
+
+
+class TailnetPolicyWriteTests(TestCase):
+    """Every outcome of a policy reconcile, pinned to what it says and sends."""
+
+    TESTED = {"grants": [], "tests": [{"src": "a-laptop", "accept": ["a-server:443"]}]}
+    WANTED = {
+        "grants": [{"src": ["*"], "dst": ["*"], "ip": ["*"]}],
+        "tests": [{"src": "a-laptop", "accept": ["a-server:443"]}],
+    }
+
+    def reconcile(self, document, script=(), *, live=None, apply=True):
+        urlopen = _Scripted(script)
+        with (
+            mock.patch.object(providers, "_tailnet_token", return_value="t"),
+            mock.patch.object(providers, "_tailnet_policy", return_value=live),
+            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
+        ):
+            result = providers.reconcile_tailnet_policy(
+                {"connection_ref": "a-tailnet", "document": document}, apply=apply
+            )
+        return result, urlopen.sent
+
+    def test_no_declared_policy_reads_nothing(self):
+        result, sent = self.reconcile("  ")
+
+        self.assertFalse(result.changed)
+        self.assertEqual(result.conditions, [])
+        self.assertIn("No policy is declared", result.message)
+        self.assertEqual(sent, [])
+
+    def test_an_unreadable_declaration_is_refused(self):
+        with self.assertRaisesRegex(providers.ProviderError, "not readable JSON"):
+            self.reconcile("{not json")
+
+    def test_a_tested_policy_already_in_place_is_ready(self):
+        result, sent = self.reconcile(json.dumps(self.TESTED), live=self.TESTED)
+
+        self.assertFalse(result.changed)
+        self.assertEqual(result.status, {"applied": True})
+        self.assertEqual(
+            [(c["type"], c["status"], c["reason"]) for c in result.conditions],
+            [("Ready", True, "Reconciled")],
+        )
+        self.assertEqual(result.message, "Tailnet policy is current.")
+        self.assertEqual(sent, [])
+
+    def test_a_policy_failing_its_own_tests_is_not_written(self):
+        with self.assertRaisesRegex(providers.ProviderError, "does not pass its own"):
+            self.reconcile(
+                json.dumps(self.WANTED), [{"errors": ["x"]}], live=self.TESTED
+            )
+
+    def test_a_validation_that_cannot_run_is_not_a_pass(self):
+        with self.assertRaisesRegex(providers.ProviderError, "could not check"):
+            self.reconcile(json.dumps(self.WANTED), [_refused(500)], live=self.TESTED)
+
+    def test_the_write_is_conditional_on_the_version_read(self):
+        result, sent = self.reconcile(
+            json.dumps(self.WANTED), [{}, ({}, '"v1"'), {}], live=self.TESTED
+        )
+
+        self.assertTrue(result.changed)
+        self.assertEqual(result.status, {"applied": True})
+        self.assertEqual(result.message, "Tailnet policy applied after its own tests passed.")
+        self.assertEqual(
+            [request.full_url.rsplit("/", 1)[-1] for request in sent],
+            ["validate", "acl", "acl"],
+        )
+        self.assertEqual(sent[2].get_method(), "POST")
+        self.assertEqual(sent[2].get_header("If-match"), '"v1"')
+        self.assertEqual(json.loads(sent[2].data), self.WANTED)
+
+    def test_no_version_read_writes_without_a_condition(self):
+        _, sent = self.reconcile(
+            json.dumps(self.WANTED), [{}, _refused(500), {}], live=self.TESTED
+        )
+
+        self.assertIsNone(sent[2].get_header("If-match"))
+
+    def test_a_policy_changed_elsewhere_is_not_overwritten(self):
+        with self.assertRaisesRegex(providers.ProviderError, "changed somewhere else"):
+            self.reconcile(
+                json.dumps(self.WANTED), [{}, ({}, "v"), _refused(412)], live=self.TESTED
+            )
+
+    def test_other_write_failures_say_what_happened(self):
+        with self.assertRaisesRegex(providers.ProviderError, r"refused the policy \(403\)"):
+            self.reconcile(
+                json.dumps(self.WANTED), [{}, ({}, "v"), _refused(403)], live=self.TESTED
+            )
+        with self.assertRaisesRegex(providers.ProviderError, "did not answer the policy"):
+            self.reconcile(
+                json.dumps(self.WANTED), [{}, ({}, "v"), OSError()], live=self.TESTED
+            )
+
+
+class RouteApprovalFailureTests(TestCase):
+    def approve(self, script):
+        with (
+            mock.patch.object(providers, "_tailnet_device_id", return_value="node-1"),
+            mock.patch.object(providers, "_tailnet_token", return_value="token"),
+            mock.patch.object(providers.urllib.request, "urlopen", _Scripted(script)),
+        ):
+            return providers.approve_tailnet_routes({"name": "a-router"})
+
+    def test_a_write_that_gets_no_answer_says_so(self):
+        pending = {"advertisedRoutes": ["10.0.0.0/24"], "enabledRoutes": []}
+        with self.assertRaisesRegex(providers.ProviderError, "did not answer for a-router"):
+            self.approve([pending, OSError()])
+
+    def test_a_refused_write_that_is_not_about_scope_names_the_device(self):
+        pending = {"advertisedRoutes": ["10.0.0.0/24"], "enabledRoutes": []}
+        with self.assertRaisesRegex(
+            providers.ProviderError, "refused the route approval for a-router"
+        ):
+            self.approve([pending, _refused(500)])
+
+    def test_an_approval_reports_the_set_tailscale_answered_with(self):
+        result = self.approve(
+            [
+                {"advertisedRoutes": ["10.0.1.0/24", "10.0.0.0/24"], "enabledRoutes": None},
+                {"enabledRoutes": ["10.0.1.0/24"]},
+            ]
+        )
+
+        self.assertEqual(
+            result.status,
+            {
+                "name": "a-router",
+                "advertised_routes": ["10.0.0.0/24", "10.0.1.0/24"],
+                "enabled_routes": ["10.0.1.0/24"],
+            },
+        )
+        self.assertEqual(result.message, "Approved 10.0.0.0/24, 10.0.1.0/24 for a-router.")
+        self.assertEqual(
+            [(c["type"], c["reason"]) for c in result.conditions], [("Ready", "Reconciled")]
+        )
+
+
+class TlsReadingTests(TestCase):
+    """Every consumer's outcome lands in one reading, pinned field by field."""
+
+    def reading(self, days, fingerprint, domain):
+        when = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=days)
+        return {
+            "domain": domain,
+            "not_after": when.replace(microsecond=0).isoformat(),
+            "fingerprint_sha256": fingerprint,
+            "issuer": f"Issuer {fingerprint}",
+            "sans": [domain],
+            "certificate_pem": f"PEM {fingerprint}",
+        }
+
+    def reconcile(self, spec, readings, endpoints):
+        def observe(domain, *, connect_host=None):
+            found = readings[domain]
+            if isinstance(found, Exception):
+                raise found
+            return dict(found)
+
+        def endpoint(consumer):
+            found = endpoints.get(consumer["name"])
+            if isinstance(found, Exception):
+                raise found
+            return found
+
+        covered = [{"domain_names": ["a.example.com", "b.example.com"]}]
+        with (
+            mock.patch.object(providers, "_observe_tls_domain", side_effect=observe) as seen,
+            mock.patch.object(providers, "_consumer_tls_endpoint", side_effect=endpoint),
+            mock.patch.object(providers, "_npm_covered_hosts", return_value=covered) as npm,
+        ):
+            result = providers.reconcile_tls(spec)
+        return result, seen, npm
+
+    def test_every_outcome_is_reported_against_its_consumer(self):
+        far = self.reading(300, "one", "a.example.com")
+        near = self.reading(200, "two", "b.example.com")
+        spec = {
+            "domains": ["*.example.com"],
+            "renewal_window_days": 250,
+            "consumers": [
+                {"kind": "npm", "name": "proxy", "discover_covered_hosts": True,
+                 "verify_domains": ["b.example.com"]},
+                {"kind": "caddy", "name": "silent"},
+                {"kind": "caddy", "name": "lost", "verify_domains": ["c.example.com"]},
+                {"kind": "other", "name": "down", "verify_domains": ["d.example.com"]},
+            ],
+        }
+        result, seen, npm = self.reconcile(
+            spec,
+            {
+                "a.example.com": far,
+                "b.example.com": near,
+                "d.example.com": providers.ProviderError("d refused"),
+            },
+            {"proxy": "192.0.2.5", "lost": providers.ProviderError("no endpoint"), "down": None},
+        )
+
+        npm.assert_called_once_with(["*.example.com"])
+        self.assertEqual(
+            seen.call_args_list,
+            [
+                mock.call("a.example.com", connect_host="192.0.2.5"),
+                mock.call("b.example.com", connect_host="192.0.2.5"),
+                mock.call("d.example.com", connect_host=None),
+            ],
+        )
+        self.assertFalse(result.changed)
+        self.assertEqual(result.message, "TLS consumers observed.")
+        public = [
+            {**{k: v for k, v in far.items() if k != "certificate_pem"},
+             "consumer": "proxy", "consumer_kind": "npm"},
+            {**{k: v for k, v in near.items() if k != "certificate_pem"},
+             "consumer": "proxy", "consumer_kind": "npm"},
+        ]
+        self.assertEqual(
+            result.status,
+            {
+                "issuer": "Issuer one",
+                "not_after": near["not_after"],
+                "artifact_not_after": far["not_after"],
+                "certificate_pem": "PEM one",
+                "verified_domains": ["a.example.com", "b.example.com"],
+                "consumers": public,
+                "unreachable_consumers": [
+                    {"consumer": "lost", "domain": "", "endpoint": "", "port": "443",
+                     "reason": "no endpoint"},
+                    {"consumer": "down", "domain": "d.example.com",
+                     "endpoint": "d.example.com", "port": "443", "reason": "d refused"},
+                ],
+            },
+        )
+        self.assertEqual(
+            [(c["type"], c["status"], c["reason"]) for c in result.conditions],
+            [
+                ("Drifted", True, "ConsumerMismatch"),
+                ("Degraded", True, "ExpiringSoon"),
+                ("Degraded", True, "ConsumerUnverified"),
+                ("Degraded", True, "ConsumerUnreachable"),
+            ],
+        )
+        self.assertRegex(result.conditions[1]["message"], r"expires in (199|200) days\.$")
+        self.assertEqual(
+            result.conditions[2]["message"],
+            "No verification domain is declared for: silent",
+        )
+        self.assertEqual(
+            result.conditions[3]["message"], "Could not be read: lost, d.example.com"
+        )
+
+    def test_one_current_certificate_everywhere_is_verified(self):
+        current = self.reading(300, "one", "a.example.com")
+        result, _, npm = self.reconcile(
+            {
+                "renewal_window_days": 30,
+                "consumers": [{"kind": "npm", "name": "proxy",
+                               "verify_domains": ["a.example.com"]}],
+            },
+            {"a.example.com": current},
+            {"proxy": "192.0.2.5"},
+        )
+
+        npm.assert_not_called()
+        self.assertEqual(
+            result.conditions,
+            [{"type": "Ready", "status": True, "reason": "Verified",
+              "message": "All TLS consumers are current."}],
+        )
+
+    def test_nothing_to_verify_is_a_failure_that_says_so(self):
+        with self.assertRaisesRegex(
+            providers.ProviderError, "No TLS verification domains were declared"
+        ):
+            self.reconcile(
+                {"renewal_window_days": 30, "consumers": [{"kind": "npm", "name": "p"}]},
+                {},
+                {},
+            )
+
+
 class TailnetReadingTests(TestCase):
     """Tailnet-level readings: kept fields only, and a refusal names its scope."""
 
@@ -3683,6 +4133,7 @@ class TailnetReadingTests(TestCase):
             self.assertRaises(providers.ProviderError) as raised,
         ):
             providers.OBSERVATION_READERS[kind]()
+        self.refusal = raised.exception.refusal
         return str(raised.exception)
 
     DNS = {
@@ -3744,20 +4195,35 @@ class TailnetReadingTests(TestCase):
         self.assertEqual(record["devices_key_duration_days"], 90)
         self.assertTrue(record["devices_approval_on"])
         self.assertTrue(record["acls_externally_managed_on"])
-        self.assertEqual(record["unread"], "")
+        self.assertNotIn("unread", record)
         self.assertNotIn("aclsExternalLink", record)
         self.assertNotIn("acls_external_link", record)
+        self.assertNotIn("network_flow_logging_on", record)
 
-    def test_a_setting_another_scope_governs_is_said_to_be_unread(self):
-        partial = {**self.SETTINGS, "networkFlowLoggingOn": None}
+    def test_a_setting_another_scope_governs_is_its_part_refused(self):
+        from control_plane.reading_parts import clean_refused_parts, refused_parts
+
+        partial = {**self.SETTINGS, "aclsExternallyManagedOn": None}
         del partial["httpsEnabled"]
 
-        (record,), _ = self.read("tailscale.settings", partial)
+        with providers.part_ledger() as ledger:
+            (record,), _ = self.read("tailscale.settings", partial)
+        snapshot = SimpleNamespace(
+            kind="tailscale.settings", reachable=True,
+            refused_parts=clean_refused_parts("tailscale.settings", ledger),
+        )
+        missing = {refused.part.name: refused.missing for refused in refused_parts(snapshot)}
 
-        self.assertIsNone(record["network_flow_logging_on"])
-        self.assertIn("logs:network:read", record["unread"])
-        self.assertIn("networking_settings:read", record["unread"])
-        self.assertNotIn("policy_file:read", record["unread"])
+        self.assertIsNone(record["https_enabled"])
+        self.assertNotIn("unread", record)
+        self.assertEqual(missing, {"https": ("networking_settings:read",),
+                                   "acl_management": ("policy_file:read",)})
+
+    def test_every_setting_seen_refuses_no_part(self):
+        with providers.part_ledger() as ledger:
+            self.read("tailscale.settings", self.SETTINGS)
+
+        self.assertEqual(ledger, [])
 
     USERS = {
         "users": [
@@ -3811,9 +4277,16 @@ class TailnetReadingTests(TestCase):
             ("tailscale.settings", "feature_settings:read"),
             ("tailscale.user", "users:read"),
         ):
-            for code in (401, 403, 404):
+            for code in (403, 404):
                 with self.subTest(kind=kind, code=code):
                     self.assertIn(scope, self.refuse(kind, code))
+                    self.assertEqual(self.refusal, providers.PERMISSION_REFUSAL)
+
+    def test_a_refused_token_is_the_credential_not_a_scope(self):
+        message = self.refuse("tailscale.user", 401)
+
+        self.assertNotIn("users:read", message)
+        self.assertEqual(self.refusal, providers.CREDENTIAL_REFUSAL)
 
     def test_a_failure_that_is_not_about_scope_raises_without_one(self):
         message = self.refuse("tailscale.dns", 500)
@@ -5184,6 +5657,11 @@ class HostPerimeterTests(TestCase):
             mock.patch.object(providers, "_ssh", return_value=payload),
             mock.patch.object(
                 providers,
+                "_transport",
+                return_value={"host": "100.64.0.9", "port": 7722, "user": "u", "host_key": "k"},
+            ),
+            mock.patch.object(
+                providers,
                 "list_portainer_containers",
                 return_value=containers
                 if containers is not None
@@ -5202,8 +5680,29 @@ class HostPerimeterTests(TestCase):
         reading = self._reading()
 
         self.assertEqual(reading["answered_publicly"], [])
-        self.assertEqual(reading["ports_checked"], [80, 443, 9001])
+        self.assertEqual(reading["ports_checked"], [22, 80, 443, 7722, 9001])
         self.assertEqual(reading["firewall_unit"], "active")
+
+    def test_the_ssh_ports_are_always_tried(self):
+        """SSH answers on the tailnet only, so a public answer is the finding."""
+
+        reading = self._reading(containers=[], answers=(7722,))
+
+        self.assertEqual(reading["ports_checked"], [22, 7722])
+        self.assertEqual(reading["answered_publicly"], [7722])
+
+    def test_containers_are_matched_by_the_address_both_names_share(self):
+        """A Portainer environment and an SSH item name one machine differently."""
+
+        reading = self._reading(
+            containers=[
+                {"host": "edge-environment", "host_address": "100.64.0.9", "ports": [9001]},
+                {"host": "edge-environment", "host_address": "203.0.113.5", "ports": [8443]},
+                {"host": "elsewhere", "host_address": "100.64.0.20", "ports": [3000]},
+            ],
+        )
+
+        self.assertEqual(reading["ports_checked"], [22, 7722, 8443, 9001])
 
     def test_a_port_that_answers_publicly_is_named(self):
         """The invariant failing, which has no symptom anywhere else."""
@@ -5219,14 +5718,14 @@ class HostPerimeterTests(TestCase):
             containers=[{"host": "an-edge", "ports": [25565]}],
         )
 
-        self.assertEqual(reading["ports_checked"], [25565])
+        self.assertEqual(reading["ports_checked"], [22, 7722, 25565])
 
     def test_containers_on_another_machine_are_not_checked_here(self):
         reading = self._reading(
             containers=[{"host": "somewhere-else", "ports": [80]}],
         )
 
-        self.assertEqual(reading["ports_checked"], [])
+        self.assertEqual(reading["ports_checked"], [22, 7722])
 
     def test_a_dead_unit_is_reported_rather_than_assumed(self):
         """Enabled and dead is the case with no symptom until it matters."""
@@ -5572,6 +6071,8 @@ class SignInRedirectTests(TestCase):
             "The address answered with a sign-in page at sso.example.com, not the API. "
             "Use the provider's direct API address.",
         )
+        self.assertEqual(found.failure, providers.ADDRESS_FAILURE)
+        self.assertEqual(found.refusal, "")
         self.assertNotIn("example-id", str(found))
         self.assertNotIn("state", str(found))
 
@@ -5582,12 +6083,62 @@ class SignInRedirectTests(TestCase):
 
         self.assertIsInstance(found, providers.ProviderError)
         self.assertIn("answered with a web page, not the API", str(found))
+        self.assertEqual(found.failure, providers.ADDRESS_FAILURE)
 
     def test_a_redirect_to_another_host_is_refused_even_with_json(self):
         found, _ = self.call(_Page(b"[]", landed="https://other.example.com/api"))
 
         self.assertIsInstance(found, providers.ProviderError)
         self.assertIn("redirected to other.example.com", str(found))
+        self.assertEqual(found.failure, providers.ADDRESS_FAILURE)
+
+    def test_no_answer_is_the_network_and_a_401_refuses_the_credential(self):
+        def raising(error):
+            def urlopen(request, timeout=None, context=None):
+                raise error
+
+            return urlopen
+
+        cases = (
+            (providers.urllib.error.URLError("no route"), providers.NETWORK_FAILURE, ""),
+            (TimeoutError(), providers.NETWORK_FAILURE, ""),
+            (
+                providers.urllib.error.HTTPError(self.API, 401, "Unauthorized", {}, None),
+                providers.CREDENTIAL_REFUSAL,
+                providers.CREDENTIAL_REFUSAL,
+            ),
+            (
+                providers.urllib.error.HTTPError(self.API, 500, "Server error", {}, None),
+                "",
+                "",
+            ),
+        )
+        for error, failure, refusal in cases:
+            with self.subTest(error=type(error).__name__):
+                with mock.patch.object(
+                    providers.urllib.request, "urlopen", raising(error)
+                ), self.assertRaises(providers.ProviderError) as raised:
+                    providers._RUNTIME.request(self.API)
+                self.assertEqual(raised.exception.failure, failure)
+                self.assertEqual(raised.exception.refusal, refusal)
+
+    def test_a_probe_reports_why_it_failed(self):
+        def probe(connection_ref):
+            raise providers.ProviderError(
+                "The address answered with a web page, not the API.",
+                failure=providers.ADDRESS_FAILURE,
+            )
+
+        found = providers._probed(probe, "example-npm")
+
+        self.assertEqual(
+            found,
+            {
+                "ok": False,
+                "detail": "The address answered with a web page, not the API.",
+                "failure": providers.ADDRESS_FAILURE,
+            },
+        )
 
     def test_json_from_the_address_asked_is_returned(self):
         found, _ = self.call(_Page(b'[{"id": 1}]', landed=self.API))
@@ -5610,12 +6161,15 @@ class RegistrarRefusalTests(TestCase):
         )
         with mock.patch.object(providers, "_analytics_account", return_value="acct"), \
                 mock.patch.object(providers, "_cloudflare_api_cursor_list", side_effect=refused):
-            found = providers._registrar_domains()
+            with providers.part_ledger() as refused_parts:
+                found = providers._registrar_domains()
 
+        self.assertEqual(found, {})
         self.assertEqual(
-            found,
-            {"": {"unread": "Cloudflare refused the request: Authentication error",
-                  "refusal": "permission"}},
+            refused_parts,
+            [{"part": "registration", "refusal": "permission",
+              "reason": "Cloudflare refused the request: Authentication error",
+              "scope": "", "connection_ref": ""}],
         )
 
 

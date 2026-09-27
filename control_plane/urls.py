@@ -20,6 +20,7 @@ urlpatterns = [
         views.ConnectionListView.as_view(),
         name="connections",
     ),
+    path("connections/read/", views.ReadNowView.as_view(), name="read_now"),
     # Before <slug:key>, which would otherwise swallow "approvals" as a
     # resource key.
     path("approvals/", views.ApprovalListView.as_view(), name="approvals"),

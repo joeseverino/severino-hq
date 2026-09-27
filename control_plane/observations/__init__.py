@@ -11,14 +11,18 @@ the reason, and ``ObservationSpec.requires`` says what the credential needs.
 
 from __future__ import annotations
 
-from . import cloudflare, host, public_registry, tailscale
-from .contract import ObservationRecord, ObservationSpec, registry
+from . import adguard, cloudflare, host, hq, npm, portainer, public_registry, tailscale
+from .contract import ObservationRecord, ObservationSpec, ReadingPart, registry
 
 OBSERVATIONS = registry(
     host.OBSERVATIONS
     + cloudflare.OBSERVATIONS
     + tailscale.OBSERVATIONS
+    + portainer.OBSERVATIONS
+    + npm.OBSERVATIONS
     + public_registry.OBSERVATIONS
+    + adguard.OBSERVATIONS
+    + hq.OBSERVATIONS
 )
 
-__all__ = ["OBSERVATIONS", "ObservationRecord", "ObservationSpec", "registry"]
+__all__ = ["OBSERVATIONS", "ObservationRecord", "ObservationSpec", "ReadingPart", "registry"]

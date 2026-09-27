@@ -7,12 +7,22 @@ from typing import Any
 
 from pydantic import Field
 
-from ..names import normalized_hostname
+from ..names import certificate_covers, normalized_hostname
 from .contracts import (
     ControllerIntegrationAdapter,
     ProviderError,
     ProviderResult,
     ProviderRuntime,
+    ServedCertificate,
+)
+
+# Why a route carries no certificate, when the edge could not say.
+_NO_CERTIFICATE_OPERATION = (
+    "the edge target does not report its certificate; redeploy it at version 3 or later"
+)
+_MANAGED_BY_CADDY = (
+    "Caddy manages this name's certificate itself, and the edge reports only the "
+    "certificate it loads from a file"
 )
 
 
@@ -64,6 +74,79 @@ def routes(config: dict[str, Any], connection_ref: str) -> list[dict[str, Any]]:
     return list(found.values())
 
 
+def loads_files(config: dict[str, Any]) -> bool:
+    """Whether the config serves certificates from files rather than only its own ACME."""
+
+    tls = ((config or {}).get("apps") or {}).get("tls") or {}
+    return bool((tls.get("certificates") or {}).get("load_files"))
+
+
+def certificate_facts(pem: bytes) -> dict[str, Any]:
+    """The served leaf as a route states it: names, issuer, expiry. Public facts only."""
+
+    from cryptography import x509
+    from cryptography.x509.oid import ExtensionOID, NameOID
+
+    leaf = x509.load_pem_x509_certificate(pem)
+
+    def first(name, oid) -> str:
+        found = name.get_attributes_for_oid(oid)
+        return str(found[0].value) if found else ""
+
+    try:
+        names = leaf.extensions.get_extension_for_oid(
+            ExtensionOID.SUBJECT_ALTERNATIVE_NAME
+        ).value.get_values_for_type(x509.DNSName)
+    except x509.ExtensionNotFound:
+        names = []
+    domains = tuple(dict.fromkeys(normalized_hostname(name) for name in names if name))
+    return {
+        "name": first(leaf.subject, NameOID.COMMON_NAME) or (domains[0] if domains else ""),
+        "provider": first(leaf.issuer, NameOID.ORGANIZATION_NAME)
+        or first(leaf.issuer, NameOID.COMMON_NAME),
+        "expires_on": leaf.not_valid_after_utc.isoformat(),
+        "domains": domains,
+    }
+
+
+def _served(runtime: ProviderRuntime, connection_ref: str, config: dict[str, Any]):
+    """``(certificate, unread)``: the file certificate this edge serves, or why not."""
+
+    if not loads_files(config):
+        return None, _MANAGED_BY_CADDY
+    try:
+        return certificate_facts(runtime.ssh(connection_ref, "certificate")), ""
+    except ProviderError:
+        return None, _NO_CERTIFICATE_OPERATION
+    except (OSError, ValueError) as exc:
+        return None, f"its certificate did not parse ({type(exc).__name__})"
+
+
+def with_certificates(
+    found: list[dict[str, Any]], certificate: dict[str, Any] | None, unread: str
+) -> list[dict[str, Any]]:
+    """Each route with the loaded certificate when it covers the route's name."""
+
+    names = frozenset((certificate or {}).get("domains") or ())
+    for route in found:
+        if certificate is not None and certificate_covers(route["domain"], names):
+            route["certificate"] = certificate
+        else:
+            route["certificate_unread"] = unread or _MANAGED_BY_CADDY
+    return found
+
+
+def served_certificate(record: dict[str, Any]) -> ServedCertificate | None:
+    """The certificate a route record serves its name with, or why it cannot say."""
+
+    domain = normalized_hostname(record.get("domain"))
+    certificate = record.get("certificate") or {}
+    if isinstance(certificate, dict) and certificate.get("name"):
+        return ServedCertificate((domain,), certificate)
+    unread = str(record.get("certificate_unread", "") or "")
+    return ServedCertificate((domain,), {}, unread=unread) if unread else None
+
+
 def inventory(runtime: ProviderRuntime) -> list[dict[str, Any]]:
     """Read the SSH connections that serve Caddy.
 
@@ -90,7 +173,8 @@ def inventory(runtime: ProviderRuntime) -> list[dict[str, Any]]:
         except (json.JSONDecodeError, UnicodeDecodeError):
             continue
         if isinstance(config, dict):
-            found.extend(routes(config, connection_ref))
+            certificate, unread = _served(runtime, connection_ref, config)
+            found.extend(with_certificates(routes(config, connection_ref), certificate, unread))
     return found
 
 
@@ -231,6 +315,7 @@ def build_adapter(*, provider_model, provider_spec, applies, normalized_hostname
         facet="proxy",
         hostnames=lambda spec: (spec["domain"],),
         origin=lambda spec: str(spec.get("upstream", "") or "").strip(),
+        served_certificate=served_certificate,
         identity=identity,
         from_record=lambda record: {
             "connection_ref": str(record.get("connection_ref", "") or ""),

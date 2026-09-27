@@ -7,7 +7,13 @@ from django.test import SimpleTestCase, TestCase
 from application.inventory import record_inventory
 from application.security import cli_principal
 from control_plane.models import ProviderInventory
-from control_plane.observations import OBSERVATIONS, ObservationRecord, ObservationSpec, registry
+from control_plane.observations import (
+    OBSERVATIONS,
+    ObservationRecord,
+    ObservationSpec,
+    ReadingPart,
+    registry,
+)
 
 
 class Named(ObservationRecord):
@@ -68,6 +74,42 @@ class ContractTests(SimpleTestCase):
             registry((ObservationSpec("example.thing", "example", "Thing", Named, facet="x"),))
         with self.assertRaises(ValueError):
             registry((ObservationSpec("example.thing", "example", "Thing", Named, read_by="x"),))
+
+
+class PartTests(SimpleTestCase):
+    """A part needs no more than its reading declares, and is named once."""
+
+    def spec(self, *parts, requires=("Read (zone)",), provider="example"):
+        return ObservationSpec(
+            "example.thing", provider, "Thing", Named, requires=requires, parts=parts
+        )
+
+    def test_a_part_within_the_readings_permissions_registers(self):
+        found = registry((self.spec(ReadingPart("half", "Half", ("Read (zone)",))),))
+
+        self.assertEqual(found["example.thing"].parts[0].name, "half")
+
+    def test_a_part_needing_more_than_its_reading_is_refused(self):
+        with self.assertRaises(ValueError):
+            registry((self.spec(ReadingPart("half", "Half", ("Write (zone)",))),))
+
+    def test_parts_are_named_once_and_never_blank(self):
+        with self.assertRaises(ValueError):
+            registry((self.spec(ReadingPart("half", "Half"), ReadingPart("half", "Again")),))
+        with self.assertRaises(ValueError):
+            registry((self.spec(ReadingPart(" ", "Blank")),))
+
+    def test_a_readings_part_is_read_by_its_own_provider(self):
+        with self.assertRaises(ValueError):
+            registry((self.spec(ReadingPart("half", "Half", (), "elsewhere")),))
+
+    def test_no_record_schema_carries_an_unread_marker_from_a_credential_read(self):
+        # A part a credential could not read is a part refusal, never a record
+        # field. Only keyless registry lookups keep a negative answer per record.
+        for kind, spec in OBSERVATIONS.items():
+            if spec.read_by == "controller":
+                with self.subTest(kind=kind):
+                    self.assertNotIn("unread", spec.record.model_fields)
 
 
 class IngestTests(TestCase):

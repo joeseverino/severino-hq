@@ -11,6 +11,7 @@ entries are bare scope names.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from types import MappingProxyType
 
 from .observations import OBSERVATIONS
@@ -49,3 +50,44 @@ def observer_permissions(provider: str) -> tuple[str, ...]:
     }
     found.update(name for name, _ in UNREGISTERED_READS.get(provider, ()))
     return tuple(sorted(found))
+
+
+@dataclass(frozen=True)
+class Minter:
+    """How an observer credential for one provider is minted and stored.
+
+    ``stores`` pairs each ``--store`` flag with the projection variable whose
+    field it fills, the secret first. ``bootstrap`` pairs each environment
+    variable the script reads with the projection variable whose field on the
+    bootstrap item holds it, so a bootstrap item is shaped like the connection.
+    """
+
+    script: str
+    stores: tuple[tuple[str, str], ...]
+    bootstrap: tuple[tuple[str, str], ...]
+    # Where an operator creates the credential by hand instead.
+    by_hand: str
+    # The flag naming the account, when the credential is minted for one.
+    account_flag: str = ""
+
+
+MINTERS: Mapping[str, Minter] = MappingProxyType(
+    {
+        "cloudflare_api": Minter(
+            script="scripts/mint-cloudflare-token.sh",
+            stores=(("--store", "API_TOKEN"),),
+            bootstrap=(("CLOUDFLARE_BOOTSTRAP_TOKEN", "API_TOKEN"),),
+            by_hand="Cloudflare dashboard, My Profile, API Tokens: a custom token",
+            account_flag="--account",
+        ),
+        "tailscale": Minter(
+            script="scripts/mint-tailscale-client.sh",
+            stores=(("--store", "CLIENT_SECRET"), ("--store-id", "CLIENT_ID")),
+            bootstrap=(
+                ("TAILSCALE_BOOTSTRAP_CLIENT_ID", "CLIENT_ID"),
+                ("TAILSCALE_BOOTSTRAP_CLIENT_SECRET", "CLIENT_SECRET"),
+            ),
+            by_hand="Tailscale admin console, Settings, Trust credentials: an OAuth client",
+        ),
+    }
+)

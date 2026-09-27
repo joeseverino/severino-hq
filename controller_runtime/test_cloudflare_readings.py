@@ -57,6 +57,11 @@ def _stored(kind, records):
     return ProviderInventory.objects.get(kind=kind)
 
 
+def _stored_report(kind, report):
+    record_inventory({kind: report}, principal=cli_principal())
+    return ProviderInventory.objects.get(kind=kind)
+
+
 def _paged(pages):
     """Answer successive requests for one list with successive pages."""
 
@@ -72,9 +77,16 @@ class CloudflareReadingTests(TestCase):
     def _read(self, kind, routes):
         fake = _Cloudflare(routes)
         with mock.patch.object(providers, "_cloudflare_api_request", fake):
-            with providers.provider_snapshot():
+            with providers.provider_snapshot(), providers.part_ledger() as refused:
                 records = providers.OBSERVATION_READERS[kind]()
+        self.refused = refused
         return records, fake
+
+    def assertRefused(self, part, scope=""):
+        (found,) = [entry for entry in self.refused if entry["part"] == part]
+        self.assertEqual(found["scope"], scope)
+        self.assertIn("403", found["reason"])
+        return found
 
     # Pages -------------------------------------------------------------
 
@@ -145,7 +157,8 @@ class CloudflareReadingTests(TestCase):
         stored = _stored("cloudflare.d1_database", records)
         self.assertEqual(stored.records[0]["file_size"], 4096)
         self.assertEqual(stored.records[0]["account_id"], ACCOUNT)
-        self.assertIn("403", stored.records[1]["unread"])
+        self.assertNotIn("file_size", stored.records[1])
+        self.assertRefused("file_size", "db-1")
         self.assertNotIn(SECRET, json.dumps(stored.records))
 
     def test_a_refused_d1_read_raises(self):
@@ -249,8 +262,9 @@ class CloudflareReadingTests(TestCase):
             ],
         )
 
-        self.assertIn("apps:", records[0]["unread"])
+        self.assertRefused("apps")
         self.assertNotIn("apps", records[0])
+        self.assertNotIn("unread", records[0])
 
     def test_a_refused_service_token_read_raises(self):
         with self.assertRaises(providers.ProviderError):
@@ -322,7 +336,7 @@ class CloudflareReadingTests(TestCase):
         )
 
         self.assertEqual(records[0]["config_source"], "local")
-        self.assertIn("connections:", records[0]["unread"])
+        self.assertRefused("connections", "t")
         self.assertNotIn("connections", records[0])
 
     def test_a_refused_tunnel_read_raises(self):
@@ -374,7 +388,7 @@ class CloudflareReadingTests(TestCase):
             ("example.com", "*.example.com"),
         )
 
-    def test_a_zone_whose_packs_are_refused_carries_unread(self):
+    def test_a_zone_whose_packs_are_refused_is_a_refused_part_not_a_record(self):
         records, _fake = self._read(
             "cloudflare.edge_certificate",
             [
@@ -385,8 +399,8 @@ class CloudflareReadingTests(TestCase):
             ],
         )
 
-        self.assertEqual(records, [{"connection_ref": "", "account_id": "", "zone": "example.com",
-                                    "unread": "Cloudflare refused the request: 403"}])
+        self.assertEqual(records, [])
+        self.assertRefused("", "example.com")
 
     def test_every_zone_refused_raises(self):
         refused = providers.ProviderError("Cloudflare refused the request: 403")
@@ -399,6 +413,106 @@ class CloudflareReadingTests(TestCase):
                     ("/zones/zone-2/ssl/certificate_packs", refused),
                 ],
             )
+
+    # Redirects ---------------------------------------------------------------
+
+    RULE = {
+        "id": "r1",
+        "action": "redirect",
+        "expression": '(http.host eq "example.net") or (http.host in {"www.example.net"})',
+        "description": "Old name",
+        "enabled": True,
+        "action_parameters": {"from_value": {
+            "target_url": {"expression": 'concat("https://example.com", http.request.uri.path)'},
+            "status_code": 301,
+            "preserve_query_string": True,
+        }},
+    }
+
+    def _redirect_routes(self, *, zone_1_pagerules=None, zone_2=None):
+        return [
+            self._zones(),
+            ("/zones/zone-1/rulesets", _page([
+                {"id": "rs-1", "phase": "http_request_dynamic_redirect", "kind": "zone"},
+                {"id": "rs-2", "phase": "http_request_firewall_custom", "kind": "zone"},
+            ])),
+            ("/zones/zone-1/rulesets/rs-1", {"success": True, "result": {"rules": [
+                self.RULE, {"id": "r2", "action": "block", "expression": "true"},
+            ]}}),
+            ("/zones/zone-1/pagerules", zone_1_pagerules or {"success": True, "result": []}),
+            ("/zones/zone-2/rulesets", zone_2 or _page([])),
+            ("/zones/zone-2/pagerules", zone_2 or {"success": True, "result": [{
+                "id": "p1", "status": "active",
+                "targets": [{"target": "url", "constraint": {"operator": "matches", "value": "*example.org/*"}}],
+                "actions": [{"id": "forwarding_url", "value": {"url": "https://example.com/$1", "status_code": 302}}],
+            }]}),
+        ]
+
+    def test_redirect_rules_and_forwarding_page_rules_name_their_hosts_and_target(self):
+        records, fake = self._read("cloudflare.redirect", self._redirect_routes())
+
+        self.assertEqual(fake.paths("/zones/zone-1/rulesets/rs-2"), [])
+        stored = _stored("cloudflare.redirect", records)
+        rule, page_rule = stored.records
+        self.assertEqual(rule["hostnames"], ["example.net", "www.example.net"])
+        self.assertEqual(rule["target_host"], "example.com")
+        self.assertEqual((rule["source"], rule["status_code"]), ("rule", 301))
+        self.assertEqual(page_rule["hostnames"], ["example.org"])
+        self.assertEqual((page_rule["source"], page_rule["target_host"]), ("page_rule", "example.com"))
+        spec = OBSERVATIONS["cloudflare.redirect"]
+        self.assertEqual(spec.hostnames(rule), ("example.net", "www.example.net"))
+        self.assertEqual(spec.title(rule), "example.com")
+
+    def test_a_disabled_redirect_joins_no_name(self):
+        record = {"zone": "example.com", "hostnames": ["example.net"], "enabled": False,
+                  "target_host": "example.com"}
+
+        self.assertEqual(OBSERVATIONS["cloudflare.redirect"].hostnames(record), ())
+
+    def test_a_refused_part_is_named_on_its_zone(self):
+        refused = providers.ProviderError("Cloudflare refused the request: 403")
+        records, _fake = self._read(
+            "cloudflare.redirect", self._redirect_routes(zone_1_pagerules=refused)
+        )
+
+        self.assertFalse(any("unread" in record for record in records))
+        self.assertTrue(all(record.get("source") for record in records))
+        self.assertRefused("page_rules", "example.com")
+        self.assertTrue(any(record.get("source") == "rule" for record in records))
+
+    def test_redirect_rules_refused_everywhere_reach_hq_as_parts_not_records(self):
+        refused = providers.ProviderError(
+            "Cloudflare refused the request: Authentication error", refusal="permission"
+        )
+        routes = [
+            self._zones(),
+            ("/zones/zone-1/rulesets", refused),
+            ("/zones/zone-1/pagerules", {"success": True, "result": []}),
+            ("/zones/zone-2/rulesets", refused),
+            ("/zones/zone-2/pagerules", {"success": True, "result": []}),
+        ]
+        fake = _Cloudflare(routes)
+        with mock.patch.object(providers, "_cloudflare_api_request", fake):
+            with providers.provider_snapshot():
+                report = providers._read_kind(providers.OBSERVATION_READERS["cloudflare.redirect"])
+
+        self.assertEqual(report["records"], [])
+        stored = _stored_report("cloudflare.redirect", report)
+        self.assertEqual(stored.records, [])
+        self.assertEqual(
+            [(entry["part"], entry["refusal"], entry["scope"]) for entry in stored.refused_parts],
+            [("rules", "permission", "example.com"), ("rules", "permission", "example.net")],
+        )
+
+    def test_every_part_refused_on_every_zone_raises(self):
+        refused = providers.ProviderError("Cloudflare refused the request: 403")
+        routes = [self._zones()] + [
+            (f"/zones/{zone}/{part}", refused)
+            for zone in ("zone-1", "zone-2")
+            for part in ("rulesets", "pagerules")
+        ]
+        with self.assertRaises(providers.ProviderError):
+            self._read("cloudflare.redirect", routes)
 
     # Sweep sharing -----------------------------------------------------------
 
@@ -433,16 +547,21 @@ class ZonePostureTests(TestCase):
         self.assertEqual(set(posture), set(providers.ZONE_POSTURE_SETTINGS))
 
     @mock.patch("controller_runtime.providers._cloudflare_api_request")
-    def test_a_refused_posture_carries_its_reason(self, request):
+    def test_a_refused_posture_is_the_zones_refused_part(self, request):
         request.side_effect = providers.ProviderError("Cloudflare refused: 403")
 
+        with providers.part_ledger() as refused:
+            posture = providers._cloudflare_zone_posture("zone-1", "example.com")
+
+        self.assertEqual(posture, {})
         self.assertEqual(
-            providers._cloudflare_zone_posture("zone-1"),
-            {"unread": "Cloudflare refused: 403"},
+            refused,
+            [{"part": "posture", "refusal": "", "reason": "Cloudflare refused: 403",
+              "scope": "example.com", "connection_ref": ""}],
         )
 
     @mock.patch("controller_runtime.providers._cloudflare_api_request")
-    def test_a_partly_refused_posture_names_what_it_missed(self, request):
+    def test_a_setting_refused_leaves_no_half_posture(self, request):
         def answer(path, *_):
             if path.endswith("/tls_1_3"):
                 raise providers.ProviderError("Cloudflare refused: 403")
@@ -450,11 +569,11 @@ class ZonePostureTests(TestCase):
 
         request.side_effect = answer
 
-        posture = providers._cloudflare_zone_posture("zone-1")
+        with providers.part_ledger() as refused:
+            posture = providers._cloudflare_zone_posture("zone-1", "example.com")
 
-        self.assertEqual(posture["ssl"], "full")
-        self.assertNotIn("tls_1_3", posture)
-        self.assertEqual(posture["unread"], "tls_1_3: Cloudflare refused: 403")
+        self.assertEqual(posture, {})
+        self.assertEqual([entry["part"] for entry in refused], ["posture"])
 
 
 class AccountListTests(TestCase):

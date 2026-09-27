@@ -197,6 +197,9 @@ def _report_findings(controller_id: str) -> None:
     """
 
     carry: frozenset[str] = frozenset()
+    # Every kind this sweep reads when HQ names some: an operator's read request
+    # between cadence sweeps. Empty is every kind.
+    only: frozenset[str] = frozenset()
     try:
         verdict = _manage("sweep-due", "--controller-id", controller_id)
     except BridgeError as exc:
@@ -213,6 +216,7 @@ def _report_findings(controller_id: str) -> None:
         if not verdict.get("due", True):
             return
         carry = frozenset(str(ref) for ref in verdict.get("carry") or ())
+        only = frozenset(str(kind) for kind in verdict.get("only_kinds") or ())
 
     with provider_snapshot():
         try:
@@ -225,7 +229,9 @@ def _report_findings(controller_id: str) -> None:
             )
         else:
             _post("connections", controller_id, found)
-        _post("inventory", controller_id, inventory())
+        _post("inventory", controller_id, inventory(only=only))
+        if only:
+            return
         try:
             sites = analytics_sites()
             readings = analytics(sites=sites, windows=_analytics_windows(sites))
