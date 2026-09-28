@@ -575,6 +575,20 @@ admission. Adding a provider is therefore writing its modules and adding one
 name to `ADMITTED`; `control_plane/provider_adapters/tests/test_admission.py` holds
 that to be enough.
 
+Its relationships follow from the same declarations. Nothing in the topology
+names a provider to draw its edges:
+
+- A reading joins its subject through the `hostnames`, `addresses` and
+  `containers` its spec declares. The edge from the connection that read it
+  carries the spec's `relation` phrase.
+- A kind that mirrors live records (`from_record`) is used by the connection
+  holding its record. The record is matched to the declaration by the identity
+  adoption uses, and read through the record's `connection_ref`, or else through
+  the kind's `connection_providers`.
+- A reading whose spec `connects` makes the declared containers it names talk
+  to each other.
+- A declaration whose spec has a `host` field runs on that machine.
+
 **One address-to-machine resolver, in `application/locate.py`.** Every surface
 that draws a line between two things HQ knows (a proxy and the box it forwards
 to, a credential and the machine it opens, a service and where it runs) is
