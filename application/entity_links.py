@@ -16,10 +16,9 @@ from typing import Any, Callable
 
 from django.urls import reverse
 
-from control_plane.names import normalized_hostname
+from control_plane.names import normalized_hostname, names_a_host
 from control_plane.observations import OBSERVATIONS
 from control_plane.providers import PROVIDERS, registry_label
-from control_plane.names import names_a_host
 
 
 @dataclass(frozen=True)

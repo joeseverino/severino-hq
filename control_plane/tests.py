@@ -25,6 +25,7 @@ from application.infrastructure import (
     request_certificate_renewal,
     request_reconcile,
     save_managed_resource,
+    delivery_targets as delivery_targets_for_test,
 )
 from application.security import cli_principal, mcp_principal
 
@@ -35,8 +36,6 @@ from .models import (
     ProviderInventory,
 )
 from .providers import PROVIDERS, describe_providers
-
-from application.infrastructure import delivery_targets as delivery_targets_for_test
 
 from .desired_state import advance_dependents
 

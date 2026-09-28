@@ -25,14 +25,10 @@ from typing import Any, Callable, Iterable, Iterator, Mapping
 
 from django.utils import timezone
 
-from control_plane.names import in_zone
+from control_plane.names import in_zone, certificate_covers, normalized_hostname
 from control_plane.observations import OBSERVATIONS, ObservationSpec
 from control_plane.reading_parts import PartRefusal, refused_parts
 from control_plane.providers import PROVIDERS
-from control_plane.names import (
-    certificate_covers,
-    normalized_hostname,
-)
 from control_plane.provider_adapters.portainer import CONTAINER_KIND
 from control_plane.provider_spec import expiry_phrase
 

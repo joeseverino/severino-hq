@@ -15,10 +15,14 @@ from control_plane.provider_adapters.contracts import (
     ProviderError,
 )
 from control_plane.reading_parts import WHOLE, clean_refused_parts, refused_parts
-from controller_runtime import providers
 
 from . import portainer_readings as portainer
 from .parts import part_ledger
+from controller_runtime import (
+    handlers,
+    portainer as controller_portainer,
+    provider_http,
+)
 
 ENDPOINTS = [
     {
@@ -315,8 +319,8 @@ class WiringTests(SimpleTestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers.controller_id", return_value="lab-1")
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_runtime.controller_id", return_value="lab-1")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_one_sweep_lists_each_environments_containers_once(self, request, _controller):
         def answer(url, **_kwargs):
             if url.endswith("/endpoints"):
@@ -326,11 +330,11 @@ class WiringTests(SimpleTestCase):
             return DOCKER[url.split("/docker", 1)[1]]
 
         request.side_effect = answer
-        with providers.provider_snapshot():
+        with provider_http.provider_snapshot():
             for kind in ("portainer.network", "portainer.volume", "portainer.image",
                          "portainer.compose_project", "portainer.environment"):
-                self.assertTrue(providers.OBSERVATION_READERS[kind]())
-            containers = providers.list_portainer_containers()
+                self.assertTrue(handlers.OBSERVATION_READERS[kind]())
+            containers = controller_portainer.list_portainer_containers()
 
         listed = [call.args[0] for call in request.call_args_list if "containers/json" in call.args[0]]
         self.assertEqual(len(listed), 1)

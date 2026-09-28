@@ -15,7 +15,8 @@ from control_plane.provider_adapters.contracts import ProviderError
 
 
 def signing_key(connection_ref: str, *, public: bool = False) -> Path:
-    from .providers import _required, connection_prefixes
+    from .connection_env import connection_prefixes
+    from .provider_http import _required
 
     if not connection_ref or "/" in connection_ref or connection_ref.startswith("."):
         raise ProviderError("Invalid signing connection.")
@@ -40,7 +41,7 @@ class SigningRuntime:
         }
 
     def sign(self, connection_ref: str, data: bytes) -> bytes:
-        from .providers import _run
+        from .commands import _run
 
         return _run(
             ["openssl", "dgst", "-sha256", "-sign", str(signing_key(connection_ref))],

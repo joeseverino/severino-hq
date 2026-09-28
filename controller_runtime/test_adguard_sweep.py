@@ -13,6 +13,7 @@ from control_plane.models import ProviderInventory
 from control_plane.observations.adguard import CLIENT_KIND, DNS_KIND, QUERY_KIND
 
 from . import providers
+from controller_runtime import provider_http
 
 ENV = {
     "ADGUARD_URL": "https://adguard.example.test",
@@ -47,9 +48,9 @@ class AdGuardSweepTests(TestCase):
         kinds = (CLIENT_KIND, QUERY_KIND, DNS_KIND, "adguard.rewrite")
         readers = {kind: providers.PROVIDER_INVENTORY[kind] for kind in kinds}
         with (
-            mock.patch.object(providers, "_request", side_effect=answer),
+            mock.patch.object(provider_http, "_request", side_effect=answer),
             mock.patch.dict(providers.PROVIDER_INVENTORY, readers, clear=True),
-            providers.provider_snapshot(),
+            provider_http.provider_snapshot(),
         ):
             report = providers.inventory()
         record_inventory(report, principal=cli_principal())

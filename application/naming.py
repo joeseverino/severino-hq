@@ -14,9 +14,8 @@ goes and gets them.
 
 from __future__ import annotations
 
-from control_plane.names import normalized_hostname
+from control_plane.names import normalized_hostname, certificate_covers
 from control_plane.providers import PROVIDERS
-from control_plane.names import certificate_covers
 from control_plane.provider_spec import NameContext
 
 from .infrastructure import (

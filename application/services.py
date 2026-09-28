@@ -43,22 +43,14 @@ from control_plane.models import (
     ManagedResource,
     ProviderInventory,
 )
-from control_plane.names import in_zone
+from control_plane.names import certificate_covers, in_zone, names_a_host, normalized_hostname
 from control_plane.providers import (
     PROVIDERS,
     service_facets,
     resource_home,
 )
-from control_plane.names import (
-    certificate_covers,
-    normalized_hostname,
-)
-from control_plane.names import names_a_host
 from control_plane.provider_adapters.portainer import CONTAINER_KIND
-from control_plane.provider_spec import (
-    NameContext,
-    origin_is_authoritative,
-)
+from control_plane.provider_spec import NameContext, origin_is_authoritative
 from control_plane.connection_kinds import CONNECTION_LABELS
 from projects.models import Project
 

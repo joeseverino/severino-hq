@@ -456,7 +456,7 @@ class WindowTests(TestCase):
     def test_every_dimension_the_reader_collects_can_be_stored(self):
         """The reader's registry and the model's enum have to stay in step."""
 
-        from controller_runtime.providers import ANALYTICS_DIMENSIONS
+        from controller_runtime.cloudflare_analytics import ANALYTICS_DIMENSIONS
 
         self.assertEqual(
             sorted(ANALYTICS_DIMENSIONS), sorted(RumDaily.Dimension.values)
@@ -470,7 +470,7 @@ class WindowTests(TestCase):
 
 class UnitTests(TestCase):
     def test_microseconds_become_milliseconds_and_minus_one_becomes_absence(self):
-        from controller_runtime.providers import _milliseconds
+        from controller_runtime.cloudflare_analytics import _milliseconds
 
         self.assertEqual(_milliseconds(2888000), 2888)
         self.assertEqual(_milliseconds(0), 0)

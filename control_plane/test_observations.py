@@ -58,7 +58,7 @@ class ContractTests(SimpleTestCase):
 
     def test_readers_and_readings_are_the_same_set(self):
         from application.public_registry import READERS
-        from controller_runtime.providers import OBSERVATION_READERS
+        from controller_runtime.handlers import OBSERVATION_READERS
 
         self.assertEqual(
             sorted(OBSERVATION_READERS),

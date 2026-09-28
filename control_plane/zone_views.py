@@ -18,15 +18,18 @@ from django.urls import reverse
 from django.utils.html import format_html
 from django.views import View
 
-from application.infrastructure import NotFoundError, PolicyError
+from application.infrastructure import (
+    NotFoundError,
+    PolicyError,
+    ManagedResourceCommand,
+    save_managed_resource,
+)
 from application.pages import PageAction, page_context
 from application.entity_links import entity_link
 from application.relationships import relationships_for
 from application.resource_capabilities import public_dns_enabled, resource_capabilities
 from application.inventory import AdoptCommand, adopt, inventory_state
-from application.security import web_principal
-
-from application.security import safe_next
+from application.security import web_principal, safe_next
 
 from .views import _readable_error
 from application.pins import DOMAIN, pinned, toggle
@@ -39,10 +42,6 @@ from application.mail_policy import (
     compose_spf,
     mail_overview,
     parse_spf,
-)
-from application.infrastructure import (
-    ManagedResourceCommand,
-    save_managed_resource,
 )
 from control_plane.models import ManagedResource
 from application.zones import (

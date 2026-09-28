@@ -33,6 +33,8 @@ from .credential_sight import (
 )
 from .inventory import record_inventory
 from .security import cli_principal
+from controller_runtime import handlers
+import urllib.request
 
 
 class ExampleRecord(ObservationRecord):
@@ -337,7 +339,7 @@ class RefusalEndToEndTests(TestCase):
 
         readers = {
             kind: reader
-            for kind, reader in providers.OBSERVATION_READERS.items()
+            for kind, reader in handlers.OBSERVATION_READERS.items()
             if OBSERVATIONS[kind].provider == "cloudflare_api"
         }
 
@@ -347,7 +349,7 @@ class RefusalEndToEndTests(TestCase):
         with (
             mock.patch.dict("os.environ", self.ENV, clear=True),
             mock.patch.dict(providers.PROVIDER_INVENTORY, readers, clear=True),
-            mock.patch.object(providers.urllib.request, "urlopen", side_effect=refuse),
+            mock.patch.object(urllib.request, "urlopen", side_effect=refuse),
         ):
             report = providers.inventory()
         record_inventory(report, principal=cli_principal())

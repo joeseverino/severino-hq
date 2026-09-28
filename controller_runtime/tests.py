@@ -13,10 +13,53 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase, mock
 
-from control_plane.provider_adapters import caddy, npm, onepassword
+from control_plane.provider_adapters import caddy, npm, onepassword, portainer_readings
 
 from . import providers, worker
+from controller_runtime import (
+    cloudflare,
+    cloudflare_analytics,
+    commands,
+    connection_env,
+    glance,
+    handlers,
+    host_readings,
+    portainer,
+    provider_http,
+    provider_runtime,
+    tailscale,
+    tls,
+)
+from control_plane.provider_adapters.contracts import (
+    ADDRESS_FAILURE,
+    CREDENTIAL_REFUSAL,
+    NETWORK_FAILURE,
+    PERMISSION_REFUSAL,
+    ProviderError,
+    ProviderResult,
+)
+from control_plane.provider_adapters.parts import part_ledger
+from control_plane.providers import controller_id
+from datetime import date
+import ssl
+import urllib.request
 
+
+
+def _controller_source() -> str:
+    """Every module the controller process runs, as one text.
+
+    Properties of the process (what it may hold, what it never caches) are
+    asserted over all of it, so moving code between its modules cannot move
+    it out of reach of the check.
+    """
+
+    folder = Path(providers.__file__).resolve().parent
+    return "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted(folder.glob("*.py"))
+        if not path.name.startswith("test")
+    )
 
 class ControllerConnectionRegistryTests(TestCase):
     def setUp(self):
@@ -69,7 +112,7 @@ class ControllerConnectionRegistryTests(TestCase):
 
         self.assertEqual(
             set(providers._CONNECTION_PROBES),
-            reconciled | providers.OBSERVER_PROVIDERS,
+            reconciled | cloudflare_analytics.OBSERVER_PROVIDERS,
         )
 
     def test_a_connection_is_reconciled_through_or_observed_with_never_both(self):
@@ -83,7 +126,7 @@ class ControllerConnectionRegistryTests(TestCase):
             for provider in spec.connection_providers
         }
 
-        self.assertEqual(reconciled & providers.OBSERVER_PROVIDERS, set())
+        self.assertEqual(reconciled & cloudflare_analytics.OBSERVER_PROVIDERS, set())
 
 
 def _by_url(routes):
@@ -135,10 +178,10 @@ class ProviderAdapterTests(TestCase):
             apply=apply,
         )
 
-    @mock.patch("controller_runtime.providers._portainer_glance")
-    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch("controller_runtime.glance._portainer_glance")
+    @mock.patch("controller_runtime.commands._ssh")
     @mock.patch(
-        "controller_runtime.providers.ssh_connection_refs",
+        "controller_runtime.connection_env.ssh_connection_refs",
         return_value=("example-ssh",),
     )
     def test_dashboard_glance_prefers_whole_host_telemetry(
@@ -156,7 +199,7 @@ class ProviderAdapterTests(TestCase):
             }
         ).encode()
 
-        result = providers.dashboard_glance(
+        result = glance.dashboard_glance(
             {
                 "panels": ["infrastructure"],
                 "targets": {
@@ -177,12 +220,12 @@ class ProviderAdapterTests(TestCase):
             ["17%", "25%", "25%"],
         )
         ssh.assert_called_once_with(
-            "example-ssh", "python3 -", providers._HOST_GLANCE_SCRIPT
+            "example-ssh", "python3 -", glance._HOST_GLANCE_SCRIPT
         )
         portainer.assert_not_called()
 
-    @mock.patch("controller_runtime.providers.ssh_connection_refs", return_value=())
-    @mock.patch("controller_runtime.providers._portainer_glance")
+    @mock.patch("controller_runtime.connection_env.ssh_connection_refs", return_value=())
+    @mock.patch("controller_runtime.glance._portainer_glance")
     def test_dashboard_glance_labels_docker_fallback_by_scope(
         self, portainer, _connection_refs
     ):
@@ -205,7 +248,7 @@ class ProviderAdapterTests(TestCase):
             ],
         }
 
-        result = providers.dashboard_glance(
+        result = glance.dashboard_glance(
             {
                 "panels": ["infrastructure"],
                 "targets": {
@@ -217,7 +260,7 @@ class ProviderAdapterTests(TestCase):
         labels = [metric["label"] for metric in result[0]["machines"][0]["metrics"]]
         self.assertEqual(labels, ["Container CPU", "Container memory"])
 
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_weather_glance_uses_the_nws_point_contract(self, request):
         request.side_effect = [
             {
@@ -245,7 +288,7 @@ class ProviderAdapterTests(TestCase):
             {"features": []},
         ]
 
-        result = providers.dashboard_glance(
+        result = glance.dashboard_glance(
             {
                 "panels": ["weather"],
                 "targets": {"weather": {"point": "41.0000,-87.0000"}},
@@ -258,11 +301,11 @@ class ProviderAdapterTests(TestCase):
         self.assertIn("User-Agent", request.call_args_list[0].kwargs["headers"])
 
     @mock.patch(
-        "controller_runtime.providers._nws_glance",
-        side_effect=providers.ProviderError("No forecast for this point."),
+        "controller_runtime.glance._nws_glance",
+        side_effect=ProviderError("No forecast for this point."),
     )
     def test_weather_failure_keeps_the_point_so_the_request_can_complete(self, _nws):
-        result = providers.dashboard_glance(
+        result = glance.dashboard_glance(
             {
                 "panels": ["weather"],
                 "targets": {"weather": {"point": "41.0000,-87.0000"}},
@@ -278,13 +321,13 @@ class ProviderAdapterTests(TestCase):
         {"HQ_CONTROLLER_CA_FILE": "/run/secrets/example-ca.pem"},
         clear=True,
     )
-    @mock.patch("controller_runtime.providers.ssl.create_default_context")
+    @mock.patch("ssl.create_default_context")
     def test_tls_context_adds_controller_ca_without_replacing_public_roots(
         self, create_default_context
     ):
         context = create_default_context.return_value
 
-        self.assertIs(providers._tls_context(), context)
+        self.assertIs(provider_http._tls_context(), context)
 
         context.load_verify_locations.assert_called_once_with(
             cafile="/run/secrets/example-ca.pem"
@@ -311,7 +354,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_adguard_noop_is_idempotent(self, request):
         request.return_value = [{"domain": "hq.example", "answer": "192.0.2.10"}]
 
@@ -333,7 +376,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_adguard_reports_a_rewrite_that_is_switched_off(self, request):
         """Present but disabled does not resolve, and Ready would be a lie.
 
@@ -363,7 +406,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_adguard_delete_removes_the_live_pair(self, request):
         """AdGuard identifies a rewrite by domain *and* answer.
 
@@ -398,7 +441,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_adguard_delete_is_idempotent(self, request):
         """A retried delete finding nothing there has done what was asked.
 
@@ -425,7 +468,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_adguard_delete_plans_without_touching_anything(self, request):
         request.return_value = [
             {"domain": "hq.example", "answer": "192.0.2.10", "enabled": True}
@@ -451,7 +494,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_adguard_update_uses_the_provider_contract(self, request):
         request.side_effect = [
             [{"domain": "hq.example", "answer": "192.0.2.9", "enabled": True}],
@@ -502,10 +545,10 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._cloudflare_envelope")
-    @mock.patch("controller_runtime.providers._run")
-    @mock.patch("controller_runtime.providers._ssh")
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_envelope")
+    @mock.patch("controller_runtime.commands._run")
+    @mock.patch("controller_runtime.commands._ssh")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_connection_sweep_probes_every_credential_the_environment_carries(
         self, request, ssh, _run, envelope
     ):
@@ -563,17 +606,17 @@ class ProviderAdapterTests(TestCase):
         self.assertEqual(ssh.call_count, 2)
         self.assertNotIn("secret-c", json.dumps(result))
 
-    @mock.patch("controller_runtime.providers._cloudflare_paged")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_paged")
     def test_one_sweep_reuses_successful_provider_reads_and_then_forgets_them(
         self, paged
     ):
         paged.return_value = [{"id": "zone-1", "name": "example.test"}]
 
-        with providers.provider_snapshot():
-            first = providers._cloudflare_zones()
-            second = providers._cloudflare_zones()
+        with provider_http.provider_snapshot():
+            first = cloudflare._cloudflare_zones()
+            second = cloudflare._cloudflare_zones()
 
-        third = providers._cloudflare_zones()
+        third = cloudflare._cloudflare_zones()
 
         self.assertIs(first, second)
         self.assertEqual(third, first)
@@ -589,8 +632,8 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._run")
-    @mock.patch("controller_runtime.providers._cloudflare_envelope")
+    @mock.patch("controller_runtime.commands._run")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_envelope")
     def test_one_broken_credential_does_not_hide_the_others(self, request, _run):
         """A failure is that connection's, and the sweep still reports the rest.
 
@@ -598,7 +641,7 @@ class ProviderAdapterTests(TestCase):
         precisely when an operator needs to see which of them still works.
         """
 
-        request.side_effect = providers.ProviderError("Token is not valid.")
+        request.side_effect = ProviderError("Token is not valid.")
 
         found = providers.connections()
 
@@ -618,7 +661,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers.urllib.request.urlopen")
+    @mock.patch("urllib.request.urlopen")
     def test_tailscale_oauth_connection_is_reported_without_secret_material(
         self, urlopen
     ):
@@ -633,7 +676,7 @@ class ProviderAdapterTests(TestCase):
                 {
                     "connection_ref": "example-tailnet",
                     "provider": "tailscale",
-                    "endpoint": providers.TAILNET_API,
+                    "endpoint": tailscale.TAILNET_API,
                     "manages": False,
                     "probed": True,
                     "ok": True,
@@ -656,9 +699,9 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers.urllib.request.urlopen")
+    @mock.patch("urllib.request.urlopen")
     def test_tailscale_probe_failure_is_isolated_and_safe(self, urlopen):
-        urlopen.side_effect = providers.urllib.error.HTTPError(
+        urlopen.side_effect = urllib.error.HTTPError(
             "https://example.invalid", 401, "Unauthorized", {}, None
         )
 
@@ -679,11 +722,11 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_npm_refuses_https_create_without_certificate(self, request):
         request.side_effect = [{"token": "short-lived"}, []]
 
-        with self.assertRaisesRegex(providers.ProviderError, "needs an issued certificate"):
+        with self.assertRaisesRegex(ProviderError, "needs an issued certificate"):
             providers.PROVIDER_ACTIONS[("npm.proxy_host", "reconcile")](
                 {
                     "domain_names": ["hq.example"],
@@ -713,7 +756,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_npm_delete_targets_the_host_with_that_exact_domain_set(self, request):
         request.side_effect = [
             {"token": "short-lived"},
@@ -740,7 +783,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_npm_reconcile_no_longer_asserts_hsts_off(self, request):
         """The payload replaces the whole object, so an unsent field is not spared.
 
@@ -785,7 +828,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_adguard_renames_the_record_it_was_last_seen_holding(self, request):
         """A changed hostname moves the record rather than adding a second one.
 
@@ -825,7 +868,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_a_name_never_seen_before_is_created_not_renamed(self, request):
         """Only a *changed* name is a rename. A new resource is still a create."""
         request.side_effect = [[], None]
@@ -847,7 +890,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_npm_renames_in_place_by_id(self, request):
         request.side_effect = [
             {"token": "short-lived"},
@@ -889,7 +932,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_removing_a_certificate_still_serving_a_host_is_refused(self, request):
         """Deleting it would take TLS down on whatever is bound to it.
 
@@ -902,8 +945,8 @@ class ProviderAdapterTests(TestCase):
             [{"id": 9, "domain_names": ["newhost.example"], "certificate_id": 3}],
         ]
 
-        with self.assertRaisesRegex(providers.ProviderError, "newhost.example"):
-            providers.delete_uploaded_certificate(
+        with self.assertRaisesRegex(ProviderError, "newhost.example"):
+            tls.delete_uploaded_certificate(
                 {
                     "certificate_name": "newhost",
                     "consumers": [{"kind": "npm", "name": "newhost-npm"}],
@@ -920,7 +963,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_an_unbound_certificate_is_removed_by_its_id(self, request):
         """Renamed in NPM, it is still the certificate HQ installed."""
 
@@ -934,7 +977,7 @@ class ProviderAdapterTests(TestCase):
             None,
         ]
 
-        result = providers.delete_uploaded_certificate(
+        result = tls.delete_uploaded_certificate(
             {
                 "certificate_name": "newhost",
                 "consumers": [{"kind": "npm", "name": "newhost-npm"}],
@@ -958,7 +1001,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_a_certificate_matched_only_by_name_is_not_deleted(self, request):
         """A display name anyone can set in NPM is not proof HQ installed it."""
 
@@ -967,8 +1010,8 @@ class ProviderAdapterTests(TestCase):
             [{"id": 3, "nice_name": "Severino HQ - newhost-npm"}],
         ]
 
-        with self.assertRaisesRegex(providers.ProviderError, "no record of installing"):
-            providers.delete_uploaded_certificate(
+        with self.assertRaisesRegex(ProviderError, "no record of installing"):
+            tls.delete_uploaded_certificate(
                 {
                     "certificate_name": "newhost",
                     "consumers": [{"kind": "npm", "name": "newhost-npm"}],
@@ -987,8 +1030,8 @@ class ProviderAdapterTests(TestCase):
         remove to call, and reporting success would forget the only pointer to
         what was left behind.
         """
-        with self.assertRaisesRegex(providers.ProviderError, "by hand"):
-            providers.delete_uploaded_certificate(
+        with self.assertRaisesRegex(ProviderError, "by hand"):
+            tls.delete_uploaded_certificate(
                 {
                     "certificate_name": "newhost",
                     "consumers": [
@@ -1007,10 +1050,10 @@ class ProviderAdapterTests(TestCase):
         refused there.
         """
 
-        with self.assertRaisesRegex(providers.ProviderError, "no settings to reconcile"):
+        with self.assertRaisesRegex(ProviderError, "no settings to reconcile"):
             providers.execute({"kind": "cloudflare.zone", "spec": {}}, "reconcile")
 
-    @mock.patch("controller_runtime.providers._observe_tls_domain")
+    @mock.patch("controller_runtime.tls._observe_tls_domain")
     @mock.patch.dict(
         "os.environ",
         {
@@ -1033,7 +1076,7 @@ class ProviderAdapterTests(TestCase):
         """
 
         observe.side_effect = [
-            providers.ProviderError(
+            ProviderError(
                 "TLS observation failed for health.example: TimeoutError."
             ),
             {
@@ -1046,7 +1089,7 @@ class ProviderAdapterTests(TestCase):
             },
         ]
 
-        result = providers.reconcile_tls(
+        result = tls.reconcile_tls(
             {
                 "renewal_window_days": 30,
                 "consumers": [
@@ -1083,17 +1126,17 @@ class ProviderAdapterTests(TestCase):
         )
         self.assertFalse(any(item["type"] == "Ready" for item in result.conditions))
 
-    @mock.patch("controller_runtime.providers._observe_tls_domain")
+    @mock.patch("controller_runtime.tls._observe_tls_domain")
     @mock.patch.dict("os.environ", {"NPM_URL": "https://npm-origin.example"}, clear=True)
     def test_every_consumer_unreachable_is_still_a_failure(self, observe):
         """Nothing was read, so there is no expiry and nothing to compare."""
 
-        observe.side_effect = providers.ProviderError(
+        observe.side_effect = ProviderError(
             "TLS observation failed for hq.example: TimeoutError."
         )
 
-        with self.assertRaises(providers.ProviderError) as caught:
-            providers.reconcile_tls(
+        with self.assertRaises(ProviderError) as caught:
+            tls.reconcile_tls(
                 {
                     "renewal_window_days": 30,
                     "consumers": [
@@ -1104,7 +1147,7 @@ class ProviderAdapterTests(TestCase):
 
         self.assertIn("No TLS consumer could be reached", str(caught.exception))
 
-    @mock.patch("controller_runtime.providers._observe_tls_domain")
+    @mock.patch("controller_runtime.tls._observe_tls_domain")
     @mock.patch.dict(
         "os.environ",
         {
@@ -1137,7 +1180,7 @@ class ProviderAdapterTests(TestCase):
             },
         ]
 
-        result = providers.reconcile_tls(
+        result = tls.reconcile_tls(
             {
                 "renewal_window_days": 30,
                 "consumers": [
@@ -1167,7 +1210,7 @@ class ProviderAdapterTests(TestCase):
             ],
         )
 
-    @mock.patch("controller_runtime.providers._observe_tls_domain")
+    @mock.patch("controller_runtime.tls._observe_tls_domain")
     @mock.patch.dict(
         "os.environ",
         {
@@ -1189,7 +1232,7 @@ class ProviderAdapterTests(TestCase):
             "certificate_pem": "-----BEGIN CERTIFICATE-----\ncurrent\n",
         }
 
-        providers.reconcile_tls(
+        tls.reconcile_tls(
             {
                 "renewal_window_days": 30,
                 "consumers": [
@@ -1208,11 +1251,11 @@ class ProviderAdapterTests(TestCase):
     @mock.patch.dict("os.environ", {"NPM_URL": "https://proxy.example"}, clear=True)
     def test_npm_tls_endpoint_is_derived_from_controller_connection(self):
         self.assertEqual(
-            providers._consumer_tls_endpoint({"kind": "npm"}),
+            tls._consumer_tls_endpoint({"kind": "npm"}),
             "proxy.example",
         )
 
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     @mock.patch("control_plane.provider_adapters.npm.token", return_value="token")
     @mock.patch.dict("os.environ", {"NPM_URL": "https://npm.example.test"}, clear=True)
     def test_npm_inventory_emits_safe_ingress_policy_evidence(self, _token, request):
@@ -1262,7 +1305,7 @@ class ProviderAdapterTests(TestCase):
         self.assertNotIn("password", serialized)
         self.assertNotIn("hint", serialized)
 
-    @mock.patch("controller_runtime.providers.renew_tls")
+    @mock.patch("controller_runtime.tls.renew_tls")
     def test_renew_plan_never_mutates(self, renew):
         result = providers.execute(
             {"kind": "tls.certificate", "spec": {}}, "renew", apply=False
@@ -1271,9 +1314,9 @@ class ProviderAdapterTests(TestCase):
         self.assertTrue(result.changed)
         renew.assert_not_called()
 
-    @mock.patch("controller_runtime.providers._request")
-    @mock.patch("controller_runtime.providers._multipart_request")
-    @mock.patch("controller_runtime.providers._npm_token", return_value="token")
+    @mock.patch("controller_runtime.provider_http._request")
+    @mock.patch("controller_runtime.provider_http._multipart_request")
+    @mock.patch("controller_runtime.tls._npm_token", return_value="token")
     @mock.patch.dict(
         "os.environ",
         {"NPM_URL": "https://npm.example.test"},
@@ -1291,7 +1334,7 @@ class ProviderAdapterTests(TestCase):
             {},
         ]
 
-        certificate_id, identity = providers._npm_managed_certificate(
+        certificate_id, identity = tls._npm_managed_certificate(
             {
                 "name": "example-wildcard",
                 "verify_domains": ["dev.example.test"],
@@ -1311,9 +1354,9 @@ class ProviderAdapterTests(TestCase):
         self.assertEqual(identity["nice_name"], "Severino HQ - example-wildcard")
         self.assertEqual(request.call_args.kwargs["payload"], {"certificate_id": 22})
 
-    @mock.patch("controller_runtime.providers._request")
-    @mock.patch("controller_runtime.providers._multipart_request")
-    @mock.patch("controller_runtime.providers._npm_token", return_value="token")
+    @mock.patch("controller_runtime.provider_http._request")
+    @mock.patch("controller_runtime.provider_http._multipart_request")
+    @mock.patch("controller_runtime.tls._npm_token", return_value="token")
     @mock.patch.dict(
         "os.environ",
         {"NPM_URL": "https://npm.example.test"},
@@ -1331,7 +1374,7 @@ class ProviderAdapterTests(TestCase):
             [],
         ]
 
-        certificate_id, _ = providers._npm_managed_certificate(
+        certificate_id, _ = tls._npm_managed_certificate(
             {"name": "example-wildcard", "verify_domains": []},
             ["example.test"],
             leaf,
@@ -1346,7 +1389,7 @@ class ProviderAdapterTests(TestCase):
         )
 
     def test_an_uploaded_certificate_takes_the_observed_status_it_is_dispatched_with(self):
-        with self.assertRaisesRegex(providers.ProviderError, "did not supply"):
+        with self.assertRaisesRegex(ProviderError, "did not supply"):
             providers.execute(
                 {
                     "kind": "tls.uploaded_certificate",
@@ -1359,18 +1402,18 @@ class ProviderAdapterTests(TestCase):
 
     def test_installed_ids_are_carried_into_a_report_that_installed_nothing(self):
         spec = {"consumers": [{"kind": "npm", "name": "example-npm"}]}
-        known = providers._npm_certificate_ids(spec, {"npm_certificate_id": 22})
-        result = providers._with_npm_certificate_ids(
-            providers.ProviderResult(changed=False, status={}, conditions=[], message=""),
+        known = tls._npm_certificate_ids(spec, {"npm_certificate_id": 22})
+        result = tls._with_npm_certificate_ids(
+            ProviderResult(changed=False, status={}, conditions=[], message=""),
             known,
         )
 
         self.assertEqual(result.status["npm_certificate_ids"], {"example-npm": 22})
         self.assertEqual(result.status["npm_certificate_id"], 22)
 
-    @mock.patch("controller_runtime.providers._request")
-    @mock.patch("controller_runtime.providers._multipart_request")
-    @mock.patch("controller_runtime.providers._npm_token", return_value="token")
+    @mock.patch("controller_runtime.provider_http._request")
+    @mock.patch("controller_runtime.provider_http._multipart_request")
+    @mock.patch("controller_runtime.tls._npm_token", return_value="token")
     @mock.patch.dict(
         "os.environ",
         {"NPM_URL": "https://npm.example.test"},
@@ -1393,7 +1436,7 @@ class ProviderAdapterTests(TestCase):
             {},
         ]
 
-        providers._npm_managed_certificate(
+        tls._npm_managed_certificate(
             {
                 "name": "example-wildcard",
                 "verify_domains": [],
@@ -1416,21 +1459,21 @@ class ProviderAdapterTests(TestCase):
         for call in request.call_args_list[-2:]:
             self.assertEqual(call.kwargs["payload"]["certificate_id"], 22)
 
-    @mock.patch("controller_runtime.providers.reconcile_tls")
-    @mock.patch("controller_runtime.providers._deploy_certificate")
-    @mock.patch("controller_runtime.providers._issue_certificate")
-    @mock.patch("controller_runtime.providers._resumable_lineage", return_value=None)
-    @mock.patch("controller_runtime.providers._validate_certificate")
-    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch("controller_runtime.tls.reconcile_tls")
+    @mock.patch("controller_runtime.tls._deploy_certificate")
+    @mock.patch("controller_runtime.tls._issue_certificate")
+    @mock.patch("controller_runtime.tls._resumable_lineage", return_value=None)
+    @mock.patch("controller_runtime.tls._validate_certificate")
+    @mock.patch("controller_runtime.commands._ssh")
     def test_renewal_deploys_and_verifies_every_consumer(
         self, ssh, validate, _resume, issue, deploy, reconcile
     ):
-        previous = providers._certificate_bundle(b"old-cert", b"old-key")
+        previous = tls._certificate_bundle(b"old-cert", b"old-key")
         ssh.return_value = previous
         validate.side_effect = ["old", "new"]
         issue.return_value = (b"new-cert", b"new-key")
         deploy.return_value = {}
-        reconcile.return_value = providers.ProviderResult(
+        reconcile.return_value = ProviderResult(
             changed=False,
             status={
                 "consumers": [
@@ -1448,7 +1491,7 @@ class ProviderAdapterTests(TestCase):
             ],
         }
 
-        result = providers.renew_tls(spec)
+        result = tls.renew_tls(spec)
 
         self.assertTrue(result.changed)
         deploy.assert_called_once_with(spec, b"new-cert", b"new-key", {}, None)
@@ -1458,16 +1501,16 @@ class ProviderAdapterTests(TestCase):
             all(item["matches_expected"] for item in result.status["consumers"])
         )
 
-    @mock.patch("controller_runtime.providers.reconcile_tls")
+    @mock.patch("controller_runtime.tls.reconcile_tls")
     @mock.patch(
-        "controller_runtime.providers._validate_certificate", return_value="new"
+        "controller_runtime.tls._validate_certificate", return_value="new"
     )
-    @mock.patch("controller_runtime.providers._lineage")
+    @mock.patch("controller_runtime.tls._lineage")
     def test_reconcile_success_records_explicit_consumer_match_evidence(
         self, lineage, _validate, reconcile
     ):
         lineage.return_value = (b"new-cert", b"new-key")
-        reconcile.return_value = providers.ProviderResult(
+        reconcile.return_value = ProviderResult(
             changed=False,
             status={
                 "consumers": [
@@ -1482,7 +1525,7 @@ class ProviderAdapterTests(TestCase):
             message="observed",
         )
 
-        result = providers.apply_tls_reconcile(
+        result = tls.apply_tls_reconcile(
             {"domains": ["example.test"], "consumers": []}
         )
 
@@ -1490,21 +1533,21 @@ class ProviderAdapterTests(TestCase):
         self.assertEqual(result.status["expected_fingerprint_sha256"], "new")
         self.assertTrue(result.status["consumers"][0]["matches_expected"])
 
-    @mock.patch("controller_runtime.providers.reconcile_tls")
-    @mock.patch("controller_runtime.providers._deploy_certificate", return_value={})
-    @mock.patch("controller_runtime.providers._issue_certificate")
+    @mock.patch("controller_runtime.tls.reconcile_tls")
+    @mock.patch("controller_runtime.tls._deploy_certificate", return_value={})
+    @mock.patch("controller_runtime.tls._issue_certificate")
     @mock.patch(
-        "controller_runtime.providers._resumable_lineage",
+        "controller_runtime.tls._resumable_lineage",
         return_value=(b"pending-cert", b"pending-key"),
     )
-    @mock.patch("controller_runtime.providers._validate_certificate")
-    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch("controller_runtime.tls._validate_certificate")
+    @mock.patch("controller_runtime.commands._ssh")
     def test_renewal_resumes_existing_lineage_without_acme_request(
         self, ssh, validate, _resume, issue, deploy, reconcile
     ):
-        ssh.return_value = providers._certificate_bundle(b"old-cert", b"old-key")
+        ssh.return_value = tls._certificate_bundle(b"old-cert", b"old-key")
         validate.side_effect = ["old", "pending"]
-        reconcile.return_value = providers.ProviderResult(
+        reconcile.return_value = ProviderResult(
             changed=False,
             status={"consumers": [{"fingerprint_sha256": "pending"}]},
             conditions=[],
@@ -1517,25 +1560,25 @@ class ProviderAdapterTests(TestCase):
             "consumers": [{"kind": "caddy", "connection_ref": "example-edge"}],
         }
 
-        result = providers.renew_tls(spec)
+        result = tls.renew_tls(spec)
 
         issue.assert_not_called()
         deploy.assert_called_once_with(spec, b"pending-cert", b"pending-key", {}, None)
         self.assertEqual(result.status["artifact_source"], "existing_lineage")
 
-    @mock.patch("controller_runtime.providers.reconcile_tls")
-    @mock.patch("controller_runtime.providers._deploy_certificate")
-    @mock.patch("controller_runtime.providers._issue_certificate")
-    @mock.patch("controller_runtime.providers._resumable_lineage", return_value=None)
-    @mock.patch("controller_runtime.providers._validate_certificate")
-    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch("controller_runtime.tls.reconcile_tls")
+    @mock.patch("controller_runtime.tls._deploy_certificate")
+    @mock.patch("controller_runtime.tls._issue_certificate")
+    @mock.patch("controller_runtime.tls._resumable_lineage", return_value=None)
+    @mock.patch("controller_runtime.tls._validate_certificate")
+    @mock.patch("controller_runtime.commands._ssh")
     def test_renewal_rolls_back_previous_artifact_on_deploy_failure(
         self, ssh, validate, _resume, issue, deploy, _reconcile
     ):
-        ssh.return_value = providers._certificate_bundle(b"old-cert", b"old-key")
+        ssh.return_value = tls._certificate_bundle(b"old-cert", b"old-key")
         validate.side_effect = ["old", "new"]
         issue.return_value = (b"new-cert", b"new-key")
-        deploy.side_effect = [providers.ProviderError("failed"), None]
+        deploy.side_effect = [ProviderError("failed"), None]
         spec = {
             "domains": ["example.test"],
             "consumers": [
@@ -1544,9 +1587,9 @@ class ProviderAdapterTests(TestCase):
         }
 
         with self.assertRaisesRegex(
-            providers.ProviderError, "failed.*[Rr]ollback succeeded"
+            ProviderError, "failed.*[Rr]ollback succeeded"
         ):
-            providers.renew_tls(spec)
+            tls.renew_tls(spec)
 
         self.assertEqual(deploy.call_count, 2)
         deploy.assert_called_with(spec, b"old-cert", b"old-key", {}, None)
@@ -1624,7 +1667,7 @@ class WorkerTests(TestCase):
             "operation": {"id": "operation-1", "action": "reconcile"},
             "resource": {"key": "dns", "kind": "adguard.rewrite", "spec": {}},
         }
-        execute.return_value = providers.ProviderResult(
+        execute.return_value = ProviderResult(
             changed=False, status={}, conditions=[], message="Current."
         )
 
@@ -1673,7 +1716,7 @@ class WorkerTests(TestCase):
                 clear=True,
             ),
             mock.patch.object(providers, "_has_source", return_value=True),
-            mock.patch.object(providers, "connection_prefixes", return_value={}),
+            mock.patch.object(connection_env, "connection_prefixes", return_value={}),
         ):
             found = providers.inventory(only=frozenset({"example.read"}))
 
@@ -1839,7 +1882,7 @@ class WorkerTests(TestCase):
                 "report": {"ok": True},
             }
         )
-        execute.side_effect = providers.ProviderError("Provider request failed.")
+        execute.side_effect = ProviderError("Provider request failed.")
 
         self.assertEqual(worker.run_once("test", apply=True), 1)
 
@@ -1873,7 +1916,7 @@ class WorkerTests(TestCase):
                 "report": {"ok": True},
             }
         )
-        execute.return_value = providers.ProviderResult(
+        execute.return_value = ProviderResult(
             changed=False,
             status={},
             conditions=[],
@@ -1935,12 +1978,12 @@ class CloudflareAdapterTests(TestCase):
         # Module-level cache of zone name -> id. Harmless in a controller run
         # that lasts a second; between tests it would carry one case's zones
         # into the next.
-        providers._ZONE_IDS.clear()
+        cloudflare._ZONE_IDS.clear()
 
     def _calls(self, request):
         return [call.args[0] for call in request.call_args_list]
 
-    @mock.patch("controller_runtime.providers._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
     def test_a_missing_record_is_created(self, request):
         request.side_effect = [
             [ZONE],
@@ -1948,7 +1991,7 @@ class CloudflareAdapterTests(TestCase):
             live("new1", "A", "app.example.com", "203.0.113.1"),
         ]
 
-        result = providers.reconcile_cloudflare_record(
+        result = cloudflare.reconcile_cloudflare_record(
             {
                 "zone": "example.com",
                 "name": "app.example.com",
@@ -1966,14 +2009,14 @@ class CloudflareAdapterTests(TestCase):
         self.assertEqual(created.kwargs["payload"]["content"], "203.0.113.1")
         self.assertEqual(result.status["record_id"], "new1")
 
-    @mock.patch("controller_runtime.providers._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
     def test_a_matching_record_is_left_alone(self, request):
         request.side_effect = [
             [ZONE],
             [live("r1", "A", "app.example.com", "203.0.113.1")],
         ]
 
-        result = providers.reconcile_cloudflare_record(
+        result = cloudflare.reconcile_cloudflare_record(
             {
                 "zone": "example.com",
                 "name": "app.example.com",
@@ -1989,7 +2032,7 @@ class CloudflareAdapterTests(TestCase):
         # record burns an API call per pass and hides real changes in the log.
         self.assertEqual(request.call_count, 2)
 
-    @mock.patch("controller_runtime.providers._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
     def test_a_changed_value_updates_that_record_in_place(self, request):
         request.side_effect = [
             [ZONE],
@@ -1997,7 +2040,7 @@ class CloudflareAdapterTests(TestCase):
             live("r1", "A", "app.example.com", "203.0.113.9"),
         ]
 
-        result = providers.reconcile_cloudflare_record(
+        result = cloudflare.reconcile_cloudflare_record(
             {
                 "zone": "example.com",
                 "name": "app.example.com",
@@ -2014,7 +2057,7 @@ class CloudflareAdapterTests(TestCase):
         self.assertEqual(written.kwargs["method"], "PUT")
         self.assertIn("/dns_records/r1", written.args[0])
 
-    @mock.patch("controller_runtime.providers._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
     def test_retargeting_a_record_moves_it_rather_than_cloning_it(self, request):
         """The bug class that made renaming create a second record.
 
@@ -2030,7 +2073,7 @@ class CloudflareAdapterTests(TestCase):
             live("r1", "A", "new.example.com", "203.0.113.7"),
         ]
 
-        result = providers.reconcile_cloudflare_record(
+        result = cloudflare.reconcile_cloudflare_record(
             {
                 "zone": "example.com",
                 "name": "new.example.com",
@@ -2047,7 +2090,7 @@ class CloudflareAdapterTests(TestCase):
         self.assertEqual(written.kwargs["method"], "PUT")
         self.assertIn("/dns_records/r1", written.args[0])
 
-    @mock.patch("controller_runtime.providers._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
     def test_one_of_nine_records_on_a_name_is_the_one_edited(self, request):
         """A zone apex holds many records. Matching by name would pick a coin toss."""
 
@@ -2075,7 +2118,7 @@ class CloudflareAdapterTests(TestCase):
             live("m2", "MX", "example.com", "mx03.example.net", priority=20),
         ]
 
-        providers.reconcile_cloudflare_record(
+        cloudflare.reconcile_cloudflare_record(
             {
                 "zone": "example.com",
                 "name": "example.com",
@@ -2090,7 +2133,7 @@ class CloudflareAdapterTests(TestCase):
 
         self.assertIn("/dns_records/m2", request.call_args_list[-1].args[0])
 
-    @mock.patch("controller_runtime.providers._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
     def test_caa_is_sent_as_three_fields_not_as_a_string(self, request):
         """Cloudflare returns CAA as one string and accepts it only as data."""
 
@@ -2100,7 +2143,7 @@ class CloudflareAdapterTests(TestCase):
             live("c1", "CAA", "example.com", '0 issue "letsencrypt.org"'),
         ]
 
-        providers.reconcile_cloudflare_record(
+        cloudflare.reconcile_cloudflare_record(
             {
                 "zone": "example.com",
                 "name": "example.com",
@@ -2117,14 +2160,14 @@ class CloudflareAdapterTests(TestCase):
         )
         self.assertNotIn("content", payload)
 
-    @mock.patch("controller_runtime.providers._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
     def test_an_mx_carries_its_priority_and_an_address_record_does_not(self, request):
         request.side_effect = [
             [ZONE],
             [],
             live("m1", "MX", "example.com", "mx.example.net", priority=10),
         ]
-        providers.reconcile_cloudflare_record(
+        cloudflare.reconcile_cloudflare_record(
             {
                 "zone": "example.com",
                 "name": "example.com",
@@ -2137,14 +2180,14 @@ class CloudflareAdapterTests(TestCase):
         )
         self.assertEqual(request.call_args_list[-1].kwargs["payload"]["priority"], 10)
 
-        providers._ZONE_IDS.clear()
+        cloudflare._ZONE_IDS.clear()
         request.reset_mock()
         request.side_effect = [
             [ZONE],
             [],
             live("a1", "A", "app.example.com", "203.0.113.1"),
         ]
-        providers.reconcile_cloudflare_record(
+        cloudflare.reconcile_cloudflare_record(
             {
                 "zone": "example.com",
                 "name": "app.example.com",
@@ -2160,7 +2203,7 @@ class CloudflareAdapterTests(TestCase):
         # rejects the field outright on a TXT or MX record.
         self.assertIn("proxied", payload)
 
-    @mock.patch("controller_runtime.providers._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
     def test_a_txt_value_matches_whether_or_not_it_was_typed_quoted(self, request):
         """Cloudflare stores TXT quoted and returns it quoted, always."""
 
@@ -2169,7 +2212,7 @@ class CloudflareAdapterTests(TestCase):
             [live("t1", "TXT", "example.com", '"v=spf1 -all"')],
         ]
 
-        result = providers.reconcile_cloudflare_record(
+        result = cloudflare.reconcile_cloudflare_record(
             {
                 "zone": "example.com",
                 "name": "example.com",
@@ -2182,7 +2225,7 @@ class CloudflareAdapterTests(TestCase):
 
         self.assertFalse(result.changed)
 
-    @mock.patch("controller_runtime.providers._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
     def test_a_name_typed_in_capitals_is_not_permanent_drift(self, request):
         """Cloudflare lowercases names, so sending the typed case never matches."""
 
@@ -2191,7 +2234,7 @@ class CloudflareAdapterTests(TestCase):
             [live("a1", "A", "app.example.com", "203.0.113.1")],
         ]
 
-        result = providers.reconcile_cloudflare_record(
+        result = cloudflare.reconcile_cloudflare_record(
             {
                 "zone": "example.com",
                 "name": "APP.example.com",
@@ -2204,7 +2247,7 @@ class CloudflareAdapterTests(TestCase):
 
         self.assertFalse(result.changed)
 
-    @mock.patch("controller_runtime.providers._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
     def test_a_caa_value_with_extra_spaces_is_not_permanent_drift(self, request):
         request.side_effect = [
             [ZONE],
@@ -2219,7 +2262,7 @@ class CloudflareAdapterTests(TestCase):
             ],
         ]
 
-        result = providers.reconcile_cloudflare_record(
+        result = cloudflare.reconcile_cloudflare_record(
             {
                 "zone": "example.com",
                 "name": "example.com",
@@ -2232,7 +2275,7 @@ class CloudflareAdapterTests(TestCase):
 
         self.assertFalse(result.changed)
 
-    @mock.patch("controller_runtime.providers._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
     def test_delete_removes_only_the_record_it_owns(self, request):
         siblings = [
             live("t1", "TXT", "example.com", '"one"'),
@@ -2241,7 +2284,7 @@ class CloudflareAdapterTests(TestCase):
         ]
         request.side_effect = [[ZONE], siblings, None]
 
-        result = providers.delete_cloudflare_record(
+        result = cloudflare.delete_cloudflare_record(
             {
                 "zone": "example.com",
                 "name": "example.com",
@@ -2256,7 +2299,7 @@ class CloudflareAdapterTests(TestCase):
         self.assertEqual(deleted.kwargs["method"], "DELETE")
         self.assertIn("/dns_records/t2", deleted.args[0])
 
-    @mock.patch("controller_runtime.providers._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
     def test_deleting_something_already_gone_is_success(self, request):
         """Deletion has to be idempotent: the queue retries a delete that
         applied and then failed to report, and a second attempt finding nothing
@@ -2264,7 +2307,7 @@ class CloudflareAdapterTests(TestCase):
 
         request.side_effect = [[ZONE], []]
 
-        result = providers.delete_cloudflare_record(
+        result = cloudflare.delete_cloudflare_record(
             {
                 "zone": "example.com",
                 "name": "gone.example.com",
@@ -2276,12 +2319,12 @@ class CloudflareAdapterTests(TestCase):
         self.assertFalse(result.changed)
         self.assertEqual(request.call_count, 2)
 
-    @mock.patch("controller_runtime.providers._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
     def test_a_zone_the_credential_cannot_see_is_named(self, request):
         request.side_effect = [[ZONE]]
 
-        with self.assertRaisesRegex(providers.ProviderError, "elsewhere.example"):
-            providers.reconcile_cloudflare_record(
+        with self.assertRaisesRegex(ProviderError, "elsewhere.example"):
+            cloudflare.reconcile_cloudflare_record(
                 {
                     "zone": "elsewhere.example",
                     "name": "app.elsewhere.example",
@@ -2292,7 +2335,7 @@ class CloudflareAdapterTests(TestCase):
                 }
             )
 
-    @mock.patch("controller_runtime.providers._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
     def test_every_page_of_a_long_zone_is_read(self, request):
         """Cloudflare returns 100 records at most.
 
@@ -2307,12 +2350,12 @@ class CloudflareAdapterTests(TestCase):
         second = [live("r100", "A", "h100.example.com", "203.0.113.1")]
         request.side_effect = [[ZONE], first, second]
 
-        records = providers.list_cloudflare_records()
+        records = cloudflare.list_cloudflare_records()
 
         self.assertEqual(len(records), 101)
         self.assertIn("page=2", self._calls(request)[-1])
 
-    @mock.patch("controller_runtime.providers._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
     def test_the_inventory_reports_what_hq_can_express(self, request):
         request.side_effect = [
             [ZONE],
@@ -2320,8 +2363,8 @@ class CloudflareAdapterTests(TestCase):
             [live("m1", "MX", "example.com", "mx.example.net", priority=10)],
         ]
 
-        zones = providers.list_cloudflare_zones()
-        records = providers.list_cloudflare_records()
+        zones = cloudflare.list_cloudflare_zones()
+        records = cloudflare.list_cloudflare_records()
 
         self.assertEqual(zones[0]["zone"], "example.com")
         self.assertEqual(zones[0]["connection_ref"], "cloudflare-dns-example")
@@ -2331,14 +2374,14 @@ class CloudflareAdapterTests(TestCase):
 
 
 class CloudflareAnalyticsTests(TestCase):
-    @mock.patch("controller_runtime.providers._cloudflare_api_request")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_api_request")
     def test_account_lists_are_read_to_the_last_page(self, request):
         request.side_effect = [
             {"result": [{"id": f"account-{index}"} for index in range(100)]},
             {"result": [{"id": "account-100"}]},
         ]
 
-        accounts = providers._cloudflare_api_list("/accounts", "example-api")
+        accounts = cloudflare._cloudflare_api_list("/accounts", "example-api")
 
         self.assertEqual(len(accounts), 101)
         self.assertIn("page=1", request.call_args_list[0].args[0])
@@ -2358,12 +2401,12 @@ class CloudflareAnalyticsTests(TestCase):
                "CF_API_TOKEN": "t"}
         with (
             mock.patch.dict("os.environ", env, clear=True),
-            mock.patch.object(providers.urllib.request, "urlopen", side_effect=refused) as urlopen,
-            providers.provider_snapshot(),
+            mock.patch.object(urllib.request, "urlopen", side_effect=refused) as urlopen,
+            provider_http.provider_snapshot(),
         ):
             for path in ("/accounts", "/zones", "/accounts/a/d1/database"):
-                with self.assertRaises(providers.ProviderError):
-                    providers._cloudflare_api_request(path)
+                with self.assertRaises(ProviderError):
+                    cloudflare._cloudflare_api_request(path)
 
         self.assertEqual(urlopen.call_count, 1)
 
@@ -2383,13 +2426,13 @@ class CloudflareAnalyticsTests(TestCase):
         with (
             mock.patch.dict("os.environ", env, clear=True),
             mock.patch.object(
-                providers.urllib.request, "urlopen", side_effect=lambda *a, **k: (_ for _ in ()).throw(refuse())
+                urllib.request, "urlopen", side_effect=lambda *a, **k: (_ for _ in ()).throw(refuse())
             ) as urlopen,
-            providers.provider_snapshot(),
+            provider_http.provider_snapshot(),
         ):
             for path in ("/accounts", "/zones"):
-                with self.assertRaises(providers.ProviderError):
-                    providers._cloudflare_api_request(path)
+                with self.assertRaises(ProviderError):
+                    cloudflare._cloudflare_api_request(path)
 
         self.assertEqual(urlopen.call_count, 2)
 
@@ -2421,15 +2464,15 @@ class CloudflareAnalyticsTests(TestCase):
         with (
             mock.patch.dict("os.environ", env, clear=True),
             mock.patch.object(
-                providers.urllib.request, "urlopen", side_effect=self._per_endpoint(verified)
+                urllib.request, "urlopen", side_effect=self._per_endpoint(verified)
             ) as urlopen,
-            providers.provider_snapshot(),
+            provider_http.provider_snapshot(),
         ):
             for path in ("/accounts/a/access/apps", "/accounts/a/d1/database"):
-                with self.assertRaises(providers.ProviderError) as raised:
-                    providers._cloudflare_api_request(path, "example-api")
-                self.assertEqual(raised.exception.refusal, providers.PERMISSION_REFUSAL)
-            refused = dict(providers._refused_credentials())
+                with self.assertRaises(ProviderError) as raised:
+                    cloudflare._cloudflare_api_request(path, "example-api")
+                self.assertEqual(raised.exception.refusal, PERMISSION_REFUSAL)
+            refused = dict(cloudflare._refused_credentials())
 
         self.assertEqual(refused, {})
         # Two refused reads and one verification, shared by both.
@@ -2442,14 +2485,14 @@ class CloudflareAnalyticsTests(TestCase):
         with (
             mock.patch.dict("os.environ", env, clear=True),
             mock.patch.object(
-                providers.urllib.request, "urlopen", side_effect=self._per_endpoint(unverified)
+                urllib.request, "urlopen", side_effect=self._per_endpoint(unverified)
             ),
-            providers.provider_snapshot(),
+            provider_http.provider_snapshot(),
         ):
-            with self.assertRaises(providers.ProviderError) as raised:
-                providers._cloudflare_api_request("/accounts/a/access/apps", "example-api")
+            with self.assertRaises(ProviderError) as raised:
+                cloudflare._cloudflare_api_request("/accounts/a/access/apps", "example-api")
 
-        self.assertEqual(raised.exception.refusal, providers.CREDENTIAL_REFUSAL)
+        self.assertEqual(raised.exception.refusal, CREDENTIAL_REFUSAL)
 
     def test_the_probe_reports_the_token_expiry(self):
         def respond(request, timeout=None, context=None):
@@ -2466,9 +2509,9 @@ class CloudflareAnalyticsTests(TestCase):
                "CLOUDFLARE_DNS_API_TOKEN": "t"}
         with (
             mock.patch.dict("os.environ", env, clear=True),
-            mock.patch.object(providers.urllib.request, "urlopen", side_effect=respond),
+            mock.patch.object(urllib.request, "urlopen", side_effect=respond),
         ):
-            probed = providers._probe_cloudflare_dns("example-dns")
+            probed = cloudflare._probe_cloudflare_dns("example-dns")
 
         self.assertEqual(probed["expires_at"], "2030-01-01T00:00:00Z")
 
@@ -2481,7 +2524,7 @@ class CloudflareAnalyticsTests(TestCase):
             "CLOUDFLARE_DNS_BOOTSTRAP": "op://Operator/Example bootstrap",
         }
         with mock.patch.dict("os.environ", env, clear=True):
-            store = providers.connection_store("CLOUDFLARE_DNS")
+            store = connection_env.connection_store("CLOUDFLARE_DNS")
 
         self.assertEqual(
             store,
@@ -2515,14 +2558,14 @@ class CloudflareAnalyticsTests(TestCase):
         with (
             mock.patch.dict("os.environ", self.BOTH, clear=True),
             mock.patch.object(
-                providers.urllib.request, "urlopen", side_effect=self._answer(200, body)
+                urllib.request, "urlopen", side_effect=self._answer(200, body)
             ) as urlopen,
-            providers.provider_snapshot(),
+            provider_http.provider_snapshot(),
         ):
             for path in ("/accounts", "/zones"):
-                with self.assertRaises(providers.ProviderError) as raised:
-                    providers._cloudflare_api_request(path)
-                self.assertEqual(raised.exception.refusal, providers.CREDENTIAL_REFUSAL)
+                with self.assertRaises(ProviderError) as raised:
+                    cloudflare._cloudflare_api_request(path)
+                self.assertEqual(raised.exception.refusal, CREDENTIAL_REFUSAL)
 
         self.assertEqual(urlopen.call_count, 1)
 
@@ -2531,21 +2574,21 @@ class CloudflareAnalyticsTests(TestCase):
         with (
             mock.patch.dict("os.environ", self.BOTH, clear=True),
             mock.patch.object(
-                providers.urllib.request, "urlopen", side_effect=self._answer(401, body)
+                urllib.request, "urlopen", side_effect=self._answer(401, body)
             ) as urlopen,
-            providers.provider_snapshot(),
+            provider_http.provider_snapshot(),
         ):
             for call in (
-                lambda: providers._probe_cloudflare_dns("example-dns"),
-                lambda: providers._cloudflare_graphql("{ viewer }", {}, "example-api"),
+                lambda: cloudflare._probe_cloudflare_dns("example-dns"),
+                lambda: cloudflare_analytics._cloudflare_graphql("{ viewer }", {}, "example-api"),
             ):
                 for _ in range(2):
-                    with self.assertRaises(providers.ProviderError) as raised:
+                    with self.assertRaises(ProviderError) as raised:
                         call()
                     self.assertEqual(
-                        raised.exception.refusal, providers.CREDENTIAL_REFUSAL
+                        raised.exception.refusal, CREDENTIAL_REFUSAL
                     )
-            refused = dict(providers._refused_credentials())
+            refused = dict(cloudflare._refused_credentials())
 
         self.assertEqual(urlopen.call_count, 2)
         self.assertEqual(set(refused), {"CF", "CLOUDFLARE_DNS"})
@@ -2557,14 +2600,14 @@ class CloudflareAnalyticsTests(TestCase):
         with (
             mock.patch.dict("os.environ", self.BOTH, clear=True),
             mock.patch.object(
-                providers.urllib.request, "urlopen", side_effect=self._answer(401, body)
+                urllib.request, "urlopen", side_effect=self._answer(401, body)
             ) as urlopen,
-            providers.provider_snapshot(),
+            provider_http.provider_snapshot(),
         ):
             found = providers.connections()
             providers.inventory()
-            with self.assertRaises(providers.ProviderError):
-                providers._cloudflare_graphql("{ viewer }", {}, "example-api")
+            with self.assertRaises(ProviderError):
+                cloudflare_analytics._cloudflare_graphql("{ viewer }", {}, "example-api")
 
         self.assertEqual(urlopen.call_count, 2)
         self.assertFalse(any(connection["ok"] for connection in found))
@@ -2576,8 +2619,8 @@ class CloudflareAnalyticsTests(TestCase):
             clear=True,
         ):
             self.assertEqual(
-                providers._cloudflare_url(provider="cloudflare_api"),
-                providers.CLOUDFLARE_API_URL,
+                cloudflare._cloudflare_url(provider="cloudflare_api"),
+                cloudflare.CLOUDFLARE_API_URL,
             )
         with mock.patch.dict(
             "os.environ",
@@ -2586,12 +2629,12 @@ class CloudflareAnalyticsTests(TestCase):
             clear=True,
         ):
             self.assertEqual(
-                providers._cloudflare_url(provider="cloudflare_api"),
+                cloudflare._cloudflare_url(provider="cloudflare_api"),
                 "https://cloudflare.example.test/client/v4",
             )
 
-    @mock.patch("controller_runtime.providers._analytics_account")
-    @mock.patch("controller_runtime.providers._cloudflare_api_request")
+    @mock.patch("controller_runtime.cloudflare_analytics._analytics_account")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_api_request")
     def test_registrations_are_read_by_cursor(self, request, account):
         account.return_value = "account-id"
         request.side_effect = [
@@ -2607,7 +2650,7 @@ class CloudflareAnalyticsTests(TestCase):
             },
         ]
 
-        found = providers._registrar_domains()
+        found = cloudflare._registrar_domains()
 
         self.assertIn("/accounts/account-id/registrar/registrations?", request.call_args_list[0].args[0])
         self.assertIn("cursor=next%2Fpage%3D%3D", request.call_args_list[1].args[0])
@@ -2615,50 +2658,50 @@ class CloudflareAnalyticsTests(TestCase):
         self.assertTrue(found["example.com"]["auto_renew"])
         self.assertFalse(found["example.net"]["auto_renew"])
 
-    @mock.patch("controller_runtime.providers._analytics_account")
-    @mock.patch("controller_runtime.providers._cloudflare_api_request")
+    @mock.patch("controller_runtime.cloudflare_analytics._analytics_account")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_api_request")
     def test_a_refused_registrar_read_carries_its_reason(self, request, account):
         account.return_value = "account-id"
-        request.side_effect = providers.ProviderError("Cloudflare refused: 403")
+        request.side_effect = ProviderError("Cloudflare refused: 403")
 
-        with providers.part_ledger() as refused:
-            found = providers._registrar_domains()
+        with part_ledger() as refused:
+            found = cloudflare._registrar_domains()
 
         self.assertEqual(found, {})
         self.assertEqual([entry["reason"] for entry in refused], ["Cloudflare refused: 403"])
 
-    @mock.patch("controller_runtime.providers._analytics_sites")
-    @mock.patch("controller_runtime.providers._analytics_account")
-    @mock.patch("controller_runtime.providers._cloudflare_api_request")
+    @mock.patch("controller_runtime.cloudflare_analytics._analytics_sites")
+    @mock.patch("controller_runtime.cloudflare_analytics._analytics_account")
+    @mock.patch("controller_runtime.cloudflare._cloudflare_api_request")
     def test_probe_and_reader_share_account_discovery(self, request, account, sites):
         request.return_value = {"success": True}
         account.return_value = "account-id"
         sites.return_value = [{"site_tag": "0" * 32, "host": "example.test"}]
 
-        result = providers._probe_cloudflare_api("example-api")
+        result = cloudflare._probe_cloudflare_api("example-api")
 
         account.assert_called_once_with("example-api")
         sites.assert_called_once_with("account-id", "example-api")
         self.assertEqual(result["reaches"], ["example.test"])
 
-    @mock.patch("controller_runtime.providers._cloudflare_graphql")
+    @mock.patch("controller_runtime.cloudflare_analytics._cloudflare_graphql")
     def test_site_reading_uses_its_connection(self, graphql):
         graphql.return_value = {"viewer": {"accounts": [{}]}}
 
-        result = providers._analytics_site_reading(
+        result = cloudflare_analytics._analytics_site_reading(
             "account-id",
             {"site_tag": "0" * 32, "host": "example.test"},
             "account-two",
-            start=providers.date(2026, 8, 26),
-            end=providers.date(2026, 8, 27),
+            start=date(2026, 8, 26),
+            end=date(2026, 8, 27),
             query="query Analytics {}",
         )
 
         self.assertEqual(result["connection_ref"], "account-two")
         self.assertEqual(graphql.call_args.args[2], "account-two")
 
-    @mock.patch("controller_runtime.providers._analytics_site_reading")
-    @mock.patch("controller_runtime.providers.analytics_sites")
+    @mock.patch("controller_runtime.cloudflare_analytics._analytics_site_reading")
+    @mock.patch("controller_runtime.cloudflare_analytics.analytics_sites")
     def test_every_configured_connection_is_read(self, sites, reading):
         sites.return_value = [
             {
@@ -2679,7 +2722,7 @@ class CloudflareAnalyticsTests(TestCase):
             {"connection_ref": "account-two"},
         ]
 
-        result = providers.analytics()
+        result = cloudflare_analytics.analytics()
 
         self.assertEqual(
             [site["connection_ref"] for site in result["sites"]],
@@ -2690,10 +2733,10 @@ class CloudflareAnalyticsTests(TestCase):
             ["account-one", "account-two"],
         )
 
-    @mock.patch("controller_runtime.providers._analytics_site_reading")
+    @mock.patch("controller_runtime.cloudflare_analytics._analytics_site_reading")
     @mock.patch(
-        "controller_runtime.providers.completed_window",
-        return_value=(providers.date(2026, 8, 26), providers.date(2026, 8, 28)),
+        "controller_runtime.cloudflare_analytics.completed_window",
+        return_value=(date(2026, 8, 26), date(2026, 8, 28)),
     )
     def test_hq_can_plan_an_exact_window_for_each_site(self, _window, reading):
         site = {
@@ -2704,7 +2747,7 @@ class CloudflareAnalyticsTests(TestCase):
         }
         reading.return_value = {"connection_ref": "account-one"}
 
-        providers.analytics(
+        cloudflare_analytics.analytics(
             sites=[site],
             windows=[
                 {
@@ -2716,13 +2759,13 @@ class CloudflareAnalyticsTests(TestCase):
             ],
         )
 
-        self.assertEqual(reading.call_args.kwargs["start"], providers.date(2026, 6, 1))
-        self.assertEqual(reading.call_args.kwargs["end"], providers.date(2026, 8, 28))
+        self.assertEqual(reading.call_args.kwargs["start"], date(2026, 6, 1))
+        self.assertEqual(reading.call_args.kwargs["end"], date(2026, 8, 28))
 
-    @mock.patch("controller_runtime.providers._analytics_site_reading")
+    @mock.patch("controller_runtime.cloudflare_analytics._analytics_site_reading")
     @mock.patch(
-        "controller_runtime.providers.completed_window",
-        return_value=(providers.date(2026, 8, 26), providers.date(2026, 8, 28)),
+        "controller_runtime.cloudflare_analytics.completed_window",
+        return_value=(date(2026, 8, 26), date(2026, 8, 28)),
     )
     def test_an_invalid_plan_falls_back_to_the_shared_safe_window(
         self, _window, reading
@@ -2735,7 +2778,7 @@ class CloudflareAnalyticsTests(TestCase):
         }
         reading.return_value = {}
 
-        providers.analytics(
+        cloudflare_analytics.analytics(
             sites=[site],
             windows=[
                 {
@@ -2747,20 +2790,20 @@ class CloudflareAnalyticsTests(TestCase):
             ],
         )
 
-        self.assertEqual(reading.call_args.kwargs["start"], providers.date(2026, 8, 26))
-        self.assertEqual(reading.call_args.kwargs["end"], providers.date(2026, 8, 28))
+        self.assertEqual(reading.call_args.kwargs["start"], date(2026, 8, 26))
+        self.assertEqual(reading.call_args.kwargs["end"], date(2026, 8, 28))
 
-    @mock.patch("controller_runtime.providers._cloudflare_graphql")
+    @mock.patch("controller_runtime.cloudflare_analytics._cloudflare_graphql")
     def test_missing_graphql_account_fails_closed(self, graphql):
         graphql.return_value = {"viewer": {"accounts": []}}
 
-        with self.assertRaisesRegex(providers.ProviderError, "matching account"):
-            providers._analytics_site_reading(
+        with self.assertRaisesRegex(ProviderError, "matching account"):
+            cloudflare_analytics._analytics_site_reading(
                 "account-id",
                 {"site_tag": "0" * 32, "host": "example.test"},
                 "example-api",
-                start=providers.date(2026, 8, 26),
-                end=providers.date(2026, 8, 27),
+                start=date(2026, 8, 26),
+                end=date(2026, 8, 27),
                 query="query Analytics {}",
             )
 
@@ -2769,9 +2812,10 @@ class ControllerStepReportingTests(TestCase):
     """A failure should name the step that failed, not the module that ran it."""
 
     def test_a_failing_step_is_named(self):
-        from controller_runtime.providers import ProviderError, _run
+        from controller_runtime.providers import ProviderError
+        from controller_runtime.commands import _run
 
-        with mock.patch("controller_runtime.providers.subprocess.run") as run:
+        with mock.patch("subprocess.run") as run:
             run.return_value = mock.Mock(returncode=1, stdout=b"", stderr=b"boom")
             with self.assertRaises(ProviderError) as caught:
                 _run(["/bin/false"], step="SSH preflight for somewhere")
@@ -2787,9 +2831,11 @@ class ControllerStepReportingTests(TestCase):
         prints the message and drops everything else.
         """
 
-        from controller_runtime.providers import ProviderError, _run
+        from controller_runtime.providers import ProviderError
 
-        with mock.patch("controller_runtime.providers.subprocess.run") as run:
+        from controller_runtime.commands import _run
+
+        with mock.patch("subprocess.run") as run:
             run.side_effect = FileNotFoundError(2, "No such file or directory", "op")
             with self.assertLogs("severino.controller", level="WARNING") as logged:
                 with self.assertRaises(ProviderError) as caught:
@@ -2800,9 +2846,10 @@ class ControllerStepReportingTests(TestCase):
         self.assertIn("1Password read for a target", str(caught.exception))
 
     def test_a_step_that_never_returned_says_so_in_the_log(self):
-        from controller_runtime.providers import ProviderError, _run
+        from controller_runtime.providers import ProviderError
+        from controller_runtime.commands import _run
 
-        with mock.patch("controller_runtime.providers.subprocess.run") as run:
+        with mock.patch("subprocess.run") as run:
             run.side_effect = subprocess.TimeoutExpired(cmd=["op"], timeout=180)
             with self.assertLogs("severino.controller", level="WARNING") as logged:
                 with self.assertRaises(ProviderError):
@@ -2813,9 +2860,11 @@ class ControllerStepReportingTests(TestCase):
     def test_a_credential_is_struck_out_of_the_silent_branch_too(self):
         """A tool that names its credential while failing to start."""
 
-        from controller_runtime.providers import ProviderError, _run
+        from controller_runtime.providers import ProviderError
 
-        with mock.patch("controller_runtime.providers.subprocess.run") as run:
+        from controller_runtime.commands import _run
+
+        with mock.patch("subprocess.run") as run:
             run.side_effect = OSError("cannot run with token ops_secret_value")
             with self.assertLogs("severino.controller", level="WARNING") as logged:
                 with self.assertRaises(ProviderError):
@@ -2836,9 +2885,11 @@ class ControllerStepReportingTests(TestCase):
     def test_subprocess_output_never_reaches_the_result(self):
         """Remote paths and messages belong in the log, not in a provider result."""
 
-        from controller_runtime.providers import ProviderError, _run
+        from controller_runtime.providers import ProviderError
 
-        with mock.patch("controller_runtime.providers.subprocess.run") as run:
+        from controller_runtime.commands import _run
+
+        with mock.patch("subprocess.run") as run:
             run.return_value = mock.Mock(
                 returncode=1, stdout=b"", stderr=b"/home/someone/secret/path missing"
             )
@@ -2849,10 +2900,12 @@ class ControllerStepReportingTests(TestCase):
     def test_what_the_tool_said_is_in_the_journal_message_itself(self):
         """The plain formatter drops `extra`, so the reason has to be in the line."""
 
-        from controller_runtime.providers import ProviderError, _run
+        from controller_runtime.providers import ProviderError
+
+        from controller_runtime.commands import _run
 
         with (
-            mock.patch("controller_runtime.providers.subprocess.run") as run,
+            mock.patch("subprocess.run") as run,
             self.assertLogs("severino.controller", level="WARNING") as logged,
         ):
             run.return_value = mock.Mock(
@@ -2895,11 +2948,11 @@ class CPanelSitePlanTests(TestCase):
         }
 
     def _plan(self, consumer, answer=None):
-        with mock.patch("controller_runtime.providers._ssh") as ssh:
+        with mock.patch("controller_runtime.commands._ssh") as ssh:
             ssh.return_value = json.dumps(
                 _ACCOUNT_SITES if answer is None else answer
             ).encode()
-            sites = providers._cpanel_sites(consumer)
+            sites = tls._cpanel_sites(consumer)
         ssh.assert_called_once_with("example-cpanel", "sites")
         return sites
 
@@ -2919,7 +2972,7 @@ class CPanelSitePlanTests(TestCase):
         )
 
         with self.assertRaisesRegex(
-            providers.ProviderError,
+            ProviderError,
             "checked at example.test but installs only on shop.example.test",
         ):
             self._plan(consumer)
@@ -2928,7 +2981,7 @@ class CPanelSitePlanTests(TestCase):
         consumer = self._consumer(["example.test", "elsewhere.example"])
 
         with self.assertRaisesRegex(
-            providers.ProviderError, "does not serve elsewhere.example"
+            ProviderError, "does not serve elsewhere.example"
         ):
             self._plan(consumer)
 
@@ -2936,14 +2989,14 @@ class CPanelSitePlanTests(TestCase):
         consumer = self._consumer(["example.test"])
         for answer in ({"sites": {}}, {"no": "sites"}, []):
             with self.subTest(answer=answer):
-                with self.assertRaises(providers.ProviderError):
+                with self.assertRaises(ProviderError):
                     self._plan(consumer, answer)
-        with mock.patch("controller_runtime.providers._ssh", return_value=b"not json"):
-            with self.assertRaisesRegex(providers.ProviderError, "could not read"):
-                providers._cpanel_sites(consumer)
+        with mock.patch("controller_runtime.commands._ssh", return_value=b"not json"):
+            with self.assertRaisesRegex(ProviderError, "could not read"):
+                tls._cpanel_sites(consumer)
 
-    @mock.patch("controller_runtime.providers._issue_certificate")
-    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch("controller_runtime.tls._issue_certificate")
+    @mock.patch("controller_runtime.commands._ssh")
     def test_an_unsatisfiable_target_is_refused_before_the_ca_is_asked(self, ssh, issue):
         ssh.return_value = json.dumps(_ACCOUNT_SITES).encode()
         spec = {
@@ -2956,19 +3009,19 @@ class CPanelSitePlanTests(TestCase):
             ],
         }
 
-        with self.assertRaisesRegex(providers.ProviderError, "installs only on"):
-            providers.renew_tls(spec)
+        with self.assertRaisesRegex(ProviderError, "installs only on"):
+            tls.renew_tls(spec)
 
         issue.assert_not_called()
         # Nothing was read from the rollback source either: the plan comes first.
         ssh.assert_called_once_with("example-cpanel", "sites")
 
-    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch("controller_runtime.commands._ssh")
     def test_one_login_installs_on_every_planned_site(self, ssh):
         consumer = self._consumer(["example.test"])
         fullchain = b"-----BEGIN CERTIFICATE-----\nleaf\n-----END CERTIFICATE-----\nchain\n"
 
-        status = providers._deploy_certificate(
+        status = tls._deploy_certificate(
             {"domains": ["example.test"], "consumers": [consumer]},
             fullchain,
             b"key",
@@ -2986,13 +3039,13 @@ class CPanelSitePlanTests(TestCase):
             status["cpanel_sites"], {"shared-hosting": ["example.test", "shop.example.test"]}
         )
 
-    @mock.patch("controller_runtime.providers._tls_verification_policy", return_value=(30, 5))
-    @mock.patch("controller_runtime.providers.time.monotonic", side_effect=[0, 31])
-    @mock.patch("controller_runtime.providers.reconcile_tls")
+    @mock.patch("controller_runtime.tls._tls_verification_policy", return_value=(30, 5))
+    @mock.patch("time.monotonic", side_effect=[0, 31])
+    @mock.patch("controller_runtime.tls.reconcile_tls")
     def test_a_consumer_that_never_activates_is_named_with_its_names(
         self, reconcile, _clock, _policy
     ):
-        reconcile.return_value = providers.ProviderResult(
+        reconcile.return_value = ProviderResult(
             changed=False,
             status={
                 "consumers": [
@@ -3005,8 +3058,8 @@ class CPanelSitePlanTests(TestCase):
             message="observed",
         )
 
-        with self.assertRaises(providers.ProviderError) as caught:
-            providers._verify_tls_deployment({"consumers": [{}, {}]}, "new")
+        with self.assertRaises(ProviderError) as caught:
+            tls._verify_tls_deployment({"consumers": [{}, {}]}, "new")
 
         self.assertEqual(
             str(caught.exception),
@@ -3020,13 +3073,13 @@ class CarriedConnectionTests(TestCase):
     """An SSH probe is a real login, so HQ may say one is not needed yet."""
 
     @mock.patch("controller_runtime.providers._probe_ssh")
-    @mock.patch("controller_runtime.providers.connection_provider", return_value="")
+    @mock.patch("controller_runtime.connection_env.connection_provider", return_value="")
     @mock.patch(
-        "controller_runtime.providers.ssh_connection_refs",
+        "controller_runtime.connection_env.ssh_connection_refs",
         return_value=["shared-hosting", "edge"],
     )
     @mock.patch(
-        "controller_runtime.providers.connection_prefixes",
+        "controller_runtime.connection_env.connection_prefixes",
         return_value={"shared-hosting": "SHARED_HOSTING", "edge": "EDGE"},
     )
     def test_a_carried_connection_is_reported_without_a_login(
@@ -3059,28 +3112,28 @@ class AcmeOwnershipTests(TestCase):
             Path(directory, "config", "archive").mkdir(parents=True)
             Path(directory, "config", "archive", "privkey1.pem").write_text("k")
 
-            self.assertEqual(providers._foreign_acme_entry(Path(directory)), "")
+            self.assertEqual(tls._foreign_acme_entry(Path(directory)), "")
 
     def test_an_entry_with_another_group_is_named(self):
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, "config").mkdir()
             Path(directory, "config", "privkey1.pem").write_text("k")
             real_gid = os.getgid()
-            with mock.patch("controller_runtime.providers.os.getgid", return_value=real_gid + 1):
-                found = providers._foreign_acme_entry(Path(directory))
+            with mock.patch("os.getgid", return_value=real_gid + 1):
+                found = tls._foreign_acme_entry(Path(directory))
 
         self.assertIn("config", found)
         self.assertIn(f"not {os.getuid()}:{real_gid + 1}", found)
 
-    @mock.patch("controller_runtime.providers._run")
-    @mock.patch("controller_runtime.providers._foreign_acme_entry", return_value="config/x is owned 1:2, not 3:4")
+    @mock.patch("controller_runtime.commands._run")
+    @mock.patch("controller_runtime.tls._foreign_acme_entry", return_value="config/x is owned 1:2, not 3:4")
     def test_issuance_stops_before_certbot_when_the_tree_is_not_its_own(self, _foreign, run):
         with tempfile.TemporaryDirectory() as directory:
             with mock.patch.dict("os.environ", {"HQ_ACME_DIR": directory}):
                 with self.assertRaisesRegex(
-                    providers.ProviderError, "config/x is owned 1:2.*nothing was requested"
+                    ProviderError, "config/x is owned 1:2.*nothing was requested"
                 ):
-                    providers._issue_certificate({"domains": ["example.test"]})
+                    tls._issue_certificate({"domains": ["example.test"]})
 
         run.assert_not_called()
 
@@ -3137,8 +3190,8 @@ class MachineNameTests(TestCase):
 
     @mock.patch.dict("os.environ", {"HQ_CONTROLLER_ID": ""})
     def test_the_local_socket_is_the_machine_this_runs_on(self):
-        record = providers.portainer.container_record(
-            {"Names": ["/app"], "State": "running"}, providers.controller_id(), ""
+        record = portainer_readings.container_record(
+            {"Names": ["/app"], "State": "running"}, controller_id(), ""
         )
 
         self.assertEqual(record["host"], os.uname().nodename)
@@ -3146,7 +3199,7 @@ class MachineNameTests(TestCase):
 
     @mock.patch.dict("os.environ", {"HQ_CONTROLLER_ID": "a-named-host"})
     def test_the_environment_names_it_when_it_says_so(self):
-        self.assertEqual(providers.controller_id(), "a-named-host")
+        self.assertEqual(controller_id(), "a-named-host")
 
 
 class ThisRunIsNotTheEstateTests(TestCase):
@@ -3156,10 +3209,10 @@ class ThisRunIsNotTheEstateTests(TestCase):
         with (
             mock.patch.dict(os.environ, {"HQ_CONTROLLER_RUN": nonce}),
             mock.patch.object(
-                providers, "provider_connection_refs", return_value=("a-portainer",)
+                connection_env, "provider_connection_refs", return_value=("a-portainer",)
             ),
             mock.patch.object(
-                providers,
+                portainer,
                 "_portainer_environments",
                 return_value=[
                     {
@@ -3171,12 +3224,12 @@ class ThisRunIsNotTheEstateTests(TestCase):
                     }
                 ],
             ),
-            mock.patch.object(providers, "_portainer_stacks", return_value=[]),
+            mock.patch.object(portainer, "_portainer_stacks", return_value=[]),
             mock.patch.object(
-                providers, "_portainer_containers", return_value=list(containers)
+                portainer, "_portainer_containers", return_value=list(containers)
             ),
         ):
-            return [record["name"] for record in providers._list_portainer_containers()]
+            return [record["name"] for record in portainer._list_portainer_containers()]
 
     def test_the_controller_running_the_sweep_is_not_reported(self):
         self.assertEqual(
@@ -3227,7 +3280,7 @@ class AppConnectorTests(TestCase):
     a DNS record, declared inside the policy rather than anywhere HQ looked."""
 
     def connectors(self, policy):
-        return providers._app_connectors(policy)
+        return tailscale._app_connectors(policy)
 
     def test_a_declared_connector_is_read_out_of_the_policy(self):
         found = self.connectors(
@@ -3311,8 +3364,8 @@ class TailnetSweepTests(TestCase):
                 json.dumps(self.STATUS if status is None else status), encoding="utf-8"
             )
             given = str(reading) if path is None else path
-            with mock.patch.object(providers, "TAILNET_STATUS", given):
-                return providers.list_tailnet_devices()
+            with mock.patch.object(tailscale, "TAILNET_STATUS", given):
+                return tailscale.list_tailnet_devices()
 
     def by_name(self):
         return {record["name"]: record for record in self.sweep()}
@@ -3359,9 +3412,9 @@ class TailnetSweepTests(TestCase):
 
         from unittest import mock
 
-        with mock.patch.object(providers, "TAILNET_STATUS", ""):
-            with self.assertRaises(providers.ProviderError) as raised:
-                providers.list_tailnet_devices()
+        with mock.patch.object(tailscale, "TAILNET_STATUS", ""):
+            with self.assertRaises(ProviderError) as raised:
+                tailscale.list_tailnet_devices()
 
         self.assertIn("not given a tailnet reading", str(raised.exception))
 
@@ -3384,12 +3437,12 @@ class TailnetSweepTests(TestCase):
             }
         ]
         with (
-            mock.patch.object(providers, "TAILNET_STATUS", ""),
-            mock.patch.object(providers, "_tailnet_token", return_value="t"),
-            mock.patch.object(providers, "_tailnet_api_devices", return_value=listed),
-            mock.patch.object(providers, "_reach_by_device", return_value={}),
+            mock.patch.object(tailscale, "TAILNET_STATUS", ""),
+            mock.patch.object(tailscale, "_tailnet_token", return_value="t"),
+            mock.patch.object(tailscale, "_tailnet_api_devices", return_value=listed),
+            mock.patch.object(tailscale, "_reach_by_device", return_value={}),
         ):
-            (device,) = providers.list_tailnet_devices()
+            (device,) = tailscale.list_tailnet_devices()
 
         self.assertEqual(device["name"], "example-host")
         self.assertEqual(device["dns_name"], "example-host.example.ts.net")
@@ -3407,14 +3460,14 @@ class TailnetSweepTests(TestCase):
         from unittest import mock
 
         refused = urllib.error.HTTPError("u", 403, "Forbidden", {}, io.BytesIO(b""))
-        with mock.patch.object(providers.urllib.request, "urlopen", side_effect=refused):
-            with self.assertRaises(providers.ProviderError) as raised:
-                providers._tailnet_api_devices("t")
+        with mock.patch.object(urllib.request, "urlopen", side_effect=refused):
+            with self.assertRaises(ProviderError) as raised:
+                tailscale._tailnet_api_devices("t")
 
         self.assertIn("devices:core:read", str(raised.exception))
 
     def test_a_missing_reading_is_reported_rather_than_crashing(self):
-        with self.assertRaises(providers.ProviderError) as raised:
+        with self.assertRaises(ProviderError) as raised:
             self.sweep(path="/nonexistent/tailnet.json")
 
         self.assertIn("missing", str(raised.exception))
@@ -3427,7 +3480,7 @@ class TailnetSweepTests(TestCase):
         credential HQ has.
         """
 
-        source = Path(providers.__file__).read_text(encoding="utf-8")
+        source = _controller_source()
 
         self.assertNotIn("tailscaled.sock", source)
 
@@ -3439,7 +3492,7 @@ class TailnetSweepTests(TestCase):
         with (
             mock.patch.dict("os.environ", {"TAILSCALE_CONNECTION_REF": "example-tailnet"}),
             mock.patch.object(
-                providers, "list_tailnet_devices", side_effect=providers.ProviderError("no")
+                tailscale, "list_tailnet_devices", side_effect=ProviderError("no")
             ),
         ):
             found = providers.inventory()
@@ -3471,7 +3524,7 @@ class TailnetDeviceTests(TestCase):
         self.addCleanup(self.directory.cleanup)
         reading = Path(self.directory.name) / "tailnet.json"
         reading.write_text(json.dumps(self.STATUS), encoding="utf-8")
-        patch = mock.patch.object(providers, "TAILNET_STATUS", str(reading))
+        patch = mock.patch.object(tailscale, "TAILNET_STATUS", str(reading))
         patch.start()
         self.addCleanup(patch.stop)
 
@@ -3485,13 +3538,13 @@ class TailnetDeviceTests(TestCase):
     def test_a_device_already_as_declared_is_left_alone(self):
         """a-server has no expiry, so there is nothing to assert."""
 
-        result = providers.reconcile_tailnet_device(self.spec("a-server"))
+        result = tailscale.reconcile_tailnet_device(self.spec("a-server"))
 
         self.assertFalse(result.changed)
 
     def test_a_dry_run_says_what_it_would_do_and_does_not_do_it(self):
-        with mock.patch.object(providers, "_tailnet_token") as token:
-            result = providers.reconcile_tailnet_device(self.spec(), apply=False)
+        with mock.patch.object(tailscale, "_tailnet_token") as token:
+            result = tailscale.reconcile_tailnet_device(self.spec(), apply=False)
 
         self.assertTrue(result.changed)
         token.assert_not_called()
@@ -3499,11 +3552,11 @@ class TailnetDeviceTests(TestCase):
     def test_the_device_id_comes_from_the_local_reading_not_the_api(self):
         """The token is spent on the change and on nothing else."""
 
-        self.assertEqual(providers._tailnet_device_id("an-edge"), "nEDGE")
+        self.assertEqual(tailscale._tailnet_device_id("an-edge"), "nEDGE")
 
     def test_a_device_the_tailnet_does_not_show_is_refused_by_name(self):
-        with self.assertRaises(providers.ProviderError) as raised:
-            providers.reconcile_tailnet_device(self.spec("a-ghost"))
+        with self.assertRaises(ProviderError) as raised:
+            tailscale.reconcile_tailnet_device(self.spec("a-ghost"))
 
         self.assertIn("a-ghost", str(raised.exception))
 
@@ -3512,11 +3565,11 @@ class TailnetDeviceTests(TestCase):
 
         refused = urllib.error.HTTPError("u", 403, "Forbidden", {}, None)
         with (
-            mock.patch.object(providers, "_tailnet_token", return_value="t"),
-            mock.patch.object(providers.urllib.request, "urlopen", side_effect=refused),
-            self.assertRaises(providers.ProviderError) as raised,
+            mock.patch.object(tailscale, "_tailnet_token", return_value="t"),
+            mock.patch.object(urllib.request, "urlopen", side_effect=refused),
+            self.assertRaises(ProviderError) as raised,
         ):
-            providers.reconcile_tailnet_device(self.spec())
+            tailscale.reconcile_tailnet_device(self.spec())
 
         self.assertIn("devices:core", str(raised.exception))
 
@@ -3534,10 +3587,10 @@ class TailnetDeviceTests(TestCase):
                     "TAILNET_CLIENT_SECRET": "secret",
                 },
             ),
-            mock.patch.object(providers.urllib.request, "urlopen", side_effect=refused),
-            self.assertRaises(providers.ProviderError) as raised,
+            mock.patch.object(urllib.request, "urlopen", side_effect=refused),
+            self.assertRaises(ProviderError) as raised,
         ):
-            providers._tailnet_token("a-tailnet")
+            tailscale._tailnet_token("a-tailnet")
 
         self.assertIn("OAuth client", str(raised.exception))
 
@@ -3555,11 +3608,11 @@ class TailnetDeviceTests(TestCase):
                 },
             ),
             mock.patch.object(
-                providers.urllib.request, "urlopen", return_value=response
+                urllib.request, "urlopen", return_value=response
             ),
-            self.assertRaises(providers.ProviderError) as raised,
+            self.assertRaises(ProviderError) as raised,
         ):
-            providers._tailnet_token("a-tailnet")
+            tailscale._tailnet_token("a-tailnet")
 
         self.assertEqual(
             str(raised.exception), "Tailscale did not answer the token request."
@@ -3570,7 +3623,7 @@ class TailnetDeviceTests(TestCase):
         """It lasts an hour and a sweep is minutes apart, so caching it would
         only add an expiry to get wrong."""
 
-        source = Path(providers.__file__).read_text(encoding="utf-8")
+        source = _controller_source()
 
         self.assertNotIn("_TOKEN_CACHE", source)
         self.assertEqual(source.count("def _tailnet_token"), 1)
@@ -3587,16 +3640,16 @@ class TailnetPolicyGateTests(TestCase):
     def reconcile(self, live, declared):
         spec = {"connection_ref": "a-tailnet", "document": json.dumps(declared)}
         with (
-            mock.patch.object(providers, "_tailnet_token", return_value="t"),
-            mock.patch.object(providers, "_tailnet_policy", return_value=live),
-            mock.patch.object(providers.urllib.request, "urlopen") as urlopen,
+            mock.patch.object(tailscale, "_tailnet_token", return_value="t"),
+            mock.patch.object(tailscale, "_tailnet_policy", return_value=live),
+            mock.patch.object(urllib.request, "urlopen") as urlopen,
         ):
             urlopen.return_value.__enter__.return_value.read.return_value = b"{}"
-            result = providers.reconcile_tailnet_policy(spec, apply=False)
+            result = tailscale.reconcile_tailnet_policy(spec, apply=False)
         return result, urlopen
 
     def test_a_policy_with_no_tests_is_refused_before_tailscale_is_asked(self):
-        with self.assertRaises(providers.ProviderError) as raised:
+        with self.assertRaises(ProviderError) as raised:
             self.reconcile(self.document(self.TEST), self.document())
 
         self.assertIn("no tests", str(raised.exception))
@@ -3604,7 +3657,7 @@ class TailnetPolicyGateTests(TestCase):
     def test_a_testless_live_policy_does_not_license_another(self):
         """The ratchet has to start somewhere: zero is never a baseline."""
 
-        with self.assertRaises(providers.ProviderError):
+        with self.assertRaises(ProviderError):
             self.reconcile(self.document(), {"grants": [], "tests": []})
 
     def test_a_testless_policy_already_in_place_is_not_ready(self):
@@ -3616,7 +3669,7 @@ class TailnetPolicyGateTests(TestCase):
 
     def test_dropping_a_deny_is_refused(self):
         other = {"src": "a-laptop", "deny": ["a-server:22"]}
-        with self.assertRaises(providers.ProviderError) as raised:
+        with self.assertRaises(ProviderError) as raised:
             self.reconcile(self.document(self.TEST, other), self.document(self.TEST))
 
         self.assertIn("'a-server:22'", str(raised.exception))
@@ -3624,7 +3677,7 @@ class TailnetPolicyGateTests(TestCase):
     def test_a_deny_moved_to_accept_is_refused(self):
         live = {"src": "a-laptop", "deny": ["a-server:22"]}
         opened = {"src": "a-laptop", "accept": ["a-server:22"]}
-        with self.assertRaises(providers.ProviderError):
+        with self.assertRaises(ProviderError):
             self.reconcile(
                 self.document(self.TEST, live), self.document(self.TEST, opened)
             )
@@ -3634,7 +3687,7 @@ class TailnetPolicyGateTests(TestCase):
 
         live = {"src": "a-phone", "proto": "tcp", "accept": ["a-server:443"]}
         swapped = {"src": "a-stranger", "proto": "tcp", "accept": ["a-server:443"]}
-        with self.assertRaises(providers.ProviderError) as raised:
+        with self.assertRaises(ProviderError) as raised:
             self.reconcile(
                 self.document(self.TEST, live), self.document(self.TEST, swapped)
             )
@@ -3644,7 +3697,7 @@ class TailnetPolicyGateTests(TestCase):
     def test_a_proto_is_part_of_what_a_test_covers(self):
         live = {"src": "a-laptop", "proto": "udp", "deny": ["a-server:53"]}
         moved = {"src": "a-laptop", "deny": ["a-server:53"]}
-        with self.assertRaises(providers.ProviderError):
+        with self.assertRaises(ProviderError):
             self.reconcile(
                 self.document(self.TEST, live), self.document(self.TEST, moved)
             )
@@ -3692,11 +3745,11 @@ class RouteApprovalTests(TestCase):
             return _Answer(reads[len(sent) - 1])
 
         with (
-            mock.patch.object(providers, "_tailnet_device_id", return_value="node-1"),
-            mock.patch.object(providers, "_tailnet_token", return_value="token"),
-            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
+            mock.patch.object(tailscale, "_tailnet_device_id", return_value="node-1"),
+            mock.patch.object(tailscale, "_tailnet_token", return_value="token"),
+            mock.patch.object(urllib.request, "urlopen", urlopen),
         ):
-            result = providers.approve_tailnet_routes(
+            result = tailscale.approve_tailnet_routes(
                 {"name": "a-router", "connection_ref": "a-tailnet"}, apply=apply
             )
         return result, sent
@@ -3772,18 +3825,18 @@ class RouteApprovalTests(TestCase):
             del timeout
             calls.append(request)
             if len(calls) == call:
-                raise providers.urllib.error.HTTPError(
+                raise urllib.error.HTTPError(
                     "https://example.invalid", code, "Forbidden", {}, None
                 )
             return _Answer(reads[len(calls) - 1])
 
         with (
-            mock.patch.object(providers, "_tailnet_device_id", return_value="node-1"),
-            mock.patch.object(providers, "_tailnet_token", return_value="token"),
-            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
-            self.assertRaises(providers.ProviderError) as raised,
+            mock.patch.object(tailscale, "_tailnet_device_id", return_value="node-1"),
+            mock.patch.object(tailscale, "_tailnet_token", return_value="token"),
+            mock.patch.object(urllib.request, "urlopen", urlopen),
+            self.assertRaises(ProviderError) as raised,
         ):
-            providers.approve_tailnet_routes({"name": "a-router"})
+            tailscale.approve_tailnet_routes({"name": "a-router"})
         return str(raised.exception)
 
     def test_a_credential_without_the_scope_says_which_scope(self):
@@ -3808,14 +3861,14 @@ class RouteApprovalTests(TestCase):
             raise OSError("no route to host")
 
         with (
-            mock.patch.object(providers, "_tailnet_device_id", return_value="node-1"),
-            mock.patch.object(providers, "_tailnet_token", return_value="token"),
-            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
+            mock.patch.object(tailscale, "_tailnet_device_id", return_value="node-1"),
+            mock.patch.object(tailscale, "_tailnet_token", return_value="token"),
+            mock.patch.object(urllib.request, "urlopen", urlopen),
             self.assertRaisesRegex(
-                providers.ProviderError, "did not report the routes"
+                ProviderError, "did not report the routes"
             ),
         ):
-            providers.approve_tailnet_routes({"name": "a-router"})
+            tailscale.approve_tailnet_routes({"name": "a-router"})
 
 
 class _Scripted:
@@ -3838,7 +3891,7 @@ class _Scripted:
 
 
 def _refused(code):
-    return providers.urllib.error.HTTPError(
+    return urllib.error.HTTPError(
         "https://example.invalid", code, "Refused", {}, None
     )
 
@@ -3855,11 +3908,11 @@ class TailnetPolicyWriteTests(TestCase):
     def reconcile(self, document, script=(), *, live=None, apply=True):
         urlopen = _Scripted(script)
         with (
-            mock.patch.object(providers, "_tailnet_token", return_value="t"),
-            mock.patch.object(providers, "_tailnet_policy", return_value=live),
-            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
+            mock.patch.object(tailscale, "_tailnet_token", return_value="t"),
+            mock.patch.object(tailscale, "_tailnet_policy", return_value=live),
+            mock.patch.object(urllib.request, "urlopen", urlopen),
         ):
-            result = providers.reconcile_tailnet_policy(
+            result = tailscale.reconcile_tailnet_policy(
                 {"connection_ref": "a-tailnet", "document": document}, apply=apply
             )
         return result, urlopen.sent
@@ -3873,7 +3926,7 @@ class TailnetPolicyWriteTests(TestCase):
         self.assertEqual(sent, [])
 
     def test_an_unreadable_declaration_is_refused(self):
-        with self.assertRaisesRegex(providers.ProviderError, "not readable JSON"):
+        with self.assertRaisesRegex(ProviderError, "not readable JSON"):
             self.reconcile("{not json")
 
     def test_a_tested_policy_already_in_place_is_ready(self):
@@ -3889,13 +3942,13 @@ class TailnetPolicyWriteTests(TestCase):
         self.assertEqual(sent, [])
 
     def test_a_policy_failing_its_own_tests_is_not_written(self):
-        with self.assertRaisesRegex(providers.ProviderError, "does not pass its own"):
+        with self.assertRaisesRegex(ProviderError, "does not pass its own"):
             self.reconcile(
                 json.dumps(self.WANTED), [{"errors": ["x"]}], live=self.TESTED
             )
 
     def test_a_validation_that_cannot_run_is_not_a_pass(self):
-        with self.assertRaisesRegex(providers.ProviderError, "could not check"):
+        with self.assertRaisesRegex(ProviderError, "could not check"):
             self.reconcile(json.dumps(self.WANTED), [_refused(500)], live=self.TESTED)
 
     def test_the_write_is_conditional_on_the_version_read(self):
@@ -3922,17 +3975,17 @@ class TailnetPolicyWriteTests(TestCase):
         self.assertIsNone(sent[2].get_header("If-match"))
 
     def test_a_policy_changed_elsewhere_is_not_overwritten(self):
-        with self.assertRaisesRegex(providers.ProviderError, "changed somewhere else"):
+        with self.assertRaisesRegex(ProviderError, "changed somewhere else"):
             self.reconcile(
                 json.dumps(self.WANTED), [{}, ({}, "v"), _refused(412)], live=self.TESTED
             )
 
     def test_other_write_failures_say_what_happened(self):
-        with self.assertRaisesRegex(providers.ProviderError, r"refused the policy \(403\)"):
+        with self.assertRaisesRegex(ProviderError, r"refused the policy \(403\)"):
             self.reconcile(
                 json.dumps(self.WANTED), [{}, ({}, "v"), _refused(403)], live=self.TESTED
             )
-        with self.assertRaisesRegex(providers.ProviderError, "did not answer the policy"):
+        with self.assertRaisesRegex(ProviderError, "did not answer the policy"):
             self.reconcile(
                 json.dumps(self.WANTED), [{}, ({}, "v"), OSError()], live=self.TESTED
             )
@@ -3941,21 +3994,21 @@ class TailnetPolicyWriteTests(TestCase):
 class RouteApprovalFailureTests(TestCase):
     def approve(self, script):
         with (
-            mock.patch.object(providers, "_tailnet_device_id", return_value="node-1"),
-            mock.patch.object(providers, "_tailnet_token", return_value="token"),
-            mock.patch.object(providers.urllib.request, "urlopen", _Scripted(script)),
+            mock.patch.object(tailscale, "_tailnet_device_id", return_value="node-1"),
+            mock.patch.object(tailscale, "_tailnet_token", return_value="token"),
+            mock.patch.object(urllib.request, "urlopen", _Scripted(script)),
         ):
-            return providers.approve_tailnet_routes({"name": "a-router"})
+            return tailscale.approve_tailnet_routes({"name": "a-router"})
 
     def test_a_write_that_gets_no_answer_says_so(self):
         pending = {"advertisedRoutes": ["10.0.0.0/24"], "enabledRoutes": []}
-        with self.assertRaisesRegex(providers.ProviderError, "did not answer for a-router"):
+        with self.assertRaisesRegex(ProviderError, "did not answer for a-router"):
             self.approve([pending, OSError()])
 
     def test_a_refused_write_that_is_not_about_scope_names_the_device(self):
         pending = {"advertisedRoutes": ["10.0.0.0/24"], "enabledRoutes": []}
         with self.assertRaisesRegex(
-            providers.ProviderError, "refused the route approval for a-router"
+            ProviderError, "refused the route approval for a-router"
         ):
             self.approve([pending, _refused(500)])
 
@@ -4010,11 +4063,11 @@ class TlsReadingTests(TestCase):
 
         covered = [{"domain_names": ["a.example.com", "b.example.com"]}]
         with (
-            mock.patch.object(providers, "_observe_tls_domain", side_effect=observe) as seen,
-            mock.patch.object(providers, "_consumer_tls_endpoint", side_effect=endpoint),
-            mock.patch.object(providers, "_npm_covered_hosts", return_value=covered) as npm,
+            mock.patch.object(tls, "_observe_tls_domain", side_effect=observe) as seen,
+            mock.patch.object(tls, "_consumer_tls_endpoint", side_effect=endpoint),
+            mock.patch.object(tls, "_npm_covered_hosts", return_value=covered) as npm,
         ):
-            result = providers.reconcile_tls(spec)
+            result = tls.reconcile_tls(spec)
         return result, seen, npm
 
     def test_every_outcome_is_reported_against_its_consumer(self):
@@ -4036,9 +4089,9 @@ class TlsReadingTests(TestCase):
             {
                 "a.example.com": far,
                 "b.example.com": near,
-                "d.example.com": providers.ProviderError("d refused"),
+                "d.example.com": ProviderError("d refused"),
             },
-            {"proxy": "192.0.2.5", "lost": providers.ProviderError("no endpoint"), "down": None},
+            {"proxy": "192.0.2.5", "lost": ProviderError("no endpoint"), "down": None},
         )
 
         npm.assert_called_once_with(["*.example.com"])
@@ -4114,7 +4167,7 @@ class TlsReadingTests(TestCase):
 
     def test_nothing_to_verify_is_a_failure_that_says_so(self):
         with self.assertRaisesRegex(
-            providers.ProviderError, "No TLS verification domains were declared"
+            ProviderError, "No TLS verification domains were declared"
         ):
             self.reconcile(
                 {"renewal_window_days": 30, "consumers": [{"kind": "npm", "name": "p"}]},
@@ -4137,10 +4190,10 @@ class TailnetReadingTests(TestCase):
             return _Answer(payload)
 
         with (
-            mock.patch.object(providers, "_tailnet_token", return_value="token"),
-            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
+            mock.patch.object(tailscale, "_tailnet_token", return_value="token"),
+            mock.patch.object(urllib.request, "urlopen", urlopen),
         ):
-            records = providers.OBSERVATION_READERS[kind]()
+            records = handlers.OBSERVATION_READERS[kind]()
         kept, refused = OBSERVATIONS[kind].clean(records)
         self.assertEqual(refused, 0)
         return kept, calls
@@ -4148,16 +4201,16 @@ class TailnetReadingTests(TestCase):
     def refuse(self, kind, code):
         def urlopen(request, timeout=None, context=None):
             del request, timeout
-            raise providers.urllib.error.HTTPError(
+            raise urllib.error.HTTPError(
                 "https://example.invalid", code, "Forbidden", {}, None
             )
 
         with (
-            mock.patch.object(providers, "_tailnet_token", return_value="token"),
-            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
-            self.assertRaises(providers.ProviderError) as raised,
+            mock.patch.object(tailscale, "_tailnet_token", return_value="token"),
+            mock.patch.object(urllib.request, "urlopen", urlopen),
+            self.assertRaises(ProviderError) as raised,
         ):
-            providers.OBSERVATION_READERS[kind]()
+            handlers.OBSERVATION_READERS[kind]()
         self.refusal = raised.exception.refusal
         return str(raised.exception)
 
@@ -4178,7 +4231,7 @@ class TailnetReadingTests(TestCase):
     def test_dns_is_read_from_the_configuration_endpoint(self):
         (record,), calls = self.read("tailscale.dns", self.DNS)
 
-        self.assertEqual(calls, [f"{providers.TAILNET_API}/tailnet/-/dns/configuration"])
+        self.assertEqual(calls, [f"{tailscale.TAILNET_API}/tailnet/-/dns/configuration"])
         self.assertEqual(record["nameservers"], ["100.64.0.53", "192.0.2.53"])
         self.assertTrue(record["magic_dns"])
         self.assertTrue(record["override_local_dns"])
@@ -4216,7 +4269,7 @@ class TailnetReadingTests(TestCase):
     def test_settings_keep_the_named_settings_only(self):
         (record,), calls = self.read("tailscale.settings", self.SETTINGS)
 
-        self.assertEqual(calls, [f"{providers.TAILNET_API}/tailnet/-/settings"])
+        self.assertEqual(calls, [f"{tailscale.TAILNET_API}/tailnet/-/settings"])
         self.assertEqual(record["devices_key_duration_days"], 90)
         self.assertTrue(record["devices_approval_on"])
         self.assertTrue(record["acls_externally_managed_on"])
@@ -4231,7 +4284,7 @@ class TailnetReadingTests(TestCase):
         partial = {**self.SETTINGS, "aclsExternallyManagedOn": None}
         del partial["httpsEnabled"]
 
-        with providers.part_ledger() as ledger:
+        with part_ledger() as ledger:
             (record,), _ = self.read("tailscale.settings", partial)
         snapshot = SimpleNamespace(
             kind="tailscale.settings", reachable=True,
@@ -4245,7 +4298,7 @@ class TailnetReadingTests(TestCase):
                                    "acl_management": ("policy_file:read",)})
 
     def test_every_setting_seen_refuses_no_part(self):
-        with providers.part_ledger() as ledger:
+        with part_ledger() as ledger:
             self.read("tailscale.settings", self.SETTINGS)
 
         self.assertEqual(ledger, [])
@@ -4273,7 +4326,7 @@ class TailnetReadingTests(TestCase):
     def test_users_keep_identity_role_and_presence_only(self):
         (record,), calls = self.read("tailscale.user", self.USERS)
 
-        self.assertEqual(calls, [f"{providers.TAILNET_API}/tailnet/-/users"])
+        self.assertEqual(calls, [f"{tailscale.TAILNET_API}/tailnet/-/users"])
         self.assertEqual(
             record,
             {
@@ -4305,13 +4358,13 @@ class TailnetReadingTests(TestCase):
             for code in (403, 404):
                 with self.subTest(kind=kind, code=code):
                     self.assertIn(scope, self.refuse(kind, code))
-                    self.assertEqual(self.refusal, providers.PERMISSION_REFUSAL)
+                    self.assertEqual(self.refusal, PERMISSION_REFUSAL)
 
     def test_a_refused_token_is_the_credential_not_a_scope(self):
         message = self.refuse("tailscale.user", 401)
 
         self.assertNotIn("users:read", message)
-        self.assertEqual(self.refusal, providers.CREDENTIAL_REFUSAL)
+        self.assertEqual(self.refusal, CREDENTIAL_REFUSAL)
 
     def test_a_failure_that_is_not_about_scope_raises_without_one(self):
         message = self.refuse("tailscale.dns", 500)
@@ -4321,13 +4374,13 @@ class TailnetReadingTests(TestCase):
 
     def test_an_unreadable_answer_raises_rather_than_reading_as_empty(self):
         with (
-            mock.patch.object(providers, "_tailnet_token", return_value="token"),
+            mock.patch.object(tailscale, "_tailnet_token", return_value="token"),
             mock.patch.object(
-                providers.urllib.request, "urlopen", return_value=_Answer([])
+                urllib.request, "urlopen", return_value=_Answer([])
             ),
-            self.assertRaises(providers.ProviderError),
+            self.assertRaises(ProviderError),
         ):
-            providers.list_tailnet_users()
+            tailscale.list_tailnet_users()
 
     def test_services_are_read_from_the_services_endpoint(self):
         calls = []
@@ -4350,10 +4403,10 @@ class TailnetReadingTests(TestCase):
             return _Answer({})
 
         with (
-            mock.patch.object(providers, "_tailnet_token", return_value="token"),
-            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
+            mock.patch.object(tailscale, "_tailnet_token", return_value="token"),
+            mock.patch.object(urllib.request, "urlopen", urlopen),
         ):
-            (record,) = providers.list_tailnet_policy()
+            (record,) = tailscale.list_tailnet_policy()
 
         self.assertEqual(record["services"][0]["name"], "svc:example")
         self.assertFalse(any("vip-services" in url for url in calls))
@@ -4602,13 +4655,13 @@ class CaddyRouteSweepTests(TestCase):
 
         with (
             mock.patch.object(
-                providers, "ssh_connection_refs", return_value=("a-box", "an-edge")
+                connection_env, "ssh_connection_refs", return_value=("a-box", "an-edge")
             ),
             mock.patch.object(
-                providers,
+                commands,
                 "_ssh",
                 side_effect=[
-                    providers.ProviderError("denied"),
+                    ProviderError("denied"),
                     json.dumps(ADAPTED_CADDY).encode(),
                 ],
             ),
@@ -4728,7 +4781,7 @@ class CaddyRouteRenderingTests(TestCase):
 
         self.assertIn("Written by Severino HQ", out)
 
-    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch("controller_runtime.commands._ssh")
     def test_plan_mode_is_a_complete_result_and_writes_nothing(self, ssh):
         result = providers.execute(
             {
@@ -4753,7 +4806,7 @@ class CaddyRouteRenderingTests(TestCase):
         {"EDGE_CONNECTION_REF": "edge", "EDGE_MANAGES": "1"},
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch("controller_runtime.commands._ssh")
     def test_apply_writes_the_complete_owned_file(self, ssh):
         result = providers.execute(
             {
@@ -4788,14 +4841,14 @@ class CollectorFailureIsReportedTests(TestCase):
     """
 
     def test_a_policy_read_that_is_refused_is_reported_not_swallowed(self):
-        refused = providers.ProviderError(
+        refused = ProviderError(
             "Tailscale refused the policy read (403). The credential needs the "
             "policy_file scope."
         )
         with (
             mock.patch.dict("os.environ", {"TAILSCALE_CONNECTION_REF": "example-tailnet"}),
-            mock.patch.object(providers, "_tailnet_token", return_value="t"),
-            mock.patch.object(providers, "_tailnet_policy", side_effect=refused),
+            mock.patch.object(tailscale, "_tailnet_token", return_value="t"),
+            mock.patch.object(tailscale, "_tailnet_policy", side_effect=refused),
         ):
             swept = providers.inventory()
 
@@ -4979,16 +5032,16 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
         self.staged = staged
 
         with (
-            mock.patch.object(providers, "_run", side_effect=run),
+            mock.patch.object(commands, "_run", side_effect=run),
             mock.patch.dict("os.environ", environment, clear=True),
         ):
-            result = providers._publish_tls_facts(
+            result = tls._publish_tls_facts(
                 spec or A_RECORDED_CERTIFICATE,
-                providers.ProviderResult(
+                ProviderResult(
                     changed=False,
                     status=dict(status or AN_OBSERVATION),
                     conditions=[
-                        providers._condition("Ready", True, "Verified", "Current.")
+                        provider_http._condition("Ready", True, "Verified", "Current.")
                     ],
                     message="TLS consumers observed.",
                 ),
@@ -5247,7 +5300,7 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
                 for argument in command
                 if "[file]=" in argument
             )
-            raise providers.ProviderError("1Password refused the write.")
+            raise ProviderError("1Password refused the write.")
 
         acme = Path(self.enterContext(tempfile.TemporaryDirectory()))
         live = acme / "config" / "live" / A_RECORDED_CERTIFICATE["certificate_name"]
@@ -5256,20 +5309,20 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
         live.joinpath("privkey.pem").write_bytes(A_PRIVATE_KEY)
 
         with (
-            mock.patch.object(providers, "_run", side_effect=run),
+            mock.patch.object(commands, "_run", side_effect=run),
             mock.patch.dict(
                 "os.environ",
                 {**A_PASSWORD_MANAGER_CONNECTION, "HQ_ACME_DIR": str(acme)},
                 clear=True,
             ),
         ):
-            result = providers._publish_tls_facts(
+            result = tls._publish_tls_facts(
                 A_RECORDED_CERTIFICATE,
-                providers.ProviderResult(
+                ProviderResult(
                     changed=False,
                     status=dict(AN_OBSERVATION),
                     conditions=[
-                        providers._condition("Ready", True, "Verified", "Current.")
+                        provider_http._condition("Ready", True, "Verified", "Current.")
                     ],
                     message="TLS consumers observed.",
                 ),
@@ -5338,13 +5391,13 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
             return b""
 
         with (
-            mock.patch.object(providers, "_run", side_effect=run),
-            mock.patch.object(providers, "reconcile_tls") as observe,
+            mock.patch.object(commands, "_run", side_effect=run),
+            mock.patch.object(tls, "reconcile_tls") as observe,
         ):
-            observe.return_value = providers.ProviderResult(
+            observe.return_value = ProviderResult(
                 changed=False, status=dict(AN_OBSERVATION), conditions=[], message=""
             )
-            providers._tls_reconcile(A_RECORDED_CERTIFICATE, apply=False)
+            tls._tls_reconcile(A_RECORDED_CERTIFICATE, apply=False)
 
         self.assertEqual(calls, [])
 
@@ -5382,21 +5435,21 @@ class RecordingTheFactsIsNeverTheCertificatesJobTests(TestCase):
     """
 
     def _reconcile_with_a_failing_publisher(self, failure):
-        observed = providers.ProviderResult(
+        observed = ProviderResult(
             changed=False,
             status=dict(AN_OBSERVATION),
-            conditions=[providers._condition("Ready", True, "Verified", "Current.")],
+            conditions=[provider_http._condition("Ready", True, "Verified", "Current.")],
             message="TLS consumers observed.",
         )
         with (
-            mock.patch.object(providers, "apply_tls_reconcile", return_value=observed),
+            mock.patch.object(tls, "apply_tls_reconcile", return_value=observed),
             mock.patch.object(onepassword, "publish", side_effect=failure),
         ):
-            return providers._tls_reconcile(A_RECORDED_CERTIFICATE, apply=True)
+            return tls._tls_reconcile(A_RECORDED_CERTIFICATE, apply=True)
 
     def test_a_failed_publication_leaves_the_reconcile_successful(self):
         result = self._reconcile_with_a_failing_publisher(
-            providers.ProviderError("1Password write for a certificate failed.")
+            ProviderError("1Password write for a certificate failed.")
         )
 
         self.assertEqual(
@@ -5406,7 +5459,7 @@ class RecordingTheFactsIsNeverTheCertificatesJobTests(TestCase):
 
     def test_a_failed_publication_is_reported_rather_than_passed_over(self):
         result = self._reconcile_with_a_failing_publisher(
-            providers.ProviderError("1Password write for a certificate failed.")
+            ProviderError("1Password write for a certificate failed.")
         )
         published = result.status["published_facts"][0]
 
@@ -5427,15 +5480,15 @@ class RecordingTheFactsIsNeverTheCertificatesJobTests(TestCase):
     def test_a_certificate_recording_nowhere_reports_no_publication_at_all(self):
         """Every certificate that names no vault must be untouched by this."""
 
-        observed = providers.ProviderResult(
+        observed = ProviderResult(
             changed=False,
             status={"issuer": "An Example Authority"},
             conditions=[],
             message=".",
         )
         spec = {**A_RECORDED_CERTIFICATE, "publish_to": []}
-        with mock.patch.object(providers, "apply_tls_reconcile", return_value=observed):
-            result = providers._tls_reconcile(spec, apply=True)
+        with mock.patch.object(tls, "apply_tls_reconcile", return_value=observed):
+            result = tls._tls_reconcile(spec, apply=True)
 
         self.assertNotIn("published_facts", result.status)
 
@@ -5450,12 +5503,12 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
 
     def _publish_against(self, run):
         with (
-            mock.patch.object(providers, "_run", side_effect=run),
+            mock.patch.object(commands, "_run", side_effect=run),
             mock.patch.dict("os.environ", A_PASSWORD_MANAGER_CONNECTION, clear=True),
         ):
-            return providers._publish_tls_facts(
+            return tls._publish_tls_facts(
                 A_RECORDED_CERTIFICATE,
-                providers.ProviderResult(
+                ProviderResult(
                     changed=False,
                     status=dict(AN_OBSERVATION),
                     conditions=[],
@@ -5490,7 +5543,7 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
 
     def test_a_failure_reports_the_step_and_not_the_credential(self):
         def run(command, *, input_bytes=None, step="command", env=None):
-            raise providers.ProviderError(f"{step} failed.")
+            raise ProviderError(f"{step} failed.")
 
         result = self._publish_against(run)
 
@@ -5506,7 +5559,7 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
         """
 
         with (
-            mock.patch.object(providers.subprocess, "run") as run,
+            mock.patch.object(subprocess, "run") as run,
             self.assertLogs("severino.controller", level="WARNING") as logged,
         ):
             run.return_value = mock.Mock(
@@ -5514,8 +5567,8 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
                 stdout=b"",
                 stderr=f"could not use {A_SERVICE_ACCOUNT_TOKEN}".encode(),
             )
-            with self.assertRaises(providers.ProviderError):
-                providers._run(
+            with self.assertRaises(ProviderError):
+                commands._run(
                     ["op", "item", "get", "an-item"],
                     step="1Password read for a certificate",
                     env={"OP_SERVICE_ACCOUNT_TOKEN": A_SERVICE_ACCOUNT_TOKEN},
@@ -5531,11 +5584,11 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
         """Replacing it outright would leave `op` without a PATH or a HOME."""
 
         with (
-            mock.patch.object(providers.subprocess, "run") as run,
+            mock.patch.object(subprocess, "run") as run,
             mock.patch.dict("os.environ", {"PATH": "/an/example/path"}, clear=True),
         ):
             run.return_value = mock.Mock(returncode=0, stdout=b"", stderr=b"")
-            providers._run(
+            commands._run(
                 ["op", "whoami"], env={"OP_SERVICE_ACCOUNT_TOKEN": "t"}, step="a step"
             )
 
@@ -5545,14 +5598,14 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
 
     def test_cloud_writer_cannot_inherit_connect_authentication(self):
         with (
-            mock.patch.object(providers.subprocess, "run") as run,
+            mock.patch.object(subprocess, "run") as run,
             mock.patch.dict("os.environ", {
                 "OP_CONNECT_HOST": "http://127.0.0.1:8080",
                 "OP_CONNECT_TOKEN": "example-connect-token",
             }),
         ):
             run.return_value = mock.Mock(returncode=0, stdout=b"", stderr=b"")
-            providers._run(
+            commands._run(
                 ["op", "item", "edit"],
                 env={"OP_SERVICE_ACCOUNT_TOKEN": "t"},
                 step="a step",
@@ -5564,7 +5617,7 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
         """A vault is not a machine, and `reaches` everywhere else means one."""
 
         with (
-            mock.patch.object(providers, "_run") as run,
+            mock.patch.object(commands, "_run") as run,
             mock.patch.dict("os.environ", A_PASSWORD_MANAGER_CONNECTION, clear=True),
         ):
             run.return_value = json.dumps(
@@ -5579,10 +5632,10 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
 
     def test_a_vault_list_that_cannot_be_read_is_a_failed_probe(self):
         with (
-            mock.patch.object(providers, "_run", return_value=b"not json"),
+            mock.patch.object(commands, "_run", return_value=b"not json"),
             mock.patch.dict("os.environ", A_PASSWORD_MANAGER_CONNECTION, clear=True),
         ):
-            with self.assertRaisesRegex(providers.ProviderError, "could not read"):
+            with self.assertRaisesRegex(ProviderError, "could not read"):
                 providers._probe_onepassword("a-password-manager")
 
     def test_an_item_that_cannot_be_read_is_a_failed_publication(self):
@@ -5677,28 +5730,28 @@ class HostPerimeterTests(TestCase):
         ).encode()
         with (
             mock.patch.object(
-                providers, "connection_refs_for_role", return_value=("an-edge",)
+                connection_env, "connection_refs_for_role", return_value=("an-edge",)
             ),
-            mock.patch.object(providers, "_ssh", return_value=payload),
+            mock.patch.object(commands, "_ssh", return_value=payload),
             mock.patch.object(
-                providers,
+                connection_env,
                 "_transport",
                 return_value={"host": "100.64.0.9", "port": 7722, "user": "u", "host_key": "k"},
             ),
             mock.patch.object(
-                providers,
+                portainer,
                 "list_portainer_containers",
                 return_value=containers
                 if containers is not None
                 else [{"host": "an-edge", "ports": [80, 443, 9001]}],
             ),
             mock.patch.object(
-                providers,
+                host_readings,
                 "_answers_from_here",
                 side_effect=lambda address, port, **_: port in answers,
             ),
         ):
-            (reading,) = providers.list_host_perimeter()
+            (reading,) = host_readings.list_host_perimeter()
         return reading
 
     def test_a_shut_perimeter_reports_nothing_answering(self):
@@ -5880,7 +5933,7 @@ class ConnectionManagesTests(TestCase):
         from unittest import mock
 
         with mock.patch.dict("os.environ", env, clear=True):
-            return providers.connection_manages("example-dns")
+            return connection_env.connection_manages("example-dns")
 
     def test_absent_is_observe(self):
         self.assertFalse(self.manages({"CLOUDFLARE_DNS_CONNECTION_REF": "example-dns"}))
@@ -5971,9 +6024,9 @@ class NotConnectedTests(TestCase):
     def test_a_local_tailnet_reading_counts_as_a_source(self):
         from unittest import mock
 
-        with mock.patch.object(providers, "TAILNET_STATUS", "/run/example/status.json"):
+        with mock.patch.object(tailscale, "TAILNET_STATUS", "/run/example/status.json"):
             self.assertTrue(providers._has_source("tailscale.device", set()))
-        with mock.patch.object(providers, "TAILNET_STATUS", ""):
+        with mock.patch.object(tailscale, "TAILNET_STATUS", ""):
             self.assertFalse(providers._has_source("tailscale.device", set()))
 
     def test_connections_shaped_as_a_deployment_names_them_are_sources(self):
@@ -5992,10 +6045,10 @@ class NotConnectedTests(TestCase):
             "ONEPASSWORD_CERTIFICATES_PROVIDER": "onepassword",
         }
         with mock.patch.dict("os.environ", env, clear=True):
-            refs = set(providers.ssh_connection_refs())
+            refs = set(connection_env.ssh_connection_refs())
             connected = {
-                providers.effective_provider(ref, refs)
-                for ref in providers.connection_prefixes()
+                connection_env.effective_provider(ref, refs)
+                for ref in connection_env.connection_prefixes()
             }
             self.assertEqual(connected, {"ssh", "tailscale", "onepassword"})
             for kind in ("host.perimeter", "caddy.route", "tailscale.device",
@@ -6005,9 +6058,9 @@ class NotConnectedTests(TestCase):
     def test_a_host_reading_needs_its_mounted_source(self):
         from unittest import mock
 
-        with mock.patch.object(providers, "HOST_FIREWALL", "/run/example/firewall.json"):
+        with mock.patch.object(host_readings, "HOST_FIREWALL", "/run/example/firewall.json"):
             self.assertTrue(providers._has_source("host.firewall", set()))
-        with mock.patch.object(providers, "HOST_FIREWALL", ""):
+        with mock.patch.object(host_readings, "HOST_FIREWALL", ""):
             self.assertFalse(providers._has_source("host.firewall", set()))
 
     def test_a_host_reading_with_nothing_mounted_is_not_connected(self):
@@ -6015,7 +6068,7 @@ class NotConnectedTests(TestCase):
 
         lister = mock.Mock(return_value=[])
         with (
-            mock.patch.object(providers, "HOST_FIREWALL", ""),
+            mock.patch.object(host_readings, "HOST_FIREWALL", ""),
             mock.patch.dict(providers.PROVIDER_INVENTORY, {"host.firewall": lister}, clear=True),
         ):
             found = providers.inventory()
@@ -6073,12 +6126,12 @@ class SignInRedirectTests(TestCase):
             seen.append(request)
             return answer
 
-        with mock.patch.object(providers.urllib.request, "urlopen", urlopen):
+        with mock.patch.object(urllib.request, "urlopen", urlopen):
             try:
-                return providers._RUNTIME.request(
+                return provider_runtime._RUNTIME.request(
                     self.API, headers={"Authorization": "Bearer example-token"}
                 ), seen
-            except providers.ProviderError as exc:
+            except ProviderError as exc:
                 return exc, seen
 
     def test_a_redirect_to_a_sign_in_page_names_its_host_only(self):
@@ -6090,13 +6143,13 @@ class SignInRedirectTests(TestCase):
             )
         )
 
-        self.assertIsInstance(found, providers.ProviderError)
+        self.assertIsInstance(found, ProviderError)
         self.assertEqual(
             str(found),
             "The address answered with a sign-in page at sso.example.com, not the API. "
             "Use the provider's direct API address.",
         )
-        self.assertEqual(found.failure, providers.ADDRESS_FAILURE)
+        self.assertEqual(found.failure, ADDRESS_FAILURE)
         self.assertEqual(found.refusal, "")
         self.assertNotIn("example-id", str(found))
         self.assertNotIn("state", str(found))
@@ -6106,16 +6159,16 @@ class SignInRedirectTests(TestCase):
             _Page(b"  <html></html>", landed=self.API, content_type="application/json")
         )
 
-        self.assertIsInstance(found, providers.ProviderError)
+        self.assertIsInstance(found, ProviderError)
         self.assertIn("answered with a web page, not the API", str(found))
-        self.assertEqual(found.failure, providers.ADDRESS_FAILURE)
+        self.assertEqual(found.failure, ADDRESS_FAILURE)
 
     def test_a_redirect_to_another_host_is_refused_even_with_json(self):
         found, _ = self.call(_Page(b"[]", landed="https://other.example.com/api"))
 
-        self.assertIsInstance(found, providers.ProviderError)
+        self.assertIsInstance(found, ProviderError)
         self.assertIn("redirected to other.example.com", str(found))
-        self.assertEqual(found.failure, providers.ADDRESS_FAILURE)
+        self.assertEqual(found.failure, ADDRESS_FAILURE)
 
     def test_no_answer_is_the_network_and_a_401_refuses_the_credential(self):
         def raising(error):
@@ -6125,15 +6178,15 @@ class SignInRedirectTests(TestCase):
             return urlopen
 
         cases = (
-            (providers.urllib.error.URLError("no route"), providers.NETWORK_FAILURE, ""),
-            (TimeoutError(), providers.NETWORK_FAILURE, ""),
+            (urllib.error.URLError("no route"), NETWORK_FAILURE, ""),
+            (TimeoutError(), NETWORK_FAILURE, ""),
             (
-                providers.urllib.error.HTTPError(self.API, 401, "Unauthorized", {}, None),
-                providers.CREDENTIAL_REFUSAL,
-                providers.CREDENTIAL_REFUSAL,
+                urllib.error.HTTPError(self.API, 401, "Unauthorized", {}, None),
+                CREDENTIAL_REFUSAL,
+                CREDENTIAL_REFUSAL,
             ),
             (
-                providers.urllib.error.HTTPError(self.API, 500, "Server error", {}, None),
+                urllib.error.HTTPError(self.API, 500, "Server error", {}, None),
                 "",
                 "",
             ),
@@ -6141,17 +6194,17 @@ class SignInRedirectTests(TestCase):
         for error, failure, refusal in cases:
             with self.subTest(error=type(error).__name__):
                 with mock.patch.object(
-                    providers.urllib.request, "urlopen", raising(error)
-                ), self.assertRaises(providers.ProviderError) as raised:
-                    providers._RUNTIME.request(self.API)
+                    urllib.request, "urlopen", raising(error)
+                ), self.assertRaises(ProviderError) as raised:
+                    provider_runtime._RUNTIME.request(self.API)
                 self.assertEqual(raised.exception.failure, failure)
                 self.assertEqual(raised.exception.refusal, refusal)
 
     def test_a_probe_reports_why_it_failed(self):
         def probe(connection_ref):
-            raise providers.ProviderError(
+            raise ProviderError(
                 "The address answered with a web page, not the API.",
-                failure=providers.ADDRESS_FAILURE,
+                failure=ADDRESS_FAILURE,
             )
 
         found = providers._probed(probe, "example-npm")
@@ -6161,7 +6214,7 @@ class SignInRedirectTests(TestCase):
             {
                 "ok": False,
                 "detail": "The address answered with a web page, not the API.",
-                "failure": providers.ADDRESS_FAILURE,
+                "failure": ADDRESS_FAILURE,
             },
         )
 
@@ -6181,13 +6234,13 @@ class SignInRedirectTests(TestCase):
 
 class RegistrarRefusalTests(TestCase):
     def test_a_refused_registrar_read_says_which_refusal(self):
-        refused = providers.ProviderError(
+        refused = ProviderError(
             "Cloudflare refused the request: Authentication error", refusal="permission"
         )
-        with mock.patch.object(providers, "_analytics_account", return_value="acct"), \
-                mock.patch.object(providers, "_cloudflare_api_cursor_list", side_effect=refused):
-            with providers.part_ledger() as refused_parts:
-                found = providers._registrar_domains()
+        with mock.patch.object(cloudflare_analytics, "_analytics_account", return_value="acct"), \
+                mock.patch.object(cloudflare, "_cloudflare_api_cursor_list", side_effect=refused):
+            with part_ledger() as refused_parts:
+                found = cloudflare._registrar_domains()
 
         self.assertEqual(found, {})
         self.assertEqual(
@@ -6253,8 +6306,8 @@ class CredentialedTransportTests(TestCase):
                 lambda _: (302, {"Location": f"{elsewhere.url}/landing"}, b"")
             )
             with origin:
-                with self.assertRaises(providers.ProviderError) as raised:
-                    providers._open(f"{origin.url}/api", headers=self.TOKEN)
+                with self.assertRaises(ProviderError) as raised:
+                    provider_http._open(f"{origin.url}/api", headers=self.TOKEN)
 
         self.assertIn("redirected to 127.0.0.1, not the API", str(raised.exception))
         self.assertEqual(len(origin.seen), 1)
@@ -6268,7 +6321,7 @@ class CredentialedTransportTests(TestCase):
             return 200, {"Content-Type": "application/json"}, b'{"ok": true}'
 
         with _Recorder(answer) as origin:
-            with providers._open(f"{origin.url}/api", headers=self.TOKEN) as response:
+            with provider_http._open(f"{origin.url}/api", headers=self.TOKEN) as response:
                 self.assertEqual(json.loads(response.read()), {"ok": True})
 
         (first, second) = origin.seen
@@ -6282,8 +6335,8 @@ class CredentialedTransportTests(TestCase):
             return 200, {"Content-Type": "application/json"}, b"{}"
 
         with _Recorder(answer) as origin:
-            with self.assertRaises(providers.ProviderError) as raised:
-                providers._open(
+            with self.assertRaises(ProviderError) as raised:
+                provider_http._open(
                     f"{origin.url}/graphql",
                     method="POST",
                     data=b"{}",
@@ -6300,12 +6353,12 @@ class CredentialedTransportTests(TestCase):
             seen.append(context)
             return _Page(b'{"devices": []}', landed=request.full_url)
 
-        with mock.patch.object(providers.urllib.request, "urlopen", urlopen):
-            providers._tailnet_api_devices("example-token")
+        with mock.patch.object(urllib.request, "urlopen", urlopen):
+            tailscale._tailnet_api_devices("example-token")
 
         (context,) = seen
-        self.assertIsInstance(context, providers.ssl.SSLContext)
-        self.assertEqual(context.minimum_version, providers.ssl.TLSVersion.TLSv1_2)
+        self.assertIsInstance(context, ssl.SSLContext)
+        self.assertEqual(context.minimum_version, ssl.TLSVersion.TLSv1_2)
 
     def test_no_provider_request_is_built_outside_the_one_opener(self):
         """An architecture test: ``urllib.request`` is reached only through ``_open``."""
@@ -6345,11 +6398,11 @@ class MissingSettingTests(TestCase):
     def test_a_missing_credential_names_no_variable(self):
         with (
             self.assertLogs("severino.controller", "WARNING") as logged,
-            self.assertRaises(providers.ProviderError) as raised,
+            self.assertRaises(ProviderError) as raised,
         ):
-            providers._cloudflare_token("")
+            cloudflare._cloudflare_token("")
 
-        self.assertEqual(str(raised.exception), providers.NOT_CONFIGURED)
+        self.assertEqual(str(raised.exception), provider_http.NOT_CONFIGURED)
         self.assertNotIn("API_TOKEN", str(raised.exception))
         self.assertIn("CLOUDFLARE_DNS_API_TOKEN", "\n".join(logged.output))
 
@@ -6363,8 +6416,8 @@ class MissingSettingTests(TestCase):
         clear=True,
     )
     def test_a_bad_port_names_the_connection_not_the_variable(self):
-        with self.assertRaises(providers.ProviderError) as raised:
-            providers._transport("example-edge")
+        with self.assertRaises(ProviderError) as raised:
+            connection_env._transport("example-edge")
 
         self.assertNotIn("EXAMPLE_EDGE", str(raised.exception))
         self.assertIn("example-edge", str(raised.exception))
@@ -6383,24 +6436,24 @@ class ManagesGateTests(TestCase):
         },
     }
 
-    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch("controller_runtime.commands._ssh")
     def test_a_write_through_an_observing_connection_is_refused(self, ssh):
         with (
             mock.patch.dict("os.environ", self.OBSERVING, clear=True),
-            self.assertRaisesRegex(providers.ProviderError, "edge only observes"),
+            self.assertRaisesRegex(ProviderError, "edge only observes"),
         ):
             providers.execute(self.ROUTE, "reconcile")
 
         ssh.assert_not_called()
 
-    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch("controller_runtime.commands._ssh")
     def test_a_plan_through_an_observing_connection_still_runs(self, ssh):
         with mock.patch.dict("os.environ", self.OBSERVING, clear=True):
             result = providers.execute(self.ROUTE, "reconcile", apply=False)
 
         self.assertEqual(result.status, {"routes": 1})
 
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http._request")
     def test_a_resource_naming_no_connection_needs_every_one_of_its_kind_to_manage(
         self, request
     ):
@@ -6417,7 +6470,7 @@ class ManagesGateTests(TestCase):
         with (
             mock.patch.dict("os.environ", env, clear=True),
             self.assertRaisesRegex(
-                providers.ProviderError, "example-adguard-home only observes"
+                ProviderError, "example-adguard-home only observes"
             ),
         ):
             providers.execute(resource, "delete")
@@ -6427,7 +6480,7 @@ class ManagesGateTests(TestCase):
     def test_a_write_with_no_connection_at_all_is_refused(self):
         with (
             mock.patch.dict("os.environ", {}, clear=True),
-            self.assertRaisesRegex(providers.ProviderError, "No connection"),
+            self.assertRaisesRegex(ProviderError, "No connection"),
         ):
             providers.execute(
                 {"kind": "adguard.rewrite", "spec": {"domain": "a.example.com"}},
@@ -6445,7 +6498,7 @@ class ManagesGateTests(TestCase):
         )
         with (
             mock.patch.dict("os.environ", {}, clear=True),
-            self.assertRaises(providers.ProviderError) as raised,
+            self.assertRaises(ProviderError) as raised,
         ):
             providers.execute({"kind": "cloudflare.zone", "spec": {}}, "reconcile")
 

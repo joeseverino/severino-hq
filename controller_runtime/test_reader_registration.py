@@ -16,7 +16,7 @@ from control_plane.observations import OBSERVATIONS
 from control_plane.provider_adapters.contracts import CORE_PROBED_CONNECTIONS
 from control_plane.provider_adapters import CONTROLLER_PROVIDER_ADAPTERS
 
-from . import providers
+from controller_runtime import handlers, provider_runtime
 
 ROOT = Path(__file__).resolve().parent.parent
 ADMITTING = "_register_adapter_readings"
@@ -86,14 +86,14 @@ class ReaderRegistrationTests(SimpleTestCase):
 
     def test_the_registered_readers_are_exactly_the_adapters_and_the_decorated_core(self):
         decorated = [kind for _path, tree in _sources() for kind in _decorated_kinds(tree)]
-        declared = providers._ADAPTER_REGISTRY.readings
+        declared = provider_runtime._ADAPTER_REGISTRY.readings
 
         self.assertEqual(len(decorated), len(set(decorated)))
         self.assertFalse(set(decorated) & set(declared))
-        self.assertEqual(set(providers.OBSERVATION_READERS), set(decorated) | set(declared))
+        self.assertEqual(set(handlers.OBSERVATION_READERS), set(decorated) | set(declared))
         for kind, reader in declared.items():
             with self.subTest(kind=kind):
-                self.assertIs(providers.OBSERVATION_READERS[kind], reader)
+                self.assertIs(handlers.OBSERVATION_READERS[kind], reader)
 
     def test_a_reading_through_an_integrations_connection_is_declared_by_its_adapter(self):
         held = {

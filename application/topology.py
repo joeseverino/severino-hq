@@ -28,8 +28,12 @@ from .connections import (
     ConnectionSpec,
     connection_catalog,
 )
-from .action_links import ActionLink as TopologyAction
-from .action_links import capability_action_link, connection_action_links, topology_url
+from .action_links import (
+    ActionLink as TopologyAction,
+    capability_action_link,
+    connection_action_links,
+    topology_url,
+)
 from .entity_links import EntityLink, entity_link, kind_label
 from .infrastructure import resource_health
 from .resource_capabilities import removals_pending, resource_capabilities

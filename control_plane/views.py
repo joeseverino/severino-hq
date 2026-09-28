@@ -51,7 +51,7 @@ from application.certificates import (
     store_certificate,
 )
 from application.connections import machines_once
-from application.machine_context import machine_links
+from application.machine_context import machine_links, sections_for as machine_sections
 from application.entity_links import NODE_KINDS, entity_link, kind_label, node_link
 from application.relationships import relationships_for
 from application.resource_context import (
@@ -86,7 +86,7 @@ from application.machines import (
     machine,
 )
 from application.service_list import listed_service, listed_services
-from application.services import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET, whereabouts
+from application.services import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET, alias_target, whereabouts
 from application.naming import name_context
 from application.plugins import _import
 from application.provider_forms import (
@@ -95,7 +95,6 @@ from application.provider_forms import (
     spec_form_class,
 )
 from application.security import AuthorizationError, safe_next, web_principal
-from application.machine_context import sections_for as machine_sections
 from application.service_context import missing_facets, page_parts, sections_for, service_badges, service_summary
 from application.pages import PageAction, PageMixin, page_context
 from application.resource_capabilities import (
@@ -105,25 +104,17 @@ from application.resource_capabilities import (
     resource_capabilities,
 )
 from application.ui import PageNavigation, PageSection, counted
-from application.services import (
-    CONTAINER_KIND,
-    alias_target,
-)
 
 from core import secrets
 from core.templatetags.nav_tags import returning_to
 
 from .models import ManagedResource, OperationRequest
-from .providers import (
-    PROVIDERS,
-    service_facets,
-    controller_action_policy,
-    describe_providers,
-)
 from .names import normalized_hostname
 from .provider_adapters.declarations import MACHINE_KIND
+from .provider_adapters.portainer import CONTAINER_KIND
 from .provider_adapters.tls import CERTIFICATE_KIND
 from .provider_spec import NameContext
+from .providers import PROVIDERS, controller_action_policy, describe_providers, service_facets
 
 
 # Which use case serves which verb. A ladder here meant every verb but one fell
