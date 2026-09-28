@@ -155,7 +155,7 @@ def _stack_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
 def _stack_origin(spec: dict[str, Any]) -> str:
     """Where this answers, as the topology names the machine.
 
-    ``_locate`` matches a host by id as readily as by address, so a stack says
+    ``locate`` matches a host by id as readily as by address, so a stack says
     which machine it runs on and never repeats that machine's address. A stack
     with no port answers nothing directly (it is reached through whatever
     fronts it) and returning nothing is the honest form of that.

@@ -30,7 +30,7 @@ from core.models import AuditLog
 from control_plane.names import normalized_hostname
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import EntityLink, entity_link, kind_label
-from .services import projects_by_hostname
+from .published_sites import projects_by_hostname
 from .ui import MISSING, PAGE_SECTION_ID, ago
 
 

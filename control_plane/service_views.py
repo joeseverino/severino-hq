@@ -21,7 +21,8 @@ from application.connections import machines_once
 from application.entity_links import entity_link
 from application.hq_self import LABEL as HQ_LABEL, hq_service
 from application.service_list import listed_service, listed_services
-from application.services import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET, alias_target
+from application.services import alias_target
+from application.service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET
 from application.security import safe_next, web_principal
 from application.service_context import missing_facets, page_parts, sections_for, service_badges, service_summary
 from application.pages import PageAction, PageMixin, page_context
@@ -57,7 +58,7 @@ class ServiceListView(PageMixin, LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         from application.pins import SERVICE, ordered
-        from application.services import RUNTIME_FACET
+        from application.service_facets import RUNTIME_FACET
 
         context = super().get_context_data(**kwargs)
         favorites = ordered(self.request.user, SERVICE)

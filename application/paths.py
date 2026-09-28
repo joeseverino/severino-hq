@@ -863,7 +863,7 @@ def _alias(name: str, target: str, *, fronted: bool, depth: int) -> list[Hop]:
 
 
 def _machine(address: str) -> Hop | None:
-    from .services import machine_link, whereabouts
+    from .whereabouts import machine_link, whereabouts
 
     link = machine_link(address, at=_whereabouts(whereabouts))
     if link is None:
@@ -1038,7 +1038,7 @@ def _declared_served(name: str, role: str) -> Certificate | None:
 
 
 def _upstream(address: str, connector: tuple[str, ...] = (), on: str = "") -> list[Hop]:
-    from .services import locate, whereabouts
+    from .whereabouts import locate, whereabouts
 
     if not address:
         return []

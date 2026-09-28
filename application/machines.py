@@ -306,7 +306,7 @@ class Machine:
     def containers_visible(self) -> bool:
         """Whether any connected credential reads containers, so "none" is a reading."""
 
-        from .services import connected_kinds
+        from .service_facets import connected_kinds
 
         return bool(self.containers) or CONTAINER_KIND in connected_kinds()
 
@@ -1017,7 +1017,7 @@ def _served_by() -> dict[tuple[str, str], set[str]]:
     from control_plane.names import normalized_hostname
 
     from .infrastructure import declared_machines, enabled_resources
-    from .services import _locate, whereabouts
+    from .whereabouts import locate, whereabouts
 
     machines = declared_machines()
     at = whereabouts(machines)
@@ -1034,7 +1034,7 @@ def _served_by() -> dict[tuple[str, str], set[str]]:
             continue
         if not origin:
             continue
-        located = _locate(origin, machines, at)
+        located = locate(origin, machines, at)
         if located.host and located.container:
             found.setdefault((located.host, located.container), set()).update(
                 name for name in (normalized_hostname(item) for item in names) if name

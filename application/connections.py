@@ -1061,7 +1061,7 @@ def outward_links(user=None) -> tuple[list[dict[str, str]], bool]:
 
     from django.urls import reverse
 
-    from .services import public_sites
+    from .published_sites import public_sites
 
     offered = [
         {

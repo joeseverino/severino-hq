@@ -4,7 +4,7 @@
 similar application/assets.py::serialize_asset <> application/projects.py::serialize_project
 similar core/management/commands/seed_demo.py::_seed_content <> core/management/commands/seed_demo.py::_seed_docs
 similar reports/exports.py::documentation_csv <> reports/exports.py::projects_csv
+largest application/paths.py 1214
 largest controller_runtime/tailscale.py 1256
 largest controller_runtime/tls.py 1291
 largest application/topology.py 1390
-largest application/services.py 1867

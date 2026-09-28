@@ -546,7 +546,7 @@ what both upserts require.
 ### Precedence of derived fields
 
 A derived value wins over an imported one. `Project.public_url` is the case
-today: it is how `application.services.projects_by_hostname` ties a project to
+today: it is how `application.published_sites.projects_by_hostname` ties a project to
 a service and how `content.content_sync.index_project` finds the site that
 serves the content index, and a Pages project can supply it.
 

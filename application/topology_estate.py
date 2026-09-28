@@ -199,7 +199,7 @@ _SERVICE_SUBTITLES = {"observed": "Observed service"}
 def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
     from .hq_self import hq_service
     from .service_list import listed_services
-    from .services import zone_holding
+    from .service_facets import zone_holding
 
     own = hq_service(catalog=machines_once())
     for service in listed_services():

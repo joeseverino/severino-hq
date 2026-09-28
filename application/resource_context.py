@@ -37,7 +37,7 @@ def origin_machine(resource, machines=None, at=None, targets=None):
     them here is the same four queries repeated once per resource.
     """
 
-    from .services import machine_link
+    from .whereabouts import machine_link
 
     provider = PROVIDERS.get(resource.kind)
     if provider is None or provider.origin is None:

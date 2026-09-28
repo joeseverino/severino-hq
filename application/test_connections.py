@@ -385,7 +385,7 @@ class OfferTests(TestCase):
 
 def _certificate_and_dns(hostname):
     from .naming import name_context
-    from .services import Facet
+    from .service_facets import Facet
 
     context = name_context(hostname)
     return {

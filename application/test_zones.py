@@ -880,7 +880,7 @@ class ServiceFacetOfferTests(TestCase):
     """
 
     def test_a_missing_facet_is_offered_by_name_not_by_identifier(self):
-        from .services import Facet
+        from .service_facets import Facet
 
         offers = dict(Facet(id="dns", label="DNS").declarable)
 
@@ -898,7 +898,7 @@ class ServiceFacetOfferTests(TestCase):
         covered is never invited to grow a certificate of its own.
         """
 
-        from .services import Facet
+        from .service_facets import Facet
 
         offers = dict(Facet(id="certificate", label="Certificate").declarable)
 
@@ -911,7 +911,7 @@ class ServiceFacetOfferTests(TestCase):
         `.home.arpa` name it is the option that works.
         """
 
-        from .services import Facet
+        from .service_facets import Facet
 
         offers = dict(Facet(id="certificate", label="Certificate").declarable)
 
@@ -1934,7 +1934,7 @@ class LabelAndDensityTests(TestCase):
         """"Add tLS certificate": the first letter lowered without looking at
         the word it belonged to."""
 
-        from .services import Facet
+        from .service_facets import Facet
 
         offers = dict(Facet(id="certificate", label="Certificate").declarable)
         dns = dict(Facet(id="dns", label="DNS").declarable)

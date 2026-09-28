@@ -36,7 +36,7 @@ from application.resource_context import (
     readout_rows,
     resource_context,
 )
-from application.services import whereabouts
+from application.whereabouts import whereabouts
 from application.security import safe_next, web_principal
 from application.pages import PageAction, PageMixin, page_context
 from application.resource_capabilities import (

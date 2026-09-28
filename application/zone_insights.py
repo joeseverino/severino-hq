@@ -76,7 +76,7 @@ def services(zone) -> ZoneInsight | None:
     them (a Pages project) and how many sit behind an overlay (Access).
     """
 
-    from .services import services_by_zone
+    from .service_list import services_by_zone
     from .zones import zone_names
 
     members = services_by_zone(zone_names()).get(zone.zone, ())
