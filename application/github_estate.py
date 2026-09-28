@@ -15,12 +15,14 @@ from typing import Any, Mapping
 
 from django.utils import timezone
 
+from control_plane.observations.github import REPOSITORY_KIND
+
+from .containers import SERIOUS
 from .expiry import days_until
 from .github_public import github_repository
 from .projection import read_once
 from .ui import Insight, counted, moment
 
-REPOSITORY_KIND = "github.repository"
 # An admission artifact that lapses stops the composition admitting its
 # extension, and nothing else says so until a deploy fails.
 ARTIFACT_ATTENTION_DAYS = 14
@@ -28,7 +30,6 @@ ARTIFACT_SERIOUS_DAYS = 3
 # A deploy held for approval is fine for a while; hours later it is a
 # scheduled run about to be cancelled.
 WAITING_SERIOUS_AFTER = timedelta(hours=1)
-_SERIOUS_LEVELS = ("critical", "high")
 
 
 @dataclass(frozen=True)
@@ -64,7 +65,7 @@ class Repository:
         return sum(
             counts.get(level, 0)
             for counts in (self.record.get("alerts") or {}).values()
-            for level in _SERIOUS_LEVELS
+            for level in SERIOUS
         )
 
     @property

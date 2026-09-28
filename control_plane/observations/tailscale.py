@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from .contract import ObservationRecord, ObservationSpec, ReadingPart
 
+# The routes that make a device an exit node: everything, in both families.
+EXIT_ROUTES = frozenset({"0.0.0.0/0", "::/0"})
+
 
 def _dns_title(record) -> str:
     """The resolvers and what the tailnet does with them."""

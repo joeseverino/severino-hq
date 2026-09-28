@@ -18,7 +18,7 @@ from control_plane.provider_adapters.contracts import (
     ProviderError,
     ProviderResult,
 )
-from control_plane.observations.tailscale import SETTING_PARTS as TAILNET_SETTING_PARTS
+from control_plane.observations.tailscale import EXIT_ROUTES, SETTING_PARTS as TAILNET_SETTING_PARTS
 from control_plane.provider_adapters.parts import refuse_part
 from .handlers import acts, lists, probes, reads
 from control_plane.provider_adapters.tailscale import TAILNET_KIND
@@ -489,7 +489,6 @@ def _tailnet_nodes() -> list[dict[str, Any]]:
 
 # An exit node is advertised as the two default routes rather than as a flag,
 # so "does this offer to be an exit node" is a question about its route list.
-_EXIT_ROUTES = frozenset({"0.0.0.0/0", "::/0"})
 
 
 def _tailnet_identities(token: str) -> dict[str, dict[str, Any]]:
@@ -530,8 +529,8 @@ def _identities_from(devices: list[dict[str, Any]]) -> dict[str, dict[str, Any]]
             # Stated separately from the route lists because it is the question
             # an operator actually asks, and because the two default routes
             # being present is not obvious as an answer to it.
-            "offers_exit_node": bool(_EXIT_ROUTES & set(advertised)),
-            "exit_node_approved": bool(_EXIT_ROUTES & set(enabled)),
+            "offers_exit_node": bool(EXIT_ROUTES & set(advertised)),
+            "exit_node_approved": bool(EXIT_ROUTES & set(enabled)),
             # Facts with no symptom until they matter. A device the tailnet has
             # not authorised is on no network; one carrying a lock error cannot
             # be reached by anything under tailnet lock; and a client left

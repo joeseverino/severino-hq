@@ -10,9 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from control_plane.observations.tailscale import EXIT_ROUTES
+
 from .locate import host_of
 
-EXIT_ROUTES = frozenset({"0.0.0.0/0", "::/0"})
 
 
 @dataclass(frozen=True)

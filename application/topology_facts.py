@@ -6,6 +6,7 @@ from dataclasses import replace
 from typing import Any
 
 from control_plane.names import normalized_hostname
+from control_plane.observations.tailscale import EXIT_ROUTES
 from control_plane.provider_adapters.tailscale import TAILNET_KIND
 from control_plane.providers import PROVIDERS
 
@@ -61,7 +62,6 @@ def _perimeter_facts() -> dict[str, tuple[tuple[str, str], ...]]:
     return found
 
 
-_EXIT_ROUTES = frozenset({"0.0.0.0/0", "::/0"})
 
 
 def _tailnet_facts() -> tuple[tuple[str, str], ...]:
@@ -83,7 +83,7 @@ def _tailnet_facts() -> tuple[tuple[str, str], ...]:
             routes.update(
                 str(route)
                 for route in record.get("enabled_routes") or ()
-                if str(route) not in _EXIT_ROUTES
+                if str(route) not in EXIT_ROUTES
             )
     if not addresses:
         return ()
