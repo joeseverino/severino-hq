@@ -73,7 +73,7 @@ print(json.dumps({
 
 
 def _host_glance(key: str, connection_ref: str) -> dict[str, Any]:
-    reading = json.loads(commands._ssh(connection_ref, "python3 -", _HOST_GLANCE_SCRIPT))
+    reading = json.loads(commands.run_ssh(connection_ref, "python3 -", _HOST_GLANCE_SCRIPT))
     memory_used = int(reading.get("memory_used") or 0)
     memory_total = int(reading.get("memory_total") or 0)
     storage_used = int(reading.get("storage_used") or 0)
@@ -115,9 +115,9 @@ def _portainer_glance() -> dict[str, Any]:
         raise ProviderError("No Portainer connection was supplied.")
     machines = []
     for connection_ref in refs:
-        base = portainer._portainer_url(connection_ref)
-        headers = portainer._portainer_headers(connection_ref)
-        for environment in portainer._load_portainer_environments(connection_ref):
+        base = portainer.portainer_url(connection_ref)
+        headers = portainer.portainer_headers(connection_ref)
+        for environment in portainer.load_portainer_environments(connection_ref):
             if not environment["reachable"]:
                 continue
             cpu_percent = 0.0
@@ -125,10 +125,10 @@ def _portainer_glance() -> dict[str, Any]:
             storage_used = 0
             running = 0
             prefix = f"{base}/endpoints/{environment['id']}/docker"
-            info = provider_http._request(f"{prefix}/info", headers=headers) or {}
-            disk = provider_http._request(f"{prefix}/system/df", headers=headers) or {}
+            info = provider_http.request_json(f"{prefix}/info", headers=headers) or {}
+            disk = provider_http.request_json(f"{prefix}/system/df", headers=headers) or {}
             containers = (
-                provider_http._request(f"{prefix}/containers/json?all=false", headers=headers) or []
+                provider_http.request_json(f"{prefix}/containers/json?all=false", headers=headers) or []
             )
             cores = int(info.get("NCPU") or 0)
             memory_total = int(info.get("MemTotal") or 0)
@@ -142,7 +142,7 @@ def _portainer_glance() -> dict[str, Any]:
             )
             for container in containers:
                 stats = (
-                    provider_http._request(
+                    provider_http.request_json(
                         f"{prefix}/containers/{container['Id']}/stats?stream=false&one-shot=true",
                         headers=headers,
                     )
@@ -204,7 +204,7 @@ def _nws_glance(point: str) -> dict[str, Any]:
         "User-Agent": "Severino-HQ/1.0 (https://github.com/joeseverino/severino-hq)",
     }
     point_data = (
-        provider_http._request(
+        provider_http.request_json(
             f"https://api.weather.gov/points/{latitude:.4f},{longitude:.4f}",
             headers=headers,
         )
@@ -212,12 +212,12 @@ def _nws_glance(point: str) -> dict[str, Any]:
     )
     properties = point_data.get("properties") or {}
     hourly = (
-        provider_http._request(str(properties.get("forecastHourly") or ""), headers=headers) or {}
+        provider_http.request_json(str(properties.get("forecastHourly") or ""), headers=headers) or {}
     )
     periods = (hourly.get("properties") or {}).get("periods") or []
     current = periods[0] if periods else {}
     alerts = (
-        provider_http._request(
+        provider_http.request_json(
             f"https://api.weather.gov/alerts/active?point={latitude:.4f},{longitude:.4f}",
             headers=headers,
         )

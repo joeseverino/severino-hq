@@ -33,11 +33,11 @@ from . import cloudflare, commands, connection_env, provider_http, provider_runt
 
 
 def _npm_url(connection_ref: str = "") -> str:
-    return npm.url(provider_runtime._RUNTIME, connection_ref)
+    return npm.url(provider_runtime.RUNTIME, connection_ref)
 
 
 def _npm_token(base_url: str, connection_ref: str = "") -> str:
-    return npm.token(provider_runtime._RUNTIME, base_url, connection_ref)
+    return npm.token(provider_runtime.RUNTIME, base_url, connection_ref)
 
 
 # The port every TLS reading is taken on. Named because what was tried is
@@ -49,7 +49,7 @@ def _observe_tls_domain(
     domain: str, *, connect_host: str | None = None
 ) -> dict[str, Any]:
     try:
-        tls_context = provider_http._tls_context()
+        tls_context = provider_http.tls_context()
         with socket.create_connection(
             (connect_host or domain, TLS_PORT), timeout=15
         ) as raw_socket:
@@ -96,13 +96,13 @@ def _consumer_tls_endpoint(consumer: dict[str, Any]) -> str | None:
     kind = consumer["kind"]
     if kind == "npm":
         hostname = urllib.parse.urlsplit(
-            provider_http._required(connection_env.connection_prefix("npm"), "URL")
+            provider_http.required(connection_env.connection_prefix("npm"), "URL")
         ).hostname
         if not hostname:
             raise ProviderError("NPM origin verification endpoint is missing.")
         return hostname
     if kind in {"caddy", "cpanel"}:
-        transport = connection_env._transport(consumer["connection_ref"])
+        transport = connection_env.ssh_target(consumer["connection_ref"])
         hostname = transport.get("host")
         if not hostname:
             raise ProviderError(f"{kind} origin verification endpoint is missing.")
@@ -113,7 +113,7 @@ def _consumer_tls_endpoint(consumer: dict[str, Any]) -> str | None:
 def _npm_covered_hosts(certificate_domains: list[str]) -> list[dict[str, Any]]:
     base_url = _npm_url()
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
-    hosts = provider_http._request(f"{base_url}/nginx/proxy-hosts", headers=headers)
+    hosts = provider_http.request_json(f"{base_url}/nginx/proxy-hosts", headers=headers)
     names = set(certificate_domains)
     return [
         host
@@ -188,7 +188,7 @@ def _tls_conditions(
     conditions: list[dict[str, Any]] = []
     if len({item["fingerprint_sha256"] for item in observations}) > 1:
         conditions.append(
-            provider_http._condition(
+            provider_http.condition(
                 "Drifted",
                 True,
                 "ConsumerMismatch",
@@ -197,7 +197,7 @@ def _tls_conditions(
         )
     if days_remaining <= spec["renewal_window_days"]:
         conditions.append(
-            provider_http._condition(
+            provider_http.condition(
                 "Degraded",
                 True,
                 "ExpiringSoon",
@@ -206,7 +206,7 @@ def _tls_conditions(
         )
     if unverified:
         conditions.append(
-            provider_http._condition(
+            provider_http.condition(
                 "Degraded",
                 True,
                 "ConsumerUnverified",
@@ -215,7 +215,7 @@ def _tls_conditions(
         )
     if unreachable:
         conditions.append(
-            provider_http._condition(
+            provider_http.condition(
                 "Degraded",
                 True,
                 "ConsumerUnreachable",
@@ -224,7 +224,7 @@ def _tls_conditions(
             )
         )
     return conditions or [
-        provider_http._condition("Ready", True, "Verified", "All TLS consumers are current.")
+        provider_http.condition("Ready", True, "Verified", "All TLS consumers are current.")
     ]
 
 
@@ -320,18 +320,18 @@ def _validate_certificate(
         key_path = Path(directory) / "privkey.pem"
         cert_path.write_bytes(fullchain)
         key_path.write_bytes(private_key)
-        cert_pub = commands._run(
+        cert_pub = commands.run_command(
             ["openssl", "x509", "-in", str(cert_path), "-pubkey", "-noout"],
             step="reading the certificate",
         )
-        key_pub = commands._run(
+        key_pub = commands.run_command(
             ["openssl", "pkey", "-in", str(key_path), "-pubout"],
             step="reading the private key",
         )
         if cert_pub != key_pub:
             raise ProviderError("Certificate and private key do not match.")
         fingerprint = (
-            commands._run(
+            commands.run_command(
                 [
                     "openssl",
                     "x509",
@@ -349,7 +349,7 @@ def _validate_certificate(
             .replace(":", "")
             .lower()
         )
-        san_output = commands._run(
+        san_output = commands.run_command(
             [
                 "openssl",
                 "x509",
@@ -406,7 +406,7 @@ def _foreign_acme_entry(acme_dir: Path) -> str:
 
 
 def _issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
-    acme_dir = Path(provider_http._required("HQ", "ACME_DIR"))
+    acme_dir = Path(provider_http.required("HQ", "ACME_DIR"))
     if not acme_dir.is_dir() or not os.access(acme_dir, os.W_OK):
         raise ProviderError("ACME state directory is not writable.")
     foreign = _foreign_acme_entry(acme_dir)
@@ -415,9 +415,9 @@ def _issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
             f"ACME state is not wholly the controller's: {foreign}. Certbot "
             "would be issued a certificate it cannot save, so nothing was requested."
         )
-    commands._run(["certbot", "--version"], step="certbot preflight")
+    commands.run_command(["certbot", "--version"], step="certbot preflight")
     credentials = acme_dir / "cloudflare.ini"
-    credentials.write_text("dns_cloudflare_api_token = " + cloudflare._cloudflare_token() + "\n")
+    credentials.write_text("dns_cloudflare_api_token = " + cloudflare.cloudflare_token() + "\n")
     credentials.chmod(0o600)
     command = [
         "certbot",
@@ -425,9 +425,9 @@ def _issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
         "--non-interactive",
         "--agree-tos",
         "--email",
-        provider_http._required("ACME", "EMAIL"),
+        provider_http.required("ACME", "EMAIL"),
         "--server",
-        provider_http._required("ACME", "DIRECTORY_URL"),
+        provider_http.required("ACME", "DIRECTORY_URL"),
         "--dns-cloudflare",
         "--dns-cloudflare-credentials",
         str(credentials),
@@ -446,7 +446,7 @@ def _issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
     for domain in spec["domains"]:
         command.extend(("-d", domain))
     try:
-        commands._run(command, step="certbot certonly")
+        commands.run_command(command, step="certbot certonly")
     finally:
         credentials.unlink(missing_ok=True)
     lineage = acme_dir / "config" / "live" / spec["certificate_name"]
@@ -464,7 +464,7 @@ def _resumable_lineage(
 ) -> tuple[bytes, bytes] | None:
     """Reuse a newer failed-transaction artifact instead of issuing again."""
     lineage = (
-        Path(provider_http._required("HQ", "ACME_DIR")) / "config" / "live" / spec["certificate_name"]
+        Path(provider_http.required("HQ", "ACME_DIR")) / "config" / "live" / spec["certificate_name"]
     )
     try:
         fullchain = lineage.joinpath("fullchain.pem").read_bytes()
@@ -478,7 +478,7 @@ def _resumable_lineage(
         cert_path = Path(directory) / "fullchain.pem"
         cert_path.write_bytes(fullchain)
         raw_expiry = (
-            commands._run(
+            commands.run_command(
                 ["openssl", "x509", "-in", str(cert_path), "-noout", "-enddate"],
                 step="openssl read lineage expiry",
             )
@@ -570,7 +570,7 @@ def _npm_managed_certificate(
     base_url = _npm_url()
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
     nice_name = _npm_certificate_name(consumer)
-    certificates = provider_http._request(f"{base_url}/nginx/certificates", headers=headers)
+    certificates = provider_http.request_json(f"{base_url}/nginx/certificates", headers=headers)
     matches = [
         item
         for item in certificates
@@ -585,7 +585,7 @@ def _npm_managed_certificate(
                 "The HQ-managed NPM certificate is not a custom certificate."
             )
     else:
-        certificate = provider_http._request(
+        certificate = provider_http.request_json(
             f"{base_url}/nginx/certificates",
             method="POST",
             headers=headers,
@@ -607,17 +607,17 @@ def _npm_managed_certificate(
             chain_body.lstrip(),
         ),
     }
-    provider_http._multipart_request(
+    provider_http.multipart_request(
         f"{base_url}/nginx/certificates/validate",
         headers=headers,
         files=files,
     )
-    provider_http._multipart_request(
+    provider_http.multipart_request(
         f"{base_url}/nginx/certificates/{certificate_id}/upload",
         headers=headers,
         files=files,
     )
-    hosts = provider_http._request(f"{base_url}/nginx/proxy-hosts", headers=headers)
+    hosts = provider_http.request_json(f"{base_url}/nginx/proxy-hosts", headers=headers)
     verify_domains = set(consumer["verify_domains"])
     certificate_names = set(certificate_domains)
     matching_hosts = []
@@ -645,7 +645,7 @@ def _npm_managed_certificate(
     for host in matching_hosts:
         # Uploading replaces NPM's certificate files but does not reload the
         # nginx workers. Re-applying every referencing host activates them.
-        provider_http._request(
+        provider_http.request_json(
             f"{base_url}/nginx/proxy-hosts/{host['id']}",
             method="PUT",
             headers=headers,
@@ -670,7 +670,7 @@ def _cpanel_sites(consumer: dict[str, Any]) -> list[str]:
     """
 
     try:
-        answer = json.loads(commands._ssh(consumer["connection_ref"], "sites") or b"{}")
+        answer = json.loads(commands.run_ssh(consumer["connection_ref"], "sites") or b"{}")
     except ValueError as exc:
         raise ProviderError(
             f"{consumer['name']} returned a site list HQ could not read."
@@ -758,7 +758,7 @@ def _deploy_certificate(
                     consumer["name"]
                 ] = certificate_id
             elif consumer["kind"] == "caddy":
-                commands._ssh(consumer["connection_ref"], "deploy", bundle)
+                commands.run_ssh(consumer["connection_ref"], "deploy", bundle)
             elif consumer["kind"] == "cpanel":
                 # One login for every site, and the account reports each one.
                 sites = plan[consumer["name"]]
@@ -771,7 +771,7 @@ def _deploy_certificate(
                     },
                     separators=(",", ":"),
                 ).encode()
-                commands._ssh(consumer["connection_ref"], "deploy", payload)
+                commands.run_ssh(consumer["connection_ref"], "deploy", payload)
                 deployment_status.setdefault("cpanel_sites", {})[
                     consumer["name"]
                 ] = sites
@@ -911,7 +911,7 @@ def _deploy_tls_transaction(
         changed=True,
         status=status,
         conditions=[
-            provider_http._condition(
+            provider_http.condition(
                 "Ready", True, reason, "All TLS consumers serve the certificate."
             )
         ],
@@ -921,7 +921,7 @@ def _deploy_tls_transaction(
 
 def _lineage(spec: dict[str, Any]) -> tuple[bytes, bytes]:
     lineage = (
-        Path(provider_http._required("HQ", "ACME_DIR")) / "config" / "live" / spec["certificate_name"]
+        Path(provider_http.required("HQ", "ACME_DIR")) / "config" / "live" / spec["certificate_name"]
     )
     try:
         return lineage.joinpath("fullchain.pem").read_bytes(), lineage.joinpath(
@@ -948,7 +948,7 @@ def apply_tls_reconcile(
                 "artifact_source": "existing_lineage",
             },
             conditions=[
-                provider_http._condition("Ready", True, "Verified", "All TLS consumers match.")
+                provider_http.condition("Ready", True, "Verified", "All TLS consumers match.")
             ],
             message="Certificate consumers already match the managed lineage.",
         )
@@ -957,7 +957,7 @@ def apply_tls_reconcile(
         raise ProviderError("Certificate reconciliation requires a rollback source.")
     plan = _plan_deployment(spec)
     previous_fullchain, previous_key = _read_bundle(
-        commands._ssh(caddy["connection_ref"], "snapshot")
+        commands.run_ssh(caddy["connection_ref"], "snapshot")
     )
     return _deploy_tls_transaction(
         spec,
@@ -983,7 +983,7 @@ def renew_tls(
     # should cost nothing.
     plan = _plan_deployment(spec)
     previous_fullchain, previous_key = _read_bundle(
-        commands._ssh(caddy["connection_ref"], "snapshot")
+        commands.run_ssh(caddy["connection_ref"], "snapshot")
     )
     previous_fingerprint = _validate_certificate(
         previous_fullchain, previous_key, spec["domains"]
@@ -1022,7 +1022,7 @@ def _lineage_material(spec: dict[str, Any]) -> Callable[[], tuple[bytes, bytes]]
 
     def read() -> tuple[bytes, bytes]:
         lineage = (
-            Path(provider_http._required("HQ", "ACME_DIR"))
+            Path(provider_http.required("HQ", "ACME_DIR"))
             / "config"
             / "live"
             / spec["certificate_name"]
@@ -1076,7 +1076,7 @@ def _publish_tls_facts(
         try:
             published.append(
                 onepassword.publish(
-                    provider_runtime._RUNTIME, publication, desired, _lineage_material(spec)
+                    provider_runtime.RUNTIME, publication, desired, _lineage_material(spec)
                 )
             )
         except (ProviderError, OSError, ValueError) as exc:
@@ -1163,7 +1163,7 @@ def reconcile_uploaded_certificate(
             changed=True,
             status={"certificate_name": spec["certificate_name"], "domains": domains},
             conditions=[
-                provider_http._condition("Ready", True, "Planned", "Would install the certificate.")
+                provider_http.condition("Ready", True, "Planned", "Would install the certificate.")
             ],
             message="Would install the stored certificate.",
         )
@@ -1195,7 +1195,7 @@ def reconcile_uploaded_certificate(
             **observed,
         },
         conditions=[
-            provider_http._condition("Ready", True, "Installed", "Stored certificate installed.")
+            provider_http.condition("Ready", True, "Installed", "Stored certificate installed.")
         ],
         message="Stored certificate installed.",
     )
@@ -1231,7 +1231,7 @@ def delete_uploaded_certificate(
 
     base_url = _npm_url()
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
-    certificates = provider_http._request(f"{base_url}/nginx/certificates", headers=headers)
+    certificates = provider_http.request_json(f"{base_url}/nginx/certificates", headers=headers)
     installed = set(_npm_certificate_ids(spec, observed).values())
     matches = [item for item in certificates if item.get("id") in installed]
     if not matches:
@@ -1253,7 +1253,7 @@ def delete_uploaded_certificate(
             changed=False,
             status={"removed": True},
             conditions=[
-                provider_http._condition("Ready", True, "Absent", "No such certificate in NPM.")
+                provider_http.condition("Ready", True, "Absent", "No such certificate in NPM.")
             ],
             message="Certificate was already absent from NPM.",
         )
@@ -1261,7 +1261,7 @@ def delete_uploaded_certificate(
     # A certificate still bound to a proxy host cannot be deleted without taking
     # TLS down on it. Naming the hosts is the actionable part: the operator has
     # to point them at something else first.
-    hosts = provider_http._request(f"{base_url}/nginx/proxy-hosts", headers=headers)
+    hosts = provider_http.request_json(f"{base_url}/nginx/proxy-hosts", headers=headers)
     identifiers = {item["id"] for item in matches}
     still_bound = sorted(
         name
@@ -1276,7 +1276,7 @@ def delete_uploaded_certificate(
         )
     if apply:
         for item in matches:
-            provider_http._request(
+            provider_http.request_json(
                 f"{base_url}/nginx/certificates/{item['id']}",
                 method="DELETE",
                 headers=headers,
@@ -1285,7 +1285,7 @@ def delete_uploaded_certificate(
         changed=True,
         status={"removed": True},
         conditions=[
-            provider_http._condition("Ready", True, "Removed", "Certificate removed from NPM.")
+            provider_http.condition("Ready", True, "Removed", "Certificate removed from NPM.")
         ],
         message="Certificate removed from NPM.",
     )

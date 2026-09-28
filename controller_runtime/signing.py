@@ -16,7 +16,7 @@ from control_plane.provider_adapters.contracts import ProviderError
 
 def signing_key(connection_ref: str, *, public: bool = False) -> Path:
     from .connection_env import connection_prefixes
-    from .provider_http import _required
+    from .provider_http import required
 
     if not connection_ref or "/" in connection_ref or connection_ref.startswith("."):
         raise ProviderError("Invalid signing connection.")
@@ -24,7 +24,7 @@ def signing_key(connection_ref: str, *, public: bool = False) -> Path:
         raise ProviderError(
             f"No connection named {connection_ref!r} was supplied to the controller."
         )
-    ssh_dir = Path(_required("HQ_CONTROLLER", "SSH_DIR"))
+    ssh_dir = Path(required("HQ_CONTROLLER", "SSH_DIR"))
     return ssh_dir / f"{connection_ref}.key{'.pub' if public else ''}"
 
 
@@ -41,9 +41,9 @@ class SigningRuntime:
         }
 
     def sign(self, connection_ref: str, data: bytes) -> bytes:
-        from .commands import _run
+        from .commands import run_command
 
-        return _run(
+        return run_command(
             ["openssl", "dgst", "-sha256", "-sign", str(signing_key(connection_ref))],
             input_bytes=data,
             step=f"sign for {connection_ref}",

@@ -39,7 +39,7 @@ class SigningTests(SimpleTestCase):
         self.addCleanup(patcher.stop)
 
     def test_openssl_signs_and_the_signature_verifies(self):
-        signature = provider_runtime._RUNTIME.sign("github", b"header.claims")
+        signature = provider_runtime.RUNTIME.sign("github", b"header.claims")
 
         self.key.public_key().verify(
             signature, b"header.claims", padding.PKCS1v15(), hashes.SHA256()
@@ -48,7 +48,7 @@ class SigningTests(SimpleTestCase):
     def test_a_connection_the_controller_was_not_given_has_no_key(self):
         for name in ("elsewhere", "../github", ".hidden", ""):
             with self.subTest(name=name), self.assertRaises(ProviderError):
-                provider_runtime._RUNTIME.sign(name, b"data")
+                provider_runtime.RUNTIME.sign(name, b"data")
 
     def test_the_key_never_enters_this_process(self):
         calls = []
@@ -61,7 +61,7 @@ class SigningTests(SimpleTestCase):
         with mock.patch.object(subprocess, "run", side_effect=watch), mock.patch(
             "builtins.open", side_effect=AssertionError("the key was opened in process")
         ):
-            provider_runtime._RUNTIME.sign("github", b"data")
+            provider_runtime.RUNTIME.sign("github", b"data")
 
         self.assertEqual(calls[0][:4], ["openssl", "dgst", "-sha256", "-sign"])
 
@@ -75,7 +75,7 @@ class CompositionTests(SimpleTestCase):
                 "HQ_CONTROLLER_IMAGE": "ghcr.io/example/host/composition@sha256:" + "a" * 64,
             },
         ), mock.patch.dict(os.environ, {"SEVERINO_HQ_PLUGIN_LOCK": ""}):
-            found = provider_runtime._RUNTIME.composition()
+            found = provider_runtime.RUNTIME.composition()
 
         self.assertEqual(found["repository"], "example/host")
         self.assertTrue(found["image"].startswith("ghcr.io/example/host/"))

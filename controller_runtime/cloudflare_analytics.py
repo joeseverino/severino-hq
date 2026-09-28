@@ -51,17 +51,17 @@ def _cloudflare_graphql(
     """
 
     prefix = connection_env.connection_prefix("cloudflare_api", connection_ref)
-    cloudflare._cloudflare_breaker(prefix)
-    base = cloudflare._cloudflare_url(connection_ref, provider="cloudflare_api")
+    cloudflare.cloudflare_breaker(prefix)
+    base = cloudflare.cloudflare_url(connection_ref, provider="cloudflare_api")
     body = json.dumps({"query": query, "variables": variables}).encode("utf-8")
     try:
-        with provider_http._open(
+        with provider_http.open_url(
             f"{base}/graphql",
             data=body,
             method="POST",
             headers={
                 "Authorization": (
-                    f"Bearer {cloudflare._cloudflare_token(connection_ref, provider='cloudflare_api')}"
+                    f"Bearer {cloudflare.cloudflare_token(connection_ref, provider='cloudflare_api')}"
                 ),
                 "Content-Type": "application/json",
             },
@@ -70,13 +70,13 @@ def _cloudflare_graphql(
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         with exc:
-            detail = cloudflare._cloudflare_errors(exc.read())
-        raise cloudflare._cloudflare_refused(
+            detail = cloudflare.cloudflare_errors(exc.read())
+        raise cloudflare.cloudflare_refused(
             prefix,
             f"Cloudflare analytics refused the query: HTTP {exc.code}.",
             detail,
             status=exc.code,
-            verified=lambda: cloudflare._cloudflare_verified("cloudflare_api", connection_ref),
+            verified=lambda: cloudflare.cloudflare_verified("cloudflare_api", connection_ref),
         ) from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise ProviderError(
@@ -88,16 +88,16 @@ def _cloudflare_graphql(
     if payload.get("errors"):
         first = payload["errors"][0]
         message = first.get("message", "") if isinstance(first, dict) else ""
-        raise cloudflare._cloudflare_refused(
+        raise cloudflare.cloudflare_refused(
             prefix, f"Cloudflare analytics rejected the query: {message}", message
         )
     return payload.get("data") or {}
 
 
-def _analytics_account(connection_ref: str = "") -> str:
+def analytics_account(connection_ref: str = "") -> str:
     """The one account this credential reads, discovered rather than configured."""
 
-    accounts = cloudflare._cloudflare_api_list("/accounts", connection_ref, per_page=50)
+    accounts = cloudflare.cloudflare_api_list("/accounts", connection_ref, per_page=50)
     tags = [account["id"] for account in accounts if account.get("id")]
     if len(tags) != 1:
         raise ProviderError(
@@ -113,7 +113,7 @@ def _analytics_sites(account: str, connection_ref: str = "") -> list[dict[str, s
     hostname measures nothing, and Cloudflare keeps those around indefinitely.
     """
 
-    result = cloudflare._cloudflare_api_list(
+    result = cloudflare.cloudflare_api_list(
         f"/accounts/{account}/rum/site_info/list", connection_ref
     )
     sites = []
@@ -283,7 +283,7 @@ def analytics_sites() -> list[dict[str, str]]:
 
     found = []
     for connection_ref in connection_env.provider_connection_refs("cloudflare_api"):
-        account = _analytics_account(connection_ref)
+        account = analytics_account(connection_ref)
         found.extend(
             {
                 **site,

@@ -194,18 +194,18 @@ def ssh_connection_refs() -> tuple[str, ...]:
     )
 
 
-def _transport(connection_ref: str) -> dict[str, Any]:
+def ssh_target(connection_ref: str) -> dict[str, Any]:
     """The endpoint for an SSH connection, from the rendered environment."""
 
     prefix = connection_prefixes().get(connection_ref)
     if not prefix or not os.environ.get(f"{prefix}_HOST"):
         raise ProviderError(f"Unknown certificate transport: {connection_ref}.")
-    port = provider_http._required(prefix, "PORT")
+    port = provider_http.required(prefix, "PORT")
     if not port.isdigit() or not 1 <= int(port) <= 65535:
         raise ProviderError(f"The port configured for {connection_ref} is not a port number.")
     return {
-        "host": provider_http._required(prefix, "HOST"),
+        "host": provider_http.required(prefix, "HOST"),
         "port": int(port),
-        "user": provider_http._required(prefix, "USER"),
-        "host_key": provider_http._required(prefix, "HOST_KEY"),
+        "user": provider_http.required(prefix, "USER"),
+        "host_key": provider_http.required(prefix, "HOST_KEY"),
     }
