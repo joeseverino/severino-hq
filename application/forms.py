@@ -49,3 +49,26 @@ class MultipleFileField(forms.FileField):
             clean_one(None, initial)
             return []
         return [clean_one(item, initial) for item in uploads]
+
+
+class LinesField(forms.Field):
+    """A list edited as one item per line."""
+
+    def prepare_value(self, value):
+        if isinstance(value, (list, tuple)):
+            return "\n".join(str(item) for item in value)
+        return value
+
+
+class BusinessUseMixin:
+    """The share of a purchase used for the business, as a whole percentage.
+
+    The web forms are still the only place this range is enforced; the save
+    services accept any integer and the model clamps it.
+    """
+
+    def clean_business_use_percentage(self):
+        v = int(self.cleaned_data.get("business_use_percentage") or 0)
+        if not 0 <= v <= 100:
+            raise forms.ValidationError("Must be between 0 and 100.")
+        return v

@@ -38,8 +38,9 @@ ObservationSpec(
 
 and read by one function registered one of two ways, and no other
 (`controller_runtime/test_reader_registration.py` holds it): a core reader in
-one of the controller's integration modules (`controller_runtime/cloudflare.py`,
-`tailscale.py`, `host_readings.py`), registered beside its definition:
+one of the controller's integration modules
+(`controller_runtime/cloudflare_account.py`, `tailscale.py`,
+`host_readings.py`), registered beside its definition:
 
 ```python
 @reads("cloudflare.pages_project")
@@ -266,7 +267,7 @@ the topology's own node and edge code, once per projection, without what only
 the topology page needs (health, actions, traffic).
 `relationships.relationships_for(node_id)` returns one node's edges in both
 directions, grouped by the phrase each says from that node: a service "Runs on"
-a machine, the machine "Serves" it, from one edge. `topology.RELATIONS` states
+a machine, the machine "Serves" it, from one edge. `topology_model.RELATIONS` states
 each structural edge kind's phrase, inverse and rank once; a reading edge takes
 its phrase from the reading's `relation` and its rank from its facet
 (`READING_RANKS`), so what serves a name comes first and an overlay with no
@@ -546,7 +547,7 @@ what both upserts require.
 ### Precedence of derived fields
 
 A derived value wins over an imported one. `Project.public_url` is the case
-today: it is how `application.services.projects_by_hostname` ties a project to
+today: it is how `application.published_sites.projects_by_hostname` ties a project to
 a service and how `content.content_sync.index_project` finds the site that
 serves the content index, and a Pages project can supply it.
 

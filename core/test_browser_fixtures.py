@@ -300,11 +300,11 @@ def _dashboard(populated):
     highlights = _highlights() if populated else {"highlights": [], "compact": []}
     with ExitStack() as stack:
         stack.enter_context(
-            mock.patch("core.views.dashboard_highlights", return_value=highlights)
+            mock.patch("core.dashboard_views.dashboard_highlights", return_value=highlights)
         )
         stack.enter_context(
             mock.patch(
-                "core.views.outward_links",
+                "core.dashboard_views.outward_links",
                 return_value=(_LINKS if populated else [], None),
             )
         )

@@ -28,10 +28,11 @@ from application.pages import PageAction, page_context
 from application.entity_links import entity_link
 from application.relationships import relationships_for
 from application.resource_capabilities import public_dns_enabled, resource_capabilities
-from application.inventory import AdoptCommand, adopt, inventory_state
+from application.inventory import inventory_state
+from application.adoption import AdoptCommand, adopt
 from application.security import web_principal, safe_next
 
-from .views import _readable_error
+from .resource_form_views import _readable_error
 from application.pins import DOMAIN, pinned, toggle
 from application.mail_policy import (
     DMARC_TAGS,

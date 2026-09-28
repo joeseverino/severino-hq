@@ -14,7 +14,7 @@ from django.utils.html import escape
 from django.utils import timezone
 
 from control_plane.models import ManagedResource, ProviderConnection
-from control_plane.views import TopologyView
+from control_plane.topology_views import TopologyView
 
 from .action_links import topology_investigation_links, topology_url
 from .command_center import command_center
@@ -26,17 +26,21 @@ from .connections import (
 )
 from .security import Capability, Principal
 from .topology import (
+    derive_topology,
+    serialize_topology,
+    topology as serialized_topology,
+)
+from .topology_lenses import (
     MAX_TRACE_DEPTH,
+    apply_lens,
+    apply_trace,
+    lens_for,
+    topology_lenses,
+)
+from .topology_model import (
     Topology,
     TopologyEdge,
     TopologyNode,
-    apply_lens,
-    apply_trace,
-    derive_topology,
-    lens_for,
-    serialize_topology,
-    topology as serialized_topology,
-    topology_lenses,
 )
 
 

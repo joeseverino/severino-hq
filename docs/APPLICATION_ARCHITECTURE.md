@@ -108,6 +108,13 @@ operation or the reader may not run it. A finding carries it as its
 specific steps of its own; the API returns them as `operator_steps` beside the
 remedies.
 
+A rule is declared beside the detector that decides it: each module that raises
+findings (`perimeter_findings`, `controller_findings`, `docker_estate`,
+`dns_findings` and the rest) exports its own `RULES`, built from the vocabulary
+in `application/finding_model.py`. `application.findings.RULES` is derived from
+the closed `RULE_MODULES` tuple, and that module keeps only the pipeline: the
+estate, derivation, suppression, resolution and serialization.
+
 The flattened queue preserves each insight's `action` and JSON-safe `workflow`
 (or `null`) alongside its existing label, evidence, severity, count, and URL.
 The dashboard and full queue share the same row partial and resolution renderer;
@@ -641,9 +648,12 @@ Caddy proves the same seam for an SSH-backed provider whose one resource
 resolves into a shared file.
 
 The kinds the controller core still implements follow the same rule from the
-other side. Each integration is one module in `controller_runtime/` (`tls`,
-`cloudflare`, `portainer`, `tailscale`, `host_readings`), and each handler
-registers itself beside its definition: `@lists(kind)` for inventory,
+other side. Each integration lives in `controller_runtime/` (`tls`,
+`cloudflare`, `portainer`, `tailscale`, `host_readings`), split further by
+concern where it grew (`tls_issuance`, `tls_verification`, `npm_certificates`,
+`tailnet_api`, `tailnet_policy`, `cloudflare_api`, `cloudflare_account`). A sibling is called as `module.name`, so a
+patch on the owner reaches every caller. Each handler registers itself beside
+its definition: `@lists(kind)` for inventory,
 `@acts(kind, action)` for an action, `@probes(provider)` for a connection probe
 and `@reads(kind)` for a reading, all in `controller_runtime/handlers.py`. An
 admitted adapter's handlers are registered into the same tables. The dispatch

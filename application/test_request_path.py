@@ -15,7 +15,8 @@ from django.utils import timezone
 
 from control_plane.models import ManagedResource, ProviderInventory
 
-from .paths import Hop, hq_path
+from .path_model import Hop
+from .paths import hq_path
 from .projection import projection_scope
 from .request_path import (
     CONTRADICTED,

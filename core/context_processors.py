@@ -152,7 +152,7 @@ def connection(request):
     being mislabeled as a local caller before the panel opens.
     """
 
-    from application.connection import channel_for_request
+    from application.request_channel import channel_for_request
 
     return {"CONNECTION_CHANNEL": channel_for_request(request)}
 

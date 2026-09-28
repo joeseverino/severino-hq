@@ -8,7 +8,6 @@ from typing import Any, Literal, get_args
 
 from pydantic import Field, model_validator
 
-
 from ..consoles import cloudflare_dashboard
 from ..credential_reads import REGISTRAR_READ
 from ..names import normalized_hostname
@@ -21,6 +20,7 @@ from ..provider_spec import (
     locked,
     named_page,
 )
+
 
 DNS_RECORD_KIND = "cloudflare.dns_record"
 ZONE_KIND = "cloudflare.zone"

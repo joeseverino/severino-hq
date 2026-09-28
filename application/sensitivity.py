@@ -12,6 +12,7 @@ from django.db.models import QuerySet
 
 from docs_index.models import DocumentationRecord
 
+
 SAFE_SENSITIVITIES = (
     DocumentationRecord.Sensitivity.PUBLIC,
     DocumentationRecord.Sensitivity.INTERNAL,

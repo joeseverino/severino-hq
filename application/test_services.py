@@ -801,7 +801,9 @@ class OriginNoteTests(TestCase):
         from control_plane.provider_spec import NameContext
 
         from .containers import Running
-        from .services import Facet, Origin, Service
+        from .services import Service
+        from .service_facets import Facet
+        from .whereabouts import Origin
 
         running = Running(
             name="probe", host="a-docker-host", stack="probe", image="",
@@ -824,7 +826,8 @@ class OriginNoteTests(TestCase):
         self.assertFalse(service.origin_is_news)
 
     def test_it_speaks_up_when_something_outside_answers_the_name(self):
-        from .services import Origin, Service
+        from .services import Service
+        from .whereabouts import Origin
 
         service = Service(
             hostname="example.com",
@@ -838,7 +841,9 @@ class OriginNoteTests(TestCase):
         """The one case worth interrupting for: ingress forwards somewhere HQ
         cannot describe, reconcile or reach."""
 
-        from .services import Origin, Service
+        from .services import Service
+
+        from .whereabouts import Origin
 
         service = Service(
             hostname="probe.invalid",
@@ -851,7 +856,11 @@ class OriginNoteTests(TestCase):
     def test_it_speaks_up_when_nothing_identified_what_is_running(self):
         from control_plane.provider_spec import NameContext
 
-        from .services import Facet, Origin, Service
+        from .services import Service
+
+        from .service_facets import Facet
+
+        from .whereabouts import Origin
 
         service = Service(
             hostname="probe.invalid",
@@ -871,7 +880,7 @@ class OriginWordingTests(TestCase):
     """
 
     def test_something_outside_is_named_rather_than_called_unknown(self):
-        from .services import Origin
+        from .whereabouts import Origin
 
         origin = Origin(address="example.pages.dev")
 
@@ -880,7 +889,7 @@ class OriginWordingTests(TestCase):
         self.assertNotEqual(origin.headline, "unknown host")
 
     def test_a_known_machine_reads_as_itself(self):
-        from .services import Origin
+        from .whereabouts import Origin
 
         origin = Origin(address="10.0.0.9:8000", host="a-docker-host",
                         container="probe")
@@ -892,7 +901,7 @@ class OriginWordingTests(TestCase):
         """The caveat has to survive: an ingress pointing somewhere HQ cannot
         describe is worth interrupting for."""
 
-        from .services import Origin
+        from .whereabouts import Origin
 
         origin = Origin(address="10.9.9.9:8080")
 
@@ -910,7 +919,7 @@ class ConnectedMachineTests(TestCase):
         from control_plane.models import ProviderConnection
         from django.utils import timezone
 
-        from .services import _locate
+        from .whereabouts import locate
 
         ProviderConnection.objects.create(
             connection_ref="a-shared-host", controller_id="a-controller",
@@ -918,16 +927,16 @@ class ConnectedMachineTests(TestCase):
             reachable=True, probed=True, observed_at=timezone.now(),
         )
 
-        origin = _locate("203.0.113.10:443", ())
+        origin = locate("203.0.113.10:443", ())
 
         self.assertEqual(origin.host, "a-shared-host")
         self.assertTrue(origin.known)
         self.assertEqual(origin.qualifier, "")
 
     def test_an_address_no_credential_points_at_is_still_unknown(self):
-        from .services import _locate
+        from .whereabouts import locate
 
-        origin = _locate("10.9.9.9:443", ())
+        origin = locate("10.9.9.9:443", ())
 
         self.assertEqual(origin.qualifier, "unknown host")
 
@@ -935,7 +944,7 @@ class ConnectedMachineTests(TestCase):
         from control_plane.models import ProviderConnection
         from django.utils import timezone
 
-        from .services import _locate
+        from .whereabouts import locate
 
         ProviderConnection.objects.create(
             connection_ref="a-proxy", controller_id="a-controller",
@@ -943,7 +952,7 @@ class ConnectedMachineTests(TestCase):
             reachable=True, probed=True, observed_at=timezone.now(),
         )
 
-        origin = _locate("proxy.example:81", ())
+        origin = locate("proxy.example:81", ())
 
         self.assertEqual(origin.host, "a-proxy")
 
@@ -957,9 +966,9 @@ class PortlessOriginTests(TestCase):
     """
 
     def test_a_bare_address_matches_the_machine_it_names(self):
-        from .services import _locate
+        from .whereabouts import locate
 
-        origin = _locate(
+        origin = locate(
             "10.0.0.9",
             ({"name": "a-docker-host", "addresses": ["10.0.0.9"]},),
         )
@@ -971,7 +980,7 @@ class PortlessOriginTests(TestCase):
         from control_plane.models import ProviderConnection
         from django.utils import timezone
 
-        from .services import _locate
+        from .whereabouts import locate
 
         ProviderConnection.objects.create(
             connection_ref="a-shared-host", controller_id="a-controller",
@@ -979,7 +988,7 @@ class PortlessOriginTests(TestCase):
             reachable=True, probed=True, observed_at=timezone.now(),
         )
 
-        origin = _locate("203.0.113.10", ())
+        origin = locate("203.0.113.10", ())
 
         self.assertEqual(origin.headline, "a-shared-host")
 
@@ -987,9 +996,9 @@ class PortlessOriginTests(TestCase):
         """The heuristic it guards must survive: a portless address nothing
         knows is a name answered outside this network."""
 
-        from .services import _locate
+        from .whereabouts import locate
 
-        origin = _locate("example.pages.dev", ())
+        origin = locate("example.pages.dev", ())
 
         self.assertTrue(origin.external)
 
@@ -1003,18 +1012,21 @@ class ParkedNameTests(TestCase):
     """
 
     def test_a_documentation_address_is_a_wiring_fault(self):
-        from .services import Origin, _points_nowhere
+        from .services import _points_nowhere
+        from .whereabouts import Origin
 
         self.assertIn("documentation address", _points_nowhere(Origin(address="192.0.2.1")))
         self.assertIn("documentation address", _points_nowhere(Origin(address="203.0.113.9:443")))
 
     def test_an_unspecified_address_is_too(self):
-        from .services import Origin, _points_nowhere
+        from .services import _points_nowhere
+        from .whereabouts import Origin
 
         self.assertIn("not a reachable address", _points_nowhere(Origin(address="0.0.0.0")))
 
     def test_a_real_address_is_not(self):
-        from .services import Origin, _points_nowhere
+        from .services import _points_nowhere
+        from .whereabouts import Origin
 
         self.assertEqual(_points_nowhere(Origin(address="10.0.0.9:8000")), "")
         self.assertEqual(_points_nowhere(Origin(address="example.pages.dev")), "")
@@ -1052,11 +1064,11 @@ class LoopbackOriginTests(TestCase):
         )
 
     def test_loopback_resolves_to_the_machine_listening_on_that_port(self):
-        from .services import _locate
+        from .whereabouts import locate
 
         self.a_container_on("a-docker-host", "an-app", 8000)
 
-        origin = _locate("127.0.0.1:8000", ({"name": "a-docker-host"},))
+        origin = locate("127.0.0.1:8000", ({"name": "a-docker-host"},))
 
         self.assertEqual(origin.host, "a-docker-host")
         self.assertEqual(origin.container, "an-app")
@@ -1064,17 +1076,18 @@ class LoopbackOriginTests(TestCase):
     def test_a_loopback_port_nothing_listens_on_names_no_machine(self):
         """Better silent than confidently wrong about which box it meant."""
 
-        from .services import _locate
+        from .whereabouts import locate
 
         self.a_container_on("a-docker-host", "an-app", 8000)
 
-        self.assertEqual(_locate("127.0.0.1:9999", ({"name": "a-docker-host"},)).host, "")
+        self.assertEqual(locate("127.0.0.1:9999", ({"name": "a-docker-host"},)).host, "")
 
     def test_two_machines_listening_on_that_port_is_reported_as_silence(self):
         from django.utils import timezone
 
         from control_plane.models import ProviderInventory
-        from .services import CONTAINER_KIND, _locate
+        from .services import CONTAINER_KIND
+        from .whereabouts import locate
 
         ProviderInventory.objects.update_or_create(
             kind=CONTAINER_KIND,
@@ -1087,7 +1100,7 @@ class LoopbackOriginTests(TestCase):
             },
         )
 
-        origin = _locate("127.0.0.1:8000", ({"name": "host-a"}, {"name": "host-b"}))
+        origin = locate("127.0.0.1:8000", ({"name": "host-a"}, {"name": "host-b"}))
 
         self.assertEqual(origin.host, "")
 
@@ -1105,7 +1118,7 @@ class WwwIsTheSameSiteTests(TestCase):
     """
 
     def aliases(self, origins, declared=None):
-        from .services import _aliases
+        from .service_declarations import _aliases
 
         return _aliases(declared or set(origins), origins)
 

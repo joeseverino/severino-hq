@@ -100,6 +100,16 @@ def strict_host(value: str) -> str:
     return host.rstrip(".")
 
 
+def is_address(text: str) -> bool:
+    """Whether ``text`` is exactly an IP address: no port, no name."""
+
+    try:
+        ip_address(text)
+    except ValueError:
+        return False
+    return True
+
+
 def parse_ip(value: str):
     """An address object, or None if this is not one.
 

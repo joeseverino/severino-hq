@@ -560,7 +560,8 @@ class FloorTests(TestCase):
             )
 
     def test_queueing_work_on_a_gated_declaration_without_consent_is_refused(self):
-        from .infrastructure import OperationCommand, PolicyError, request_reconcile
+        from .infrastructure import PolicyError
+        from .resource_operations import OperationCommand, request_reconcile
 
         with self.assertRaises(PolicyError):
             request_reconcile(

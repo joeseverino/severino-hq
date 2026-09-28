@@ -12,7 +12,7 @@ from search_index.registry import BY_SCOPE
 
 from .projection import page_size
 from .resources import resource_search_capabilities
-from .security import AuthorizationError, Capability, Principal
+from .security import AuthorizationError, Capability, Principal, require_all
 
 MAX_SEARCH_RESULTS = 5000
 # Precise relevance ordering only matters for results a human will actually
@@ -56,8 +56,7 @@ def _authorize(scope: str, principal: Principal) -> None:
     if scope not in BY_SCOPE:
         raise UnknownSearchScope(f"Unknown search scope {scope!r}.")
     required = SCOPE_CAPABILITIES[scope]
-    for capability in required if isinstance(required, tuple) else (required,):
-        principal.require(capability)
+    require_all(principal, required if isinstance(required, tuple) else (required,))
 
 
 def search_ids(

@@ -14,6 +14,7 @@ from typing import Any, TypeVar
 
 from control_plane.provider_adapters.contracts import ProviderResult
 
+
 _Handler = TypeVar("_Handler", bound=Callable[..., Any])
 
 

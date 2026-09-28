@@ -24,6 +24,7 @@ from typing import Any
 from django.conf import settings
 
 from control_plane.names import normalized_hostname
+from core.network import is_address
 
 from .locate import Machines, host_of
 
@@ -79,7 +80,7 @@ def hq_hostnames() -> tuple[str, ...]:
         if not text or "*" in text or text.startswith("."):
             continue
         name = normalized_hostname(text)
-        if not name or name in _NOT_A_SITE or "." not in name or _is_address(name):
+        if not name or name in _NOT_A_SITE or "." not in name or is_address(name):
             continue
         if name not in found:
             found.append(name)
@@ -238,11 +239,3 @@ def _matchable(text: str) -> bool:
     except ValueError:
         return False
     return not (address.is_loopback or address.is_link_local or address.is_unspecified)
-
-
-def _is_address(text: str) -> bool:
-    try:
-        ipaddress.ip_address(text)
-    except ValueError:
-        return False
-    return True

@@ -300,6 +300,6 @@ def machine_address_notes() -> dict[str, dict[str, str]]:
     HQ is watching.
     """
 
-    from .machines import observed_addresses
+    from .tailnet_presence import observed_addresses
 
     return {"addresses": observed_addresses()}

@@ -9,7 +9,6 @@ from typing import Annotated, Any, Callable, Literal
 
 from pydantic import Field, field_validator, model_validator
 
-
 from ..names import certificate_covers, normalized_hostname
 from ..provider_spec import (
     ControllerVerification,
@@ -20,6 +19,7 @@ from ..provider_spec import (
     applies,
     expiry_phrase,
 )
+
 
 CERTIFICATE_KIND = "tls.certificate"
 UPLOADED_CERTIFICATE_KIND = "tls.uploaded_certificate"

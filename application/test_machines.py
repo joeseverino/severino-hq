@@ -287,7 +287,7 @@ class TailnetPresenceTests(TestCase):
         device appearing at all is in HQ's network map. A key in a map is a
         machine HQ could reach; a handshake is one it is reaching."""
 
-        from .machines import tailnet_presence
+        from .tailnet_presence import tailnet_presence
 
         self.sweep(
             {
@@ -314,7 +314,7 @@ class TailnetPresenceTests(TestCase):
         region, so an unparsed timestamp reads as a relayed peering.
         """
 
-        from .machines import tailnet_presence
+        from .tailnet_presence import tailnet_presence
 
         self.sweep(
             {
@@ -335,7 +335,7 @@ class TailnetPresenceTests(TestCase):
         ``Relay`` is the DERP region it homes to, not a path to anywhere.
         """
 
-        from .machines import tailnet_presence
+        from .tailnet_presence import tailnet_presence
 
         self.sweep(
             {
@@ -356,7 +356,7 @@ class TailnetPresenceTests(TestCase):
     def test_a_relayed_peer_says_so_rather_than_reading_as_direct(self):
         """Still end to end encrypted, still slower, and worth knowing which."""
 
-        from .machines import tailnet_presence
+        from .tailnet_presence import tailnet_presence
 
         self.sweep(
             {
@@ -376,7 +376,7 @@ class TailnetPresenceTests(TestCase):
         hands it to nobody, so a subnet route can be configured, documented,
         believed, and dead, with every side of it reporting success."""
 
-        from .machines import tailnet_presence
+        from .tailnet_presence import tailnet_presence
 
         self.sweep(
             {
@@ -397,14 +397,14 @@ class TailnetPresenceTests(TestCase):
     def test_a_machine_advertising_nothing_raises_nothing(self):
         """A queue entry per machine that routes nothing would be every machine."""
 
-        from .machines import tailnet_presence
+        from .tailnet_presence import tailnet_presence
 
         self.sweep(self.device("a-laptop"))
 
         self.assertEqual(tailnet_presence()["a-laptop"].unapproved_routes, ())
 
     def test_every_advertised_route_approved_is_silent(self):
-        from .machines import tailnet_presence
+        from .tailnet_presence import tailnet_presence
 
         self.sweep(
             {

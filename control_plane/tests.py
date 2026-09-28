@@ -19,13 +19,15 @@ from application.controller import (
 )
 from application.infrastructure import (
     ManagedResourceCommand,
-    OperationCommand,
     PolicyError,
     controller_contract,
-    request_certificate_renewal,
-    request_reconcile,
     save_managed_resource,
     delivery_targets as delivery_targets_for_test,
+)
+from application.resource_operations import (
+    OperationCommand,
+    request_certificate_renewal,
+    request_reconcile,
 )
 from application.security import cli_principal, mcp_principal
 
@@ -36,7 +38,6 @@ from .models import (
     ProviderInventory,
 )
 from .providers import PROVIDERS, describe_providers
-
 from .desired_state import advance_dependents
 
 
@@ -914,7 +915,7 @@ class OperationPolicyTests(TestCase):
         self.assertFalse(OperationRequest.objects.exists())
 
     @patch(
-        "application.infrastructure.controller_action_policy",
+        "application.resource_operations.controller_action_policy",
         return_value=(True, "active"),
     )
     def test_renewal_is_blocked_outside_window(self, _policy):
@@ -930,7 +931,7 @@ class OperationPolicyTests(TestCase):
             )
 
     @patch(
-        "application.infrastructure.controller_action_policy",
+        "application.resource_operations.controller_action_policy",
         return_value=(True, "active"),
     )
     def test_renewal_is_allowed_for_drift_and_idempotent(self, _policy):
@@ -967,7 +968,7 @@ class OperationPolicyTests(TestCase):
         self.assertEqual(result["error"]["code"], "forbidden")
 
     @patch(
-        "application.infrastructure.controller_action_policy",
+        "application.resource_operations.controller_action_policy",
         return_value=(True, "active"),
     )
     def test_controller_claim_and_report_updates_observed_state(self, _policy):
@@ -1135,8 +1136,8 @@ class InfrastructureViewsTests(TestCase):
 
     def test_findings_render_only_offers_the_projection_authorized(self):
         from application.action_links import ActionLink
-        from application.findings import Finding
-        from application.topology import Topology, TopologyNode
+        from application.finding_model import Finding
+        from application.topology_model import Topology, TopologyNode
 
         subject = TopologyNode(
             "controller:one",
@@ -1157,10 +1158,10 @@ class InfrastructureViewsTests(TestCase):
         )
         with (
             patch(
-                "control_plane.views.derive_topology",
+                "control_plane.finding_views.derive_topology",
                 return_value=Topology((subject,), ()),
             ),
-            patch("control_plane.views.derive_findings", return_value=(finding,)),
+            patch("control_plane.finding_views.derive_findings", return_value=(finding,)),
         ):
             response = self.client.get(reverse("control_plane:findings"))
 
@@ -1439,7 +1440,7 @@ class QueueHeadTests(TestCase):
     def test_removing_a_target_stops_the_certificate_reporting_itself_in_sync(self):
         """Removing one is as much a change as editing one."""
 
-        from application.infrastructure import OperationCommand, request_removal
+        from application.resource_operations import OperationCommand, request_removal
         from application.security import cli_principal
 
         self.certificate.desired_fingerprint = "settled"
@@ -1692,7 +1693,6 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
         """There are no observed facts to publish, only the declaration."""
 
         from .providers import resolve_provider_spec
-
         from .provider_spec import ProviderResolutionContext
 
         with self.assertRaisesRegex(ValueError, "cannot be recorded in 1Password"):

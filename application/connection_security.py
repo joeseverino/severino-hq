@@ -23,8 +23,8 @@ from control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
 from control_plane.connection_kinds import CONNECTION_LABELS
 from core.network import split_host_port
 
-from .connection import channel_for_request
-from .connections import ConnectionGroup
+from .request_channel import channel_for_request
+from .connection_catalog import ConnectionGroup
 from .reach import TAILNET
 from .ui import counted
 

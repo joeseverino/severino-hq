@@ -129,7 +129,7 @@ class PageTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user("op", password="x" * 20)
         self.client.force_login(self.user)
-        patcher = mock.patch("core.views.work_queue", return_value=[ITEM, OTHER])
+        patcher = mock.patch("core.action_item_views.work_queue", return_value=[ITEM, OTHER])
         patcher.start()
         self.addCleanup(patcher.stop)
 

@@ -18,7 +18,8 @@ from control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLI
 
 from .credential_sight import READABLE, Sight, credential_sight
 from .entity_links import EntityLink
-from .findings import Finding, derive_findings, serialize_finding
+from .findings import derive_findings, serialize_finding
+from .finding_model import Finding
 from .policy_links import PolicyName, PolicyNames, tagged
 from .projection import projection_scope
 from .security import Capability, Principal

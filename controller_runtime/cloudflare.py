@@ -1,13 +1,11 @@
-"""Cloudflare: DNS records and zones, and every reading taken through its API."""
+"""Cloudflare: DNS records and zones, their posture, and the connection probes.
+
+The API client is ``cloudflare_api``'s; account-wide readings are
+``cloudflare_account``'s.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Callable
-import json
-import os
-import urllib.error
-import urllib.parse
-import urllib.request
 from typing import Any
 
 from control_plane.names import normalized_hostname
@@ -17,248 +15,14 @@ from control_plane.provider_adapters.cloudflare import (
     caa_parts,
     normalized_record_content,
 )
-from control_plane.provider_adapters.contracts import (
-    CREDENTIAL_REFUSAL,
-    NETWORK_FAILURE,
-    ProviderError,
-    ProviderResult,
-    cloudflare_refusal,
-)
-from control_plane.provider_adapters.parts import (
-    refuse_part,
-    unread_reason as _unread_reason,
-)
-from controller_runtime import redirects
-from .handlers import acts, lists, probes, reads
-from . import cloudflare_analytics, connection_env, provider_http
-
-
-# ----- Cloudflare ------------------------------------------------------------
-#
-# Two credentials, each scoped to one surface.
-#
-# `cloudflare_dns` is deliberately narrow: it can read the zones on the account
-# and read and write their DNS records, and nothing else. Zone settings,
-# analytics and every account-level surface answer 403 to it. That is why the
-# zone provider declares no reconcile it could perform (see the capability
-# registry) and why nothing here reaches for a setting it cannot change.
-#
-# `cloudflare_api` carries the account surface (analytics, zone settings,
-# registration) and reaches no DNS record. Neither is a subset of the other,
-# so a provider states which one it needs and gets exactly that.
-
-
-CLOUDFLARE_API_URL = "https://api.cloudflare.com/client/v4"
-
-
-def cloudflare_url(
-    connection_ref: str = "", *, provider: str = "cloudflare_dns"
-) -> str:
-    """The API base; <PREFIX>_URL overrides the public one."""
-
-    prefix = connection_env.connection_prefix(provider, connection_ref)
-    return (os.environ.get(f"{prefix}_URL", "").strip() or CLOUDFLARE_API_URL).rstrip("/")
-
-
-def cloudflare_token(
-    connection_ref: str = "", *, provider: str = "cloudflare_dns"
-) -> str:
-    return provider_http.required(connection_env.connection_prefix(provider, connection_ref), "API_TOKEN")
-
-
-def _cloudflare_envelope(
-    path: str,
-    *,
-    method: str = "GET",
-    payload: Any = None,
-    provider: str = "cloudflare_dns",
-    connection_ref: str = "",
-) -> dict[str, Any]:
-    """One Cloudflare call, returning the whole envelope with its errors kept.
-
-    Not routed through ``_request`` because Cloudflare says something useful in
-    the body of a 400: "Content for A record must be a valid IPv4 address",
-    "An identical record already exists", and the shared helper turns every
-    non-200 into the same sentence. A rejected DNS change that only says
-    "Provider request failed: HTTPError" is a support ticket to yourself.
-
-    ``success`` is checked here rather than by each caller, because Cloudflare
-    also answers 200 with ``success: false``: a token missing one permission
-    returns no ``result`` at all, and a list helper reading ``result`` off that
-    collects nothing and reports an empty estate. An account that looks empty
-    and an account that refused to answer must not read the same.
-
-    Both credentials come through here: the zone-scoped DNS token and the
-    account-scoped analytics one differ only in which connection names them,
-    which is what ``provider`` and ``connection_ref`` select.
-    """
-
-    prefix = connection_env.connection_prefix(provider, connection_ref)
-    cloudflare_breaker(prefix)
-    url = f"{cloudflare_url(connection_ref, provider=provider)}{path}"
-    headers = {
-        "Authorization": (
-            f"Bearer {cloudflare_token(connection_ref, provider=provider)}"
-        ),
-        "Accept": "application/json",
-    }
-    body = None
-    if payload is not None:
-        body = json.dumps(payload).encode()
-        headers["Content-Type"] = "application/json"
-    try:
-        with provider_http.open_url(url, data=body, headers=headers, method=method) as response:
-            raw = response.read()
-    except urllib.error.HTTPError as exc:
-        with exc:
-            detail = cloudflare_errors(exc.read())
-        raise cloudflare_refused(
-            prefix,
-            f"Cloudflare refused the request: {detail}",
-            detail,
-            status=exc.code,
-            verified=lambda: cloudflare_verified(provider, connection_ref),
-        ) from exc
-    except (urllib.error.URLError, TimeoutError) as exc:
-        raise ProviderError(
-            f"Cloudflare request failed: {type(exc).__name__}.",
-            failure=NETWORK_FAILURE,
-        ) from exc
-    try:
-        parsed = json.loads(raw) if raw else {}
-    except json.JSONDecodeError as exc:
-        raise ProviderError("Cloudflare returned invalid JSON.") from exc
-    if not parsed.get("success", False):
-        detail = cloudflare_errors(raw)
-        raise cloudflare_refused(
-            prefix, f"Cloudflare refused the request: {detail}", detail
-        )
-    return parsed if isinstance(parsed, dict) else {}
-
-
-def _refused_credentials() -> dict[str, str]:
-    """Credentials refused outright during this sweep, by connection prefix."""
-
-    snapshot = provider_http.PROVIDER_SNAPSHOT.get()
-    if snapshot is None:
-        return {}
-    return snapshot.setdefault(("refused-credentials",), {})
-
-
-def cloudflare_breaker(prefix: str) -> None:
-    """Raise without a call when this sweep has already seen the credential refused.
-
-    Every further call with a refused credential is refused too, and repeated
-    failures lock the token out, so each Cloudflare call consults this first.
-    """
-
-    refused = _refused_credentials()
-    if prefix in refused:
-        raise ProviderError(
-            f"Cloudflare refused the request: {refused[prefix]} "
-            "Not retried for the rest of this sweep.",
-            refusal=CREDENTIAL_REFUSAL,
-            reason=refused[prefix],
-        )
-
-
-def _cloudflare_verification(provider: str, connection_ref: str) -> dict[str, Any]:
-    """``/user/tokens/verify``'s result for one credential, once per sweep.
-
-    ``{}`` when it does not verify. Called directly rather than through
-    ``_cloudflare_envelope``, whose refusals consult this.
-    """
-
-    def verify() -> dict[str, Any]:
-        url = f"{cloudflare_url(connection_ref, provider=provider)}/user/tokens/verify"
-        headers = {
-            "Authorization": (
-                f"Bearer {cloudflare_token(connection_ref, provider=provider)}"
-            ),
-            "Accept": "application/json",
-        }
-        try:
-            with provider_http.open_url(url, headers=headers) as response:
-                parsed = json.loads(response.read() or b"{}")
-        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-            provider_http.release(exc)
-            return {}
-        result = parsed.get("result") if isinstance(parsed, dict) else None
-        if not parsed.get("success") or not isinstance(result, dict):
-            return {}
-        return result
-
-    prefix = connection_env.connection_prefix(provider, connection_ref)
-    return provider_http.snapshot_value(("cloudflare-verification", prefix), verify)
-
-
-def cloudflare_verified(provider: str, connection_ref: str) -> bool:
-    """Whether the credential itself verifies as active."""
-
-    return _cloudflare_verification(provider, connection_ref).get("status") == "active"
-
-
-def cloudflare_refused(
-    prefix: str,
-    message: str,
-    detail: str,
-    *,
-    status: int = 0,
-    verified: Callable[[], bool] | None = None,
-) -> ProviderError:
-    """The error for one Cloudflare refusal, recording a refused credential."""
-
-    refusal = cloudflare_refusal(detail, status=status, verified=verified)
-    if refusal == CREDENTIAL_REFUSAL:
-        _refused_credentials()[prefix] = detail
-        return ProviderError(message, refusal=CREDENTIAL_REFUSAL, reason=detail)
-    return ProviderError(message, refusal=refusal)
-
-
-def _cloudflare_request(path: str, *, method: str = "GET", payload: Any = None) -> Any:
-    """The zone-scoped DNS surface, unwrapped to the result callers expect."""
-
-    return _cloudflare_envelope(path, method=method, payload=payload).get("result")
-
-
-def cloudflare_errors(raw: bytes) -> str:
-    try:
-        parsed = json.loads(raw or b"{}")
-    except json.JSONDecodeError:
-        return "an unreadable error"
-    messages = [
-        str(error.get("message", "")).strip()
-        for error in parsed.get("errors") or ()
-        if str(error.get("message", "")).strip()
-    ]
-    return "; ".join(messages) or "no reason given"
-
-
-def _cloudflare_paged(path: str) -> list[dict[str, Any]]:
-    """Every page of a list endpoint.
-
-    Cloudflare returns 100 records at most. A zone that outgrew one page would
-    otherwise have its tail silently reported as absent, and "absent" is the
-    word this system acts on, so the reconciler would set about recreating
-    records that were there all along.
-    """
-
-    collected: list[dict[str, Any]] = []
-    page = 1
-    while True:
-        separator = "&" if "?" in path else "?"
-        result = _cloudflare_request(f"{path}{separator}per_page=100&page={page}")
-        batch = result or []
-        collected.extend(batch)
-        if len(batch) < 100:
-            return collected
-        page += 1
-        if page > 50:
-            raise ProviderError("Cloudflare list did not terminate.")
+from control_plane.provider_adapters.contracts import ProviderError, ProviderResult
+from control_plane.provider_adapters.parts import refuse_part
+from .handlers import acts, lists, probes
+from . import cloudflare_analytics, cloudflare_api, connection_env, provider_http
 
 
 def _cloudflare_zones() -> list[dict[str, Any]]:
-    return provider_http.snapshot_value(("cloudflare-zones",), lambda: _cloudflare_paged("/zones"))
+    return provider_http.snapshot_value(("cloudflare-zones",), lambda: cloudflare_api.cloudflare_paged("/zones"))
 
 
 _ZONE_IDS: dict[str, str] = {}
@@ -280,7 +44,7 @@ def _cloudflare_zone_id(zone: str) -> str:
 
 
 def _cloudflare_records(zone_id: str) -> list[dict[str, Any]]:
-    return _cloudflare_paged(f"/zones/{zone_id}/dns_records")
+    return cloudflare_api.cloudflare_paged(f"/zones/{zone_id}/dns_records")
 
 
 def _caa_data(content: str) -> dict[str, Any]:
@@ -374,7 +138,7 @@ def reconcile_cloudflare_record(
 
     if live is None:
         if apply:
-            live = _cloudflare_request(
+            live = cloudflare_api.cloudflare_request(
                 f"/zones/{zone_id}/dns_records", method="POST", payload=desired
             )
         return ProviderResult(
@@ -414,7 +178,7 @@ def reconcile_cloudflare_record(
             message="Public DNS record unchanged.",
         )
     if apply:
-        live = _cloudflare_request(
+        live = cloudflare_api.cloudflare_request(
             f"/zones/{zone_id}/dns_records/{live['id']}",
             method="PUT",
             payload=desired,
@@ -459,7 +223,7 @@ def delete_cloudflare_record(
             message="Public DNS record was already absent.",
         )
     if apply:
-        _cloudflare_request(
+        cloudflare_api.cloudflare_request(
             f"/zones/{zone_id}/dns_records/{live['id']}", method="DELETE"
         )
     return ProviderResult(
@@ -497,7 +261,7 @@ def _registrar_domains() -> dict[str, dict[str, Any]]:
 
     try:
         account = cloudflare_analytics.analytics_account()
-        domains = _cloudflare_api_cursor_list(
+        domains = cloudflare_api.cloudflare_api_cursor_list(
             f"/accounts/{account}/registrar/registrations"
         )
     except (ProviderError, OSError, ValueError) as exc:
@@ -534,7 +298,7 @@ def _cloudflare_zone_posture(zone_id: str, zone: str = "") -> dict[str, str]:
     found: dict[str, str] = {}
     for setting in ZONE_POSTURE_SETTINGS:
         try:
-            envelope = _cloudflare_api_request(f"/zones/{zone_id}/settings/{setting}")
+            envelope = cloudflare_api.cloudflare_api_request(f"/zones/{zone_id}/settings/{setting}")
         except (ProviderError, OSError, ValueError) as exc:
             refuse_part("posture", exc, scope=zone)
             return {}
@@ -590,352 +354,6 @@ def list_cloudflare_records() -> list[dict[str, Any]]:
     return records
 
 
-# Account readings through `cloudflare_api`. Every list is fetched once per
-# sweep through the provider snapshot; per-item requests are made only where
-# Cloudflare has no list that carries the field. The account allows 1,200
-# requests per five minutes.
-
-
-def _cloudflare_api_refs() -> tuple[str, ...]:
-    # No declared connection still reads once, so a missing credential raises.
-    return connection_env.provider_connection_refs("cloudflare_api") or ("",)
-
-
-def _cloudflare_account(connection_ref: str) -> str:
-    return provider_http.snapshot_value(
-        ("cloudflare-account", connection_ref),
-        lambda: cloudflare_analytics.analytics_account(connection_ref),
-    )
-
-
-def _cloudflare_account_list(
-    connection_ref: str, path: str, *, per_page: int = 100
-) -> list[dict[str, Any]]:
-    """One account list endpoint, read once per sweep."""
-
-    account = _cloudflare_account(connection_ref)
-    return provider_http.snapshot_value(
-        ("cloudflare-account-list", connection_ref, path),
-        lambda: cloudflare_api_list(
-            f"/accounts/{account}{path}", connection_ref, per_page=per_page
-        ),
-    )
-
-
-def _cloudflare_api_result(path: str, connection_ref: str) -> Any:
-    return (_cloudflare_api_request(path, connection_ref) or {}).get("result")
-
-
-@reads("cloudflare.pages_project")
-def list_pages_projects() -> list[dict[str, Any]]:
-    """Pages projects and their latest production deployment."""
-
-    projects = []
-    for ref in _cloudflare_api_refs():
-        account = _cloudflare_account(ref)
-        for project in _cloudflare_account_list(ref, "/pages/projects", per_page=10):
-            deployment = project.get("canonical_deployment") or {}
-            metadata = (deployment.get("deployment_trigger") or {}).get("metadata") or {}
-            projects.append(
-                {
-                    "connection_ref": ref,
-                    "account_id": account,
-                    "name": project.get("name", ""),
-                    "subdomain": project.get("subdomain") or "",
-                    "domains": tuple(project.get("domains") or ()),
-                    "production_branch": project.get("production_branch") or "",
-                    "deployment_id": deployment.get("id") or "",
-                    "deployment_commit": str(metadata.get("commit_hash") or "")[:7],
-                    "deployment_created_on": deployment.get("created_on") or "",
-                }
-            )
-    return projects
-
-
-@reads("cloudflare.d1_database")
-def list_d1_databases() -> list[dict[str, Any]]:
-    """D1 databases. The list omits file_size, so each is read once more."""
-
-    databases = []
-    for ref in _cloudflare_api_refs():
-        account = _cloudflare_account(ref)
-        for database in _cloudflare_account_list(ref, "/d1/database"):
-            uuid = str(database.get("uuid", ""))
-            record = {
-                "connection_ref": ref,
-                "account_id": account,
-                "name": database.get("name", ""),
-                "uuid": uuid,
-                "created_at": database.get("created_at") or "",
-                "version": database.get("version") or "",
-            }
-            try:
-                detail = _cloudflare_api_result(
-                    f"/accounts/{account}/d1/database/{uuid}", ref
-                )
-            except (ProviderError, OSError, ValueError) as exc:
-                refuse_part(
-                    "file_size", exc, scope=str(record["name"]), connection_ref=ref
-                )
-            else:
-                size = (detail or {}).get("file_size")
-                if isinstance(size, int):
-                    record["file_size"] = size
-            databases.append(record)
-    return databases
-
-
-def _access_destination_hosts(destinations: Any) -> tuple[str, ...]:
-    """Hostnames from an application's destinations, without paths or CIDRs."""
-
-    hosts: list[str] = []
-    for destination in destinations or ():
-        if not isinstance(destination, dict):
-            continue
-        if destination.get("type") == "public":
-            uri = str(destination.get("uri") or "")
-            host = uri.split("://", 1)[-1].split("/", 1)[0]
-        else:
-            host = str(destination.get("hostname") or "")
-        host = host.strip().lower().rstrip(".")
-        if host and host not in hosts:
-            hosts.append(host)
-    return tuple(hosts)
-
-
-@reads("cloudflare.access_app")
-def list_access_apps() -> list[dict[str, Any]]:
-    """Access applications at the account, with their policies by name."""
-
-    apps = []
-    for ref in _cloudflare_api_refs():
-        account = _cloudflare_account(ref)
-        for app in _cloudflare_account_list(ref, "/access/apps"):
-            apps.append(
-                {
-                    "connection_ref": ref,
-                    "account_id": account,
-                    "id": app.get("id", ""),
-                    "name": app.get("name") or "",
-                    "type": app.get("type") or "",
-                    "domain": app.get("domain") or "",
-                    "destinations": _access_destination_hosts(app.get("destinations")),
-                    "session_duration": app.get("session_duration") or "",
-                    "policies": tuple(
-                        {"id": policy.get("id") or "", "name": policy.get("name") or ""}
-                        for policy in app.get("policies") or ()
-                        if isinstance(policy, dict)
-                    ),
-                }
-            )
-    return apps
-
-
-def _admits_token(rule: Any, token_id: str) -> bool:
-    if not isinstance(rule, dict):
-        return False
-    if "any_valid_service_token" in rule:
-        return True
-    return str((rule.get("service_token") or {}).get("token_id") or "") == token_id
-
-
-def _apps_admitting(apps: list[dict[str, Any]], token_id: str) -> tuple[dict, ...]:
-    return tuple(
-        {"id": app.get("id") or "", "name": app.get("name") or ""}
-        for app in apps
-        if any(
-            _admits_token(rule, token_id)
-            for policy in app.get("policies") or ()
-            if isinstance(policy, dict)
-            for rule in policy.get("include") or ()
-        )
-    )
-
-
-@reads("cloudflare.access_service_token")
-def list_access_service_tokens() -> list[dict[str, Any]]:
-    """Service tokens, and the applications whose policies include them.
-
-    The client ID is never read into a record.
-    """
-
-    tokens = []
-    for ref in _cloudflare_api_refs():
-        listed = _cloudflare_account_list(ref, "/access/service_tokens")
-        try:
-            apps = _cloudflare_account_list(ref, "/access/apps")
-            unread = False
-        except (ProviderError, OSError, ValueError) as exc:
-            refuse_part("apps", exc, connection_ref=ref)
-            apps, unread = [], True
-        for token in listed:
-            token_id = str(token.get("id", ""))
-            record = {
-                "connection_ref": ref,
-                "id": token_id,
-                "name": token.get("name") or "",
-                "expires_at": token.get("expires_at") or "",
-                "created_at": token.get("created_at") or "",
-            }
-            if not unread:
-                record["apps"] = _apps_admitting(apps, token_id)
-            tokens.append(record)
-    return tokens
-
-
-def _tunnel_ingress(config: Any) -> tuple[dict[str, str], ...]:
-    rules = ((config or {}).get("config") or {}).get("ingress") or ()
-    return tuple(
-        {"hostname": str(rule["hostname"]), "service": str(rule.get("service") or "")}
-        for rule in rules
-        if isinstance(rule, dict) and rule.get("hostname")
-    )
-
-
-def _tunnel_connections(clients: Any) -> tuple[dict[str, str], ...]:
-    found = []
-    for client in clients or ():
-        if not isinstance(client, dict):
-            continue
-        for connection in client.get("conns") or ():
-            if not isinstance(connection, dict):
-                continue
-            found.append(
-                {
-                    "version": str(
-                        client.get("version") or connection.get("client_version") or ""
-                    ),
-                    "colo": str(connection.get("colo_name") or ""),
-                    "origin_ip": str(connection.get("origin_ip") or ""),
-                }
-            )
-    return tuple(found)
-
-
-@reads("cloudflare.tunnel")
-def list_tunnels() -> list[dict[str, Any]]:
-    """Tunnels, their ingress and their live connections.
-
-    Connections come from each tunnel's own endpoint: the list's ``connections``
-    field is removed on 2026-10-05 and is not read.
-    """
-
-    tunnels = []
-    for ref in _cloudflare_api_refs():
-        account = _cloudflare_account(ref)
-        for tunnel in _cloudflare_account_list(ref, "/cfd_tunnel?is_deleted=false"):
-            tunnel_id = str(tunnel.get("id", ""))
-            base = f"/accounts/{account}/cfd_tunnel/{tunnel_id}"
-            record: dict[str, Any] = {
-                "connection_ref": ref,
-                "account_id": account,
-                "id": tunnel_id,
-                "name": tunnel.get("name") or "",
-                "status": tunnel.get("status") or "",
-                "created_at": tunnel.get("created_at") or "",
-                "conns_active_at": tunnel.get("conns_active_at") or "",
-            }
-            scope = {"scope": record["name"], "connection_ref": ref}
-            try:
-                config = _cloudflare_api_result(f"{base}/configurations", ref)
-            except (ProviderError, OSError, ValueError) as exc:
-                refuse_part("configuration", exc, **scope)
-            else:
-                record["config_source"] = str((config or {}).get("source") or "")
-                record["ingress"] = _tunnel_ingress(config)
-            try:
-                clients = _cloudflare_api_result(f"{base}/connections", ref)
-            except (ProviderError, OSError, ValueError) as exc:
-                refuse_part("connections", exc, **scope)
-            else:
-                record["connections"] = _tunnel_connections(clients)
-            tunnels.append(record)
-    return tunnels
-
-
-def _cloudflare_api_zones(connection_ref: str) -> list[dict[str, Any]]:
-    return provider_http.snapshot_value(
-        ("cloudflare-api-zones", connection_ref),
-        lambda: cloudflare_api_list("/zones", connection_ref, per_page=50),
-    )
-
-
-def _earliest_expiry(pack: dict[str, Any]) -> str:
-    dates = sorted(
-        str(certificate.get("expires_on"))
-        for certificate in pack.get("certificates") or ()
-        if isinstance(certificate, dict) and certificate.get("expires_on")
-    )
-    return dates[0] if dates else ""
-
-
-@reads("cloudflare.edge_certificate")
-def list_edge_certificates() -> list[dict[str, Any]]:
-    """Certificate packs on every zone the account credential can see.
-
-    A zone whose packs are refused is a refused part on that zone; every zone
-    refused is a refused read and raises.
-    """
-
-    packs: list[dict[str, Any]] = []
-    for ref in _cloudflare_api_refs():
-        zones = [zone for zone in _cloudflare_api_zones(ref) if zone.get("name")]
-        refused: list[ProviderError] = []
-        for zone in zones:
-            name = str(zone["name"]).strip().lower().rstrip(".")
-            account = str((zone.get("account") or {}).get("id") or "")
-            try:
-                listed = cloudflare_api_list(
-                    f"/zones/{zone.get('id', '')}/ssl/certificate_packs?status=all",
-                    ref,
-                    per_page=50,
-                )
-            except (ProviderError, OSError, ValueError) as exc:
-                refused.append(
-                    ProviderError(
-                        _unread_reason(exc),
-                        refusal=getattr(exc, "refusal", ""),
-                        reason=getattr(exc, "reason", ""),
-                    )
-                )
-                refuse_part("", exc, scope=name, connection_ref=ref)
-                continue
-            packs.extend(
-                {
-                    "connection_ref": ref,
-                    "account_id": account,
-                    "zone": name,
-                    "id": pack.get("id") or "",
-                    "type": pack.get("type") or "",
-                    "hosts": tuple(pack.get("hosts") or ()),
-                    "status": pack.get("status") or "",
-                    "certificate_authority": pack.get("certificate_authority") or "",
-                    "expires_on": _earliest_expiry(pack),
-                }
-                for pack in listed
-            )
-        if zones and len(refused) == len(zones):
-            raise refused[0]
-    return packs
-
-
-@reads("cloudflare.redirect")
-def list_redirects() -> list[dict[str, Any]]:
-    """Redirect rules and forwarding page rules on every zone the credential sees."""
-
-    return redirects.read(
-        _cloudflare_api_refs(),
-        redirects.ZoneReads(
-            zones=_cloudflare_api_zones,
-            listed=lambda path, ref: cloudflare_api_list(path, ref, per_page=50),
-            result=_cloudflare_api_result,
-            reason=_unread_reason,
-            error=ProviderError,
-            refuse=refuse_part,
-        ),
-    )
-
-
 # ----- Connections -----------------------------------------------------------
 #
 # What the controller can reach, and whether it still can. The rendered
@@ -961,13 +379,13 @@ def _token_expiry(verification: Any) -> str:
 
 @probes("cloudflare_dns")
 def _probe_cloudflare_dns(connection_ref: str) -> dict[str, Any]:
-    verification = _cloudflare_envelope(
+    verification = cloudflare_api.cloudflare_envelope(
         "/user/tokens/verify", connection_ref=connection_ref
     )
     # Which zones *matter* is not the controller's to know. The credential
     # reports what it can reach; HQ declares which zones it is responsible for
     # and is the only side able to compare the two.
-    zones = _cloudflare_envelope(
+    zones = cloudflare_api.cloudflare_envelope(
         "/zones?per_page=50", connection_ref=connection_ref
     ).get("result")
     names = sorted(
@@ -997,69 +415,15 @@ def _probe_cloudflare_api(connection_ref: str) -> dict[str, Any]:
     name a host for is one it could not join to anything either.
     """
 
-    verification = _cloudflare_api_request("/user/tokens/verify", connection_ref)
+    verification = cloudflare_api.cloudflare_api_request("/user/tokens/verify", connection_ref)
     if not isinstance(verification, dict) or not verification.get("success"):
         raise ProviderError("Cloudflare token verification failed.")
 
     account = cloudflare_analytics.analytics_account(connection_ref)
-    hosts = sorted(site["host"] for site in cloudflare_analytics._analytics_sites(account, connection_ref))
+    hosts = sorted(site["host"] for site in cloudflare_analytics.account_sites(account, connection_ref))
     measured = "site" if len(hosts) == 1 else "sites"
     return {
         "detail": f"{len(hosts)} analytics {measured}.",
         "reaches": hosts,
         "expires_at": _token_expiry(verification),
     }
-
-
-def _cloudflare_api_request(path: str, connection_ref: str = "") -> Any:
-    """One account-surface request through the account-scoped credential."""
-
-    return _cloudflare_envelope(
-        path, provider="cloudflare_api", connection_ref=connection_ref
-    )
-
-
-def cloudflare_api_list(
-    path: str, connection_ref: str = "", *, per_page: int = 100
-) -> list[dict[str, Any]]:
-    """Every page from one Cloudflare account list endpoint."""
-
-    collected: list[dict[str, Any]] = []
-    for page in range(1, 51):
-        separator = "&" if "?" in path else "?"
-        response = _cloudflare_api_request(
-            f"{path}{separator}per_page={per_page}&page={page}", connection_ref
-        )
-        batch = (response or {}).get("result", [])
-        if not isinstance(batch, list):
-            raise ProviderError("Cloudflare account list returned an invalid result.")
-        collected.extend(item for item in batch if isinstance(item, dict))
-        total_pages = int(
-            ((response or {}).get("result_info") or {}).get("total_pages") or 0
-        )
-        # total_pages decides when present: an endpoint may cap per_page below
-        # what was asked, so a short page is not proof of the last one.
-        if (page >= total_pages) if total_pages else (len(batch) < per_page):
-            return collected
-    raise ProviderError("Cloudflare account list did not terminate.")
-
-
-def _cloudflare_api_cursor_list(
-    path: str, connection_ref: str = "", *, per_page: int = 50
-) -> list[dict[str, Any]]:
-    """Every page from a cursor-paginated Cloudflare list; an empty cursor ends it."""
-
-    collected: list[dict[str, Any]] = []
-    cursor = ""
-    for _ in range(200):
-        query = f"per_page={per_page}" + (f"&cursor={urllib.parse.quote(cursor, safe='')}" if cursor else "")
-        separator = "&" if "?" in path else "?"
-        response = _cloudflare_api_request(f"{path}{separator}{query}", connection_ref)
-        batch = (response or {}).get("result", [])
-        if not isinstance(batch, list):
-            raise ProviderError("Cloudflare account list returned an invalid result.")
-        collected.extend(item for item in batch if isinstance(item, dict))
-        cursor = str(((response or {}).get("result_info") or {}).get("cursor") or "")
-        if not cursor:
-            return collected
-    raise ProviderError("Cloudflare account list did not terminate.")

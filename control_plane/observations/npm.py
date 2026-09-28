@@ -10,9 +10,10 @@ named, so the schema drops them.
 
 from __future__ import annotations
 
-import ipaddress
 from collections.abc import Mapping
 from typing import Any
+
+from core.network import is_address
 
 from ..certificate_authorities import authority_name
 from ..names import normalized_hostname
@@ -135,20 +136,12 @@ def _stream_title(record: Mapping[str, Any]) -> str:
 
 def _stream_hosts(record: Mapping[str, Any]) -> tuple[str, ...]:
     name = normalized_hostname(record.get("forwarding_host"))
-    return (name,) if name and "." in name and not _is_address(name) else ()
+    return (name,) if name and "." in name and not is_address(name) else ()
 
 
 def _stream_addresses(record: Mapping[str, Any]) -> tuple[str, ...]:
     host = str(record.get("forwarding_host", "") or "")
-    return (host,) if _is_address(host) else ()
-
-
-def _is_address(text: str) -> bool:
-    try:
-        ipaddress.ip_address(text)
-    except ValueError:
-        return False
-    return True
+    return (host,) if is_address(host) else ()
 
 
 def stream_upstream(record: Mapping[str, Any], hostname: str = "") -> str:

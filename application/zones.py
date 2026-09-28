@@ -43,7 +43,7 @@ from control_plane.provider_adapters.cloudflare import (
 
 from .entity_links import entity_link
 from .infrastructure import resource_health
-from .inventory import unmanaged
+from .adoption import unmanaged
 from .ui import ListRow
 
 RECORD_KIND = DNS_RECORD_KIND
@@ -615,7 +615,7 @@ def adopt_zone_records(zone: str, *, principal) -> dict[str, Any]:
     """
 
     from .infrastructure import NotFoundError
-    from .inventory import AdoptCommand, adopt
+    from .adoption import AdoptCommand, adopt
 
     found = find_zone(zone)
     if found is None:

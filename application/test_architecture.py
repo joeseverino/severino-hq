@@ -14,6 +14,13 @@ from starlette.staticfiles import StaticFiles
 from core.static import CachedStaticFiles
 
 
+def view_modules(root: Path) -> list[Path]:
+    """Every web view module: ``views.py`` and the ``*_views.py`` split from one."""
+
+    found = {*root.glob("*/views.py"), *root.glob("*/*_views.py")}
+    return sorted(path for path in found if not path.name.startswith("test"))
+
+
 class DeliveryAdapterArchitectureTests(SimpleTestCase):
     def test_workflow_models_remain_a_dependency_leaf(self):
         root = Path(__file__).resolve().parent
@@ -113,7 +120,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
             "bulk_update",
         }
 
-        for source_path in sorted(root.glob("*/views.py")):
+        for source_path in view_modules(root):
             tree = ast.parse(source_path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call) or not isinstance(
@@ -134,7 +141,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
     def test_paginated_list_views_use_the_shared_table_engine(self):
         root = Path(__file__).resolve().parents[1]
         violations = []
-        for source_path in sorted(root.glob("*/views.py")):
+        for source_path in view_modules(root):
             tree = ast.parse(source_path.read_text(encoding="utf-8"))
             for node in tree.body:
                 if not isinstance(node, ast.ClassDef):
@@ -154,6 +161,35 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
                     violations.append(f"{source_path.relative_to(root)}:{node.name}")
 
         self.assertEqual(violations, [])
+
+
+
+    def test_every_module_defining_a_view_is_one_these_checks_read(self):
+        """A view split into its own module must not step outside the checks.
+
+        The two checks above read a fixed set of files. Any module under a
+        Django app that subclasses a ``...View`` is a view module, and it is
+        held to the same rules only if it is in that set.
+        """
+
+        root = Path(__file__).resolve().parents[1]
+        read = set(view_modules(root))
+        escaped = []
+        for source_path in sorted(root.glob("*/*.py")):
+            if source_path.name.startswith("test") or source_path in read:
+                continue
+            tree = ast.parse(source_path.read_text(encoding="utf-8"))
+            if any(
+                isinstance(node, ast.ClassDef)
+                and any(
+                    (base.id if isinstance(base, ast.Name) else getattr(base, "attr", ""))
+                    .endswith("View")
+                    for base in node.bases
+                )
+                for node in tree.body
+            ):
+                escaped.append(str(source_path.relative_to(root)))
+        self.assertEqual(escaped, [])
 
 
 class StyleContractTests(SimpleTestCase):

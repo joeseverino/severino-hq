@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 from typing import Any
 
 from pydantic import Field
@@ -18,19 +17,6 @@ from .contracts import (
 )
 
 
-def _url(runtime: ProviderRuntime, connection_ref: str = "") -> str:
-    prefix = runtime.connection_prefix("adguard", connection_ref)
-    return runtime.required(prefix, "URL").rstrip("/")
-
-
-def _headers(runtime: ProviderRuntime, connection_ref: str = "") -> dict[str, str]:
-    prefix = runtime.connection_prefix("adguard", connection_ref)
-    encoded = base64.b64encode(
-        f"{runtime.required(prefix, 'USERNAME')}:{runtime.required(prefix, 'PASSWORD')}".encode()
-    ).decode()
-    return {"Authorization": f"Basic {encoded}"}
-
-
 def reconcile(
     runtime: ProviderRuntime,
     spec: dict[str, Any],
@@ -38,8 +24,8 @@ def reconcile(
     apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
-    base_url = _url(runtime)
-    headers = _headers(runtime)
+    base_url = adguard_readings.url(runtime)
+    headers = adguard_readings.headers(runtime)
     rewrites = runtime.request(f"{base_url}/control/rewrite/list", headers=headers)
     desired = {"domain": spec["domain"], "answer": spec["answer"]}
     matches = [item for item in rewrites if item.get("domain") == spec["domain"]]
@@ -115,8 +101,8 @@ def delete(
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     del observed
-    base_url = _url(runtime)
-    headers = _headers(runtime)
+    base_url = adguard_readings.url(runtime)
+    headers = adguard_readings.headers(runtime)
     rewrites = runtime.request(f"{base_url}/control/rewrite/list", headers=headers)
     matches = [item for item in rewrites if item.get("domain") == spec["domain"]]
     if not matches:
@@ -159,29 +145,22 @@ def inventory(runtime: ProviderRuntime) -> list[dict[str, Any]]:
             "enabled": item.get("enabled", True),
         }
         for ref in runtime.connection_refs("adguard") or ("",)
-        for item in adguard_readings.rewrites(runtime, _url, _headers, ref)
+        for item in adguard_readings.rewrites(runtime, ref)
         if item.get("domain") and item.get("answer")
     ]
 
 
-def _reader(read):
-    def reader(runtime: ProviderRuntime) -> list[dict[str, Any]]:
-        return read(runtime, _url, _headers)
-
-    return reader
-
-
 READINGS = {
-    CLIENT_KIND: _reader(adguard_readings.read_clients),
-    QUERY_KIND: _reader(adguard_readings.read_query_summary),
-    DNS_KIND: _reader(adguard_readings.read_dns),
+    CLIENT_KIND: adguard_readings.read_clients,
+    QUERY_KIND: adguard_readings.read_query_summary,
+    DNS_KIND: adguard_readings.read_dns,
 }
 
 
 def probe(runtime: ProviderRuntime, connection_ref: str) -> dict[str, Any]:
     status = runtime.request(
-        f"{_url(runtime, connection_ref)}/control/status",
-        headers=_headers(runtime, connection_ref),
+        f"{adguard_readings.url(runtime, connection_ref)}/control/status",
+        headers=adguard_readings.headers(runtime, connection_ref),
     )
     if not isinstance(status, dict) or "dns_addresses" not in status:
         raise ProviderError("AdGuard did not return a status.")

@@ -13,7 +13,7 @@ from django.conf import settings
 
 from core.network import parse_ip
 
-from .credential_findings import OperatorStep
+from .finding_model import OperatorStep
 from .reach import TAILNET
 from .ui import counted
 

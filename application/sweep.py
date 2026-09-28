@@ -22,11 +22,11 @@ from django.db import transaction
 
 from .cadence import settle_read_requests
 from .inventory import (
-    adopt_discovered,
     confirm_observed,
     record_inventory,
     retire_departed,
 )
+from .adoption import adopt_discovered
 from .zones import adopt_discovered_records
 
 
@@ -86,7 +86,7 @@ def _adoptable_kinds() -> tuple[str, ...]:
     cannot fall behind the provider registry.
     """
 
-    from .inventory import unmanaged
+    from .adoption import unmanaged
 
     from .zones import RECORD_KIND
 

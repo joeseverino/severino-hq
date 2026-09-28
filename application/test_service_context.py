@@ -263,7 +263,8 @@ class OneWindowTests(TestCase):
 
 class PartRowTests(TestCase):
     def test_every_step_on_a_path_says_what_changing_it_would_do(self):
-        from .paths import Hop, consequence_of
+        from .path_dependencies import consequence_of
+        from .path_model import Hop
 
         for step in ("dns", "network", "machine", "ingress", "upstream", "container"):
             self.assertTrue(consequence_of(Hop(step, "Part", "name")), step)

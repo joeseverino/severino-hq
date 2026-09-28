@@ -30,7 +30,7 @@ from .cadence import (
     ring_doorbell,
     sweep_due,
 )
-from .infrastructure import OperationCommand, request_reconcile
+from .resource_operations import OperationCommand, request_reconcile
 from .security import cli_principal
 
 

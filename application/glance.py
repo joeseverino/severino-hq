@@ -25,7 +25,7 @@ from . import readings
 from .cadence import ring_doorbell
 from .freshness import DASHBOARD_GLANCE, freshness
 from .connections import machines_once
-from .security import AuthorizationError, Capability, Principal
+from .security import Capability, Principal
 
 
 
@@ -465,11 +465,7 @@ def request_stale_panel_refresh(
         for panel in panels
         if panel.get("due") and panel.get("refreshable") and not panel.get("refreshing")
     )
-    if not wanted:
-        return ()
-    try:
-        principal.require(Capability.MANAGE_INFRASTRUCTURE)
-    except AuthorizationError:
+    if not wanted or not principal.permits(Capability.MANAGE_INFRASTRUCTURE):
         return ()
 
     now = timezone.now()

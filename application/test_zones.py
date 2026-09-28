@@ -34,7 +34,7 @@ from control_plane.provider_adapters.cloudflare import (
 
 from .adoption_testing import managing_everything
 from .infrastructure import PolicyError, save_managed_resource, suggest_key
-from .inventory import (
+from .adoption import (
     AdoptCommand,
     adopt,
     unmanaged,
@@ -457,7 +457,7 @@ class ProviderSurfaceTests(TestCase):
         The capability registry already said so; the page just was not asking.
         """
 
-        from control_plane.views import _apply_note
+        from control_plane.resource_form_views import _apply_note
 
         # Asserted on the promise, not on the sentence explaining its absence.
         # Pinning the wording meant a reason that had gone stale could only be
@@ -880,7 +880,7 @@ class ServiceFacetOfferTests(TestCase):
     """
 
     def test_a_missing_facet_is_offered_by_name_not_by_identifier(self):
-        from .services import Facet
+        from .service_facets import Facet
 
         offers = dict(Facet(id="dns", label="DNS").declarable)
 
@@ -898,7 +898,7 @@ class ServiceFacetOfferTests(TestCase):
         covered is never invited to grow a certificate of its own.
         """
 
-        from .services import Facet
+        from .service_facets import Facet
 
         offers = dict(Facet(id="certificate", label="Certificate").declarable)
 
@@ -911,7 +911,7 @@ class ServiceFacetOfferTests(TestCase):
         `.home.arpa` name it is the option that works.
         """
 
-        from .services import Facet
+        from .service_facets import Facet
 
         offers = dict(Facet(id="certificate", label="Certificate").declarable)
 
@@ -1030,7 +1030,7 @@ class StopManagingDomainTests(TestCase):
         )
 
     def _remove(self):
-        from .infrastructure import OperationCommand, request_removal
+        from .resource_operations import OperationCommand, request_removal
 
         return request_removal(
             OperationCommand(idempotency_key="forget-1", reason="no longer mine"),
@@ -1074,7 +1074,7 @@ class StopManagingDomainTests(TestCase):
         """The distinction has to hold in both directions: forgetting a record
         declaration would abandon a live record with nothing pointing at it."""
 
-        from .infrastructure import OperationCommand, request_removal
+        from .resource_operations import OperationCommand, request_removal
 
         key = ManagedResource.objects.filter(kind=RECORD_KIND).first().key
         request_removal(
@@ -1800,7 +1800,7 @@ class PendingRemovalTests(TestCase):
         self.assertNotContains(response, "Removal in progress")
 
     def test_a_queued_removal_withdraws_them(self):
-        from .infrastructure import OperationCommand, request_removal
+        from .resource_operations import OperationCommand, request_removal
 
         request_removal(
             OperationCommand(idempotency_key="r1"),
@@ -1814,7 +1814,7 @@ class PendingRemovalTests(TestCase):
         self.assertNotContains(response, ">Reconcile<")
 
     def test_the_topology_withdraws_them_too(self):
-        from .infrastructure import OperationCommand, request_removal
+        from .resource_operations import OperationCommand, request_removal
         from .topology import derive_topology
 
         request_removal(
@@ -1832,7 +1832,7 @@ class PendingRemovalTests(TestCase):
     def test_the_report_is_still_reachable(self):
         """The one thing still worth doing: reading what it was."""
 
-        from .infrastructure import OperationCommand, request_removal
+        from .resource_operations import OperationCommand, request_removal
 
         request_removal(
             OperationCommand(idempotency_key="r1"),
@@ -1934,7 +1934,7 @@ class LabelAndDensityTests(TestCase):
         """"Add tLS certificate": the first letter lowered without looking at
         the word it belonged to."""
 
-        from .services import Facet
+        from .service_facets import Facet
 
         offers = dict(Facet(id="certificate", label="Certificate").declarable)
         dns = dict(Facet(id="dns", label="DNS").declarable)

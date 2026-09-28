@@ -19,14 +19,10 @@ from django.utils import timezone
 from control_plane.models import ManagedResource, ProviderInventory
 
 from .ui import MISSING
-from .connection import (
-    addresses_of,
-    addresses_of_hq,
-    channel_for_request,
-    channel_of,
-    connection,
-    headers_of,
-)
+from .connection import connection
+from .request_addresses import addresses_of, addresses_of_hq
+from .request_channel import channel_for_request, channel_of
+from .request_headers import headers_of
 from .request_path import address_chain
 
 A_TAILNET_ADDRESS = "100.64.0.5"

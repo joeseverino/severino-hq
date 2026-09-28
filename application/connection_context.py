@@ -31,7 +31,7 @@ from .connection_security import (
     connection_security_posture,
     observed_connection_controls,
 )
-from .connections import (
+from .connection_catalog import (
     CONTROLLER_CONNECTIONS,
     ConnectionGroup,
     ConnectionView,
@@ -43,7 +43,8 @@ from .credential_sight import ProviderSight, sight_by_connection
 from .derived_reads import NotFoundError, serialize_path, serialize_provider_sight
 from .freshness import freshness
 from .hq_self import hq_hostnames
-from .paths import ServicePath, hq_path
+from .paths import hq_path
+from .path_model import ServicePath
 from .request_path import joined
 from .projection import projection_scope
 from .security import Principal

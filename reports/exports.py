@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import csv
 import json
+from collections.abc import Callable, Iterable
 from datetime import date, datetime
 from decimal import Decimal
 from io import StringIO
-from typing import Iterable
+from operator import attrgetter
+from typing import Any
 
 from django.db.models import Sum
 from django.utils import timezone
@@ -48,110 +50,93 @@ def _csv_cell(value) -> str:
     return str(value)
 
 
+# A column is a field name, read as that attribute, or (header, reader) where
+# the cell is derived. Each export states its columns once; the header row and
+# every data row come from the same tuple, so they cannot drift apart.
+Column = str | tuple[str, Callable[[Any], Any]]
+
+
+def _csv_of(records: Iterable[Any], columns: tuple[Column, ...]) -> str:
+    readers = [
+        (column, attrgetter(column)) if isinstance(column, str) else column
+        for column in columns
+    ]
+    return _csv_response(
+        [header for header, _ in readers],
+        ([read(record) for _, read in readers] for record in records),
+    )
+
+
+def _slug_of(relation: str, field: str = "slug") -> tuple[str, Callable[[Any], Any]]:
+    """A related record's handle, or blank when there is none."""
+
+    def read(record):
+        if not getattr(record, f"{relation}_id"):
+            return ""
+        return getattr(getattr(record, relation), field)
+
+    return relation, read
+
+
+EXPENSE_COLUMNS: tuple[Column, ...] = (
+    "id", "date", "vendor", "item", "category",
+    "total_cost", "business_use_percentage", "estimated_deductible_amount",
+    "payment_method", "business_purpose",
+    _slug_of("related_project"), _slug_of("related_asset"), _slug_of("related_content"),
+    _slug_of("related_documentation", "doc_id"),
+    "notes",
+)
+ASSET_COLUMNS: tuple[Column, ...] = (
+    "id", "slug", "item_name", "vendor", "category",
+    "purchase_date", "total_cost",
+    "business_use_percentage", "estimated_deductible_amount",
+    "payment_method", "serial_number", "warranty_date", "status", "notes",
+)
+CONTENT_COLUMNS: tuple[Column, ...] = (
+    "id", "slug", "title", "content_type", "status", "topic", "tags",
+    "published_url", "published_at",
+    ("wordpress_post_id", lambda c: c.wordpress_post_id or ""), "wordpress_slug",
+)
+PROJECT_COLUMNS: tuple[Column, ...] = (
+    "id", "slug", "name", "category", "status",
+    "repository_url", "public_url", "technologies_used",
+)
+DOCUMENTATION_COLUMNS: tuple[Column, ...] = (
+    "doc_id", "title", "doc_type", "system_service", "environment",
+    "status", "sensitivity",
+    "obsidian_path", "github_path", "external_url", "last_reviewed",
+)
+
+
 def expenses_csv(year: int | None = None) -> str:
     qs = Expense.objects.all()
     if year:
         qs = qs.filter(date__year=year)
-    qs = qs.order_by("date")
-    headers = [
-        "id", "date", "vendor", "item", "category",
-        "total_cost", "business_use_percentage", "estimated_deductible_amount",
-        "payment_method", "business_purpose",
+    qs = qs.order_by("date").select_related(
         "related_project", "related_asset", "related_content", "related_documentation",
-        "notes",
-    ]
-    rows = (
-        [
-            e.id, e.date, e.vendor, e.item, e.category,
-            e.total_cost, e.business_use_percentage, e.estimated_deductible_amount,
-            e.payment_method, e.business_purpose,
-            e.related_project.slug if e.related_project_id else "",
-            e.related_asset.slug if e.related_asset_id else "",
-            e.related_content.slug if e.related_content_id else "",
-            e.related_documentation.doc_id if e.related_documentation_id else "",
-            e.notes,
-        ]
-        for e in qs.select_related(
-            "related_project", "related_asset", "related_content",
-            "related_documentation",
-        )
     )
-    return _csv_response(headers, rows)
+    return _csv_of(qs, EXPENSE_COLUMNS)
 
 
 def assets_csv(year: int | None = None) -> str:
     qs = Asset.objects.all()
     if year:
         qs = qs.filter(purchase_date__year=year)
-    qs = qs.order_by("-purchase_date")
-    headers = [
-        "id", "slug", "item_name", "vendor", "category",
-        "purchase_date", "total_cost",
-        "business_use_percentage", "estimated_deductible_amount",
-        "payment_method", "serial_number", "warranty_date", "status", "notes",
-    ]
-    rows = (
-        [
-            a.id, a.slug, a.item_name, a.vendor, a.category,
-            a.purchase_date, a.total_cost,
-            a.business_use_percentage, a.estimated_deductible_amount,
-            a.payment_method, a.serial_number, a.warranty_date, a.status, a.notes,
-        ]
-        for a in qs
-    )
-    return _csv_response(headers, rows)
+    return _csv_of(qs.order_by("-purchase_date"), ASSET_COLUMNS)
 
 
 def content_csv() -> str:
-    qs = ContentItem.objects.all().order_by("-updated_at")
-    headers = [
-        "id", "slug", "title", "content_type", "status", "topic", "tags",
-        "published_url", "published_at",
-        "wordpress_post_id", "wordpress_slug",
-    ]
-    rows = (
-        [
-            c.id, c.slug, c.title, c.content_type, c.status, c.topic, c.tags,
-            c.published_url, c.published_at,
-            c.wordpress_post_id or "", c.wordpress_slug,
-        ]
-        for c in qs
-    )
-    return _csv_response(headers, rows)
+    return _csv_of(ContentItem.objects.all().order_by("-updated_at"), CONTENT_COLUMNS)
 
 
 def projects_csv() -> str:
-    qs = Project.objects.all().order_by("-updated_at")
-    headers = [
-        "id", "slug", "name", "category", "status",
-        "repository_url", "public_url", "technologies_used",
-    ]
-    rows = (
-        [
-            p.id, p.slug, p.name, p.category, p.status,
-            p.repository_url, p.public_url, p.technologies_used,
-        ]
-        for p in qs
-    )
-    return _csv_response(headers, rows)
+    return _csv_of(Project.objects.all().order_by("-updated_at"), PROJECT_COLUMNS)
 
 
 def documentation_csv() -> str:
-    qs = DocumentationRecord.objects.all().order_by("doc_id")
-    headers = [
-        "doc_id", "title", "doc_type", "system_service", "environment",
-        "status", "sensitivity",
-        "obsidian_path", "github_path", "external_url", "last_reviewed",
-    ]
-    rows = (
-        [
-            d.doc_id, d.title, d.doc_type, d.system_service, d.environment,
-            d.status, d.sensitivity,
-            d.obsidian_path, d.github_path, d.external_url, d.last_reviewed,
-        ]
-        for d in qs
+    return _csv_of(
+        DocumentationRecord.objects.all().order_by("doc_id"), DOCUMENTATION_COLUMNS
     )
-    return _csv_response(headers, rows)
 
 
 # ---------- Year summary -------------------------------------------------------

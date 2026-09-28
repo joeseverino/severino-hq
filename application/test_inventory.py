@@ -19,17 +19,16 @@ from control_plane.providers import PROVIDERS, validate_spec
 
 from unittest import mock
 
-from .inventory import (
+from .inventory import inventory_state, confirm_observed, record_inventory
+from .adoption import (
     AdoptCommand,
     AdoptServiceCommand,
     adopt,
     adopt_discovered,
     adopt_service,
-    inventory_state,
     unmanaged,
     unmanaged_services,
 )
-from .inventory import confirm_observed, record_inventory
 from .sweep import record_sweep
 from .adoption_testing import managing_everything
 from .infrastructure import NotFoundError
@@ -509,7 +508,7 @@ class AdoptServiceTests(TestCase):
         )
 
         with mock.patch(
-            "application.inventory.adopt",
+            "application.adoption.adopt",
             side_effect=[{"resource": {"key": "one"}}, RuntimeError("boom")],
         ):
             with self.assertRaises(RuntimeError):
