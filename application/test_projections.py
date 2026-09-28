@@ -88,12 +88,12 @@ class UiProjectionTests(TestCase):
 
     def test_stacked_chart_projects_aligned_series_once(self):
         chart = stacked_bar_chart(
-            "Training",
+            "Backups",
             "Weekly minutes",
             ("Aug 3", "Aug 10"),
             (
-                ChartSeries("Run", (30.0, 45.0), 1),
-                ChartSeries("Strength", (60.0, 30.0), 2),
+                ChartSeries("Nightly", (30.0, 45.0), 1),
+                ChartSeries("Offsite", (60.0, 30.0), 2),
             ),
             unit="minutes",
         )
@@ -104,11 +104,11 @@ class UiProjectionTests(TestCase):
         rendered = render_to_string(
             "partials/_stacked_bar_chart.html", {"chart": chart}
         )
-        self.assertIn("Training", rendered)
+        self.assertIn("Backups", rendered)
         self.assertIn("View chart data", rendered)
         # The tooltip names its period as well as its series: hovering a bar
         # without being told which week it is answers half a question.
-        self.assertIn('data-tip="Aug 10 · Run: 45 minutes"', rendered)
+        self.assertIn('data-tip="Aug 10 · Nightly: 45 minutes"', rendered)
         # No SVG <title>: that is the browser's own tooltip, which waits a
         # second or two and would double up with the host's.
         self.assertNotIn("<title>", rendered)
@@ -116,10 +116,10 @@ class UiProjectionTests(TestCase):
     def test_stacked_chart_rejects_misaligned_series(self):
         with self.assertRaises(ValueError):
             stacked_bar_chart(
-                "Training",
+                "Backups",
                 "Weekly minutes",
                 ("Aug 3",),
-                (ChartSeries("Run", (30.0, 45.0), 1),),
+                (ChartSeries("Nightly", (30.0, 45.0), 1),),
                 unit="minutes",
             )
 
@@ -129,7 +129,7 @@ class LineChartTests(TestCase):
 
     SERIES = (
         (
-            "Resting heart rate",
+            "Response time",
             (
                 (date(2026, 1, 1), 52.0),
                 (date(2026, 1, 15), 54.0),
@@ -140,7 +140,7 @@ class LineChartTests(TestCase):
     )
 
     def test_the_axis_is_fitted_to_the_data_not_to_zero(self):
-        chart = line_chart("Resting", "", self.SERIES, unit="bpm")
+        chart = line_chart("Latency", "", self.SERIES, unit="ms")
         floor = float(chart.ticks[0].label.replace(",", ""))
         # A zero-based axis draws 51, 52 and 54 as three identical heights and
         # the chart then says nothing happened. That is the whole reason this
@@ -149,7 +149,7 @@ class LineChartTests(TestCase):
         self.assertLess(floor, 52.0)
 
     def test_dates_are_placed_by_the_calendar_not_by_index(self):
-        chart = line_chart("Resting", "", self.SERIES, unit="bpm")
+        chart = line_chart("Latency", "", self.SERIES, unit="ms")
         points = chart.series[0].points
         first, middle, last = (p.x for p in points)
         # Jan 1 → Jan 15 is a fortnight and Jan 15 → Feb 1 is longer, so the
@@ -158,15 +158,15 @@ class LineChartTests(TestCase):
         self.assertLess(middle - first, last - middle)
 
     def test_a_narrow_range_keeps_the_ticks_distinguishable(self):
-        # Pace across a run: 10.6 to 11.8 min/mi. Rounded to whole numbers the
+        # Disk used across three days: 10.6 to 11.8 GB. Rounded to whole numbers the
         # three ticks read 11, 11, 12, which looks like a bug and carries no
         # information about the axis it labels.
         chart = line_chart(
-            "Pace",
+            "Disk",
             "",
             (
                 (
-                    "Pace",
+                    "Disk",
                     (
                         (date(2026, 1, 1), 10.6),
                         (date(2026, 1, 2), 11.2),
@@ -175,7 +175,7 @@ class LineChartTests(TestCase):
                     1,
                 ),
             ),
-            unit="min/mi",
+            unit="GB",
         )
         labels = [tick.label for tick in chart.ticks]
         self.assertEqual(len(set(labels)), len(labels))
@@ -253,10 +253,10 @@ class LineChartTests(TestCase):
 
     def test_a_mark_lands_on_its_own_date(self):
         chart = line_chart(
-            "Resting",
+            "Latency",
             "",
             self.SERIES,
-            unit="bpm",
+            unit="ms",
             marks=((date(2026, 1, 15), "Care"),),
         )
         self.assertEqual(len(chart.marks), 1)
@@ -264,12 +264,12 @@ class LineChartTests(TestCase):
 
     def test_a_mark_outside_the_window_is_dropped(self):
         chart = line_chart(
-            "Resting", "", self.SERIES, unit="bpm", marks=((date(2025, 1, 1), "Old"),)
+            "Latency", "", self.SERIES, unit="ms", marks=((date(2025, 1, 1), "Old"),)
         )
         self.assertEqual(chart.marks, ())
 
     def test_the_line_is_stroked_rather_than_filled(self):
-        chart = line_chart("Resting", "", self.SERIES, unit="bpm", trend=True)
+        chart = line_chart("Latency", "", self.SERIES, unit="ms", trend=True)
         rendered = render_to_string("partials/_line_chart.html", {"chart": chart})
         # `.chart-series-N` sets `fill`, which would render the path as a
         # filled blob. Lines use the stroke classes.
@@ -279,7 +279,7 @@ class LineChartTests(TestCase):
         self.assertNotIn("<title>", rendered)
 
     def test_each_point_has_a_target_big_enough_to_hit(self):
-        chart = line_chart("Resting", "", self.SERIES, unit="bpm")
+        chart = line_chart("Latency", "", self.SERIES, unit="ms")
         rendered = render_to_string("partials/_line_chart.html", {"chart": chart})
         # The visible dot is three pixels across, which is smaller than a
         # pointer can be aimed: the tooltip worked and could not be reached.
@@ -292,24 +292,24 @@ class LineChartTests(TestCase):
         self.assertGreater(rendered.index("chart-hit"), rendered.rindex("chart-line-"))
 
     def test_every_point_carries_the_hosts_own_tooltip(self):
-        chart = line_chart("Resting", "", self.SERIES, unit="bpm")
+        chart = line_chart("Latency", "", self.SERIES, unit="ms")
         rendered = render_to_string("partials/_line_chart.html", {"chart": chart})
-        self.assertIn("Jan 1, 2026 · Resting heart rate: 52 bpm", rendered)
+        self.assertIn("Jan 1, 2026 · Response time: 52 ms", rendered)
         self.assertNotIn("title=", rendered)
 
     def test_a_slot_outside_the_palette_is_refused(self):
         with self.assertRaises(ValueError):
             line_chart(
-                "Resting",
+                "Latency",
                 "",
-                (("Resting", ((date(2026, 1, 1), 1.0), (date(2026, 1, 2), 2.0)), 9),),
-                unit="bpm",
+                (("Latency", ((date(2026, 1, 1), 1.0), (date(2026, 1, 2), 2.0)), 9),),
+                unit="ms",
             )
 
     def test_the_plot_rectangle_is_shared_with_the_bar_chart(self):
-        line = line_chart("Resting", "", self.SERIES, unit="bpm")
+        line = line_chart("Latency", "", self.SERIES, unit="ms")
         bars = stacked_bar_chart(
-            "Training", "", ("a", "b"), (ChartSeries("Run", (1.0, 2.0), 1),), unit="m"
+            "Backups", "", ("a", "b"), (ChartSeries("Nightly", (1.0, 2.0), 1),), unit="m"
         )
         # Two charts stacked in a column have to share an axis position, or the
         # page reads as two unrelated drawings. A bar is centred in its own

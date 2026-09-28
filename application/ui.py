@@ -619,10 +619,10 @@ class LineChart(Chart):
     """A measure over time, on an axis fitted to the measure.
 
     Not a bar chart with the bars removed. `stacked_bar_chart` is zero-based by
-    contract, which is right for quantities that add up (minutes trained,
-    volume lifted) and wrong for anything that varies around a level. Every
-    mile of a run sits between 140 and 160 bpm, and drawn from zero those are
-    identical bars: the chart says nothing changed, which is the opposite of
+    contract, which is right for quantities that add up (requests served,
+    bytes transferred) and wrong for anything that varies around a level. A
+    service's response time can sit between 140 and 160 ms all week, and drawn
+    from zero those are identical bars: the chart says nothing changed, which is the opposite of
     what the numbers say. This axis is fitted to the data's own range, so the
     variation is the drawing.
 
@@ -875,8 +875,8 @@ class ActivityCalendar:
     A chart answers how much and a cadence strip answers whether, per week.
     This answers *when*, which days the plan asks for, which were kept, and
     which were not. None of that survives aggregation into a weekly bar: four
-    sessions crammed into a weekend and four spread across the week produce
-    the same bar and are not the same training.
+    backups crammed into a weekend and four spread across the week produce
+    the same bar and are not the same coverage.
     """
 
     title: str
@@ -918,7 +918,7 @@ class ActivityCalendar:
         """Planned days kept, as "n/m": blank when nothing has come due.
 
         Counts only days the plan asked for and whose day has passed. Unplanned
-        training is real work and shows as a filled dot, but crediting it here
+        work is real work and shows as a filled dot, but crediting it here
         would let extra sessions paper over a schedule that is not being kept;
         counting days still ahead would make every Monday look like a failure.
         """
@@ -936,7 +936,7 @@ class ActivityCalendar:
 class PlannedDay:
     """One weekday in a recurring plan.
 
-    Several things can be scheduled on the same day (a run and a lift) so
+    Several things can be scheduled on the same day (a backup and a certificate check) so
     marks are a tuple of ChartSeries slots rather than one flag. `note` names
     what the day is for when the dot alone does not say it.
     """
@@ -1127,7 +1127,7 @@ def _format_fitted_value(value: float, span: float) -> str:
 
     The bar chart's formatter drops decimals above ten, which is right for an
     axis that starts at zero: its ticks are always far apart. A fitted axis is
-    not: a pace chart running from 10.6 to 11.8 min/mi has three ticks that all
+    not: a disk chart running from 10.6 to 11.8 GB has three ticks that all
     round to "11", and an axis reading 11, 11, 12 looks broken and says nothing.
 
     Precision therefore comes from the span rather than the magnitude.

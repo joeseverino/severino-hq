@@ -64,8 +64,8 @@ def _contains_all(values: tuple[str, ...], query: str) -> bool:
     terms = _SEARCH_WORD.findall(query.casefold())
     words = _SEARCH_WORD.findall(" ".join(values).casefold())
     # Two-letter input is a person beginning a word, not permission to match
-    # the same two characters in the middle of everything. `sp` should find
-    # splits and spending; it should never find infrastructure.
+    # the same two characters in the middle of everything. `re` should find
+    # receipts and reports; it should never find infrastructure.
     return all(
         any(word.startswith(term) if len(term) <= 2 else term in word for word in words)
         for term in terms

@@ -181,6 +181,12 @@ pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin
     actually hold, adoption of what they hold and HQ does not, drift,
     certificate issuance and installation, and audited reconciliation.
 12. MCP-ready: stable IDs/slugs, JSON exports with relationships, AI-readable Markdown.
+13. Contacts: the public site's contact-form inbox, read from and written back
+    to Cloudflare D1; HQ keeps only counts and inbox state.
+14. Site analytics: Cloudflare Web Analytics stored once a day per breakdown,
+    so pages, referrers and the dashboard tile are projections of one table.
+15. Search and jobs: one full-text projection across every record, and
+    long-running work recorded as rows that outlive the request that started it.
 
 ---
 
@@ -388,7 +394,7 @@ pip install -r requirements.txt
 
 # 3. Environment
 cp .env.example .env
-# (for dev you can leave DEBUG=0 with a real SECRET_KEY, or set DEBUG=1)
+# (for dev you can leave DJANGO_DEBUG=0 with a real SECRET_KEY, or set DJANGO_DEBUG=1)
 
 # 4. DB + first user
 python manage.py migrate
@@ -437,6 +443,6 @@ exports, optional Tailscale sidecar) and systemd + Caddy/Nginx on a VPS.
 
 See [`docs/SECURITY.md`](docs/SECURITY.md) for the production security checklist
 and [`docs/BACKUP.md`](docs/BACKUP.md) for SQLite-safe backup & restore
-(`VACUUM INTO` + `age` / `restic`). The roadmap (clients, invoices, the
-WordPress bridge, Postgres migration) is in
+(`VACUUM INTO` + `age` / `restic`). The roadmap (clients, invoices,
+repository publication, Postgres migration) is in
 [`docs/ROADMAP.md`](docs/ROADMAP.md).

@@ -3,7 +3,7 @@ Documentation Index.
 
 Severino HQ does NOT store full runbook bodies. The Obsidian vault remains the
 source of truth. This model stores metadata and relationships only, so the
-future severino-knowledge-router MCP can point an assistant at the right place.
+vault MCP can point an assistant at the right place.
 
 No secrets should be stored here.
 """

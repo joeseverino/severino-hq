@@ -287,9 +287,10 @@ Pull requests run application checks, build the production image, boot it to
 readiness, and scan it with Trivy. A push to `main` publishes and scans the
 image but does **not** deploy it.
 
-Deployment is the composition workflow's job, and it is the only path to
-production. It waits for the host workflow to finish, rebuilds every admitted
-extension onto the new host image, and deploys that. Two deploy paths existed
+Only a composed image reaches production. Compose waits for the host workflow
+to finish, rebuilds every admitted extension onto the new host image, publishes
+that, and starts the separate Deploy workflow with the commit; Deploy waits for
+approval in `production` and runs it. Two deploy paths existed
 once (the host's and each extension's) and whichever ran last won, so a host
 release silently dropped every extension out of production.
 `scripts/deploy-image.sh` stops reconciliation, records the currently running

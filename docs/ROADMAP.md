@@ -26,8 +26,8 @@ covers AdGuard?" or "what assets relate to project Y?": behind a sensitivity
 gate that withholds secret-adjacent runbook bodies. HQ supplied the
 prerequisites that made it possible: stable `doc_id`s/slugs, AI-readable
 exports, and the frontmatter schema (`docs_index/schema.json`) the MCP and HQ
-now both validate against. The MCP runs locally on the Mac; git-crypt keys
-never go on the server.
+now both validate against. The MCP runs on the workstation that holds the vault;
+git-crypt keys never go on the server.
 
 ### HQ typed control plane: registry-driven execution shipped
 
@@ -50,13 +50,14 @@ generic model access.
 
 ### Public integrations
 
-- WordPress content **pull** (read-only): mirror `published_url` /
-  `wordpress_post_id` from example.com so the content pipeline shows
-  ground truth.
-- WordPress bridge plugin (optional, later): outbound webhooks from
-  Severino HQ so publishing a content item can flip the WP status.
-- GitHub metadata integration: pull commit counts / last-push dates against
-  projects' `repository_url`.
+- Published-content pull: shipped. `sync_content_index` mirrors the live site's
+  content index into the content pipeline (`content/content_sync.py`).
+- GitHub metadata: shipped. Projects refresh from the public API, and the
+  controller reads repositories, runs and rules through the GitHub App
+  (`control_plane/provider_adapters/github_readings.py`).
+- Repository publication (candidate): let an authorized write commit files to a
+  repository named by a connection, through the controller and its `manages`
+  gate, so an extension can publish content without holding a credential.
 
 ### Infrastructure
 
@@ -66,7 +67,8 @@ generic model access.
   operationally significant, or a required query depends on Postgres features.
   The ORM and migrations are already DB-agnostic; SQLite-specific PRAGMAs and
   FTS/export paths are isolated behind replaceable boundaries.
-- HTMX for inline edits on list pages, especially expenses and receipts.
+- Inline edits on list pages, especially expenses and receipts, built on the
+  shared partial-replacement primitives rather than a new framework.
 - Bulk import for expenses (CSV).
 
 ### Quality-of-life

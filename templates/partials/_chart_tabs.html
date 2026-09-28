@@ -1,7 +1,7 @@
 {% comment %}
 Tabbed charts: several drawings of one thing, in the space of one.
 
-  {% include "partials/_chart_tabs.html" with charts=my_charts group="splits" %}
+  {% include "partials/_chart_tabs.html" with charts=my_charts group="latency" %}
 
 `charts` is a sequence of LineChart or StackedBarChart, at most four. `group`
 must be unique on the page: it names the radio group the tabs are built from.

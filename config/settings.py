@@ -225,8 +225,9 @@ SEVERINO_CSP_REPORT_PATH = "/csp-report/"
 
 # Django owns the browser security boundary. Scripts are limited to same-origin
 # assets or per-response nonces; objects and framing are disabled outright.
-# Inline styles remain allowed for Django admin compatibility, while application
-# templates keep styles in the static bundle.
+# Inline styles remain allowed only so a chart can position a mark with a
+# per-datum custom property (`style="--at: 62%"`); every other style lives in
+# the static bundle. A test pins style-src as the one relaxed directive.
 #
 # `require-trusted-types-for` is the one directive here that is not about where
 # content may come from. Every other line describes an origin; this one removes
