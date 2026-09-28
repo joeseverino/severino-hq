@@ -118,8 +118,10 @@ class DomainRegistryTests(SimpleTestCase):
 
         Each entry carries its own url, so there is no code to look up.
         """
-        source = (Path(settings.BASE_DIR) / "core" / "views.py").read_text()
-        self.assertNotIn("routes = {", source)
+        core = Path(settings.BASE_DIR) / "core"
+        for module in sorted({*core.glob("views.py"), *core.glob("*_views.py")}):
+            with self.subTest(module=module.name):
+                self.assertNotIn("routes = {", module.read_text())
 
 
 class ComposedQueueTests(TestCase):

@@ -129,7 +129,7 @@ class DashboardQueueTests(TestCase):
             for number in (1, 2)
         ]
         with patch(
-            "core.views.dashboard_highlights",
+            "core.dashboard_views.dashboard_highlights",
             return_value={"highlights": highlights, "compact": []},
         ):
             response = self.client.get("/")
