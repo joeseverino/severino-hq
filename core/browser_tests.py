@@ -29,6 +29,8 @@ from django.test import SimpleTestCase
 from core.test_browser_fixtures import PAGES, build_estate, render_pages
 
 WIDTHS = (320, 390, 768, 1280)
+# A phone, a tablet held upright, a laptop: where only a table may scroll sideways.
+OVERFLOW_WIDTHS = (375, 820, 1360)
 # The stylesheet's phone breakpoint: `@media (max-width: 640px)`.
 PHONE = 640
 ORIGIN = "http://hq.example.test"
@@ -38,6 +40,8 @@ SELECTORS = {
     "highlights": ".dashboard-highlights > .highlight-card",
     "patterns": ".dashboard-patterns > .card",
     "pill": ".pill",
+    # The one box allowed to scroll sideways.
+    "table_scroll": ".table-scroll",
 }
 
 # Structural rules from scripts/layout-audit.js that hold on every page at
@@ -105,6 +109,30 @@ _ESCAPES = "() => {" + _DESCRIBE + """
       if (scrolls(up)) { held = true; break; }
     }
     if (!held) found.push(`${describe(el)} spans ${Math.round(r.left)}..${Math.round(r.right)}px`);
+  }
+  return found.slice(0, 10);
+}"""
+
+_SIDEWAYS = "(allowed) => {" + _DESCRIBE + """
+  // Nothing moves sideways except inside the one box built for it. A chip row,
+  // a lane or a code block scrolled past the edge of a phone is content nobody
+  // finds; a name cut off with an ellipsis is a deliberate truncation.
+  const width = document.documentElement.clientWidth;
+  const found = [];
+  if (document.documentElement.scrollWidth > width + 1) {
+    found.push(`page scrolls sideways: ${document.documentElement.scrollWidth}px in ${width}px`);
+  }
+  for (const el of document.querySelectorAll('body *')) {
+    if (el.closest(allowed) || !el.checkVisibility()) continue;
+    const r = box(el);
+    if (r.width < 2 || r.height < 2) continue;
+    const style = getComputedStyle(el);
+    const boxed = ['auto', 'scroll', 'hidden', 'clip'].includes(style.overflowX);
+    if (boxed && el.scrollWidth > el.clientWidth + 1 && style.textOverflow !== 'ellipsis') {
+      found.push(`${describe(el)} holds ${el.scrollWidth}px in ${el.clientWidth}px (overflow-x: ${style.overflowX})`);
+    } else if (r.right > width + 1 || r.left < -1) {
+      found.push(`${describe(el)} spans ${Math.round(r.left)}..${Math.round(r.right)}px`);
+    }
   }
   return found.slice(0, 10);
 }"""
@@ -306,6 +334,19 @@ class LayoutBrowserTests(SimpleTestCase):
             self.assertEqual(self.page.evaluate(_ESCAPES), [])
 
         self.each(check)
+
+    def test_only_a_table_scrolls_sideways(self):
+        """At a phone, tablet and laptop width, with every disclosure open."""
+
+        for name in PAGES:
+            for width in OVERFLOW_WIDTHS:
+                with self.subTest(page=name, width=width):
+                    self.open(name, width)
+                    self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
+                    self.page.evaluate(
+                        "() => document.querySelectorAll('details').forEach((d) => { d.open = true; })"
+                    )
+                    self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
 
     def test_tables_scroll_inside_their_own_container(self):
         """On a phone a wide table scrolls sideways; it never stacks into cards."""

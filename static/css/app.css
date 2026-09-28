@@ -2230,6 +2230,11 @@ a.kpi:hover { background: var(--surface-2); }
 .list-rows li:first-child { padding-top: var(--space-2); }
 .list-rows .row-main { display: flex; align-items: center; gap: var(--space-4); min-width: 0; flex: 1; flex-wrap: wrap; }
 .list-rows .row-main > a { min-width: 0; overflow-wrap: anywhere; }
+/* The title keeps the line its marker is on. Wrapping places a flex item by
+   its full content width, so a long name moved below its dot and left the dot
+   alone on a line; a modest basis keeps them together and the name wraps
+   inside itself instead. */
+.list-rows .row-main > :is(a, strong) { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
 .list-rows .row-meta { color: var(--muted); font-size: var(--text-xs); margin-left: auto; white-space: nowrap; }
 .list-rows a strong { color: var(--ink); font-weight: 600; }
 .list-rows a:hover strong { color: var(--accent); }
@@ -4597,7 +4602,6 @@ textarea.code {
 .topology-map, .topology-trace-bar, .topology-detail, .topology-relations {
   scroll-margin-top: calc(var(--site-header-height) + var(--space-5));
 }
-.topology-scroll-hint { display: none; }
 .topology-lane { min-width: 0; padding: var(--space-5); background: var(--surface-2); box-shadow: 0 0 0 1px var(--line); }
 .topology-lane > header {
   position: sticky; top: 0; z-index: 2; display: grid;
@@ -4730,21 +4734,11 @@ textarea.code {
   .command-contract { margin-top: 0; }
   .command-evidence { grid-template-columns: minmax(0, 1fr); }
   .command-preview-path { grid-template-columns: minmax(0, 1fr); }
-  .topology-lenses {
-    flex-wrap: nowrap; overflow-x: auto; padding-bottom: var(--space-1);
-    overscroll-behavior-inline: contain; scrollbar-width: thin;
-  }
-  .topology-lenses .scope-chip { flex: 0 0 auto; }
   .topology-toolbar { align-items: stretch; }
   .topology-search { flex-basis: 100%; }
-  .topology-kind-filters { width: 100%; overflow-x: auto; flex-wrap: nowrap; padding-bottom: var(--space-1); }
-  /* One lane per screen, the next one showing at the edge, scrolled sideways. */
-  .topology-map {
-    grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(82vw, 330px);
-    scroll-snap-type: x proximity;
-  }
-  .topology-scroll-hint { display: block; margin: 0; padding: var(--space-3) var(--space-6) 0; font-size: var(--text-xs); }
-  .topology-lane { scroll-snap-align: start; }
+  /* Wrapped rather than scrolled: a lens or a kind past the edge of a phone
+     is one nobody finds. Only a table scrolls sideways. */
+  .topology-kind-filters { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
