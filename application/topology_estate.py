@@ -26,6 +26,7 @@ from control_plane.names import normalized_hostname
 from .action_links import ActionLink as TopologyAction
 from .entity_links import entity_link
 from .facts import Joined, Subject, inventory_records, readings
+from .inventory import record_identity
 from .locate import Machines, index_of
 from .paths import path_to
 from .connections import machines_once
@@ -325,11 +326,13 @@ def _fold(nodes, edges, estate: _Estate) -> None:
 
 
 def _hosted(nodes, edges, resources, estate: _Estate) -> None:
-    """What declares the machine it runs on, and a machine's tailnet device."""
+    """What declares the machine it runs on, a machine's tailnet device, and
+    the connection holding each declaration's live record."""
 
     _runs_edges(nodes, edges, resources, estate)
     _container_subjects(nodes, resources, estate)
     _tailnet_edges(nodes, edges, resources, estate)
+    _holder_edges(nodes, edges, resources)
 
 
 def _container_subjects(nodes, resources, estate: _Estate) -> None:
@@ -369,7 +372,6 @@ def _tailnet_edges(nodes, edges, resources, estate: _Estate) -> None:
     from . import tailnet
 
     devices = None
-    read_through: dict[str, str] | None = None
     for resource in resources:
         device_id = f"resource:{resource.key}"
         if resource.kind != tailnet.TAILNET_KIND or device_id not in nodes:
@@ -384,15 +386,6 @@ def _tailnet_edges(nodes, edges, resources, estate: _Estate) -> None:
         for host in _device_hosts(device, estate):
             relation = edge_between(host, device_id, "on_tailnet", "On the tailnet as")
             edges[relation.id] = relation
-        # The connection that reads the device: the record's own, else the
-        # tailnet connections, as the machine catalogue decides it.
-        if read_through is None:
-            read_through = {
-                str(record.get("name", "")): str(record.get("connection_ref", "") or "")
-                for _snapshot, record in inventory_records(tailnet.TAILNET_KIND)
-            }
-        if name in read_through:
-            _device_reader_edges(nodes, edges, device_id, read_through[name])
 
 
 def _device_hosts(device, estate: _Estate) -> set[str]:
@@ -404,17 +397,52 @@ def _device_hosts(device, estate: _Estate) -> set[str]:
     } - {""}
 
 
-def _device_reader_edges(nodes, edges, device_id: str, ref: str) -> None:
-    from . import tailnet
+def _holder_edges(nodes, edges, resources) -> None:
+    """The connection holding a declaration's live record uses that declaration.
 
-    for node in nodes.values():
-        if node.kind != "connection":
-            continue
-        if node.connection_ref == ref or (
-            not ref and node.provider in PROVIDERS[tailnet.TAILNET_KIND].connection_providers
-        ):
-            relation = edge_between(node.id, device_id, "used_by")
-            edges[relation.id] = relation
+    Derived for every kind that mirrors a provider's records (``from_record``),
+    matched by the same identity adoption uses, so a kind is joined to its
+    connection by declaring those two and nothing here. The record's
+    ``connection_ref`` names the connection; a record without one was read by
+    the connections of the kind's providers.
+    """
+
+    declared: dict[tuple[str, tuple[str, ...]], list[str]] = {}
+    for resource in resources:
+        node_id = f"resource:{resource.key}"
+        provider = PROVIDERS.get(resource.kind)
+        if node_id in nodes and provider is not None and provider.from_record is not None:
+            identity = record_identity(resource.kind, resource.spec or {})
+            if identity:
+                declared.setdefault((resource.kind, identity), []).append(node_id)
+    by_ref, by_provider = _reader_index(nodes)
+    for kind in {kind for kind, _identity in declared}:
+        provider = PROVIDERS[kind]
+        for _snapshot, record in inventory_records(kind):
+            holders = _holders(provider, record, by_ref, by_provider)
+            for resource_id in declared.get((kind, _mirrored_identity(kind, record)), ()):
+                for holder in holders:
+                    relation = edge_between(holder, resource_id, "used_by")
+                    edges[relation.id] = relation
+
+
+def _mirrored_identity(kind: str, record) -> tuple[str, ...]:
+    try:
+        spec = PROVIDERS[kind].from_record(dict(record))
+    except (KeyError, TypeError, ValueError):
+        return ()
+    return record_identity(kind, spec)
+
+
+def _holders(provider, record, by_ref, by_provider) -> list[str]:
+    ref = str(record.get("connection_ref", "") or "")
+    if ref:
+        return by_ref.get(ref, [])
+    return [
+        node_id
+        for name in provider.connection_providers
+        for node_id in by_provider.get(name, [])
+    ]
 
 
 def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
