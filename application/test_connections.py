@@ -17,13 +17,8 @@ from django.urls import reverse
 from control_plane.models import ProviderConnection
 from control_plane.providers import PROVIDERS
 
-from .connections import (
-    CONTROLLER_CONNECTIONS,
-    connection_catalog,
-    connection_readings,
-    connections_for,
-    reachable_through,
-)
+from .connections import connection_readings, connections_for, reachable_through
+from .connection_catalog import CONTROLLER_CONNECTIONS, connection_catalog
 from .inventory import record_connections
 from control_plane.provider_spec import NameContext
 
@@ -730,7 +725,7 @@ class OutwardLinkChoiceTests(TestCase):
         sweep(A_PORTAINER, A_DNS_TOKEN)
 
     def test_nothing_chosen_shows_everything(self):
-        from .connections import outward_links
+        from .outward_links import outward_links
 
         offered, curated = outward_links(self.user)
 
@@ -738,7 +733,7 @@ class OutwardLinkChoiceTests(TestCase):
         self.assertTrue(any(item["label"] == "Portainer" for item in offered))
 
     def test_choosing_narrows_the_panel(self):
-        from .connections import outward_links
+        from .outward_links import outward_links
 
         self.client.post(
             reverse("dashboard_links"), {"href": "https://portainer.example"}
@@ -754,7 +749,7 @@ class OutwardLinkChoiceTests(TestCase):
         """A chooser answers with the whole set, so applying it as toggles would
         depend on what was already stored."""
 
-        from .connections import outward_links
+        from .outward_links import outward_links
 
         self.client.post(
             reverse("dashboard_links"), {"href": "https://portainer.example"}
@@ -767,7 +762,7 @@ class OutwardLinkChoiceTests(TestCase):
     def test_something_never_offered_cannot_be_stored(self):
         """A key arriving in a form post is a request, not an instruction."""
 
-        from .connections import outward_links
+        from .outward_links import outward_links
 
         self.client.post(reverse("dashboard_links"), {"href": "https://elsewhere.test"})
         offered, curated = outward_links(self.user)
@@ -776,7 +771,7 @@ class OutwardLinkChoiceTests(TestCase):
         self.assertGreater(len(offered), 1)
 
     def test_the_chooser_offers_exactly_what_the_panel_renders(self):
-        from .connections import link_choices, outward_links
+        from .outward_links import link_choices, outward_links
 
         offered, _ = outward_links(None)
 

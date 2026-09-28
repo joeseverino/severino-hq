@@ -31,7 +31,7 @@ from .connection_security import (
     connection_security_posture,
     observed_connection_controls,
 )
-from .connections import (
+from .connection_catalog import (
     CONTROLLER_CONNECTIONS,
     ConnectionGroup,
     ConnectionView,

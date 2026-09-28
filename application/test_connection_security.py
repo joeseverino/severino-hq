@@ -10,16 +10,13 @@ from .connection_security import (
     observed_connection_controls,
     observed_request_controls,
 )
-
 from .connections import (
     ConnectionAbility,
-    ConnectionAbilityState,
-    ConnectionGroup,
     ConnectionInstance,
     ConnectionLink,
     ConnectionSpec,
-    ConnectionView,
 )
+from .connection_catalog import ConnectionAbilityState, ConnectionGroup, ConnectionView
 from .security import Capability
 
 
@@ -125,7 +122,7 @@ class OneStateModelTests(TestCase):
     def test_a_whole_account_credential_is_named_and_still_ready(self):
         from dataclasses import replace
 
-        from application.connections import (
+        from application.connection_catalog import (
             AUTHORITY_LABELS,
             connection_authority,
             connection_lifecycle,

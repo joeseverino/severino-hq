@@ -20,12 +20,8 @@ from control_plane.providers import PROVIDERS
 from control_plane.connection_kinds import CONNECTION_LABELS
 
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
-from .connections import (
-    ConnectionGroup,
-    ConnectionLink,
-    ConnectionSpec,
-    connection_catalog,
-)
+from .connections import ConnectionLink, ConnectionSpec
+from .connection_catalog import ConnectionGroup, connection_catalog
 from .action_links import (
     ActionLink as TopologyAction,
     capability_action_link,

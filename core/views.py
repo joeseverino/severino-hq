@@ -24,7 +24,7 @@ from django.views.generic import DetailView, ListView, TemplateView, View
 
 from application import action_items as read_state
 from application.agent_access import set_agents_paused
-from application.connections import link_choices, outward_links
+from application.outward_links import link_choices, outward_links
 from application.command_center import command_center
 from application.dashboard import dashboard_highlights, operating_snapshot, work_queue
 from application.glance import (

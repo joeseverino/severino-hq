@@ -24,7 +24,7 @@ from control_plane.connection_kinds import CONNECTION_LABELS
 from core.network import split_host_port
 
 from .request_channel import channel_for_request
-from .connections import ConnectionGroup
+from .connection_catalog import ConnectionGroup
 from .reach import TAILNET
 from .ui import counted
 

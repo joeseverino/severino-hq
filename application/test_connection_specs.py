@@ -16,10 +16,10 @@ from .connections import (
     ConnectionInstance,
     ConnectionLink,
     ConnectionSpec,
-    connection_catalog,
     describe_connections,
     list_connections,
 )
+from .connection_catalog import connection_catalog
 from .integrations import integration_graph
 from .command_center import command_center
 from .security import Capability, Principal
@@ -630,7 +630,7 @@ class GrantEvidenceTests(TestCase):
         return ConnectionInstance(**{**base, **overrides})
 
     def evidence(self, ability, instance):
-        from application.connections import grant_evidence
+        from application.connection_catalog import grant_evidence
 
         return grant_evidence(ability, instance)
 
@@ -669,7 +669,7 @@ class GrantEvidenceTests(TestCase):
 
         from django.utils import timezone
 
-        from application.connections import (
+        from application.connection_catalog import (
             ConnectionAbilityState,
             connection_authority,
             connection_lifecycle,

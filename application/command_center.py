@@ -11,11 +11,8 @@ from django.urls import reverse
 from control_plane.names import normalized_hostname
 
 from .capabilities import CapabilitySpec
-from .connections import (
-    ConnectionAbility,
-    ConnectionSpec,
-    connection_catalog,
-)
+from .connections import ConnectionAbility, ConnectionSpec
+from .connection_catalog import connection_catalog
 from .contracts import route_url
 from .entity_links import entity_link
 from .integrations import integration_graph
