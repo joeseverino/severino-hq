@@ -67,12 +67,12 @@ from .action_links import (
 from .integrations import IntegrationGraph, integration_graph
 from .contracts import route_url
 from .finding_model import OperatorStep
-from .security import AuthorizationError, Principal
-from .topology import (
+from .security import Principal
+from .topology import derive_topology
+from .topology_model import (
     JOINED_KINDS,
     Topology,
     TopologyNode,
-    derive_topology,
 )
 from .workflows import (
     WorkflowLayout,
@@ -221,12 +221,7 @@ def _permitted(
 
     spec = graph.capabilities.get(capability)
     if spec is not None:
-        try:
-            for required in spec.required_capabilities:
-                principal.require(required)
-        except AuthorizationError:
-            return False, spec.effect
-        return True, spec.effect
+        return principal.permits(*spec.required_capabilities), spec.effect
     # A rule naming a capability the registry does not hold is a contract error
     # the suite catches; at runtime the honest answer is to offer nothing.
     return False, ""

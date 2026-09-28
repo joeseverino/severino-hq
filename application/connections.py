@@ -51,7 +51,7 @@ from .action_links import (
     connection_relationship_link,
     recommend_connection_action,
 )
-from .security import AuthorizationError, Capability, Principal
+from .security import Capability, Principal
 from .ui import ago
 
 # The family the controller observes on HQ's behalf. It leads every inventory
@@ -672,15 +672,6 @@ def connection_specs() -> tuple[ConnectionSpec, ...]:
     return (_controller_connection_spec(),)
 
 
-def _permitted(spec: ConnectionSpec, principal: Principal) -> bool:
-    try:
-        for capability in spec.required_capabilities:
-            principal.require(capability)
-    except AuthorizationError:
-        return False
-    return True
-
-
 def _validate_instance(
     spec: ConnectionSpec, instance: ConnectionInstance
 ) -> ConnectionInstance:
@@ -770,7 +761,7 @@ def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
 
     groups = []
     for spec in integration_graph().connections.values():
-        if not _permitted(spec, principal):
+        if not principal.permits(*spec.required_capabilities):
             continue
         instances = _connection_instances(spec)
         abilities = {ability.name: ability for ability in spec.abilities}
