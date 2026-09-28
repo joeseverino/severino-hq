@@ -180,12 +180,3 @@ class OperatorStep:
     label: str
     command: str = ""
     notes: tuple[str, ...] = ()
-
-
-def parse_stamp(value: str) -> datetime | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        return None

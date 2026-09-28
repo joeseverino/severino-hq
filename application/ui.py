@@ -62,17 +62,17 @@ def ended(text: str) -> str:
 PAGE_SECTION_ID = re.compile(r"[a-z][a-z0-9-]*\Z")
 
 
-def moment(stamp: str):
-    """A provider's timestamp, parsed, or nothing when there is not one.
+def moment(stamp):
+    """An instant, parsed and timezone-aware, or ``None`` when there is not one.
 
-    Beside ``ago`` because it is never wanted without it, and shared because a
-    fourth copy of "parse what a provider wrote" was about to exist. Tailscale
-    writes the zero time for "never", which as an age reads as two thousand
-    years and looks like a bug rather than a fact.
+    A ``datetime`` passes through; a bare stamp is UTC; Tailscale's zero time
+    for "never" (which as an age reads as two thousand years) is ``None``.
     """
 
     from datetime import datetime, timezone as _tz
 
+    if isinstance(stamp, datetime):
+        return stamp if stamp.tzinfo else stamp.replace(tzinfo=_tz.utc)
     text = str(stamp or "").strip()
     if not text or text.startswith("0001-01-01"):
         return None

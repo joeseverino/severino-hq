@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Callable
 
 from .topology_model import JOINED_KINDS, Topology, TopologyTrace
+from .ui import moment
 
 
 TRACE_DIRECTIONS = ("inbound", "outbound", "both")
@@ -94,9 +95,8 @@ def _stale_observations(topology: Topology) -> frozenset[str]:
     for node in topology.nodes:
         if not node.observed_at or not node.kind_key or node.kind in JOINED_KINDS:
             continue
-        try:
-            observed = datetime.fromisoformat(node.observed_at)
-        except ValueError:
+        observed = moment(node.observed_at)
+        if observed is None:
             continue
         seen[node.id] = observed
         newest = latest.get(node.kind_key)

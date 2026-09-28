@@ -46,7 +46,7 @@ from .hq_self import hq_hostnames
 from .paths import hq_path
 from .path_model import ServicePath
 from .request_path import joined
-from .projection import projection_scope
+from .projection import iso, projection_scope
 from .security import Principal
 from .workflow_contracts import ActionLink
 
@@ -94,12 +94,8 @@ class ConnectionRow:
                 else None
             ),
             "read_now": asdict(self.read_now) if self.read_now else None,
-            "read_requested_at": _moment(self.read_requested_at),
+            "read_requested_at": iso(self.read_requested_at),
         }
-
-
-def _moment(value: datetime | None) -> str | None:
-    return value.isoformat() if value else None
 
 
 def _sight(sight: ProviderSight) -> dict[str, Any]:
@@ -116,7 +112,7 @@ def _fix(fix: CredentialFix) -> dict[str, Any]:
         "missing": list(fix.missing),
         "unseen": list(fix.unseen),
         "refused": fix.refused or None,
-        "expires_at": _moment(fix.expires_at),
+        "expires_at": iso(fix.expires_at),
         "expiring": fix.expiring,
         "expired": fix.expired,
         "permissions": list(fix.permissions),
@@ -181,7 +177,7 @@ class ConnectionsContext:
                     {
                         "label": self.oldest.label,
                         "connection_ref": self.oldest.connection_ref or None,
-                        "observed_at": _moment(self.oldest.observed_at),
+                        "observed_at": iso(self.oldest.observed_at),
                     }
                     if self.oldest is not None
                     else None
@@ -218,7 +214,7 @@ class ConnectionsContext:
             },
             "hq_path": serialize_path(self.hq_path) if self.hq_path else None,
             "read_all": asdict(self.read_all) if self.read_all else None,
-            "reading_everything_since": _moment(self.reading_everything_since),
+            "reading_everything_since": iso(self.reading_everything_since),
             "request": self._request() if self.answers_request else None,
         }
 

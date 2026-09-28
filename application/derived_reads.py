@@ -11,7 +11,6 @@ so none can be returned.
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import datetime
 from typing import Any
 
 from control_plane.names import normalized_hostname
@@ -21,18 +20,12 @@ from control_plane.connection_kinds import CONNECTION_LABELS
 
 from .labels import human_label
 from .own_addresses import tailnet_sightings
-from .projection import page_size, projection_scope
+from .projection import iso, page_size, projection_scope
 from .security import Principal
 
 
 class NotFoundError(ValueError):
     """No derived record answers to the identifier."""
-
-
-def _moment(value: Any) -> str | None:
-    if isinstance(value, datetime):
-        return value.isoformat()
-    return str(value) if value else None
 
 
 def _link(link: Any) -> dict[str, Any] | None:
@@ -113,7 +106,7 @@ def _presence(presence: Any) -> dict[str, Any] | None:
         "exit_node_approved": presence.exit_node_approved,
         "ssh_enabled": presence.ssh_enabled,
         "blocks_incoming": presence.blocks_incoming,
-        "observed_at": _moment(presence.observed_at),
+        "observed_at": iso(presence.observed_at),
     }
 
 
@@ -152,7 +145,7 @@ def serialize_machine(machine: Any) -> dict[str, Any]:
                 "status": item.status,
                 "published": item.published,
                 "watcher": item.watcher,
-                "observed_at": _moment(item.observed_at),
+                "observed_at": iso(item.observed_at),
             }
             for item in machine.containers
         ],
@@ -249,7 +242,7 @@ def get_domain(name: str) -> dict[str, Any]:
             **found,
             "connection_ref": zone.connection_ref,
             "reachable": zone.reachable,
-            "observed_at": _moment(zone.observed_at),
+            "observed_at": iso(zone.observed_at),
             "records": [
                 {
                     "name": record.name,
@@ -314,7 +307,7 @@ def get_relationships(node: str, *, principal: Principal) -> dict[str, Any]:
                     {
                         "entity": _link(item.entity),
                         "source": _link(item.source),
-                        "observed_at": _moment(item.observed_at),
+                        "observed_at": iso(item.observed_at),
                         "stale": item.stale,
                     }
                     for item in group.items
@@ -337,7 +330,7 @@ def _source(source: Any) -> dict[str, Any] | None:
         "kind": source.kind,
         "label": source.label,
         "connection": source.connection,
-        "observed_at": _moment(source.observed_at),
+        "observed_at": iso(source.observed_at),
         "declared": source.declared,
     }
 
@@ -485,7 +478,7 @@ def _reading(kind: str, row: ProviderInventory | None) -> dict[str, Any]:
         "requires": list(spec.requires),
         "state": seen.state,
         "records": seen.records,
-        "observed_at": _moment(seen.observed_at),
+        "observed_at": iso(seen.observed_at),
         "error": seen.error,
         "refusal": seen.refusal,
         "remedy": seen.remedy,
@@ -535,7 +528,7 @@ def serialize_provider_sight(found: Any) -> dict[str, Any]:
         "sights": [
             {
                 **asdict(item),
-                "observed_at": _moment(item.observed_at),
+                "observed_at": iso(item.observed_at),
                 "state_label": item.state_label,
                 "remedy": item.remedy,
             }

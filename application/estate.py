@@ -9,7 +9,7 @@ center read ``estate_reading``; none keeps a list of its own.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import datetime, timedelta
 from typing import Any
 
 from django.urls import reverse
@@ -25,7 +25,7 @@ from control_plane.provider_spec import expiry_phrase
 from .entity_links import entity_link
 from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
 from .projection import read_once
-from .ui import Insight, Kpi, ago, counted
+from .ui import Insight, Kpi, ago, counted, moment
 from .workflow_contracts import ActionLink
 
 # A machine that holds something for the estate and has been offline this long
@@ -47,17 +47,6 @@ def subject_link(kind: str, name: str) -> ActionLink | None:
         return None
     link = entity_link(kind, name)
     return ActionLink("subject", link.label, "read", link.url) if link.url else None
-
-
-def _moment(value: Any) -> datetime | None:
-    if isinstance(value, datetime):
-        found = value
-    else:
-        try:
-            found = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
-        except ValueError:
-            return None
-    return found if found.tzinfo else found.replace(tzinfo=dt_timezone.utc)
 
 
 @dataclass(frozen=True)
@@ -205,14 +194,14 @@ def _registrations(domains: tuple[str, ...]) -> tuple[Expiry, ...]:
         registration: dict[str, Any] = {}
         for _snapshot, record in inventory_about(ZONE_KIND, subject):
             registration = dict(record.get("registration") or {})
-        expires = None if registration.get("unread") else _moment(registration.get("expires_at"))
+        expires = None if registration.get("unread") else moment(registration.get("expires_at"))
         auto_renew = bool(registration.get("auto_renew")) if expires else None
         if expires is None:
             expires = min(
                 (
                     when
                     for item in index.about(subject, facets=("registration",))
-                    if (when := _moment(item.expires))
+                    if (when := moment(item.expires))
                 ),
                 default=None,
             )
@@ -234,7 +223,7 @@ def _certificates(domains: tuple[str, ...], hostnames: set[str]) -> tuple[Expiry
     found = []
     if domains:
         for item in readings().about(Subject.of(zones=domains), facets=("certificate",)):
-            when = _moment(item.expires)
+            when = moment(item.expires)
             if when is None:
                 continue
             name = next(iter(item.hostnames), "") or item.title
@@ -248,7 +237,7 @@ def _certificates(domains: tuple[str, ...], hostnames: set[str]) -> tuple[Expiry
     for resource in enabled_resources():
         if resource.kind not in MANAGED_CERTIFICATE_KINDS:
             continue
-        when = _moment((resource.status or {}).get("not_after"))
+        when = moment((resource.status or {}).get("not_after"))
         if when is None:
             continue
         spec = resource.spec or {}
@@ -392,7 +381,7 @@ def _offline(estate: Estate) -> tuple[Insight, ...]:
         presence = machine.presence
         if presence is None or presence.online or not _holds_something(machine):
             continue
-        seen = _moment(presence.last_seen)
+        seen = moment(presence.last_seen)
         if seen is None or seen.year < 2000 or now - seen < OFFLINE_AFTER:
             continue
         serves = bool(machine.hostnames or machine.roles or machine.runs_hq)

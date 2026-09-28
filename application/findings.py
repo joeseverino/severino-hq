@@ -73,9 +73,9 @@ from .finding_model import (
     Remedy,
     FindingEstate,
     is_observable,
-    parse_stamp,
 )
 from .security import Principal
+from .ui import moment
 from .topology import derive_topology
 from .topology_model import (
     JOINED_KINDS,
@@ -143,13 +143,13 @@ def _estate(topology: Topology) -> FindingEstate:
     observed: dict[str, datetime] = {}
     latest: dict[str, datetime] = {}
     for node in topology.nodes:
-        moment = parse_stamp(node.observed_at)
-        if moment is None or not node.kind_key or node.kind in JOINED_KINDS:
+        seen = moment(node.observed_at)
+        if seen is None or not node.kind_key or node.kind in JOINED_KINDS:
             continue
-        observed[node.id] = moment
+        observed[node.id] = seen
         newest = latest.get(node.kind_key)
-        if newest is None or moment > newest:
-            latest[node.kind_key] = moment
+        if newest is None or seen > newest:
+            latest[node.kind_key] = seen
     governed = frozenset(
         edge.target for edge in topology.edges if edge.kind == "governs"
     )

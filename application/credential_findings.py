@@ -9,7 +9,6 @@ the finding, so this module does not import it.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from django.utils import timezone
@@ -20,7 +19,7 @@ from control_plane.provider_adapters.contracts import (
     REFUSALS,
 )
 
-from .ui import counted
+from .ui import counted, moment
 from .finding_model import FindingRule, OperatorStep, built_findings, fact_values
 
 # Fact keys a connection node carries; ``topology`` writes them.
@@ -196,7 +195,10 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
         stamp = next(iter(fact_values(node, EXPIRES)), "")
         if not stamp:
             continue
-        expired = datetime.fromisoformat(stamp) <= timezone.now()
+        expires = moment(stamp)
+        if expires is None:
+            continue
+        expired = expires <= timezone.now()
         found.append(
             dict(
                 rule="credential-expiring",

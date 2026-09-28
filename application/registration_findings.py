@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import timezone as dt_timezone
 
 from .expiry import days_until
-from .finding_model import Finding, FindingEstate, parse_stamp, FindingRule
+from .finding_model import Finding, FindingEstate, FindingRule
+from .ui import moment
 
 
 def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -30,7 +31,7 @@ def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
     found: list[Finding] = []
     for node in estate.nodes():
         facts = dict(node.facts)
-        expires = parse_stamp(facts.get("expires_at", ""))
+        expires = moment(facts.get("expires_at", ""))
         if expires is None or facts.get("auto_renew") != "no":
             continue
         # A registrar reports a date, and a date parses naive. Compared against

@@ -7,13 +7,13 @@ every module that adds edges gives them the same stable id and phrase.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from hashlib import sha256
 
 from control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink as TopologyAction
 from .entity_links import EntityLink
+from .ui import moment
 
 
 @dataclass(frozen=True)
@@ -195,14 +195,7 @@ def observable(node: TopologyNode) -> bool:
 def newest_stamp(*stamps: str) -> str:
     """The latest of several ISO 8601 instants, or ""."""
 
-    moments = []
-    for stamp in stamps:
-        try:
-            moment = datetime.fromisoformat(stamp) if stamp else None
-        except ValueError:
-            continue
-        if moment is not None:
-            moments.append(moment if moment.tzinfo else moment.replace(tzinfo=UTC))
+    moments = [found for stamp in stamps if (found := moment(stamp)) is not None]
     return max(moments).isoformat() if moments else ""
 
 

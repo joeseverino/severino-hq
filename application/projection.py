@@ -91,7 +91,9 @@ def iso(value: Any) -> str | None:
     call site to mean absent.
     """
 
-    return value.isoformat() if value else None
+    if not value:
+        return None
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
 
 
 def listing(model, serialize, *, search: tuple[str, ...], status=None, query=None,

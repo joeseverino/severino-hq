@@ -10,15 +10,11 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from .projection import page_size, projection_scope
+from .projection import iso, page_size, projection_scope
 
 
 class NotFoundError(ValueError):
     """No running container answers to the address."""
-
-
-def _moment(value: Any) -> str | None:
-    return value.isoformat() if value is not None else None
 
 
 def _repository(repo: Any) -> dict[str, Any] | None:
@@ -67,14 +63,14 @@ def _supply_chain(standing: Any) -> dict[str, Any]:
         "source_known_by": standing.source_from,
         "provenance": (
             {key: provenance.get(key, "") for key in ("format", "revision", "builder")}
-            | {"built_at": _moment(standing.built_at), "built_on": list(standing.built_on), "commit_url": standing.commit_url}
+            | {"built_at": iso(standing.built_at), "built_on": list(standing.built_on), "commit_url": standing.commit_url}
             if provenance
             else None
         ),
         "packages": standing.packages,
         "sbom": str((standing.attested or {}).get("sbom", "") or ""),
         "attestations_unread": str((standing.attested or {}).get("unread", "") or "") if standing.attested else "not read yet",
-        "vulnerabilities_read_at": _moment(standing.checked_at),
+        "vulnerabilities_read_at": iso(standing.checked_at),
         "vulnerabilities": [
             {key: finding.get(key, "") for key in ("id", "package", "installed", "severity", "summary", "url")}
             | {"fixed": list(finding.get("fixed") or ())}
@@ -103,7 +99,7 @@ def serialize_container(item: Any) -> dict[str, Any]:
             "digest": standing.digest,
             "image_id": standing.image_id,
             "pinned": standing.pinned,
-            "built": _moment(standing.built),
+            "built": iso(standing.built),
             "source": standing.source,
         },
         "standing": {
@@ -112,7 +108,7 @@ def serialize_container(item: Any) -> dict[str, Any]:
             "newer": list(standing.newer),
             "latest": standing.latest,
             "release": (
-                {"tag": standing.release.get("tag", ""), "url": standing.release.get("url", ""), "published": _moment(standing.release.get("published"))}
+                {"tag": standing.release.get("tag", ""), "url": standing.release.get("url", ""), "published": iso(standing.release.get("published"))}
                 if standing.release
                 else None
             ),
@@ -123,8 +119,8 @@ def serialize_container(item: Any) -> dict[str, Any]:
             ],
             "unmatched_advisories": standing.unmatched,
             "unread": standing.unread,
-            "registry_read_at": _moment(standing.read_at),
-            "upstream_read_at": _moment(standing.upstream_read_at),
+            "registry_read_at": iso(standing.read_at),
+            "upstream_read_at": iso(standing.upstream_read_at),
         },
         "project": (
             {"name": item.project.name, "slug": item.project.slug, "url": item.project.get_absolute_url()}
@@ -183,7 +179,7 @@ def serialize_plan(plan: Any) -> dict[str, Any]:
         "from": {"tag": plan.container.standing.tag, "digest": plan.container.standing.digest},
         "to": {"tag": plan.target_tag, "digest": plan.target_digest},
         "release": (
-            {"tag": plan.release.get("tag", ""), "url": plan.release.get("url", ""), "published": _moment(plan.release.get("published"))}
+            {"tag": plan.release.get("tag", ""), "url": plan.release.get("url", ""), "published": iso(plan.release.get("published"))}
             if plan.release
             else None
         ),

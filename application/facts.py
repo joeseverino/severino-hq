@@ -37,6 +37,7 @@ from .freshness import stale_after
 from .locate import host_of
 from .projection import read_once
 from .tailnet import TAILNET_KIND
+from .ui import moment
 
 OBSERVED = "observed"
 UNREADABLE = "unreadable"
@@ -361,13 +362,7 @@ class Readings:
 def record_read_at(record: Mapping[str, Any]) -> datetime | None:
     """When a record says it was read, for a reading carried across sweeps."""
 
-    stamp = str(record.get("read_at", "") or "")
-    if not stamp:
-        return None
-    try:
-        return datetime.fromisoformat(stamp)
-    except ValueError:
-        return None
+    return moment(record.get("read_at"))
 
 
 def readings() -> Readings:

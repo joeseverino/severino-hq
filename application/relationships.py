@@ -21,6 +21,7 @@ from .facts import readings, unreadable_labels
 from .security import Principal
 from .topology import relation_graph
 from .topology_model import RELATIONS, TopologyEdge, relation_rank
+from .ui import moment
 
 
 @dataclass(frozen=True)
@@ -78,19 +79,12 @@ class Relationships:
         )
 
 
-def _moment(stamp: str) -> datetime | None:
-    try:
-        return datetime.fromisoformat(stamp) if stamp else None
-    except ValueError:
-        return None
-
-
 def _rows(edge: TopologyEdge, node_id: str, nodes: dict[str, Any]):
     """``(phrase, relationship)`` for each thing one edge relates the node to."""
 
     outbound = edge.source == node_id
     other = nodes[edge.target if outbound else edge.source]
-    observed = _moment(edge.observed_at)
+    observed = moment(edge.observed_at)
     stale = edge.status == "attention"
     if edge.kind == "reading":
         if outbound:
