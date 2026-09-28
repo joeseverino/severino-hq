@@ -24,11 +24,14 @@ from controller_runtime import (
     glance,
     handlers,
     host_readings,
+    npm_certificates,
     portainer,
     provider_http,
     provider_runtime,
     tailscale,
     tls,
+    tls_issuance,
+    tls_verification,
 )
 from control_plane.provider_adapters.contracts import (
     ADDRESS_FAILURE,
@@ -1053,7 +1056,7 @@ class ProviderAdapterTests(TestCase):
         with self.assertRaisesRegex(ProviderError, "no settings to reconcile"):
             providers.execute({"kind": "cloudflare.zone", "spec": {}}, "reconcile")
 
-    @mock.patch("controller_runtime.tls._observe_tls_domain")
+    @mock.patch("controller_runtime.tls_verification._observe_tls_domain")
     @mock.patch.dict(
         "os.environ",
         {
@@ -1089,7 +1092,7 @@ class ProviderAdapterTests(TestCase):
             },
         ]
 
-        result = tls.reconcile_tls(
+        result = tls_verification.reconcile_tls(
             {
                 "renewal_window_days": 30,
                 "consumers": [
@@ -1126,7 +1129,7 @@ class ProviderAdapterTests(TestCase):
         )
         self.assertFalse(any(item["type"] == "Ready" for item in result.conditions))
 
-    @mock.patch("controller_runtime.tls._observe_tls_domain")
+    @mock.patch("controller_runtime.tls_verification._observe_tls_domain")
     @mock.patch.dict("os.environ", {"NPM_URL": "https://npm-origin.example"}, clear=True)
     def test_every_consumer_unreachable_is_still_a_failure(self, observe):
         """Nothing was read, so there is no expiry and nothing to compare."""
@@ -1136,7 +1139,7 @@ class ProviderAdapterTests(TestCase):
         )
 
         with self.assertRaises(ProviderError) as caught:
-            tls.reconcile_tls(
+            tls_verification.reconcile_tls(
                 {
                     "renewal_window_days": 30,
                     "consumers": [
@@ -1147,7 +1150,7 @@ class ProviderAdapterTests(TestCase):
 
         self.assertIn("No TLS consumer could be reached", str(caught.exception))
 
-    @mock.patch("controller_runtime.tls._observe_tls_domain")
+    @mock.patch("controller_runtime.tls_verification._observe_tls_domain")
     @mock.patch.dict(
         "os.environ",
         {
@@ -1180,7 +1183,7 @@ class ProviderAdapterTests(TestCase):
             },
         ]
 
-        result = tls.reconcile_tls(
+        result = tls_verification.reconcile_tls(
             {
                 "renewal_window_days": 30,
                 "consumers": [
@@ -1210,7 +1213,7 @@ class ProviderAdapterTests(TestCase):
             ],
         )
 
-    @mock.patch("controller_runtime.tls._observe_tls_domain")
+    @mock.patch("controller_runtime.tls_verification._observe_tls_domain")
     @mock.patch.dict(
         "os.environ",
         {
@@ -1232,7 +1235,7 @@ class ProviderAdapterTests(TestCase):
             "certificate_pem": "-----BEGIN CERTIFICATE-----\ncurrent\n",
         }
 
-        tls.reconcile_tls(
+        tls_verification.reconcile_tls(
             {
                 "renewal_window_days": 30,
                 "consumers": [
@@ -1251,7 +1254,7 @@ class ProviderAdapterTests(TestCase):
     @mock.patch.dict("os.environ", {"NPM_URL": "https://proxy.example"}, clear=True)
     def test_npm_tls_endpoint_is_derived_from_controller_connection(self):
         self.assertEqual(
-            tls._consumer_tls_endpoint({"kind": "npm"}),
+            tls_verification._consumer_tls_endpoint({"kind": "npm"}),
             "proxy.example",
         )
 
@@ -1316,7 +1319,7 @@ class ProviderAdapterTests(TestCase):
 
     @mock.patch("controller_runtime.provider_http.request_json")
     @mock.patch("controller_runtime.provider_http.multipart_request")
-    @mock.patch("controller_runtime.tls._npm_token", return_value="token")
+    @mock.patch("controller_runtime.npm_certificates.npm_token", return_value="token")
     @mock.patch.dict(
         "os.environ",
         {"NPM_URL": "https://npm.example.test"},
@@ -1334,7 +1337,7 @@ class ProviderAdapterTests(TestCase):
             {},
         ]
 
-        certificate_id, identity = tls._npm_managed_certificate(
+        certificate_id, identity = npm_certificates.npm_managed_certificate(
             {
                 "name": "example-wildcard",
                 "verify_domains": ["dev.example.test"],
@@ -1356,7 +1359,7 @@ class ProviderAdapterTests(TestCase):
 
     @mock.patch("controller_runtime.provider_http.request_json")
     @mock.patch("controller_runtime.provider_http.multipart_request")
-    @mock.patch("controller_runtime.tls._npm_token", return_value="token")
+    @mock.patch("controller_runtime.npm_certificates.npm_token", return_value="token")
     @mock.patch.dict(
         "os.environ",
         {"NPM_URL": "https://npm.example.test"},
@@ -1374,7 +1377,7 @@ class ProviderAdapterTests(TestCase):
             [],
         ]
 
-        certificate_id, _ = tls._npm_managed_certificate(
+        certificate_id, _ = npm_certificates.npm_managed_certificate(
             {"name": "example-wildcard", "verify_domains": []},
             ["example.test"],
             leaf,
@@ -1402,8 +1405,8 @@ class ProviderAdapterTests(TestCase):
 
     def test_installed_ids_are_carried_into_a_report_that_installed_nothing(self):
         spec = {"consumers": [{"kind": "npm", "name": "example-npm"}]}
-        known = tls._npm_certificate_ids(spec, {"npm_certificate_id": 22})
-        result = tls._with_npm_certificate_ids(
+        known = npm_certificates.npm_certificate_ids(spec, {"npm_certificate_id": 22})
+        result = npm_certificates.with_npm_certificate_ids(
             ProviderResult(changed=False, status={}, conditions=[], message=""),
             known,
         )
@@ -1413,7 +1416,7 @@ class ProviderAdapterTests(TestCase):
 
     @mock.patch("controller_runtime.provider_http.request_json")
     @mock.patch("controller_runtime.provider_http.multipart_request")
-    @mock.patch("controller_runtime.tls._npm_token", return_value="token")
+    @mock.patch("controller_runtime.npm_certificates.npm_token", return_value="token")
     @mock.patch.dict(
         "os.environ",
         {"NPM_URL": "https://npm.example.test"},
@@ -1436,7 +1439,7 @@ class ProviderAdapterTests(TestCase):
             {},
         ]
 
-        tls._npm_managed_certificate(
+        npm_certificates.npm_managed_certificate(
             {
                 "name": "example-wildcard",
                 "verify_domains": [],
@@ -1459,16 +1462,16 @@ class ProviderAdapterTests(TestCase):
         for call in request.call_args_list[-2:]:
             self.assertEqual(call.kwargs["payload"]["certificate_id"], 22)
 
-    @mock.patch("controller_runtime.tls.reconcile_tls")
+    @mock.patch("controller_runtime.tls_verification.reconcile_tls")
     @mock.patch("controller_runtime.tls._deploy_certificate")
-    @mock.patch("controller_runtime.tls._issue_certificate")
-    @mock.patch("controller_runtime.tls._resumable_lineage", return_value=None)
-    @mock.patch("controller_runtime.tls._validate_certificate")
+    @mock.patch("controller_runtime.tls_issuance.issue_certificate")
+    @mock.patch("controller_runtime.tls_issuance.resumable_lineage", return_value=None)
+    @mock.patch("controller_runtime.tls_issuance.validate_certificate")
     @mock.patch("controller_runtime.commands.run_ssh")
     def test_renewal_deploys_and_verifies_every_consumer(
         self, ssh, validate, _resume, issue, deploy, reconcile
     ):
-        previous = tls._certificate_bundle(b"old-cert", b"old-key")
+        previous = tls_issuance.certificate_bundle(b"old-cert", b"old-key")
         ssh.return_value = previous
         validate.side_effect = ["old", "new"]
         issue.return_value = (b"new-cert", b"new-key")
@@ -1501,11 +1504,11 @@ class ProviderAdapterTests(TestCase):
             all(item["matches_expected"] for item in result.status["consumers"])
         )
 
-    @mock.patch("controller_runtime.tls.reconcile_tls")
+    @mock.patch("controller_runtime.tls_verification.reconcile_tls")
     @mock.patch(
-        "controller_runtime.tls._validate_certificate", return_value="new"
+        "controller_runtime.tls_issuance.validate_certificate", return_value="new"
     )
-    @mock.patch("controller_runtime.tls._lineage")
+    @mock.patch("controller_runtime.tls_issuance.lineage")
     def test_reconcile_success_records_explicit_consumer_match_evidence(
         self, lineage, _validate, reconcile
     ):
@@ -1533,19 +1536,19 @@ class ProviderAdapterTests(TestCase):
         self.assertEqual(result.status["expected_fingerprint_sha256"], "new")
         self.assertTrue(result.status["consumers"][0]["matches_expected"])
 
-    @mock.patch("controller_runtime.tls.reconcile_tls")
+    @mock.patch("controller_runtime.tls_verification.reconcile_tls")
     @mock.patch("controller_runtime.tls._deploy_certificate", return_value={})
-    @mock.patch("controller_runtime.tls._issue_certificate")
+    @mock.patch("controller_runtime.tls_issuance.issue_certificate")
     @mock.patch(
-        "controller_runtime.tls._resumable_lineage",
+        "controller_runtime.tls_issuance.resumable_lineage",
         return_value=(b"pending-cert", b"pending-key"),
     )
-    @mock.patch("controller_runtime.tls._validate_certificate")
+    @mock.patch("controller_runtime.tls_issuance.validate_certificate")
     @mock.patch("controller_runtime.commands.run_ssh")
     def test_renewal_resumes_existing_lineage_without_acme_request(
         self, ssh, validate, _resume, issue, deploy, reconcile
     ):
-        ssh.return_value = tls._certificate_bundle(b"old-cert", b"old-key")
+        ssh.return_value = tls_issuance.certificate_bundle(b"old-cert", b"old-key")
         validate.side_effect = ["old", "pending"]
         reconcile.return_value = ProviderResult(
             changed=False,
@@ -1566,16 +1569,16 @@ class ProviderAdapterTests(TestCase):
         deploy.assert_called_once_with(spec, b"pending-cert", b"pending-key", {}, None)
         self.assertEqual(result.status["artifact_source"], "existing_lineage")
 
-    @mock.patch("controller_runtime.tls.reconcile_tls")
+    @mock.patch("controller_runtime.tls_verification.reconcile_tls")
     @mock.patch("controller_runtime.tls._deploy_certificate")
-    @mock.patch("controller_runtime.tls._issue_certificate")
-    @mock.patch("controller_runtime.tls._resumable_lineage", return_value=None)
-    @mock.patch("controller_runtime.tls._validate_certificate")
+    @mock.patch("controller_runtime.tls_issuance.issue_certificate")
+    @mock.patch("controller_runtime.tls_issuance.resumable_lineage", return_value=None)
+    @mock.patch("controller_runtime.tls_issuance.validate_certificate")
     @mock.patch("controller_runtime.commands.run_ssh")
     def test_renewal_rolls_back_previous_artifact_on_deploy_failure(
         self, ssh, validate, _resume, issue, deploy, _reconcile
     ):
-        ssh.return_value = tls._certificate_bundle(b"old-cert", b"old-key")
+        ssh.return_value = tls_issuance.certificate_bundle(b"old-cert", b"old-key")
         validate.side_effect = ["old", "new"]
         issue.return_value = (b"new-cert", b"new-key")
         deploy.side_effect = [ProviderError("failed"), None]
@@ -2995,7 +2998,7 @@ class CPanelSitePlanTests(TestCase):
             with self.assertRaisesRegex(ProviderError, "could not read"):
                 tls._cpanel_sites(consumer)
 
-    @mock.patch("controller_runtime.tls._issue_certificate")
+    @mock.patch("controller_runtime.tls_issuance.issue_certificate")
     @mock.patch("controller_runtime.commands.run_ssh")
     def test_an_unsatisfiable_target_is_refused_before_the_ca_is_asked(self, ssh, issue):
         ssh.return_value = json.dumps(_ACCOUNT_SITES).encode()
@@ -3039,9 +3042,9 @@ class CPanelSitePlanTests(TestCase):
             status["cpanel_sites"], {"shared-hosting": ["example.test", "shop.example.test"]}
         )
 
-    @mock.patch("controller_runtime.tls._tls_verification_policy", return_value=(30, 5))
+    @mock.patch("controller_runtime.tls_verification._tls_verification_policy", return_value=(30, 5))
     @mock.patch("time.monotonic", side_effect=[0, 31])
-    @mock.patch("controller_runtime.tls.reconcile_tls")
+    @mock.patch("controller_runtime.tls_verification.reconcile_tls")
     def test_a_consumer_that_never_activates_is_named_with_its_names(
         self, reconcile, _clock, _policy
     ):
@@ -3059,7 +3062,7 @@ class CPanelSitePlanTests(TestCase):
         )
 
         with self.assertRaises(ProviderError) as caught:
-            tls._verify_tls_deployment({"consumers": [{}, {}]}, "new")
+            tls_verification.verify_tls_deployment({"consumers": [{}, {}]}, "new")
 
         self.assertEqual(
             str(caught.exception),
@@ -3112,7 +3115,7 @@ class AcmeOwnershipTests(TestCase):
             Path(directory, "config", "archive").mkdir(parents=True)
             Path(directory, "config", "archive", "privkey1.pem").write_text("k")
 
-            self.assertEqual(tls._foreign_acme_entry(Path(directory)), "")
+            self.assertEqual(tls_issuance._foreign_acme_entry(Path(directory)), "")
 
     def test_an_entry_with_another_group_is_named(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -3120,20 +3123,20 @@ class AcmeOwnershipTests(TestCase):
             Path(directory, "config", "privkey1.pem").write_text("k")
             real_gid = os.getgid()
             with mock.patch("os.getgid", return_value=real_gid + 1):
-                found = tls._foreign_acme_entry(Path(directory))
+                found = tls_issuance._foreign_acme_entry(Path(directory))
 
         self.assertIn("config", found)
         self.assertIn(f"not {os.getuid()}:{real_gid + 1}", found)
 
     @mock.patch("controller_runtime.commands.run_command")
-    @mock.patch("controller_runtime.tls._foreign_acme_entry", return_value="config/x is owned 1:2, not 3:4")
+    @mock.patch("controller_runtime.tls_issuance._foreign_acme_entry", return_value="config/x is owned 1:2, not 3:4")
     def test_issuance_stops_before_certbot_when_the_tree_is_not_its_own(self, _foreign, run):
         with tempfile.TemporaryDirectory() as directory:
             with mock.patch.dict("os.environ", {"HQ_ACME_DIR": directory}):
                 with self.assertRaisesRegex(
                     ProviderError, "config/x is owned 1:2.*nothing was requested"
                 ):
-                    tls._issue_certificate({"domains": ["example.test"]})
+                    tls_issuance.issue_certificate({"domains": ["example.test"]})
 
         run.assert_not_called()
 
@@ -4063,11 +4066,11 @@ class TlsReadingTests(TestCase):
 
         covered = [{"domain_names": ["a.example.com", "b.example.com"]}]
         with (
-            mock.patch.object(tls, "_observe_tls_domain", side_effect=observe) as seen,
-            mock.patch.object(tls, "_consumer_tls_endpoint", side_effect=endpoint),
-            mock.patch.object(tls, "_npm_covered_hosts", return_value=covered) as npm,
+            mock.patch.object(tls_verification, "_observe_tls_domain", side_effect=observe) as seen,
+            mock.patch.object(tls_verification, "_consumer_tls_endpoint", side_effect=endpoint),
+            mock.patch.object(tls_verification, "_npm_covered_hosts", return_value=covered) as npm,
         ):
-            result = tls.reconcile_tls(spec)
+            result = tls_verification.reconcile_tls(spec)
         return result, seen, npm
 
     def test_every_outcome_is_reported_against_its_consumer(self):
@@ -5392,7 +5395,7 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
 
         with (
             mock.patch.object(commands, "run_command", side_effect=run),
-            mock.patch.object(tls, "reconcile_tls") as observe,
+            mock.patch.object(tls_verification, "reconcile_tls") as observe,
         ):
             observe.return_value = ProviderResult(
                 changed=False, status=dict(AN_OBSERVATION), conditions=[], message=""
