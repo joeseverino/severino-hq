@@ -12,12 +12,13 @@ from django.core.validators import RegexValidator
 
 from .capabilities import CapabilitySpec, command_schema
 from .command_targets import CommandTargetOption
+from .forms import LinesField
 
 
 _EXECUTION_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
 
-class PrimitiveListField(forms.Field):
+class PrimitiveListField(LinesField):
     """One JSON primitive per line, preserving the schema's item type."""
 
     widget = forms.Textarea(attrs={"rows": 4, "spellcheck": "false", "class": "code"})
@@ -25,11 +26,6 @@ class PrimitiveListField(forms.Field):
     def __init__(self, *args, item_type: str = "string", **kwargs):
         self.item_type = item_type
         super().__init__(*args, **kwargs)
-
-    def prepare_value(self, value):
-        if isinstance(value, (list, tuple)):
-            return "\n".join(str(item) for item in value)
-        return value
 
     def to_python(self, value):
         lines = [line.strip() for line in str(value or "").splitlines() if line.strip()]

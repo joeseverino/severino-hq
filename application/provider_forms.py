@@ -37,6 +37,7 @@ from control_plane.providers import PROVIDERS, validate_spec
 
 from control_plane.provider_spec import NameContext
 
+from .forms import LinesField
 from .plugins import _import
 
 # Constraint attributes carried by annotated-types objects in a pydantic field's
@@ -155,15 +156,10 @@ class NameListWidget(forms.Widget):
         )
 
 
-class NameList(forms.Field):
+class NameList(LinesField):
     """A list of names, one field per name."""
 
     widget = NameListWidget
-
-    def prepare_value(self, value: Any) -> Any:
-        if isinstance(value, (list, tuple)):
-            return "\n".join(str(item) for item in value)
-        return value
 
     def to_python(self, value: Any) -> list[str]:
         if isinstance(value, (list, tuple)):
