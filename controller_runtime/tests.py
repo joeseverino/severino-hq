@@ -19,6 +19,7 @@ from . import providers, worker
 from controller_runtime import (
     cloudflare,
     cloudflare_analytics,
+    cloudflare_api,
     commands,
     connection_env,
     glance,
@@ -550,7 +551,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.cloudflare._cloudflare_envelope")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_envelope")
     @mock.patch("controller_runtime.commands.run_command")
     @mock.patch("controller_runtime.commands.run_ssh")
     @mock.patch("controller_runtime.provider_http.request_json")
@@ -611,7 +612,7 @@ class ProviderAdapterTests(TestCase):
         self.assertEqual(ssh.call_count, 2)
         self.assertNotIn("secret-c", json.dumps(result))
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_paged")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_paged")
     def test_one_sweep_reuses_successful_provider_reads_and_then_forgets_them(
         self, paged
     ):
@@ -638,7 +639,7 @@ class ProviderAdapterTests(TestCase):
         clear=True,
     )
     @mock.patch("controller_runtime.commands.run_command")
-    @mock.patch("controller_runtime.cloudflare._cloudflare_envelope")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_envelope")
     def test_one_broken_credential_does_not_hide_the_others(self, request, _run):
         """A failure is that connection's, and the sweep still reports the rest.
 
@@ -1988,7 +1989,7 @@ class CloudflareAdapterTests(TestCase):
     def _calls(self, request):
         return [call.args[0] for call in request.call_args_list]
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_request")
     def test_a_missing_record_is_created(self, request):
         request.side_effect = [
             [ZONE],
@@ -2014,7 +2015,7 @@ class CloudflareAdapterTests(TestCase):
         self.assertEqual(created.kwargs["payload"]["content"], "203.0.113.1")
         self.assertEqual(result.status["record_id"], "new1")
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_request")
     def test_a_matching_record_is_left_alone(self, request):
         request.side_effect = [
             [ZONE],
@@ -2037,7 +2038,7 @@ class CloudflareAdapterTests(TestCase):
         # record burns an API call per pass and hides real changes in the log.
         self.assertEqual(request.call_count, 2)
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_request")
     def test_a_changed_value_updates_that_record_in_place(self, request):
         request.side_effect = [
             [ZONE],
@@ -2062,7 +2063,7 @@ class CloudflareAdapterTests(TestCase):
         self.assertEqual(written.kwargs["method"], "PUT")
         self.assertIn("/dns_records/r1", written.args[0])
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_request")
     def test_retargeting_a_record_moves_it_rather_than_cloning_it(self, request):
         """The bug class that made renaming create a second record.
 
@@ -2095,7 +2096,7 @@ class CloudflareAdapterTests(TestCase):
         self.assertEqual(written.kwargs["method"], "PUT")
         self.assertIn("/dns_records/r1", written.args[0])
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_request")
     def test_one_of_nine_records_on_a_name_is_the_one_edited(self, request):
         """A zone apex holds many records. Matching by name would pick a coin toss."""
 
@@ -2138,7 +2139,7 @@ class CloudflareAdapterTests(TestCase):
 
         self.assertIn("/dns_records/m2", request.call_args_list[-1].args[0])
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_request")
     def test_caa_is_sent_as_three_fields_not_as_a_string(self, request):
         """Cloudflare returns CAA as one string and accepts it only as data."""
 
@@ -2165,7 +2166,7 @@ class CloudflareAdapterTests(TestCase):
         )
         self.assertNotIn("content", payload)
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_request")
     def test_an_mx_carries_its_priority_and_an_address_record_does_not(self, request):
         request.side_effect = [
             [ZONE],
@@ -2208,7 +2209,7 @@ class CloudflareAdapterTests(TestCase):
         # rejects the field outright on a TXT or MX record.
         self.assertIn("proxied", payload)
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_request")
     def test_a_txt_value_matches_whether_or_not_it_was_typed_quoted(self, request):
         """Cloudflare stores TXT quoted and returns it quoted, always."""
 
@@ -2230,7 +2231,7 @@ class CloudflareAdapterTests(TestCase):
 
         self.assertFalse(result.changed)
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_request")
     def test_a_name_typed_in_capitals_is_not_permanent_drift(self, request):
         """Cloudflare lowercases names, so sending the typed case never matches."""
 
@@ -2252,7 +2253,7 @@ class CloudflareAdapterTests(TestCase):
 
         self.assertFalse(result.changed)
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_request")
     def test_a_caa_value_with_extra_spaces_is_not_permanent_drift(self, request):
         request.side_effect = [
             [ZONE],
@@ -2280,7 +2281,7 @@ class CloudflareAdapterTests(TestCase):
 
         self.assertFalse(result.changed)
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_request")
     def test_delete_removes_only_the_record_it_owns(self, request):
         siblings = [
             live("t1", "TXT", "example.com", '"one"'),
@@ -2304,7 +2305,7 @@ class CloudflareAdapterTests(TestCase):
         self.assertEqual(deleted.kwargs["method"], "DELETE")
         self.assertIn("/dns_records/t2", deleted.args[0])
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_request")
     def test_deleting_something_already_gone_is_success(self, request):
         """Deletion has to be idempotent: the queue retries a delete that
         applied and then failed to report, and a second attempt finding nothing
@@ -2324,7 +2325,7 @@ class CloudflareAdapterTests(TestCase):
         self.assertFalse(result.changed)
         self.assertEqual(request.call_count, 2)
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_request")
     def test_a_zone_the_credential_cannot_see_is_named(self, request):
         request.side_effect = [[ZONE]]
 
@@ -2340,7 +2341,7 @@ class CloudflareAdapterTests(TestCase):
                 }
             )
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_request")
     def test_every_page_of_a_long_zone_is_read(self, request):
         """Cloudflare returns 100 records at most.
 
@@ -2360,7 +2361,7 @@ class CloudflareAdapterTests(TestCase):
         self.assertEqual(len(records), 101)
         self.assertIn("page=2", self._calls(request)[-1])
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_request")
     def test_the_inventory_reports_what_hq_can_express(self, request):
         request.side_effect = [
             [ZONE],
@@ -2379,14 +2380,14 @@ class CloudflareAdapterTests(TestCase):
 
 
 class CloudflareAnalyticsTests(TestCase):
-    @mock.patch("controller_runtime.cloudflare._cloudflare_api_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_api_request")
     def test_account_lists_are_read_to_the_last_page(self, request):
         request.side_effect = [
             {"result": [{"id": f"account-{index}"} for index in range(100)]},
             {"result": [{"id": "account-100"}]},
         ]
 
-        accounts = cloudflare.cloudflare_api_list("/accounts", "example-api")
+        accounts = cloudflare_api.cloudflare_api_list("/accounts", "example-api")
 
         self.assertEqual(len(accounts), 101)
         self.assertIn("page=1", request.call_args_list[0].args[0])
@@ -2411,7 +2412,7 @@ class CloudflareAnalyticsTests(TestCase):
         ):
             for path in ("/accounts", "/zones", "/accounts/a/d1/database"):
                 with self.assertRaises(ProviderError):
-                    cloudflare._cloudflare_api_request(path)
+                    cloudflare_api.cloudflare_api_request(path)
 
         self.assertEqual(urlopen.call_count, 1)
 
@@ -2437,7 +2438,7 @@ class CloudflareAnalyticsTests(TestCase):
         ):
             for path in ("/accounts", "/zones"):
                 with self.assertRaises(ProviderError):
-                    cloudflare._cloudflare_api_request(path)
+                    cloudflare_api.cloudflare_api_request(path)
 
         self.assertEqual(urlopen.call_count, 2)
 
@@ -2475,9 +2476,9 @@ class CloudflareAnalyticsTests(TestCase):
         ):
             for path in ("/accounts/a/access/apps", "/accounts/a/d1/database"):
                 with self.assertRaises(ProviderError) as raised:
-                    cloudflare._cloudflare_api_request(path, "example-api")
+                    cloudflare_api.cloudflare_api_request(path, "example-api")
                 self.assertEqual(raised.exception.refusal, PERMISSION_REFUSAL)
-            refused = dict(cloudflare._refused_credentials())
+            refused = dict(cloudflare_api._refused_credentials())
 
         self.assertEqual(refused, {})
         # Two refused reads and one verification, shared by both.
@@ -2495,7 +2496,7 @@ class CloudflareAnalyticsTests(TestCase):
             provider_http.provider_snapshot(),
         ):
             with self.assertRaises(ProviderError) as raised:
-                cloudflare._cloudflare_api_request("/accounts/a/access/apps", "example-api")
+                cloudflare_api.cloudflare_api_request("/accounts/a/access/apps", "example-api")
 
         self.assertEqual(raised.exception.refusal, CREDENTIAL_REFUSAL)
 
@@ -2569,7 +2570,7 @@ class CloudflareAnalyticsTests(TestCase):
         ):
             for path in ("/accounts", "/zones"):
                 with self.assertRaises(ProviderError) as raised:
-                    cloudflare._cloudflare_api_request(path)
+                    cloudflare_api.cloudflare_api_request(path)
                 self.assertEqual(raised.exception.refusal, CREDENTIAL_REFUSAL)
 
         self.assertEqual(urlopen.call_count, 1)
@@ -2593,7 +2594,7 @@ class CloudflareAnalyticsTests(TestCase):
                     self.assertEqual(
                         raised.exception.refusal, CREDENTIAL_REFUSAL
                     )
-            refused = dict(cloudflare._refused_credentials())
+            refused = dict(cloudflare_api._refused_credentials())
 
         self.assertEqual(urlopen.call_count, 2)
         self.assertEqual(set(refused), {"CF", "CLOUDFLARE_DNS"})
@@ -2624,8 +2625,8 @@ class CloudflareAnalyticsTests(TestCase):
             clear=True,
         ):
             self.assertEqual(
-                cloudflare.cloudflare_url(provider="cloudflare_api"),
-                cloudflare.CLOUDFLARE_API_URL,
+                cloudflare_api.cloudflare_url(provider="cloudflare_api"),
+                cloudflare_api.CLOUDFLARE_API_URL,
             )
         with mock.patch.dict(
             "os.environ",
@@ -2634,12 +2635,12 @@ class CloudflareAnalyticsTests(TestCase):
             clear=True,
         ):
             self.assertEqual(
-                cloudflare.cloudflare_url(provider="cloudflare_api"),
+                cloudflare_api.cloudflare_url(provider="cloudflare_api"),
                 "https://cloudflare.example.test/client/v4",
             )
 
     @mock.patch("controller_runtime.cloudflare_analytics.analytics_account")
-    @mock.patch("controller_runtime.cloudflare._cloudflare_api_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_api_request")
     def test_registrations_are_read_by_cursor(self, request, account):
         account.return_value = "account-id"
         request.side_effect = [
@@ -2664,7 +2665,7 @@ class CloudflareAnalyticsTests(TestCase):
         self.assertFalse(found["example.net"]["auto_renew"])
 
     @mock.patch("controller_runtime.cloudflare_analytics.analytics_account")
-    @mock.patch("controller_runtime.cloudflare._cloudflare_api_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_api_request")
     def test_a_refused_registrar_read_carries_its_reason(self, request, account):
         account.return_value = "account-id"
         request.side_effect = ProviderError("Cloudflare refused: 403")
@@ -2675,9 +2676,9 @@ class CloudflareAnalyticsTests(TestCase):
         self.assertEqual(found, {})
         self.assertEqual([entry["reason"] for entry in refused], ["Cloudflare refused: 403"])
 
-    @mock.patch("controller_runtime.cloudflare_analytics._analytics_sites")
+    @mock.patch("controller_runtime.cloudflare_analytics.account_sites")
     @mock.patch("controller_runtime.cloudflare_analytics.analytics_account")
-    @mock.patch("controller_runtime.cloudflare._cloudflare_api_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_api_request")
     def test_probe_and_reader_share_account_discovery(self, request, account, sites):
         request.return_value = {"success": True}
         account.return_value = "account-id"
@@ -6243,7 +6244,7 @@ class RegistrarRefusalTests(TestCase):
             "Cloudflare refused the request: Authentication error", refusal="permission"
         )
         with mock.patch.object(cloudflare_analytics, "analytics_account", return_value="acct"), \
-                mock.patch.object(cloudflare, "_cloudflare_api_cursor_list", side_effect=refused):
+                mock.patch.object(cloudflare_api, "cloudflare_api_cursor_list", side_effect=refused):
             with part_ledger() as refused_parts:
                 found = cloudflare._registrar_domains()
 
@@ -6405,7 +6406,7 @@ class MissingSettingTests(TestCase):
             self.assertLogs("severino.controller", "WARNING") as logged,
             self.assertRaises(ProviderError) as raised,
         ):
-            cloudflare.cloudflare_token("")
+            cloudflare_api.cloudflare_token("")
 
         self.assertEqual(str(raised.exception), provider_http.NOT_CONFIGURED)
         self.assertNotIn("API_TOKEN", str(raised.exception))

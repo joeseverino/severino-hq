@@ -15,7 +15,7 @@ import tempfile
 from typing import Any
 
 from control_plane.provider_adapters.contracts import ProviderError
-from . import cloudflare, commands, provider_http
+from . import cloudflare_api, commands, provider_http
 
 
 def certificate_bundle(fullchain: bytes, private_key: bytes) -> bytes:
@@ -149,7 +149,7 @@ def issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
         )
     commands.run_command(["certbot", "--version"], step="certbot preflight")
     credentials = acme_dir / "cloudflare.ini"
-    credentials.write_text("dns_cloudflare_api_token = " + cloudflare.cloudflare_token() + "\n")
+    credentials.write_text("dns_cloudflare_api_token = " + cloudflare_api.cloudflare_token() + "\n")
     credentials.chmod(0o600)
     command = [
         "certbot",

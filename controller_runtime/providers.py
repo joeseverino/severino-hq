@@ -25,6 +25,7 @@ from control_plane.provider_adapters.tailscale import TAILNET_KIND
 from control_plane.provider_adapters.parts import part_ledger
 from . import (
     cloudflare,
+    cloudflare_account,
     commands,
     connection_env,
     handlers,
@@ -45,6 +46,7 @@ logger = logging.getLogger("severino.controller")
 REGISTRANTS = (
     tls,
     cloudflare,
+    cloudflare_account,
     portainer,
     tailscale,
     tailnet_policy,

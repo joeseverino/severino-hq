@@ -13,7 +13,7 @@ from control_plane.models import ProviderInventory
 from control_plane.observations import OBSERVATIONS
 
 from . import providers
-from controller_runtime import cloudflare, handlers, provider_http
+from controller_runtime import cloudflare, cloudflare_account, cloudflare_api, handlers, provider_http
 from control_plane.provider_adapters.contracts import ProviderError
 from control_plane.provider_adapters.parts import part_ledger
 
@@ -79,7 +79,7 @@ def _paged(pages):
 class CloudflareReadingTests(TestCase):
     def _read(self, kind, routes):
         fake = _Cloudflare(routes)
-        with mock.patch.object(cloudflare, "_cloudflare_api_request", fake):
+        with mock.patch.object(cloudflare_api, "cloudflare_api_request", fake):
             with provider_http.provider_snapshot(), part_ledger() as refused:
                 records = handlers.OBSERVATION_READERS[kind]()
         self.refused = refused
@@ -495,7 +495,7 @@ class CloudflareReadingTests(TestCase):
             ("/zones/zone-2/pagerules", {"success": True, "result": []}),
         ]
         fake = _Cloudflare(routes)
-        with mock.patch.object(cloudflare, "_cloudflare_api_request", fake):
+        with mock.patch.object(cloudflare_api, "cloudflare_api_request", fake):
             with provider_http.provider_snapshot():
                 report = providers._read_kind(handlers.OBSERVATION_READERS["cloudflare.redirect"])
 
@@ -524,17 +524,17 @@ class CloudflareReadingTests(TestCase):
             (f"/accounts/{ACCOUNT}/access/apps", _page([self.APP])),
             (f"/accounts/{ACCOUNT}/access/service_tokens", _page([])),
         ])
-        with mock.patch.object(cloudflare, "_cloudflare_api_request", fake):
+        with mock.patch.object(cloudflare_api, "cloudflare_api_request", fake):
             with provider_http.provider_snapshot():
-                cloudflare.list_access_apps()
-                cloudflare.list_access_service_tokens()
+                cloudflare_account.list_access_apps()
+                cloudflare_account.list_access_service_tokens()
 
         self.assertEqual(len(fake.paths("/accounts?")), 1)
         self.assertEqual(len(fake.paths(f"/accounts/{ACCOUNT}/access/apps")), 1)
 
 
 class ZonePostureTests(TestCase):
-    @mock.patch("controller_runtime.cloudflare._cloudflare_api_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_api_request")
     def test_each_posture_setting_is_read_on_its_own(self, request):
         request.side_effect = lambda path, *_: {
             "success": True,
@@ -549,7 +549,7 @@ class ZonePostureTests(TestCase):
         )
         self.assertEqual(set(posture), set(cloudflare.ZONE_POSTURE_SETTINGS))
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_api_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_api_request")
     def test_a_refused_posture_is_the_zones_refused_part(self, request):
         request.side_effect = ProviderError("Cloudflare refused: 403")
 
@@ -563,7 +563,7 @@ class ZonePostureTests(TestCase):
               "scope": "example.com", "connection_ref": ""}],
         )
 
-    @mock.patch("controller_runtime.cloudflare._cloudflare_api_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_api_request")
     def test_a_setting_refused_leaves_no_half_posture(self, request):
         def answer(path, *_):
             if path.endswith("/tls_1_3"):
@@ -580,10 +580,10 @@ class ZonePostureTests(TestCase):
 
 
 class AccountListTests(TestCase):
-    @mock.patch("controller_runtime.cloudflare._cloudflare_api_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_api_request")
     def test_total_pages_decides_over_a_short_page(self, request):
         request.side_effect = [_page([{"id": "a"}], 1, 2), _page([{"id": "b"}], 2, 2)]
 
-        found = cloudflare.cloudflare_api_list("/accounts/x/pages/projects", per_page=10)
+        found = cloudflare_api.cloudflare_api_list("/accounts/x/pages/projects", per_page=10)
 
         self.assertEqual([item["id"] for item in found], ["a", "b"])

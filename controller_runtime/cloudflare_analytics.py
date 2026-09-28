@@ -11,7 +11,7 @@ from typing import Any
 
 from analytics.contracts import MAX_QUERY_DAYS, completed_window
 from control_plane.provider_adapters.contracts import ProviderError
-from . import cloudflare, connection_env, provider_http
+from . import cloudflare_api, connection_env, provider_http
 
 
 # Which Cloudflare dimension answers each breakdown HQ stores. Declared once:
@@ -51,8 +51,8 @@ def _cloudflare_graphql(
     """
 
     prefix = connection_env.connection_prefix("cloudflare_api", connection_ref)
-    cloudflare.cloudflare_breaker(prefix)
-    base = cloudflare.cloudflare_url(connection_ref, provider="cloudflare_api")
+    cloudflare_api.cloudflare_breaker(prefix)
+    base = cloudflare_api.cloudflare_url(connection_ref, provider="cloudflare_api")
     body = json.dumps({"query": query, "variables": variables}).encode("utf-8")
     try:
         with provider_http.open_url(
@@ -61,7 +61,7 @@ def _cloudflare_graphql(
             method="POST",
             headers={
                 "Authorization": (
-                    f"Bearer {cloudflare.cloudflare_token(connection_ref, provider='cloudflare_api')}"
+                    f"Bearer {cloudflare_api.cloudflare_token(connection_ref, provider='cloudflare_api')}"
                 ),
                 "Content-Type": "application/json",
             },
@@ -70,13 +70,13 @@ def _cloudflare_graphql(
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         with exc:
-            detail = cloudflare.cloudflare_errors(exc.read())
-        raise cloudflare.cloudflare_refused(
+            detail = cloudflare_api.cloudflare_errors(exc.read())
+        raise cloudflare_api.cloudflare_refused(
             prefix,
             f"Cloudflare analytics refused the query: HTTP {exc.code}.",
             detail,
             status=exc.code,
-            verified=lambda: cloudflare.cloudflare_verified("cloudflare_api", connection_ref),
+            verified=lambda: cloudflare_api.cloudflare_verified("cloudflare_api", connection_ref),
         ) from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise ProviderError(
@@ -88,7 +88,7 @@ def _cloudflare_graphql(
     if payload.get("errors"):
         first = payload["errors"][0]
         message = first.get("message", "") if isinstance(first, dict) else ""
-        raise cloudflare.cloudflare_refused(
+        raise cloudflare_api.cloudflare_refused(
             prefix, f"Cloudflare analytics rejected the query: {message}", message
         )
     return payload.get("data") or {}
@@ -97,7 +97,7 @@ def _cloudflare_graphql(
 def analytics_account(connection_ref: str = "") -> str:
     """The one account this credential reads, discovered rather than configured."""
 
-    accounts = cloudflare.cloudflare_api_list("/accounts", connection_ref, per_page=50)
+    accounts = cloudflare_api.cloudflare_api_list("/accounts", connection_ref, per_page=50)
     tags = [account["id"] for account in accounts if account.get("id")]
     if len(tags) != 1:
         raise ProviderError(
@@ -106,14 +106,14 @@ def analytics_account(connection_ref: str = "") -> str:
     return tags[0]
 
 
-def _analytics_sites(account: str, connection_ref: str = "") -> list[dict[str, str]]:
+def account_sites(account: str, connection_ref: str = "") -> list[dict[str, str]]:
     """Web Analytics sites that still describe something.
 
     The same membership rule the probe applies: a site whose ruleset names no
     hostname measures nothing, and Cloudflare keeps those around indefinitely.
     """
 
-    result = cloudflare.cloudflare_api_list(
+    result = cloudflare_api.cloudflare_api_list(
         f"/accounts/{account}/rum/site_info/list", connection_ref
     )
     sites = []
@@ -290,7 +290,7 @@ def analytics_sites() -> list[dict[str, str]]:
                 "account": account,
                 "connection_ref": connection_ref,
             }
-            for site in _analytics_sites(account, connection_ref)
+            for site in account_sites(account, connection_ref)
         )
     return found
 

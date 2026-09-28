@@ -651,7 +651,7 @@ The kinds the controller core still implements follow the same rule from the
 other side. Each integration lives in `controller_runtime/` (`tls`,
 `cloudflare`, `portainer`, `tailscale`, `host_readings`), split further by
 concern where it grew (`tls_issuance`, `tls_verification`, `npm_certificates`,
-`tailnet_api`, `tailnet_policy`). A sibling is called as `module.name`, so a
+`tailnet_api`, `tailnet_policy`, `cloudflare_api`, `cloudflare_account`). A sibling is called as `module.name`, so a
 patch on the owner reaches every caller. Each handler registers itself beside
 its definition: `@lists(kind)` for inventory,
 `@acts(kind, action)` for an action, `@probes(provider)` for a connection probe
