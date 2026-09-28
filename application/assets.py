@@ -11,17 +11,13 @@ from django.db import transaction
 
 from assets.models import Asset
 from core.audit import operation_context
-from docs_index.models import DocumentationRecord
 from projects.models import Project
+from .sensitivity import safe_doc_ids
 from .security import Capability, Principal
 from .upserts import upsert_by_slug
 from .projection import addressable, iso, listing
 from .ui import counted
 
-SAFE_SENSITIVITIES = (
-    DocumentationRecord.Sensitivity.PUBLIC,
-    DocumentationRecord.Sensitivity.INTERNAL,
-)
 
 
 class NotFoundError(ValueError):
@@ -75,13 +71,7 @@ def serialize_asset(asset: Asset, *, relationships: bool = False) -> dict[str, A
             "projects": list(
                 asset.related_projects.order_by("slug").values_list("slug", flat=True)
             ),
-            "documentation": list(
-                asset.documentation_records.filter(
-                    sensitivity__in=SAFE_SENSITIVITIES
-                )
-                .order_by("doc_id")
-                .values_list("doc_id", flat=True)
-            ),
+            "documentation": safe_doc_ids(asset.documentation_records),
             "content": list(
                 asset.content_items.order_by("slug").values_list("slug", flat=True)
             ),

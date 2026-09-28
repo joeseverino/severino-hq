@@ -14,14 +14,11 @@ from core.audit import operation_context
 from docs_index.models import DocumentationRecord
 from expenses.models import Expense
 from projects.models import Project
+from .sensitivity import safe_doc_ids
 from .security import Capability, Principal
 from .projection import iso
 from .ui import counted
 
-SAFE_SENSITIVITIES = (
-    DocumentationRecord.Sensitivity.PUBLIC,
-    DocumentationRecord.Sensitivity.INTERNAL,
-)
 
 
 class NotFoundError(ValueError):
@@ -77,13 +74,7 @@ def serialize_content(item: ContentItem) -> dict[str, Any]:
             "expense_ids": list(
                 item.related_expenses.order_by("id").values_list("id", flat=True)
             ),
-            "documentation": list(
-                item.related_documentation.filter(
-                    sensitivity__in=SAFE_SENSITIVITIES
-                )
-                .order_by("doc_id")
-                .values_list("doc_id", flat=True)
-            ),
+            "documentation": safe_doc_ids(item.related_documentation),
         },
     }
 

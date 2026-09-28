@@ -16,12 +16,9 @@ from expenses.models import Expense
 from projects.models import Project
 
 from core.audit import operation_context
+from .sensitivity import SAFE_SENSITIVITIES
 from .security import Capability, Principal
 
-SAFE_SENSITIVITIES = (
-    DocumentationRecord.Sensitivity.PUBLIC,
-    DocumentationRecord.Sensitivity.INTERNAL,
-)
 
 
 class NotFoundError(ValueError):

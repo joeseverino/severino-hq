@@ -1,6 +1,7 @@
 """Canonical, non-mutating HQ projections shared by delivery adapters."""
 
 from __future__ import annotations
+from .sensitivity import SAFE_SENSITIVITIES
 from .projection import iso, page_size
 
 from typing import Any
@@ -16,10 +17,6 @@ from expenses.models import Expense
 from projects.models import Project
 from receipts.models import Receipt
 
-SAFE_SENSITIVITIES = (
-    DocumentationRecord.Sensitivity.PUBLIC,
-    DocumentationRecord.Sensitivity.INTERNAL,
-)
 
 
 
