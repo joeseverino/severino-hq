@@ -8,8 +8,15 @@ from .cadence import slowest_sweep_interval as _slowest_sweep_interval, sweep_in
 from .topology_lenses import _STALE_AFTER
 from .topology_model import TopologyNode
 from .ui import counted, duration
-from .finding_model import Finding, Remedy, FindingEstate, fact_values, is_observable, reconcile_remedy
-from .finding_model import FindingRule
+from .finding_model import (
+    Finding,
+    Remedy,
+    FindingEstate,
+    fact_values,
+    is_observable,
+    reconcile_remedy,
+    FindingRule,
+)
 
 
 # ``_STALE_AFTER`` is imported rather than restated: the lens that asks "what

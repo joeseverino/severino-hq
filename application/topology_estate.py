@@ -29,8 +29,13 @@ from .facts import Joined, Subject, inventory_records, readings
 from .locate import Machines, index_of
 from .paths import path_to
 from .connections import machines_once
-from .topology_model import derived_id, edge_between, newest_stamp
-from .topology_model import TopologyEdge, TopologyNode
+from .topology_model import (
+    derived_id,
+    edge_between,
+    newest_stamp,
+    TopologyEdge,
+    TopologyNode,
+)
 
 
 # Derived node kinds that only stand for a machine something mentioned: a

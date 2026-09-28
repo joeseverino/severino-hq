@@ -32,10 +32,17 @@ from .entity_links import entity_link, kind_label
 from .infrastructure import resource_health
 from .resource_capabilities import removals_pending, resource_capabilities
 from .security import Capability, Principal
-from .topology_model import Topology, TopologyEdge, TopologyNode, TopologyTrace
+from .topology_model import (
+    Topology,
+    TopologyEdge,
+    TopologyNode,
+    TopologyTrace,
+    derived_id,
+    edge_between,
+    newest_stamp,
+)
 from .topology_lenses import TOPOLOGY_LENSES, TopologyLens, apply_lens, apply_trace, lens_for
 from .topology_facts import add_connection_facts, add_observed_facts
-from .topology_model import derived_id, edge_between, newest_stamp
 
 
 _KIND_ORDER = {

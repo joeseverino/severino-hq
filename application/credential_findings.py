@@ -21,8 +21,7 @@ from control_plane.provider_adapters.contracts import (
 )
 
 from .ui import counted
-from .finding_model import OperatorStep
-from .finding_model import FindingRule, built_findings
+from .finding_model import FindingRule, OperatorStep, built_findings, fact_values
 
 # Fact keys a connection node carries; ``topology`` writes them.
 FAILURE = "connection-failure"
@@ -50,10 +49,6 @@ def credential_facts(fix: Any) -> tuple[tuple[str, str], ...]:
     if fix.by_hand:
         found.append((BY_HAND, fix.by_hand))
     return tuple(found)
-
-
-def _values(node: Any, key: str) -> tuple[str, ...]:
-    return tuple(value for name, value in node.facts if name == key and value)
 
 
 def operator_steps(
@@ -89,10 +84,10 @@ def mint_steps(node: Any) -> tuple[OperatorStep, ...]:
     """The mint step a connection node's facts describe, for a finding."""
 
     return operator_steps(
-        next(iter(_values(node, MINT)), ""),
-        _values(node, MINT_NOTE),
-        next(iter(_values(node, BY_HAND)), ""),
-        _values(node, MISSING),
+        next(iter(fact_values(node, MINT)), ""),
+        fact_values(node, MINT_NOTE),
+        next(iter(fact_values(node, BY_HAND)), ""),
+        fact_values(node, MISSING),
     )
 
 
@@ -108,7 +103,7 @@ FAILURE_LABELS = {
 def failure_of_node(node: Any) -> str:
     """Why the connection's last probe failed, one of ``FAILURES``, or ""."""
 
-    return next(iter(_values(node, FAILURE)), "")
+    return next(iter(fact_values(node, FAILURE)), "")
 
 
 def answer_steps(node: Any) -> tuple[OperatorStep, ...]:
@@ -117,7 +112,7 @@ def answer_steps(node: Any) -> tuple[OperatorStep, ...]:
     from .credential_mint import address_fields
 
     failure = failure_of_node(node)
-    endpoint = next(iter(_values(node, ENDPOINT)), "")
+    endpoint = next(iter(fact_values(node, ENDPOINT)), "")
     if failure == ADDRESS_FAILURE:
         return (
             OperatorStep(
@@ -163,10 +158,10 @@ def missing_permissions(estate: Any) -> tuple[dict[str, Any], ...]:
     for node in estate.nodes():
         if node.kind != "connection":
             continue
-        missing = _values(node, MISSING)
+        missing = fact_values(node, MISSING)
         if not missing:
             continue
-        unseen = _values(node, UNSEEN)
+        unseen = fact_values(node, UNSEEN)
         found.append(
             dict(
                 rule="credential-missing-permissions",
@@ -198,7 +193,7 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
     for node in estate.nodes():
         if node.kind != "connection":
             continue
-        stamp = next(iter(_values(node, EXPIRES)), "")
+        stamp = next(iter(fact_values(node, EXPIRES)), "")
         if not stamp:
             continue
         expired = datetime.fromisoformat(stamp) <= timezone.now()

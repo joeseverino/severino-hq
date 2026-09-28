@@ -7,10 +7,16 @@ from urllib.parse import urlencode
 from control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
 
 from . import trusted_networks
-from .finding_model import OperatorStep
+from .finding_model import (
+    OperatorStep,
+    Finding,
+    Remedy,
+    FindingEstate,
+    built_findings,
+    fact_values,
+    FindingRule,
+)
 from .ui import counted
-from .finding_model import Finding, Remedy, FindingEstate, built_findings, fact_values
-from .finding_model import FindingRule
 
 
 def _devices_join_without_approval(estate: FindingEstate) -> tuple[Finding, ...]:

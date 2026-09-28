@@ -5,9 +5,7 @@ from __future__ import annotations
 from datetime import timezone as dt_timezone
 
 from .expiry import days_until
-from .finding_model import Finding, FindingEstate
-from .finding_model import parse_stamp
-from .finding_model import FindingRule
+from .finding_model import Finding, FindingEstate, parse_stamp, FindingRule
 
 
 def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:

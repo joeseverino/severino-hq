@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from .finding_model import OperatorStep
-from .finding_model import Finding, FindingEstate, fact_values
-from .finding_model import FindingRule
+from .finding_model import (
+    OperatorStep,
+    Finding,
+    FindingEstate,
+    fact_values,
+    FindingRule,
+)
 
 
 def _reached_but_unmeasured(estate: FindingEstate) -> tuple[Finding, ...]:
