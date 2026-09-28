@@ -1556,7 +1556,8 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     }
 
     def _resolve(self, *targets, install_on=None):
-        from .providers import ProviderResolutionContext, resolve_provider_spec
+        from .providers import resolve_provider_spec
+        from .provider_spec import ProviderResolutionContext
 
         return resolve_provider_spec(
             "tls.certificate",
@@ -1691,7 +1692,9 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     def test_a_certificate_hq_did_not_issue_cannot_be_recorded(self):
         """There are no observed facts to publish, only the declaration."""
 
-        from .providers import ProviderResolutionContext, resolve_provider_spec
+        from .providers import resolve_provider_spec
+
+        from .provider_spec import ProviderResolutionContext
 
         with self.assertRaisesRegex(ValueError, "cannot be recorded in 1Password"):
             resolve_provider_spec(

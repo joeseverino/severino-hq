@@ -160,7 +160,7 @@ class CredentialFix:
 
     @property
     def expiry(self) -> str:
-        from control_plane.providers import expiry_phrase
+        from control_plane.provider_spec import expiry_phrase
 
         return expiry_phrase(self.expires_at.isoformat()) if self.expires_at else ""
 

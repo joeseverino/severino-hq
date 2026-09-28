@@ -27,8 +27,8 @@ from control_plane.providers import (
     MACHINE_KIND,
     PROVIDERS,
     normalized_hostname,
-    origin_is_authoritative,
 )
+from control_plane.provider_spec import origin_is_authoritative
 
 from .containers import Running, container_watchers
 from .services import CONTAINER_KIND

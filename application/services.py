@@ -47,13 +47,15 @@ from control_plane.names import in_zone
 from control_plane.providers import (
     CONTAINER_KIND,
     PROVIDERS,
-    NameContext,
     certificate_covers,
-    origin_is_authoritative,
     service_facets,
     names_a_host,
     normalized_hostname,
     resource_home,
+)
+from control_plane.provider_spec import (
+    NameContext,
+    origin_is_authoritative,
 )
 from control_plane.connection_kinds import CONNECTION_LABELS
 from projects.models import Project

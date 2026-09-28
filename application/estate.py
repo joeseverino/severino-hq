@@ -18,8 +18,9 @@ from django.utils import timezone
 from control_plane.providers import (
     CERTIFICATE_KIND,
     UPLOADED_CERTIFICATE_KIND,
-    expiry_phrase,
 )
+
+from control_plane.provider_spec import expiry_phrase
 
 from .entity_links import entity_link
 from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window

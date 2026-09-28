@@ -54,7 +54,7 @@ def add(nodes, readers: Callable[[Joined], Iterable[str]]) -> None:
 def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
     """A certificate a connection reads, inside three weeks of expiry or past it."""
 
-    from control_plane.providers import expiry_phrase
+    from control_plane.provider_spec import expiry_phrase
 
     found = []
     for node in estate.nodes():

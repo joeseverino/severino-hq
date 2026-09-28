@@ -11,7 +11,8 @@ from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from control_plane.models import ManagedResource
-from control_plane.providers import PROVIDERS, SERVICE_FACETS, SERVICE_FACET_IDS
+from control_plane.providers import PROVIDERS
+from control_plane.provider_spec import SERVICE_FACETS, SERVICE_FACET_IDS
 from projects.models import Project
 
 from .attention import services as service_attention
@@ -797,7 +798,7 @@ class OriginNoteTests(TestCase):
     """
 
     def test_it_is_silent_when_a_facet_already_names_the_container(self):
-        from control_plane.providers import NameContext
+        from control_plane.provider_spec import NameContext
 
         from .containers import Running
         from .services import Facet, Origin, Service
@@ -848,7 +849,7 @@ class OriginNoteTests(TestCase):
         self.assertTrue(service.origin_is_news)
 
     def test_it_speaks_up_when_nothing_identified_what_is_running(self):
-        from control_plane.providers import NameContext
+        from control_plane.provider_spec import NameContext
 
         from .services import Facet, Origin, Service
 

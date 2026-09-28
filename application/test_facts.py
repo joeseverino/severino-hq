@@ -314,7 +314,7 @@ class QueryCountTests(TestCase):
 class InZoneTests(TestCase):
     def test_label_boundaries_wildcards_and_spelling(self):
         from control_plane.names import in_zone
-        from control_plane.providers import NameContext
+        from control_plane.provider_spec import NameContext
 
         self.assertTrue(in_zone("example.com", "example.com"))
         self.assertTrue(in_zone("*.Example.com.", "example.COM."))

@@ -200,7 +200,7 @@ def missing_permissions(estate: Any) -> tuple[dict[str, Any], ...]:
 def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
     """A credential inside its renewal window, or past it."""
 
-    from control_plane.providers import expiry_phrase
+    from control_plane.provider_spec import expiry_phrase
 
     found = []
     for node in estate.nodes():

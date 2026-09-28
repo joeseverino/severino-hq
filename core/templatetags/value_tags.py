@@ -57,7 +57,7 @@ def ago(value):
 @register.filter
 def expiry(value):
     """``{{ not_after|expiry }}``: "22 Dec 2026 · 87 days", the one phrasing HQ uses for an end date."""
-    from control_plane.providers import expiry_phrase
+    from control_plane.provider_spec import expiry_phrase
 
     return expiry_phrase(str(value or ""))
 

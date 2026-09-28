@@ -31,8 +31,8 @@ from control_plane.providers import (
     PROVIDERS,
     UPLOADED_CERTIFICATE_KIND,
     caa_parts,
-    expiry_phrase,
 )
+from control_plane.provider_spec import expiry_phrase
 
 from control_plane.names import in_zone, normalized_hostname
 

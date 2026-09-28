@@ -28,8 +28,8 @@ from control_plane.providers import (
     UPLOADED_CERTIFICATE_KIND,
     UPLOADED_CERTIFICATE_REFUSALS,
     ZONE_KIND,
-    NameContext,
 )
+from control_plane.provider_spec import NameContext
 
 from .connections import connections_for, reachable_through
 

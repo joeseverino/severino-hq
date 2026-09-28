@@ -33,7 +33,9 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 
-from control_plane.providers import PROVIDERS, NameContext, validate_spec
+from control_plane.providers import PROVIDERS, validate_spec
+
+from control_plane.provider_spec import NameContext
 
 from .plugins import _import
 

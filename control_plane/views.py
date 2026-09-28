@@ -117,13 +117,13 @@ from .models import ManagedResource, OperationRequest
 from .providers import (
     CERTIFICATE_KIND,
     MACHINE_KIND,
-    NameContext,
     PROVIDERS,
     normalized_hostname,
     service_facets,
     controller_action_policy,
     describe_providers,
 )
+from .provider_spec import NameContext
 
 
 # Which use case serves which verb. A ladder here meant every verb but one fell

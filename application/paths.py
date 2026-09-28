@@ -30,8 +30,8 @@ from control_plane.observations import OBSERVATIONS
 from control_plane.providers import (
     PROVIDERS,
     TAILNET_KIND,
-    expiry_phrase,
 )
+from control_plane.provider_spec import expiry_phrase
 from control_plane.connection_kinds import CONNECTION_LABELS
 
 from .entity_links import EntityLink, entity_link, kind_label

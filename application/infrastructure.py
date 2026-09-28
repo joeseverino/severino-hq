@@ -168,7 +168,7 @@ def resolved_spec(
     to be reading the same declaration.
     """
 
-    from control_plane.providers import ProviderResolutionContext
+    from control_plane.provider_spec import ProviderResolutionContext
 
     try:
         return resolve_provider_spec(
@@ -395,7 +395,8 @@ def operation_summary(operation: OperationRequest) -> dict[str, Any]:
 
 def controller_contract(resource: ManagedResource) -> dict[str, Any]:
     """Return the minimal desired-only contract consumed by a controller."""
-    from control_plane.providers import ProviderResolutionContext, resolve_provider_spec
+    from control_plane.providers import resolve_provider_spec
+    from control_plane.provider_spec import ProviderResolutionContext
 
     def resource_status(key: str, kinds: tuple[str, ...]) -> dict[str, Any] | None:
         return (

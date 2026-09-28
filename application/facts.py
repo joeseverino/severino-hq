@@ -32,9 +32,9 @@ from control_plane.providers import (
     CONTAINER_KIND,
     PROVIDERS,
     certificate_covers,
-    expiry_phrase,
     normalized_hostname,
 )
+from control_plane.provider_spec import expiry_phrase
 
 from .entity_links import kind_label
 from .freshness import stale_after

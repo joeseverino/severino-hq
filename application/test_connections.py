@@ -25,7 +25,7 @@ from .connections import (
     reachable_through,
 )
 from .inventory import record_connections
-from control_plane.providers import NameContext
+from control_plane.provider_spec import NameContext
 
 from .provider_choices import container_stack, zone
 from .security import cli_principal
