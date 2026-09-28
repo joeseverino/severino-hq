@@ -400,8 +400,8 @@ def request_delivery_read() -> bool:
     """
 
     from control_plane.models import ManagedResource
+    from control_plane.provider_adapters.github import KIND as kind
 
-    kind = "github.delivery"
     if not (
         ProviderInventory.objects.filter(kind=kind).exists()
         or ManagedResource.objects.filter(kind=kind).exists()

@@ -10,7 +10,9 @@ from pydantic import Field, model_validator
 
 
 from ..consoles import cloudflare_dashboard
+from ..credential_reads import REGISTRAR_READ
 from ..names import normalized_hostname
+from ..observations.contract import ReadingPart
 from ..provider_spec import (
     NameContext,
     ProviderModel,
@@ -538,6 +540,12 @@ ZONE = ProviderSpec(
     key_hint=_zone_key_hint,
     declaration_only=True,
     contains=("cloudflare.dns_record", "zone", "zone"),
+    parts=(
+        ReadingPart(
+            "posture", "Zone TLS posture", ("Zone Settings Read (zone)",), "cloudflare_api"
+        ),
+        ReadingPart("registration", "Domain registration", (REGISTRAR_READ,), "cloudflare_api"),
+    ),
 )
 
 # Declarations only: the controller half is still the core's.

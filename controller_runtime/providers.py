@@ -24,6 +24,7 @@ from control_plane.provider_adapters.contracts import (
     failure_of,
 )
 from control_plane.provider_adapters import onepassword
+from control_plane.provider_adapters.tailscale import TAILNET_KIND
 from control_plane.provider_adapters.parts import part_ledger
 from . import cloudflare, commands, connection_env, handlers, host_readings, portainer, provider_http, provider_runtime, tailscale, tls
 from .handlers import probes
@@ -206,7 +207,7 @@ def _refused_report(exc: BaseException) -> dict[str, Any]:
 
 # Kinds read from something mounted on this host, and whether it is mounted.
 _LOCAL_SOURCES: dict[str, Callable[[], bool]] = {
-    "tailscale.device": lambda: bool(tailscale.TAILNET_STATUS),
+    TAILNET_KIND: lambda: bool(tailscale.TAILNET_STATUS),
     "host.firewall": lambda: bool(host_readings.HOST_FIREWALL),
 }
 

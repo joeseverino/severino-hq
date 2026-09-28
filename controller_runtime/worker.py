@@ -31,10 +31,7 @@ from .provider_http import (
     logger,
     provider_snapshot,
 )
-from control_plane.providers import (
-    controller_id,
-    enabled_controller_actions,
-)
+from control_plane.providers import PROVIDERS, controller_id, enabled_controller_actions
 
 
 class BridgeError(RuntimeError):
@@ -127,9 +124,12 @@ def _report(
 
 
 # Kinds whose work needs material HQ is holding rather than credentials the
-# controller has. Fetched separately from the contract so it stays out of
-# anything that merely describes a resource.
-_MATERIAL_KINDS = frozenset({"tls.uploaded_certificate"})
+# controller has: those whose declaration takes material from the operator.
+# Fetched separately from the contract so it stays out of anything that merely
+# describes a resource.
+_MATERIAL_KINDS = frozenset(
+    kind for kind, provider in PROVIDERS.items() if provider.material_handler
+)
 
 
 def _with_material(resource: dict[str, Any]) -> dict[str, Any]:

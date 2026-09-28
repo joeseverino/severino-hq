@@ -27,6 +27,7 @@ from pydantic import (
 from application.ui import counted
 
 from .names import in_zone
+from .observations.contract import ReadingPart
 
 
 class ProviderModel(BaseModel):
@@ -437,6 +438,10 @@ class ProviderSpec:
     # HQ can do; a second copy of that is a thing to keep in sync, not a
     # contract.
     actions: Mapping[str, ControllerActionPolicy] = field(default_factory=dict)
+    # The parts this kind's sweep reads through a credential other than the one
+    # that lists it, or in pieces, and what each needs. A reading declares the
+    # same on its ``ObservationSpec``; a part refused is stored against it.
+    parts: tuple[ReadingPart, ...] = ()
 
     def __post_init__(self) -> None:
         if self.facet and self.facet not in SERVICE_FACET_IDS:

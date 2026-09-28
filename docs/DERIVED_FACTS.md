@@ -78,7 +78,7 @@ Rules:
   the kind's `refused_parts` beside its records and HQ stores them
   (`control_plane.reading_parts`). A refused part is never a record or a record
   field, so a count never includes it. The whole kind on one zone, or on one
-  machine (`scope` its name, `address` its address), is the part `""`. Resource kinds swept in parts declare them in `RESOURCE_PARTS` (a zone's
+  machine (`scope` its name, `address` its address), is the part `""`. Resource kinds swept in parts declare them on their provider, `ProviderSpec.parts` (a zone's
   TLS posture and registration, the tailnet policy's settings, DNS and
   services). A refused part reads as **Partly refused** in credential sight,
   its permissions join the missing-permissions finding and the mint, it is an

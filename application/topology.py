@@ -18,6 +18,7 @@ from django.urls import reverse
 
 from control_plane.names import normalized_hostname
 from control_plane.models import ManagedResource
+from control_plane.provider_adapters.tailscale import TAILNET_KIND
 from control_plane.providers import PROVIDERS
 from control_plane.connection_kinds import CONNECTION_LABELS
 
@@ -732,7 +733,7 @@ def _tailnet_facts() -> tuple[tuple[str, str], ...]:
 
     addresses: set[str] = set()
     routes: set[str] = set()
-    for snapshot in _inventory_of("tailscale.device"):
+    for snapshot in _inventory_of(TAILNET_KIND):
         for record in snapshot.records:
             addresses.update(str(item) for item in record.get("addresses") or ())
             routes.update(

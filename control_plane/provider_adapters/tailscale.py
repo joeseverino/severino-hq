@@ -8,6 +8,7 @@ from pydantic import Field
 
 
 from ..consoles import tailscale_machine
+from ..observations.contract import ReadingPart
 from ..provider_spec import (
     ControllerVerification,
     ProviderModel,
@@ -236,6 +237,11 @@ POLICY = ProviderSpec(
         ("Grants", "", str(len(status.get("grants", ())) if status else "")),
         ("Groups", "", str(len(status.get("groups", ())) if status else "")),
         ("Tests", "", str(len(status.get("tests", ())) if status else "")),
+    ),
+    parts=(
+        ReadingPart("settings", "Tailnet settings", ("feature_settings:read",)),
+        ReadingPart("dns", "Tailnet DNS", ("dns:read",)),
+        ReadingPart("services", "Tailnet services", ("services:read",)),
     ),
 )
 
