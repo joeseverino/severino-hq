@@ -31,6 +31,7 @@ from .provider_http import (
     logger,
     provider_snapshot,
 )
+from control_plane.provider_adapters.contracts import NETWORK_FAILURE
 from control_plane.providers import PROVIDERS, controller_id, enabled_controller_actions
 
 
@@ -282,6 +283,44 @@ def _report_glance(controller_id: str) -> None:
     _post("glance", controller_id, dashboard_glance(plan))
 
 
+def _probed_again_on_network_failure(probed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Ask once more of any connection the network failed, and keep the answer.
+
+    A provider that did not answer for one second is not a broken controller.
+    """
+
+    if not any(_network_failed(connection) for connection in probed):
+        return probed
+    again = {connection["connection_ref"]: connection for connection in connections()}
+    return [
+        again.get(connection["connection_ref"], connection) if _network_failed(connection) else connection
+        for connection in probed
+    ]
+
+
+def _network_failed(connection: dict[str, Any]) -> bool:
+    return not connection["ok"] and connection.get("failure") == NETWORK_FAILURE
+
+
+def _plan_health(probed: list[dict[str, Any]]) -> tuple[bool, list[str]]:
+    """Whether a plan run proves this controller fit to run, and what it forgave.
+
+    The plan run gates a deploy, so it must fail on what a new image can cause:
+    a refused credential, a missing value, code that cannot run. A connection
+    the network failed, twice, is the provider's moment, and a deploy should
+    not roll back for it; the next sweep reports it. Unless every probed
+    connection failed that way: then it is this image that cannot reach the
+    network (its CA bundle, its resolver), and that is exactly what to catch.
+    """
+
+    tried = [connection for connection in probed if connection.get("probed", True)]
+    network = [connection for connection in tried if _network_failed(connection)]
+    other = [connection for connection in tried if not connection["ok"] and not _network_failed(connection)]
+    if other or (network and len(network) == len(tried)):
+        return False, []
+    return True, [f"{connection['connection_ref']}: {connection['detail']}" for connection in network]
+
+
 def run_once(controller_id: str, *, apply: bool) -> int:
     if not apply:
         peek_args = ["peek"]
@@ -301,7 +340,8 @@ def run_once(controller_id: str, *, apply: bool) -> int:
                 "would_change": result.changed,
                 "message": result.message,
             }
-        healthy = all(connection["ok"] for connection in probed)
+        probed = _probed_again_on_network_failure(probed)
+        healthy, warnings = _plan_health(probed)
         print(
             json.dumps(
                 {
@@ -309,6 +349,7 @@ def run_once(controller_id: str, *, apply: bool) -> int:
                     "mode": "plan",
                     "claimed": False,
                     "connections": probed,
+                    "warnings": warnings,
                     "plan": plan,
                 }
             )

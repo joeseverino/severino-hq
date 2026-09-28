@@ -32,6 +32,15 @@ class DiagnoseTests(SimpleTestCase):
         self.assertEqual(found["id"], "unhealthy")
         self.assertIn("previous image", found["fix"])
 
+    def test_a_controller_that_could_not_use_a_connection_says_where_to_look(self):
+        found = _diagnose().diagnose(
+            "Controller connection preflight failed; inspect the private host log.\n"
+            "Controller activation failed; rolling back application image."
+        )
+
+        self.assertEqual(found["id"], "controller-preflight")
+        self.assertIn("controller-preflight.log", found["fix"])
+
     def test_nothing_known_says_so_and_asks_for_an_entry(self):
         found = _diagnose().diagnose("something nobody has seen")
 

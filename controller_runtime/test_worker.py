@@ -98,6 +98,50 @@ class WorkerTests(TestCase):
         connections.assert_called_once_with()
         execute.assert_called_once()
 
+    def plan(self, *rounds):
+        """A plan run whose probes answer ``rounds`` in turn; its exit and output."""
+
+        with mock.patch("builtins.print") as output, \
+                mock.patch("controller_runtime.worker.connections", side_effect=list(rounds)) as probes, \
+                mock.patch("controller_runtime.worker._manage", return_value={"operation": None}):
+            code = worker.run_once("test", apply=False)
+        return code, json.loads(output.call_args.args[0]), probes.call_count
+
+    def test_a_provider_that_did_not_answer_once_is_asked_again(self):
+        blip = {"connection_ref": "example-tailnet", "ok": False, "detail": "no answer", "failure": "network"}
+        good = {"connection_ref": "example-dns", "ok": True, "detail": "ok"}
+
+        code, payload, asked = self.plan([blip, good], [{**blip, "ok": True, "detail": "ok"}, good])
+
+        self.assertEqual((code, asked), (0, 2))
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["warnings"], [])
+
+    def test_one_provider_the_network_keeps_failing_warns_and_does_not_roll_back(self):
+        blip = {"connection_ref": "example-tailnet", "ok": False, "detail": "no answer", "failure": "network"}
+        good = {"connection_ref": "example-dns", "ok": True, "detail": "ok"}
+
+        code, payload, _ = self.plan([blip, good], [blip, good])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["warnings"], ["example-tailnet: no answer"])
+
+    def test_every_provider_failing_on_the_network_is_this_image_and_fails(self):
+        down = [{"connection_ref": ref, "ok": False, "detail": "no answer", "failure": "network"} for ref in ("a", "b")]
+
+        code, payload, _ = self.plan(down, down)
+
+        self.assertEqual(code, 1)
+        self.assertFalse(payload["ok"])
+
+    def test_a_refused_credential_still_fails_the_plan(self):
+        refused = {"connection_ref": "example-dns", "ok": False, "detail": "refused", "failure": "credential"}
+        good = {"connection_ref": "example-tailnet", "ok": True, "detail": "ok"}
+
+        code, _, asked = self.plan([refused, good])
+
+        self.assertEqual((code, asked), (1, 1))
+
     @mock.patch("controller_runtime.worker.analytics_sites")
     @mock.patch("controller_runtime.worker.inventory", return_value={})
     @mock.patch("controller_runtime.worker.connections", return_value=[])

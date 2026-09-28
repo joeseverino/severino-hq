@@ -96,6 +96,21 @@ class StandingTests(TestCase):
         self.assertIn("Fixed in 1.2.1", advisory.body)
         self.assertEqual(items["container-updates"].body, "example/kuma:1 → 2.")
 
+    def test_many_advisories_are_one_thing_to_do(self):
+        estate(advisories=[HIGH, {**HIGH, "id": "GHSA-high-2"}, {**HIGH, "id": "GHSA-high-3"}])
+
+        (advisory,) = [item for item in attention() if item.key.startswith("container-advisory:")]
+
+        self.assertEqual(advisory.magnitude, 1)
+
+    def test_an_advisory_no_release_fixes_yet_is_said_not_raised(self):
+        estate(advisories=[HIGH], app_tags=("v1.2.0",))
+
+        (advisory,) = [item for item in attention() if item.key.startswith("container-advisory:")]
+
+        self.assertEqual(advisory.status, "attention")
+        self.assertIn("no release fixes it yet", advisory.title)
+
     def test_nothing_known_asks_for_nothing(self):
         estate(app_tags=("v1.2.0",))
         inventory("registry.image", [

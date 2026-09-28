@@ -96,6 +96,8 @@ class FailureTests(TestCase):
             (ConnectionRefusedError(), NETWORK_FAILURE),
             (ValueError("bad"), ""),
             (ProviderError("unclassified"), ""),
+            (_wrapped(urllib.error.URLError("no answer")), NETWORK_FAILURE),
+            (_wrapped(ValueError("bad json")), ""),
         )
         for exc, expected in cases:
             with self.subTest(exc=repr(exc)):
@@ -108,3 +110,14 @@ class FailureTests(TestCase):
 
         with self.assertRaises(ValueError):
             ProviderError("x", failure="gremlins")
+
+
+def _wrapped(cause: BaseException):
+    """A ProviderError raised from ``cause``, as a reader raises one."""
+
+    from control_plane.provider_adapters.contracts import ProviderError
+
+    try:
+        raise ProviderError("did not answer") from cause
+    except ProviderError as exc:
+        return exc

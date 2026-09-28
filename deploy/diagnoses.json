@@ -63,6 +63,12 @@
       "fix": "Production only runs a composition this repository's Compose workflow signed. Run Compose for this commit instead of deploying an image published some other way."
     },
     {
+      "id": "controller-preflight",
+      "match": "Controller connection preflight failed",
+      "title": "The new controller could not use a connection, and was rolled back",
+      "fix": "Production still runs the previous image. Which connection, and why, is in the host's private log at /var/log/severino-hq/controller-preflight.log. A provider that briefly did not answer is retried and forgiven; anything left there is a refused credential or the new code, so fix that and merge again."
+    },
+    {
       "id": "unhealthy",
       "match": "(New image did not become healthy|Application replacement failed|Controller activation failed)",
       "title": "The new version did not come up healthy, and was rolled back",
