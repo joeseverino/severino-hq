@@ -9,7 +9,6 @@ the finding, so this module does not import it.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -22,6 +21,8 @@ from control_plane.provider_adapters.contracts import (
 )
 
 from .ui import counted
+from .finding_model import OperatorStep
+from .finding_model import FindingRule, built_findings
 
 # Fact keys a connection node carries; ``topology`` writes them.
 FAILURE = "connection-failure"
@@ -32,15 +33,6 @@ EXPIRES = "credential-expires"
 MINT = "credential-mint"
 MINT_NOTE = "credential-mint-note"
 BY_HAND = "credential-by-hand"
-
-
-@dataclass(frozen=True)
-class OperatorStep:
-    """A command an operator runs on their own machine. HQ never runs it."""
-
-    label: str
-    command: str = ""
-    notes: tuple[str, ...] = ()
 
 
 def credential_facts(fix: Any) -> tuple[tuple[str, str], ...]:
@@ -229,3 +221,26 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
             )
         )
     return tuple(sorted(found, key=lambda finding: finding["title"]))
+
+
+# The rules this module raises, beside the detectors that decide them.
+RULES: tuple[FindingRule, ...] = (
+    FindingRule(
+        "credential-missing-permissions",
+        "Credential missing permissions",
+        "attention",
+        lambda estate: built_findings(missing_permissions(estate)),
+        operator_action=(
+            "Mint a credential with the missing permissions using the command on the connection's row, then request a fresh sweep."
+        ),
+    ),
+    FindingRule(
+        "credential-expiring",
+        "Credential expiring",
+        "attention",
+        lambda estate: built_findings(expiring(estate)),
+        operator_action=(
+            "Mint a replacement using the command on the connection's row before it expires, then request a fresh sweep."
+        ),
+    ),
+)

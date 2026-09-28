@@ -24,6 +24,7 @@ from control_plane.observations.portainer import (
 from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .facts import inventory_records
+from .finding_model import FindingRule, built_findings
 
 IMAGE_BEHIND = "image-behind"
 IMAGE_UNTAGGED = "image-untagged"
@@ -173,7 +174,7 @@ def unrecognised_containers(estate: Any) -> tuple[dict[str, Any], ...]:
 
     from django.urls import NoReverseMatch, reverse
 
-    from .findings import Remedy
+    from .finding_model import Remedy
     from .inventory import record_token
 
     found: list[dict[str, Any]] = []
@@ -288,7 +289,7 @@ def images_untagged(estate: Any) -> tuple[dict[str, Any], ...]:
 
 
 def _step(**fields: Any) -> Any:
-    from .credential_findings import OperatorStep
+    from .finding_model import OperatorStep
 
     return OperatorStep(**fields)
 
@@ -302,3 +303,35 @@ def _recreate(container: str, service: str, host: str) -> tuple:
             command=f"docker compose up -d --force-recreate {service}".rstrip(),
         ),
     )
+
+
+# The rules this module raises, beside the detectors that decide them.
+RULES: tuple[FindingRule, ...] = (
+    FindingRule(
+        "unrecognised-container",
+        "A container no compose project declares",
+        "serious",
+        lambda estate: built_findings(unrecognised_containers(estate)),
+        operator_action=(
+            "Adopt it if you started it; otherwise remove it on its machine with docker rm -f and the container's name."
+        ),
+    ),
+    FindingRule(
+        "container-image-behind",
+        "Container runs an older image than its tag",
+        "attention",
+        lambda estate: built_findings(images_behind(estate)),
+        operator_action=(
+            "Recreate the container from its compose project so it runs the image its tag names now."
+        ),
+    ),
+    FindingRule(
+        "container-image-untagged",
+        "Container runs an untagged image",
+        "attention",
+        lambda estate: built_findings(images_untagged(estate)),
+        operator_action=(
+            "Pin a tag for the image in the container's compose file and recreate it."
+        ),
+    ),
+)

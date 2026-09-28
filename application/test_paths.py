@@ -570,7 +570,7 @@ class HqHealthTests(TestCase):
         self.assertIn("1 finding names HQ.", health.detail)
 
     def test_only_findings_about_hq_count(self):
-        from .findings import Finding
+        from .finding_model import Finding
         from .service_health import _hq_findings
 
         def finding(subject):

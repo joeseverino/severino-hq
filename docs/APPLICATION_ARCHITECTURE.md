@@ -108,6 +108,13 @@ operation or the reader may not run it. A finding carries it as its
 specific steps of its own; the API returns them as `operator_steps` beside the
 remedies.
 
+A rule is declared beside the detector that decides it: each module that raises
+findings (`perimeter_findings`, `controller_findings`, `docker_estate`,
+`dns_findings` and the rest) exports its own `RULES`, built from the vocabulary
+in `application/finding_model.py`. `application.findings.RULES` is derived from
+the closed `RULE_MODULES` tuple, and that module keeps only the pipeline: the
+estate, derivation, suppression, resolution and serialization.
+
 The flattened queue preserves each insight's `action` and JSON-safe `workflow`
 (or `null`) alongside its existing label, evidence, severity, count, and URL.
 The dashboard and full queue share the same row partial and resolution renderer;
