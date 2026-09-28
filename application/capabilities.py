@@ -76,7 +76,7 @@ from .projects import (
 )
 from .receipts import ReceiptMetadataCommand, update_receipt
 from .integrations import integration_graph
-from .security import AuthorizationError, Capability, PolicyDenied, Principal
+from .security import AuthorizationError, Capability, PolicyDenied, Principal, require_all
 from .registry_import import REQUIRED_CAPABILITIES as IMPORT_CAPABILITIES
 from .registry_import import HQImportCommand, execute_hq_import
 from .sync import HQSyncCommand, execute_hq_sync
@@ -637,8 +637,7 @@ def capability_registry() -> dict[str, CapabilitySpec]:
 def authorize_capability(spec: CapabilitySpec, principal: Principal) -> None:
     """Apply the registry's one authorization rule for every adapter."""
 
-    for capability in spec.required_capabilities:
-        principal.require(capability)
+    require_all(principal, spec.required_capabilities)
 
 
 def describe_capabilities() -> dict[str, Any]:
