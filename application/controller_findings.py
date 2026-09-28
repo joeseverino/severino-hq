@@ -5,10 +5,8 @@ from __future__ import annotations
 from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .cadence import slowest_sweep_interval as _slowest_sweep_interval, sweep_interval
-from .topology import (
-    _STALE_AFTER,
-    TopologyNode,
-)
+from .topology_lenses import _STALE_AFTER
+from .topology_model import TopologyNode
 from .ui import counted, duration
 from .finding_model import Finding, Remedy, FindingEstate, fact_values, is_observable, reconcile_remedy
 from .finding_model import FindingRule

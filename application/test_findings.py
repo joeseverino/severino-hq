@@ -15,7 +15,8 @@ from .action_links import ActionLink
 from .findings import derive_findings, finding_rules, findings, rule_for
 from .reach import TAILNET
 from .security import Capability, Principal
-from .topology import Topology, TopologyEdge, TopologyNode, derive_topology
+from .topology import derive_topology
+from .topology_model import Topology, TopologyEdge, TopologyNode
 
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
@@ -972,7 +973,7 @@ class RegistrationLapsingTests(TestCase):
         from application.findings import _estate
 
         from application.registration_findings import _registration_lapsing
-        from application.topology import Topology, TopologyNode
+        from application.topology_model import Topology, TopologyNode
 
         expires = (timezone.now() + timedelta(days=days)).date().isoformat()
         node = TopologyNode(
@@ -1252,7 +1253,7 @@ class UnreachableConsumerTests(TestCase):
     def _findings(self, *names):
         from application.findings import _estate
         from application.connection_findings import _unreachable_consumer
-        from application.topology import Topology, TopologyNode
+        from application.topology_model import Topology, TopologyNode
 
         node = TopologyNode(
             id="resource:a-certificate",
@@ -1309,7 +1310,7 @@ class PathRefusedByTheTailnetTests(TestCase):
     def _finding(self, *, refused):
         from application.findings import _estate
         from application.connection_findings import _unreachable_consumer
-        from application.topology import Topology, TopologyNode
+        from application.topology_model import Topology, TopologyNode
 
         facts = [("unreachable", "health.example")]
         if refused:
@@ -1365,7 +1366,7 @@ class WorkThatKeepsFailingTests(TestCase):
     def _findings(self, *facts):
         from application.findings import _estate
         from application.controller_findings import _work_that_keeps_failing
-        from application.topology import Topology, TopologyNode
+        from application.topology_model import Topology, TopologyNode
 
         node = TopologyNode(
             id="connection:infrastructure.controllers:a-host:shared-hosting",
@@ -1445,7 +1446,7 @@ class TailnetClaimTests(TestCase):
 
     def _findings(self, detect, *facts):
         from application.findings import _estate
-        from application.topology import Topology, TopologyNode
+        from application.topology_model import Topology, TopologyNode
 
         node = TopologyNode(
             id="connection:infrastructure.controllers:a-host:a-tailnet",
@@ -1604,7 +1605,7 @@ class TailnetFactTests(TestCase):
         )
 
     def facts(self):
-        from application.topology import _tailnet_facts
+        from application.topology_facts import _tailnet_facts
 
         return _tailnet_facts()
 
@@ -1647,7 +1648,7 @@ class PerimeterClaimTests(TestCase):
 
     def _findings(self, detect, *facts):
         from application.findings import _estate
-        from application.topology import Topology, TopologyNode
+        from application.topology_model import Topology, TopologyNode
 
         node = TopologyNode(
             id="connection:infrastructure.controllers:a-host:an-edge",

@@ -266,7 +266,7 @@ the topology's own node and edge code, once per projection, without what only
 the topology page needs (health, actions, traffic).
 `relationships.relationships_for(node_id)` returns one node's edges in both
 directions, grouped by the phrase each says from that node: a service "Runs on"
-a machine, the machine "Serves" it, from one edge. `topology.RELATIONS` states
+a machine, the machine "Serves" it, from one edge. `topology_model.RELATIONS` states
 each structural edge kind's phrase, inverse and rank once; a reading edge takes
 its phrase from the reading's `relation` and its rank from its facet
 (`READING_RANKS`), so what serves a name comes first and an overlay with no

@@ -11,14 +11,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass, replace
-from datetime import UTC, datetime, timedelta
-from hashlib import sha256
-from typing import Any, Callable
+from typing import Any
 from django.urls import reverse
 
 from control_plane.names import normalized_hostname
 from control_plane.models import ManagedResource
-from control_plane.provider_adapters.tailscale import TAILNET_KIND
 from control_plane.providers import PROVIDERS
 from control_plane.connection_kinds import CONNECTION_LABELS
 
@@ -35,169 +32,14 @@ from .action_links import (
     connection_action_links,
     topology_url,
 )
-from .entity_links import EntityLink, entity_link, kind_label
+from .entity_links import entity_link, kind_label
 from .infrastructure import resource_health
 from .resource_capabilities import removals_pending, resource_capabilities
-from .security import AuthorizationError, Capability, Principal
-
-
-@dataclass(frozen=True)
-class TopologyNode:
-    """One addressable thing in the derived topology."""
-
-    id: str
-    kind: str
-    label: str
-    subtitle: str
-    status: str = "neutral"
-    status_label: str = ""
-    detail: str = ""
-    url: str = ""
-    # What this node is an instance of: a provider kind, or the connection
-    # family that emitted it. The subtitle already reads as this, but a subtitle
-    # is a rendered label and must never become a join key; grouping siblings
-    # needs identity.
-    kind_key: str = ""
-    # A connection node's provider (``tailscale``, ``cloudflare_api``): the join
-    # key its readings are matched by. The subtitle is that provider's label.
-    provider: str = ""
-    # A connection node's ref and the controller that reported it: the join keys
-    # for facts about the connection. A ref is unique per controller only.
-    connection_ref: str = ""
-    controller_id: str = ""
-    # When this was last observed, ISO 8601, or "" when nothing observes it.
-    # Health describes the content of the last observation and says nothing
-    # about its age, so a thing observed once and never again reads healthy
-    # forever. This is the fact that distinguishes the two.
-    observed_at: str = ""
-    # What was asked for, and what was last confirmed back. Between them the
-    # whole of triage: equal means a reconcile already ran against this exact
-    # declaration, so a difference the world still shows is the declaration
-    # being wrong rather than the convergence being late.
-    declared_revision: int = 0
-    observed_revision: int = 0
-    # The reason on the active condition, verbatim. "Observed" was written by a
-    # sweep that saw this; "Reconciled" was written by a reconcile and says
-    # nothing about whether a sweep has confirmed it since.
-    reason: str = ""
-    # Whether HQ is converging this at all. A disabled declaration is not a
-    # finding: nobody asked for it to be true.
-    managed: bool = True
-    # Declared as usually absent, so a sweep not finding it is expected.
-    on_demand: bool = False
-    # Fields this declaration asserts that the last observation did not echo
-    # back, excluding the ones the provider declared it cannot report. Drift is
-    # compared only across fields present in both, so a field the reading omits
-    # is unverified rather than agreed: the difference between "we set this"
-    # and "we checked this".
-    unconfirmed_fields: tuple[str, ...] = ()
-    # Facts a sweep reports that no declaration carries, as flat strings. A
-    # findings rule derives from this topology and is not allowed a query of its
-    # own (the suite measures that) so an observation a rule has to reason
-    # about has to arrive here or not at all.
-    #
-    # Flat and small on purpose. This is not a second copy of the inventory; it
-    # is the handful of observed facts that decide something.
-    facts: tuple[tuple[str, str], ...] = ()
-    # What this name actually served, where anything measures it. ``None`` is
-    # not zero: nobody visited and nobody looked are opposite findings, and the
-    # second is the one worth acting on: a target HQ reaches, and nothing
-    # measures, is a site running unobserved.
-    pageviews: int | None = None
-    visits: int | None = None
-    actions: tuple[TopologyAction, ...] = ()
-
-
-@dataclass(frozen=True)
-class TopologyEdge:
-    """A relationship derived from a declaration or observation."""
-
-    id: str
-    source: str
-    target: str
-    kind: str
-    label: str
-    status: str = "neutral"
-    # For an edge a reading supports: the reading kind, what it names, and
-    # when it was read. An edge exists only while its reading does.
-    source_kind: str = ""
-    detail: str = ""
-    observed_at: str = ""
-    # For a reading edge: each record it stands for, through the link builder,
-    # and the facet the reading supplies.
-    entities: tuple[EntityLink, ...] = ()
-    facet: str = ""
-
-
-@dataclass(frozen=True)
-class RelationKind:
-    """What an edge kind says from each end, and where it ranks on a page.
-
-    ``phrase`` reads from the source, ``inverse`` from the target. A lower
-    ``rank`` is shown first.
-    """
-
-    phrase: str
-    inverse: str
-    rank: int
-
-
-# Every structural edge kind, stated once. Reading edges take their phrase from
-# the reading's ``relation`` and their rank from its facet.
-RELATIONS: dict[str, RelationKind] = {
-    "runs_on": RelationKind("Runs on", "Serves", 10),
-    "runs": RelationKind("Runs", "Runs on", 15),
-    "talks_to": RelationKind("Talks to", "Talks to", 20),
-    "contains": RelationKind("Contains", "In domain", 30),
-    "redirects_to": RelationKind("Redirects to", "Redirected from", 25),
-    "reaches": RelationKind("Reaches", "Reached through", 70),
-    "on_tailnet": RelationKind("On the tailnet as", "Tailnet device of", 75),
-    "declared_by": RelationKind("Declared by", "Declares", 80),
-    "carries": RelationKind("Carries", "Carried by", 85),
-    "used_by": RelationKind("Used by", "Uses", 85),
-    "enables": RelationKind("Enables", "Enabled by", 85),
-    "governs": RelationKind("Governs", "Governed by", 85),
-    "reading": RelationKind("", "Reads", 88),
-}
-
-# Where a reading's relation ranks, by the facet it supplies. What serves a
-# name comes first; a protective overlay with no facet (Access) comes last.
-READING_RANKS: dict[str, int] = {
-    "runtime": 20,
-    "network": 20,
-    "dns": 35,
-    "proxy": 40,
-    "certificate": 50,
-    "registration": 60,
-    "": 90,
-}
-
-
-def relation_rank(edge: "TopologyEdge") -> int:
-    """Where an edge's relation is shown among a node's relationships."""
-
-    if edge.kind == "reading":
-        return READING_RANKS.get(edge.facet, READING_RANKS[""])
-    relation = RELATIONS.get(edge.kind)
-    return relation.rank if relation else 99
-
-
-@dataclass(frozen=True)
-class Topology:
-    """The complete permitted projection consumed by web, API, and MCP."""
-
-    nodes: tuple[TopologyNode, ...]
-    edges: tuple[TopologyEdge, ...]
-
-
-@dataclass(frozen=True)
-class TopologyTrace:
-    """A bounded traversal applied to an already-authorized topology."""
-
-    focus: str
-    direction: str
-    depth: int
-    hops: tuple[tuple[str, int], ...]
+from .security import Capability, Principal
+from .topology_model import Topology, TopologyEdge, TopologyNode, TopologyTrace
+from .topology_lenses import TOPOLOGY_LENSES, TopologyLens, apply_lens, apply_trace, lens_for
+from .topology_facts import add_connection_facts, add_observed_facts
+from .topology_model import derived_id, edge_between, newest_stamp
 
 
 _KIND_ORDER = {
@@ -213,70 +55,9 @@ _KIND_ORDER = {
     "dependency": 9,
 }
 
-# Node kinds whose ``observed_at`` is the newest of the readings joined to
-# them rather than one sweep's stamp, so siblings are not compared by it.
-JOINED_KINDS = frozenset({"machine", "service", "zone", "registry", "controller"})
-
-# Node kinds a sweep or a reading can observe. A declaration is observable
-# unless its provider says no sweep reads it.
-_OBSERVABLE_KINDS = frozenset({"connection", *JOINED_KINDS})
-
-
-def observable(node: TopologyNode) -> bool:
-    """Whether anything can observe this node, so "never observed" is a gap."""
-
-    if node.kind == "resource":
-        provider = PROVIDERS.get(node.kind_key)
-        return not (provider and provider.unobserved_reason)
-    return node.kind in _OBSERVABLE_KINDS
-
-
-def newest_stamp(*stamps: str) -> str:
-    """The latest of several ISO 8601 instants, or ""."""
-
-    moments = []
-    for stamp in stamps:
-        try:
-            moment = datetime.fromisoformat(stamp) if stamp else None
-        except ValueError:
-            continue
-        if moment is not None:
-            moments.append(moment if moment.tzinfo else moment.replace(tzinfo=UTC))
-    return max(moments).isoformat() if moments else ""
-
-
-TRACE_DIRECTIONS = ("inbound", "outbound", "both")
-MAX_TRACE_DEPTH = 5
-
-
-def _permitted(principal: Principal, capability: Capability | str) -> bool:
-    try:
-        principal.require(capability)
-    except AuthorizationError:
-        return False
-    return True
-
-
-def _derived_id(kind: str, *parts: str) -> str:
-    """Keep composite observation ids stable and compact, not confidential."""
-
-    digest = sha256("\0".join(parts).encode()).hexdigest()[:16]
-    return f"{kind}:{digest}"
-
 
 def _focus_url(node_id: str) -> str:
     return topology_url(node_id)
-
-
-def _edge(source: str, target: str, kind: str, label: str = "", status="neutral"):
-    return TopologyEdge(
-        id=_derived_id("edge", source, target, kind),
-        source=source,
-        target=target,
-        kind=kind,
-        label=label or RELATIONS[kind].phrase,
-        status=status,
-    )
 
 
 def _resource_status(resource: ManagedResource) -> tuple[str, str, str]:
@@ -301,7 +82,7 @@ def _resource_actions(
             resource.get_absolute_url(),
         )
     ]
-    if not _permitted(principal, Capability.MANAGE_INFRASTRUCTURE):
+    if not principal.permits(Capability.MANAGE_INFRASTRUCTURE):
         return tuple(actions)
     actions.append(
         TopologyAction(
@@ -333,7 +114,7 @@ def _resource_actions(
     if (
         renew
         and renew.enabled
-        and _permitted(principal, Capability.REQUEST_CERTIFICATE_RENEWAL)
+        and principal.permits(Capability.REQUEST_CERTIFICATE_RENEWAL)
     ):
         actions.append(
             TopologyAction(
@@ -361,7 +142,7 @@ def _resource_actions(
 
 
 def _link_node(link: ConnectionLink, *, kind: str) -> TopologyNode:
-    node_id = _derived_id(kind, link.url, link.label)
+    node_id = derived_id(kind, link.url, link.label)
     return TopologyNode(
         id=node_id,
         kind=kind,
@@ -575,7 +356,7 @@ def _connection_node(group, instance, spec_actions, connection_url) -> TopologyN
 
 
 def _controller_edge(group, instance, node, connection_url, nodes, edges, principal) -> None:
-    controller_id = _derived_id("controller", instance.controller_id)
+    controller_id = derived_id("controller", instance.controller_id)
     _merge_controller_node(
         nodes,
         node_id=controller_id,
@@ -585,7 +366,7 @@ def _controller_edge(group, instance, node, connection_url, nodes, edges, princi
         principal=principal,
         observed_at=node.observed_at,
     )
-    relation = _edge(controller_id, node.id, "carries", "Carries")
+    relation = edge_between(controller_id, node.id, "carries", "Carries")
     edges[relation.id] = relation
 
 
@@ -593,12 +374,12 @@ def _target_edges(instance, connection_id, nodes, edges) -> None:
     for target in instance.targets:
         node = _link_node(target, kind="target")
         nodes.setdefault(node.id, node)
-        relation = _edge(connection_id, node.id, "reaches", "Reaches", instance.status)
+        relation = edge_between(connection_id, node.id, "reaches", "Reaches", instance.status)
         edges[relation.id] = relation
         # A target that is also a declaration using this connection.
         resource_id = f"resource:{target.resource_key}"
         if target.resource_key and resource_id in nodes:
-            relation = _edge(
+            relation = edge_between(
                 connection_id, resource_id, "used_by", "Used by", instance.status
             )
             edges[relation.id] = relation
@@ -613,7 +394,7 @@ def _dependency_edges(instance, connection_id, nodes, edges) -> None:
             node = _link_node(dependency, kind="dependency")
             nodes.setdefault(node.id, node)
             target_id = node.id
-        relation = _edge(connection_id, target_id, "used_by", "Used by", instance.status)
+        relation = edge_between(connection_id, target_id, "used_by", "Used by", instance.status)
         edges[relation.id] = relation
 
 
@@ -625,7 +406,7 @@ def _ability_edges(group, connection, connection_id, edges) -> None:
             if state.available is True
             else "serious" if state.available is False else "neutral"
         )
-        relation = _edge(connection_id, ability_id, "enables", "Enables", available)
+        relation = edge_between(connection_id, ability_id, "enables", "Enables", available)
         edges[relation.id] = relation
 
 
@@ -666,219 +447,6 @@ def _measure(nodes: dict[str, TopologyNode]) -> None:
                 pageviews=reading["pageviews"],
                 visits=reading["visits"],
             )
-
-
-def _inventory_of(kind: str) -> tuple[Any, ...]:
-    """Snapshots of one kind, from the join engine's one read of the inventory."""
-
-    from .facts import snapshots_of
-
-    return snapshots_of(kind)
-
-
-def perimeter_unchecked(record: dict[str, Any]) -> str:
-    """Why a perimeter reading proves nothing, or "" when it tried something.
-
-    No address or no port means no connection was attempted, so "nothing
-    answered" is not evidence of a shut perimeter.
-    """
-
-    if not record.get("public_addresses"):
-        return "no public address"
-    if not record.get("ports_checked"):
-        return "no port to try"
-    return ""
-
-
-def _perimeter_facts() -> dict[str, tuple[tuple[str, str], ...]]:
-    """Each machine's perimeter reading, keyed by the connection that took it."""
-
-    found: dict[str, tuple[tuple[str, str], ...]] = {}
-    from control_plane.observations.host import PERIMETER_KIND
-
-    for snapshot in _inventory_of(PERIMETER_KIND):
-        for record in snapshot.records:
-            connection_ref = str(record.get("connection_ref", "")).strip()
-            if not connection_ref:
-                continue
-            entries: list[tuple[str, str]] = []
-            unchecked = perimeter_unchecked(record)
-            if unchecked:
-                entries.append(("perimeter-unchecked", unchecked))
-            unit = str(record.get("firewall_unit", "")).strip()
-            if unit and unit != "active":
-                entries.append(("firewall-unit", unit))
-            entries.extend(
-                ("answers-publicly", str(port))
-                for port in record.get("answered_publicly") or ()
-            )
-            if entries:
-                found[connection_ref] = tuple(entries)
-    return found
-
-
-_EXIT_ROUTES = frozenset({"0.0.0.0/0", "::/0"})
-
-
-def _tailnet_facts() -> tuple[tuple[str, str], ...]:
-    """What the tailnet uses, and each global resolver that is not part of it.
-
-    Addresses are the IPv4 addresses of every device the device reading holds;
-    routes are the subnet routes approved for them, exit routes excluded.
-    Nothing is said without a device reading, since every claim here compares
-    against it.
-    """
-
-    from core.network import parse_ip
-
-    addresses: set[str] = set()
-    routes: set[str] = set()
-    for snapshot in _inventory_of(TAILNET_KIND):
-        for record in snapshot.records:
-            addresses.update(str(item) for item in record.get("addresses") or ())
-            routes.update(
-                str(route)
-                for route in record.get("enabled_routes") or ()
-                if str(route) not in _EXIT_ROUTES
-            )
-    if not addresses:
-        return ()
-    entries: list[tuple[str, str]] = []
-    for snapshot in _inventory_of("tailscale.dns"):
-        for record in snapshot.records:
-            entries.extend(
-                ("tailnet-dns-off-tailnet", str(address))
-                for address in record.get("nameservers") or ()
-                if parse_ip(str(address)) is not None and str(address) not in addresses
-            )
-    entries.extend(
-        ("tailnet-address", address)
-        for address in sorted(addresses)
-        if parse_ip(address) is not None
-    )
-    entries.extend(("tailnet-route", route) for route in sorted(routes))
-    return tuple(entries)
-
-
-def _policy_verdicts(
-    found: dict[str, tuple[tuple[str, str], ...]],
-    blocked: list[tuple[str, dict[str, str]]],
-) -> dict[str, tuple[tuple[str, str], ...]]:
-    """Add, for each unreachable address, whether the tailnet is what refused.
-
-    Three answers are possible and only one of them is this fact. A policy that
-    admits the path leaves nothing here: the consumer is down, or the service
-    is not listening, and saying "the tailnet allows this" would be noise. A
-    tailnet HQ has not swept leaves nothing either: not knowing is not the same
-    as knowing it is shut, and a rule that confused them would send an operator
-    to change an access policy that was never the problem.
-    """
-
-    from .tailnet import devices, device_at, may_reach, observer
-
-    known = devices()
-    watcher = observer(known)
-    if watcher is None:
-        return found
-    for node_id, item in blocked:
-        target = device_at(str(item.get("endpoint", "")), known)
-        if target is None:
-            continue
-        try:
-            port = int(str(item.get("port", "")) or 0)
-        except ValueError:
-            continue
-        if not port:
-            continue
-        verdict = may_reach(watcher.name, target.name, port, known)
-        if verdict.allowed or not verdict.known:
-            continue
-        found[node_id] = found.get(node_id, ()) + (
-            ("path-denied", f"{watcher.name} to {target.name} on {port}"),
-        )
-    return found
-
-
-def _observed_facts(
-    resources: tuple[Any, ...],
-) -> dict[str, tuple[tuple[str, str], ...]]:
-    """The observed facts a rule needs, keyed by the node they belong to.
-
-    A domain's registration, which lives in the zone sweep rather than in any
-    declaration (nobody writes down when a domain expires, the registrar is
-    asked) and the consumers a reading could not reach, which a sweep records
-    and no declaration mentions. A rule reasoning about either has no other way
-    to see it, and rules may not query.
-    """
-
-
-    from .zones import ZONE_KIND
-
-    found: dict[str, tuple[tuple[str, str], ...]] = {}
-
-    # Already in hand, so this costs nothing: the sweep wrote it into the
-    # status this function was handed.
-    blocked: list[tuple[str, dict[str, str]]] = []
-    for resource in resources:
-        unreachable = (resource.status or {}).get("unreachable_consumers") or []
-        if not isinstance(unreachable, list):
-            continue
-        entries = tuple(
-            (
-                "unreachable",
-                str(item.get("domain") or item.get("consumer") or "").strip(),
-            )
-            for item in unreachable
-            if isinstance(item, dict)
-            and str(item.get("domain") or item.get("consumer") or "").strip()
-        )
-        if entries:
-            found[f"resource:{resource.key}"] = entries
-            blocked.extend(
-                (f"resource:{resource.key}", item)
-                for item in unreachable
-                if isinstance(item, dict) and str(item.get("endpoint", "")).strip()
-            )
-
-    # Why it could not be reached, where the tailnet policy is the answer.
-    #
-    # HQ can decide whether one machine may reach another on a port, so the
-    # answer arrives with the failure instead of waiting to be looked up.
-    #
-    # Paid for only when something is actually unreachable, the way the zone
-    # facts below refuse to buy a query to learn there are no domains.
-    if blocked:
-        found = _policy_verdicts(found, blocked)
-
-    # Nothing further when the estate holds no zone, the way `_measure` pays
-    # nothing when nothing is named like a host. This runs inside the shared
-    # projection that the dashboard budget measures, so a deployment with no
-    # domains must not buy a query to learn it has none.
-    zones = tuple(
-        resource for resource in resources if resource.kind == ZONE_KIND
-    )
-    if not zones:
-        return found
-
-    from .facts import Subject, inventory_about
-
-    for resource in zones:
-        name = normalized_hostname(resource.spec.get("zone"))
-        registration: dict[str, Any] = {}
-        for _snapshot, record in inventory_about(ZONE_KIND, Subject.of(hostnames=(name,))):
-            registration = dict(record.get("registration") or {})
-        if not registration or registration.get("unread"):
-            continue
-        # Added to, never over: the unreachable consumers above are kept.
-        found[f"resource:{resource.key}"] = found.get(
-            f"resource:{resource.key}", ()
-        ) + (
-            ("domain", name),
-            ("expires_at", str(registration.get("expires_at", ""))),
-            ("auto_renew", "yes" if registration.get("auto_renew") else "no"),
-            ("registrar", str(registration.get("registrar", ""))),
-        )
-    return found
 
 
 def derive_topology(*, principal: Principal, request: Any = None) -> Topology:
@@ -965,14 +533,14 @@ def _derive(principal: Principal) -> Topology:
     nodes = _resource_nodes(resources, principal)
     # Observed facts that decide a finding, attached to the resource they are
     # about. Read once here rather than by a rule, which must cost no queries.
-    for resource_id, extra in _observed_facts(resources).items():
+    for resource_id, extra in add_observed_facts(resources).items():
         if resource_id in nodes:
             nodes[resource_id] = replace(nodes[resource_id], facts=extra)
 
     groups = connection_catalog(principal=principal)
     _connection_nodes(groups, nodes, edges, principal)
     add_estate(nodes, edges, resources)
-    _add_connection_facts(nodes)
+    add_connection_facts(nodes)
     _governs_edges(groups, resources, edges)
     _measure(nodes)
 
@@ -996,7 +564,7 @@ def _resource_nodes(resources, principal: Principal) -> dict[str, TopologyNode]:
     # Only an operator is offered actions, so only an operator's view reads this.
     pending_removal = (
         removals_pending()
-        if resources and _permitted(principal, Capability.MANAGE_INFRASTRUCTURE)
+        if resources and principal.permits(Capability.MANAGE_INFRASTRUCTURE)
         else frozenset()
     )
     # Read on first use, once for every resource.
@@ -1026,68 +594,6 @@ def _resource_nodes(resources, principal: Principal) -> dict[str, TopologyNode]:
     return nodes
 
 
-def _add_connection_facts(nodes: dict[str, TopologyNode]) -> None:
-    """Facts a connection node carries for the findings that read them.
-
-    What each edge relies on to stay shut (joined on the connection's ref), a
-    credential its provider refused or that lacks permissions or is expiring,
-    with its fix, work the last pass could not finish, the tailnet's own
-    readings on the connections of the tailnet's providers, and what each
-    reading's ``facts`` say about the connection that took it.
-    """
-
-    from .connections import unfinished_work
-    from .credential_findings import credential_facts
-    from .facts import connection_facts
-    from .credential_mint import credential_fixes
-    from .estate import refused_connections
-    from .tailnet import TAILNET_KIND, posture_facts
-
-    perimeter = _perimeter_facts()
-    unanswered = _unanswered()
-    refused = refused_connections()
-    fixes = credential_fixes()
-    unfinished = unfinished_work()
-    tailnet = _tailnet_facts() + posture_facts()
-    tailnet_providers = PROVIDERS[TAILNET_KIND].connection_providers
-
-    def facts_for(node: TopologyNode) -> tuple[tuple[str, str], ...]:
-        found = tuple(perimeter.get(node.connection_ref, ()))
-        found += unanswered.get((node.controller_id, node.connection_ref), ())
-        if node.connection_ref in refused:
-            found += (("credential-refused", refused[node.connection_ref]),)
-        found += credential_facts(fixes.get(node.connection_ref))
-        steps = unfinished.get((node.controller_id, node.connection_ref), ())
-        found += tuple(("work-unfinished", step) for step in steps)
-        if node.provider in tailnet_providers:
-            found += tailnet
-        found += connection_facts(node.connection_ref, node.provider)
-        return found
-
-    for node_id, node in list(nodes.items()):
-        if node.kind != "connection":
-            continue
-        extra = facts_for(node)
-        if extra:
-            nodes[node_id] = replace(node, facts=node.facts + extra)
-
-
-def _unanswered() -> dict[tuple[str, str], tuple[tuple[str, str], ...]]:
-    """Why each connection that did not answer failed, and where it points."""
-
-    from .connections import connection_rows
-    from .credential_findings import ENDPOINT, FAILURE
-
-    return {
-        (row.controller_id, row.connection_ref): (
-            *(((FAILURE, row.failure),) if row.failure else ()),
-            *(((ENDPOINT, row.endpoint),) if row.endpoint else ()),
-        )
-        for row in connection_rows()
-        if not row.reachable
-    }
-
-
 def _governs_edges(groups, resources, edges: dict[str, TopologyEdge]) -> None:
     """An ability governs every declaration of the kinds it names."""
 
@@ -1099,234 +605,8 @@ def _governs_edges(groups, resources, edges: dict[str, TopologyEdge]) -> None:
             ability_id = f"ability:{group.spec.name}:{ability.name}"
             for kind in ability.governs_kinds:
                 for resource_id in resources_by_kind.get(kind, ()):
-                    relation = _edge(ability_id, resource_id, "governs", "Governs")
+                    relation = edge_between(ability_id, resource_id, "governs", "Governs")
                     edges[relation.id] = relation
-
-
-@dataclass(frozen=True)
-class TopologyLens:
-    """A standing question about the graph, answered from the graph itself.
-
-    A lens owns no inventory and runs no query. It selects ids out of a
-    projection already derived and already authorized, so a lens can only ever
-    narrow what a principal sees: never widen it.
-    """
-
-    name: str
-    label: str
-    summary: str
-    select: Callable[[Topology], frozenset[str]]
-
-
-_ATTENTION_STATES = frozenset({"attention", "serious"})
-
-# How far behind its own kind's latest observation a node may fall before the
-# gap means it was skipped rather than swept a moment later. Sweeps write one
-# timestamp for everything they confirm, so siblings land together.
-_STALE_AFTER = timedelta(hours=1)
-
-
-def _incoming_kinds(topology: Topology) -> dict[str, set[str]]:
-    incoming: dict[str, set[str]] = {}
-    for edge in topology.edges:
-        incoming.setdefault(edge.target, set()).add(edge.kind)
-    return incoming
-
-
-def _without_inbound(topology: Topology, kind: str, edge_kind: str) -> frozenset[str]:
-    """Nodes of one kind that nothing currently relates to in one way.
-
-    The absence is the finding: a resource nothing observes and a resource
-    nothing governs are different gaps, and neither is visible from a node in
-    isolation.
-    """
-
-    incoming = _incoming_kinds(topology)
-    return frozenset(
-        node.id
-        for node in topology.nodes
-        if node.kind == kind and edge_kind not in incoming.get(node.id, frozenset())
-    )
-
-
-def _needs_attention(topology: Topology) -> frozenset[str]:
-    return frozenset(
-        node.id for node in topology.nodes if node.status in _ATTENTION_STATES
-    )
-
-
-def _unobserved_resources(topology: Topology) -> frozenset[str]:
-    return _without_inbound(topology, "resource", "used_by")
-
-
-def _ungoverned_resources(topology: Topology) -> frozenset[str]:
-    return _without_inbound(topology, "resource", "governs")
-
-
-def _unobserved_abilities(topology: Topology) -> frozenset[str]:
-    return _without_inbound(topology, "ability", "enables")
-
-
-def _unresolved_dependencies(topology: Topology) -> frozenset[str]:
-    return frozenset(node.id for node in topology.nodes if node.kind == "dependency")
-
-
-def _stale_observations(topology: Topology) -> frozenset[str]:
-    """Nodes a sweep passed over while it confirmed their siblings.
-
-    Compared against the newest observation of the same ``kind_key`` rather
-    than the clock. A kind on a slower cadence is not stale, it is slower, and
-    an absolute threshold cannot tell those apart.
-    """
-
-    latest: dict[str, datetime] = {}
-    seen: dict[str, datetime] = {}
-    for node in topology.nodes:
-        if not node.observed_at or not node.kind_key or node.kind in JOINED_KINDS:
-            continue
-        try:
-            observed = datetime.fromisoformat(node.observed_at)
-        except ValueError:
-            continue
-        seen[node.id] = observed
-        newest = latest.get(node.kind_key)
-        if newest is None or observed > newest:
-            latest[node.kind_key] = observed
-    return frozenset(
-        node.id
-        for node in topology.nodes
-        if node.id in seen and latest[node.kind_key] - seen[node.id] > _STALE_AFTER
-    )
-
-
-def _isolated(topology: Topology) -> frozenset[str]:
-    related: set[str] = set()
-    for edge in topology.edges:
-        related.add(edge.source)
-        related.add(edge.target)
-    return frozenset(node.id for node in topology.nodes if node.id not in related)
-
-
-# Derived from node kinds and edge kinds alone, so an extension that emits a
-# resource or an ability answers them without knowing they exist. Nothing here
-# names a domain, a provider, or an installed package.
-TOPOLOGY_LENSES: tuple[TopologyLens, ...] = (
-    TopologyLens("attention", "Needs attention",
-        "Everything currently reported as pending, drifted, degraded, or unreachable.",
-        _needs_attention),
-    TopologyLens("unobserved-resources", "Unreported resources",
-        "Declared resources that no live connection currently names as a dependency.",
-        _unobserved_resources),
-    TopologyLens("ungoverned-resources", "Ungoverned resources",
-        "Declared resources whose kind no connection ability claims to govern.",
-        _ungoverned_resources),
-    TopologyLens("unobserved-abilities", "Abilities with no live connection",
-        "Abilities a provider declared that no current observation enables.",
-        _unobserved_abilities),
-    TopologyLens("unresolved-dependencies", "Unresolved dependencies",
-        "Things a connection depends on that HQ holds no declaration for.",
-        _unresolved_dependencies),
-    TopologyLens("stale-observations", "Left behind by the last sweep",
-        "Things observed materially longer ago than others of their own kind.",
-        _stale_observations),
-    TopologyLens("isolated", "Nodes with no relationships",
-        "Anything nothing else currently reaches, governs, carries, or uses.",
-        _isolated),
-)
-
-_LENS_BY_NAME = {lens.name: lens for lens in TOPOLOGY_LENSES}
-
-
-def topology_lenses() -> tuple[TopologyLens, ...]:
-    """Every standing question any adapter may ask of the topology."""
-
-    return TOPOLOGY_LENSES
-
-
-def lens_for(name: str) -> TopologyLens | None:
-    """Resolve a requested lens, or ``None`` when no declaration claims it."""
-
-    return _LENS_BY_NAME.get(name)
-
-
-def apply_lens(topology: Topology, lens: TopologyLens) -> Topology:
-    """Narrow a derived projection to one lens, keeping only surviving edges.
-
-    An edge whose other end the lens excluded is dropped rather than left
-    dangling: every adapter resolves an edge's endpoints against the node set.
-    """
-
-    selected = lens.select(topology)
-    return Topology(
-        tuple(node for node in topology.nodes if node.id in selected),
-        tuple(
-            edge
-            for edge in topology.edges
-            if edge.source in selected and edge.target in selected
-        ),
-    )
-
-
-def apply_trace(
-    topology: Topology,
-    focus: str,
-    *,
-    direction: str = "both",
-    depth: int | str = 2,
-) -> tuple[Topology, TopologyTrace | None]:
-    """Select a bounded dependency neighborhood without deriving new state.
-
-    ``outbound`` follows the graph's declared source-to-target direction;
-    ``inbound`` answers what points at the focus. Unknown inputs deliberately
-    leave the projection unchanged and report no applied trace, matching the
-    standing-lens contract used by every delivery adapter.
-    """
-
-    node_ids = {node.id for node in topology.nodes}
-    if focus not in node_ids:
-        return topology, None
-    selected_direction = direction if direction in TRACE_DIRECTIONS else "both"
-    try:
-        selected_depth = int(depth)
-    except (TypeError, ValueError):
-        selected_depth = 2
-    selected_depth = min(max(selected_depth, 1), MAX_TRACE_DEPTH)
-
-    adjacent: dict[str, set[str]] = {node_id: set() for node_id in node_ids}
-    for edge in topology.edges:
-        if selected_direction in ("outbound", "both"):
-            adjacent[edge.source].add(edge.target)
-        if selected_direction in ("inbound", "both"):
-            adjacent[edge.target].add(edge.source)
-
-    hops = {focus: 0}
-    frontier = {focus}
-    for hop in range(1, selected_depth + 1):
-        frontier = {
-            neighbor
-            for node_id in frontier
-            for neighbor in adjacent[node_id]
-            if neighbor not in hops
-        }
-        if not frontier:
-            break
-        hops.update({node_id: hop for node_id in frontier})
-
-    narrowed = Topology(
-        tuple(node for node in topology.nodes if node.id in hops),
-        tuple(
-            edge
-            for edge in topology.edges
-            if edge.source in hops and edge.target in hops
-        ),
-    )
-    trace = TopologyTrace(
-        focus=focus,
-        direction=selected_direction,
-        depth=selected_depth,
-        hops=tuple(sorted(hops.items(), key=lambda item: (item[1], item[0]))),
-    )
-    return narrowed, trace
 
 
 def serialize_topology(

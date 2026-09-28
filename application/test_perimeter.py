@@ -6,7 +6,7 @@ from django.test import TestCase
 
 from .inventory_testing import store
 from .test_tailnet_posture import raised, tailnet_connection
-from .topology import perimeter_unchecked
+from .topology_facts import perimeter_unchecked
 
 
 def perimeter(**record):

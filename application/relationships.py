@@ -19,7 +19,8 @@ from control_plane.observations import OBSERVATIONS
 from .entity_links import EntityLink, entity_link, node_link
 from .facts import readings, unreadable_labels
 from .security import Principal
-from .topology import RELATIONS, TopologyEdge, relation_graph, relation_rank
+from .topology import relation_graph
+from .topology_model import RELATIONS, TopologyEdge, relation_rank
 
 
 @dataclass(frozen=True)

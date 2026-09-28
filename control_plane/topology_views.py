@@ -18,15 +18,17 @@ from application.analytics import HOST_TRAFFIC_DAYS
 from application.action_links import (
     topology_url,
 )
-from application.topology import (
-    RELATIONS,
-    relation_rank,
+from application.topology import derive_topology
+from application.topology_lenses import (
     apply_lens,
     apply_trace,
-    derive_topology,
     lens_for,
-    observable,
     topology_lenses,
+)
+from application.topology_model import (
+    RELATIONS,
+    relation_rank,
+    observable,
 )
 from application.security import web_principal
 from application.pages import PageAction, PageMixin

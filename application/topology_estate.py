@@ -29,7 +29,8 @@ from .facts import Joined, Subject, inventory_records, readings
 from .locate import Machines, index_of
 from .paths import path_to
 from .connections import machines_once
-from .topology import TopologyEdge, TopologyNode, _derived_id, _edge, newest_stamp
+from .topology_model import derived_id, edge_between, newest_stamp
+from .topology_model import TopologyEdge, TopologyNode
 
 
 # Derived node kinds that only stand for a machine something mentioned: a
@@ -110,7 +111,7 @@ def _open(url: str) -> tuple[TopologyAction, ...]:
 
 def _declared_by(edges, node_id: str, resource_id: str, nodes) -> None:
     if resource_id in nodes:
-        relation = _edge(node_id, resource_id, "declared_by", "Declared by")
+        relation = edge_between(node_id, resource_id, "declared_by", "Declared by")
         edges[relation.id] = relation
 
 
@@ -143,7 +144,7 @@ def _machines(nodes, edges, resources) -> _Estate:
         # machine list's "Reached through".
         for ref in machine.reached_by:
             for connection_id in connections.get(ref, ()):
-                relation = _edge(connection_id, node_id, "reaches")
+                relation = edge_between(connection_id, node_id, "reaches")
                 edges[relation.id] = relation
         subjects[node_id] = Subject.of(
             hostnames=(machine.name, *machine.aliases), addresses=machine.addresses
@@ -235,11 +236,11 @@ def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
             _declared_by(edges, node_id, f"resource:{claim.resource_key}", nodes)
         machine = estate.machine(_runs_on(service, own))
         if machine:
-            relation = _edge(node_id, machine, "runs_on", "Runs on")
+            relation = edge_between(node_id, machine, "runs_on", "Runs on")
             edges[relation.id] = relation
         zone = zone_holding(service.hostname, zones)
         if zone:
-            relation = _edge(f"zone:{zone}", node_id, "contains", "Contains")
+            relation = edge_between(f"zone:{zone}", node_id, "contains", "Contains")
             edges[relation.id] = relation
     _redirect_edges(nodes, edges)
 
@@ -258,7 +259,7 @@ def _redirect_edges(nodes, edges) -> None:
     for node_id in [key for key, node in nodes.items() if node.kind == "service"]:
         target = path_to(nodes[node_id].label).redirects_to
         if target and f"service:{target}" in nodes:
-            relation = _edge(node_id, f"service:{target}", "redirects_to", "Redirects to")
+            relation = edge_between(node_id, f"service:{target}", "redirects_to", "Redirects to")
             edges[relation.id] = relation
 
 
@@ -307,7 +308,7 @@ def _fold(nodes, edges, estate: _Estate) -> None:
             continue
         relation = replace(
             edge,
-            id=_derived_id("edge", source, target, edge.kind),
+            id=derived_id("edge", source, target, edge.kind),
             source=source,
             target=target,
         )
@@ -355,7 +356,7 @@ def _runs_edges(nodes, edges, resources, estate: _Estate) -> None:
             continue
         host = estate.machine((resource.spec or {}).get("host"))
         if host:
-            relation = _edge(host, resource_id, "runs", "Runs")
+            relation = edge_between(host, resource_id, "runs", "Runs")
             edges[relation.id] = relation
 
 
@@ -376,7 +377,7 @@ def _tailnet_edges(nodes, edges, resources, estate: _Estate) -> None:
         if device is not None and device.addresses:
             estate.subjects[device_id] = Subject.of(addresses=device.addresses)
         for host in _device_hosts(device, estate):
-            relation = _edge(host, device_id, "on_tailnet", "On the tailnet as")
+            relation = edge_between(host, device_id, "on_tailnet", "On the tailnet as")
             edges[relation.id] = relation
         # The connection that reads the device: the record's own, else the
         # tailnet connections, as the machine catalogue decides it.
@@ -407,7 +408,7 @@ def _device_reader_edges(nodes, edges, device_id: str, ref: str) -> None:
         if node.connection_ref == ref or (
             not ref and node.provider in PROVIDERS[tailnet.TAILNET_KIND].connection_providers
         ):
-            relation = _edge(node.id, device_id, "used_by")
+            relation = edge_between(node.id, device_id, "used_by")
             edges[relation.id] = relation
 
 
@@ -460,7 +461,7 @@ def _reading_edges(nodes, edges, estate: _Estate) -> None:
             dict.fromkeys(entity_link(item.kind, "", record=item.record) for item in items)
         )
         relation = TopologyEdge(
-            id=_derived_id("edge", source, target, kind),
+            id=derived_id("edge", source, target, kind),
             source=source,
             target=target,
             kind="reading",

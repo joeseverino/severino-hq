@@ -26,17 +26,21 @@ from .connections import (
 )
 from .security import Capability, Principal
 from .topology import (
+    derive_topology,
+    serialize_topology,
+    topology as serialized_topology,
+)
+from .topology_lenses import (
     MAX_TRACE_DEPTH,
+    apply_lens,
+    apply_trace,
+    lens_for,
+    topology_lenses,
+)
+from .topology_model import (
     Topology,
     TopologyEdge,
     TopologyNode,
-    apply_lens,
-    apply_trace,
-    derive_topology,
-    lens_for,
-    serialize_topology,
-    topology as serialized_topology,
-    topology_lenses,
 )
 
 

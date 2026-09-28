@@ -24,7 +24,8 @@ from .security import Capability, Principal
 from .services import service_or_prospect
 from .tailnet import TAILNET_KIND
 from .test_hq_self import SITE, declare, own
-from .topology import RELATIONS, READING_RANKS, relation_graph
+from .topology import relation_graph
+from .topology_model import RELATIONS, READING_RANKS
 
 READER = Principal("reader", "test", frozenset({Capability.READ}))
 CONTROLLER = "example-controller"

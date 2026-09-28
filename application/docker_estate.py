@@ -67,7 +67,7 @@ def _on(record: Mapping[str, Any], machine: Callable[[Any], str]) -> str:
 
 
 def _talks_to(nodes, edges, resources, machine) -> None:
-    from .topology import _edge
+    from .topology_model import edge_between
 
     containers: dict[tuple[str, str], str] = {}
     for resource in resources:
@@ -89,7 +89,7 @@ def _talks_to(nodes, edges, resources, machine) -> None:
             {containers[(host, item)] for item in record.get("containers") or () if (host, item) in containers}
         )
         for one, other in combinations(declared, 2):
-            relation = replace(_edge(one, other, "talks_to"), detail=f"Network {name}")
+            relation = replace(edge_between(one, other, "talks_to"), detail=f"Network {name}")
             edges[relation.id] = relation
 
 

@@ -15,7 +15,7 @@ from control_plane.providers import PROVIDERS
 from .action_links import (
     ActionLink,
 )
-from .topology import (
+from .topology_model import (
     Topology,
     TopologyNode,
 )
