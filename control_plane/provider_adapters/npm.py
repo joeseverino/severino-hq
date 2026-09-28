@@ -11,7 +11,7 @@ from core.network import split_host_port
 
 from ..names import normalized_hostname
 from . import npm_readings
-from ..provider_spec import ProviderModel, ProviderSpec, applies
+from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, applies
 from .contracts import (
     ControllerIntegrationAdapter,
     IngressPolicy,
@@ -494,3 +494,7 @@ ADAPTER = ControllerIntegrationAdapter(
     },
     readings=npm_readings.READINGS,
 )
+
+# The connection this provider's credential arrives through, beside its kinds:
+# admitting the module admits both.
+CONNECTIONS = {"npm": ConnectionKind("Nginx Proxy Manager", "coarse")}

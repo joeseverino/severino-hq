@@ -30,6 +30,22 @@ from .names import in_zone
 from .observations.contract import ReadingPart
 
 
+@dataclass(frozen=True)
+class ConnectionKind:
+    """One connection provider: its name on the page, and how its credential is held.
+
+    ``credential`` is ``scoped`` or ``coarse``. The controller reports that a
+    credential reached its endpoint, never what it is allowed to do, so the only
+    honest statement about least privilege is the one the provider's credential
+    model permits: a scoped provider issues narrow tokens whose grants HQ could
+    verify; a coarse one issues a login or an admin token that is the whole
+    account.
+    """
+
+    label: str
+    credential: Literal["scoped", "coarse"]
+
+
 class ProviderModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 

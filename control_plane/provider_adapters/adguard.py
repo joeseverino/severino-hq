@@ -8,7 +8,7 @@ from pydantic import Field
 
 from ..observations.adguard import CLIENT_KIND, DNS_KIND, QUERY_KIND
 from . import adguard_readings
-from ..provider_spec import ProviderModel, ProviderSpec, applies
+from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, applies
 from .contracts import (
     ControllerIntegrationAdapter,
     ProviderError,
@@ -241,3 +241,7 @@ ADAPTER = ControllerIntegrationAdapter(
     },
     readings=READINGS,
 )
+
+# The connection this provider's credential arrives through, beside its kinds:
+# admitting the module admits both.
+CONNECTIONS = {"adguard": ConnectionKind("AdGuard Home", "coarse")}

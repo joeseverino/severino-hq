@@ -12,7 +12,15 @@ from pydantic import Field, field_validator
 
 from application.github_public import GitHubRepositoryURL
 
-from ..provider_spec import NameContext, ProviderModel, ProviderSpec, applies, key_from, locked
+from ..provider_spec import (
+    ConnectionKind,
+    NameContext,
+    ProviderModel,
+    ProviderSpec,
+    applies,
+    key_from,
+    locked,
+)
 from .contracts import ControllerIntegrationAdapter
 from .portainer_readings import PROVIDER, READINGS
 
@@ -349,3 +357,7 @@ ADAPTER = ControllerIntegrationAdapter(
     readings=READINGS,
     reads_through=(PROVIDER,),
 )
+
+# The connection this provider's credential arrives through, beside its kinds:
+# admitting the module admits both.
+CONNECTIONS = {"portainer": ConnectionKind("Portainer", "coarse")}
