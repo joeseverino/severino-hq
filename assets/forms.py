@@ -1,9 +1,11 @@
 from django import forms
 
+from application.forms import BusinessUseMixin
+
 from .models import Asset
 
 
-class AssetForm(forms.ModelForm):
+class AssetForm(BusinessUseMixin, forms.ModelForm):
     class Meta:
         model = Asset
         fields = [
@@ -30,9 +32,3 @@ class AssetForm(forms.ModelForm):
             ),
             "related_projects": forms.SelectMultiple(attrs={"size": 6}),
         }
-
-    def clean_business_use_percentage(self):
-        v = int(self.cleaned_data.get("business_use_percentage") or 0)
-        if not 0 <= v <= 100:
-            raise forms.ValidationError("Must be between 0 and 100.")
-        return v

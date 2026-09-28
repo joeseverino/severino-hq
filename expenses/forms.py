@@ -1,9 +1,11 @@
 from django import forms
 
+from application.forms import BusinessUseMixin
+
 from .models import Expense
 
 
-class ExpenseForm(forms.ModelForm):
+class ExpenseForm(BusinessUseMixin, forms.ModelForm):
     class Meta:
         model = Expense
         fields = [
@@ -26,9 +28,3 @@ class ExpenseForm(forms.ModelForm):
             "business_purpose": forms.TextInput(),
             "notes": forms.Textarea(attrs={"rows": 4}),
         }
-
-    def clean_business_use_percentage(self):
-        v = int(self.cleaned_data.get("business_use_percentage") or 0)
-        if not 0 <= v <= 100:
-            raise forms.ValidationError("Must be between 0 and 100.")
-        return v
