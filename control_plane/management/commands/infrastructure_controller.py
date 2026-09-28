@@ -99,36 +99,17 @@ def _material(options: dict) -> Any:
         raise ValueError(str(exc)) from exc
 
 
-def _inventory(options: dict) -> Any:
-    return record_sweep(
-        json.loads(options["payload"]),
-        principal=cli_principal(),
-        controller_id=options["controller_id"],
-    )
+def _recorded(record: Callable[..., Any]) -> Callable[[dict], Any]:
+    """A controller's report, parsed and recorded against it as the CLI principal."""
 
+    def run(options: dict) -> Any:
+        return record(
+            json.loads(options["payload"]),
+            principal=cli_principal(),
+            controller_id=options["controller_id"],
+        )
 
-def _connections(options: dict) -> Any:
-    return record_connections(
-        json.loads(options["payload"]),
-        principal=cli_principal(),
-        controller_id=options["controller_id"],
-    )
-
-
-def _steps(options: dict) -> Any:
-    return record_step_failures(
-        json.loads(options["payload"]),
-        principal=cli_principal(),
-        controller_id=options["controller_id"],
-    )
-
-
-def _analytics(options: dict) -> Any:
-    return record_analytics(
-        json.loads(options["payload"]),
-        principal=cli_principal(),
-        controller_id=options["controller_id"],
-    )
+    return run
 
 
 def _analytics_plan(options: dict) -> Any:
@@ -141,15 +122,6 @@ def _sweep_due(options: dict) -> Any:
 
 def _glance_plan(options: dict) -> Any:
     return dashboard_refresh_plan(options["controller_id"])
-
-
-def _glance(options: dict) -> Any:
-    payload = json.loads(options["payload"])
-    return record_dashboard_observations(
-        payload,
-        principal=cli_principal(),
-        controller_id=options["controller_id"],
-    )
 
 
 def _schedule(options: dict) -> Any:
@@ -177,14 +149,16 @@ ACTIONS: tuple[Action, ...] = (
     Action("export", ("resource",), _export),
     Action("schedule", ("controller_id",), _schedule),
     Action("material", ("resource",), _material),
-    Action("inventory", ("controller_id", "payload"), _inventory),
-    Action("connections", ("controller_id", "payload"), _connections),
-    Action("steps", ("controller_id", "payload"), _steps),
-    Action("analytics", ("controller_id", "payload"), _analytics),
+    Action("inventory", ("controller_id", "payload"), _recorded(record_sweep)),
+    Action("connections", ("controller_id", "payload"), _recorded(record_connections)),
+    Action("steps", ("controller_id", "payload"), _recorded(record_step_failures)),
+    Action("analytics", ("controller_id", "payload"), _recorded(record_analytics)),
     Action("analytics-plan", ("payload",), _analytics_plan),
     Action("sweep-due", ("controller_id",), _sweep_due),
     Action("glance-plan", ("controller_id",), _glance_plan),
-    Action("glance", ("controller_id", "payload"), _glance),
+    Action(
+        "glance", ("controller_id", "payload"), _recorded(record_dashboard_observations)
+    ),
     Action("report", ("controller_id", "operation", "payload"), _report),
 )
 
