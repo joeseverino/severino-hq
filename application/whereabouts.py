@@ -219,7 +219,7 @@ class Whereabouts:
         self._answering: "dict[tuple[str, Any], list[str]] | None" = None
         self._hosting: "dict[str, list[str]] | None" = None
 
-    def index(self) -> "Machines":
+    def machine_index(self) -> "Machines":
         if self._index is None:
             self._index = machines_index(self._machines)
         return self._index
@@ -293,7 +293,7 @@ def locate(
                 container=claimed[0] if len(claimed) == 1 else "",
             )
         return Origin(address=address)
-    name = at.index().resolve(host_address)
+    name = at.machine_index().resolve(host_address)
     if not name:
         # Not an address at all, but a container name on a docker network,
         # which is how everything behind a proxy sharing that network is
