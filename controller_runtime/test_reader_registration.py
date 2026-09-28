@@ -14,7 +14,7 @@ from django.test import SimpleTestCase
 
 from control_plane.observations import OBSERVATIONS
 from control_plane.provider_adapters.contracts import CORE_PROBED_CONNECTIONS
-from control_plane.providers import CONTROLLER_PROVIDER_ADAPTERS
+from control_plane.provider_adapters import CONTROLLER_PROVIDER_ADAPTERS
 
 from . import providers
 

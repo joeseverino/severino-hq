@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import Field
 
 from ..names import certificate_covers, normalized_hostname
+from ..provider_spec import ProviderModel, ProviderSpec, applies
 from .contracts import (
     ControllerIntegrationAdapter,
     ProviderError,
@@ -264,92 +265,91 @@ def _resolve(authored: dict[str, Any], context: Any) -> dict[str, Any]:
     }
 
 
-def build_adapter(*, provider_model, provider_spec, applies, normalized_hostname):
-    class CaddyRouteSpec(provider_model):
-        connection_ref: str = Field(
-            default="",
-            max_length=160,
-            title="Caddy",
-            description=(
-                "The connection to the host that serves this route."
-            ),
-        )
-        domain: str = Field(
-            min_length=1,
-            max_length=253,
-            title="Hostname",
-            description="The name this route answers for.",
-        )
-        upstream: str = Field(
-            default="",
-            max_length=253,
-            title="Hands off to",
-            description=(
-                "Where Caddy sends the request, usually a container and port."
-            ),
-        )
-
-    class CaddyRouteInFile(provider_model):
-        domain: str = Field(min_length=1, max_length=253)
-        upstream: str = Field(min_length=1, max_length=253)
-
-    class ResolvedCaddyRouteSpec(CaddyRouteSpec):
-        certificate_directory: str = Field(default="", max_length=500)
-        routes: list[CaddyRouteInFile] = Field(default_factory=list)
-
-    def identity(spec: dict[str, Any]) -> tuple[str, ...]:
-        return (
-            str(spec.get("connection_ref", "") or ""),
-            normalized_hostname(str(spec.get("domain", "") or "")),
-        )
-
-    definition = provider_spec(
-        "caddy.route",
-        "A hostname an edge Caddy serves, and where it sends requests.",
-        CaddyRouteSpec,
-        ResolvedCaddyRouteSpec,
-        _resolve,
-        actions={"reconcile": applies(automatic=True)},
-        label="Caddy route",
-        connection_providers=("ssh",),
-        facet="proxy",
-        hostnames=lambda spec: (spec["domain"],),
-        origin=lambda spec: str(spec.get("upstream", "") or "").strip(),
-        served_certificate=served_certificate,
-        identity=identity,
-        from_record=lambda record: {
-            "connection_ref": str(record.get("connection_ref", "") or ""),
-            "domain": str(record.get("domain", "") or ""),
-            "upstream": str(record.get("upstream", "") or ""),
-        },
-        key_hint=lambda spec: (
-            f"{normalized_hostname(str(spec.get('domain', '') or ''))}-caddy"
-        ),
-        readout=lambda spec, status: (
-            (
-                "Served by",
-                "",
-                f"caddy on {spec.get('connection_ref', '') or 'the edge'}",
-            ),
-            (
-                "Hands off to",
-                "",
-                str(spec.get("upstream", "") or "") or "Caddy answers this itself",
-            ),
-        ),
-        sample_record={
-            "connection_ref": "an-edge",
-            "domain": "app.example.com",
-            "upstream": "app:8080",
-        },
-        removal_gap=(
-            "The controller cannot delete Caddy routes yet, so the edge would "
-            "keep serving it."
+class CaddyRouteSpec(ProviderModel):
+    connection_ref: str = Field(
+        default="",
+        max_length=160,
+        title="Caddy",
+        description=(
+            "The connection to the host that serves this route."
         ),
     )
-    return ControllerIntegrationAdapter(
-        definitions=(definition,),
-        inventory={definition.kind: inventory},
-        connection_probes={},
-        actions={(definition.kind, "reconcile"): reconcile},
+    domain: str = Field(
+        min_length=1,
+        max_length=253,
+        title="Hostname",
+        description="The name this route answers for.",
     )
+    upstream: str = Field(
+        default="",
+        max_length=253,
+        title="Hands off to",
+        description=(
+            "Where Caddy sends the request, usually a container and port."
+        ),
+    )
+
+class CaddyRouteInFile(ProviderModel):
+    domain: str = Field(min_length=1, max_length=253)
+    upstream: str = Field(min_length=1, max_length=253)
+
+class ResolvedCaddyRouteSpec(CaddyRouteSpec):
+    certificate_directory: str = Field(default="", max_length=500)
+    routes: list[CaddyRouteInFile] = Field(default_factory=list)
+
+def _identity(spec: dict[str, Any]) -> tuple[str, ...]:
+    return (
+        str(spec.get("connection_ref", "") or ""),
+        normalized_hostname(str(spec.get("domain", "") or "")),
+    )
+
+DEFINITION = ProviderSpec(
+    "caddy.route",
+    "A hostname an edge Caddy serves, and where it sends requests.",
+    CaddyRouteSpec,
+    ResolvedCaddyRouteSpec,
+    _resolve,
+    actions={"reconcile": applies(automatic=True)},
+    label="Caddy route",
+    connection_providers=("ssh",),
+    facet="proxy",
+    hostnames=lambda spec: (spec["domain"],),
+    origin=lambda spec: str(spec.get("upstream", "") or "").strip(),
+    served_certificate=served_certificate,
+    identity=_identity,
+    from_record=lambda record: {
+        "connection_ref": str(record.get("connection_ref", "") or ""),
+        "domain": str(record.get("domain", "") or ""),
+        "upstream": str(record.get("upstream", "") or ""),
+    },
+    key_hint=lambda spec: (
+        f"{normalized_hostname(str(spec.get('domain', '') or ''))}-caddy"
+    ),
+    readout=lambda spec, status: (
+        (
+            "Served by",
+            "",
+            f"caddy on {spec.get('connection_ref', '') or 'the edge'}",
+        ),
+        (
+            "Hands off to",
+            "",
+            str(spec.get("upstream", "") or "") or "Caddy answers this itself",
+        ),
+    ),
+    sample_record={
+        "connection_ref": "an-edge",
+        "domain": "app.example.com",
+        "upstream": "app:8080",
+    },
+    removal_gap=(
+        "The controller cannot delete Caddy routes yet, so the edge would "
+        "keep serving it."
+    ),
+)
+ADAPTER = ControllerIntegrationAdapter(
+    definitions=(DEFINITION,),
+    inventory={DEFINITION.kind: inventory},
+    connection_probes={},
+    actions={(DEFINITION.kind, "reconcile"): reconcile},
+)

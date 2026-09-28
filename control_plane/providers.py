@@ -27,6 +27,8 @@ from .consoles import cloudflare_dashboard, tailscale_machine
 from .names import certificate_covers, normalized_hostname
 from .connection_kinds import CONNECTION_CREDENTIALS
 from .observations import OBSERVATIONS
+from .provider_adapters import CONTROLLER_PROVIDER_ADAPTERS
+from .provider_adapters.contracts import admit_controller_adapters
 from .provider_spec import (
     SERVICE_FACETS,
     ControllerCapabilityRegistry,
@@ -1718,25 +1720,9 @@ def _tailnet_device_from_record(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _admitted_provider_definitions() -> dict[str, ProviderSpec]:
-    from .provider_adapters.contracts import admit_controller_adapters
-
-    return dict(admit_controller_adapters(CONTROLLER_PROVIDER_ADAPTERS))
-
-
-def _admitted_controller_adapters():
-    from .provider_adapters import build_controller_provider_adapters
-
-    return build_controller_provider_adapters(
-        provider_model=ProviderModel,
-        provider_spec=ProviderSpec,
-        applies=applies,
-        normalized_hostname=normalized_hostname,
-    )
-
-
-CONTROLLER_PROVIDER_ADAPTERS = _admitted_controller_adapters()
-_ADMITTED_PROVIDER_DEFINITIONS = _admitted_provider_definitions()
+_ADMITTED_PROVIDER_DEFINITIONS = dict(
+    admit_controller_adapters(CONTROLLER_PROVIDER_ADAPTERS)
+)
 
 
 def _named_page(route: str, resource, field: str) -> str:

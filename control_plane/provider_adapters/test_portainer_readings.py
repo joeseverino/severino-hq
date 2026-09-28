@@ -297,7 +297,7 @@ class WiringTests(SimpleTestCase):
     """The registered readers reach Portainer through the controller's own calls."""
 
     def test_the_portainer_adapter_declares_every_portainer_reading(self):
-        from control_plane.providers import CONTROLLER_PROVIDER_ADAPTERS
+        from control_plane.provider_adapters import CONTROLLER_PROVIDER_ADAPTERS
 
         (adapter,) = [a for a in CONTROLLER_PROVIDER_ADAPTERS if "portainer" in a.reads_through]
         self.assertEqual(dict(adapter.readings), portainer.READINGS)

@@ -11,6 +11,7 @@ from core.network import split_host_port
 
 from ..names import normalized_hostname
 from . import npm_readings
+from ..provider_spec import ProviderModel, ProviderSpec, applies
 from .contracts import (
     ControllerIntegrationAdapter,
     IngressPolicy,
@@ -318,179 +319,178 @@ def probe(runtime: ProviderRuntime, connection_ref: str) -> dict[str, Any]:
     return {"detail": "Authenticated.", "reaches": []}
 
 
-def build_adapter(*, provider_model, provider_spec, applies):
-    class NPMProxyHostSpec(provider_model):
-        domain_names: list[str] = Field(
-            min_length=1,
-            title="Hostnames",
-            description="One per line.",
-        )
-        forward_scheme: Literal["http", "https"] = Field(
-            title="Reach it over",
-            description="How the proxy connects to your service.",
-        )
-        forward_host: str = Field(
-            min_length=1,
-            max_length=255,
-            title="Send traffic to",
-            description="The service's address, usually an internal IP.",
-        )
-        forward_port: int = Field(ge=1, le=65535, title="Port")
-        certificate_resource: str = Field(
-            default="",
-            title="Certificate",
-            description="Secures these names. Required when Force HTTPS is on.",
-        )
-        force_ssl: bool = Field(
-            default=True,
-            title="Force HTTPS",
-            description="Redirect HTTP to HTTPS.",
-        )
-        http2: bool = Field(default=True, title="HTTP/2")
-        websocket: bool = Field(
-            default=False,
-            title="Allow websockets",
-            description="Needed for live updates, terminals and chat.",
-        )
-        caching_enabled: bool = Field(default=False, title="Cache assets")
-        block_exploits: bool = Field(
-            default=True,
-            title="Block common exploits",
-            description="Nginx Proxy Manager's built-in request filtering.",
-        )
-        access_list_id: int = Field(
-            default=0,
-            ge=0,
-            title="Access list",
-            description="An Nginx Proxy Manager access list id. 0 means none.",
-        )
-        advanced_config: str = Field(
-            default="",
-            title="Extra nginx configuration",
-            description="Passed through as-is. Usually blank.",
-        )
-        hsts_enabled: bool = False
-        hsts_subdomains: bool = False
-        trust_forwarded_proto: bool = False
-        serving: bool = True
-
-    class ResolvedNPMProxyHostSpec(NPMProxyHostSpec):
-        certificate_id: int | None = Field(default=None, ge=1)
-
-    def resolve(authored, context):
-        resource_key = authored.get("certificate_resource")
-        status = (
-            context.resource_status(
-                resource_key, ("tls.certificate", "tls.uploaded_certificate")
-            )
-            if resource_key and context.resource_status
-            else None
-        )
-        return {
-            **authored,
-            "certificate_id": status.get("npm_certificate_id") if status else None,
-        }
-
-    def from_record(record):
-        return {
-            "domain_names": list(record["domain_names"]),
-            "forward_scheme": record["forward_scheme"],
-            "forward_host": record["forward_host"],
-            "forward_port": record["forward_port"],
-            "certificate_resource": "",
-            "force_ssl": bool(record.get("ssl_forced")),
-            "http2": bool(record.get("http2_support")),
-            "websocket": bool(record.get("allow_websocket_upgrade")),
-            "caching_enabled": bool(record.get("caching_enabled")),
-            "block_exploits": bool(record.get("block_exploits")),
-            "access_list_id": record.get("access_list_id") or 0,
-            "advanced_config": record.get("advanced_config") or "",
-            "hsts_enabled": bool(record.get("hsts_enabled")),
-            "hsts_subdomains": bool(record.get("hsts_subdomains")),
-            "trust_forwarded_proto": bool(record.get("trust_forwarded_proto")),
-            "serving": bool(record.get("enabled", True)),
-        }
-
-    def seed(context):
-        host, port = split_host_port(context.origin_address or context.origin)
-        result = {"domain_names": [context.hostname]}
-        if host and port.isdigit():
-            result.update(forward_host=host, forward_port=int(port))
-        if len(context.certificates) == 1:
-            result["certificate_resource"] = context.certificates[0]
-        return result
-
-    definition = provider_spec(
-        "npm.proxy_host",
-        "Forwards a hostname to a service on your network over HTTPS. HQ creates it in Nginx Proxy Manager if it does not exist.",
-        NPMProxyHostSpec,
-        ResolvedNPMProxyHostSpec,
-        resolve,
-        actions={"reconcile": applies(automatic=True), "delete": applies()},
-        label="Proxy host",
-        connection_providers=("npm",),
-        removal_note=lambda spec: (
-            "These names stop being served: "
-            + ", ".join(spec.get("domain_names", ()))
-            + "."
-        ),
-        choices="application.provider_choices:proxy_choices",
-        required_on_create=("certificate_resource",),
-        unobservable_fields=("certificate_resource",),
-        advanced_fields=(
-            "http2",
-            "websocket",
-            "caching_enabled",
-            "block_exploits",
-            "access_list_id",
-            "advanced_config",
-            "hsts_enabled",
-            "hsts_subdomains",
-            "trust_forwarded_proto",
-            "serving",
-        ),
-        facet="proxy",
-        ingress_policy=ingress_policy,
-        served_certificate=served_certificate,
-        forwarding_headers=FORWARDING_HEADERS,
-        hostnames=lambda spec: tuple(spec["domain_names"]),
-        certificate=lambda spec: str(spec.get("certificate_resource", "") or ""),
-        origin=lambda spec: f"{spec['forward_host']}:{spec['forward_port']}",
-        seed=seed,
-        from_record=from_record,
-        sample_record={
-            "domain_names": ["shop.example.com"],
-            "forward_scheme": "http",
-            "forward_host": "10.0.0.20",
-            "forward_port": 3000,
-            "ssl_forced": True,
-            "http2_support": True,
-            "allow_websocket_upgrade": False,
-            "caching_enabled": False,
-            "block_exploits": True,
-            "access_list_id": 0,
-            "advanced_config": "",
-            "hsts_enabled": False,
-            "hsts_subdomains": False,
-            "trust_forwarded_proto": False,
-            "enabled": True,
-        },
-        readout=lambda spec, status: (
-            (
-                "Forwards to",
-                f"{spec.get('forward_scheme', '')}://{spec.get('forward_host', '')}:{spec.get('forward_port', '')}",
-                status.get("forward", ""),
-            ),
-            ("TLS", "forced" if spec.get("force_ssl") else "optional", ""),
-        ),
+class NPMProxyHostSpec(ProviderModel):
+    domain_names: list[str] = Field(
+        min_length=1,
+        title="Hostnames",
+        description="One per line.",
     )
-    return ControllerIntegrationAdapter(
-        definitions=(definition,),
-        inventory={definition.kind: inventory},
-        connection_probes={"npm": probe},
-        actions={
-            (definition.kind, "reconcile"): reconcile,
-            (definition.kind, "delete"): delete,
-        },
-        readings=npm_readings.READINGS,
+    forward_scheme: Literal["http", "https"] = Field(
+        title="Reach it over",
+        description="How the proxy connects to your service.",
     )
+    forward_host: str = Field(
+        min_length=1,
+        max_length=255,
+        title="Send traffic to",
+        description="The service's address, usually an internal IP.",
+    )
+    forward_port: int = Field(ge=1, le=65535, title="Port")
+    certificate_resource: str = Field(
+        default="",
+        title="Certificate",
+        description="Secures these names. Required when Force HTTPS is on.",
+    )
+    force_ssl: bool = Field(
+        default=True,
+        title="Force HTTPS",
+        description="Redirect HTTP to HTTPS.",
+    )
+    http2: bool = Field(default=True, title="HTTP/2")
+    websocket: bool = Field(
+        default=False,
+        title="Allow websockets",
+        description="Needed for live updates, terminals and chat.",
+    )
+    caching_enabled: bool = Field(default=False, title="Cache assets")
+    block_exploits: bool = Field(
+        default=True,
+        title="Block common exploits",
+        description="Nginx Proxy Manager's built-in request filtering.",
+    )
+    access_list_id: int = Field(
+        default=0,
+        ge=0,
+        title="Access list",
+        description="An Nginx Proxy Manager access list id. 0 means none.",
+    )
+    advanced_config: str = Field(
+        default="",
+        title="Extra nginx configuration",
+        description="Passed through as-is. Usually blank.",
+    )
+    hsts_enabled: bool = False
+    hsts_subdomains: bool = False
+    trust_forwarded_proto: bool = False
+    serving: bool = True
+
+class ResolvedNPMProxyHostSpec(NPMProxyHostSpec):
+    certificate_id: int | None = Field(default=None, ge=1)
+
+def _resolve(authored, context):
+    resource_key = authored.get("certificate_resource")
+    status = (
+        context.resource_status(
+            resource_key, ("tls.certificate", "tls.uploaded_certificate")
+        )
+        if resource_key and context.resource_status
+        else None
+    )
+    return {
+        **authored,
+        "certificate_id": status.get("npm_certificate_id") if status else None,
+    }
+
+def _from_record(record):
+    return {
+        "domain_names": list(record["domain_names"]),
+        "forward_scheme": record["forward_scheme"],
+        "forward_host": record["forward_host"],
+        "forward_port": record["forward_port"],
+        "certificate_resource": "",
+        "force_ssl": bool(record.get("ssl_forced")),
+        "http2": bool(record.get("http2_support")),
+        "websocket": bool(record.get("allow_websocket_upgrade")),
+        "caching_enabled": bool(record.get("caching_enabled")),
+        "block_exploits": bool(record.get("block_exploits")),
+        "access_list_id": record.get("access_list_id") or 0,
+        "advanced_config": record.get("advanced_config") or "",
+        "hsts_enabled": bool(record.get("hsts_enabled")),
+        "hsts_subdomains": bool(record.get("hsts_subdomains")),
+        "trust_forwarded_proto": bool(record.get("trust_forwarded_proto")),
+        "serving": bool(record.get("enabled", True)),
+    }
+
+def _seed(context):
+    host, port = split_host_port(context.origin_address or context.origin)
+    result = {"domain_names": [context.hostname]}
+    if host and port.isdigit():
+        result.update(forward_host=host, forward_port=int(port))
+    if len(context.certificates) == 1:
+        result["certificate_resource"] = context.certificates[0]
+    return result
+
+DEFINITION = ProviderSpec(
+    "npm.proxy_host",
+    "Forwards a hostname to a service on your network over HTTPS. HQ creates it in Nginx Proxy Manager if it does not exist.",
+    NPMProxyHostSpec,
+    ResolvedNPMProxyHostSpec,
+    _resolve,
+    actions={"reconcile": applies(automatic=True), "delete": applies()},
+    label="Proxy host",
+    connection_providers=("npm",),
+    removal_note=lambda spec: (
+        "These names stop being served: "
+        + ", ".join(spec.get("domain_names", ()))
+        + "."
+    ),
+    choices="application.provider_choices:proxy_choices",
+    required_on_create=("certificate_resource",),
+    unobservable_fields=("certificate_resource",),
+    advanced_fields=(
+        "http2",
+        "websocket",
+        "caching_enabled",
+        "block_exploits",
+        "access_list_id",
+        "advanced_config",
+        "hsts_enabled",
+        "hsts_subdomains",
+        "trust_forwarded_proto",
+        "serving",
+    ),
+    facet="proxy",
+    ingress_policy=ingress_policy,
+    served_certificate=served_certificate,
+    forwarding_headers=FORWARDING_HEADERS,
+    hostnames=lambda spec: tuple(spec["domain_names"]),
+    certificate=lambda spec: str(spec.get("certificate_resource", "") or ""),
+    origin=lambda spec: f"{spec['forward_host']}:{spec['forward_port']}",
+    seed=_seed,
+    from_record=_from_record,
+    sample_record={
+        "domain_names": ["shop.example.com"],
+        "forward_scheme": "http",
+        "forward_host": "10.0.0.20",
+        "forward_port": 3000,
+        "ssl_forced": True,
+        "http2_support": True,
+        "allow_websocket_upgrade": False,
+        "caching_enabled": False,
+        "block_exploits": True,
+        "access_list_id": 0,
+        "advanced_config": "",
+        "hsts_enabled": False,
+        "hsts_subdomains": False,
+        "trust_forwarded_proto": False,
+        "enabled": True,
+    },
+    readout=lambda spec, status: (
+        (
+            "Forwards to",
+            f"{spec.get('forward_scheme', '')}://{spec.get('forward_host', '')}:{spec.get('forward_port', '')}",
+            status.get("forward", ""),
+        ),
+        ("TLS", "forced" if spec.get("force_ssl") else "optional", ""),
+    ),
+)
+ADAPTER = ControllerIntegrationAdapter(
+    definitions=(DEFINITION,),
+    inventory={DEFINITION.kind: inventory},
+    connection_probes={"npm": probe},
+    actions={
+        (DEFINITION.kind, "reconcile"): reconcile,
+        (DEFINITION.kind, "delete"): delete,
+    },
+    readings=npm_readings.READINGS,
+)

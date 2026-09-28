@@ -35,10 +35,10 @@ from control_plane.providers import (
     certificate_covers,
     controller_capability_registry,
     controller_id,
-    CONTROLLER_PROVIDER_ADAPTERS,
     normalized_record_content,
     normalized_hostname,
 )
+from control_plane.provider_adapters import CONTROLLER_PROVIDER_ADAPTERS
 from control_plane.connection_kinds import CONNECTION_CREDENTIALS
 from control_plane.provider_adapters.contracts import (
     ADDRESS_FAILURE,

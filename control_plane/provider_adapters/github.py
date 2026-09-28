@@ -28,6 +28,7 @@ from typing import Any, Literal
 from pydantic import Field
 
 from . import github_app, github_readings
+from ..provider_spec import ProviderModel, ProviderSpec, applies
 from .contracts import ControllerIntegrationAdapter, ProviderResult, ProviderRuntime
 
 KIND = "github.delivery"
@@ -413,54 +414,53 @@ def _readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, s
     return tuple(rows)
 
 
-def build_adapter(*, provider_model, provider_spec, applies):
-    class GitHubDeliverySpec(provider_model):
-        repository: str = Field(
-            pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
-            title="Host repository",
-            description="The repository whose composition workflow deploys HQ.",
-        )
-        workflow: str = Field(
-            default=COMPOSE_WORKFLOW,
-            pattern=r"^\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml$",
-            title="Composition workflow",
-        )
-        branch: str = Field(default="main", pattern=r"^[A-Za-z0-9_./-]+$", title="Branch")
-        production: Literal[CURRENT] = Field(  # type: ignore[valid-type]
-            default=CURRENT, title="Production runs"
-        )
+class GitHubDeliverySpec(ProviderModel):
+    repository: str = Field(
+        pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+        title="Host repository",
+        description="The repository whose composition workflow deploys HQ.",
+    )
+    workflow: str = Field(
+        default=COMPOSE_WORKFLOW,
+        pattern=r"^\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml$",
+        title="Composition workflow",
+    )
+    branch: str = Field(default="main", pattern=r"^[A-Za-z0-9_./-]+$", title="Branch")
+    production: Literal[CURRENT] = Field(  # type: ignore[valid-type]
+        default=CURRENT, title="Production runs"
+    )
 
-    definition = provider_spec(
-        KIND,
-        "Reports each extension's stage on its commit, from admission to "
-        "production, and comments once on its merged pull request.",
-        GitHubDeliverySpec,
-        actions={"reconcile": applies(automatic=True)},
-        label="Continuous delivery",
-        connection_providers=(github_app.PROVIDER,),
-        from_record=_from_record,
-        identity=lambda spec: (spec["repository"],),
-        key_hint=lambda record: "delivery",
-        adopts=lambda record: record.get("production") == CURRENT,
-        sample_record={
-            "repository": "example/host",
-            "workflow": COMPOSE_WORKFLOW,
-            "branch": "main",
-            "production": CURRENT,
-            "extensions": [],
-        },
-        readout=_readout,
-        advanced_fields=("workflow", "branch", "production"),
-        declaration_only=True,
-        removal_note=lambda spec: (
-            "HQ stops reporting on extension commits. Their admissions still "
-            f"start the composition in {spec.get('repository', 'the host repository')}."
-        ),
-    )
-    return ControllerIntegrationAdapter(
-        definitions=(definition,),
-        inventory={KIND: inventory},
-        readings=github_readings.READINGS,
-        connection_probes={github_app.PROVIDER: probe},
-        actions={(KIND, "reconcile"): reconcile},
-    )
+DEFINITION = ProviderSpec(
+    KIND,
+    "Reports each extension's stage on its commit, from admission to "
+    "production, and comments once on its merged pull request.",
+    GitHubDeliverySpec,
+    actions={"reconcile": applies(automatic=True)},
+    label="Continuous delivery",
+    connection_providers=(github_app.PROVIDER,),
+    from_record=_from_record,
+    identity=lambda spec: (spec["repository"],),
+    key_hint=lambda record: "delivery",
+    adopts=lambda record: record.get("production") == CURRENT,
+    sample_record={
+        "repository": "example/host",
+        "workflow": COMPOSE_WORKFLOW,
+        "branch": "main",
+        "production": CURRENT,
+        "extensions": [],
+    },
+    readout=_readout,
+    advanced_fields=("workflow", "branch", "production"),
+    declaration_only=True,
+    removal_note=lambda spec: (
+        "HQ stops reporting on extension commits. Their admissions still "
+        f"start the composition in {spec.get('repository', 'the host repository')}."
+    ),
+)
+ADAPTER = ControllerIntegrationAdapter(
+    definitions=(DEFINITION,),
+    inventory={KIND: inventory},
+    readings=github_readings.READINGS,
+    connection_probes={github_app.PROVIDER: probe},
+    actions={(KIND, "reconcile"): reconcile},
+)

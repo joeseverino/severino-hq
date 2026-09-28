@@ -9,6 +9,7 @@ from pydantic import Field
 
 from ..observations.adguard import CLIENT_KIND, DNS_KIND, QUERY_KIND
 from . import adguard_readings
+from ..provider_spec import ProviderModel, ProviderSpec, applies
 from .contracts import (
     ControllerIntegrationAdapter,
     ProviderError,
@@ -215,51 +216,49 @@ def _seed(context: Any) -> dict[str, Any]:
     return {"domain": context.hostname}
 
 
-def build_adapter(*, provider_model, provider_spec, applies):
-    """Build after the host's provider primitives exist; no parent import cycle."""
 
-    class AdGuardRewriteSpec(provider_model):
-        domain: str = Field(
-            min_length=1,
-            max_length=253,
-            title="Hostname",
-            description="The name that should resolve on your network.",
-        )
-        answer: str = Field(
-            min_length=1,
-            max_length=253,
-            title="Points at",
-            description="The IP address this hostname resolves to.",
-        )
+class AdGuardRewriteSpec(ProviderModel):
+    domain: str = Field(
+        min_length=1,
+        max_length=253,
+        title="Hostname",
+        description="The name that should resolve on your network.",
+    )
+    answer: str = Field(
+        min_length=1,
+        max_length=253,
+        title="Points at",
+        description="The IP address this hostname resolves to.",
+    )
 
-    definition = provider_spec(
-        "adguard.rewrite",
-        "Resolves a hostname to an IP on your network. HQ creates it in "
-        "AdGuard if it does not exist.",
-        AdGuardRewriteSpec,
-        actions={"reconcile": applies(automatic=True), "delete": applies()},
-        label="Internal DNS record",
-        connection_providers=("adguard",),
-        removal_note=lambda spec: (
-            f"{spec.get('domain', 'This name')} stops resolving on your "
-            "network. Anything reached by that name goes offline."
-        ),
-        facet="dns",
-        hostnames=_hostnames,
-        seed=_seed,
-        answers=_answers,
-        origin=_origin,
-        from_record=_from_record,
-        sample_record={"domain": "app.example.com", "answer": "10.0.0.10"},
-        readout=_readout,
-    )
-    return ControllerIntegrationAdapter(
-        definitions=(definition,),
-        inventory={definition.kind: inventory},
-        connection_probes={"adguard": probe},
-        actions={
-            (definition.kind, "reconcile"): reconcile,
-            (definition.kind, "delete"): delete,
-        },
-        readings=READINGS,
-    )
+DEFINITION = ProviderSpec(
+    "adguard.rewrite",
+    "Resolves a hostname to an IP on your network. HQ creates it in "
+    "AdGuard if it does not exist.",
+    AdGuardRewriteSpec,
+    actions={"reconcile": applies(automatic=True), "delete": applies()},
+    label="Internal DNS record",
+    connection_providers=("adguard",),
+    removal_note=lambda spec: (
+        f"{spec.get('domain', 'This name')} stops resolving on your "
+        "network. Anything reached by that name goes offline."
+    ),
+    facet="dns",
+    hostnames=_hostnames,
+    seed=_seed,
+    answers=_answers,
+    origin=_origin,
+    from_record=_from_record,
+    sample_record={"domain": "app.example.com", "answer": "10.0.0.10"},
+    readout=_readout,
+)
+ADAPTER = ControllerIntegrationAdapter(
+    definitions=(DEFINITION,),
+    inventory={DEFINITION.kind: inventory},
+    connection_probes={"adguard": probe},
+    actions={
+        (DEFINITION.kind, "reconcile"): reconcile,
+        (DEFINITION.kind, "delete"): delete,
+    },
+    readings=READINGS,
+)
