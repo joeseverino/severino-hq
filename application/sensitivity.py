@@ -10,13 +10,10 @@ from __future__ import annotations
 
 from django.db.models import QuerySet
 
-from docs_index.models import DocumentationRecord
+from docs_index.models import AI_SAFE_SENSITIVITIES, DocumentationRecord
 
-
-SAFE_SENSITIVITIES = (
-    DocumentationRecord.Sensitivity.PUBLIC,
-    DocumentationRecord.Sensitivity.INTERNAL,
-)
+# The model owns which sensitivities are safe; every surface filters with this.
+SAFE_SENSITIVITIES = AI_SAFE_SENSITIVITIES
 
 
 def safe_doc_ids(documentation: QuerySet[DocumentationRecord]) -> list[str]:
