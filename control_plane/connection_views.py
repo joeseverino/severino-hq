@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 from django.contrib import messages
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -19,8 +18,6 @@ from application.capabilities import execute_capability
 from application.connection_context import connections_context
 from application.security import safe_next, web_principal
 from application.pages import PageMixin
-
-
 
 
 class ConnectionListView(PageMixin, LoginRequiredMixin, TemplateView):

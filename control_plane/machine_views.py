@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from urllib.parse import urlencode
 
-
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404
 from django.shortcuts import redirect
@@ -24,7 +23,6 @@ from application.pages import PageAction, PageMixin
 from application.resource_capabilities import (
     resource_capabilities,
 )
-
 
 from .models import ManagedResource
 from .provider_adapters.declarations import MACHINE_KIND
@@ -230,7 +228,7 @@ class MachineDetailView(PageMixin, LoginRequiredMixin, TemplateView):
         # carries the addresses it answers at, so the page could always have
         # known, and said "this machine" while you looked at your own laptop.
         # Arithmetic on one address: no query, no sweep.
-        from application.connection import displayed_client_ip
+        from application.request_channel import displayed_client_ip
 
         context["is_this_device"] = displayed_client_ip(self.request) in found.addresses
         context["hq_label"] = HQ_LABEL

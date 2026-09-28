@@ -24,10 +24,14 @@ from control_plane.provider_adapters.tailscale import TAILNET_KIND
 from control_plane.connection_kinds import CONNECTION_LABELS
 from core.network import is_trusted_proxy, split_host_port
 
-from .connection import Address, Connection, Header, forwarded_chain, socket_peer
+from .connection import Connection
 from .entity_links import entity_link
 from .paths import NETWORK_LABELS, Hop, Route, ServicePath, Source, last_machine, why_unread
 from .reach import network_of
+from .request_addresses import Address
+from .request_channel import forwarded_chain, socket_peer
+from .request_headers import Header
+
 
 PROVEN = "proven"
 CONTRADICTED = "contradicted"
@@ -719,7 +723,9 @@ class RequestPath:
 def request_path(request) -> RequestPath:
     """How ``request`` reached HQ, read once per projection."""
 
-    from .connection import addresses_of, addresses_of_hq, connection, headers_of
+    from .connection import connection
+    from .request_addresses import addresses_of, addresses_of_hq
+    from .request_headers import headers_of
     from .connection_security import observed_request_controls
     from .paths import hq_path
 

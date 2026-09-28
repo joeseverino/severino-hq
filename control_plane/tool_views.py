@@ -14,8 +14,6 @@ from django.views.generic import TemplateView
 from application.pages import PageMixin
 
 
-
-
 class ToolsView(PageMixin, LoginRequiredMixin, TemplateView):
     """The tools, one tab at a time, answering on a plain GET.
 

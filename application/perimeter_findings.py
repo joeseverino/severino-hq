@@ -1,10 +1,6 @@
 """Findings about a machine's edge: ports open to the internet, a perimeter nobody checked, a firewall that is not running, and reach nobody measured."""
 
-
 from __future__ import annotations
-
-
-
 
 from .finding_model import OperatorStep
 from .finding_model import Finding, FindingEstate, fact_values

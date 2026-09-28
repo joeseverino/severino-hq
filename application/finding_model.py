@@ -4,13 +4,11 @@ Every detector module builds its findings from these, and application.findings
 derives, resolves and serves them. Kept apart so a detector can import its
 vocabulary without importing the pipeline that collects it."""
 
-
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable
-
 
 from control_plane.providers import PROVIDERS
 

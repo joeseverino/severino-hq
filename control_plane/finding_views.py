@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-
-
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse
 from django.views.generic import TemplateView
@@ -14,8 +12,6 @@ from application.topology import (
 )
 from application.security import web_principal
 from application.pages import PageAction, PageMixin
-
-
 
 
 class FindingsView(PageMixin, LoginRequiredMixin, TemplateView):

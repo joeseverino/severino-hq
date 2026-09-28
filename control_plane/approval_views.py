@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 from django.contrib import messages
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -11,8 +10,6 @@ from django.urls import reverse
 from django.views import View
 
 from application.security import AuthorizationError, safe_next, web_principal
-
-
 
 
 class ApprovalListView(LoginRequiredMixin, View):

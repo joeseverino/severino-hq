@@ -164,7 +164,7 @@ def _arrival(request, address: str) -> dict[str, Any]:
     from core.network import is_trusted_proxy
 
     from . import tailnet
-    from .connection import channel_for_request, forwarded_chain, socket_peer
+    from .request_channel import channel_for_request, forwarded_chain, socket_peer
     from .machines import tailnet_presence
 
     device = tailnet.device_at(address)

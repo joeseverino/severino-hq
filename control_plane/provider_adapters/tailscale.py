@@ -6,7 +6,6 @@ from typing import Any
 
 from pydantic import Field
 
-
 from ..consoles import tailscale_machine
 from ..observations.contract import ReadingPart
 from ..provider_spec import (
@@ -16,6 +15,7 @@ from ..provider_spec import (
     applies,
     expiry_phrase,
 )
+
 
 TAILNET_KIND = "tailscale.device"
 TAILNET_POLICY_KIND = "tailscale.policy"

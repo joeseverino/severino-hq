@@ -12,7 +12,6 @@ from typing import Any, Literal
 from django.urls.converters import StringConverter
 from pydantic import Field, field_validator, model_validator
 
-
 from ..provider_spec import (
     ProviderModel,
     ProviderSpec,
@@ -20,6 +19,7 @@ from ..provider_spec import (
     key_from,
     named_page,
 )
+
 
 NETWORK_KIND = "network"
 AUTHORITY_KIND = "pki.authority"

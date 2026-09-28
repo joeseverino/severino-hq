@@ -1,9 +1,6 @@
 """Findings about the controller's own work: kinds it stopped sweeping, records it skipped or never saw, and changes it keeps applying without effect."""
 
-
 from __future__ import annotations
-
-
 
 from control_plane.provider_adapters.portainer import CONTAINER_KIND
 

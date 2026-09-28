@@ -1135,7 +1135,7 @@ class InfrastructureViewsTests(TestCase):
 
     def test_findings_render_only_offers_the_projection_authorized(self):
         from application.action_links import ActionLink
-        from application.findings import Finding
+        from application.finding_model import Finding
         from application.topology import Topology, TopologyNode
 
         subject = TopologyNode(

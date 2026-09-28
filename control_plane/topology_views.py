@@ -33,8 +33,6 @@ from application.pages import PageAction, PageMixin
 from application.ui import counted
 
 
-
-
 class TopologyView(PageMixin, LoginRequiredMixin, TemplateView):
     """The live, actionable graph derived by the application layer."""
 

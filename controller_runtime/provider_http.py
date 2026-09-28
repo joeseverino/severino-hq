@@ -23,6 +23,7 @@ from control_plane.provider_adapters.contracts import (
     failure_of,
 )
 
+
 logger = logging.getLogger("severino.controller")
 
 

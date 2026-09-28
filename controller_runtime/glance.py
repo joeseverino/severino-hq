@@ -12,6 +12,7 @@ from control_plane.providers import controller_id
 from control_plane.provider_adapters.contracts import ProviderError
 from . import commands, connection_env, portainer, provider_http
 
+
 logger = logging.getLogger("severino.controller")
 
 

@@ -32,7 +32,6 @@ from application.resource_capabilities import (
 )
 from application.ui import PageNavigation, PageSection
 
-
 from .models import ManagedResource
 from .names import normalized_hostname
 from .provider_adapters.portainer import CONTAINER_KIND
