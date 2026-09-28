@@ -118,7 +118,7 @@ class TLSCertificateSpec(ProviderModel):
     )
 
     @model_validator(mode="after")
-    def a_certificate_needs_names_and_somewhere_to_go(self):
+    def a_certificate_needs_names_and_somewhere_to_go(self) -> TLSCertificateSpec:
         missing = [
             label
             for label, value in (
@@ -157,7 +157,7 @@ class ResolvedTLSCertificateSpec(ProviderModel):
         return normalized
 
     @model_validator(mode="after")
-    def validate_consumers(self):
+    def validate_consumers(self) -> ResolvedTLSCertificateSpec:
         identities = [(consumer.kind, consumer.name) for consumer in self.consumers]
         if len(identities) != len(set(identities)):
             raise ValueError("TLS consumer kind/name pairs must be unique.")

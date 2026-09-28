@@ -70,7 +70,7 @@ def _registry() -> dict[str, ProviderSpec]:
 PROVIDERS = _registry()
 
 
-def resource_home(resource) -> str:
+def resource_home(resource: Any) -> str:
     """The URL of the page a resource lives on."""
     provider = PROVIDERS.get(resource.kind)
     if provider is not None and provider.home is not None:
@@ -78,7 +78,7 @@ def resource_home(resource) -> str:
     return reverse("control_plane:detail", kwargs={"key": resource.key})
 
 
-def readout_rows(resource) -> tuple[tuple[str, str, str], ...]:
+def readout_rows(resource: Any) -> tuple[tuple[str, str, str], ...]:
     """``(label, desired, observed)`` as the resource's provider describes it."""
 
     provider = PROVIDERS.get(resource.kind)
@@ -271,7 +271,8 @@ def validate_spec(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
     except KeyError as exc:
         raise ValueError(f"Unknown infrastructure resource kind {kind!r}.") from exc
     validated = provider.validate(payload)
-    return TypeAdapter(provider.spec_type).dump_python(validated, mode="json")
+    dumped: dict[str, Any] = TypeAdapter(provider.spec_type).dump_python(validated, mode="json")
+    return dumped
 
 
 def resolve_provider_spec(
@@ -286,5 +287,6 @@ def resolve_provider_spec(
     authored = validate_spec(kind, payload)
     resolved = provider.resolver(authored, context) if provider.resolver else authored
     resolved_type = provider.resolved_type or provider.spec_type
-    value = TypeAdapter(resolved_type).validate_python(resolved)
-    return TypeAdapter(resolved_type).dump_python(value, mode="json")
+    value: Any = TypeAdapter(resolved_type).validate_python(resolved)
+    dumped: dict[str, Any] = TypeAdapter(resolved_type).dump_python(value, mode="json")
+    return dumped

@@ -57,7 +57,7 @@ class ControllerVerification(ProviderModel):
     interval_seconds: int = Field(ge=1, le=300)
 
     @model_validator(mode="after")
-    def interval_fits_timeout(self):
+    def interval_fits_timeout(self) -> ControllerVerification:
         if self.interval_seconds > self.timeout_seconds:
             raise ValueError("verification interval must not exceed its timeout")
         return self
@@ -70,7 +70,7 @@ class ControllerActionPolicy(ProviderModel):
     verification: ControllerVerification | None = None
 
     @model_validator(mode="after")
-    def validate_mode(self):
+    def validate_mode(self) -> ControllerActionPolicy:
         if self.mode == "locked" and self.automatic:
             raise ValueError("locked controller actions cannot be automatic")
         if self.mode == "locked" and not self.reason:
@@ -87,7 +87,9 @@ class ControllerCapabilityRegistry(ProviderModel):
     capabilities: dict[str, ControllerProviderCapability]
 
 
-def applies(*, automatic: bool = False, verification=None) -> ControllerActionPolicy:
+def applies(
+    *, automatic: bool = False, verification: ControllerVerification | None = None
+) -> ControllerActionPolicy:
     """The controller may run this action."""
 
     return ControllerActionPolicy(
@@ -458,7 +460,7 @@ class ProviderSpec:
     def schema(self) -> dict[str, Any]:
         return TypeAdapter(self.spec_type).json_schema()
 
-    def validate(self, payload: dict[str, Any]):
+    def validate(self, payload: dict[str, Any]) -> Any:
         return TypeAdapter(self.spec_type).validate_python(payload)
 
 

@@ -37,7 +37,7 @@ def _register(table: dict[Any, Any], key: Any, what: str) -> Callable[[_Handler]
 OBSERVATION_READERS: dict[str, Callable[[], list[dict[str, Any]]]] = {}
 
 
-def reads(kind: str):
+def reads(kind: str) -> Callable[[_Handler], _Handler]:
     return _register(OBSERVATION_READERS, kind, "reader")
 
 
@@ -54,13 +54,13 @@ ACTIONS: dict[tuple[str, str], Callable[..., ProviderResult]] = {}
 PROBES: dict[str, Callable[[str], dict[str, Any]]] = {}
 
 
-def lists(kind: str):
+def lists(kind: str) -> Callable[[_Handler], _Handler]:
     return _register(INVENTORY, kind, "inventory reader")
 
 
-def acts(kind: str, action: str):
+def acts(kind: str, action: str) -> Callable[[_Handler], _Handler]:
     return _register(ACTIONS, (kind, action), "controller action")
 
 
-def probes(provider: str):
+def probes(provider: str) -> Callable[[_Handler], _Handler]:
     return _register(PROBES, provider, "connection probe")

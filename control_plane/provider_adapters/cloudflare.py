@@ -196,7 +196,7 @@ class CloudflareDNSRecordSpec(ProviderModel):
     )
 
     @model_validator(mode="after")
-    def type_shape(self):
+    def type_shape(self) -> CloudflareDNSRecordSpec:
         """Reject at the form what Cloudflare would reject a minute later.
 
         Every rule here is one the API enforces anyway. Enforcing them at the

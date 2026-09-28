@@ -265,7 +265,7 @@ class TLSDeliveryTargetSpec(ProviderModel):
     )
 
     @model_validator(mode="after")
-    def kind_decides_which_settings_apply(self):
+    def kind_decides_which_settings_apply(self) -> TLSDeliveryTargetSpec:
         # Refused rather than ignored. A directory typed against an NPM target
         # would sit there looking configured while nothing ever read it.
         for field_name, kind in (
