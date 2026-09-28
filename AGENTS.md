@@ -92,7 +92,7 @@ synthetic `example.*` namespace so the host can demonstrate a contract without
 acquiring a consumer.
 
 Runtime-supplied composition metadata is the only place the real installed set
-meets the host, and two tests keep it that way (`application/test_plugins.py`).
+meets the host, and two tests keep it that way (`application/tests/test_plugins.py`).
 When one of them fails it has found a coupling, not a secret.
 
 Generic integration policy belongs here. Domain meaning belongs in its own
@@ -155,7 +155,7 @@ domain until a genuine shared contract appears.
 
 Function complexity is part of the gate. Ruff's C901 fails any function whose
 cyclomatic complexity exceeds 15, and `CognitiveComplexityTests` in
-`application/test_architecture.py` fails any non-test function whose cognitive
+`application/tests/test_architecture.py` fails any non-test function whose cognitive
 complexity exceeds 20. There is no allowance list: a function over either
 limit is split into named steps.
 
@@ -231,7 +231,7 @@ exits 2, never 0.
   gates (no CodeQL alert and every file-based Scorecard check at 10) and the
   browser layout gate, which it always runs.
 - A browser check selects markup only through `SELECTORS` in
-  `core/browser_tests.py`; `core/test_browser_selectors.py` holds every one
+  `core/browser_tests.py`; `core/tests/test_browser_selectors.py` holds every one
   to a template that renders it.
 - The structural bar above did not move the wrong way.
 - Docs change when a supported contract changes.

@@ -572,7 +572,7 @@ provider's readings are a module of their own in `control_plane/observations/`;
 the package registers every module beside `contract.py`, in name order, so a
 new file is a registered reading. What may read it is still decided by
 admission. Adding a provider is therefore writing its modules and adding one
-name to `ADMITTED`; `control_plane/provider_adapters/test_admission.py` holds
+name to `ADMITTED`; `control_plane/provider_adapters/tests/test_admission.py` holds
 that to be enough.
 
 **One address-to-machine resolver, in `application/locate.py`.** Every surface

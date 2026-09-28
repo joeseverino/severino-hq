@@ -1,7 +1,7 @@
 # Severino HQ
 
 [![CI](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml)
-&nbsp;![coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
+&nbsp;![coverage](https://img.shields.io/badge/coverage-91%25-brightgreen)
 &nbsp;![python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)
 
 A self-hosted operations hub that derives its picture of your infrastructure
@@ -348,7 +348,7 @@ sideways (with disclosures open too), tables scroll inside their own container
 rather than stacking, stretched grid rows end together, siblings never overlap,
 and the structural rules of `scripts/layout-audit.js` hold. JavaScript is
 disabled to protect the server-rendered baseline. Failures save a synthetic
-screenshot to an OS temporary directory. `core/test_browser_selectors.py`, in
+screenshot to an OS temporary directory. `core/tests/test_browser_selectors.py`, in
 the normal suite, fails when a selector the gate or the audit uses names
 nothing a template renders, so a redesign cannot leave the gate waiting for an
 element that no longer exists.
