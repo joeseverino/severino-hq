@@ -584,6 +584,6 @@ class AccountListTests(TestCase):
     def test_total_pages_decides_over_a_short_page(self, request):
         request.side_effect = [_page([{"id": "a"}], 1, 2), _page([{"id": "b"}], 2, 2)]
 
-        found = cloudflare._cloudflare_api_list("/accounts/x/pages/projects", per_page=10)
+        found = cloudflare.cloudflare_api_list("/accounts/x/pages/projects", per_page=10)
 
         self.assertEqual([item["id"] for item in found], ["a", "b"])

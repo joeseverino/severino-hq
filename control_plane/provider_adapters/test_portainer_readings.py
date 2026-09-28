@@ -320,7 +320,7 @@ class WiringTests(SimpleTestCase):
         clear=True,
     )
     @mock.patch("controller_runtime.provider_runtime.controller_id", return_value="lab-1")
-    @mock.patch("controller_runtime.provider_http._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_one_sweep_lists_each_environments_containers_once(self, request, _controller):
         def answer(url, **_kwargs):
             if url.endswith("/endpoints"):

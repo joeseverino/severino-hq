@@ -51,7 +51,7 @@ from . import cloudflare_analytics, connection_env, provider_http
 CLOUDFLARE_API_URL = "https://api.cloudflare.com/client/v4"
 
 
-def _cloudflare_url(
+def cloudflare_url(
     connection_ref: str = "", *, provider: str = "cloudflare_dns"
 ) -> str:
     """The API base; <PREFIX>_URL overrides the public one."""
@@ -60,10 +60,10 @@ def _cloudflare_url(
     return (os.environ.get(f"{prefix}_URL", "").strip() or CLOUDFLARE_API_URL).rstrip("/")
 
 
-def _cloudflare_token(
+def cloudflare_token(
     connection_ref: str = "", *, provider: str = "cloudflare_dns"
 ) -> str:
-    return provider_http._required(connection_env.connection_prefix(provider, connection_ref), "API_TOKEN")
+    return provider_http.required(connection_env.connection_prefix(provider, connection_ref), "API_TOKEN")
 
 
 def _cloudflare_envelope(
@@ -94,11 +94,11 @@ def _cloudflare_envelope(
     """
 
     prefix = connection_env.connection_prefix(provider, connection_ref)
-    _cloudflare_breaker(prefix)
-    url = f"{_cloudflare_url(connection_ref, provider=provider)}{path}"
+    cloudflare_breaker(prefix)
+    url = f"{cloudflare_url(connection_ref, provider=provider)}{path}"
     headers = {
         "Authorization": (
-            f"Bearer {_cloudflare_token(connection_ref, provider=provider)}"
+            f"Bearer {cloudflare_token(connection_ref, provider=provider)}"
         ),
         "Accept": "application/json",
     }
@@ -107,17 +107,17 @@ def _cloudflare_envelope(
         body = json.dumps(payload).encode()
         headers["Content-Type"] = "application/json"
     try:
-        with provider_http._open(url, data=body, headers=headers, method=method) as response:
+        with provider_http.open_url(url, data=body, headers=headers, method=method) as response:
             raw = response.read()
     except urllib.error.HTTPError as exc:
         with exc:
-            detail = _cloudflare_errors(exc.read())
-        raise _cloudflare_refused(
+            detail = cloudflare_errors(exc.read())
+        raise cloudflare_refused(
             prefix,
             f"Cloudflare refused the request: {detail}",
             detail,
             status=exc.code,
-            verified=lambda: _cloudflare_verified(provider, connection_ref),
+            verified=lambda: cloudflare_verified(provider, connection_ref),
         ) from exc
     except (urllib.error.URLError, TimeoutError) as exc:
         raise ProviderError(
@@ -129,8 +129,8 @@ def _cloudflare_envelope(
     except json.JSONDecodeError as exc:
         raise ProviderError("Cloudflare returned invalid JSON.") from exc
     if not parsed.get("success", False):
-        detail = _cloudflare_errors(raw)
-        raise _cloudflare_refused(
+        detail = cloudflare_errors(raw)
+        raise cloudflare_refused(
             prefix, f"Cloudflare refused the request: {detail}", detail
         )
     return parsed if isinstance(parsed, dict) else {}
@@ -139,13 +139,13 @@ def _cloudflare_envelope(
 def _refused_credentials() -> dict[str, str]:
     """Credentials refused outright during this sweep, by connection prefix."""
 
-    snapshot = provider_http._PROVIDER_SNAPSHOT.get()
+    snapshot = provider_http.PROVIDER_SNAPSHOT.get()
     if snapshot is None:
         return {}
     return snapshot.setdefault(("refused-credentials",), {})
 
 
-def _cloudflare_breaker(prefix: str) -> None:
+def cloudflare_breaker(prefix: str) -> None:
     """Raise without a call when this sweep has already seen the credential refused.
 
     Every further call with a refused credential is refused too, and repeated
@@ -170,18 +170,18 @@ def _cloudflare_verification(provider: str, connection_ref: str) -> dict[str, An
     """
 
     def verify() -> dict[str, Any]:
-        url = f"{_cloudflare_url(connection_ref, provider=provider)}/user/tokens/verify"
+        url = f"{cloudflare_url(connection_ref, provider=provider)}/user/tokens/verify"
         headers = {
             "Authorization": (
-                f"Bearer {_cloudflare_token(connection_ref, provider=provider)}"
+                f"Bearer {cloudflare_token(connection_ref, provider=provider)}"
             ),
             "Accept": "application/json",
         }
         try:
-            with provider_http._open(url, headers=headers) as response:
+            with provider_http.open_url(url, headers=headers) as response:
                 parsed = json.loads(response.read() or b"{}")
         except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-            provider_http._release(exc)
+            provider_http.release(exc)
             return {}
         result = parsed.get("result") if isinstance(parsed, dict) else None
         if not parsed.get("success") or not isinstance(result, dict):
@@ -189,16 +189,16 @@ def _cloudflare_verification(provider: str, connection_ref: str) -> dict[str, An
         return result
 
     prefix = connection_env.connection_prefix(provider, connection_ref)
-    return provider_http._snapshot_value(("cloudflare-verification", prefix), verify)
+    return provider_http.snapshot_value(("cloudflare-verification", prefix), verify)
 
 
-def _cloudflare_verified(provider: str, connection_ref: str) -> bool:
+def cloudflare_verified(provider: str, connection_ref: str) -> bool:
     """Whether the credential itself verifies as active."""
 
     return _cloudflare_verification(provider, connection_ref).get("status") == "active"
 
 
-def _cloudflare_refused(
+def cloudflare_refused(
     prefix: str,
     message: str,
     detail: str,
@@ -221,7 +221,7 @@ def _cloudflare_request(path: str, *, method: str = "GET", payload: Any = None) 
     return _cloudflare_envelope(path, method=method, payload=payload).get("result")
 
 
-def _cloudflare_errors(raw: bytes) -> str:
+def cloudflare_errors(raw: bytes) -> str:
     try:
         parsed = json.loads(raw or b"{}")
     except json.JSONDecodeError:
@@ -258,7 +258,7 @@ def _cloudflare_paged(path: str) -> list[dict[str, Any]]:
 
 
 def _cloudflare_zones() -> list[dict[str, Any]]:
-    return provider_http._snapshot_value(("cloudflare-zones",), lambda: _cloudflare_paged("/zones"))
+    return provider_http.snapshot_value(("cloudflare-zones",), lambda: _cloudflare_paged("/zones"))
 
 
 _ZONE_IDS: dict[str, str] = {}
@@ -381,7 +381,7 @@ def reconcile_cloudflare_record(
             changed=True,
             status=_record_status(zone, live or {}),
             conditions=[
-                provider_http._condition("Ready", True, "Created", "DNS record was created.")
+                provider_http.condition("Ready", True, "Created", "DNS record was created.")
             ],
             message="Public DNS record created.",
         )
@@ -409,7 +409,7 @@ def reconcile_cloudflare_record(
             changed=False,
             status=_record_status(zone, live),
             conditions=[
-                provider_http._condition("Ready", True, "Reconciled", "DNS record is current.")
+                provider_http.condition("Ready", True, "Reconciled", "DNS record is current.")
             ],
             message="Public DNS record unchanged.",
         )
@@ -422,7 +422,7 @@ def reconcile_cloudflare_record(
     return ProviderResult(
         changed=True,
         status=_record_status(zone, live or {}),
-        conditions=[provider_http._condition("Ready", True, "Reconciled", "DNS record was updated.")],
+        conditions=[provider_http.condition("Ready", True, "Reconciled", "DNS record was updated.")],
         message="Public DNS record updated.",
     )
 
@@ -454,7 +454,7 @@ def delete_cloudflare_record(
             changed=False,
             status={"zone": zone, "name": spec.get("name", ""), "removed": True},
             conditions=[
-                provider_http._condition("Ready", True, "Absent", "No such record in Cloudflare.")
+                provider_http.condition("Ready", True, "Absent", "No such record in Cloudflare.")
             ],
             message="Public DNS record was already absent.",
         )
@@ -465,7 +465,7 @@ def delete_cloudflare_record(
     return ProviderResult(
         changed=True,
         status={"zone": zone, "name": spec.get("name", ""), "removed": True},
-        conditions=[provider_http._condition("Ready", True, "Removed", "DNS record was removed.")],
+        conditions=[provider_http.condition("Ready", True, "Removed", "DNS record was removed.")],
         message="Public DNS record removed.",
     )
 
@@ -496,7 +496,7 @@ def _registrar_domains() -> dict[str, dict[str, Any]]:
     """
 
     try:
-        account = cloudflare_analytics._analytics_account()
+        account = cloudflare_analytics.analytics_account()
         domains = _cloudflare_api_cursor_list(
             f"/accounts/{account}/registrar/registrations"
         )
@@ -553,7 +553,7 @@ def list_cloudflare_zones() -> list[dict[str, Any]]:
     ones already decided about.
     """
 
-    connection_ref = provider_http._required(connection_env.connection_prefix("cloudflare_dns"), "CONNECTION_REF")
+    connection_ref = provider_http.required(connection_env.connection_prefix("cloudflare_dns"), "CONNECTION_REF")
     # Read once for the whole sweep rather than once per zone: it is one list
     # for the account, and asking per zone would be four calls for one answer.
     registrars = _registrar_domains()
@@ -602,9 +602,9 @@ def _cloudflare_api_refs() -> tuple[str, ...]:
 
 
 def _cloudflare_account(connection_ref: str) -> str:
-    return provider_http._snapshot_value(
+    return provider_http.snapshot_value(
         ("cloudflare-account", connection_ref),
-        lambda: cloudflare_analytics._analytics_account(connection_ref),
+        lambda: cloudflare_analytics.analytics_account(connection_ref),
     )
 
 
@@ -614,9 +614,9 @@ def _cloudflare_account_list(
     """One account list endpoint, read once per sweep."""
 
     account = _cloudflare_account(connection_ref)
-    return provider_http._snapshot_value(
+    return provider_http.snapshot_value(
         ("cloudflare-account-list", connection_ref, path),
-        lambda: _cloudflare_api_list(
+        lambda: cloudflare_api_list(
             f"/accounts/{account}{path}", connection_ref, per_page=per_page
         ),
     )
@@ -854,9 +854,9 @@ def list_tunnels() -> list[dict[str, Any]]:
 
 
 def _cloudflare_api_zones(connection_ref: str) -> list[dict[str, Any]]:
-    return provider_http._snapshot_value(
+    return provider_http.snapshot_value(
         ("cloudflare-api-zones", connection_ref),
-        lambda: _cloudflare_api_list("/zones", connection_ref, per_page=50),
+        lambda: cloudflare_api_list("/zones", connection_ref, per_page=50),
     )
 
 
@@ -885,7 +885,7 @@ def list_edge_certificates() -> list[dict[str, Any]]:
             name = str(zone["name"]).strip().lower().rstrip(".")
             account = str((zone.get("account") or {}).get("id") or "")
             try:
-                listed = _cloudflare_api_list(
+                listed = cloudflare_api_list(
                     f"/zones/{zone.get('id', '')}/ssl/certificate_packs?status=all",
                     ref,
                     per_page=50,
@@ -927,7 +927,7 @@ def list_redirects() -> list[dict[str, Any]]:
         _cloudflare_api_refs(),
         redirects.ZoneReads(
             zones=_cloudflare_api_zones,
-            listed=lambda path, ref: _cloudflare_api_list(path, ref, per_page=50),
+            listed=lambda path, ref: cloudflare_api_list(path, ref, per_page=50),
             result=_cloudflare_api_result,
             reason=_unread_reason,
             error=ProviderError,
@@ -1001,7 +1001,7 @@ def _probe_cloudflare_api(connection_ref: str) -> dict[str, Any]:
     if not isinstance(verification, dict) or not verification.get("success"):
         raise ProviderError("Cloudflare token verification failed.")
 
-    account = cloudflare_analytics._analytics_account(connection_ref)
+    account = cloudflare_analytics.analytics_account(connection_ref)
     hosts = sorted(site["host"] for site in cloudflare_analytics._analytics_sites(account, connection_ref))
     measured = "site" if len(hosts) == 1 else "sites"
     return {
@@ -1019,7 +1019,7 @@ def _cloudflare_api_request(path: str, connection_ref: str = "") -> Any:
     )
 
 
-def _cloudflare_api_list(
+def cloudflare_api_list(
     path: str, connection_ref: str = "", *, per_page: int = 100
 ) -> list[dict[str, Any]]:
     """Every page from one Cloudflare account list endpoint."""

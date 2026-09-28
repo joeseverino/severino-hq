@@ -84,13 +84,13 @@ def list_host_perimeter() -> list[dict[str, Any]]:
 
     found: list[dict[str, Any]] = []
     for connection_ref in connection_env.connection_refs_for_role("caddy"):
-        reading = json.loads(commands._ssh(connection_ref, "perimeter") or b"{}")
+        reading = json.loads(commands.run_ssh(connection_ref, "perimeter") or b"{}")
         addresses = [
             address.strip()
             for address in str(reading.get("public_addresses", "")).split(",")
             if address.strip()
         ]
-        transport = connection_env._transport(connection_ref)
+        transport = connection_env.ssh_target(connection_ref)
         ports = sorted(
             _published_ports_at(connection_ref, {transport["host"], *addresses})
             | {_SSH_PORT, transport["port"]}

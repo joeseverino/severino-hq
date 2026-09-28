@@ -36,12 +36,12 @@ REGISTRANTS = (tls, cloudflare, portainer, tailscale, host_readings, provider_ru
 
 @probes("onepassword")
 def _probe_onepassword(connection_ref: str) -> dict[str, Any]:
-    return onepassword.probe(provider_runtime._RUNTIME, connection_ref)
+    return onepassword.probe(provider_runtime.RUNTIME, connection_ref)
 
 
 def _probe_ssh(connection_ref: str) -> dict[str, Any]:
-    commands._ssh(connection_ref, "preflight")
-    transport = connection_env._transport(connection_ref)
+    commands.run_ssh(connection_ref, "preflight")
+    transport = connection_env.ssh_target(connection_ref)
     return {
         "detail": f"{transport['user']}@{transport['host']}:{transport['port']}",
         "reaches": [transport["host"]],
@@ -77,7 +77,7 @@ def _endpoint(prefix: str, provider: str) -> str:
 def connections(*, carry: frozenset[str] = frozenset()) -> list[dict[str, Any]]:
     """See _connections. Opens the per-sweep snapshot when the caller has not."""
 
-    if provider_http._PROVIDER_SNAPSHOT.get() is not None:
+    if provider_http.PROVIDER_SNAPSHOT.get() is not None:
         return _connections(carry=carry)
     with provider_http.provider_snapshot():
         return _connections(carry=carry)
@@ -149,7 +149,7 @@ def _probed(probe: Callable[[str], dict[str, Any]], connection_ref: str) -> dict
 def inventory(*, only: frozenset[str] = frozenset()) -> dict[str, Any]:
     """See _inventory. Opens the per-sweep snapshot when the caller has not."""
 
-    if provider_http._PROVIDER_SNAPSHOT.get() is not None:
+    if provider_http.PROVIDER_SNAPSHOT.get() is not None:
         return _inventory(only)
     with provider_http.provider_snapshot():
         return _inventory(only)

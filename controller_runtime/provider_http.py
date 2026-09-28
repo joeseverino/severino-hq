@@ -29,24 +29,24 @@ logger = logging.getLogger("severino.controller")
 logger = logging.getLogger("severino.controller")
 
 _SnapshotValue = TypeVar("_SnapshotValue")
-_PROVIDER_SNAPSHOT: ContextVar[dict[tuple[object, ...], object] | None] = ContextVar(
+PROVIDER_SNAPSHOT: ContextVar[dict[tuple[object, ...], object] | None] = ContextVar(
     "provider_snapshot", default=None
 )
 @contextmanager
 def provider_snapshot() -> Iterator[None]:
     """Share successful reads only for one logically atomic provider sweep."""
 
-    token = _PROVIDER_SNAPSHOT.set({})
+    token = PROVIDER_SNAPSHOT.set({})
     try:
         yield
     finally:
-        _PROVIDER_SNAPSHOT.reset(token)
+        PROVIDER_SNAPSHOT.reset(token)
 
 
-def _snapshot_value(
+def snapshot_value(
     key: tuple[object, ...], load: Callable[[], _SnapshotValue]
 ) -> _SnapshotValue:
-    snapshot = _PROVIDER_SNAPSHOT.get()
+    snapshot = PROVIDER_SNAPSHOT.get()
     if snapshot is None:
         return load()
     if key not in snapshot:
@@ -54,7 +54,7 @@ def _snapshot_value(
     return cast(_SnapshotValue, snapshot[key])
 
 
-def _tls_context() -> ssl.SSLContext:
+def tls_context() -> ssl.SSLContext:
     context = ssl.create_default_context()
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     ca_file = os.environ.get("HQ_CONTROLLER_CA_FILE", "").strip()
@@ -66,7 +66,7 @@ def _tls_context() -> ssl.SSLContext:
     return context
 
 
-def _condition(
+def condition(
     condition_type: str, status: bool, reason: str, message: str
 ) -> dict[str, Any]:
     return {
@@ -77,7 +77,7 @@ def _condition(
     }
 
 
-def _release(exc: BaseException) -> None:
+def release(exc: BaseException) -> None:
     """Close the response a failed request carries, if it carries one.
 
     An ``HTTPError`` is not only an exception: it is the error response,
@@ -209,7 +209,7 @@ def _provider_request(
     return request
 
 
-def _open(
+def open_url(
     url: str,
     *,
     method: str = "GET",
@@ -220,17 +220,17 @@ def _open(
     """The one way the controller sends a provider request.
 
     Credentials ride only as unredirected headers, a redirect off the request's
-    origin is refused, and TLS is verified with ``_tls_context()``. Returns the
+    origin is refused, and TLS is verified with ``tls_context()``. Returns the
     open response; ``urllib.error`` exceptions propagate to the caller.
     """
 
     request = _provider_request(url, data=data, headers=headers or {}, method=method)
     return urllib.request.urlopen(  # noqa: S310 - URLs are deployment config.
-        request, timeout=timeout, context=_tls_context()
+        request, timeout=timeout, context=tls_context()
     )
 
 
-def _request(
+def request_json(
     url: str,
     *,
     method: str = "GET",
@@ -243,13 +243,13 @@ def _request(
         body = json.dumps(payload).encode()
         request_headers["Content-Type"] = "application/json"
     try:
-        with _open(
+        with open_url(
             url, data=body, headers=request_headers, method=method
         ) as response:
             raw = response.read()
             return _json_answer(url, response, raw)
     except (urllib.error.URLError, TimeoutError) as exc:
-        _release(exc)
+        release(exc)
         failure = failure_of(exc)
         raise ProviderError(
             f"Provider request failed: {type(exc).__name__}.",
@@ -258,7 +258,7 @@ def _request(
         ) from exc
 
 
-def _multipart_request(
+def multipart_request(
     url: str,
     *,
     headers: dict[str, str],
@@ -281,7 +281,7 @@ def _multipart_request(
         )
     chunks.append(f"--{boundary}--\r\n".encode())
     try:
-        with _open(
+        with open_url(
             url,
             data=b"".join(chunks),
             headers={
@@ -295,7 +295,7 @@ def _multipart_request(
             raw = response.read()
             return _json_answer(url, response, raw)
     except (urllib.error.URLError, TimeoutError) as exc:
-        _release(exc)
+        release(exc)
         raise ProviderError(
             f"Provider multipart request failed: {type(exc).__name__}."
         ) from exc
@@ -306,7 +306,7 @@ def _multipart_request(
 NOT_CONFIGURED = "A setting this needs is not configured on the controller."
 
 
-def _required(prefix: str, name: str) -> str:
+def required(prefix: str, name: str) -> str:
     value = os.environ.get(f"{prefix}_{name}", "").strip()
     if not value:
         logger.warning(

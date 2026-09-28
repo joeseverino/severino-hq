@@ -23,20 +23,20 @@ from . import connection_env, provider_http, provider_runtime
 # than by anything here naming it.
 
 
-def _portainer_url(connection_ref: str = "") -> str:
-    return portainer_readings.url(provider_runtime._RUNTIME, connection_ref)
+def portainer_url(connection_ref: str = "") -> str:
+    return portainer_readings.url(provider_runtime.RUNTIME, connection_ref)
 
 
-def _portainer_headers(connection_ref: str = "") -> dict[str, str]:
-    return portainer_readings.headers(provider_runtime._RUNTIME, connection_ref)
+def portainer_headers(connection_ref: str = "") -> dict[str, str]:
+    return portainer_readings.headers(provider_runtime.RUNTIME, connection_ref)
 
 
-def _load_portainer_environments(connection_ref: str = "") -> list[dict[str, Any]]:
-    return portainer_readings.load_environments(provider_runtime._RUNTIME, connection_ref)
+def load_portainer_environments(connection_ref: str = "") -> list[dict[str, Any]]:
+    return portainer_readings.load_environments(provider_runtime.RUNTIME, connection_ref)
 
 
 def _portainer_environments(connection_ref: str = "") -> list[dict[str, Any]]:
-    return portainer_readings.environments(provider_runtime._RUNTIME, connection_ref)
+    return portainer_readings.environments(provider_runtime.RUNTIME, connection_ref)
 
 
 def _portainer_environment_for(host: str, connection_ref: str = "") -> dict[str, Any]:
@@ -61,7 +61,7 @@ def _portainer_environment_for(host: str, connection_ref: str = "") -> dict[str,
 
 
 def _portainer_stack_list(connection_ref: str = "") -> list[dict[str, Any]]:
-    return portainer_readings.stack_list(provider_runtime._RUNTIME, connection_ref)
+    return portainer_readings.stack_list(provider_runtime.RUNTIME, connection_ref)
 
 
 def _portainer_stacks(
@@ -75,7 +75,7 @@ def _portainer_stacks(
 
 
 def _portainer_docker(connection_ref: str, environment_id: int, path: str) -> Any:
-    return portainer_readings.docker(provider_runtime._RUNTIME, connection_ref, environment_id, path)
+    return portainer_readings.docker(provider_runtime.RUNTIME, connection_ref, environment_id, path)
 
 
 def _portainer_containers(
@@ -117,26 +117,26 @@ def reconcile_portainer(
     changed = True
     if existing:
         stack = existing[0]
-        current = provider_http._request(
-            f"{_portainer_url(connection_ref)}/stacks/{stack['Id']}/file",
-            headers=_portainer_headers(connection_ref),
+        current = provider_http.request_json(
+            f"{portainer_url(connection_ref)}/stacks/{stack['Id']}/file",
+            headers=portainer_headers(connection_ref),
         )
         if (current or {}).get("StackFileContent") == spec["compose"]:
             changed = False
         elif apply:
-            provider_http._request(
-                f"{_portainer_url(connection_ref)}/stacks/{stack['Id']}"
+            provider_http.request_json(
+                f"{portainer_url(connection_ref)}/stacks/{stack['Id']}"
                 f"?endpointId={environment['id']}",
                 method="PUT",
-                headers=_portainer_headers(connection_ref),
+                headers=portainer_headers(connection_ref),
                 payload={**_stack_payload(spec), "PullImage": False},
             )
     elif apply:
-        provider_http._request(
-            f"{_portainer_url(connection_ref)}/stacks/create/standalone/string"
+        provider_http.request_json(
+            f"{portainer_url(connection_ref)}/stacks/create/standalone/string"
             f"?endpointId={environment['id']}",
             method="POST",
-            headers=_portainer_headers(connection_ref),
+            headers=portainer_headers(connection_ref),
             payload=_stack_payload(spec),
         )
 
@@ -163,7 +163,7 @@ def reconcile_portainer(
             changed=changed,
             status=status,
             conditions=[
-                provider_http._condition(
+                provider_http.condition(
                     "Degraded",
                     True,
                     "NotRunning",
@@ -179,7 +179,7 @@ def reconcile_portainer(
             changed=changed,
             status=status,
             conditions=[
-                provider_http._condition(
+                provider_http.condition(
                     "Degraded",
                     True,
                     "BoundToLoopback",
@@ -193,7 +193,7 @@ def reconcile_portainer(
     return ProviderResult(
         changed=changed,
         status=status,
-        conditions=[provider_http._condition("Ready", True, "Reconciled", "Stack is running.")],
+        conditions=[provider_http.condition("Ready", True, "Reconciled", "Stack is running.")],
         message="Stack updated." if changed else "Stack unchanged.",
     )
 
@@ -216,20 +216,20 @@ def delete_portainer(
         return ProviderResult(
             changed=False,
             status={},
-            conditions=[provider_http._condition("Ready", True, "Absent", "Stack is already gone.")],
+            conditions=[provider_http.condition("Ready", True, "Absent", "Stack is already gone.")],
             message="Stack was already absent.",
         )
     if apply:
-        provider_http._request(
-            f"{_portainer_url(connection_ref)}/stacks/{existing[0]['Id']}"
+        provider_http.request_json(
+            f"{portainer_url(connection_ref)}/stacks/{existing[0]['Id']}"
             f"?endpointId={environment['id']}",
             method="DELETE",
-            headers=_portainer_headers(connection_ref),
+            headers=portainer_headers(connection_ref),
         )
     return ProviderResult(
         changed=True,
         status={},
-        conditions=[provider_http._condition("Ready", True, "Deleted", "Stack removed.")],
+        conditions=[provider_http.condition("Ready", True, "Deleted", "Stack removed.")],
         message="Stack removed.",
     )
 
@@ -237,7 +237,7 @@ def delete_portainer(
 RUN_LABEL = "severino-hq.run"
 
 
-def _is_this_run(container: dict[str, Any]) -> bool:
+def is_this_run(container: dict[str, Any]) -> bool:
     """Whether a container is the controller running this sweep.
 
     Matched on a per-run nonce the launcher sets as both a label and
@@ -276,7 +276,7 @@ def _list_portainer_containers() -> list[dict[str, Any]]:
                 if stack.get("Name")
             )
             for container in _portainer_containers(environment["id"], connection_ref):
-                if _is_this_run(container):
+                if is_this_run(container):
                     continue
                 records.append(
                     portainer_readings.container_record(
@@ -292,7 +292,7 @@ def _list_portainer_containers() -> list[dict[str, Any]]:
 
 @lists(CONTAINER_KIND)
 def list_portainer_containers() -> list[dict[str, Any]]:
-    return provider_http._snapshot_value(("portainer-containers",), _list_portainer_containers)
+    return provider_http.snapshot_value(("portainer-containers",), _list_portainer_containers)
 
 
 def _portainer_container_id(spec: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -326,11 +326,11 @@ def _cycle_portainer_container(
     connection_ref = spec.get("connection_ref", "")
     container_id, environment = _portainer_container_id(spec)
     if apply:
-        provider_http._request(
-            f"{_portainer_url(connection_ref)}/endpoints/{environment['id']}"
+        provider_http.request_json(
+            f"{portainer_url(connection_ref)}/endpoints/{environment['id']}"
             f"/docker/containers/{container_id}/{verb}",
             method="POST",
-            headers=_portainer_headers(connection_ref),
+            headers=portainer_headers(connection_ref),
             payload={},
         )
     # Read back rather than trusting the call. A restart that brought the
@@ -354,7 +354,7 @@ def _cycle_portainer_container(
         changed=apply,
         status=status,
         conditions=[
-            provider_http._condition(
+            provider_http.condition(
                 "Ready" if settled else "Degraded",
                 True,
                 verb.capitalize() + ("ed" if verb == "stop" else "ed"),

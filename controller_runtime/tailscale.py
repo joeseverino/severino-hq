@@ -286,13 +286,13 @@ def _tailnet_token(connection_ref: str) -> str:
     prefix = connection_env.connection_prefix("tailscale", connection_ref)
 
     def exchange() -> str:
-        client_id = provider_http._required(prefix, "CLIENT_ID")
-        client_secret = provider_http._required(prefix, "CLIENT_SECRET")
+        client_id = provider_http.required(prefix, "CLIENT_ID")
+        client_secret = provider_http.required(prefix, "CLIENT_SECRET")
         body = urllib.parse.urlencode(
             {"client_id": client_id, "client_secret": client_secret}
         ).encode()
         try:
-            with provider_http._open(
+            with provider_http.open_url(
                 f"{TAILNET_API}/oauth/token",
                 data=body,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
@@ -304,7 +304,7 @@ def _tailnet_token(connection_ref: str) -> str:
                     raise ValueError("OAuth response is not an object")
                 token = payload.get("access_token", "")
         except urllib.error.HTTPError as exc:
-            provider_http._release(exc)
+            provider_http.release(exc)
             reason = (
                 f"Tailscale refused the credential for {connection_ref} "
                 f"({exc.code}). It has to be an OAuth client, not an API key."
@@ -318,7 +318,7 @@ def _tailnet_token(connection_ref: str) -> str:
             raise ProviderError("Tailscale returned no access token.")
         return token
 
-    return provider_http._snapshot_value(("tailscale-token", prefix), exchange)
+    return provider_http.snapshot_value(("tailscale-token", prefix), exchange)
 
 
 def _tailnet_device_id(name: str) -> str:
@@ -362,7 +362,7 @@ def reconcile_tailnet_device(
             changed=False,
             status=current,
             conditions=[
-                provider_http._condition("Ready", True, "Reconciled", "The device is as declared.")
+                provider_http.condition("Ready", True, "Reconciled", "The device is as declared.")
             ],
             message="Tailnet device is current.",
         )
@@ -379,7 +379,7 @@ def reconcile_tailnet_device(
     identifier = _tailnet_device_id(name)
     token = _tailnet_token(spec["connection_ref"])
     try:
-        with provider_http._open(
+        with provider_http.open_url(
             f"{TAILNET_API}/device/{urllib.parse.quote(identifier)}/key",
             data=json.dumps({"keyExpiryDisabled": wanted}).encode(),
             headers={
@@ -391,7 +391,7 @@ def reconcile_tailnet_device(
         ) as response:
             response.read()
     except urllib.error.HTTPError as exc:
-        provider_http._release(exc)
+        provider_http.release(exc)
         if exc.code == 403:
             raise ProviderError(
                 "This Tailscale credential may not change devices. It needs "
@@ -407,7 +407,7 @@ def reconcile_tailnet_device(
         changed=True,
         status={**current, "key_expiry_disabled": wanted, "key_expires": ""},
         conditions=[
-            provider_http._condition("Ready", True, "Reconciled", "The device is as declared.")
+            provider_http.condition("Ready", True, "Reconciled", "The device is as declared.")
         ],
         message=(
             f"{name} now stays on the tailnet."
@@ -432,14 +432,14 @@ def _tailnet_routes(name: str, identifier: str, token: str) -> dict[str, Any]:
     """The routes one device advertises and has enabled, as Tailscale holds them."""
 
     try:
-        with provider_http._open(
+        with provider_http.open_url(
             f"{TAILNET_API}/device/{urllib.parse.quote(identifier)}/routes",
             headers={"Authorization": f"Bearer {token}"},
             timeout=30,
         ) as response:
             return json.loads(response.read())
     except urllib.error.HTTPError as exc:
-        provider_http._release(exc)
+        provider_http.release(exc)
         # Named at the first call: an operator told only that the routes could
         # not be read goes looking at the device.
         if exc.code in (401, 403):
@@ -455,7 +455,7 @@ def _enable_tailnet_routes(
     """Set the device's enabled routes to exactly ``routes``; Tailscale's answer."""
 
     try:
-        with provider_http._open(
+        with provider_http.open_url(
             f"{TAILNET_API}/device/{urllib.parse.quote(identifier)}/routes",
             data=json.dumps({"routes": routes}).encode(),
             headers={
@@ -467,7 +467,7 @@ def _enable_tailnet_routes(
         ) as response:
             return json.loads(response.read())
     except urllib.error.HTTPError as exc:
-        provider_http._release(exc)
+        provider_http.release(exc)
         if exc.code in (401, 403):
             raise ProviderError(_TAILNET_ROUTES_WRITE_SCOPE) from exc
         raise ProviderError(
@@ -510,7 +510,7 @@ def approve_tailnet_routes(
             changed=False,
             status=status,
             conditions=[
-                provider_http._condition(
+                provider_http.condition(
                     "Ready",
                     True,
                     "Reconciled",
@@ -537,7 +537,7 @@ def approve_tailnet_routes(
         changed=True,
         status=status,
         conditions=[
-            provider_http._condition(
+            provider_http.condition(
                 "Ready", True, "Reconciled", "The advertised routes are approved."
             )
         ],
@@ -578,17 +578,17 @@ def _tailnet_get(token: str, path: str) -> dict[str, Any]:
     """One tailnet-level read. Raises ProviderError with the reason."""
 
     try:
-        with provider_http._open(
+        with provider_http.open_url(
             f"{TAILNET_API}/tailnet/-/{path}",
             headers={"Authorization": f"Bearer {token}"},
             timeout=30,
         ) as response:
             found = json.loads(response.read())
     except urllib.error.HTTPError as exc:
-        provider_http._release(exc)
+        provider_http.release(exc)
         raise ProviderError(f"/{path} answered HTTP {exc.code}.") from None
     except (urllib.error.URLError, OSError, ValueError) as exc:
-        provider_http._release(exc)
+        provider_http.release(exc)
         raise ProviderError(f"/{path} could not be read: {type(exc).__name__}.") from None
     if not isinstance(found, dict):
         raise ProviderError(f"/{path} did not answer with an object.")
@@ -620,14 +620,14 @@ def _tailnet_policy_etag(token: str) -> str:
     """
 
     try:
-        with provider_http._open(
+        with provider_http.open_url(
             f"{TAILNET_API}/tailnet/-/acl",
             headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             timeout=30,
         ) as response:
             return response.headers.get("etag", "")
     except (urllib.error.HTTPError, urllib.error.URLError, OSError) as exc:
-        provider_http._release(exc)
+        provider_http.release(exc)
         return ""
 
 
@@ -636,7 +636,7 @@ def _policy_passes_its_tests(token: str, document: dict[str, Any]) -> None:
     that would break one is refused before anything is written."""
 
     try:
-        with provider_http._open(
+        with provider_http.open_url(
             f"{TAILNET_API}/tailnet/-/acl/validate",
             data=json.dumps(document).encode(),
             headers={
@@ -648,7 +648,7 @@ def _policy_passes_its_tests(token: str, document: dict[str, Any]) -> None:
         ) as response:
             verdict = json.loads(response.read() or b"{}")
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as exc:
-        provider_http._release(exc)
+        provider_http.release(exc)
         raise ProviderError("Tailscale could not check the policy.") from exc
     if verdict:
         raise ProviderError(
@@ -662,7 +662,7 @@ def _write_tailnet_policy(token: str, document: dict[str, Any]) -> None:
 
     etag = _tailnet_policy_etag(token)
     try:
-        with provider_http._open(
+        with provider_http.open_url(
             f"{TAILNET_API}/tailnet/-/acl",
             data=json.dumps(document).encode(),
             headers={
@@ -675,7 +675,7 @@ def _write_tailnet_policy(token: str, document: dict[str, Any]) -> None:
         ) as response:
             response.read()
     except urllib.error.HTTPError as exc:
-        provider_http._release(exc)
+        provider_http.release(exc)
         if exc.code == 412:
             raise ProviderError(
                 "The policy changed somewhere else since HQ read it, so this "
@@ -694,9 +694,9 @@ def _current_policy(document: dict[str, Any]) -> ProviderResult:
         changed=False,
         status={"applied": True},
         conditions=[
-            provider_http._condition("Ready", True, "Reconciled", "The policy is as declared.")
+            provider_http.condition("Ready", True, "Reconciled", "The policy is as declared.")
             if tested
-            else provider_http._condition(
+            else provider_http.condition(
                 "Ready",
                 False,
                 "Untested",
@@ -760,7 +760,7 @@ def reconcile_tailnet_policy(
         changed=True,
         status={"applied": True},
         conditions=[
-            provider_http._condition("Ready", True, "Reconciled", "The policy is as declared.")
+            provider_http.condition("Ready", True, "Reconciled", "The policy is as declared.")
         ],
         message="Tailnet policy applied after its own tests passed.",
     )
@@ -770,14 +770,14 @@ def _tailnet_policy(token: str) -> dict[str, Any]:
     """The tailnet's policy file, as Tailscale currently holds it."""
 
     try:
-        with provider_http._open(
+        with provider_http.open_url(
             f"{TAILNET_API}/tailnet/-/acl",
             headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             timeout=30,
         ) as response:
             return json.loads(response.read())
     except urllib.error.HTTPError as exc:
-        provider_http._release(exc)
+        provider_http.release(exc)
         raise _tailnet_refused("the policy read", "policy_file:read", exc.code) from exc
     except (urllib.error.URLError, OSError, ValueError) as exc:
         raise ProviderError("Tailscale did not return a readable policy.") from exc
@@ -795,7 +795,7 @@ def _who_may_reach(
     """
 
     try:
-        with provider_http._open(
+        with provider_http.open_url(
             f"{TAILNET_API}/tailnet/-/acl/preview"
             f"?type=ipport&previewFor={urllib.parse.quote(target)}",
             data=json.dumps(policy).encode(),
@@ -808,7 +808,7 @@ def _who_may_reach(
         ) as response:
             return json.loads(response.read()).get("matches") or []
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as exc:
-        provider_http._release(exc)
+        provider_http.release(exc)
         # One address that cannot be previewed must not lose the others.
         return []
 
@@ -1034,19 +1034,19 @@ def _tailnet_api_devices(token: str) -> list[dict[str, Any]]:
     """Every device as the coordination server lists it. Raises when refused."""
 
     try:
-        with provider_http._open(
+        with provider_http.open_url(
             f"{TAILNET_API}/tailnet/-/devices?fields=all",
             headers={"Authorization": f"Bearer {token}"},
             timeout=30,
         ) as response:
             found = json.loads(response.read())
     except urllib.error.HTTPError as exc:
-        provider_http._release(exc)
+        provider_http.release(exc)
         raise _tailnet_refused(
             "the tailnet device list", "devices:core:read", exc.code
         ) from None
     except (urllib.error.URLError, OSError, ValueError) as exc:
-        provider_http._release(exc)
+        provider_http.release(exc)
         raise ProviderError(f"The tailnet device list could not be read: {type(exc).__name__}.") from None
     if not isinstance(found, dict):
         raise ProviderError("The tailnet device list did not answer with an object.")
@@ -1123,14 +1123,14 @@ def _tailnet_read(path: str, what: str, scope: str) -> dict[str, Any]:
 
     token = _tailnet_token("")
     try:
-        with provider_http._open(
+        with provider_http.open_url(
             f"{TAILNET_API}/tailnet/-/{path}",
             headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             timeout=30,
         ) as response:
             found = json.loads(response.read())
     except urllib.error.HTTPError as exc:
-        provider_http._release(exc)
+        provider_http.release(exc)
         raise _tailnet_refused(f"the {what} read", scope, exc.code) from exc
     except (urllib.error.URLError, OSError, ValueError) as exc:
         raise ProviderError(f"Tailscale did not return readable {what}.") from exc

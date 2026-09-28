@@ -23,21 +23,21 @@ class _ProviderRuntime(SigningRuntime):
         headers: dict[str, str] | None = None,
         payload: dict[str, Any] | None = None,
     ) -> Any:
-        return provider_http._request(url, method=method, headers=headers, payload=payload)
+        return provider_http.request_json(url, method=method, headers=headers, payload=payload)
 
     def required(self, prefix: str, name: str) -> str:
-        return provider_http._required(prefix, name)
+        return provider_http.required(prefix, name)
 
     def connection_prefix(self, provider: str, connection_ref: str = "") -> str:
         return connection_env.connection_prefix(provider, connection_ref)
 
     def snapshot_value(self, key, load):
-        return provider_http._snapshot_value(key, load)
+        return provider_http.snapshot_value(key, load)
 
     def condition(
         self, condition_type: str, status: bool, reason: str, message: str
     ) -> dict[str, Any]:
-        return provider_http._condition(condition_type, status, reason, message)
+        return provider_http.condition(condition_type, status, reason, message)
 
     def ssh_connection_refs(self) -> tuple[str, ...]:
         return connection_env.ssh_connection_refs()
@@ -52,12 +52,12 @@ class _ProviderRuntime(SigningRuntime):
         return controller_id()
 
     def own_run(self, container) -> bool:
-        return portainer._is_this_run(dict(container))
+        return portainer.is_this_run(dict(container))
 
     def ssh(
         self, connection_ref: str, operation: str, payload: bytes | None = None
     ) -> bytes:
-        return commands._ssh(connection_ref, operation, payload)
+        return commands.run_ssh(connection_ref, operation, payload)
 
     def run(
         self,
@@ -66,11 +66,11 @@ class _ProviderRuntime(SigningRuntime):
         env: dict[str, str] | None = None,
         step: str = "command",
     ) -> bytes:
-        return commands._run(command, step=step, env=env)
+        return commands.run_command(command, step=step, env=env)
 
 
-_RUNTIME = _ProviderRuntime()
-_ADAPTER_REGISTRY = compile_controller_adapters(CONTROLLER_PROVIDER_ADAPTERS, _RUNTIME)
+RUNTIME = _ProviderRuntime()
+_ADAPTER_REGISTRY = compile_controller_adapters(CONTROLLER_PROVIDER_ADAPTERS, RUNTIME)
 
 
 def _register_adapters() -> None:

@@ -48,7 +48,7 @@ class AdGuardSweepTests(TestCase):
         kinds = (CLIENT_KIND, QUERY_KIND, DNS_KIND, "adguard.rewrite")
         readers = {kind: providers.PROVIDER_INVENTORY[kind] for kind in kinds}
         with (
-            mock.patch.object(provider_http, "_request", side_effect=answer),
+            mock.patch.object(provider_http, "request_json", side_effect=answer),
             mock.patch.dict(providers.PROVIDER_INVENTORY, readers, clear=True),
             provider_http.provider_snapshot(),
         ):

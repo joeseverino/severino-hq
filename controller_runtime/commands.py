@@ -49,7 +49,7 @@ def _redacted(text: str, env: dict[str, str] | None) -> str:
     return text
 
 
-def _run(
+def run_command(
     command: list[str],
     *,
     input_bytes: bytes | None = None,
@@ -146,9 +146,9 @@ def _last_line(stderr: str) -> str:
     return line if len(line) <= _SAID_LIMIT else line[: _SAID_LIMIT - 1] + "…"
 
 
-def _ssh(connection_ref: str, operation: str, payload: bytes | None = None) -> bytes:
-    transport = connection_env._transport(connection_ref)
-    ssh_dir = Path(provider_http._required("HQ_CONTROLLER", "SSH_DIR"))
+def run_ssh(connection_ref: str, operation: str, payload: bytes | None = None) -> bytes:
+    transport = connection_env.ssh_target(connection_ref)
+    ssh_dir = Path(provider_http.required("HQ_CONTROLLER", "SSH_DIR"))
     command = [
         "ssh",
         "-F",
@@ -172,7 +172,7 @@ def _ssh(connection_ref: str, operation: str, payload: bytes | None = None) -> b
         f"{transport['user']}@{transport['host']}",
         operation,
     ]
-    return _run(
+    return run_command(
         command,
         input_bytes=payload,
         step=f"SSH {operation} for {connection_ref}",
