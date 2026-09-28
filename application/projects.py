@@ -16,14 +16,13 @@ from django.db import transaction
 
 from core.audit import operation_context, record_event
 from core.models import AuditLog
-from projects.models import PROJECT_CATEGORY_CHOICES, Project
+from projects.models import Project
 from projects.github import GitHubMetadataError, fetch_last_push
 from content.content_sync import ContentSyncError, sync_content_index
 from .sensitivity import safe_doc_ids
 from .security import Capability, Principal
 from .upserts import upsert_by_slug
 from .projection import addressable, iso, listing
-
 
 
 class NotFoundError(ValueError):
@@ -58,10 +57,6 @@ class ProjectRefreshCommand:
     """A targeted refresh has no free-form payload beyond its project target."""
 
     pass
-
-
-
-
 
 
 def serialize_project(project: Project, *, relationships: bool = False) -> dict[str, Any]:
@@ -266,10 +261,3 @@ def project_command_from_cleaned_data(data: dict[str, Any]) -> ProjectCommand:
             for field in ProjectCommand.__dataclass_fields__
         }
     )
-
-
-def project_choices() -> dict[str, list[str]]:
-    return {
-        "categories": [value for value, _ in PROJECT_CATEGORY_CHOICES],
-        "statuses": [choice.value for choice in Project.Status],
-    }

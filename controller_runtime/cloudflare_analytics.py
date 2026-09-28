@@ -39,17 +39,6 @@ ANALYTICS_VITALS = {
 
 ANALYTICS_BUCKETS = ("lcp", "inp", "cls")
 
-# Connection kinds a reading uses that no resource declares.
-#
-# Every other probe exists because some ProviderSpec names its provider: the
-# credential is there to reconcile something, so the resource registry is the
-# record of why it is carried. Analytics is observed and never reconciled
-# (there is no desired state for a page view) so nothing in that registry
-# would ever name this, and without saying so here the probe would look like a
-# probe for nothing. Declared rather than inferred, so a probe still cannot be
-# added for a connection HQ has no stated use for.
-OBSERVER_PROVIDERS = frozenset({"cloudflare_api"})
-
 
 def _cloudflare_graphql(
     query: str, variables: dict[str, Any], connection_ref: str = ""

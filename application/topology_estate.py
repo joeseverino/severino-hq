@@ -31,7 +31,6 @@ from .paths import path_to
 from .connections import machines_once
 from .topology import TopologyEdge, TopologyNode, _derived_id, _edge, newest_stamp
 
-ESTATE_KINDS = ("machine", "service", "zone")
 
 # Derived node kinds that only stand for a machine something mentioned: a
 # controller is the machine it runs on, a target is the machine it reaches.

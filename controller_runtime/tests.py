@@ -39,7 +39,7 @@ from control_plane.provider_adapters.contracts import (
     ProviderResult,
 )
 from control_plane.provider_adapters.parts import part_ledger
-from control_plane.providers import controller_id
+from control_plane.providers import controller_id, observer_abilities
 from datetime import date
 import ssl
 import urllib.request
@@ -112,7 +112,7 @@ class ControllerConnectionRegistryTests(TestCase):
 
         self.assertEqual(
             set(providers._CONNECTION_PROBES),
-            reconciled | cloudflare_analytics.OBSERVER_PROVIDERS,
+            reconciled | {ability.provider for ability in observer_abilities()},
         )
 
     def test_a_connection_is_reconciled_through_or_observed_with_never_both(self):
@@ -126,7 +126,7 @@ class ControllerConnectionRegistryTests(TestCase):
             for provider in spec.connection_providers
         }
 
-        self.assertEqual(reconciled & cloudflare_analytics.OBSERVER_PROVIDERS, set())
+        self.assertEqual(reconciled & {ability.provider for ability in observer_abilities()}, set())
 
 
 def _by_url(routes):
@@ -5094,7 +5094,7 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
 
         self.assertEqual(
             sorted(written),
-            sorted(onepassword.PUBLISHED_LABELS),
+            sorted(onepassword.PUBLISHED_FIELDS),
         )
         self.assertEqual(written["Issued by"], "An Example Authority")
         self.assertEqual(written["Expires"], "2027-01-14")
@@ -5123,7 +5123,7 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
 
         written = self._written(self._publish({}, spec=spec)[0])
 
-        self.assertEqual(sorted(written), sorted(onepassword.PUBLISHED_LABELS))
+        self.assertEqual(sorted(written), sorted(onepassword.PUBLISHED_FIELDS))
         self.assertNotIn("Recovery Phrase", written)
 
     def test_nothing_on_the_item_is_deleted_and_the_note_is_left_alone(self):
@@ -5179,7 +5179,7 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
         self.assertEqual(types["Expires"], "date")
         self.assertEqual(
             {label for label, kind in types.items() if kind == "text"},
-            set(onepassword.PUBLISHED_LABELS) - {"Expires"},
+            set(onepassword.PUBLISHED_FIELDS) - {"Expires"},
         )
 
     def test_the_expiry_1password_stores_is_read_back_as_the_date_it_was_given(self):

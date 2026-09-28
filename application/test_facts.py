@@ -18,7 +18,7 @@ from control_plane.models import ProviderInventory
 from control_plane.observations import OBSERVATIONS, ObservationRecord, ObservationSpec, registry
 from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
-from .facts import OBSERVED, STALE, UNREADABLE, disagreements, facts_about
+from .facts import OBSERVED, STALE, UNREADABLE, facts_about
 from .projection import projection_scope
 
 PERIMETER = "host.perimeter"
@@ -218,34 +218,6 @@ class DisagreementTests(TestCase):
 
         addresses = labelled(facts, "Address")
         self.assertEqual(sorted(f.value for f in addresses), ["10.0.0.5", "192.0.2.10"])
-        differs = disagreements(facts)
-        self.assertEqual(set(differs), set(addresses))
-
-    def test_sources_that_agree_do_not_differ(self):
-        first, second = dns_kinds()
-        store(first, record_for(first, "www.example.com", "192.0.2.10"))
-        store(second, record_for(second, "www.example.com", "192.0.2.10"))
-
-        facts = facts_about(("www.example.com",), ())
-
-        self.assertEqual(disagreements(facts), {})
-
-
-class SeveralValuesTests(TestCase):
-    def test_several_addresses_are_not_a_disagreement(self):
-        from .facts import Fact, OBSERVED, disagreements
-
-        def fact(source, value):
-            return Fact(label="Address", value=value, source_kind=source,
-                        source_label=source, connection_ref="", observed_at=None,
-                        state=OBSERVED, detail="")
-
-        tailnet = (fact("tailnet", "100.64.0.5"), fact("tailnet", "fd7a::5"))
-        containers = (fact("containers", "10.0.0.5"),)
-        self.assertEqual(disagreements(tailnet + containers), {})
-
-        single = (fact("a", "1.0"), fact("b", "2.0"))
-        self.assertEqual(set(disagreements(single)), set(single))
 
 
 class QueryCountTests(TestCase):

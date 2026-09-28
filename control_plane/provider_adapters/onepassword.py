@@ -57,7 +57,6 @@ PUBLISHED_FIELDS: Mapping[str, str] = MappingProxyType(
         "Installed on": "text",
     }
 )
-PUBLISHED_LABELS = tuple(PUBLISHED_FIELDS)
 
 # The one published field that is also an identity rather than a description: it
 # names the certificate's content, so it decides whether what is attached is this

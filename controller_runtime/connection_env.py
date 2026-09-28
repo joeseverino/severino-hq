@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from typing import Any
 
 from control_plane.provider_adapters.contracts import ProviderError
@@ -210,17 +209,3 @@ def _transport(connection_ref: str) -> dict[str, Any]:
         "user": provider_http._required(prefix, "USER"),
         "host_key": provider_http._required(prefix, "HOST_KEY"),
     }
-
-
-def controller_config_dir() -> Path:
-    """Where this deployment's controller registries live.
-
-    `SEVERINO_CONTROLLER_CONFIG_DIR` overrides the copy in the repository, so a
-    deployment's hosts, connections and ACME identity are supplied at runtime
-    rather than committed.
-    """
-
-    override = os.environ.get("SEVERINO_CONTROLLER_CONFIG_DIR", "").strip()
-    if override:
-        return Path(override)
-    return Path(__file__).resolve().parents[1] / "config"

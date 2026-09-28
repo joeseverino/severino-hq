@@ -1186,15 +1186,6 @@ class Dependency:
     source: Source | None = None
 
 
-@dataclass(frozen=True)
-class Dependent:
-    """One thing that depends on a name."""
-
-    relation: str
-    name: str
-    link: EntityLink | None
-
-
 def depends_on(path: ServicePath) -> tuple[Dependency, ...]:
     """The parts every route of ``path`` passes through, once each."""
 
@@ -1221,32 +1212,3 @@ def depends_on(path: ServicePath) -> tuple[Dependency, ...]:
                     ),
                 )
     return tuple(found.values())
-
-
-def depended_on_by(hostname: str) -> tuple[Dependent, ...]:
-    """Listed services whose path leads to ``hostname``: a redirect or an alias."""
-
-    from .service_list import listed_services
-
-    wanted = normalized_hostname(hostname)
-    found = []
-    for service in listed_services():
-        if service.hostname == wanted:
-            found.extend(
-                Dependent("Another name for it", alias, None) for alias in service.aliases
-            )
-            continue
-        relation = _leads_to(service.path, wanted)
-        if relation:
-            found.append(Dependent(relation, service.hostname, entity_link("service", service.hostname)))
-    return tuple(found)
-
-
-def _leads_to(path: ServicePath, hostname: str) -> str:
-    for route in path.routes:
-        for hop in route.hops:
-            if hop.name == hostname and hop.step == "redirect":
-                return "Redirects here"
-            if hop.name == hostname and hop.step == "alias":
-                return "Resolves through it"
-    return ""

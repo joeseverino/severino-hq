@@ -624,44 +624,6 @@ def facts_about(hostnames: Iterable[str], addresses: Iterable[str]) -> tuple[Fac
     )
 
 
-def disagreements(facts: Iterable[Fact]) -> dict[Fact, tuple[str, ...]]:
-    """Observed facts another source reports with a different single value.
-
-    A label is compared only where every source reporting it gives exactly one
-    value: a machine has several addresses, and two sources naming different
-    ones do not disagree. Maps each such fact to the labels of the sources that
-    report the label differently.
-    """
-
-    by_label: dict[str, dict[tuple[str, str], set[str]]] = {}
-    labels: dict[tuple[str, str], str] = {}
-    observed = [fact for fact in facts if fact.state != UNREADABLE]
-    for fact in observed:
-        by_label.setdefault(fact.label, {}).setdefault(fact.source, set()).add(fact.value)
-        labels[fact.source] = fact.source_label
-    single = {
-        label
-        for label, sources in by_label.items()
-        if len(sources) > 1 and all(len(values) == 1 for values in sources.values())
-    }
-    found: dict[Fact, tuple[str, ...]] = {}
-    for fact in observed:
-        if fact.label not in single:
-            continue
-        others = tuple(
-            sorted(
-                {
-                    labels[source]
-                    for source, values in by_label[fact.label].items()
-                    if source != fact.source and fact.value not in values
-                }
-            )
-        )
-        if others:
-            found[fact] = others
-    return found
-
-
 def _aged(fact: Fact, stale_before: datetime) -> Fact:
     if fact.state != OBSERVED or fact.observed_at is None:
         return fact
