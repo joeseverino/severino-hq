@@ -1,8 +1,8 @@
 # The CI toolchain that pip installs: the one place these versions are stated.
 # Compiled with hashes into requirements-tools.txt, which CI installs with
 # --require-hashes and scripts/toolchain.env reads the versions from.
-ruff==0.15.18
-uv==0.11.33
+ruff==0.16.9
+uv==0.12.19
 coverage==7.16.1
 # The type checker over the architectural seams (mypy.ini). django-stubs pulls
 # Django, so this file compiles against requirements.txt and keeps its pins.
