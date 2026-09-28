@@ -589,7 +589,7 @@ class ConnectionWorkspaceTests(TestCase):
                 "application.plugins.plugin_connection_specs",
                 return_value=(_finance_spec(),),
             ),
-            mock.patch("control_plane.views.web_principal", return_value=FINANCE),
+            mock.patch("control_plane.connection_views.web_principal", return_value=FINANCE),
         ):
             response = self.client.get(reverse("control_plane:connections"))
 
@@ -609,7 +609,7 @@ class ConnectionWorkspaceTests(TestCase):
             mock.patch(
                 "application.plugins.plugin_connection_specs", return_value=(spec,)
             ),
-            mock.patch("control_plane.views.web_principal", return_value=FINANCE),
+            mock.patch("control_plane.connection_views.web_principal", return_value=FINANCE),
         ):
             response = self.client.get(reverse("control_plane:connections"))
 

@@ -14,7 +14,7 @@ from django.utils.html import escape
 from django.utils import timezone
 
 from control_plane.models import ManagedResource, ProviderConnection
-from control_plane.views import TopologyView
+from control_plane.topology_views import TopologyView
 
 from .action_links import topology_investigation_links, topology_url
 from .command_center import command_center

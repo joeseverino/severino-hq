@@ -1157,10 +1157,10 @@ class InfrastructureViewsTests(TestCase):
         )
         with (
             patch(
-                "control_plane.views.derive_topology",
+                "control_plane.finding_views.derive_topology",
                 return_value=Topology((subject,), ()),
             ),
-            patch("control_plane.views.derive_findings", return_value=(finding,)),
+            patch("control_plane.finding_views.derive_findings", return_value=(finding,)),
         ):
             response = self.client.get(reverse("control_plane:findings"))
 

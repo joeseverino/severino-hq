@@ -31,7 +31,7 @@ from application.resource_capabilities import public_dns_enabled, resource_capab
 from application.inventory import AdoptCommand, adopt, inventory_state
 from application.security import web_principal, safe_next
 
-from .views import _readable_error
+from .resource_form_views import _readable_error
 from application.pins import DOMAIN, pinned, toggle
 from application.mail_policy import (
     DMARC_TAGS,

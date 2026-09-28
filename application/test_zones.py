@@ -457,7 +457,7 @@ class ProviderSurfaceTests(TestCase):
         The capability registry already said so; the page just was not asking.
         """
 
-        from control_plane.views import _apply_note
+        from control_plane.resource_form_views import _apply_note
 
         # Asserted on the promise, not on the sentence explaining its absence.
         # Pinning the wording meant a reason that had gone stale could only be
