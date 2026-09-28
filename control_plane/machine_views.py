@@ -14,15 +14,10 @@ from application.connections import machines_once
 from application.machine_context import machine_links, sections_for as machine_sections
 from application.tailnet_context import tailnet_context
 from application.hq_self import LABEL as HQ_LABEL
-from application.machines import (
-    declaration_seed,
-    machine,
-)
+from application.machines import declaration_seed, machine
 from application.security import web_principal
 from application.pages import PageAction, PageMixin
-from application.resource_capabilities import (
-    resource_capabilities,
-)
+from application.resource_capabilities import resource_capabilities
 
 from .models import ManagedResource
 from .provider_adapters.declarations import MACHINE_KIND

@@ -7,9 +7,7 @@ from django.urls import reverse
 from django.views.generic import TemplateView
 
 from application.findings import derive_findings, finding_layout, finding_rules, rule_for
-from application.topology import (
-    derive_topology,
-)
+from application.topology import derive_topology
 from application.security import web_principal
 from application.pages import PageAction, PageMixin
 

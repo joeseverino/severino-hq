@@ -6,10 +6,7 @@ import os
 from typing import Any
 
 from control_plane.providers import controller_id
-from control_plane.provider_adapters.contracts import (
-    ProviderError,
-    ProviderResult,
-)
+from control_plane.provider_adapters.contracts import ProviderError, ProviderResult
 from control_plane.provider_adapters import portainer_readings
 from control_plane.provider_adapters.portainer import CONTAINER_KIND, CONTAINER_STACK_KIND
 from .handlers import acts, lists, probes

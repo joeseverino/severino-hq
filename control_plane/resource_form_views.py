@@ -34,9 +34,7 @@ from application.certificates import (
     store_certificate,
 )
 from application.entity_links import kind_label
-from application.resource_context import (
-    readout_rows,
-)
+from application.resource_context import readout_rows
 from application.naming import name_context
 from application.plugins import _import
 from application.provider_forms import (

@@ -12,16 +12,9 @@ from typing import Any, Callable
 
 from control_plane.providers import PROVIDERS
 
-from .action_links import (
-    ActionLink,
-)
-from .topology_model import (
-    Topology,
-    TopologyNode,
-)
-from .workflows import (
-    WorkflowPlan,
-)
+from .action_links import ActionLink
+from .topology_model import Topology, TopologyNode
+from .workflows import WorkflowPlan
 
 
 @dataclass(frozen=True)

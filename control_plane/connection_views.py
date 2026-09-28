@@ -10,10 +10,7 @@ from django.urls import reverse
 from django.views import View
 from django.views.generic import TemplateView
 
-from application.action_links import (
-    READ_NOW_CAPABILITY,
-    read_now_payload,
-)
+from application.action_links import READ_NOW_CAPABILITY, read_now_payload
 from application.capabilities import execute_capability
 from application.connection_context import connections_context
 from application.security import safe_next, web_principal

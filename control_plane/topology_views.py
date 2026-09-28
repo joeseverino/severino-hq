@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
-
-from contextlib import suppress
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404
@@ -15,9 +14,7 @@ from django.views.generic import TemplateView
 
 from application.entity_links import NODE_KINDS, node_link
 from application.analytics import HOST_TRAFFIC_DAYS
-from application.action_links import (
-    topology_url,
-)
+from application.action_links import topology_url
 from application.topology import derive_topology
 from application.topology_lenses import (
     apply_lens,
@@ -25,11 +22,7 @@ from application.topology_lenses import (
     lens_for,
     topology_lenses,
 )
-from application.topology_model import (
-    RELATIONS,
-    relation_rank,
-    observable,
-)
+from application.topology_model import RELATIONS, relation_rank, observable
 from application.security import web_principal
 from application.pages import PageAction, PageMixin
 from application.ui import counted
