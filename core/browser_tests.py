@@ -137,6 +137,24 @@ _SIDEWAYS = "(allowed) => {" + _DESCRIBE + """
   return found.slice(0, 10);
 }"""
 
+_CELLS = "() => {" + _DESCRIBE + """
+  // A cell's content stays in the cell. Inside a table that scrolls, running
+  // past the edge is not caught by anything else: it lands under the next
+  // column, readable in neither.
+  const found = [];
+  for (const cell of document.querySelectorAll('main td, main th')) {
+    const edge = box(cell).right;
+    for (const el of cell.querySelectorAll('*')) {
+      const r = box(el);
+      if (r.width < 2 || r.height < 2 || !el.checkVisibility()) continue;
+      if (r.right > edge + 1) {
+        found.push(`${describe(el)} runs ${Math.round(r.right - edge)}px past its cell: ${el.textContent.trim().slice(0, 40)}`);
+      }
+    }
+  }
+  return [...new Set(found)].slice(0, 10);
+}"""
+
 _TABLES = "() => {" + _DESCRIBE + """
   const width = document.documentElement.clientWidth;
   const found = [];
@@ -347,6 +365,13 @@ class LayoutBrowserTests(SimpleTestCase):
                         "() => document.querySelectorAll('details').forEach((d) => { d.open = true; })"
                     )
                     self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
+
+    def test_nothing_runs_out_of_its_table_cell(self):
+        for name in PAGES:
+            for width in OVERFLOW_WIDTHS:
+                with self.subTest(page=name, width=width):
+                    self.open(name, width)
+                    self.assertEqual(self.page.evaluate(_CELLS), [])
 
     def test_tables_scroll_inside_their_own_container(self):
         """On a phone a wide table scrolls sideways; it never stacks into cards."""
