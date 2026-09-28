@@ -1515,6 +1515,11 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .row-actions a { font-size: var(--text-sm); }
 .actions-col { width: 1%; text-align: right; white-space: nowrap; }
 
+/* A pill in a table fits the cell's line: on the baseline, with its border
+   and padding, it made every row that had one two pixels taller than the
+   rows that did not. */
+.data-table td .pill { vertical-align: top; line-height: 1.4; }
+
 /* ── One table rendered twice ───────────────────────────────────────
    A partial included twice measures its columns per copy, so declared widths
    are what keep both on one grid. Fixed layout cannot grow to fit a cell, so
