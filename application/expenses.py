@@ -16,6 +16,7 @@ from expenses.models import Expense
 from projects.models import Project
 
 from core.audit import operation_context
+from .money import BusinessUse, business_use_field
 from .sensitivity import SAFE_SENSITIVITIES
 from .security import Capability, Principal
 
@@ -36,7 +37,7 @@ class ExpenseCommand:
     item: str
     category: str = "miscellaneous"
     total_cost: Decimal = Decimal("0.00")
-    business_use_percentage: int = 100
+    business_use_percentage: BusinessUse = 100
     payment_method: str = ""
     business_purpose: str = ""
     notes: str = ""
@@ -114,6 +115,7 @@ def save_expense(
         }
         for field, value in {**values, **relations}.items():
             setattr(expense, field, value)
+        business_use_field(expense.business_use_percentage)
         expense.full_clean()
         expense.save()
     return {"ok": True, "created": created, "expense": serialize_expense(expense)}

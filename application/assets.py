@@ -15,6 +15,7 @@ from projects.models import Project
 from .sensitivity import safe_doc_ids
 from .security import Capability, Principal
 from .upserts import upsert_by_slug
+from .money import BusinessUse, business_use_field
 from .projection import addressable, iso, listing
 from .ui import counted
 
@@ -36,7 +37,7 @@ class AssetCommand:
     category: str = "other"
     purchase_date: date | None = None
     total_cost: Decimal = Decimal("0.00")
-    business_use_percentage: int = 100
+    business_use_percentage: BusinessUse = 100
     payment_method: str = ""
     serial_number: str = ""
     warranty_date: date | None = None
@@ -141,6 +142,7 @@ def save_asset(
 
         for field, value in values.items():
             setattr(asset, field, value)
+        business_use_field(asset.business_use_percentage)
         asset.full_clean()
         asset.save()
         asset.related_projects.set(projects)

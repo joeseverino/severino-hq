@@ -18,6 +18,10 @@ gets the other rounding mode.
 from __future__ import annotations
 
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from typing import Annotated
+
+from django.core.exceptions import ValidationError
+from pydantic import Field
 
 CENTS = Decimal("0.01")
 
@@ -42,4 +46,39 @@ def to_money(value, default: Decimal | None = None) -> Decimal | None:
         return default
 
 
-__all__ = ["CENTS", "quantize_money", "to_money"]
+# The share of a purchase used for the business, as a whole percentage. One
+# range, published in the API schema through the type and enforced by every
+# save through ``business_use``, so no interface accepts what another refuses.
+BUSINESS_USE_MIN, BUSINESS_USE_MAX = 0, 100
+BusinessUse = Annotated[int, Field(ge=BUSINESS_USE_MIN, le=BUSINESS_USE_MAX)]
+
+
+def business_use(value) -> int:
+    """A business-use percentage, or a ``ValidationError`` when out of range."""
+
+    percentage = int(value or 0)
+    if not BUSINESS_USE_MIN <= percentage <= BUSINESS_USE_MAX:
+        raise ValidationError(
+            f"Must be between {BUSINESS_USE_MIN} and {BUSINESS_USE_MAX}.",
+            code="business_use_range",
+        )
+    return percentage
+
+
+def business_use_field(value) -> int:
+    """``business_use`` for a save: the error names the field it is about."""
+
+    try:
+        return business_use(value)
+    except ValidationError as exc:
+        raise ValidationError({"business_use_percentage": exc.error_list}) from None
+
+
+__all__ = [
+    "BusinessUse",
+    "CENTS",
+    "business_use",
+    "business_use_field",
+    "quantize_money",
+    "to_money",
+]
