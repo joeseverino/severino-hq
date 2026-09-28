@@ -110,6 +110,26 @@ domain until a genuine shared contract appears.
 | Plugin identity or domain semantics | private plugin repository |
 | Cross-plugin compatibility | generic composition check in HQ |
 
+### Adding a provider
+
+A provider emits itself: nothing outside its own modules names it except one
+entry in `ADMITTED` (`control_plane/provider_adapters/__init__.py`). Its adapter
+module declares its kinds, its `ADAPTER` and its `CONNECTIONS`; its readings are
+a module in `control_plane/observations/`, found by discovery. Registries,
+connection labels, credential policy, the controller's dispatch and the
+topology edges its readings declare are all derived from those, and admission
+fails at import on a duplicate or undeclared name.
+`control_plane/provider_adapters/tests/test_admission.py` shows the contract;
+`docs/APPLICATION_ARCHITECTURE.md` has the detail.
+
+### Moving code
+
+Tests live in each package's `tests/` directory. When a definition moves,
+retarget every `mock.patch("module.name")` that named its old home: a patch of
+a name that is no longer looked up there passes silently and patches nothing.
+A check that walks a path (an architecture test, a script's glob) needs the
+same review, and should fail when its path matches nothing rather than pass.
+
 ## Rules that eliminate bug classes
 
 - Reject unknown input; Pydantic plugin commands inherit `StrictCommand`.
