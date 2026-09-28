@@ -13,7 +13,17 @@ from control_plane.provider_adapters import onepassword
 
 from controller_runtime import provider_http, tls, tls_issuance, tls_verification
 from control_plane.provider_adapters.contracts import ProviderError, ProviderResult
-from .test_support import _ACCOUNT_SITES, A_RECORDED_CERTIFICATE, AN_OBSERVATION
+from .test_support import A_RECORDED_CERTIFICATE, AN_OBSERVATION
+
+# One account, three sites; the first carries its aliases, as shared hosting
+# serves `www.` and a parked domain from the main site.
+_ACCOUNT_SITES = {
+    "sites": {
+        "example.test": ["example.test", "www.example.test", "parked.example"],
+        "shop.example.test": ["shop.example.test", "www.shop.example.test"],
+        "lab.example.test": ["lab.example.test"],
+    }
+}
 
 
 class CPanelSitePlanTests(TestCase):

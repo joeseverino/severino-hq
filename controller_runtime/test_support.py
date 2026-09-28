@@ -144,17 +144,6 @@ class _Recorder:
         return False
 
 
-# One account, three sites; the first carries its aliases, as shared hosting
-# serves `www.` and a parked domain from the main site.
-_ACCOUNT_SITES = {
-    "sites": {
-        "example.test": ["example.test", "www.example.test", "parked.example"],
-        "shop.example.test": ["shop.example.test", "www.shop.example.test"],
-        "lab.example.test": ["lab.example.test"],
-    }
-}
-
-
 A_RECORDED_CERTIFICATE = {
     "certificate_name": "an-example-certificate",
     "domains": ["shop.example.test", "*.shop.example.test"],
