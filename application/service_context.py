@@ -412,7 +412,7 @@ def part_rows(service, route) -> tuple[PartRow, ...]:
     """Each hop of ``route`` joined to its declaration, its health and its
     consequence, then the declarations no hop reached."""
 
-    from .paths import consequence_of
+    from .path_dependencies import consequence_of
 
     claims = {claim.url: claim for claim in service.claims}
     used: set[str] = set()

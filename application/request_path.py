@@ -26,7 +26,8 @@ from core.network import is_trusted_proxy, split_host_port
 
 from .connection import Connection
 from .entity_links import entity_link
-from .paths import NETWORK_LABELS, Hop, Route, ServicePath, Source, last_machine, why_unread
+from .paths import why_unread
+from .path_model import NETWORK_LABELS, Hop, Route, ServicePath, Source, last_machine
 from .reach import network_of
 from .request_addresses import Address
 from .request_channel import forwarded_chain, socket_peer
