@@ -35,6 +35,7 @@ from control_plane.connection_kinds import CONNECTION_LABELS
 from .entity_links import EntityLink, entity_link, kind_label
 from .facts import Joined, Subject, readings, snapshots_of
 from .infrastructure import enabled_resources
+from .labels import lower_first
 from .locate import host_of, split_endpoint
 from .projection import read_once
 from .reach import is_documentation, network_of
@@ -230,10 +231,7 @@ class Route:
     def via_phrase(self) -> str:
         """``via`` inside a sentence: "internal DNS record", acronyms intact."""
 
-        # An acronym keeps its case: "HQ" stays "HQ", "Internal" becomes "internal".
-        if self.via[1:2].isupper():
-            return self.via
-        return self.via[:1].lower() + self.via[1:]
+        return lower_first(self.via)
 
     @property
     def line_hops(self) -> tuple[Hop, ...]:
@@ -489,11 +487,7 @@ def _no_route() -> tuple[str, ...]:
         return gaps
     if not gaps:
         return ("No DNS record HQ reads names this host.",)
-    return (f"No {' or '.join(_lower_first(label) for label in read)} names this host.", *gaps)
-
-
-def _lower_first(text: str) -> str:
-    return text[:1].lower() + text[1:]
+    return (f"No {' or '.join(lower_first(label) for label in read)} names this host.", *gaps)
 
 
 def observers(name: str) -> tuple[Hop, ...]:

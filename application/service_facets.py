@@ -13,23 +13,10 @@ from control_plane.provider_spec import NameContext
 from .containers import Running
 from .entity_links import EntityLink, entity_link, kind_label
 from .facts import Joined
+from .labels import lower_first
 from .projection import read_once
 from .service_declarations import Claim
 from .ui import moment
-
-
-def _lower_first(text: str) -> str:
-    """A label as it reads mid-sentence, leaving an acronym alone.
-
-    "Proxy host" belongs lowercase after "Add"; "TLS certificate" does not, and
-    lowering its first letter produced "tLS certificate". Only the first word is
-    inspected, because that is the only one being changed.
-    """
-
-    first = text.partition(" ")[0]
-    if not text or first.isupper():
-        return text
-    return text[:1].lower() + text[1:]
 
 
 @dataclass(frozen=True)
@@ -166,7 +153,7 @@ class Facet:
                 (
                     not (public_first and provider.public_effect),
                     kind,
-                    _lower_first(kind_label(kind)),
+                    lower_first(kind_label(kind)),
                 )
                 for kind, provider in PROVIDERS.items()
                 if provider.facet == self.id

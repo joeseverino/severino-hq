@@ -27,6 +27,7 @@ from .infrastructure import (
     resource_health,
     serialize_resource,
 )
+from .labels import lower_first
 from .resource_capabilities import ResourceCapabilities, resource_capabilities
 
 
@@ -296,7 +297,7 @@ def controller_summary(actions, labels) -> ControllerSummary | None:
         if not allowed.enabled:
             off.setdefault(allowed.reason, []).append(labels(verb))
     lines = tuple(
-        f"{_and(names)} {'is' if len(names) == 1 else 'are'} off: {reason[:1].lower() + reason[1:]}"
+        f"{_and(names)} {'is' if len(names) == 1 else 'are'} off: {lower_first(reason)}"
         for reason, names in off.items()
     )
     if len(off) and sum(len(names) for names in off.values()) == len(actions):
