@@ -250,7 +250,7 @@ def container_hosts() -> dict[str, str]:
     machine.
     """
 
-    from control_plane.providers import CONTAINER_KIND
+    from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
     from .facts import snapshots_of
 

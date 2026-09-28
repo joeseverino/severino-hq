@@ -16,18 +16,13 @@ from django.db import transaction
 
 from core.audit import operation_context, record_event
 from core.models import AuditLog
-from docs_index.models import DocumentationRecord
-from projects.models import PROJECT_CATEGORY_CHOICES, Project
+from projects.models import Project
 from projects.github import GitHubMetadataError, fetch_last_push
 from content.content_sync import ContentSyncError, sync_content_index
+from .sensitivity import safe_doc_ids
 from .security import Capability, Principal
 from .upserts import upsert_by_slug
 from .projection import addressable, iso, listing
-
-SAFE_SENSITIVITIES = (
-    DocumentationRecord.Sensitivity.PUBLIC,
-    DocumentationRecord.Sensitivity.INTERNAL,
-)
 
 
 class NotFoundError(ValueError):
@@ -64,10 +59,6 @@ class ProjectRefreshCommand:
     pass
 
 
-
-
-
-
 def serialize_project(project: Project, *, relationships: bool = False) -> dict[str, Any]:
     result = {
         "slug": project.slug,
@@ -83,13 +74,7 @@ def serialize_project(project: Project, *, relationships: bool = False) -> dict[
     }
     if relationships:
         result["relationships"] = {
-            "documentation": list(
-                project.documentation_records.filter(
-                    sensitivity__in=SAFE_SENSITIVITIES
-                )
-                .order_by("doc_id")
-                .values_list("doc_id", flat=True)
-            ),
+            "documentation": safe_doc_ids(project.documentation_records),
             "content": list(
                 project.content_items.order_by("slug").values_list("slug", flat=True)
             ),
@@ -276,10 +261,3 @@ def project_command_from_cleaned_data(data: dict[str, Any]) -> ProjectCommand:
             for field in ProjectCommand.__dataclass_fields__
         }
     )
-
-
-def project_choices() -> dict[str, list[str]]:
-    return {
-        "categories": [value for value, _ in PROJECT_CATEGORY_CHOICES],
-        "statuses": [choice.value for choice in Project.Status],
-    }

@@ -15,7 +15,8 @@ from urllib.parse import urlparse
 
 from pydantic import AfterValidator
 
-API = "https://api.github.com"
+from control_plane.provider_adapters.github_app import API
+
 TIMEOUT_SECONDS = 10
 JSON = "application/vnd.github+json"
 

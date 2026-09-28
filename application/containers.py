@@ -22,15 +22,19 @@ from typing import Any, Mapping
 
 from django.urls import reverse
 
-from control_plane.observations.portainer import IMAGE_KIND as PULLED_KIND
-from control_plane.observations.portainer import RUNTIME_KIND, STACK_KIND, VOLUME_KIND
+from control_plane.observations.portainer import (
+    IMAGE_KIND as PULLED_KIND,
+    RUNTIME_KIND,
+    STACK_KIND,
+    VOLUME_KIND,
+)
 from control_plane.observations.public_registry import (
     DIGEST_KIND,
     IMAGE_KIND,
     UPSTREAM_KIND,
     VULNERABILITY_KIND,
 )
-from control_plane.providers import CONTAINER_KIND
+from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .github_public import github_repository
 from .images import ImageRef, affected, compare, newer, version

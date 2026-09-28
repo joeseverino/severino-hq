@@ -54,7 +54,8 @@ class EveryWritePathFollowsTheConnectionTests(TestCase):
         )
 
     def test_queueing_through_an_observing_connection_is_refused(self):
-        from .infrastructure import OperationCommand, PolicyError, request_reconcile
+        from .infrastructure import PolicyError
+        from .resource_operations import OperationCommand, request_reconcile
 
         connection("adguard", manages=False)
 
@@ -91,7 +92,7 @@ class EveryWritePathFollowsTheConnectionTests(TestCase):
         self.assertFalse(OperationRequest.objects.filter(resource=self.resource).exists())
 
     def test_a_managing_connection_queues(self):
-        from .infrastructure import OperationCommand, request_reconcile
+        from .resource_operations import OperationCommand, request_reconcile
 
         connection("adguard", manages=True)
 

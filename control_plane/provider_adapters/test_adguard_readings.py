@@ -26,7 +26,7 @@ from control_plane.observations.adguard import (
     plain_upstreams,
     upstream,
 )
-from control_plane.providers import CONTROLLER_PROVIDER_ADAPTERS
+from control_plane.provider_adapters import CONTROLLER_PROVIDER_ADAPTERS
 from control_plane.reading_parts import clean_refused_parts, refused_parts
 
 from . import adguard, adguard_readings

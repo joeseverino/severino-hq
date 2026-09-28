@@ -1515,6 +1515,11 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .row-actions a { font-size: var(--text-sm); }
 .actions-col { width: 1%; text-align: right; white-space: nowrap; }
 
+/* A pill in a table fits the cell's line: on the baseline, with its border
+   and padding, it made every row that had one two pixels taller than the
+   rows that did not. */
+.data-table td .pill { vertical-align: top; line-height: 1.4; }
+
 /* ── One table rendered twice ───────────────────────────────────────
    A partial included twice measures its columns per copy, so declared widths
    are what keep both on one grid. Fixed layout cannot grow to fit a cell, so
@@ -2230,6 +2235,11 @@ a.kpi:hover { background: var(--surface-2); }
 .list-rows li:first-child { padding-top: var(--space-2); }
 .list-rows .row-main { display: flex; align-items: center; gap: var(--space-4); min-width: 0; flex: 1; flex-wrap: wrap; }
 .list-rows .row-main > a { min-width: 0; overflow-wrap: anywhere; }
+/* The title keeps the line its marker is on. Wrapping places a flex item by
+   its full content width, so a long name moved below its dot and left the dot
+   alone on a line; a modest basis keeps them together and the name wraps
+   inside itself instead. */
+.list-rows .row-main > :is(a, strong) { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
 .list-rows .row-meta { color: var(--muted); font-size: var(--text-xs); margin-left: auto; white-space: nowrap; }
 .list-rows a strong { color: var(--ink); font-weight: 600; }
 .list-rows a:hover strong { color: var(--accent); }
@@ -3052,8 +3062,8 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-table { table-layout: fixed; }
 .connection-col-identity { width: 29%; }
 .connection-col-abilities { width: 20%; }
-.connection-col-dependencies { width: 21%; }
-.connection-col-state { width: 12%; }
+.connection-col-dependencies { width: 18%; }
+.connection-col-state { width: 15%; }
 .connection-col-next { width: 18%; }
 .connection-endpoint {
   display: inline-block;
@@ -3096,11 +3106,12 @@ a.discovery-link:hover strong { color: var(--accent); }
 /* Lifecycle, authority and the reading's age, one under the other, in the
    table and in the stacked card alike. */
 .connection-standing { display: inline-grid; gap: var(--space-1); justify-items: start; min-width: 0; }
-/* The cell is a tight column and therefore nowrap; the reading's age is the
-   one line in it that may wrap, or it runs under whatever the next column
-   holds. */
-.connection-standing .muted { font-size: var(--text-2xs); white-space: normal; }
-.connection-last-activity { font-size: var(--text-2xs); white-space: normal; }
+/* The cell is a tight column and therefore nowrap. Only the lifecycle word
+   keeps its line; everything under it wraps, or it runs under whatever the
+   next column holds ("Whole-account credential" did, by 60px at a tablet). */
+.connection-standing > :not(.connection-state) { white-space: normal; }
+.connection-standing .muted { font-size: var(--text-2xs); }
+.connection-last-activity { font-size: var(--text-2xs); }
 .connection-authority { color: var(--muted); font-size: var(--text-2xs); }
 .connection-authority-proven { color: var(--muted); }
 .connection-authority-missing { color: var(--danger); }
@@ -4424,8 +4435,16 @@ textarea.code {
 /* ----- Favourites ------------------------------------------------------- */
 
 .service-name { display: flex; align-items: center; gap: var(--space-4); }
-/* A hostname is one token: the table scrolls rather than breaking it. */
+/* The star keeps a full touch target but hangs into the cell's padding, so
+   the name starts on the line every other cell in the row starts on. */
+.service-name > .pin-toggle { margin-block: -7px; }
+/* A hostname is one token: where the table sizes to its content, it scrolls
+   rather than breaking it. A locked grid cannot grow a column, so there the
+   name breaks like every other cell rather than running under the next one. */
 .service-name strong { white-space: nowrap; }
+@media (min-width: 761px) {
+  .grid-locked .service-name strong { white-space: normal; }
+}
 .service-name > form { display: inline-flex; }
 .pin-toggle {
   background: none; border: 0; box-shadow: none; padding: 0 var(--space-1); cursor: pointer;
@@ -4501,14 +4520,18 @@ textarea.code {
    because the rule it has to beat, `.content > * + *:not(dialog)`, is (0,1,1)
    and a bare `.sweep` is (0,1,0). */
 .content > .sweep { margin-top: var(--space-12); }
+/* Each item draws its own ring, as topology lanes do, rather than the grid
+   painting its gaps: a short last row then leaves blank card, not a grey
+   block. Auto-fit lets a single row of readings take the whole width. */
 .sweep-grid {
-  display: grid; gap: 1px; background: var(--line);
-  grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
+  display: grid; gap: 1px; background: var(--surface);
+  grid-template-columns: repeat(auto-fit, minmax(228px, 1fr));
   border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
 }
 .sweep-item {
   display: grid; grid-template-columns: 1fr auto; gap: var(--space-1) var(--space-5);
   align-items: baseline; padding: var(--space-4) var(--space-6); background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
 }
 .sweep-label { font-size: var(--text-xs); color: var(--ink-2); }
 /* The count is the number on the row, so it leads rather than trails. */
@@ -4597,7 +4620,6 @@ textarea.code {
 .topology-map, .topology-trace-bar, .topology-detail, .topology-relations {
   scroll-margin-top: calc(var(--site-header-height) + var(--space-5));
 }
-.topology-scroll-hint { display: none; }
 .topology-lane { min-width: 0; padding: var(--space-5); background: var(--surface-2); box-shadow: 0 0 0 1px var(--line); }
 .topology-lane > header {
   position: sticky; top: 0; z-index: 2; display: grid;
@@ -4730,21 +4752,11 @@ textarea.code {
   .command-contract { margin-top: 0; }
   .command-evidence { grid-template-columns: minmax(0, 1fr); }
   .command-preview-path { grid-template-columns: minmax(0, 1fr); }
-  .topology-lenses {
-    flex-wrap: nowrap; overflow-x: auto; padding-bottom: var(--space-1);
-    overscroll-behavior-inline: contain; scrollbar-width: thin;
-  }
-  .topology-lenses .scope-chip { flex: 0 0 auto; }
   .topology-toolbar { align-items: stretch; }
   .topology-search { flex-basis: 100%; }
-  .topology-kind-filters { width: 100%; overflow-x: auto; flex-wrap: nowrap; padding-bottom: var(--space-1); }
-  /* One lane per screen, the next one showing at the edge, scrolled sideways. */
-  .topology-map {
-    grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(82vw, 330px);
-    scroll-snap-type: x proximity;
-  }
-  .topology-scroll-hint { display: block; margin: 0; padding: var(--space-3) var(--space-6) 0; font-size: var(--text-xs); }
-  .topology-lane { scroll-snap-align: start; }
+  /* Wrapped rather than scrolled: a lens or a kind past the edge of a phone
+     is one nobody finds. Only a table scrolls sideways. */
+  .topology-kind-filters { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -4,7 +4,7 @@
 similar application/assets.py::serialize_asset <> application/projects.py::serialize_project
 similar core/management/commands/seed_demo.py::_seed_content <> core/management/commands/seed_demo.py::_seed_docs
 similar reports/exports.py::documentation_csv <> reports/exports.py::projects_csv
-largest application/findings.py 1971
-largest control_plane/views.py 2172
-largest control_plane/providers.py 2919
-largest controller_runtime/providers.py 5895
+largest application/request_layers.py 909
+largest config/settings.py 935
+largest application/facts.py 958
+largest application/ui.py 1161

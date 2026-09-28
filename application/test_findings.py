@@ -15,7 +15,8 @@ from .action_links import ActionLink
 from .findings import derive_findings, finding_rules, findings, rule_for
 from .reach import TAILNET
 from .security import Capability, Principal
-from .topology import Topology, TopologyEdge, TopologyNode, derive_topology
+from .topology import derive_topology
+from .topology_model import Topology, TopologyEdge, TopologyNode
 
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
@@ -969,8 +970,10 @@ class RegistrationLapsingTests(TestCase):
 
         from django.utils import timezone
 
-        from application.findings import _registration_lapsing, _estate
-        from application.topology import Topology, TopologyNode
+        from application.findings import _estate
+
+        from application.registration_findings import _registration_lapsing
+        from application.topology_model import Topology, TopologyNode
 
         expires = (timezone.now() + timedelta(days=days)).date().isoformat()
         node = TopologyNode(
@@ -1077,13 +1080,14 @@ class DeclarationOnlyKindsTests(TestCase):
     """
 
     def _kinds_raised(self, kind):
-        from .findings import _kind_never_swept, _Estate
+        from .controller_findings import _kind_never_swept
+        from .finding_model import FindingEstate
 
         node = TopologyNode(
             f"resource:{kind}-one", "resource", "one", "Resource",
             kind_key=kind, managed=True,
         )
-        estate = _Estate(
+        estate = FindingEstate(
             topology=Topology(nodes=(node,), edges=()),
             now=timezone.now(),
             observed={},
@@ -1105,14 +1109,15 @@ class DeclarationOnlyKindsTests(TestCase):
         )
 
     def test_it_is_never_called_unobserved_one_record_at_a_time_either(self):
-        from .findings import _Estate, _never_observed
+        from .controller_findings import _never_observed
+        from .finding_model import FindingEstate
 
         seen = TopologyNode(
             "resource:seen", "resource", "seen", "Target",
             kind_key="tls.delivery_target", observed_at=timezone.now().isoformat(),
         )
         unseen = TopologyNode("resource:unseen", "resource", "unseen", "Target", kind_key="tls.delivery_target")
-        estate = _Estate(
+        estate = FindingEstate(
             topology=Topology(nodes=(seen, unseen), edges=()),
             now=timezone.now(),
             observed={seen.id: timezone.now()},
@@ -1130,7 +1135,8 @@ class OnDemandContainerTests(TestCase):
     """A container that only runs now and then is removed while it is off."""
 
     def _missing(self, *, on_demand):
-        from .findings import _Estate, _skipped_by_a_sweep
+        from .controller_findings import _skipped_by_a_sweep
+        from .finding_model import FindingEstate
 
         now = timezone.now()
         then = now - timedelta(days=2)
@@ -1142,7 +1148,7 @@ class OnDemandContainerTests(TestCase):
             "resource:tool", "resource", "tool", "Container",
             kind_key="portainer.container", observed_at=then.isoformat(), on_demand=on_demand,
         )
-        estate = _Estate(
+        estate = FindingEstate(
             topology=Topology(nodes=(running, off), edges=()),
             now=now,
             observed={running.id: now, off.id: then},
@@ -1178,7 +1184,7 @@ class StalenessIsMeasuredOnlyWhereASweepGoesTests(TestCase):
     """
 
     def test_a_kind_no_collector_sweeps_is_not_judged_on_sweep_cadence(self):
-        from .findings import _is_observable
+        from .finding_model import is_observable
         from control_plane.providers import PROVIDERS
 
         for kind in ("tls.certificate", "machine", "tls.delivery_target"):
@@ -1187,16 +1193,16 @@ class StalenessIsMeasuredOnlyWhereASweepGoesTests(TestCase):
                     PROVIDERS[kind].unobserved_reason,
                     f"{kind} has no collector and should say so",
                 )
-                self.assertFalse(_is_observable(kind))
+                self.assertFalse(is_observable(kind))
 
     def test_a_swept_kind_is_still_judged(self):
         """The exemption must not quietly turn staleness reporting off."""
 
-        from .findings import _is_observable
+        from .finding_model import is_observable
 
         for kind in ("adguard.rewrite", "tailscale.device", "npm.proxy_host"):
             with self.subTest(kind=kind):
-                self.assertTrue(_is_observable(kind))
+                self.assertTrue(is_observable(kind))
 
 
 class StalenessNeedsSomethingDeclaredTests(TestCase):
@@ -1209,13 +1215,14 @@ class StalenessNeedsSomethingDeclaredTests(TestCase):
     """
 
     def _raised(self, *, declared):
-        from .findings import _kind_never_swept, _Estate
+        from .controller_findings import _kind_never_swept
+        from .finding_model import FindingEstate
 
         now = timezone.now()
         return tuple(
             f.scope
             for f in _kind_never_swept(
-                _Estate(
+                FindingEstate(
                     topology=Topology(nodes=(), edges=()),
                     now=now,
                     observed={},
@@ -1244,8 +1251,9 @@ class UnreachableConsumerTests(TestCase):
     """
 
     def _findings(self, *names):
-        from application.findings import _estate, _unreachable_consumer
-        from application.topology import Topology, TopologyNode
+        from application.findings import _estate
+        from application.connection_findings import _unreachable_consumer
+        from application.topology_model import Topology, TopologyNode
 
         node = TopologyNode(
             id="resource:a-certificate",
@@ -1300,8 +1308,9 @@ class PathRefusedByTheTailnetTests(TestCase):
     """
 
     def _finding(self, *, refused):
-        from application.findings import _estate, _unreachable_consumer
-        from application.topology import Topology, TopologyNode
+        from application.findings import _estate
+        from application.connection_findings import _unreachable_consumer
+        from application.topology_model import Topology, TopologyNode
 
         facts = [("unreachable", "health.example")]
         if refused:
@@ -1355,8 +1364,9 @@ class WorkThatKeepsFailingTests(TestCase):
     """A connection that answers every probe and finishes none of its work."""
 
     def _findings(self, *facts):
-        from application.findings import _estate, _work_that_keeps_failing
-        from application.topology import Topology, TopologyNode
+        from application.findings import _estate
+        from application.controller_findings import _work_that_keeps_failing
+        from application.topology_model import Topology, TopologyNode
 
         node = TopologyNode(
             id="connection:infrastructure.controllers:a-host:shared-hosting",
@@ -1436,7 +1446,7 @@ class TailnetClaimTests(TestCase):
 
     def _findings(self, detect, *facts):
         from application.findings import _estate
-        from application.topology import Topology, TopologyNode
+        from application.topology_model import Topology, TopologyNode
 
         node = TopologyNode(
             id="connection:infrastructure.controllers:a-host:a-tailnet",
@@ -1448,7 +1458,7 @@ class TailnetClaimTests(TestCase):
         return detect(_estate(Topology(nodes=(node,), edges=())))
 
     def test_a_resolver_off_the_tailnet_is_claimed(self):
-        from application.findings import _tailnet_dns_off_tailnet
+        from application.tailnet_findings import _tailnet_dns_off_tailnet
 
         (finding,) = self._findings(
             _tailnet_dns_off_tailnet, ("tailnet-dns-off-tailnet", "192.0.2.53")
@@ -1460,7 +1470,7 @@ class TailnetClaimTests(TestCase):
         self.assertEqual(finding.evidence, (("Nameserver", "192.0.2.53"),))
 
     def test_a_resolver_on_the_tailnet_claims_nothing(self):
-        from application.findings import _tailnet_dns_off_tailnet
+        from application.tailnet_findings import _tailnet_dns_off_tailnet
 
         self.assertEqual(
             self._findings(
@@ -1471,7 +1481,7 @@ class TailnetClaimTests(TestCase):
 
     @override_settings(SEVERINO_TRUSTED_NETWORKS=["127.0.0.0/8", str(TAILNET[0])])
     def test_trusting_the_whole_range_is_reported_with_what_the_tailnet_uses(self):
-        from application.findings import _trusted_wider_than_tailnet
+        from application.tailnet_findings import _trusted_wider_than_tailnet
 
         (finding,) = self._findings(
             _trusted_wider_than_tailnet,
@@ -1497,7 +1507,7 @@ class TailnetClaimTests(TestCase):
         SEVERINO_TRUSTED_NETWORKS=["127.0.0.0/8", "::1/128", *map(str, TAILNET)]
     )
     def test_both_families_are_narrowed_to_device_hosts_and_loopback_is_kept(self):
-        from application.findings import _trusted_wider_than_tailnet
+        from application.tailnet_findings import _trusted_wider_than_tailnet
 
         (finding,) = self._findings(
             _trusted_wider_than_tailnet,
@@ -1518,7 +1528,7 @@ class TailnetClaimTests(TestCase):
 
     @override_settings(SEVERINO_TRUSTED_NETWORKS=["::1/128", str(TAILNET[1])])
     def test_only_the_wide_family_is_narrowed(self):
-        from application.findings import _trusted_wider_than_tailnet
+        from application.tailnet_findings import _trusted_wider_than_tailnet
 
         (finding,) = self._findings(
             _trusted_wider_than_tailnet,
@@ -1534,7 +1544,7 @@ class TailnetClaimTests(TestCase):
 
     @override_settings(SEVERINO_TRUSTED_NETWORKS=[*map(str, TAILNET)])
     def test_a_wide_range_no_device_address_falls_in_is_kept_whole(self):
-        from application.findings import _trusted_wider_than_tailnet
+        from application.tailnet_findings import _trusted_wider_than_tailnet
 
         (finding,) = self._findings(
             _trusted_wider_than_tailnet, ("tailnet-address", "100.64.0.1")
@@ -1547,7 +1557,7 @@ class TailnetClaimTests(TestCase):
 
     @override_settings(SEVERINO_TRUSTED_NETWORKS=["::1/128", "fd7a:115c:a1e0::1/128"])
     def test_ipv6_trust_already_narrowed_claims_nothing(self):
-        from application.findings import _trusted_wider_than_tailnet
+        from application.tailnet_findings import _trusted_wider_than_tailnet
 
         self.assertEqual(
             self._findings(
@@ -1558,7 +1568,7 @@ class TailnetClaimTests(TestCase):
 
     @override_settings(SEVERINO_TRUSTED_NETWORKS=["not a network", str(TAILNET[0])])
     def test_an_invalid_trusted_entry_is_skipped_not_raised(self):
-        from application.findings import _trusted_wider_than_tailnet
+        from application.tailnet_findings import _trusted_wider_than_tailnet
 
         (finding,) = self._findings(
             _trusted_wider_than_tailnet, ("tailnet-address", "100.64.0.1")
@@ -1568,7 +1578,7 @@ class TailnetClaimTests(TestCase):
 
     @override_settings(SEVERINO_TRUSTED_NETWORKS=["127.0.0.0/8", "100.64.0.1/32"])
     def test_trust_already_narrowed_claims_nothing(self):
-        from application.findings import _trusted_wider_than_tailnet
+        from application.tailnet_findings import _trusted_wider_than_tailnet
 
         self.assertEqual(
             self._findings(
@@ -1579,7 +1589,7 @@ class TailnetClaimTests(TestCase):
 
     @override_settings(SEVERINO_TRUSTED_NETWORKS=[str(TAILNET[0])])
     def test_without_a_device_reading_nothing_is_claimed(self):
-        from application.findings import _trusted_wider_than_tailnet
+        from application.tailnet_findings import _trusted_wider_than_tailnet
 
         self.assertEqual(self._findings(_trusted_wider_than_tailnet), ())
 
@@ -1595,7 +1605,7 @@ class TailnetFactTests(TestCase):
         )
 
     def facts(self):
-        from application.topology import _tailnet_facts
+        from application.topology_facts import _tailnet_facts
 
         return _tailnet_facts()
 
@@ -1638,7 +1648,7 @@ class PerimeterClaimTests(TestCase):
 
     def _findings(self, detect, *facts):
         from application.findings import _estate
-        from application.topology import Topology, TopologyNode
+        from application.topology_model import Topology, TopologyNode
 
         node = TopologyNode(
             id="connection:infrastructure.controllers:a-host:an-edge",
@@ -1650,7 +1660,7 @@ class PerimeterClaimTests(TestCase):
         return detect(_estate(Topology(nodes=(node,), edges=())))
 
     def test_a_port_answering_publicly_is_serious(self):
-        from application.findings import _perimeter_open
+        from application.perimeter_findings import _perimeter_open
 
         (finding,) = self._findings(
             _perimeter_open,
@@ -1663,14 +1673,14 @@ class PerimeterClaimTests(TestCase):
         self.assertEqual(len(finding.evidence), 2)
 
     def test_a_shut_perimeter_claims_nothing(self):
-        from application.findings import _perimeter_open
+        from application.perimeter_findings import _perimeter_open
 
         self.assertEqual(self._findings(_perimeter_open, ("Controller", "a-host")), ())
 
     def test_a_stopped_firewall_is_claimed_on_its_own(self):
         """Separate from the ports: a control that stopped, not a breach."""
 
-        from application.findings import _firewall_stopped
+        from application.perimeter_findings import _firewall_stopped
 
         (finding,) = self._findings(_firewall_stopped, ("firewall-unit", "inactive"))
 
@@ -1681,7 +1691,7 @@ class PerimeterClaimTests(TestCase):
     def test_a_running_firewall_claims_nothing(self):
         """Only a state worth acting on reaches the topology at all."""
 
-        from application.findings import _firewall_stopped
+        from application.perimeter_findings import _firewall_stopped
 
         self.assertEqual(self._findings(_firewall_stopped), ())
 
@@ -1756,7 +1766,8 @@ class UnrecognisedContainerTests(TestCase):
     def test_the_remedy_adopts_exactly_that_record(self):
         from django.urls import reverse
 
-        from .inventory import record_token, unmanaged
+        from .inventory import record_token
+        from .adoption import unmanaged
 
         (finding,) = self.found()
         (remedy,) = finding.remedies
@@ -1795,7 +1806,7 @@ class UnrecognisedContainerTests(TestCase):
         self.assertEqual(self.found(), [])
 
     def test_adopting_it_through_the_service_clears_the_finding(self):
-        from .inventory import AdoptCommand, adopt, unmanaged
+        from .adoption import AdoptCommand, adopt, unmanaged
         from .security import cli_principal
 
         (item,) = unmanaged()

@@ -13,18 +13,21 @@ from datetime import datetime
 from typing import Any
 
 from control_plane.models import ManagedResource
-from control_plane.providers import CERTIFICATE_KIND, DELIVERY_TARGET_KIND, PROVIDERS
+from control_plane.providers import PROVIDERS
+from control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
+from control_plane.provider_adapters.tls import CERTIFICATE_KIND
 
 from .entity_links import entity_link
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .infrastructure import (
     NotFoundError,
     controller_contract,
-    operation_summary,
     resolved_spec,
     resource_health,
     serialize_resource,
 )
+from .resource_operations import operation_summary
+from .labels import lower_first
 from .resource_capabilities import ResourceCapabilities, resource_capabilities
 
 
@@ -35,7 +38,7 @@ def origin_machine(resource, machines=None, at=None, targets=None):
     them here is the same four queries repeated once per resource.
     """
 
-    from .services import machine_link
+    from .whereabouts import machine_link
 
     provider = PROVIDERS.get(resource.kind)
     if provider is None or provider.origin is None:
@@ -294,7 +297,7 @@ def controller_summary(actions, labels) -> ControllerSummary | None:
         if not allowed.enabled:
             off.setdefault(allowed.reason, []).append(labels(verb))
     lines = tuple(
-        f"{_and(names)} {'is' if len(names) == 1 else 'are'} off: {reason[:1].lower() + reason[1:]}"
+        f"{_and(names)} {'is' if len(names) == 1 else 'are'} off: {lower_first(reason)}"
         for reason, names in off.items()
     )
     if len(off) and sum(len(names) for names in off.values()) == len(actions):

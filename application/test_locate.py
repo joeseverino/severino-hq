@@ -21,7 +21,8 @@ from django.utils import timezone
 from control_plane.models import ManagedResource, ProviderConnection
 
 from .locate import index_of, machines_index, split_endpoint
-from .services import Origin, _locate, _machines
+from .infrastructure import declared_machines
+from .whereabouts import Origin, locate
 
 
 def a_machine(key, name, *addresses, role=""):
@@ -141,10 +142,10 @@ class ForwardingAddressTests(TestCase):
         a_machine("example-alpha", "example-alpha", "10.0.0.5", role="Workstation")
 
     def test_a_declared_address_names_the_machine(self):
-        self.assertEqual(_locate("10.0.0.5:8000", _machines()).host, "example-alpha")
+        self.assertEqual(locate("10.0.0.5:8000", declared_machines()).host, "example-alpha")
 
     def test_an_address_nothing_claims_names_nothing(self):
-        origin = _locate("198.51.100.9:8000", _machines())
+        origin = locate("198.51.100.9:8000", declared_machines())
 
         self.assertEqual(origin.host, "")
         self.assertEqual(origin.address, "198.51.100.9:8000")
@@ -153,7 +154,7 @@ class ForwardingAddressTests(TestCase):
         a_machine("example-six", "example-six", "2001:db8::5")
 
         self.assertEqual(
-            _locate("[2001:db8::5]:8000", _machines()).host, "example-six"
+            locate("[2001:db8::5]:8000", declared_machines()).host, "example-six"
         )
 
     def test_a_bare_ipv6_answer_is_somewhere_else_rather_than_an_ingress(self):
@@ -170,7 +171,7 @@ class ForwardingAddressTests(TestCase):
         a_connection("example-edge", "ssh", endpoint="198.51.100.7:22")
 
         self.assertEqual(
-            _locate("198.51.100.7:8000", _machines()).host, "example-edge"
+            locate("198.51.100.7:8000", declared_machines()).host, "example-edge"
         )
 
 

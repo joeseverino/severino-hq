@@ -16,7 +16,7 @@ from control_plane.observations.portainer import IMAGE_KIND, RUNTIME_KIND, STACK
 
 from .relationships import Relationships, relationships_for
 from .security import Principal
-from .topology import RELATIONS
+from .topology_model import RELATIONS
 
 
 def for_service(service: Any, sections: Iterable[Any], *, principal: Principal) -> Relationships:

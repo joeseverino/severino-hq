@@ -108,6 +108,13 @@ operation or the reader may not run it. A finding carries it as its
 specific steps of its own; the API returns them as `operator_steps` beside the
 remedies.
 
+A rule is declared beside the detector that decides it: each module that raises
+findings (`perimeter_findings`, `controller_findings`, `docker_estate`,
+`dns_findings` and the rest) exports its own `RULES`, built from the vocabulary
+in `application/finding_model.py`. `application.findings.RULES` is derived from
+the closed `RULE_MODULES` tuple, and that module keeps only the pipeline: the
+estate, derivation, suppression, resolution and serialization.
+
 The flattened queue preserves each insight's `action` and JSON-safe `workflow`
 (or `null`) alongside its existing label, evidence, severity, count, and URL.
 The dashboard and full queue share the same row partial and resolution renderer;
@@ -549,6 +556,14 @@ service view, the generated create-and-edit forms, adoption) is written once
 and names no provider, so a provider added to the registry appears on all of it
 without another file being edited.
 
+Each provider is one module in `control_plane/provider_adapters/`: its spec
+models, its kind constants, the functions its declaration names, and the
+declaration itself. The vocabulary those are built from (`ProviderSpec`,
+`ProviderModel`, action policies, `NameContext`) is `control_plane/provider_spec.py`,
+which imports no registry. `control_plane.providers.PROVIDERS` is derived from
+the package's closed `ADMITTED` tuple, whose order is the registry's order; the
+registry holds no list of kinds of its own.
+
 **One address-to-machine resolver, in `application/locate.py`.** Every surface
 that draws a line between two things HQ knows (a proxy and the box it forwards
 to, a credential and the machine it opens, a service and where it runs) is
@@ -630,8 +645,22 @@ duplicate kinds, probes, or dispatch identities before the worker can run.
 Admission remains a closed tuple owned by HQ; this is modular composition, not
 arbitrary runtime registration. AdGuard is the first vertical extraction, and
 Caddy proves the same seam for an SSH-backed provider whose one resource
-resolves into a shared file. The remaining legacy provider maps migrate through
-that same parity seam.
+resolves into a shared file.
+
+The kinds the controller core still implements follow the same rule from the
+other side. Each integration lives in `controller_runtime/` (`tls`,
+`cloudflare`, `portainer`, `tailscale`, `host_readings`), split further by
+concern where it grew (`tls_issuance`, `tls_verification`, `npm_certificates`,
+`tailnet_api`, `tailnet_policy`, `cloudflare_api`, `cloudflare_account`). A sibling is called as `module.name`, so a
+patch on the owner reaches every caller. Each handler registers itself beside
+its definition: `@lists(kind)` for inventory,
+`@acts(kind, action)` for an action, `@probes(provider)` for a connection probe
+and `@reads(kind)` for a reading, all in `controller_runtime/handlers.py`. An
+admitted adapter's handlers are registered into the same tables. The dispatch
+tables in `controller_runtime/providers.py` are those registries plus a
+generated refusal for every locked action, and its `REGISTRANTS` tuple is the
+closed set of modules admitted to register; an architecture test rejects a
+handler written into a table by hand.
 
 The homelab controller is a separate root-owned systemd oneshot, not a web
 process. It starts a disposable, capability-dropped container from the exact

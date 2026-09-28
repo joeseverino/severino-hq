@@ -13,6 +13,9 @@ from control_plane.models import ProviderInventory
 from control_plane.observations import OBSERVATIONS
 
 from . import providers
+from controller_runtime import cloudflare, cloudflare_account, cloudflare_api, handlers, provider_http
+from control_plane.provider_adapters.contracts import ProviderError
+from control_plane.provider_adapters.parts import part_ledger
 
 ACCOUNT = "0" * 32
 SECRET = "never-stored-secret"
@@ -76,9 +79,9 @@ def _paged(pages):
 class CloudflareReadingTests(TestCase):
     def _read(self, kind, routes):
         fake = _Cloudflare(routes)
-        with mock.patch.object(providers, "_cloudflare_api_request", fake):
-            with providers.provider_snapshot(), providers.part_ledger() as refused:
-                records = providers.OBSERVATION_READERS[kind]()
+        with mock.patch.object(cloudflare_api, "cloudflare_api_request", fake):
+            with provider_http.provider_snapshot(), part_ledger() as refused:
+                records = handlers.OBSERVATION_READERS[kind]()
         self.refused = refused
         return records, fake
 
@@ -123,8 +126,8 @@ class CloudflareReadingTests(TestCase):
         )
 
     def test_a_refused_pages_read_raises(self):
-        refused = providers.ProviderError("Cloudflare refused the request: 403")
-        with self.assertRaises(providers.ProviderError):
+        refused = ProviderError("Cloudflare refused the request: 403")
+        with self.assertRaises(ProviderError):
             self._read(
                 "cloudflare.pages_project",
                 [(f"/accounts/{ACCOUNT}/pages/projects", refused)],
@@ -144,7 +147,7 @@ class CloudflareReadingTests(TestCase):
                 (f"/accounts/{ACCOUNT}/d1/database?per_page",
                  _paged([databases[:2], databases[2:]])),
                 (f"/accounts/{ACCOUNT}/d1/database/uuid-1",
-                 providers.ProviderError("Cloudflare refused the request: 403")),
+                 ProviderError("Cloudflare refused the request: 403")),
                 (f"/accounts/{ACCOUNT}/d1/database/uuid-0",
                  {"success": True, "result": {"file_size": 4096, "token": SECRET}}),
                 (f"/accounts/{ACCOUNT}/d1/database/uuid-2",
@@ -162,11 +165,11 @@ class CloudflareReadingTests(TestCase):
         self.assertNotIn(SECRET, json.dumps(stored.records))
 
     def test_a_refused_d1_read_raises(self):
-        with self.assertRaises(providers.ProviderError):
+        with self.assertRaises(ProviderError):
             self._read(
                 "cloudflare.d1_database",
                 [(f"/accounts/{ACCOUNT}/d1/database",
-                  providers.ProviderError("Cloudflare refused the request: 403"))],
+                  ProviderError("Cloudflare refused the request: 403"))],
             )
 
     # Access --------------------------------------------------------------
@@ -222,11 +225,11 @@ class CloudflareReadingTests(TestCase):
         )
 
     def test_a_refused_access_app_read_raises(self):
-        with self.assertRaises(providers.ProviderError):
+        with self.assertRaises(ProviderError):
             self._read(
                 "cloudflare.access_app",
                 [(f"/accounts/{ACCOUNT}/access/apps",
-                  providers.ProviderError("Cloudflare refused the request: 403"))],
+                  ProviderError("Cloudflare refused the request: 403"))],
             )
 
     def test_service_tokens_name_the_apps_that_admit_them_and_never_the_client_id(self):
@@ -258,7 +261,7 @@ class CloudflareReadingTests(TestCase):
                 (f"/accounts/{ACCOUNT}/access/service_tokens",
                  _page([{"id": "token-1", "name": "ci"}])),
                 (f"/accounts/{ACCOUNT}/access/apps",
-                 providers.ProviderError("Cloudflare refused the request: 403")),
+                 ProviderError("Cloudflare refused the request: 403")),
             ],
         )
 
@@ -267,11 +270,11 @@ class CloudflareReadingTests(TestCase):
         self.assertNotIn("unread", records[0])
 
     def test_a_refused_service_token_read_raises(self):
-        with self.assertRaises(providers.ProviderError):
+        with self.assertRaises(ProviderError):
             self._read(
                 "cloudflare.access_service_token",
                 [(f"/accounts/{ACCOUNT}/access/service_tokens",
-                  providers.ProviderError("Cloudflare refused the request: 403"))],
+                  ProviderError("Cloudflare refused the request: 403"))],
             )
 
     # Tunnels -------------------------------------------------------------
@@ -331,7 +334,7 @@ class CloudflareReadingTests(TestCase):
                 (f"/accounts/{ACCOUNT}/cfd_tunnel", _page([{"id": "tunnel-1", "name": "t"}])),
                 (f"{base}/configurations", {"success": True, "result": {"source": "local"}}),
                 (f"{base}/connections",
-                 providers.ProviderError("Cloudflare refused the request: 403")),
+                 ProviderError("Cloudflare refused the request: 403")),
             ],
         )
 
@@ -340,11 +343,11 @@ class CloudflareReadingTests(TestCase):
         self.assertNotIn("connections", records[0])
 
     def test_a_refused_tunnel_read_raises(self):
-        with self.assertRaises(providers.ProviderError):
+        with self.assertRaises(ProviderError):
             self._read(
                 "cloudflare.tunnel",
                 [(f"/accounts/{ACCOUNT}/cfd_tunnel",
-                  providers.ProviderError("Cloudflare refused the request: 403"))],
+                  ProviderError("Cloudflare refused the request: 403"))],
             )
 
     # Edge certificates ------------------------------------------------------
@@ -394,7 +397,7 @@ class CloudflareReadingTests(TestCase):
             [
                 self._zones(),
                 ("/zones/zone-1/ssl/certificate_packs",
-                 providers.ProviderError("Cloudflare refused the request: 403")),
+                 ProviderError("Cloudflare refused the request: 403")),
                 ("/zones/zone-2/ssl/certificate_packs", _page([])),
             ],
         )
@@ -403,8 +406,8 @@ class CloudflareReadingTests(TestCase):
         self.assertRefused("", "example.com")
 
     def test_every_zone_refused_raises(self):
-        refused = providers.ProviderError("Cloudflare refused the request: 403")
-        with self.assertRaises(providers.ProviderError):
+        refused = ProviderError("Cloudflare refused the request: 403")
+        with self.assertRaises(ProviderError):
             self._read(
                 "cloudflare.edge_certificate",
                 [
@@ -470,7 +473,7 @@ class CloudflareReadingTests(TestCase):
         self.assertEqual(OBSERVATIONS["cloudflare.redirect"].hostnames(record), ())
 
     def test_a_refused_part_is_named_on_its_zone(self):
-        refused = providers.ProviderError("Cloudflare refused the request: 403")
+        refused = ProviderError("Cloudflare refused the request: 403")
         records, _fake = self._read(
             "cloudflare.redirect", self._redirect_routes(zone_1_pagerules=refused)
         )
@@ -481,7 +484,7 @@ class CloudflareReadingTests(TestCase):
         self.assertTrue(any(record.get("source") == "rule" for record in records))
 
     def test_redirect_rules_refused_everywhere_reach_hq_as_parts_not_records(self):
-        refused = providers.ProviderError(
+        refused = ProviderError(
             "Cloudflare refused the request: Authentication error", refusal="permission"
         )
         routes = [
@@ -492,9 +495,9 @@ class CloudflareReadingTests(TestCase):
             ("/zones/zone-2/pagerules", {"success": True, "result": []}),
         ]
         fake = _Cloudflare(routes)
-        with mock.patch.object(providers, "_cloudflare_api_request", fake):
-            with providers.provider_snapshot():
-                report = providers._read_kind(providers.OBSERVATION_READERS["cloudflare.redirect"])
+        with mock.patch.object(cloudflare_api, "cloudflare_api_request", fake):
+            with provider_http.provider_snapshot():
+                report = providers._read_kind(handlers.OBSERVATION_READERS["cloudflare.redirect"])
 
         self.assertEqual(report["records"], [])
         stored = _stored_report("cloudflare.redirect", report)
@@ -505,13 +508,13 @@ class CloudflareReadingTests(TestCase):
         )
 
     def test_every_part_refused_on_every_zone_raises(self):
-        refused = providers.ProviderError("Cloudflare refused the request: 403")
+        refused = ProviderError("Cloudflare refused the request: 403")
         routes = [self._zones()] + [
             (f"/zones/{zone}/{part}", refused)
             for zone in ("zone-1", "zone-2")
             for part in ("rulesets", "pagerules")
         ]
-        with self.assertRaises(providers.ProviderError):
+        with self.assertRaises(ProviderError):
             self._read("cloudflare.redirect", routes)
 
     # Sweep sharing -----------------------------------------------------------
@@ -521,37 +524,37 @@ class CloudflareReadingTests(TestCase):
             (f"/accounts/{ACCOUNT}/access/apps", _page([self.APP])),
             (f"/accounts/{ACCOUNT}/access/service_tokens", _page([])),
         ])
-        with mock.patch.object(providers, "_cloudflare_api_request", fake):
-            with providers.provider_snapshot():
-                providers.list_access_apps()
-                providers.list_access_service_tokens()
+        with mock.patch.object(cloudflare_api, "cloudflare_api_request", fake):
+            with provider_http.provider_snapshot():
+                cloudflare_account.list_access_apps()
+                cloudflare_account.list_access_service_tokens()
 
         self.assertEqual(len(fake.paths("/accounts?")), 1)
         self.assertEqual(len(fake.paths(f"/accounts/{ACCOUNT}/access/apps")), 1)
 
 
 class ZonePostureTests(TestCase):
-    @mock.patch("controller_runtime.providers._cloudflare_api_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_api_request")
     def test_each_posture_setting_is_read_on_its_own(self, request):
         request.side_effect = lambda path, *_: {
             "success": True,
             "result": {"id": path.rsplit("/", 1)[-1], "value": "on"},
         }
 
-        posture = providers._cloudflare_zone_posture("zone-1")
+        posture = cloudflare._cloudflare_zone_posture("zone-1")
 
         self.assertEqual(
             [call.args[0] for call in request.call_args_list],
-            [f"/zones/zone-1/settings/{name}" for name in providers.ZONE_POSTURE_SETTINGS],
+            [f"/zones/zone-1/settings/{name}" for name in cloudflare.ZONE_POSTURE_SETTINGS],
         )
-        self.assertEqual(set(posture), set(providers.ZONE_POSTURE_SETTINGS))
+        self.assertEqual(set(posture), set(cloudflare.ZONE_POSTURE_SETTINGS))
 
-    @mock.patch("controller_runtime.providers._cloudflare_api_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_api_request")
     def test_a_refused_posture_is_the_zones_refused_part(self, request):
-        request.side_effect = providers.ProviderError("Cloudflare refused: 403")
+        request.side_effect = ProviderError("Cloudflare refused: 403")
 
-        with providers.part_ledger() as refused:
-            posture = providers._cloudflare_zone_posture("zone-1", "example.com")
+        with part_ledger() as refused:
+            posture = cloudflare._cloudflare_zone_posture("zone-1", "example.com")
 
         self.assertEqual(posture, {})
         self.assertEqual(
@@ -560,27 +563,27 @@ class ZonePostureTests(TestCase):
               "scope": "example.com", "connection_ref": ""}],
         )
 
-    @mock.patch("controller_runtime.providers._cloudflare_api_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_api_request")
     def test_a_setting_refused_leaves_no_half_posture(self, request):
         def answer(path, *_):
             if path.endswith("/tls_1_3"):
-                raise providers.ProviderError("Cloudflare refused: 403")
+                raise ProviderError("Cloudflare refused: 403")
             return {"success": True, "result": {"value": "full"}}
 
         request.side_effect = answer
 
-        with providers.part_ledger() as refused:
-            posture = providers._cloudflare_zone_posture("zone-1", "example.com")
+        with part_ledger() as refused:
+            posture = cloudflare._cloudflare_zone_posture("zone-1", "example.com")
 
         self.assertEqual(posture, {})
         self.assertEqual([entry["part"] for entry in refused], ["posture"])
 
 
 class AccountListTests(TestCase):
-    @mock.patch("controller_runtime.providers._cloudflare_api_request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_api_request")
     def test_total_pages_decides_over_a_short_page(self, request):
         request.side_effect = [_page([{"id": "a"}], 1, 2), _page([{"id": "b"}], 2, 2)]
 
-        found = providers._cloudflare_api_list("/accounts/x/pages/projects", per_page=10)
+        found = cloudflare_api.cloudflare_api_list("/accounts/x/pages/projects", per_page=10)
 
         self.assertEqual([item["id"] for item in found], ["a", "b"])

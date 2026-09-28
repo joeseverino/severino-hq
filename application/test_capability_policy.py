@@ -404,7 +404,7 @@ class CommandTitleTests(TestCase):
 
     def test_a_connection_offers_the_command_by_its_title_and_marks_destruction(self):
         from .connection_contracts import ConnectionAbility, ConnectionInstance
-        from .connections import _ability_state
+        from .connection_catalog import _ability_state
         from .security import Capability, Principal
 
         ability = ConnectionAbility(

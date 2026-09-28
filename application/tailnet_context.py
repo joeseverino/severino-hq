@@ -12,11 +12,14 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 from typing import Any
 
-from control_plane.providers import PROVIDERS, TAILNET_KIND, TAILNET_POLICY_KIND
+from control_plane.providers import PROVIDERS
+
+from control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
 
 from .credential_sight import READABLE, Sight, credential_sight
 from .entity_links import EntityLink
-from .findings import Finding, derive_findings, serialize_finding
+from .findings import derive_findings, serialize_finding
+from .finding_model import Finding
 from .policy_links import PolicyName, PolicyNames, tagged
 from .projection import projection_scope
 from .security import Capability, Principal

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-import io
 import json
 import os
 import re
@@ -10,13 +9,40 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 from unittest import TestCase, mock
 
-from control_plane.provider_adapters import caddy, onepassword
+from control_plane.provider_adapters import npm, onepassword, portainer_readings
 
-from . import providers, worker
-
+from . import providers
+from controller_runtime import (
+    cloudflare,
+    cloudflare_api,
+    commands,
+    connection_env,
+    glance,
+    host_readings,
+    npm_certificates,
+    portainer,
+    provider_http,
+    provider_runtime,
+    tailnet_api,
+    tailnet_policy,
+    tailscale,
+    tls,
+    tls_issuance,
+    tls_verification,
+)
+from control_plane.provider_adapters.contracts import (
+    ADDRESS_FAILURE,
+    CREDENTIAL_REFUSAL,
+    NETWORK_FAILURE,
+    ProviderError,
+    ProviderResult,
+)
+from control_plane.providers import controller_id, observer_abilities
+import ssl
+import urllib.request
+from .test_support import _by_url, _Page, _Recorder, A_RECORDED_CERTIFICATE, AN_OBSERVATION
 
 class ControllerConnectionRegistryTests(TestCase):
     def setUp(self):
@@ -69,7 +95,7 @@ class ControllerConnectionRegistryTests(TestCase):
 
         self.assertEqual(
             set(providers._CONNECTION_PROBES),
-            reconciled | providers.OBSERVER_PROVIDERS,
+            reconciled | {ability.provider for ability in observer_abilities()},
         )
 
     def test_a_connection_is_reconciled_through_or_observed_with_never_both(self):
@@ -83,44 +109,7 @@ class ControllerConnectionRegistryTests(TestCase):
             for provider in spec.connection_providers
         }
 
-        self.assertEqual(reconciled & providers.OBSERVER_PROVIDERS, set())
-
-
-def _by_url(routes):
-    """Answer a mocked provider request by what it asked for, not by call order.
-
-    Order-indexed fakes encode the sweep's iteration order into every test that
-    uses one, so adding a connection rewrites tests that have nothing to do
-    with it.
-    """
-
-    def respond(url, *args, **kwargs):
-        # Longest match wins. `/tokens` is a substring of `/user/tokens/verify`,
-        # so first-match would answer Cloudflare with NPM's reply.
-        matches = sorted((fragment for fragment in routes if fragment in url), key=len)
-        if not matches:
-            raise AssertionError(f"Unexpected provider request: {url}")
-        return routes[matches[-1]]
-
-    return respond
-
-
-def _bridge(**responses):
-    """Answer a mocked bridge call by which action it is, not by call order.
-
-    Order-indexed fakes encode the pass's exact sequence into every test that
-    uses one, so adding a step rewrites tests that have nothing to do with it.
-    """
-
-    def respond(*args, **kwargs):
-        action = args[0] if args else ""
-        if action in responses:
-            return responses[action]
-        if action == "glance-plan":
-            return {"ok": True, "panels": [], "targets": {}}
-        raise AssertionError(f"Unexpected bridge call: {action}")
-
-    return respond
+        self.assertEqual(reconciled & {ability.provider for ability in observer_abilities()}, set())
 
 
 class ProviderAdapterTests(TestCase):
@@ -135,10 +124,10 @@ class ProviderAdapterTests(TestCase):
             apply=apply,
         )
 
-    @mock.patch("controller_runtime.providers._portainer_glance")
-    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch("controller_runtime.glance._portainer_glance")
+    @mock.patch("controller_runtime.commands.run_ssh")
     @mock.patch(
-        "controller_runtime.providers.ssh_connection_refs",
+        "controller_runtime.connection_env.ssh_connection_refs",
         return_value=("example-ssh",),
     )
     def test_dashboard_glance_prefers_whole_host_telemetry(
@@ -156,7 +145,7 @@ class ProviderAdapterTests(TestCase):
             }
         ).encode()
 
-        result = providers.dashboard_glance(
+        result = glance.dashboard_glance(
             {
                 "panels": ["infrastructure"],
                 "targets": {
@@ -177,12 +166,12 @@ class ProviderAdapterTests(TestCase):
             ["17%", "25%", "25%"],
         )
         ssh.assert_called_once_with(
-            "example-ssh", "python3 -", providers._HOST_GLANCE_SCRIPT
+            "example-ssh", "python3 -", glance._HOST_GLANCE_SCRIPT
         )
         portainer.assert_not_called()
 
-    @mock.patch("controller_runtime.providers.ssh_connection_refs", return_value=())
-    @mock.patch("controller_runtime.providers._portainer_glance")
+    @mock.patch("controller_runtime.connection_env.ssh_connection_refs", return_value=())
+    @mock.patch("controller_runtime.glance._portainer_glance")
     def test_dashboard_glance_labels_docker_fallback_by_scope(
         self, portainer, _connection_refs
     ):
@@ -205,7 +194,7 @@ class ProviderAdapterTests(TestCase):
             ],
         }
 
-        result = providers.dashboard_glance(
+        result = glance.dashboard_glance(
             {
                 "panels": ["infrastructure"],
                 "targets": {
@@ -217,7 +206,7 @@ class ProviderAdapterTests(TestCase):
         labels = [metric["label"] for metric in result[0]["machines"][0]["metrics"]]
         self.assertEqual(labels, ["Container CPU", "Container memory"])
 
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_weather_glance_uses_the_nws_point_contract(self, request):
         request.side_effect = [
             {
@@ -245,7 +234,7 @@ class ProviderAdapterTests(TestCase):
             {"features": []},
         ]
 
-        result = providers.dashboard_glance(
+        result = glance.dashboard_glance(
             {
                 "panels": ["weather"],
                 "targets": {"weather": {"point": "41.0000,-87.0000"}},
@@ -258,11 +247,11 @@ class ProviderAdapterTests(TestCase):
         self.assertIn("User-Agent", request.call_args_list[0].kwargs["headers"])
 
     @mock.patch(
-        "controller_runtime.providers._nws_glance",
-        side_effect=providers.ProviderError("No forecast for this point."),
+        "controller_runtime.glance._nws_glance",
+        side_effect=ProviderError("No forecast for this point."),
     )
     def test_weather_failure_keeps_the_point_so_the_request_can_complete(self, _nws):
-        result = providers.dashboard_glance(
+        result = glance.dashboard_glance(
             {
                 "panels": ["weather"],
                 "targets": {"weather": {"point": "41.0000,-87.0000"}},
@@ -278,13 +267,13 @@ class ProviderAdapterTests(TestCase):
         {"HQ_CONTROLLER_CA_FILE": "/run/secrets/example-ca.pem"},
         clear=True,
     )
-    @mock.patch("controller_runtime.providers.ssl.create_default_context")
+    @mock.patch("ssl.create_default_context")
     def test_tls_context_adds_controller_ca_without_replacing_public_roots(
         self, create_default_context
     ):
         context = create_default_context.return_value
 
-        self.assertIs(providers._tls_context(), context)
+        self.assertIs(provider_http.tls_context(), context)
 
         context.load_verify_locations.assert_called_once_with(
             cafile="/run/secrets/example-ca.pem"
@@ -292,11 +281,11 @@ class ProviderAdapterTests(TestCase):
 
     def test_npm_ui_url_derives_api_base_once(self):
         self.assertEqual(
-            providers._npm_api_url("https://npm.example"),
+            npm.api_url("https://npm.example"),
             "https://npm.example/api",
         )
         self.assertEqual(
-            providers._npm_api_url("https://npm.example/api"),
+            npm.api_url("https://npm.example/api"),
             "https://npm.example/api",
         )
 
@@ -311,7 +300,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_adguard_noop_is_idempotent(self, request):
         request.return_value = [{"domain": "hq.example", "answer": "192.0.2.10"}]
 
@@ -333,7 +322,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_adguard_reports_a_rewrite_that_is_switched_off(self, request):
         """Present but disabled does not resolve, and Ready would be a lie.
 
@@ -363,7 +352,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_adguard_delete_removes_the_live_pair(self, request):
         """AdGuard identifies a rewrite by domain *and* answer.
 
@@ -398,7 +387,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_adguard_delete_is_idempotent(self, request):
         """A retried delete finding nothing there has done what was asked.
 
@@ -425,7 +414,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_adguard_delete_plans_without_touching_anything(self, request):
         request.return_value = [
             {"domain": "hq.example", "answer": "192.0.2.10", "enabled": True}
@@ -451,7 +440,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_adguard_update_uses_the_provider_contract(self, request):
         request.side_effect = [
             [{"domain": "hq.example", "answer": "192.0.2.9", "enabled": True}],
@@ -502,10 +491,10 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._cloudflare_envelope")
-    @mock.patch("controller_runtime.providers._run")
-    @mock.patch("controller_runtime.providers._ssh")
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_envelope")
+    @mock.patch("controller_runtime.commands.run_command")
+    @mock.patch("controller_runtime.commands.run_ssh")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_connection_sweep_probes_every_credential_the_environment_carries(
         self, request, ssh, _run, envelope
     ):
@@ -563,17 +552,17 @@ class ProviderAdapterTests(TestCase):
         self.assertEqual(ssh.call_count, 2)
         self.assertNotIn("secret-c", json.dumps(result))
 
-    @mock.patch("controller_runtime.providers._cloudflare_paged")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_paged")
     def test_one_sweep_reuses_successful_provider_reads_and_then_forgets_them(
         self, paged
     ):
         paged.return_value = [{"id": "zone-1", "name": "example.test"}]
 
-        with providers.provider_snapshot():
-            first = providers._cloudflare_zones()
-            second = providers._cloudflare_zones()
+        with provider_http.provider_snapshot():
+            first = cloudflare._cloudflare_zones()
+            second = cloudflare._cloudflare_zones()
 
-        third = providers._cloudflare_zones()
+        third = cloudflare._cloudflare_zones()
 
         self.assertIs(first, second)
         self.assertEqual(third, first)
@@ -589,8 +578,8 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._run")
-    @mock.patch("controller_runtime.providers._cloudflare_envelope")
+    @mock.patch("controller_runtime.commands.run_command")
+    @mock.patch("controller_runtime.cloudflare_api.cloudflare_envelope")
     def test_one_broken_credential_does_not_hide_the_others(self, request, _run):
         """A failure is that connection's, and the sweep still reports the rest.
 
@@ -598,7 +587,7 @@ class ProviderAdapterTests(TestCase):
         precisely when an operator needs to see which of them still works.
         """
 
-        request.side_effect = providers.ProviderError("Token is not valid.")
+        request.side_effect = ProviderError("Token is not valid.")
 
         found = providers.connections()
 
@@ -618,7 +607,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers.urllib.request.urlopen")
+    @mock.patch("urllib.request.urlopen")
     def test_tailscale_oauth_connection_is_reported_without_secret_material(
         self, urlopen
     ):
@@ -633,7 +622,7 @@ class ProviderAdapterTests(TestCase):
                 {
                     "connection_ref": "example-tailnet",
                     "provider": "tailscale",
-                    "endpoint": providers.TAILNET_API,
+                    "endpoint": tailnet_api.TAILNET_API,
                     "manages": False,
                     "probed": True,
                     "ok": True,
@@ -656,9 +645,9 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers.urllib.request.urlopen")
+    @mock.patch("urllib.request.urlopen")
     def test_tailscale_probe_failure_is_isolated_and_safe(self, urlopen):
-        urlopen.side_effect = providers.urllib.error.HTTPError(
+        urlopen.side_effect = urllib.error.HTTPError(
             "https://example.invalid", 401, "Unauthorized", {}, None
         )
 
@@ -679,12 +668,12 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_npm_refuses_https_create_without_certificate(self, request):
         request.side_effect = [{"token": "short-lived"}, []]
 
-        with self.assertRaisesRegex(providers.ProviderError, "needs an issued certificate"):
-            providers.reconcile_npm(
+        with self.assertRaisesRegex(ProviderError, "needs an issued certificate"):
+            providers.PROVIDER_ACTIONS[("npm.proxy_host", "reconcile")](
                 {
                     "domain_names": ["hq.example"],
                     "forward_scheme": "http",
@@ -713,7 +702,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_npm_delete_targets_the_host_with_that_exact_domain_set(self, request):
         request.side_effect = [
             {"token": "short-lived"},
@@ -724,7 +713,7 @@ class ProviderAdapterTests(TestCase):
             None,
         ]
 
-        result = providers.delete_npm({"domain_names": ["hq.example"]})
+        result = providers.PROVIDER_ACTIONS[("npm.proxy_host", "delete")]({"domain_names": ["hq.example"]})
 
         self.assertTrue(result.changed)
         deletion = request.call_args_list[-1]
@@ -740,7 +729,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_npm_reconcile_no_longer_asserts_hsts_off(self, request):
         """The payload replaces the whole object, so an unsent field is not spared.
 
@@ -749,7 +738,7 @@ class ProviderAdapterTests(TestCase):
         """
         request.side_effect = [{"token": "short-lived"}, [], None]
 
-        providers.reconcile_npm(
+        providers.PROVIDER_ACTIONS[("npm.proxy_host", "reconcile")](
             {
                 "domain_names": ["hq.example"],
                 "forward_scheme": "http",
@@ -785,7 +774,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_adguard_renames_the_record_it_was_last_seen_holding(self, request):
         """A changed hostname moves the record rather than adding a second one.
 
@@ -825,7 +814,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_a_name_never_seen_before_is_created_not_renamed(self, request):
         """Only a *changed* name is a rename. A new resource is still a create."""
         request.side_effect = [[], None]
@@ -847,7 +836,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_npm_renames_in_place_by_id(self, request):
         request.side_effect = [
             {"token": "short-lived"},
@@ -855,7 +844,7 @@ class ProviderAdapterTests(TestCase):
             None,
         ]
 
-        providers.reconcile_npm(
+        providers.PROVIDER_ACTIONS[("npm.proxy_host", "reconcile")](
             {
                 "domain_names": ["new.example"],
                 "forward_scheme": "http",
@@ -889,7 +878,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_removing_a_certificate_still_serving_a_host_is_refused(self, request):
         """Deleting it would take TLS down on whatever is bound to it.
 
@@ -902,8 +891,8 @@ class ProviderAdapterTests(TestCase):
             [{"id": 9, "domain_names": ["newhost.example"], "certificate_id": 3}],
         ]
 
-        with self.assertRaisesRegex(providers.ProviderError, "newhost.example"):
-            providers.delete_uploaded_certificate(
+        with self.assertRaisesRegex(ProviderError, "newhost.example"):
+            tls.delete_uploaded_certificate(
                 {
                     "certificate_name": "newhost",
                     "consumers": [{"kind": "npm", "name": "newhost-npm"}],
@@ -920,7 +909,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_an_unbound_certificate_is_removed_by_its_id(self, request):
         """Renamed in NPM, it is still the certificate HQ installed."""
 
@@ -934,7 +923,7 @@ class ProviderAdapterTests(TestCase):
             None,
         ]
 
-        result = providers.delete_uploaded_certificate(
+        result = tls.delete_uploaded_certificate(
             {
                 "certificate_name": "newhost",
                 "consumers": [{"kind": "npm", "name": "newhost-npm"}],
@@ -958,7 +947,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_a_certificate_matched_only_by_name_is_not_deleted(self, request):
         """A display name anyone can set in NPM is not proof HQ installed it."""
 
@@ -967,8 +956,8 @@ class ProviderAdapterTests(TestCase):
             [{"id": 3, "nice_name": "Severino HQ - newhost-npm"}],
         ]
 
-        with self.assertRaisesRegex(providers.ProviderError, "no record of installing"):
-            providers.delete_uploaded_certificate(
+        with self.assertRaisesRegex(ProviderError, "no record of installing"):
+            tls.delete_uploaded_certificate(
                 {
                     "certificate_name": "newhost",
                     "consumers": [{"kind": "npm", "name": "newhost-npm"}],
@@ -987,8 +976,8 @@ class ProviderAdapterTests(TestCase):
         remove to call, and reporting success would forget the only pointer to
         what was left behind.
         """
-        with self.assertRaisesRegex(providers.ProviderError, "by hand"):
-            providers.delete_uploaded_certificate(
+        with self.assertRaisesRegex(ProviderError, "by hand"):
+            tls.delete_uploaded_certificate(
                 {
                     "certificate_name": "newhost",
                     "consumers": [
@@ -1007,10 +996,10 @@ class ProviderAdapterTests(TestCase):
         refused there.
         """
 
-        with self.assertRaisesRegex(providers.ProviderError, "no settings to reconcile"):
+        with self.assertRaisesRegex(ProviderError, "no settings to reconcile"):
             providers.execute({"kind": "cloudflare.zone", "spec": {}}, "reconcile")
 
-    @mock.patch("controller_runtime.providers._observe_tls_domain")
+    @mock.patch("controller_runtime.tls_verification._observe_tls_domain")
     @mock.patch.dict(
         "os.environ",
         {
@@ -1033,7 +1022,7 @@ class ProviderAdapterTests(TestCase):
         """
 
         observe.side_effect = [
-            providers.ProviderError(
+            ProviderError(
                 "TLS observation failed for health.example: TimeoutError."
             ),
             {
@@ -1046,7 +1035,7 @@ class ProviderAdapterTests(TestCase):
             },
         ]
 
-        result = providers.reconcile_tls(
+        result = tls_verification.reconcile_tls(
             {
                 "renewal_window_days": 30,
                 "consumers": [
@@ -1083,17 +1072,17 @@ class ProviderAdapterTests(TestCase):
         )
         self.assertFalse(any(item["type"] == "Ready" for item in result.conditions))
 
-    @mock.patch("controller_runtime.providers._observe_tls_domain")
+    @mock.patch("controller_runtime.tls_verification._observe_tls_domain")
     @mock.patch.dict("os.environ", {"NPM_URL": "https://npm-origin.example"}, clear=True)
     def test_every_consumer_unreachable_is_still_a_failure(self, observe):
         """Nothing was read, so there is no expiry and nothing to compare."""
 
-        observe.side_effect = providers.ProviderError(
+        observe.side_effect = ProviderError(
             "TLS observation failed for hq.example: TimeoutError."
         )
 
-        with self.assertRaises(providers.ProviderError) as caught:
-            providers.reconcile_tls(
+        with self.assertRaises(ProviderError) as caught:
+            tls_verification.reconcile_tls(
                 {
                     "renewal_window_days": 30,
                     "consumers": [
@@ -1104,7 +1093,7 @@ class ProviderAdapterTests(TestCase):
 
         self.assertIn("No TLS consumer could be reached", str(caught.exception))
 
-    @mock.patch("controller_runtime.providers._observe_tls_domain")
+    @mock.patch("controller_runtime.tls_verification._observe_tls_domain")
     @mock.patch.dict(
         "os.environ",
         {
@@ -1137,7 +1126,7 @@ class ProviderAdapterTests(TestCase):
             },
         ]
 
-        result = providers.reconcile_tls(
+        result = tls_verification.reconcile_tls(
             {
                 "renewal_window_days": 30,
                 "consumers": [
@@ -1167,7 +1156,7 @@ class ProviderAdapterTests(TestCase):
             ],
         )
 
-    @mock.patch("controller_runtime.providers._observe_tls_domain")
+    @mock.patch("controller_runtime.tls_verification._observe_tls_domain")
     @mock.patch.dict(
         "os.environ",
         {
@@ -1189,7 +1178,7 @@ class ProviderAdapterTests(TestCase):
             "certificate_pem": "-----BEGIN CERTIFICATE-----\ncurrent\n",
         }
 
-        providers.reconcile_tls(
+        tls_verification.reconcile_tls(
             {
                 "renewal_window_days": 30,
                 "consumers": [
@@ -1208,11 +1197,11 @@ class ProviderAdapterTests(TestCase):
     @mock.patch.dict("os.environ", {"NPM_URL": "https://proxy.example"}, clear=True)
     def test_npm_tls_endpoint_is_derived_from_controller_connection(self):
         self.assertEqual(
-            providers._consumer_tls_endpoint({"kind": "npm"}),
+            tls_verification._consumer_tls_endpoint({"kind": "npm"}),
             "proxy.example",
         )
 
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     @mock.patch("control_plane.provider_adapters.npm.token", return_value="token")
     @mock.patch.dict("os.environ", {"NPM_URL": "https://npm.example.test"}, clear=True)
     def test_npm_inventory_emits_safe_ingress_policy_evidence(self, _token, request):
@@ -1246,7 +1235,7 @@ class ProviderAdapterTests(TestCase):
             [],
         ]
 
-        found = providers.list_npm()[0]["access_policy"]
+        found = providers.PROVIDER_INVENTORY["npm.proxy_host"]()[0]["access_policy"]
 
         self.assertEqual(found["authorization_count"], 1)
         self.assertTrue(found["implicit_deny"])
@@ -1262,7 +1251,7 @@ class ProviderAdapterTests(TestCase):
         self.assertNotIn("password", serialized)
         self.assertNotIn("hint", serialized)
 
-    @mock.patch("controller_runtime.providers.renew_tls")
+    @mock.patch("controller_runtime.tls.renew_tls")
     def test_renew_plan_never_mutates(self, renew):
         result = providers.execute(
             {"kind": "tls.certificate", "spec": {}}, "renew", apply=False
@@ -1271,9 +1260,9 @@ class ProviderAdapterTests(TestCase):
         self.assertTrue(result.changed)
         renew.assert_not_called()
 
-    @mock.patch("controller_runtime.providers._request")
-    @mock.patch("controller_runtime.providers._multipart_request")
-    @mock.patch("controller_runtime.providers._npm_token", return_value="token")
+    @mock.patch("controller_runtime.provider_http.request_json")
+    @mock.patch("controller_runtime.provider_http.multipart_request")
+    @mock.patch("controller_runtime.npm_certificates.npm_token", return_value="token")
     @mock.patch.dict(
         "os.environ",
         {"NPM_URL": "https://npm.example.test"},
@@ -1291,7 +1280,7 @@ class ProviderAdapterTests(TestCase):
             {},
         ]
 
-        certificate_id, identity = providers._npm_managed_certificate(
+        certificate_id, identity = npm_certificates.npm_managed_certificate(
             {
                 "name": "example-wildcard",
                 "verify_domains": ["dev.example.test"],
@@ -1311,9 +1300,9 @@ class ProviderAdapterTests(TestCase):
         self.assertEqual(identity["nice_name"], "Severino HQ - example-wildcard")
         self.assertEqual(request.call_args.kwargs["payload"], {"certificate_id": 22})
 
-    @mock.patch("controller_runtime.providers._request")
-    @mock.patch("controller_runtime.providers._multipart_request")
-    @mock.patch("controller_runtime.providers._npm_token", return_value="token")
+    @mock.patch("controller_runtime.provider_http.request_json")
+    @mock.patch("controller_runtime.provider_http.multipart_request")
+    @mock.patch("controller_runtime.npm_certificates.npm_token", return_value="token")
     @mock.patch.dict(
         "os.environ",
         {"NPM_URL": "https://npm.example.test"},
@@ -1331,7 +1320,7 @@ class ProviderAdapterTests(TestCase):
             [],
         ]
 
-        certificate_id, _ = providers._npm_managed_certificate(
+        certificate_id, _ = npm_certificates.npm_managed_certificate(
             {"name": "example-wildcard", "verify_domains": []},
             ["example.test"],
             leaf,
@@ -1346,7 +1335,7 @@ class ProviderAdapterTests(TestCase):
         )
 
     def test_an_uploaded_certificate_takes_the_observed_status_it_is_dispatched_with(self):
-        with self.assertRaisesRegex(providers.ProviderError, "did not supply"):
+        with self.assertRaisesRegex(ProviderError, "did not supply"):
             providers.execute(
                 {
                     "kind": "tls.uploaded_certificate",
@@ -1359,18 +1348,18 @@ class ProviderAdapterTests(TestCase):
 
     def test_installed_ids_are_carried_into_a_report_that_installed_nothing(self):
         spec = {"consumers": [{"kind": "npm", "name": "example-npm"}]}
-        known = providers._npm_certificate_ids(spec, {"npm_certificate_id": 22})
-        result = providers._with_npm_certificate_ids(
-            providers.ProviderResult(changed=False, status={}, conditions=[], message=""),
+        known = npm_certificates.npm_certificate_ids(spec, {"npm_certificate_id": 22})
+        result = npm_certificates.with_npm_certificate_ids(
+            ProviderResult(changed=False, status={}, conditions=[], message=""),
             known,
         )
 
         self.assertEqual(result.status["npm_certificate_ids"], {"example-npm": 22})
         self.assertEqual(result.status["npm_certificate_id"], 22)
 
-    @mock.patch("controller_runtime.providers._request")
-    @mock.patch("controller_runtime.providers._multipart_request")
-    @mock.patch("controller_runtime.providers._npm_token", return_value="token")
+    @mock.patch("controller_runtime.provider_http.request_json")
+    @mock.patch("controller_runtime.provider_http.multipart_request")
+    @mock.patch("controller_runtime.npm_certificates.npm_token", return_value="token")
     @mock.patch.dict(
         "os.environ",
         {"NPM_URL": "https://npm.example.test"},
@@ -1393,7 +1382,7 @@ class ProviderAdapterTests(TestCase):
             {},
         ]
 
-        providers._npm_managed_certificate(
+        npm_certificates.npm_managed_certificate(
             {
                 "name": "example-wildcard",
                 "verify_domains": [],
@@ -1416,21 +1405,21 @@ class ProviderAdapterTests(TestCase):
         for call in request.call_args_list[-2:]:
             self.assertEqual(call.kwargs["payload"]["certificate_id"], 22)
 
-    @mock.patch("controller_runtime.providers.reconcile_tls")
-    @mock.patch("controller_runtime.providers._deploy_certificate")
-    @mock.patch("controller_runtime.providers._issue_certificate")
-    @mock.patch("controller_runtime.providers._resumable_lineage", return_value=None)
-    @mock.patch("controller_runtime.providers._validate_certificate")
-    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch("controller_runtime.tls_verification.reconcile_tls")
+    @mock.patch("controller_runtime.tls._deploy_certificate")
+    @mock.patch("controller_runtime.tls_issuance.issue_certificate")
+    @mock.patch("controller_runtime.tls_issuance.resumable_lineage", return_value=None)
+    @mock.patch("controller_runtime.tls_issuance.validate_certificate")
+    @mock.patch("controller_runtime.commands.run_ssh")
     def test_renewal_deploys_and_verifies_every_consumer(
         self, ssh, validate, _resume, issue, deploy, reconcile
     ):
-        previous = providers._certificate_bundle(b"old-cert", b"old-key")
+        previous = tls_issuance.certificate_bundle(b"old-cert", b"old-key")
         ssh.return_value = previous
         validate.side_effect = ["old", "new"]
         issue.return_value = (b"new-cert", b"new-key")
         deploy.return_value = {}
-        reconcile.return_value = providers.ProviderResult(
+        reconcile.return_value = ProviderResult(
             changed=False,
             status={
                 "consumers": [
@@ -1448,7 +1437,7 @@ class ProviderAdapterTests(TestCase):
             ],
         }
 
-        result = providers.renew_tls(spec)
+        result = tls.renew_tls(spec)
 
         self.assertTrue(result.changed)
         deploy.assert_called_once_with(spec, b"new-cert", b"new-key", {}, None)
@@ -1458,16 +1447,16 @@ class ProviderAdapterTests(TestCase):
             all(item["matches_expected"] for item in result.status["consumers"])
         )
 
-    @mock.patch("controller_runtime.providers.reconcile_tls")
+    @mock.patch("controller_runtime.tls_verification.reconcile_tls")
     @mock.patch(
-        "controller_runtime.providers._validate_certificate", return_value="new"
+        "controller_runtime.tls_issuance.validate_certificate", return_value="new"
     )
-    @mock.patch("controller_runtime.providers._lineage")
+    @mock.patch("controller_runtime.tls_issuance.lineage")
     def test_reconcile_success_records_explicit_consumer_match_evidence(
         self, lineage, _validate, reconcile
     ):
         lineage.return_value = (b"new-cert", b"new-key")
-        reconcile.return_value = providers.ProviderResult(
+        reconcile.return_value = ProviderResult(
             changed=False,
             status={
                 "consumers": [
@@ -1482,7 +1471,7 @@ class ProviderAdapterTests(TestCase):
             message="observed",
         )
 
-        result = providers.apply_tls_reconcile(
+        result = tls.apply_tls_reconcile(
             {"domains": ["example.test"], "consumers": []}
         )
 
@@ -1490,21 +1479,21 @@ class ProviderAdapterTests(TestCase):
         self.assertEqual(result.status["expected_fingerprint_sha256"], "new")
         self.assertTrue(result.status["consumers"][0]["matches_expected"])
 
-    @mock.patch("controller_runtime.providers.reconcile_tls")
-    @mock.patch("controller_runtime.providers._deploy_certificate", return_value={})
-    @mock.patch("controller_runtime.providers._issue_certificate")
+    @mock.patch("controller_runtime.tls_verification.reconcile_tls")
+    @mock.patch("controller_runtime.tls._deploy_certificate", return_value={})
+    @mock.patch("controller_runtime.tls_issuance.issue_certificate")
     @mock.patch(
-        "controller_runtime.providers._resumable_lineage",
+        "controller_runtime.tls_issuance.resumable_lineage",
         return_value=(b"pending-cert", b"pending-key"),
     )
-    @mock.patch("controller_runtime.providers._validate_certificate")
-    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch("controller_runtime.tls_issuance.validate_certificate")
+    @mock.patch("controller_runtime.commands.run_ssh")
     def test_renewal_resumes_existing_lineage_without_acme_request(
         self, ssh, validate, _resume, issue, deploy, reconcile
     ):
-        ssh.return_value = providers._certificate_bundle(b"old-cert", b"old-key")
+        ssh.return_value = tls_issuance.certificate_bundle(b"old-cert", b"old-key")
         validate.side_effect = ["old", "pending"]
-        reconcile.return_value = providers.ProviderResult(
+        reconcile.return_value = ProviderResult(
             changed=False,
             status={"consumers": [{"fingerprint_sha256": "pending"}]},
             conditions=[],
@@ -1517,25 +1506,25 @@ class ProviderAdapterTests(TestCase):
             "consumers": [{"kind": "caddy", "connection_ref": "example-edge"}],
         }
 
-        result = providers.renew_tls(spec)
+        result = tls.renew_tls(spec)
 
         issue.assert_not_called()
         deploy.assert_called_once_with(spec, b"pending-cert", b"pending-key", {}, None)
         self.assertEqual(result.status["artifact_source"], "existing_lineage")
 
-    @mock.patch("controller_runtime.providers.reconcile_tls")
-    @mock.patch("controller_runtime.providers._deploy_certificate")
-    @mock.patch("controller_runtime.providers._issue_certificate")
-    @mock.patch("controller_runtime.providers._resumable_lineage", return_value=None)
-    @mock.patch("controller_runtime.providers._validate_certificate")
-    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch("controller_runtime.tls_verification.reconcile_tls")
+    @mock.patch("controller_runtime.tls._deploy_certificate")
+    @mock.patch("controller_runtime.tls_issuance.issue_certificate")
+    @mock.patch("controller_runtime.tls_issuance.resumable_lineage", return_value=None)
+    @mock.patch("controller_runtime.tls_issuance.validate_certificate")
+    @mock.patch("controller_runtime.commands.run_ssh")
     def test_renewal_rolls_back_previous_artifact_on_deploy_failure(
         self, ssh, validate, _resume, issue, deploy, _reconcile
     ):
-        ssh.return_value = providers._certificate_bundle(b"old-cert", b"old-key")
+        ssh.return_value = tls_issuance.certificate_bundle(b"old-cert", b"old-key")
         validate.side_effect = ["old", "new"]
         issue.return_value = (b"new-cert", b"new-key")
-        deploy.side_effect = [providers.ProviderError("failed"), None]
+        deploy.side_effect = [ProviderError("failed"), None]
         spec = {
             "domains": ["example.test"],
             "consumers": [
@@ -1544,1489 +1533,25 @@ class ProviderAdapterTests(TestCase):
         }
 
         with self.assertRaisesRegex(
-            providers.ProviderError, "failed.*[Rr]ollback succeeded"
+            ProviderError, "failed.*[Rr]ollback succeeded"
         ):
-            providers.renew_tls(spec)
+            tls.renew_tls(spec)
 
         self.assertEqual(deploy.call_count, 2)
         deploy.assert_called_with(spec, b"old-cert", b"old-key", {}, None)
-
-
-class WorkerTests(TestCase):
-    def setUp(self):
-        # A pass prints its JSON result on stdout, which is the worker's answer
-        # to systemd, not something these tests read. Captured, so a line in
-        # the suite's output is always something worth looking at.
-        self.enterContext(mock.patch("sys.stdout", new_callable=io.StringIO))
-
-    @mock.patch.dict("os.environ", {"HQ_IN_PROCESS": "1"}, clear=True)
-    @mock.patch("controller_runtime.worker.subprocess.run")
-    def test_in_process_bridge_uses_running_image_python(self, run):
-        run.return_value = mock.Mock(
-            returncode=0,
-            stdout='{"ok":true,"operation":null}',
-        )
-
-        worker._manage("peek")
-
-        command = run.call_args.args[0]
-        self.assertEqual(command[0], worker.sys.executable)
-        self.assertTrue(command[1].endswith("/manage.py"))
-        self.assertNotIn("docker", command)
-
-    @mock.patch.dict("os.environ", {"HQ_IN_PROCESS": "1"}, clear=True)
-    @mock.patch("controller_runtime.worker.subprocess.run")
-    def test_a_payload_goes_on_standard_input_whatever_its_size(self, run):
-        """One argument is capped at 128 KiB; a whole sweep is larger."""
-
-        run.return_value = mock.Mock(returncode=0, stdout='{"ok":true}')
-        sweep = {"example.kind": {"ok": True, "records": [{"name": "x" * 1000}] * 300}}
-
-        worker._manage("inventory", "--controller-id", "test", payload=sweep)
-
-        command = run.call_args.args[0]
-        self.assertEqual(command[-2:], ["--payload", "-"])
-        self.assertLess(max(len(part) for part in command), 4096)
-        self.assertEqual(json.loads(run.call_args.kwargs["input"]), sweep)
-
-    @mock.patch.dict("os.environ", {"HQ_IN_PROCESS": "1"}, clear=True)
-    @mock.patch("controller_runtime.worker.subprocess.run")
-    def test_a_failed_bridge_says_why(self, run):
-        run.return_value = mock.Mock(
-            returncode=1, stdout="", stderr="Traceback\nCommandError: Unknown kind.\n"
-        )
-
-        with self.assertRaisesRegex(worker.BridgeError, "Unknown kind"):
-            worker._manage("peek")
-
-    @mock.patch("controller_runtime.worker.connections", return_value=[])
-    @mock.patch("controller_runtime.worker._manage")
-    def test_idle_plan_reports_connections_without_claiming(self, manage, connections):
-        manage.return_value = {"ok": True, "operation": None}
-
-        self.assertEqual(worker.run_once("test", apply=False), 0)
-
-        self.assertEqual(manage.call_args.args[0], "peek")
-        self.assertNotIn("claim", manage.call_args.args)
-        connections.assert_called_once_with()
-
-    @mock.patch("builtins.print")
-    @mock.patch(
-        "controller_runtime.worker.connections",
-        return_value=[{"connection_ref": "broken", "ok": False}],
-    )
-    @mock.patch("controller_runtime.worker.execute")
-    @mock.patch("controller_runtime.worker._manage")
-    def test_plan_reports_broken_connections_and_returns_failure(
-        self, manage, execute, connections, output
-    ):
-        manage.return_value = {
-            "operation": {"id": "operation-1", "action": "reconcile"},
-            "resource": {"key": "dns", "kind": "adguard.rewrite", "spec": {}},
-        }
-        execute.return_value = providers.ProviderResult(
-            changed=False, status={}, conditions=[], message="Current."
-        )
-
-        self.assertEqual(worker.run_once("test", apply=False), 1)
-
-        payload = json.loads(output.call_args.args[0])
-        self.assertFalse(payload["ok"])
-        self.assertFalse(payload["connections"][0]["ok"])
-        connections.assert_called_once_with()
-        execute.assert_called_once()
-
-    @mock.patch("controller_runtime.worker.analytics_sites")
-    @mock.patch("controller_runtime.worker.inventory", return_value={})
-    @mock.patch("controller_runtime.worker.connections", return_value=[])
-    @mock.patch("controller_runtime.worker._manage")
-    def test_a_kind_hq_forces_is_read_when_nothing_else_is_due(
-        self, manage, connections, inventory, sites
-    ):
-        manage.side_effect = _bridge(
-            **{
-                "sweep-due": {
-                    "ok": True,
-                    "due": True,
-                    "carry": ["example-ssh"],
-                    "only_kinds": ["tailscale.device"],
-                },
-                "connections": {"ok": True},
-                "inventory": {"ok": True},
-            }
-        )
-
-        worker._report_findings("test")
-
-        inventory.assert_called_once_with(only=frozenset({"tailscale.device"}))
-        connections.assert_called_once_with(carry=frozenset({"example-ssh"}))
-        # Only what was asked for: no analytics read rides along.
-        sites.assert_not_called()
-
-    def test_inventory_reads_only_the_kinds_named(self):
-        read = mock.Mock(return_value=[])
-        unread = mock.Mock(return_value=[])
-        with (
-            mock.patch.dict(
-                providers.PROVIDER_INVENTORY,
-                {"example.read": read, "example.unread": unread},
-                clear=True,
-            ),
-            mock.patch.object(providers, "_has_source", return_value=True),
-            mock.patch.object(providers, "connection_prefixes", return_value={}),
-        ):
-            found = providers.inventory(only=frozenset({"example.read"}))
-
-        self.assertEqual(set(found), {"example.read"})
-        read.assert_called_once_with()
-        unread.assert_not_called()
-
-    @mock.patch("controller_runtime.worker.connections", return_value=[])
-    @mock.patch("controller_runtime.worker._manage")
-    def test_idle_apply_claims_after_reporting_findings(self, manage, _connections):
-        manage.side_effect = _bridge(
-            **{
-                "sweep-due": {"ok": True, "due": True},
-                "connections": {"ok": True},
-                "inventory": {"ok": True},
-                "analytics": {"ok": True},
-                "schedule": {"ok": True},
-                "claim": {"ok": True, "operation": None},
-            }
-        )
-
-        self.assertEqual(worker.run_once("test", apply=True), 0)
-
-        called = [call.args[0] for call in manage.call_args_list]
-        # Both sweeps, before anything is claimed. What HQ can reach is reported
-        # ahead of what it found there, so an empty inventory can be read
-        # against the credential that would have filled it.
-        self.assertEqual(
-            called,
-            [
-                "glance-plan",
-                "sweep-due",
-                "connections",
-                "inventory",
-                "analytics",
-                "schedule",
-                "claim",
-            ],
-        )
-        arguments = manage.call_args.args
-        self.assertEqual(arguments[:3], ("claim", "--controller-id", "test"))
-        self.assertIn("adguard.rewrite:reconcile", arguments)
-        self.assertIn("npm.proxy_host:reconcile", arguments)
-        self.assertIn("tls.certificate:reconcile", arguments)
-        self.assertIn("tls.certificate:renew", arguments)
-
-    @mock.patch("controller_runtime.worker.inventory", return_value={"records": []})
-    @mock.patch("controller_runtime.worker.connections", return_value=[])
-    @mock.patch("controller_runtime.worker.analytics")
-    @mock.patch("controller_runtime.worker.analytics_sites")
-    @mock.patch("controller_runtime.worker._manage")
-    def test_hq_plans_each_sites_missing_analytics_before_it_is_read(
-        self, manage, sites, analytics, _connections, _inventory
-    ):
-        site = {
-            "account": "provider-only-account-id",
-            "connection_ref": "example-api",
-            "site_tag": "0" * 32,
-            "host": "example.test",
-        }
-        window = {
-            "connection_ref": "example-api",
-            "site_tag": "0" * 32,
-            "start": "2026-06-01",
-            "end": "2026-08-28",
-            "reason": "backfill",
-        }
-        sites.return_value = [site]
-        analytics.return_value = {"sites": []}
-        manage.side_effect = _bridge(
-            **{
-                "sweep-due": {"ok": True, "due": True},
-                "analytics-plan": {"ok": True, "windows": [window]},
-                "connections": {"ok": True},
-                "inventory": {"ok": True},
-                "analytics": {"ok": True},
-            }
-        )
-
-        worker._report_findings("test")
-
-        analytics.assert_called_once_with(sites=[site], windows=[window])
-        plan_call = next(
-            call for call in manage.call_args_list if call.args[0] == "analytics-plan"
-        )
-        self.assertNotIn("provider-only-account-id", " ".join(plan_call.args))
-
-    def test_capability_registry_drives_supported_kinds(self):
-        """What the controller offers is the registry, minus what is locked.
-
-        Derived rather than listed: a provider added to the registry appears
-        here without this test being edited, which is the whole claim the
-        registry makes.
-        """
-        from control_plane.providers import controller_capability_registry
-
-        expected = tuple(
-            sorted(
-                (kind, action)
-                for kind, capability in (
-                    controller_capability_registry().capabilities.items()
-                )
-                for action, settings in capability.actions.items()
-                # A locked action needs a credential the controller does not
-                # hold (a zone's own settings, for one) so it is declared
-                # and never offered.
-                if settings.mode != "locked"
-            )
-        )
-
-        self.assertEqual(worker.supported_capabilities(), expected)
-        # And the exclusion is real, not vacuous.
-        self.assertNotIn(("cloudflare.zone", "reconcile"), expected)
-
-    def test_removal_is_never_scheduled_automatically(self):
-        """The scheduler converges declarations. It must not decide to delete.
-
-        Reconciliation moves the world toward what HQ says and is safe to run
-        unattended. Removal takes down something that is currently serving, and
-        an automatic one would mean a bad declaration could delete a live record
-        with nobody having asked for it.
-        """
-        from control_plane.providers import enabled_controller_actions
-
-        automatic = enabled_controller_actions(automatic_only=True)
-
-        self.assertEqual([a for _, a in automatic if a == "delete"], [])
-
-    def test_every_declared_controller_action_has_exactly_one_dispatch(self):
-        from control_plane.providers import controller_capability_registry
-
-        declared = {
-            (kind, action)
-            for kind, capability in controller_capability_registry().capabilities.items()
-            for action in capability.actions
-        }
-
-        self.assertEqual(set(providers.PROVIDER_ACTIONS), declared)
-
-    @mock.patch("controller_runtime.worker.connections", return_value=[])
-    @mock.patch("controller_runtime.worker.execute")
-    @mock.patch("controller_runtime.worker._manage")
-    def test_provider_failure_is_reported_without_secret(
-        self, manage, execute, _connections
-    ):
-        manage.side_effect = _bridge(
-            **{
-                "sweep-due": {"ok": True, "due": True},
-                "connections": {"ok": True, "recorded": []},
-                "inventory": {"ok": True, "recorded": []},
-                "analytics": {"ok": True, "recorded": {}},
-                "glance-plan": {"ok": True, "panels": [], "targets": {}},
-                "schedule": {"ok": True, "scheduled": []},
-                "claim": {
-                    "operation": {"id": "operation-1", "action": "reconcile"},
-                    "resource": {
-                        "key": "dns",
-                        "kind": "adguard.rewrite",
-                        "generation": 2,
-                        "spec": {},
-                    },
-                },
-                "report": {"ok": True},
-            }
-        )
-        execute.side_effect = providers.ProviderError("Provider request failed.")
-
-        self.assertEqual(worker.run_once("test", apply=True), 1)
-
-        report_payload = manage.call_args.kwargs["payload"]
-        self.assertFalse(report_payload["success"])
-        self.assertNotIn("password", json.dumps(report_payload).lower())
-
-    @mock.patch("controller_runtime.worker.connections", return_value=[])
-    @mock.patch("controller_runtime.worker.execute")
-    @mock.patch("controller_runtime.worker._manage")
-    def test_claimed_operation_executes_without_an_unrelated_global_gate(
-        self, manage, execute, connections
-    ):
-        manage.side_effect = _bridge(
-            **{
-                "sweep-due": {"ok": True, "due": True},
-                "connections": {"ok": True, "recorded": []},
-                "inventory": {"ok": True, "recorded": []},
-                "analytics": {"ok": True, "recorded": {}},
-                "glance-plan": {"ok": True, "panels": [], "targets": {}},
-                "schedule": {"ok": True, "scheduled": []},
-                "claim": {
-                    "operation": {"id": "operation-1", "action": "reconcile"},
-                    "resource": {
-                        "key": "dns",
-                        "kind": "adguard.rewrite",
-                        "generation": 2,
-                        "spec": {},
-                    },
-                },
-                "report": {"ok": True},
-            }
-        )
-        execute.return_value = providers.ProviderResult(
-            changed=False,
-            status={},
-            conditions=[],
-            message="Current.",
-        )
-
-        self.assertEqual(worker.run_once("test", apply=True), 0)
-
-        connections.assert_called_once_with(carry=frozenset())
-        execute.assert_called_once()
-
-
-CLOUDFLARE_ENV = {
-    "CLOUDFLARE_DNS_URL": "https://api.cloudflare.com/client/v4",
-    "CLOUDFLARE_DNS_API_TOKEN": "secret-c",
-    "CLOUDFLARE_DNS_CONNECTION_REF": "cloudflare-dns-example",
-}
-
-ZONE = {
-    "id": "zone1",
-    "name": "example.com",
-    "status": "active",
-    "plan": {"name": "Free"},
-}
-
-
-def live(record_id, rtype, name, content, **extra):
-    """A record shaped exactly as Cloudflare returns one.
-
-    The field set was read off the real API rather than assumed: `priority` is
-    present and null except on MX, CAA carries a formatted `content` *and* a
-    `data` object, and a proxied record always reports ttl 1.
-    """
-
-    record = {
-        "id": record_id,
-        "type": rtype,
-        "name": name,
-        "content": content,
-        "proxied": extra.get("proxied", False),
-        "ttl": extra.get("ttl", 1),
-        "priority": extra.get("priority"),
-        "data": extra.get("data"),
-    }
-    return record
-
-
-@mock.patch.dict("os.environ", CLOUDFLARE_ENV, clear=True)
-class CloudflareAdapterTests(TestCase):
-    """The code that actually changes public DNS.
-
-    Every case here is one where getting it wrong is expensive and quiet: a
-    record edited into existence twice, a sibling deleted along with its
-    neighbour, or a record that reports as drifted against itself and is
-    rewritten on every pass forever.
-    """
-
-    def setUp(self):
-        # Module-level cache of zone name -> id. Harmless in a controller run
-        # that lasts a second; between tests it would carry one case's zones
-        # into the next.
-        providers._ZONE_IDS.clear()
-
-    def _calls(self, request):
-        return [call.args[0] for call in request.call_args_list]
-
-    @mock.patch("controller_runtime.providers._cloudflare_request")
-    def test_a_missing_record_is_created(self, request):
-        request.side_effect = [
-            [ZONE],
-            [],
-            live("new1", "A", "app.example.com", "203.0.113.1"),
-        ]
-
-        result = providers.reconcile_cloudflare_record(
-            {
-                "zone": "example.com",
-                "name": "app.example.com",
-                "record_type": "A",
-                "content": "203.0.113.1",
-                "proxied": False,
-                "ttl": 1,
-            }
-        )
-
-        self.assertTrue(result.changed)
-        created = request.call_args_list[-1]
-        self.assertEqual(created.kwargs["method"], "POST")
-        self.assertEqual(created.kwargs["payload"]["type"], "A")
-        self.assertEqual(created.kwargs["payload"]["content"], "203.0.113.1")
-        self.assertEqual(result.status["record_id"], "new1")
-
-    @mock.patch("controller_runtime.providers._cloudflare_request")
-    def test_a_matching_record_is_left_alone(self, request):
-        request.side_effect = [
-            [ZONE],
-            [live("r1", "A", "app.example.com", "203.0.113.1")],
-        ]
-
-        result = providers.reconcile_cloudflare_record(
-            {
-                "zone": "example.com",
-                "name": "app.example.com",
-                "record_type": "A",
-                "content": "203.0.113.1",
-                "proxied": False,
-                "ttl": 1,
-            }
-        )
-
-        self.assertFalse(result.changed)
-        # Two reads and no write. A reconciler that rewrites an already-correct
-        # record burns an API call per pass and hides real changes in the log.
-        self.assertEqual(request.call_count, 2)
-
-    @mock.patch("controller_runtime.providers._cloudflare_request")
-    def test_a_changed_value_updates_that_record_in_place(self, request):
-        request.side_effect = [
-            [ZONE],
-            [live("r1", "A", "app.example.com", "203.0.113.1")],
-            live("r1", "A", "app.example.com", "203.0.113.9"),
-        ]
-
-        result = providers.reconcile_cloudflare_record(
-            {
-                "zone": "example.com",
-                "name": "app.example.com",
-                "record_type": "A",
-                "content": "203.0.113.9",
-                "proxied": False,
-                "ttl": 1,
-            },
-            observed={"record_id": "r1"},
-        )
-
-        self.assertTrue(result.changed)
-        written = request.call_args_list[-1]
-        self.assertEqual(written.kwargs["method"], "PUT")
-        self.assertIn("/dns_records/r1", written.args[0])
-
-    @mock.patch("controller_runtime.providers._cloudflare_request")
-    def test_retargeting_a_record_moves_it_rather_than_cloning_it(self, request):
-        """The bug class that made renaming create a second record.
-
-        Name and value both change at once, so nothing matches by content. The
-        record id HQ was last seen holding is the only thing that still
-        identifies it: without that this becomes a create, and the old record
-        keeps answering with nothing in HQ pointing at it.
-        """
-
-        request.side_effect = [
-            [ZONE],
-            [live("r1", "A", "old.example.com", "203.0.113.1")],
-            live("r1", "A", "new.example.com", "203.0.113.7"),
-        ]
-
-        result = providers.reconcile_cloudflare_record(
-            {
-                "zone": "example.com",
-                "name": "new.example.com",
-                "record_type": "A",
-                "content": "203.0.113.7",
-                "proxied": False,
-                "ttl": 1,
-            },
-            observed={"record_id": "r1"},
-        )
-
-        self.assertTrue(result.changed)
-        written = request.call_args_list[-1]
-        self.assertEqual(written.kwargs["method"], "PUT")
-        self.assertIn("/dns_records/r1", written.args[0])
-
-    @mock.patch("controller_runtime.providers._cloudflare_request")
-    def test_one_of_nine_records_on_a_name_is_the_one_edited(self, request):
-        """A zone apex holds many records. Matching by name would pick a coin toss."""
-
-        siblings = [
-            live(
-                "c1",
-                "CAA",
-                "example.com",
-                '0 issue "letsencrypt.org"',
-                data={"flags": 0, "tag": "issue", "value": "letsencrypt.org"},
-            ),
-            live(
-                "c2",
-                "CAA",
-                "example.com",
-                '0 issuewild "letsencrypt.org"',
-                data={"flags": 0, "tag": "issuewild", "value": "letsencrypt.org"},
-            ),
-            live("m1", "MX", "example.com", "mx01.example.net", priority=10),
-            live("m2", "MX", "example.com", "mx02.example.net", priority=20),
-        ]
-        request.side_effect = [
-            [ZONE],
-            siblings,
-            live("m2", "MX", "example.com", "mx03.example.net", priority=20),
-        ]
-
-        providers.reconcile_cloudflare_record(
-            {
-                "zone": "example.com",
-                "name": "example.com",
-                "record_type": "MX",
-                "content": "mx03.example.net",
-                "priority": 20,
-                "proxied": False,
-                "ttl": 1,
-            },
-            observed={"record_id": "m2"},
-        )
-
-        self.assertIn("/dns_records/m2", request.call_args_list[-1].args[0])
-
-    @mock.patch("controller_runtime.providers._cloudflare_request")
-    def test_caa_is_sent_as_three_fields_not_as_a_string(self, request):
-        """Cloudflare returns CAA as one string and accepts it only as data."""
-
-        request.side_effect = [
-            [ZONE],
-            [],
-            live("c1", "CAA", "example.com", '0 issue "letsencrypt.org"'),
-        ]
-
-        providers.reconcile_cloudflare_record(
-            {
-                "zone": "example.com",
-                "name": "example.com",
-                "record_type": "CAA",
-                "content": '0 issue "letsencrypt.org"',
-                "proxied": False,
-                "ttl": 1,
-            }
-        )
-
-        payload = request.call_args_list[-1].kwargs["payload"]
-        self.assertEqual(
-            payload["data"], {"flags": 0, "tag": "issue", "value": "letsencrypt.org"}
-        )
-        self.assertNotIn("content", payload)
-
-    @mock.patch("controller_runtime.providers._cloudflare_request")
-    def test_an_mx_carries_its_priority_and_an_address_record_does_not(self, request):
-        request.side_effect = [
-            [ZONE],
-            [],
-            live("m1", "MX", "example.com", "mx.example.net", priority=10),
-        ]
-        providers.reconcile_cloudflare_record(
-            {
-                "zone": "example.com",
-                "name": "example.com",
-                "record_type": "MX",
-                "content": "mx.example.net",
-                "priority": 10,
-                "proxied": False,
-                "ttl": 1,
-            }
-        )
-        self.assertEqual(request.call_args_list[-1].kwargs["payload"]["priority"], 10)
-
-        providers._ZONE_IDS.clear()
-        request.reset_mock()
-        request.side_effect = [
-            [ZONE],
-            [],
-            live("a1", "A", "app.example.com", "203.0.113.1"),
-        ]
-        providers.reconcile_cloudflare_record(
-            {
-                "zone": "example.com",
-                "name": "app.example.com",
-                "record_type": "A",
-                "content": "203.0.113.1",
-                "proxied": False,
-                "ttl": 1,
-            }
-        )
-        payload = request.call_args_list[-1].kwargs["payload"]
-        self.assertNotIn("priority", payload)
-        # proxied is only sent for the types that can carry it; Cloudflare
-        # rejects the field outright on a TXT or MX record.
-        self.assertIn("proxied", payload)
-
-    @mock.patch("controller_runtime.providers._cloudflare_request")
-    def test_a_txt_value_matches_whether_or_not_it_was_typed_quoted(self, request):
-        """Cloudflare stores TXT quoted and returns it quoted, always."""
-
-        request.side_effect = [
-            [ZONE],
-            [live("t1", "TXT", "example.com", '"v=spf1 -all"')],
-        ]
-
-        result = providers.reconcile_cloudflare_record(
-            {
-                "zone": "example.com",
-                "name": "example.com",
-                "record_type": "TXT",
-                "content": "v=spf1 -all",
-                "proxied": False,
-                "ttl": 1,
-            }
-        )
-
-        self.assertFalse(result.changed)
-
-    @mock.patch("controller_runtime.providers._cloudflare_request")
-    def test_a_name_typed_in_capitals_is_not_permanent_drift(self, request):
-        """Cloudflare lowercases names, so sending the typed case never matches."""
-
-        request.side_effect = [
-            [ZONE],
-            [live("a1", "A", "app.example.com", "203.0.113.1")],
-        ]
-
-        result = providers.reconcile_cloudflare_record(
-            {
-                "zone": "example.com",
-                "name": "APP.example.com",
-                "record_type": "A",
-                "content": "203.0.113.1",
-                "proxied": False,
-                "ttl": 1,
-            }
-        )
-
-        self.assertFalse(result.changed)
-
-    @mock.patch("controller_runtime.providers._cloudflare_request")
-    def test_a_caa_value_with_extra_spaces_is_not_permanent_drift(self, request):
-        request.side_effect = [
-            [ZONE],
-            [
-                live(
-                    "c1",
-                    "CAA",
-                    "example.com",
-                    '0 issue "letsencrypt.org"',
-                    data={"flags": 0, "tag": "issue", "value": "letsencrypt.org"},
-                )
-            ],
-        ]
-
-        result = providers.reconcile_cloudflare_record(
-            {
-                "zone": "example.com",
-                "name": "example.com",
-                "record_type": "CAA",
-                "content": '0  issue   "letsencrypt.org"',
-                "proxied": False,
-                "ttl": 1,
-            }
-        )
-
-        self.assertFalse(result.changed)
-
-    @mock.patch("controller_runtime.providers._cloudflare_request")
-    def test_delete_removes_only_the_record_it_owns(self, request):
-        siblings = [
-            live("t1", "TXT", "example.com", '"one"'),
-            live("t2", "TXT", "example.com", '"two"'),
-            live("t3", "TXT", "example.com", '"three"'),
-        ]
-        request.side_effect = [[ZONE], siblings, None]
-
-        result = providers.delete_cloudflare_record(
-            {
-                "zone": "example.com",
-                "name": "example.com",
-                "record_type": "TXT",
-                "content": '"two"',
-            },
-            observed={"record_id": "t2"},
-        )
-
-        self.assertTrue(result.changed)
-        deleted = request.call_args_list[-1]
-        self.assertEqual(deleted.kwargs["method"], "DELETE")
-        self.assertIn("/dns_records/t2", deleted.args[0])
-
-    @mock.patch("controller_runtime.providers._cloudflare_request")
-    def test_deleting_something_already_gone_is_success(self, request):
-        """Deletion has to be idempotent: the queue retries a delete that
-        applied and then failed to report, and a second attempt finding nothing
-        has achieved exactly what was asked."""
-
-        request.side_effect = [[ZONE], []]
-
-        result = providers.delete_cloudflare_record(
-            {
-                "zone": "example.com",
-                "name": "gone.example.com",
-                "record_type": "A",
-                "content": "203.0.113.1",
-            },
-        )
-
-        self.assertFalse(result.changed)
-        self.assertEqual(request.call_count, 2)
-
-    @mock.patch("controller_runtime.providers._cloudflare_request")
-    def test_a_zone_the_credential_cannot_see_is_named(self, request):
-        request.side_effect = [[ZONE]]
-
-        with self.assertRaisesRegex(providers.ProviderError, "elsewhere.example"):
-            providers.reconcile_cloudflare_record(
-                {
-                    "zone": "elsewhere.example",
-                    "name": "app.elsewhere.example",
-                    "record_type": "A",
-                    "content": "203.0.113.1",
-                    "proxied": False,
-                    "ttl": 1,
-                }
-            )
-
-    @mock.patch("controller_runtime.providers._cloudflare_request")
-    def test_every_page_of_a_long_zone_is_read(self, request):
-        """Cloudflare returns 100 records at most.
-
-        A zone that outgrew one page would have its tail reported as absent, and
-        absent is the word this system acts on: the reconciler would set about
-        recreating records that were there all along.
-        """
-
-        first = [
-            live(f"r{i}", "A", f"h{i}.example.com", "203.0.113.1") for i in range(100)
-        ]
-        second = [live("r100", "A", "h100.example.com", "203.0.113.1")]
-        request.side_effect = [[ZONE], first, second]
-
-        records = providers.list_cloudflare_records()
-
-        self.assertEqual(len(records), 101)
-        self.assertIn("page=2", self._calls(request)[-1])
-
-    @mock.patch("controller_runtime.providers._cloudflare_request")
-    def test_the_inventory_reports_what_hq_can_express(self, request):
-        request.side_effect = [
-            [ZONE],
-            [ZONE],
-            [live("m1", "MX", "example.com", "mx.example.net", priority=10)],
-        ]
-
-        zones = providers.list_cloudflare_zones()
-        records = providers.list_cloudflare_records()
-
-        self.assertEqual(zones[0]["zone"], "example.com")
-        self.assertEqual(zones[0]["connection_ref"], "cloudflare-dns-example")
-        self.assertEqual(records[0]["record_id"], "m1")
-        self.assertEqual(records[0]["priority"], 10)
-        self.assertEqual(records[0]["zone"], "example.com")
-
-
-class CloudflareAnalyticsTests(TestCase):
-    @mock.patch("controller_runtime.providers._cloudflare_api_request")
-    def test_account_lists_are_read_to_the_last_page(self, request):
-        request.side_effect = [
-            {"result": [{"id": f"account-{index}"} for index in range(100)]},
-            {"result": [{"id": "account-100"}]},
-        ]
-
-        accounts = providers._cloudflare_api_list("/accounts", "example-api")
-
-        self.assertEqual(len(accounts), 101)
-        self.assertIn("page=1", request.call_args_list[0].args[0])
-        self.assertIn("page=2", request.call_args_list[1].args[0])
-        self.assertEqual(request.call_args_list[1].args[1], "example-api")
-
-    def test_a_refused_credential_is_not_used_again_in_the_sweep(self):
-        import io
-        import urllib.error
-
-        refused = urllib.error.HTTPError(
-            "u", 403, "Forbidden", {},
-            io.BytesIO(b'{"success": false, "errors": [{"code": 9109, '
-                       b'"message": "Cannot use the access token from location: 192.0.2.1"}]}'),
-        )
-        env = {"CF_CONNECTION_REF": "example-api", "CF_PROVIDER": "cloudflare_api",
-               "CF_API_TOKEN": "t"}
-        with (
-            mock.patch.dict("os.environ", env, clear=True),
-            mock.patch.object(providers.urllib.request, "urlopen", side_effect=refused) as urlopen,
-            providers.provider_snapshot(),
-        ):
-            for path in ("/accounts", "/zones", "/accounts/a/d1/database"):
-                with self.assertRaises(providers.ProviderError):
-                    providers._cloudflare_api_request(path)
-
-        self.assertEqual(urlopen.call_count, 1)
-
-    def test_a_missing_permission_does_not_stop_the_credential(self):
-        import io
-        import urllib.error
-
-        def refuse(*args, **kwargs):
-            return urllib.error.HTTPError(
-                "u", 403, "Forbidden", {},
-                io.BytesIO(b'{"success": false, "errors": [{"code": 10000, '
-                           b'"message": "Authentication error"}]}'),
-            )
-
-        env = {"CF_CONNECTION_REF": "example-api", "CF_PROVIDER": "cloudflare_api",
-               "CF_API_TOKEN": "t"}
-        with (
-            mock.patch.dict("os.environ", env, clear=True),
-            mock.patch.object(
-                providers.urllib.request, "urlopen", side_effect=lambda *a, **k: (_ for _ in ()).throw(refuse())
-            ) as urlopen,
-            providers.provider_snapshot(),
-        ):
-            for path in ("/accounts", "/zones"):
-                with self.assertRaises(providers.ProviderError):
-                    providers._cloudflare_api_request(path)
-
-        self.assertEqual(urlopen.call_count, 2)
-
-    @staticmethod
-    def _per_endpoint(verify_body, status=401):
-        """Refuse every call with 10000 except the token verification."""
-
-        import io
-        import urllib.error
-
-        def respond(request, timeout=None, context=None):
-            if request.full_url.endswith("/user/tokens/verify"):
-                return _Page(verify_body, landed=request.full_url)
-            raise urllib.error.HTTPError(
-                "u", status, "Refused", {},
-                io.BytesIO(b'{"success": false, "errors": [{"code": 10000, '
-                           b'"message": "Authentication error"}]}'),
-            )
-
-        return respond
-
-    def test_an_authentication_error_under_401_is_a_permission_when_the_token_verifies(self):
-        verified = (
-            b'{"success": true, "result": {"id": "t1", "status": "active", '
-            b'"expires_on": "2030-01-01T00:00:00Z"}}'
-        )
-        env = {"CF_CONNECTION_REF": "example-api", "CF_PROVIDER": "cloudflare_api",
-               "CF_API_TOKEN": "t"}
-        with (
-            mock.patch.dict("os.environ", env, clear=True),
-            mock.patch.object(
-                providers.urllib.request, "urlopen", side_effect=self._per_endpoint(verified)
-            ) as urlopen,
-            providers.provider_snapshot(),
-        ):
-            for path in ("/accounts/a/access/apps", "/accounts/a/d1/database"):
-                with self.assertRaises(providers.ProviderError) as raised:
-                    providers._cloudflare_api_request(path, "example-api")
-                self.assertEqual(raised.exception.refusal, providers.PERMISSION_REFUSAL)
-            refused = dict(providers._refused_credentials())
-
-        self.assertEqual(refused, {})
-        # Two refused reads and one verification, shared by both.
-        self.assertEqual(urlopen.call_count, 3)
-
-    def test_an_authentication_error_under_401_is_the_credential_when_it_does_not_verify(self):
-        unverified = b'{"success": false, "errors": [{"code": 1000, "message": "Invalid API Token"}]}'
-        env = {"CF_CONNECTION_REF": "example-api", "CF_PROVIDER": "cloudflare_api",
-               "CF_API_TOKEN": "t"}
-        with (
-            mock.patch.dict("os.environ", env, clear=True),
-            mock.patch.object(
-                providers.urllib.request, "urlopen", side_effect=self._per_endpoint(unverified)
-            ),
-            providers.provider_snapshot(),
-        ):
-            with self.assertRaises(providers.ProviderError) as raised:
-                providers._cloudflare_api_request("/accounts/a/access/apps", "example-api")
-
-        self.assertEqual(raised.exception.refusal, providers.CREDENTIAL_REFUSAL)
-
-    def test_the_probe_reports_the_token_expiry(self):
-        def respond(request, timeout=None, context=None):
-            if request.full_url.endswith("/user/tokens/verify"):
-                body = (
-                    b'{"success": true, "result": {"status": "active", '
-                    b'"expires_on": "2030-01-01T00:00:00Z"}}'
-                )
-            else:
-                body = b'{"success": true, "result": [], "result_info": {"total_pages": 1}}'
-            return _Page(body, landed=request.full_url)
-
-        env = {"CLOUDFLARE_DNS_CONNECTION_REF": "example-dns",
-               "CLOUDFLARE_DNS_API_TOKEN": "t"}
-        with (
-            mock.patch.dict("os.environ", env, clear=True),
-            mock.patch.object(providers.urllib.request, "urlopen", side_effect=respond),
-        ):
-            probed = providers._probe_cloudflare_dns("example-dns")
-
-        self.assertEqual(probed["expires_at"], "2030-01-01T00:00:00Z")
-
-    def test_a_connection_reports_where_its_credential_is_kept(self):
-        env = {
-            "CLOUDFLARE_DNS_CONNECTION_REF": "example-dns",
-            "CLOUDFLARE_DNS_API_TOKEN": "secret-value",
-            "CLOUDFLARE_DNS_STORE_VAULT": "Example Vault",
-            "CLOUDFLARE_DNS_STORE_ITEM": "item-1",
-            "CLOUDFLARE_DNS_BOOTSTRAP": "op://Operator/Example bootstrap",
-        }
-        with mock.patch.dict("os.environ", env, clear=True):
-            store = providers.connection_store("CLOUDFLARE_DNS")
-
-        self.assertEqual(
-            store,
-            {"vault": "Example Vault", "item": "item-1",
-             "bootstrap": "op://Operator/Example bootstrap"},
-        )
-        self.assertNotIn("secret-value", json.dumps(store))
-
-    BOTH = {
-        "CF_CONNECTION_REF": "example-api",
-        "CF_PROVIDER": "cloudflare_api",
-        "CF_API_TOKEN": "t",
-        "CLOUDFLARE_DNS_CONNECTION_REF": "example-dns",
-        "CLOUDFLARE_DNS_API_TOKEN": "t",
-    }
-
-    @staticmethod
-    def _answer(status, body):
-        import io
-        import urllib.error
-
-        def respond(request, timeout=None, context=None):
-            if status == 200:
-                return _Page(body, landed=request.full_url)
-            raise urllib.error.HTTPError("u", status, "Refused", {}, io.BytesIO(body))
-
-        return respond
-
-    def test_a_refusal_answered_as_a_200_trips_the_breaker(self):
-        body = b'{"success": false, "errors": [{"code": 1000, "message": "Invalid API Token"}]}'
-        with (
-            mock.patch.dict("os.environ", self.BOTH, clear=True),
-            mock.patch.object(
-                providers.urllib.request, "urlopen", side_effect=self._answer(200, body)
-            ) as urlopen,
-            providers.provider_snapshot(),
-        ):
-            for path in ("/accounts", "/zones"):
-                with self.assertRaises(providers.ProviderError) as raised:
-                    providers._cloudflare_api_request(path)
-                self.assertEqual(raised.exception.refusal, providers.CREDENTIAL_REFUSAL)
-
-        self.assertEqual(urlopen.call_count, 1)
-
-    def test_the_dns_probe_and_analytics_query_consult_and_record_the_breaker(self):
-        body = b'{"success": false, "errors": [{"message": "Invalid API Token"}]}'
-        with (
-            mock.patch.dict("os.environ", self.BOTH, clear=True),
-            mock.patch.object(
-                providers.urllib.request, "urlopen", side_effect=self._answer(401, body)
-            ) as urlopen,
-            providers.provider_snapshot(),
-        ):
-            for call in (
-                lambda: providers._probe_cloudflare_dns("example-dns"),
-                lambda: providers._cloudflare_graphql("{ viewer }", {}, "example-api"),
-            ):
-                for _ in range(2):
-                    with self.assertRaises(providers.ProviderError) as raised:
-                        call()
-                    self.assertEqual(
-                        raised.exception.refusal, providers.CREDENTIAL_REFUSAL
-                    )
-            refused = dict(providers._refused_credentials())
-
-        self.assertEqual(urlopen.call_count, 2)
-        self.assertEqual(set(refused), {"CF", "CLOUDFLARE_DNS"})
-
-    def test_a_revoked_credential_is_refused_once_per_sweep(self):
-        """Connections, inventory and analytics share one sweep's breaker."""
-
-        body = b'{"success": false, "errors": [{"message": "Invalid API Token"}]}'
-        with (
-            mock.patch.dict("os.environ", self.BOTH, clear=True),
-            mock.patch.object(
-                providers.urllib.request, "urlopen", side_effect=self._answer(401, body)
-            ) as urlopen,
-            providers.provider_snapshot(),
-        ):
-            found = providers.connections()
-            providers.inventory()
-            with self.assertRaises(providers.ProviderError):
-                providers._cloudflare_graphql("{ viewer }", {}, "example-api")
-
-        self.assertEqual(urlopen.call_count, 2)
-        self.assertFalse(any(connection["ok"] for connection in found))
-
-    def test_the_api_url_defaults_to_cloudflare_and_can_be_overridden(self):
-        with mock.patch.dict(
-            "os.environ",
-            {"CF_CONNECTION_REF": "example-api", "CF_PROVIDER": "cloudflare_api"},
-            clear=True,
-        ):
-            self.assertEqual(
-                providers._cloudflare_url(provider="cloudflare_api"),
-                providers.CLOUDFLARE_API_URL,
-            )
-        with mock.patch.dict(
-            "os.environ",
-            {"CF_CONNECTION_REF": "example-api", "CF_PROVIDER": "cloudflare_api",
-             "CF_URL": "https://cloudflare.example.test/client/v4/"},
-            clear=True,
-        ):
-            self.assertEqual(
-                providers._cloudflare_url(provider="cloudflare_api"),
-                "https://cloudflare.example.test/client/v4",
-            )
-
-    @mock.patch("controller_runtime.providers._analytics_account")
-    @mock.patch("controller_runtime.providers._cloudflare_api_request")
-    def test_registrations_are_read_by_cursor(self, request, account):
-        account.return_value = "account-id"
-        request.side_effect = [
-            {
-                "result": [{"domain_name": "Example.com.", "expires_at": "2027-01-02T00:00:00Z",
-                            "auto_renew": True, "locked": True, "status": "active"}],
-                "result_info": {"cursor": "next/page=="},
-            },
-            {
-                "result": [{"domain_name": "example.net", "expires_at": "2026-12-01T00:00:00Z",
-                            "auto_renew": False, "status": "active"}],
-                "result_info": {"cursor": ""},
-            },
-        ]
-
-        found = providers._registrar_domains()
-
-        self.assertIn("/accounts/account-id/registrar/registrations?", request.call_args_list[0].args[0])
-        self.assertIn("cursor=next%2Fpage%3D%3D", request.call_args_list[1].args[0])
-        self.assertEqual(found["example.com"]["expires_at"], "2027-01-02")
-        self.assertTrue(found["example.com"]["auto_renew"])
-        self.assertFalse(found["example.net"]["auto_renew"])
-
-    @mock.patch("controller_runtime.providers._analytics_account")
-    @mock.patch("controller_runtime.providers._cloudflare_api_request")
-    def test_a_refused_registrar_read_carries_its_reason(self, request, account):
-        account.return_value = "account-id"
-        request.side_effect = providers.ProviderError("Cloudflare refused: 403")
-
-        with providers.part_ledger() as refused:
-            found = providers._registrar_domains()
-
-        self.assertEqual(found, {})
-        self.assertEqual([entry["reason"] for entry in refused], ["Cloudflare refused: 403"])
-
-    @mock.patch("controller_runtime.providers._analytics_sites")
-    @mock.patch("controller_runtime.providers._analytics_account")
-    @mock.patch("controller_runtime.providers._cloudflare_api_request")
-    def test_probe_and_reader_share_account_discovery(self, request, account, sites):
-        request.return_value = {"success": True}
-        account.return_value = "account-id"
-        sites.return_value = [{"site_tag": "0" * 32, "host": "example.test"}]
-
-        result = providers._probe_cloudflare_api("example-api")
-
-        account.assert_called_once_with("example-api")
-        sites.assert_called_once_with("account-id", "example-api")
-        self.assertEqual(result["reaches"], ["example.test"])
-
-    @mock.patch("controller_runtime.providers._cloudflare_graphql")
-    def test_site_reading_uses_its_connection(self, graphql):
-        graphql.return_value = {"viewer": {"accounts": [{}]}}
-
-        result = providers._analytics_site_reading(
-            "account-id",
-            {"site_tag": "0" * 32, "host": "example.test"},
-            "account-two",
-            start=providers.date(2026, 8, 26),
-            end=providers.date(2026, 8, 27),
-            query="query Analytics {}",
-        )
-
-        self.assertEqual(result["connection_ref"], "account-two")
-        self.assertEqual(graphql.call_args.args[2], "account-two")
-
-    @mock.patch("controller_runtime.providers._analytics_site_reading")
-    @mock.patch("controller_runtime.providers.analytics_sites")
-    def test_every_configured_connection_is_read(self, sites, reading):
-        sites.return_value = [
-            {
-                "account": "account-id-one",
-                "connection_ref": "account-one",
-                "site_tag": "1" * 32,
-                "host": "one.example",
-            },
-            {
-                "account": "account-id-two",
-                "connection_ref": "account-two",
-                "site_tag": "2" * 32,
-                "host": "two.example",
-            },
-        ]
-        reading.side_effect = [
-            {"connection_ref": "account-one"},
-            {"connection_ref": "account-two"},
-        ]
-
-        result = providers.analytics()
-
-        self.assertEqual(
-            [site["connection_ref"] for site in result["sites"]],
-            ["account-one", "account-two"],
-        )
-        self.assertEqual(
-            [call.args[2] for call in reading.call_args_list],
-            ["account-one", "account-two"],
-        )
-
-    @mock.patch("controller_runtime.providers._analytics_site_reading")
-    @mock.patch(
-        "controller_runtime.providers.completed_window",
-        return_value=(providers.date(2026, 8, 26), providers.date(2026, 8, 28)),
-    )
-    def test_hq_can_plan_an_exact_window_for_each_site(self, _window, reading):
-        site = {
-            "account": "account-id",
-            "connection_ref": "account-one",
-            "site_tag": "1" * 32,
-            "host": "one.example",
-        }
-        reading.return_value = {"connection_ref": "account-one"}
-
-        providers.analytics(
-            sites=[site],
-            windows=[
-                {
-                    "connection_ref": "account-one",
-                    "site_tag": "1" * 32,
-                    "start": "2026-06-01",
-                    "end": "2026-08-28",
-                }
-            ],
-        )
-
-        self.assertEqual(reading.call_args.kwargs["start"], providers.date(2026, 6, 1))
-        self.assertEqual(reading.call_args.kwargs["end"], providers.date(2026, 8, 28))
-
-    @mock.patch("controller_runtime.providers._analytics_site_reading")
-    @mock.patch(
-        "controller_runtime.providers.completed_window",
-        return_value=(providers.date(2026, 8, 26), providers.date(2026, 8, 28)),
-    )
-    def test_an_invalid_plan_falls_back_to_the_shared_safe_window(
-        self, _window, reading
-    ):
-        site = {
-            "account": "account-id",
-            "connection_ref": "account-one",
-            "site_tag": "1" * 32,
-            "host": "one.example",
-        }
-        reading.return_value = {}
-
-        providers.analytics(
-            sites=[site],
-            windows=[
-                {
-                    "connection_ref": "account-one",
-                    "site_tag": "1" * 32,
-                    "start": "not-a-date",
-                    "end": None,
-                }
-            ],
-        )
-
-        self.assertEqual(reading.call_args.kwargs["start"], providers.date(2026, 8, 26))
-        self.assertEqual(reading.call_args.kwargs["end"], providers.date(2026, 8, 28))
-
-    @mock.patch("controller_runtime.providers._cloudflare_graphql")
-    def test_missing_graphql_account_fails_closed(self, graphql):
-        graphql.return_value = {"viewer": {"accounts": []}}
-
-        with self.assertRaisesRegex(providers.ProviderError, "matching account"):
-            providers._analytics_site_reading(
-                "account-id",
-                {"site_tag": "0" * 32, "host": "example.test"},
-                "example-api",
-                start=providers.date(2026, 8, 26),
-                end=providers.date(2026, 8, 27),
-                query="query Analytics {}",
-            )
-
-
-class ControllerStepReportingTests(TestCase):
-    """A failure should name the step that failed, not the module that ran it."""
-
-    def test_a_failing_step_is_named(self):
-        from controller_runtime.providers import ProviderError, _run
-
-        with mock.patch("controller_runtime.providers.subprocess.run") as run:
-            run.return_value = mock.Mock(returncode=1, stdout=b"", stderr=b"boom")
-            with self.assertRaises(ProviderError) as caught:
-                _run(["/bin/false"], step="SSH preflight for somewhere")
-        self.assertIn("SSH preflight for somewhere", str(caught.exception))
-        self.assertNotIn("Certificate", str(caught.exception))
-
-    def test_a_step_whose_tool_is_missing_says_so_in_the_log(self):
-        """A tool that is not on the machine raises before there is an exit code.
-
-        The provider result says only that the step could not complete, so the
-        log is the only place the cause can be read. The exception's type is
-        that cause, and it belongs in the message: the controller's formatter
-        prints the message and drops everything else.
-        """
-
-        from controller_runtime.providers import ProviderError, _run
-
-        with mock.patch("controller_runtime.providers.subprocess.run") as run:
-            run.side_effect = FileNotFoundError(2, "No such file or directory", "op")
-            with self.assertLogs("severino.controller", level="WARNING") as logged:
-                with self.assertRaises(ProviderError) as caught:
-                    _run(["op", "item", "get"], step="1Password read for a target")
-
-        self.assertIn("1Password read for a target", logged.output[0])
-        self.assertIn("FileNotFoundError", logged.output[0])
-        self.assertIn("1Password read for a target", str(caught.exception))
-
-    def test_a_step_that_never_returned_says_so_in_the_log(self):
-        from controller_runtime.providers import ProviderError, _run
-
-        with mock.patch("controller_runtime.providers.subprocess.run") as run:
-            run.side_effect = subprocess.TimeoutExpired(cmd=["op"], timeout=180)
-            with self.assertLogs("severino.controller", level="WARNING") as logged:
-                with self.assertRaises(ProviderError):
-                    _run(["op", "item", "get"], step="1Password read for a target")
-
-        self.assertIn("TimeoutExpired", logged.output[0])
-
-    def test_a_credential_is_struck_out_of_the_silent_branch_too(self):
-        """A tool that names its credential while failing to start."""
-
-        from controller_runtime.providers import ProviderError, _run
-
-        with mock.patch("controller_runtime.providers.subprocess.run") as run:
-            run.side_effect = OSError("cannot run with token ops_secret_value")
-            with self.assertLogs("severino.controller", level="WARNING") as logged:
-                with self.assertRaises(ProviderError):
-                    _run(
-                        ["op"],
-                        step="a step",
-                        env={"OP_SERVICE_ACCOUNT_TOKEN": "ops_secret_value"},
-                    )
-
-        # The detail rides in `extra`, which the formatted output drops, so the
-        # record itself is what has to be checked: asserting on the rendered
-        # line would pass for a value that was never redacted at all.
-        detail = logged.records[0].detail
-        self.assertIn("[redacted]", detail)
-        self.assertNotIn("ops_secret_value", detail)
-        self.assertNotIn("ops_secret_value", "".join(logged.output))
-
-    def test_subprocess_output_never_reaches_the_result(self):
-        """Remote paths and messages belong in the log, not in a provider result."""
-
-        from controller_runtime.providers import ProviderError, _run
-
-        with mock.patch("controller_runtime.providers.subprocess.run") as run:
-            run.return_value = mock.Mock(
-                returncode=1, stdout=b"", stderr=b"/home/someone/secret/path missing"
-            )
-            with self.assertRaises(ProviderError) as caught:
-                _run(["/bin/false"], step="a step")
-        self.assertNotIn("/home/someone", str(caught.exception))
-
-    def test_what_the_tool_said_is_in_the_journal_message_itself(self):
-        """The plain formatter drops `extra`, so the reason has to be in the line."""
-
-        from controller_runtime.providers import ProviderError, _run
-
-        with (
-            mock.patch("controller_runtime.providers.subprocess.run") as run,
-            self.assertLogs("severino.controller", level="WARNING") as logged,
-        ):
-            run.return_value = mock.Mock(
-                returncode=1,
-                stdout=b"",
-                stderr=b"noise\nPermissionError: Operation not permitted: 'a/key.pem'\n",
-            )
-            with self.assertRaises(ProviderError) as caught:
-                _run(["/bin/false"], step="certbot certonly")
-        self.assertIn("certbot certonly (exit 1): PermissionError", logged.output[0])
-        self.assertNotIn("noise", logged.output[0])
-        self.assertEqual(str(caught.exception), "certbot certonly failed.")
-
-
-# One account, three sites; the first carries its aliases, as shared hosting
-# serves `www.` and a parked domain from the main site.
-_ACCOUNT_SITES = {
-    "sites": {
-        "example.test": ["example.test", "www.example.test", "parked.example"],
-        "shop.example.test": ["shop.example.test", "www.shop.example.test"],
-        "lab.example.test": ["lab.example.test"],
-    }
-}
-
-
-class CPanelSitePlanTests(TestCase):
-    """Which cPanel sites a certificate goes to, decided before anything is issued.
-
-    A target must never install on one site and be checked at names another site
-    serves: the install would succeed and the check could never pass.
-    """
-
-    def _consumer(self, verify, install=()):
-        return {
-            "kind": "cpanel",
-            "name": "shared-hosting",
-            "connection_ref": "example-cpanel",
-            "verify_domains": list(verify),
-            "install_domains": list(install),
-        }
-
-    def _plan(self, consumer, answer=None):
-        with mock.patch("controller_runtime.providers._ssh") as ssh:
-            ssh.return_value = json.dumps(
-                _ACCOUNT_SITES if answer is None else answer
-            ).encode()
-            sites = providers._cpanel_sites(consumer)
-        ssh.assert_called_once_with("example-cpanel", "sites")
-        return sites
-
-    def test_without_a_list_it_installs_on_every_site_serving_a_checked_name(self):
-        consumer = self._consumer(["www.example.test", "parked.example", "shop.example.test"])
-
-        self.assertEqual(self._plan(consumer), ["example.test", "shop.example.test"])
-
-    def test_a_declared_name_installs_on_the_whole_site_that_serves_it(self):
-        consumer = self._consumer(["www.example.test"], install=["parked.example"])
-
-        self.assertEqual(self._plan(consumer), ["example.test"])
-
-    def test_a_checked_name_on_a_site_it_does_not_install_on_is_refused(self):
-        consumer = self._consumer(
-            ["example.test", "shop.example.test"], install=["shop.example.test"]
-        )
-
-        with self.assertRaisesRegex(
-            providers.ProviderError,
-            "checked at example.test but installs only on shop.example.test",
-        ):
-            self._plan(consumer)
-
-    def test_a_name_the_account_does_not_serve_is_refused(self):
-        consumer = self._consumer(["example.test", "elsewhere.example"])
-
-        with self.assertRaisesRegex(
-            providers.ProviderError, "does not serve elsewhere.example"
-        ):
-            self._plan(consumer)
-
-    def test_an_unreadable_or_empty_answer_is_refused(self):
-        consumer = self._consumer(["example.test"])
-        for answer in ({"sites": {}}, {"no": "sites"}, []):
-            with self.subTest(answer=answer):
-                with self.assertRaises(providers.ProviderError):
-                    self._plan(consumer, answer)
-        with mock.patch("controller_runtime.providers._ssh", return_value=b"not json"):
-            with self.assertRaisesRegex(providers.ProviderError, "could not read"):
-                providers._cpanel_sites(consumer)
-
-    @mock.patch("controller_runtime.providers._issue_certificate")
-    @mock.patch("controller_runtime.providers._ssh")
-    def test_an_unsatisfiable_target_is_refused_before_the_ca_is_asked(self, ssh, issue):
-        ssh.return_value = json.dumps(_ACCOUNT_SITES).encode()
-        spec = {
-            "domains": ["example.test", "*.example.test"],
-            "consumers": [
-                {"kind": "caddy", "name": "edge", "connection_ref": "example-edge"},
-                self._consumer(
-                    ["example.test", "shop.example.test"], install=["shop.example.test"]
-                ),
-            ],
-        }
-
-        with self.assertRaisesRegex(providers.ProviderError, "installs only on"):
-            providers.renew_tls(spec)
-
-        issue.assert_not_called()
-        # Nothing was read from the rollback source either: the plan comes first.
-        ssh.assert_called_once_with("example-cpanel", "sites")
-
-    @mock.patch("controller_runtime.providers._ssh")
-    def test_one_login_installs_on_every_planned_site(self, ssh):
-        consumer = self._consumer(["example.test"])
-        fullchain = b"-----BEGIN CERTIFICATE-----\nleaf\n-----END CERTIFICATE-----\nchain\n"
-
-        status = providers._deploy_certificate(
-            {"domains": ["example.test"], "consumers": [consumer]},
-            fullchain,
-            b"key",
-            {"shared-hosting": ["example.test", "shop.example.test"]},
-        )
-
-        ssh.assert_called_once()
-        connection_ref, operation, payload = ssh.call_args.args
-        self.assertEqual((connection_ref, operation), ("example-cpanel", "deploy"))
-        sent = json.loads(payload)
-        self.assertEqual(sent["sites"], ["example.test", "shop.example.test"])
-        self.assertIn("leaf", sent["cert"])
-        self.assertEqual(sent["cabundle"], "chain\n")
-        self.assertEqual(
-            status["cpanel_sites"], {"shared-hosting": ["example.test", "shop.example.test"]}
-        )
-
-    @mock.patch("controller_runtime.providers._tls_verification_policy", return_value=(30, 5))
-    @mock.patch("controller_runtime.providers.time.monotonic", side_effect=[0, 31])
-    @mock.patch("controller_runtime.providers.reconcile_tls")
-    def test_a_consumer_that_never_activates_is_named_with_its_names(
-        self, reconcile, _clock, _policy
-    ):
-        reconcile.return_value = providers.ProviderResult(
-            changed=False,
-            status={
-                "consumers": [
-                    {"consumer": "edge", "consumer_kind": "caddy", "domain": "a.example.test", "fingerprint_sha256": "new"},
-                    {"consumer": "shared-hosting", "consumer_kind": "cpanel", "domain": "www.example.test", "fingerprint_sha256": "old"},
-                    {"consumer": "shared-hosting", "consumer_kind": "cpanel", "domain": "example.test", "fingerprint_sha256": "old"},
-                ]
-            },
-            conditions=[],
-            message="observed",
-        )
-
-        with self.assertRaises(providers.ProviderError) as caught:
-            providers._verify_tls_deployment({"consumers": [{}, {}]}, "new")
-
-        self.assertEqual(
-            str(caught.exception),
-            "1 of 2 TLS consumers did not activate the certificate within 30s: "
-            "shared-hosting still serves the previous certificate at "
-            "example.test, www.example.test.",
-        )
 
 
 class CarriedConnectionTests(TestCase):
     """An SSH probe is a real login, so HQ may say one is not needed yet."""
 
     @mock.patch("controller_runtime.providers._probe_ssh")
-    @mock.patch("controller_runtime.providers.connection_provider", return_value="")
+    @mock.patch("controller_runtime.connection_env.connection_provider", return_value="")
     @mock.patch(
-        "controller_runtime.providers.ssh_connection_refs",
+        "controller_runtime.connection_env.ssh_connection_refs",
         return_value=["shared-hosting", "edge"],
     )
     @mock.patch(
-        "controller_runtime.providers.connection_prefixes",
+        "controller_runtime.connection_env.connection_prefixes",
         return_value={"shared-hosting": "SHARED_HOSTING", "edge": "EDGE"},
     )
     def test_a_carried_connection_is_reported_without_a_login(
@@ -3046,87 +1571,6 @@ class CarriedConnectionTests(TestCase):
         self.assertTrue(found["edge"]["probed"])
 
 
-class AcmeOwnershipTests(TestCase):
-    """Certbot copies the previous key's owner onto the new one on every renewal.
-
-    A process that is not root cannot chown to a group it is not in, so one file
-    carrying another group fails the save: after the CA has issued. The check
-    runs first, so that costs nothing.
-    """
-
-    def test_a_tree_wholly_the_processes_own_passes(self):
-        with tempfile.TemporaryDirectory() as directory:
-            Path(directory, "config", "archive").mkdir(parents=True)
-            Path(directory, "config", "archive", "privkey1.pem").write_text("k")
-
-            self.assertEqual(providers._foreign_acme_entry(Path(directory)), "")
-
-    def test_an_entry_with_another_group_is_named(self):
-        with tempfile.TemporaryDirectory() as directory:
-            Path(directory, "config").mkdir()
-            Path(directory, "config", "privkey1.pem").write_text("k")
-            real_gid = os.getgid()
-            with mock.patch("controller_runtime.providers.os.getgid", return_value=real_gid + 1):
-                found = providers._foreign_acme_entry(Path(directory))
-
-        self.assertIn("config", found)
-        self.assertIn(f"not {os.getuid()}:{real_gid + 1}", found)
-
-    @mock.patch("controller_runtime.providers._run")
-    @mock.patch("controller_runtime.providers._foreign_acme_entry", return_value="config/x is owned 1:2, not 3:4")
-    def test_issuance_stops_before_certbot_when_the_tree_is_not_its_own(self, _foreign, run):
-        with tempfile.TemporaryDirectory() as directory:
-            with mock.patch.dict("os.environ", {"HQ_ACME_DIR": directory}):
-                with self.assertRaisesRegex(
-                    providers.ProviderError, "config/x is owned 1:2.*nothing was requested"
-                ):
-                    providers._issue_certificate({"domains": ["example.test"]})
-
-        run.assert_not_called()
-
-
-class WorkerEntryPointTests(TestCase):
-    """The worker's own start-up, which nothing else exercises.
-
-    Every other test calls `run_once` directly and never builds the parser.
-    """
-
-    def test_it_starts_and_names_the_machine_it_runs_on(self):
-        with (
-            mock.patch.object(worker.sys, "argv", ["worker"]),
-            mock.patch.object(worker, "run_once", return_value=0) as run,
-        ):
-            self.assertEqual(worker.main(), 0)
-
-        self.assertEqual(run.call_args.args[0], os.uname().nodename)
-        self.assertFalse(run.call_args.kwargs["apply"])
-
-    @mock.patch.dict("os.environ", {"HQ_CONTROLLER_ID": "a-named-controller"})
-    def test_the_environment_names_it_when_it_says_so(self):
-        with (
-            mock.patch.object(worker.sys, "argv", ["worker"]),
-            mock.patch.object(worker, "run_once", return_value=0) as run,
-        ):
-            worker.main()
-
-        self.assertEqual(run.call_args.args[0], "a-named-controller")
-
-    def test_apply_is_off_unless_asked_for(self):
-        # An applying pass reports its step failures on the way out, whatever
-        # happened in it. Unpatched, that report went over the real bridge
-        # (a manage.py subprocess from inside a unit test) and only passed
-        # because the failure is swallowed.
-        with (
-            mock.patch.object(worker.sys, "argv", ["worker", "--apply"]),
-            mock.patch.object(worker, "run_once", return_value=0) as run,
-            mock.patch.object(worker, "_post") as post,
-        ):
-            worker.main()
-
-        self.assertTrue(run.call_args.kwargs["apply"])
-        self.assertEqual(post.call_args.args[0], "steps")
-
-
 class MachineNameTests(TestCase):
     """Portainer calls its own environment "local", which is nobody's hostname.
 
@@ -3137,8 +1581,8 @@ class MachineNameTests(TestCase):
 
     @mock.patch.dict("os.environ", {"HQ_CONTROLLER_ID": ""})
     def test_the_local_socket_is_the_machine_this_runs_on(self):
-        record = providers.portainer.container_record(
-            {"Names": ["/app"], "State": "running"}, providers.controller_id(), ""
+        record = portainer_readings.container_record(
+            {"Names": ["/app"], "State": "running"}, controller_id(), ""
         )
 
         self.assertEqual(record["host"], os.uname().nodename)
@@ -3146,1479 +1590,7 @@ class MachineNameTests(TestCase):
 
     @mock.patch.dict("os.environ", {"HQ_CONTROLLER_ID": "a-named-host"})
     def test_the_environment_names_it_when_it_says_so(self):
-        self.assertEqual(providers.controller_id(), "a-named-host")
-
-
-class ThisRunIsNotTheEstateTests(TestCase):
-    """The controller running the sweep is excluded by its per-run nonce only."""
-
-    def listed(self, *containers, nonce="a-run-nonce"):
-        with (
-            mock.patch.dict(os.environ, {"HQ_CONTROLLER_RUN": nonce}),
-            mock.patch.object(
-                providers, "provider_connection_refs", return_value=("a-portainer",)
-            ),
-            mock.patch.object(
-                providers,
-                "_portainer_environments",
-                return_value=[
-                    {
-                        "id": 1,
-                        "name": "a-docker-host",
-                        "address": "10.0.0.9",
-                        "local": False,
-                        "reachable": True,
-                    }
-                ],
-            ),
-            mock.patch.object(providers, "_portainer_stacks", return_value=[]),
-            mock.patch.object(
-                providers, "_portainer_containers", return_value=list(containers)
-            ),
-        ):
-            return [record["name"] for record in providers._list_portainer_containers()]
-
-    def test_the_controller_running_the_sweep_is_not_reported(self):
-        self.assertEqual(
-            self.listed(
-                {"Names": ["/hq-controller"], "Labels": {"severino-hq.run": "a-run-nonce"}}
-            ),
-            [],
-        )
-
-    def test_a_role_label_does_not_hide_a_container(self):
-        self.assertEqual(
-            self.listed(
-                {"Names": ["/a-spoof"], "Labels": {"severino-hq.role": "controller"}}
-            ),
-            ["a-spoof"],
-        )
-
-    def test_another_runs_nonce_does_not_hide_a_container(self):
-        self.assertEqual(
-            self.listed(
-                {"Names": ["/a-spoof"], "Labels": {"severino-hq.run": "a-guess"}}
-            ),
-            ["a-spoof"],
-        )
-
-    def test_without_a_nonce_nothing_is_hidden(self):
-        self.assertEqual(
-            self.listed(
-                {"Names": ["/a-spoof"], "Labels": {"severino-hq.run": ""}}, nonce=""
-            ),
-            ["a-spoof"],
-        )
-
-    def test_an_unlabelled_container_is_still_reported(self):
-        self.assertEqual(
-            self.listed(
-                {"Names": ["/a-stray"]},
-                {"Names": ["/a-web"], "Labels": {"com.docker.compose.project": "a-project"}},
-                {"Names": ["/hq-controller"], "Labels": {"severino-hq.run": "a-run-nonce"}},
-            ),
-            ["a-stray", "a-web"],
-        )
-
-
-class AppConnectorTests(TestCase):
-    """An app connector is a node routing traffic for named domains on the
-    tailnet's behalf: a way something is reached that is neither a device nor
-    a DNS record, declared inside the policy rather than anywhere HQ looked."""
-
-    def connectors(self, policy):
-        return providers._app_connectors(policy)
-
-    def test_a_declared_connector_is_read_out_of_the_policy(self):
-        found = self.connectors(
-            {
-                "nodeAttrs": [
-                    {
-                        "target": ["tag:server"],
-                        "app": {
-                            "tailscale.com/app-connectors": [
-                                {
-                                    "name": "example-connector",
-                                    "connectors": ["tag:server"],
-                                    "domains": ["example.test"],
-                                }
-                            ]
-                        },
-                    }
-                ]
-            }
-        )
-
-        self.assertEqual(
-            found,
-            [
-                {
-                    "name": "example-connector",
-                    "connectors": ["tag:server"],
-                    "domains": ["example.test"],
-                }
-            ],
-        )
-
-    def test_other_node_attributes_are_not_mistaken_for_connectors(self):
-        """`nodeAttrs` carries every per-node attribute the policy sets."""
-
-        found = self.connectors({"nodeAttrs": [{"target": ["*"], "attr": ["funnel"]}]})
-
-        self.assertEqual(found, [])
-
-    def test_a_policy_with_no_attributes_at_all_reads_as_none(self):
-        self.assertEqual(self.connectors({}), [])
-
-
-class TailnetSweepTests(TestCase):
-    """Reading the tailnet through the daemon this node is already a peer of.
-
-    Every field is optional. Tailscale omits rather than nulls (a device with
-    expiry disabled carries no ``KeyExpiry`` and one never seen carries no
-    ``LastSeen``) so a reader that requires any of them rejects exactly the
-    devices it exists to describe.
-    """
-
-    STATUS = {
-        "Self": {"HostName": "this-node", "Online": True, "OS": "linux"},
-        "Peer": {
-            "k1": {
-                "HostName": "an-edge",
-                "DNSName": "an-edge.example.ts.net.",
-                "Online": True,
-                "KeyExpiry": "2026-11-04T00:00:00Z",
-                "TailscaleIPs": ["100.64.0.2"],
-                "OS": "linux",
-                "ExitNode": True,
-                "ExitNodeOption": True,
-            },
-            "k2": {
-                "HostName": "a-tv",
-                "Online": False,
-                "LastSeen": "2026-07-01T00:00:00Z",
-            },
-        },
-    }
-
-    def sweep(self, status=None, *, path=None):
-        import tempfile
-        from unittest import mock
-
-        with tempfile.TemporaryDirectory() as directory:
-            reading = Path(directory) / "tailnet.json"
-            reading.write_text(
-                json.dumps(self.STATUS if status is None else status), encoding="utf-8"
-            )
-            given = str(reading) if path is None else path
-            with mock.patch.object(providers, "TAILNET_STATUS", given):
-                return providers.list_tailnet_devices()
-
-    def by_name(self):
-        return {record["name"]: record for record in self.sweep()}
-
-    def test_the_node_itself_is_one_of_the_machines(self):
-        self.assertIn("this-node", self.by_name())
-
-    def test_presence_comes_across(self):
-        found = self.by_name()
-        self.assertTrue(found["an-edge"]["online"])
-        self.assertFalse(found["a-tv"]["online"])
-
-    def test_offering_to_be_an_exit_node_is_not_being_the_one_in_use(self):
-        """Two different questions. `ExitNode` is whether this peer is the exit
-        node the reading machine currently routes through: a fact about our
-        own preference. `ExitNodeOption` is whether the peer offers to be one.
-        A machine page saying "exit node" means the second."""
-
-        found = self.by_name()
-
-        self.assertTrue(found["an-edge"]["offers_exit_node"])
-        self.assertTrue(found["an-edge"]["exit_node_in_use"])
-        # A device that offers nothing says so on both counts.
-        self.assertFalse(found["a-tv"]["offers_exit_node"])
-        self.assertFalse(found["a-tv"]["exit_node_in_use"])
-
-    def test_a_key_expiry_is_carried_and_its_absence_is_not_invented(self):
-        found = self.by_name()
-        self.assertEqual(found["an-edge"]["key_expires"], "2026-11-04T00:00:00Z")
-        self.assertEqual(found["a-tv"]["key_expires"], "")
-
-    def test_a_device_missing_every_optional_field_is_still_read(self):
-        records = self.sweep({"Self": {"HostName": "bare"}, "Peer": {}})
-
-        self.assertEqual(records[0]["name"], "bare")
-
-    def test_a_nameless_device_is_dropped_rather_than_named_blank(self):
-        records = self.sweep({"Self": {}, "Peer": {"k": {"HostName": ""}}})
-
-        self.assertEqual(records, [])
-
-    def test_a_controller_given_no_reading_says_so(self):
-        """A machine not on a tailnet is a supported way to be."""
-
-        from unittest import mock
-
-        with mock.patch.object(providers, "TAILNET_STATUS", ""):
-            with self.assertRaises(providers.ProviderError) as raised:
-                providers.list_tailnet_devices()
-
-        self.assertIn("not given a tailnet reading", str(raised.exception))
-
-    def test_with_only_a_credential_devices_come_from_the_api(self):
-        from unittest import mock
-
-        listed = [
-            {
-                "hostname": "example-host",
-                "name": "example-host.example.ts.net.",
-                "addresses": ["100.64.0.5"],
-                "os": "linux",
-                "connectedToControl": True,
-                "lastSeen": "2026-09-25T00:00:00Z",
-                "keyExpiryDisabled": True,
-                "tags": ["tag:server"],
-                "advertisedRoutes": ["0.0.0.0/0", "::/0"],
-                "enabledRoutes": [],
-                "clientConnectivity": {"endpoints": ["192.0.2.10:41641"]},
-            }
-        ]
-        with (
-            mock.patch.object(providers, "TAILNET_STATUS", ""),
-            mock.patch.object(providers, "_tailnet_token", return_value="t"),
-            mock.patch.object(providers, "_tailnet_api_devices", return_value=listed),
-            mock.patch.object(providers, "_reach_by_device", return_value={}),
-        ):
-            (device,) = providers.list_tailnet_devices()
-
-        self.assertEqual(device["name"], "example-host")
-        self.assertEqual(device["dns_name"], "example-host.example.ts.net")
-        self.assertEqual(device["addresses"], ["100.64.0.5"])
-        self.assertTrue(device["online"])
-        self.assertEqual(device["key_expires"], "")
-        self.assertEqual(device["tags"], ["tag:server"])
-        self.assertTrue(device["offers_exit_node"])
-        self.assertFalse(device["exit_node_approved"])
-        self.assertEqual(device["endpoints"], ["192.0.2.10:41641"])
-
-    def test_a_refused_device_list_raises_with_its_scope(self):
-        import io
-        import urllib.error
-        from unittest import mock
-
-        refused = urllib.error.HTTPError("u", 403, "Forbidden", {}, io.BytesIO(b""))
-        with mock.patch.object(providers.urllib.request, "urlopen", side_effect=refused):
-            with self.assertRaises(providers.ProviderError) as raised:
-                providers._tailnet_api_devices("t")
-
-        self.assertIn("devices:core:read", str(raised.exception))
-
-    def test_a_missing_reading_is_reported_rather_than_crashing(self):
-        with self.assertRaises(providers.ProviderError) as raised:
-            self.sweep(path="/nonexistent/tailnet.json")
-
-        self.assertIn("missing", str(raised.exception))
-
-    def test_the_controller_never_holds_the_daemon_socket(self):
-        """The local API is read and write, and this only ever needed reading.
-
-        Asserted on the module rather than trusted: the socket was mounted into
-        this container once, and the process that reads it holds every provider
-        credential HQ has.
-        """
-
-        source = Path(providers.__file__).read_text(encoding="utf-8")
-
-        self.assertNotIn("tailscaled.sock", source)
-
-    def test_an_unreachable_daemon_does_not_take_the_sweep_down(self):
-        """One provider that cannot be read must not lose the other five."""
-
-        from unittest import mock
-
-        with (
-            mock.patch.dict("os.environ", {"TAILSCALE_CONNECTION_REF": "example-tailnet"}),
-            mock.patch.object(
-                providers, "list_tailnet_devices", side_effect=providers.ProviderError("no")
-            ),
-        ):
-            found = providers.inventory()
-
-        self.assertFalse(found["tailscale.device"]["ok"])
-        self.assertEqual(found["tailscale.device"]["records"], [])
-
-
-class TailnetDeviceTests(TestCase):
-    """Asserting HQ's one decision about a device, and nothing else about it."""
-
-    STATUS = {
-        "Self": {"HostName": "this-node", "ID": "nSELF", "Online": True},
-        "Peer": {
-            "k1": {
-                "HostName": "an-edge",
-                "ID": "nEDGE",
-                "Online": True,
-                "KeyExpiry": "2026-11-04T00:00:00Z",
-            },
-            "k2": {"HostName": "a-server", "ID": "nSERV", "Online": True},
-        },
-    }
-
-    def setUp(self):
-        import tempfile
-
-        self.directory = tempfile.TemporaryDirectory()
-        self.addCleanup(self.directory.cleanup)
-        reading = Path(self.directory.name) / "tailnet.json"
-        reading.write_text(json.dumps(self.STATUS), encoding="utf-8")
-        patch = mock.patch.object(providers, "TAILNET_STATUS", str(reading))
-        patch.start()
-        self.addCleanup(patch.stop)
-
-    def spec(self, name="an-edge", disabled=True):
-        return {
-            "connection_ref": "a-tailnet",
-            "name": name,
-            "key_expiry_disabled": disabled,
-        }
-
-    def test_a_device_already_as_declared_is_left_alone(self):
-        """a-server has no expiry, so there is nothing to assert."""
-
-        result = providers.reconcile_tailnet_device(self.spec("a-server"))
-
-        self.assertFalse(result.changed)
-
-    def test_a_dry_run_says_what_it_would_do_and_does_not_do_it(self):
-        with mock.patch.object(providers, "_tailnet_token") as token:
-            result = providers.reconcile_tailnet_device(self.spec(), apply=False)
-
-        self.assertTrue(result.changed)
-        token.assert_not_called()
-
-    def test_the_device_id_comes_from_the_local_reading_not_the_api(self):
-        """The token is spent on the change and on nothing else."""
-
-        self.assertEqual(providers._tailnet_device_id("an-edge"), "nEDGE")
-
-    def test_a_device_the_tailnet_does_not_show_is_refused_by_name(self):
-        with self.assertRaises(providers.ProviderError) as raised:
-            providers.reconcile_tailnet_device(self.spec("a-ghost"))
-
-        self.assertIn("a-ghost", str(raised.exception))
-
-    def test_a_credential_without_the_scope_says_which_scope(self):
-        import urllib.error
-
-        refused = urllib.error.HTTPError("u", 403, "Forbidden", {}, None)
-        with (
-            mock.patch.object(providers, "_tailnet_token", return_value="t"),
-            mock.patch.object(providers.urllib.request, "urlopen", side_effect=refused),
-            self.assertRaises(providers.ProviderError) as raised,
-        ):
-            providers.reconcile_tailnet_device(self.spec())
-
-        self.assertIn("devices:core", str(raised.exception))
-
-    def test_an_api_key_used_as_an_oauth_client_says_so(self):
-        import urllib.error
-
-        refused = urllib.error.HTTPError("u", 401, "Unauthorized", {}, None)
-        with (
-            mock.patch.dict(
-                os.environ,
-                {
-                    "TAILNET_CONNECTION_REF": "a-tailnet",
-                    "TAILNET_PROVIDER": "tailscale",
-                    "TAILNET_CLIENT_ID": "id",
-                    "TAILNET_CLIENT_SECRET": "secret",
-                },
-            ),
-            mock.patch.object(providers.urllib.request, "urlopen", side_effect=refused),
-            self.assertRaises(providers.ProviderError) as raised,
-        ):
-            providers._tailnet_token("a-tailnet")
-
-        self.assertIn("OAuth client", str(raised.exception))
-
-    def test_a_malformed_oauth_response_fails_as_a_safe_provider_error(self):
-        response = mock.MagicMock()
-        response.__enter__.return_value.read.return_value = b"[]"
-        with (
-            mock.patch.dict(
-                os.environ,
-                {
-                    "TAILNET_CONNECTION_REF": "a-tailnet",
-                    "TAILNET_PROVIDER": "tailscale",
-                    "TAILNET_CLIENT_ID": "id",
-                    "TAILNET_CLIENT_SECRET": "secret",
-                },
-            ),
-            mock.patch.object(
-                providers.urllib.request, "urlopen", return_value=response
-            ),
-            self.assertRaises(providers.ProviderError) as raised,
-        ):
-            providers._tailnet_token("a-tailnet")
-
-        self.assertEqual(
-            str(raised.exception), "Tailscale did not answer the token request."
-        )
-        self.assertNotIn("secret", str(raised.exception))
-
-    def test_the_token_is_never_kept(self):
-        """It lasts an hour and a sweep is minutes apart, so caching it would
-        only add an expiry to get wrong."""
-
-        source = Path(providers.__file__).read_text(encoding="utf-8")
-
-        self.assertNotIn("_TOKEN_CACHE", source)
-        self.assertEqual(source.count("def _tailnet_token"), 1)
-
-
-class TailnetPolicyGateTests(TestCase):
-    """Validation runs only the tests a document carries, so it is not a gate alone."""
-
-    TEST = {"src": "a-laptop", "accept": ["a-server:443"]}
-
-    def document(self, *tests):
-        return {"grants": [{"src": ["*"], "dst": ["*"], "ip": ["*"]}], "tests": list(tests)}
-
-    def reconcile(self, live, declared):
-        spec = {"connection_ref": "a-tailnet", "document": json.dumps(declared)}
-        with (
-            mock.patch.object(providers, "_tailnet_token", return_value="t"),
-            mock.patch.object(providers, "_tailnet_policy", return_value=live),
-            mock.patch.object(providers.urllib.request, "urlopen") as urlopen,
-        ):
-            urlopen.return_value.__enter__.return_value.read.return_value = b"{}"
-            result = providers.reconcile_tailnet_policy(spec, apply=False)
-        return result, urlopen
-
-    def test_a_policy_with_no_tests_is_refused_before_tailscale_is_asked(self):
-        with self.assertRaises(providers.ProviderError) as raised:
-            self.reconcile(self.document(self.TEST), self.document())
-
-        self.assertIn("no tests", str(raised.exception))
-
-    def test_a_testless_live_policy_does_not_license_another(self):
-        """The ratchet has to start somewhere: zero is never a baseline."""
-
-        with self.assertRaises(providers.ProviderError):
-            self.reconcile(self.document(), {"grants": [], "tests": []})
-
-    def test_a_testless_policy_already_in_place_is_not_ready(self):
-        result, _ = self.reconcile(self.document(), self.document())
-
-        self.assertFalse(result.changed)
-        self.assertFalse(result.conditions[0]["status"])
-        self.assertEqual(result.conditions[0]["reason"], "Untested")
-
-    def test_dropping_a_deny_is_refused(self):
-        other = {"src": "a-laptop", "deny": ["a-server:22"]}
-        with self.assertRaises(providers.ProviderError) as raised:
-            self.reconcile(self.document(self.TEST, other), self.document(self.TEST))
-
-        self.assertIn("'a-server:22'", str(raised.exception))
-
-    def test_a_deny_moved_to_accept_is_refused(self):
-        live = {"src": "a-laptop", "deny": ["a-server:22"]}
-        opened = {"src": "a-laptop", "accept": ["a-server:22"]}
-        with self.assertRaises(providers.ProviderError):
-            self.reconcile(
-                self.document(self.TEST, live), self.document(self.TEST, opened)
-            )
-
-    def test_replacing_a_src_with_another_of_the_same_count_is_refused(self):
-        """Same number of tests, but one (src, proto) no longer tested."""
-
-        live = {"src": "a-phone", "proto": "tcp", "accept": ["a-server:443"]}
-        swapped = {"src": "a-stranger", "proto": "tcp", "accept": ["a-server:443"]}
-        with self.assertRaises(providers.ProviderError) as raised:
-            self.reconcile(
-                self.document(self.TEST, live), self.document(self.TEST, swapped)
-            )
-
-        self.assertIn("'a-phone' over tcp", str(raised.exception))
-
-    def test_a_proto_is_part_of_what_a_test_covers(self):
-        live = {"src": "a-laptop", "proto": "udp", "deny": ["a-server:53"]}
-        moved = {"src": "a-laptop", "deny": ["a-server:53"]}
-        with self.assertRaises(providers.ProviderError):
-            self.reconcile(
-                self.document(self.TEST, live), self.document(self.TEST, moved)
-            )
-
-    def test_tests_may_be_merged_when_every_pair_and_deny_survives(self):
-        live = {"src": "a-laptop", "deny": ["a-server:22"]}
-        merged = {
-            "src": "a-laptop",
-            "accept": ["a-server:443"],
-            "deny": ["a-server:22", "a-server:23"],
-        }
-        result, _ = self.reconcile(
-            self.document(self.TEST, live), self.document(merged)
-        )
-
-        self.assertTrue(result.changed)
-
-    def test_a_rewritten_test_passes_to_validation(self):
-        moved = {"src": "a-laptop", "accept": ["a-server:443", "a-server:22"]}
-        result, urlopen = self.reconcile(
-            self.document(self.TEST), self.document(moved)
-        )
-
-        self.assertTrue(result.changed)
-        self.assertIn("/acl/validate", urlopen.call_args.args[0].full_url)
-
-
-class RouteApprovalTests(TestCase):
-    """Approving routes is the one tailnet call that writes.
-
-    Tailscale takes the whole enabled set on every write, so what this sends
-    decides which routes keep working. A list assembled from anywhere but the
-    device's own advertisement would withdraw a route the call was never about
-    silently, and on a subnet router that is somebody's network going away.
-    """
-
-    def approve(self, reads, *, apply=True):
-        """Run the handler against a scripted sequence of API answers."""
-
-        sent = []
-
-        def urlopen(request, timeout=None, context=None):
-            del timeout
-            sent.append(request)
-            return _Answer(reads[len(sent) - 1])
-
-        with (
-            mock.patch.object(providers, "_tailnet_device_id", return_value="node-1"),
-            mock.patch.object(providers, "_tailnet_token", return_value="token"),
-            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
-        ):
-            result = providers.approve_tailnet_routes(
-                {"name": "a-router", "connection_ref": "a-tailnet"}, apply=apply
-            )
-        return result, sent
-
-    def test_what_is_approved_is_what_the_device_advertises(self):
-        result, sent = self.approve(
-            [
-                {"advertisedRoutes": ["10.0.0.0/24", "0.0.0.0/0"], "enabledRoutes": []},
-                {"enabledRoutes": ["0.0.0.0/0", "10.0.0.0/24"]},
-            ]
-        )
-
-        self.assertTrue(result.changed)
-        self.assertEqual(sent[1].method, "POST")
-        self.assertEqual(
-            json.loads(sent[1].data)["routes"], ["0.0.0.0/0", "10.0.0.0/24"]
-        )
-        self.assertEqual(result.status["enabled_routes"], ["0.0.0.0/0", "10.0.0.0/24"])
-
-    def test_an_already_enabled_route_is_kept_rather_than_withdrawn(self):
-        """The write is the whole set, so approving the second route has to
-        send the first one back with it."""
-
-        _, sent = self.approve(
-            [
-                {
-                    "advertisedRoutes": ["10.0.0.0/24", "10.0.1.0/24"],
-                    "enabledRoutes": ["10.0.0.0/24"],
-                },
-                {"enabledRoutes": ["10.0.0.0/24", "10.0.1.0/24"]},
-            ]
-        )
-
-        self.assertIn("10.0.0.0/24", json.loads(sent[1].data)["routes"])
-
-    def test_nothing_pending_writes_nothing(self):
-        result, sent = self.approve(
-            [
-                {"advertisedRoutes": ["10.0.0.0/24"], "enabledRoutes": ["10.0.0.0/24"]},
-            ]
-        )
-
-        self.assertFalse(result.changed)
-        self.assertEqual(len(sent), 1)
-        self.assertEqual(result.message, "Nothing to approve.")
-
-    def test_a_device_offering_nothing_is_a_no_op_not_a_clearance(self):
-        """An empty advertisement must not become an empty write: that is how
-        a handler meant to approve routes ends up removing them."""
-
-        result, sent = self.approve([{"advertisedRoutes": [], "enabledRoutes": []}])
-
-        self.assertFalse(result.changed)
-        self.assertEqual(len(sent), 1)
-        self.assertIn("advertises no routes", result.message)
-
-    def test_a_plan_says_what_it_would_do_and_touches_nothing(self):
-        result, sent = self.approve(
-            [{"advertisedRoutes": ["10.0.0.0/24"], "enabledRoutes": []}], apply=False
-        )
-
-        self.assertTrue(result.changed)
-        self.assertEqual(len(sent), 1)
-        self.assertIn("Would approve 10.0.0.0/24", result.message)
-
-    def refuse_at(self, call, code):
-        """Answer normally until `call`, then refuse with `code`."""
-
-        reads = [{"advertisedRoutes": ["10.0.0.0/24"], "enabledRoutes": []}]
-        calls = []
-
-        def urlopen(request, timeout=None, context=None):
-            del timeout
-            calls.append(request)
-            if len(calls) == call:
-                raise providers.urllib.error.HTTPError(
-                    "https://example.invalid", code, "Forbidden", {}, None
-                )
-            return _Answer(reads[len(calls) - 1])
-
-        with (
-            mock.patch.object(providers, "_tailnet_device_id", return_value="node-1"),
-            mock.patch.object(providers, "_tailnet_token", return_value="token"),
-            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
-            self.assertRaises(providers.ProviderError) as raised,
-        ):
-            providers.approve_tailnet_routes({"name": "a-router"})
-        return str(raised.exception)
-
-    def test_a_credential_without_the_scope_says_which_scope(self):
-        """Each call names the scope it needs: the read devices:routes:read,
-        the approval devices:routes. Neither is devices:core."""
-
-        for code in (401, 403):
-            with self.subTest(code=code):
-                read = self.refuse_at(1, code)
-                write = self.refuse_at(2, code)
-                self.assertIn("devices:routes:read", read)
-                self.assertIn("devices:routes scope", write)
-                self.assertNotIn("devices:core", read + write)
-
-    def test_a_refusal_that_is_not_about_scope_is_not_reported_as_one(self):
-        self.assertNotIn("devices:routes", self.refuse_at(1, 500))
-        self.assertNotIn("devices:routes", self.refuse_at(2, 500))
-
-    def test_an_unreadable_device_is_not_approved_blind(self):
-        def urlopen(request, timeout=None, context=None):
-            del request, timeout
-            raise OSError("no route to host")
-
-        with (
-            mock.patch.object(providers, "_tailnet_device_id", return_value="node-1"),
-            mock.patch.object(providers, "_tailnet_token", return_value="token"),
-            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
-            self.assertRaisesRegex(
-                providers.ProviderError, "did not report the routes"
-            ),
-        ):
-            providers.approve_tailnet_routes({"name": "a-router"})
-
-
-class _Scripted:
-    """urlopen answering each call in turn; an exception in the script is raised."""
-
-    def __init__(self, script):
-        self.script = list(script)
-        self.sent = []
-
-    def __call__(self, request, timeout=None, context=None):
-        del timeout, context
-        self.sent.append(request)
-        answer = self.script[len(self.sent) - 1]
-        if isinstance(answer, BaseException):
-            raise answer
-        body, etag = answer if isinstance(answer, tuple) else (answer, "")
-        response = _Answer(body)
-        response.headers = {"etag": etag}
-        return response
-
-
-def _refused(code):
-    return providers.urllib.error.HTTPError(
-        "https://example.invalid", code, "Refused", {}, None
-    )
-
-
-class TailnetPolicyWriteTests(TestCase):
-    """Every outcome of a policy reconcile, pinned to what it says and sends."""
-
-    TESTED = {"grants": [], "tests": [{"src": "a-laptop", "accept": ["a-server:443"]}]}
-    WANTED = {
-        "grants": [{"src": ["*"], "dst": ["*"], "ip": ["*"]}],
-        "tests": [{"src": "a-laptop", "accept": ["a-server:443"]}],
-    }
-
-    def reconcile(self, document, script=(), *, live=None, apply=True):
-        urlopen = _Scripted(script)
-        with (
-            mock.patch.object(providers, "_tailnet_token", return_value="t"),
-            mock.patch.object(providers, "_tailnet_policy", return_value=live),
-            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
-        ):
-            result = providers.reconcile_tailnet_policy(
-                {"connection_ref": "a-tailnet", "document": document}, apply=apply
-            )
-        return result, urlopen.sent
-
-    def test_no_declared_policy_reads_nothing(self):
-        result, sent = self.reconcile("  ")
-
-        self.assertFalse(result.changed)
-        self.assertEqual(result.conditions, [])
-        self.assertIn("No policy is declared", result.message)
-        self.assertEqual(sent, [])
-
-    def test_an_unreadable_declaration_is_refused(self):
-        with self.assertRaisesRegex(providers.ProviderError, "not readable JSON"):
-            self.reconcile("{not json")
-
-    def test_a_tested_policy_already_in_place_is_ready(self):
-        result, sent = self.reconcile(json.dumps(self.TESTED), live=self.TESTED)
-
-        self.assertFalse(result.changed)
-        self.assertEqual(result.status, {"applied": True})
-        self.assertEqual(
-            [(c["type"], c["status"], c["reason"]) for c in result.conditions],
-            [("Ready", True, "Reconciled")],
-        )
-        self.assertEqual(result.message, "Tailnet policy is current.")
-        self.assertEqual(sent, [])
-
-    def test_a_policy_failing_its_own_tests_is_not_written(self):
-        with self.assertRaisesRegex(providers.ProviderError, "does not pass its own"):
-            self.reconcile(
-                json.dumps(self.WANTED), [{"errors": ["x"]}], live=self.TESTED
-            )
-
-    def test_a_validation_that_cannot_run_is_not_a_pass(self):
-        with self.assertRaisesRegex(providers.ProviderError, "could not check"):
-            self.reconcile(json.dumps(self.WANTED), [_refused(500)], live=self.TESTED)
-
-    def test_the_write_is_conditional_on_the_version_read(self):
-        result, sent = self.reconcile(
-            json.dumps(self.WANTED), [{}, ({}, '"v1"'), {}], live=self.TESTED
-        )
-
-        self.assertTrue(result.changed)
-        self.assertEqual(result.status, {"applied": True})
-        self.assertEqual(result.message, "Tailnet policy applied after its own tests passed.")
-        self.assertEqual(
-            [request.full_url.rsplit("/", 1)[-1] for request in sent],
-            ["validate", "acl", "acl"],
-        )
-        self.assertEqual(sent[2].get_method(), "POST")
-        self.assertEqual(sent[2].get_header("If-match"), '"v1"')
-        self.assertEqual(json.loads(sent[2].data), self.WANTED)
-
-    def test_no_version_read_writes_without_a_condition(self):
-        _, sent = self.reconcile(
-            json.dumps(self.WANTED), [{}, _refused(500), {}], live=self.TESTED
-        )
-
-        self.assertIsNone(sent[2].get_header("If-match"))
-
-    def test_a_policy_changed_elsewhere_is_not_overwritten(self):
-        with self.assertRaisesRegex(providers.ProviderError, "changed somewhere else"):
-            self.reconcile(
-                json.dumps(self.WANTED), [{}, ({}, "v"), _refused(412)], live=self.TESTED
-            )
-
-    def test_other_write_failures_say_what_happened(self):
-        with self.assertRaisesRegex(providers.ProviderError, r"refused the policy \(403\)"):
-            self.reconcile(
-                json.dumps(self.WANTED), [{}, ({}, "v"), _refused(403)], live=self.TESTED
-            )
-        with self.assertRaisesRegex(providers.ProviderError, "did not answer the policy"):
-            self.reconcile(
-                json.dumps(self.WANTED), [{}, ({}, "v"), OSError()], live=self.TESTED
-            )
-
-
-class RouteApprovalFailureTests(TestCase):
-    def approve(self, script):
-        with (
-            mock.patch.object(providers, "_tailnet_device_id", return_value="node-1"),
-            mock.patch.object(providers, "_tailnet_token", return_value="token"),
-            mock.patch.object(providers.urllib.request, "urlopen", _Scripted(script)),
-        ):
-            return providers.approve_tailnet_routes({"name": "a-router"})
-
-    def test_a_write_that_gets_no_answer_says_so(self):
-        pending = {"advertisedRoutes": ["10.0.0.0/24"], "enabledRoutes": []}
-        with self.assertRaisesRegex(providers.ProviderError, "did not answer for a-router"):
-            self.approve([pending, OSError()])
-
-    def test_a_refused_write_that_is_not_about_scope_names_the_device(self):
-        pending = {"advertisedRoutes": ["10.0.0.0/24"], "enabledRoutes": []}
-        with self.assertRaisesRegex(
-            providers.ProviderError, "refused the route approval for a-router"
-        ):
-            self.approve([pending, _refused(500)])
-
-    def test_an_approval_reports_the_set_tailscale_answered_with(self):
-        result = self.approve(
-            [
-                {"advertisedRoutes": ["10.0.1.0/24", "10.0.0.0/24"], "enabledRoutes": None},
-                {"enabledRoutes": ["10.0.1.0/24"]},
-            ]
-        )
-
-        self.assertEqual(
-            result.status,
-            {
-                "name": "a-router",
-                "advertised_routes": ["10.0.0.0/24", "10.0.1.0/24"],
-                "enabled_routes": ["10.0.1.0/24"],
-            },
-        )
-        self.assertEqual(result.message, "Approved 10.0.0.0/24, 10.0.1.0/24 for a-router.")
-        self.assertEqual(
-            [(c["type"], c["reason"]) for c in result.conditions], [("Ready", "Reconciled")]
-        )
-
-
-class TlsReadingTests(TestCase):
-    """Every consumer's outcome lands in one reading, pinned field by field."""
-
-    def reading(self, days, fingerprint, domain):
-        when = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=days)
-        return {
-            "domain": domain,
-            "not_after": when.replace(microsecond=0).isoformat(),
-            "fingerprint_sha256": fingerprint,
-            "issuer": f"Issuer {fingerprint}",
-            "sans": [domain],
-            "certificate_pem": f"PEM {fingerprint}",
-        }
-
-    def reconcile(self, spec, readings, endpoints):
-        def observe(domain, *, connect_host=None):
-            found = readings[domain]
-            if isinstance(found, Exception):
-                raise found
-            return dict(found)
-
-        def endpoint(consumer):
-            found = endpoints.get(consumer["name"])
-            if isinstance(found, Exception):
-                raise found
-            return found
-
-        covered = [{"domain_names": ["a.example.com", "b.example.com"]}]
-        with (
-            mock.patch.object(providers, "_observe_tls_domain", side_effect=observe) as seen,
-            mock.patch.object(providers, "_consumer_tls_endpoint", side_effect=endpoint),
-            mock.patch.object(providers, "_npm_covered_hosts", return_value=covered) as npm,
-        ):
-            result = providers.reconcile_tls(spec)
-        return result, seen, npm
-
-    def test_every_outcome_is_reported_against_its_consumer(self):
-        far = self.reading(300, "one", "a.example.com")
-        near = self.reading(200, "two", "b.example.com")
-        spec = {
-            "domains": ["*.example.com"],
-            "renewal_window_days": 250,
-            "consumers": [
-                {"kind": "npm", "name": "proxy", "discover_covered_hosts": True,
-                 "verify_domains": ["b.example.com"]},
-                {"kind": "caddy", "name": "silent"},
-                {"kind": "caddy", "name": "lost", "verify_domains": ["c.example.com"]},
-                {"kind": "other", "name": "down", "verify_domains": ["d.example.com"]},
-            ],
-        }
-        result, seen, npm = self.reconcile(
-            spec,
-            {
-                "a.example.com": far,
-                "b.example.com": near,
-                "d.example.com": providers.ProviderError("d refused"),
-            },
-            {"proxy": "192.0.2.5", "lost": providers.ProviderError("no endpoint"), "down": None},
-        )
-
-        npm.assert_called_once_with(["*.example.com"])
-        self.assertEqual(
-            seen.call_args_list,
-            [
-                mock.call("a.example.com", connect_host="192.0.2.5"),
-                mock.call("b.example.com", connect_host="192.0.2.5"),
-                mock.call("d.example.com", connect_host=None),
-            ],
-        )
-        self.assertFalse(result.changed)
-        self.assertEqual(result.message, "TLS consumers observed.")
-        public = [
-            {**{k: v for k, v in far.items() if k != "certificate_pem"},
-             "consumer": "proxy", "consumer_kind": "npm"},
-            {**{k: v for k, v in near.items() if k != "certificate_pem"},
-             "consumer": "proxy", "consumer_kind": "npm"},
-        ]
-        self.assertEqual(
-            result.status,
-            {
-                "issuer": "Issuer one",
-                "not_after": near["not_after"],
-                "artifact_not_after": far["not_after"],
-                "certificate_pem": "PEM one",
-                "verified_domains": ["a.example.com", "b.example.com"],
-                "consumers": public,
-                "unreachable_consumers": [
-                    {"consumer": "lost", "domain": "", "endpoint": "", "port": "443",
-                     "reason": "no endpoint"},
-                    {"consumer": "down", "domain": "d.example.com",
-                     "endpoint": "d.example.com", "port": "443", "reason": "d refused"},
-                ],
-            },
-        )
-        self.assertEqual(
-            [(c["type"], c["status"], c["reason"]) for c in result.conditions],
-            [
-                ("Drifted", True, "ConsumerMismatch"),
-                ("Degraded", True, "ExpiringSoon"),
-                ("Degraded", True, "ConsumerUnverified"),
-                ("Degraded", True, "ConsumerUnreachable"),
-            ],
-        )
-        self.assertRegex(result.conditions[1]["message"], r"expires in (199|200) days\.$")
-        self.assertEqual(
-            result.conditions[2]["message"],
-            "No verification domain is declared for: silent",
-        )
-        self.assertEqual(
-            result.conditions[3]["message"], "Could not be read: lost, d.example.com"
-        )
-
-    def test_one_current_certificate_everywhere_is_verified(self):
-        current = self.reading(300, "one", "a.example.com")
-        result, _, npm = self.reconcile(
-            {
-                "renewal_window_days": 30,
-                "consumers": [{"kind": "npm", "name": "proxy",
-                               "verify_domains": ["a.example.com"]}],
-            },
-            {"a.example.com": current},
-            {"proxy": "192.0.2.5"},
-        )
-
-        npm.assert_not_called()
-        self.assertEqual(
-            result.conditions,
-            [{"type": "Ready", "status": True, "reason": "Verified",
-              "message": "All TLS consumers are current."}],
-        )
-
-    def test_nothing_to_verify_is_a_failure_that_says_so(self):
-        with self.assertRaisesRegex(
-            providers.ProviderError, "No TLS verification domains were declared"
-        ):
-            self.reconcile(
-                {"renewal_window_days": 30, "consumers": [{"kind": "npm", "name": "p"}]},
-                {},
-                {},
-            )
-
-
-class TailnetReadingTests(TestCase):
-    """Tailnet-level readings: kept fields only, and a refusal names its scope."""
-
-    def read(self, kind, payload):
-        from control_plane.observations import OBSERVATIONS
-
-        calls = []
-
-        def urlopen(request, timeout=None, context=None):
-            del timeout
-            calls.append(request.full_url)
-            return _Answer(payload)
-
-        with (
-            mock.patch.object(providers, "_tailnet_token", return_value="token"),
-            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
-        ):
-            records = providers.OBSERVATION_READERS[kind]()
-        kept, refused = OBSERVATIONS[kind].clean(records)
-        self.assertEqual(refused, 0)
-        return kept, calls
-
-    def refuse(self, kind, code):
-        def urlopen(request, timeout=None, context=None):
-            del request, timeout
-            raise providers.urllib.error.HTTPError(
-                "https://example.invalid", code, "Forbidden", {}, None
-            )
-
-        with (
-            mock.patch.object(providers, "_tailnet_token", return_value="token"),
-            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
-            self.assertRaises(providers.ProviderError) as raised,
-        ):
-            providers.OBSERVATION_READERS[kind]()
-        self.refusal = raised.exception.refusal
-        return str(raised.exception)
-
-    DNS = {
-        "nameservers": [
-            {"address": "100.64.0.53", "useWithExitNode": True},
-            {"address": "192.0.2.53"},
-        ],
-        "splitDNS": {
-            "corp.example.com": [{"address": "192.0.2.54"}],
-            "empty.example.com": None,
-        },
-        "searchPaths": ["example.com"],
-        "preferences": {"magicDNS": True, "overrideLocalDNS": True},
-        "extraField": "never stored",
-    }
-
-    def test_dns_is_read_from_the_configuration_endpoint(self):
-        (record,), calls = self.read("tailscale.dns", self.DNS)
-
-        self.assertEqual(calls, [f"{providers.TAILNET_API}/tailnet/-/dns/configuration"])
-        self.assertEqual(record["nameservers"], ["100.64.0.53", "192.0.2.53"])
-        self.assertTrue(record["magic_dns"])
-        self.assertTrue(record["override_local_dns"])
-        self.assertEqual(record["search_paths"], ["example.com"])
-        self.assertEqual(
-            record["split_dns"],
-            {"corp.example.com": ["192.0.2.54"], "empty.example.com": []},
-        )
-        self.assertNotIn("extraField", record)
-
-    def test_dns_joins_on_every_resolver_address(self):
-        from control_plane.observations import OBSERVATIONS
-
-        (record,), _ = self.read("tailscale.dns", self.DNS)
-
-        self.assertEqual(
-            tuple(OBSERVATIONS["tailscale.dns"].addresses(record)),
-            ("100.64.0.53", "192.0.2.53", "192.0.2.54"),
-        )
-
-    SETTINGS = {
-        "devicesApprovalOn": True,
-        "devicesKeyDurationDays": 90,
-        "devicesAutoUpdatesOn": False,
-        "usersApprovalOn": True,
-        "networkFlowLoggingOn": False,
-        "regionalRoutingOn": False,
-        "postureIdentityCollectionOn": False,
-        "httpsEnabled": True,
-        "aclsExternallyManagedOn": True,
-        "aclsExternalLink": "https://example.com/policy",
-        "usersRoleAllowedToJoinExternalTailnets": "none",
-    }
-
-    def test_settings_keep_the_named_settings_only(self):
-        (record,), calls = self.read("tailscale.settings", self.SETTINGS)
-
-        self.assertEqual(calls, [f"{providers.TAILNET_API}/tailnet/-/settings"])
-        self.assertEqual(record["devices_key_duration_days"], 90)
-        self.assertTrue(record["devices_approval_on"])
-        self.assertTrue(record["acls_externally_managed_on"])
-        self.assertNotIn("unread", record)
-        self.assertNotIn("aclsExternalLink", record)
-        self.assertNotIn("acls_external_link", record)
-        self.assertNotIn("network_flow_logging_on", record)
-
-    def test_a_setting_another_scope_governs_is_its_part_refused(self):
-        from control_plane.reading_parts import clean_refused_parts, refused_parts
-
-        partial = {**self.SETTINGS, "aclsExternallyManagedOn": None}
-        del partial["httpsEnabled"]
-
-        with providers.part_ledger() as ledger:
-            (record,), _ = self.read("tailscale.settings", partial)
-        snapshot = SimpleNamespace(
-            kind="tailscale.settings", reachable=True,
-            refused_parts=clean_refused_parts("tailscale.settings", ledger),
-        )
-        missing = {refused.part.name: refused.missing for refused in refused_parts(snapshot)}
-
-        self.assertIsNone(record["https_enabled"])
-        self.assertNotIn("unread", record)
-        self.assertEqual(missing, {"https": ("networking_settings:read",),
-                                   "acl_management": ("policy_file:read",)})
-
-    def test_every_setting_seen_refuses_no_part(self):
-        with providers.part_ledger() as ledger:
-            self.read("tailscale.settings", self.SETTINGS)
-
-        self.assertEqual(ledger, [])
-
-    USERS = {
-        "users": [
-            {
-                "id": "u1",
-                "displayName": "Example Person",
-                "loginName": "person@example.com",
-                "profilePicUrl": "https://example.com/p.png",
-                "tailnetId": "t1",
-                "created": "2026-01-01T00:00:00Z",
-                "type": "member",
-                "role": "owner",
-                "status": "active",
-                "deviceCount": 3,
-                "lastSeen": "2026-09-01T00:00:00Z",
-                "currentlyConnected": True,
-            },
-            {"displayName": "no id"},
-        ]
-    }
-
-    def test_users_keep_identity_role_and_presence_only(self):
-        (record,), calls = self.read("tailscale.user", self.USERS)
-
-        self.assertEqual(calls, [f"{providers.TAILNET_API}/tailnet/-/users"])
-        self.assertEqual(
-            record,
-            {
-                "id": "u1",
-                "display_name": "Example Person",
-                "login_name": "person@example.com",
-                "role": "owner",
-                "status": "active",
-                "created": "2026-01-01T00:00:00Z",
-                "last_seen": "2026-09-01T00:00:00Z",
-            },
-        )
-
-    def test_clean_drops_fields_the_schema_does_not_name(self):
-        from control_plane.observations import OBSERVATIONS
-
-        kept, _ = OBSERVATIONS["tailscale.user"].clean(
-            [{"id": "u1", "profile_pic_url": "https://example.com/p.png"}]
-        )
-
-        self.assertEqual(kept, [{"id": "u1"}])
-
-    def test_a_refused_read_raises_and_names_its_scope(self):
-        for kind, scope in (
-            ("tailscale.dns", "dns:read"),
-            ("tailscale.settings", "feature_settings:read"),
-            ("tailscale.user", "users:read"),
-        ):
-            for code in (403, 404):
-                with self.subTest(kind=kind, code=code):
-                    self.assertIn(scope, self.refuse(kind, code))
-                    self.assertEqual(self.refusal, providers.PERMISSION_REFUSAL)
-
-    def test_a_refused_token_is_the_credential_not_a_scope(self):
-        message = self.refuse("tailscale.user", 401)
-
-        self.assertNotIn("users:read", message)
-        self.assertEqual(self.refusal, providers.CREDENTIAL_REFUSAL)
-
-    def test_a_failure_that_is_not_about_scope_raises_without_one(self):
-        message = self.refuse("tailscale.dns", 500)
-
-        self.assertIn("500", message)
-        self.assertNotIn("dns:read", message)
-
-    def test_an_unreadable_answer_raises_rather_than_reading_as_empty(self):
-        with (
-            mock.patch.object(providers, "_tailnet_token", return_value="token"),
-            mock.patch.object(
-                providers.urllib.request, "urlopen", return_value=_Answer([])
-            ),
-            self.assertRaises(providers.ProviderError),
-        ):
-            providers.list_tailnet_users()
-
-    def test_services_are_read_from_the_services_endpoint(self):
-        calls = []
-
-        def urlopen(request, timeout=None, context=None):
-            del timeout
-            calls.append(request.full_url)
-            if request.full_url.endswith("/services"):
-                return _Answer(
-                    {
-                        "vipServices": [
-                            {
-                                "name": "svc:example",
-                                "addrs": ["100.64.0.9"],
-                                "ports": ["tcp:443"],
-                            }
-                        ]
-                    }
-                )
-            return _Answer({})
-
-        with (
-            mock.patch.object(providers, "_tailnet_token", return_value="token"),
-            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
-        ):
-            (record,) = providers.list_tailnet_policy()
-
-        self.assertEqual(record["services"][0]["name"], "svc:example")
-        self.assertFalse(any("vip-services" in url for url in calls))
-
-
-class _Answer:
-    """The context-manager shape `urlopen` returns."""
-
-    def __init__(self, payload):
-        self._payload = json.dumps(payload).encode()
-
-    def read(self):
-        return self._payload
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
-
-
-ADAPTED_CADDY = {
-    "apps": {
-        "http": {
-            "servers": {
-                "srv0": {
-                    "listen": [":443"],
-                    "routes": [
-                        {
-                            "match": [{"host": ["status.example.com"]}],
-                            "handle": [
-                                {
-                                    "handler": "subroute",
-                                    "routes": [
-                                        {
-                                            "handle": [
-                                                {
-                                                    "handler": "reverse_proxy",
-                                                    "upstreams": [
-                                                        {"dial": "uptime-kuma:3001"}
-                                                    ],
-                                                }
-                                            ]
-                                        }
-                                    ],
-                                }
-                            ],
-                            "terminal": True,
-                        },
-                        {
-                            "match": [{"host": ["health.example.com"]}],
-                            "handle": [
-                                {
-                                    "handler": "subroute",
-                                    "routes": [
-                                        {
-                                            "handle": [
-                                                {
-                                                    "handler": "static_response",
-                                                    "body": "ok",
-                                                }
-                                            ]
-                                        }
-                                    ],
-                                }
-                            ],
-                            "terminal": True,
-                        },
-                    ],
-                }
-            }
-        }
-    }
-}
-
-
-class CaddyRouteSweepTests(TestCase):
-    """What the edge serves, read out of the config Caddy itself runs on.
-
-    The names here answer over TLS from a box HQ sweeps, holds a credential for
-    and installs the certificate on, and every one of their service pages
-    read "nothing supplies this", because the only ingress HQ could describe was
-    a proxy this box does not run.
-    """
-
-    def _routes(self, config):
-        return {
-            record["domain"]: record["upstream"]
-            for record in caddy.routes(config, "an-edge")
-        }
-
-    def test_a_proxied_name_carries_the_container_it_hands_off_to(self):
-        self.assertEqual(
-            self._routes(ADAPTED_CADDY)["status.example.com"], "uptime-kuma:3001"
-        )
-
-    def test_a_name_caddy_answers_itself_has_no_upstream(self):
-        """A redirect or a static response forwards nowhere, and that is a fact."""
-
-        self.assertEqual(self._routes(ADAPTED_CADDY)["health.example.com"], "")
-
-    def test_the_upstream_is_found_however_deeply_it_is_nested(self):
-        """Caddy nests by how the Caddyfile was written, not by a fixed depth."""
-
-        deep = {
-            "apps": {
-                "http": {
-                    "servers": {
-                        "srv0": {
-                            "routes": [
-                                {
-                                    "match": [{"host": ["deep.example.com"]}],
-                                    "handle": [
-                                        {
-                                            "handler": "subroute",
-                                            "routes": [
-                                                {
-                                                    "handle": [
-                                                        {
-                                                            "handler": "subroute",
-                                                            "routes": [
-                                                                {
-                                                                    "handle": [
-                                                                        {
-                                                                            "handler": "reverse_proxy",
-                                                                            "upstreams": [
-                                                                                {
-                                                                                    "dial": "app:8080"
-                                                                                }
-                                                                            ],
-                                                                        }
-                                                                    ]
-                                                                }
-                                                            ],
-                                                        }
-                                                    ]
-                                                }
-                                            ],
-                                        }
-                                    ],
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-        }
-
-        self.assertEqual(self._routes(deep)["deep.example.com"], "app:8080")
-
-    def test_a_route_matching_no_host_is_not_a_hostname(self):
-        """Caddy's catch-all answers for anything, which is not a name."""
-
-        catch_all = {
-            "apps": {
-                "http": {
-                    "servers": {
-                        "srv0": {
-                            "routes": [
-                                {
-                                    "handle": [
-                                        {
-                                            "handler": "reverse_proxy",
-                                            "upstreams": [{"dial": "app:8080"}],
-                                        }
-                                    ]
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-        }
-
-        self.assertEqual(caddy.routes(catch_all, "an-edge"), [])
-
-    def test_one_route_serving_several_names_becomes_one_record_each(self):
-        """The rest of HQ joins on a hostname; a row holding three joins to none."""
-
-        shared = {
-            "apps": {
-                "http": {
-                    "servers": {
-                        "srv0": {
-                            "routes": [
-                                {
-                                    "match": [
-                                        {
-                                            "host": [
-                                                "one.example.com",
-                                                "two.example.com",
-                                            ]
-                                        }
-                                    ],
-                                    "handle": [
-                                        {
-                                            "handler": "reverse_proxy",
-                                            "upstreams": [{"dial": "app:8080"}],
-                                        }
-                                    ],
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-        }
-
-        self.assertEqual(
-            self._routes(shared),
-            {"one.example.com": "app:8080", "two.example.com": "app:8080"},
-        )
-
-    def test_a_balanced_route_names_no_single_upstream(self):
-        """Two backends is not one answer, and a guess reads as a fifth fact."""
-
-        balanced = {
-            "apps": {
-                "http": {
-                    "servers": {
-                        "srv0": {
-                            "routes": [
-                                {
-                                    "match": [{"host": ["ha.example.com"]}],
-                                    "handle": [
-                                        {
-                                            "handler": "reverse_proxy",
-                                            "upstreams": [
-                                                {"dial": "a:8080"},
-                                                {"dial": "b:8080"},
-                                            ],
-                                        }
-                                    ],
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-        }
-
-        self.assertEqual(self._routes(balanced)["ha.example.com"], "")
-
-    def test_an_edge_that_refuses_the_operation_is_skipped_not_fatal(self):
-        """Most SSH hosts are not an edge, and one down host is not a blackout."""
-
-        with (
-            mock.patch.object(
-                providers, "ssh_connection_refs", return_value=("a-box", "an-edge")
-            ),
-            mock.patch.object(
-                providers,
-                "_ssh",
-                side_effect=[
-                    providers.ProviderError("denied"),
-                    json.dumps(ADAPTED_CADDY).encode(),
-                ],
-            ),
-        ):
-            found = providers.PROVIDER_INVENTORY["caddy.route"]()
-
-        self.assertEqual(
-            sorted(record["domain"] for record in found),
-            ["health.example.com", "status.example.com"],
-        )
+        self.assertEqual(controller_id(), "a-named-host")
 
 
 class CapabilityMatchesTheHandlersTests(TestCase):
@@ -4679,100 +1651,6 @@ class CapabilityMatchesTheHandlersTests(TestCase):
         self.assertEqual(undeclared, [], f"handler nothing declares: {undeclared}")
 
 
-class CaddyRouteRenderingTests(TestCase):
-    """The file HQ writes for an edge, in the shape that edge already uses."""
-
-    def _rendered(self, specs, certificate_directory="/opt/apps/caddy/certs"):
-        return caddy.render_routes(specs, certificate_directory)
-
-    def test_a_route_becomes_a_site_block_that_serves_its_own_tls(self):
-        """Written out rather than importing the operator's snippet.
-
-        A file that imports a name from a file HQ does not own breaks the moment
-        that file is edited, which is the coupling the separate file exists to
-        avoid.
-        """
-
-        out = self._rendered([{"domain": "a.example.com", "upstream": "app:8080"}])
-
-        self.assertIn("a.example.com {", out)
-        self.assertIn("\ttls /opt/apps/caddy/certs/fullchain.pem", out)
-        self.assertIn("\treverse_proxy app:8080", out)
-
-    def test_the_same_declarations_render_the_same_bytes(self):
-        """A file whose order follows a query looks changed on every pass."""
-
-        specs = [
-            {"domain": "b.example.com", "upstream": "b:1"},
-            {"domain": "a.example.com", "upstream": "a:1"},
-        ]
-
-        self.assertEqual(self._rendered(specs), self._rendered(list(reversed(specs))))
-
-    def test_a_route_with_nowhere_to_forward_is_left_out(self):
-        """Caddy answers some names itself. A block with no upstream is invalid."""
-
-        out = self._rendered(
-            [
-                {"domain": "a.example.com", "upstream": "app:8080"},
-                {"domain": "answered-here.example.com", "upstream": ""},
-            ]
-        )
-
-        self.assertNotIn("answered-here", out)
-
-    def test_it_says_whose_file_it_is(self):
-        """It replaces this file wholesale, so it has to say so in the file."""
-
-        out = self._rendered([{"domain": "a.example.com", "upstream": "app:8080"}])
-
-        self.assertIn("Written by Severino HQ", out)
-
-    @mock.patch("controller_runtime.providers._ssh")
-    def test_plan_mode_is_a_complete_result_and_writes_nothing(self, ssh):
-        result = providers.execute(
-            {
-                "kind": "caddy.route",
-                "spec": {
-                    "connection_ref": "edge",
-                    "certificate_directory": "/certs",
-                    "routes": [{"domain": "a.example.com", "upstream": "app:80"}],
-                },
-            },
-            "reconcile",
-            apply=False,
-        )
-
-        self.assertFalse(result.changed)
-        self.assertEqual(result.conditions, [])
-        self.assertEqual(result.status, {"routes": 1})
-        ssh.assert_not_called()
-
-    @mock.patch.dict(
-        "os.environ",
-        {"EDGE_CONNECTION_REF": "edge", "EDGE_MANAGES": "1"},
-        clear=True,
-    )
-    @mock.patch("controller_runtime.providers._ssh")
-    def test_apply_writes_the_complete_owned_file(self, ssh):
-        result = providers.execute(
-            {
-                "kind": "caddy.route",
-                "spec": {
-                    "connection_ref": "edge",
-                    "certificate_directory": "/certs",
-                    "routes": [{"domain": "a.example.com", "upstream": "app:80"}],
-                },
-            },
-            "reconcile",
-        )
-
-        self.assertTrue(result.changed)
-        ssh.assert_called_once()
-        self.assertEqual(ssh.call_args.args[:2], ("edge", "routes:write"))
-        self.assertIn(b"reverse_proxy app:80", ssh.call_args.args[2])
-
-
 class CollectorFailureIsReportedTests(TestCase):
     """A collector that cannot read raises, and never reports emptiness.
 
@@ -4788,14 +1666,14 @@ class CollectorFailureIsReportedTests(TestCase):
     """
 
     def test_a_policy_read_that_is_refused_is_reported_not_swallowed(self):
-        refused = providers.ProviderError(
+        refused = ProviderError(
             "Tailscale refused the policy read (403). The credential needs the "
             "policy_file scope."
         )
         with (
             mock.patch.dict("os.environ", {"TAILSCALE_CONNECTION_REF": "example-tailnet"}),
-            mock.patch.object(providers, "_tailnet_token", return_value="t"),
-            mock.patch.object(providers, "_tailnet_policy", side_effect=refused),
+            mock.patch.object(tailnet_api, "tailnet_token", return_value="t"),
+            mock.patch.object(tailnet_policy, "_tailnet_policy", side_effect=refused),
         ):
             swept = providers.inventory()
 
@@ -4806,43 +1684,6 @@ class CollectorFailureIsReportedTests(TestCase):
             "reads as having no policy at all",
         )
         self.assertIn("policy_file", entry["error"])
-
-
-A_RECORDED_CERTIFICATE = {
-    "certificate_name": "an-example-certificate",
-    "domains": ["shop.example.test", "*.shop.example.test"],
-    "renewal_window_days": 30,
-    "consumers": [
-        {
-            "kind": "npm",
-            "name": "an-example-certificate-npm",
-            "connection_ref": "a-proxy",
-            "verify_domains": ["shop.example.test"],
-        }
-    ],
-    "publish_to": [
-        {
-            "kind": "onepassword",
-            "name": "an-example-certificate-onepassword",
-            "connection_ref": "a-password-manager",
-            "vault": "An Example Vault",
-            "item": "An Example Certificate Item",
-        }
-    ],
-}
-
-AN_OBSERVATION = {
-    "issuer": "An Example Authority",
-    "not_after": "2027-01-14T09:30:00+00:00",
-    "expected_fingerprint_sha256": "aa:bb:cc",
-    "consumers": [
-        {
-            "consumer": "an-example-certificate-npm",
-            "domain": "shop.example.test",
-            "fingerprint_sha256": "aa:bb:cc",
-        }
-    ],
-}
 
 A_SERVICE_ACCOUNT_TOKEN = "ops_an-example-service-account-token"
 
@@ -4979,16 +1820,16 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
         self.staged = staged
 
         with (
-            mock.patch.object(providers, "_run", side_effect=run),
+            mock.patch.object(commands, "run_command", side_effect=run),
             mock.patch.dict("os.environ", environment, clear=True),
         ):
-            result = providers._publish_tls_facts(
+            result = tls._publish_tls_facts(
                 spec or A_RECORDED_CERTIFICATE,
-                providers.ProviderResult(
+                ProviderResult(
                     changed=False,
                     status=dict(status or AN_OBSERVATION),
                     conditions=[
-                        providers._condition("Ready", True, "Verified", "Current.")
+                        provider_http.condition("Ready", True, "Verified", "Current.")
                     ],
                     message="TLS consumers observed.",
                 ),
@@ -5041,7 +1882,7 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
 
         self.assertEqual(
             sorted(written),
-            sorted(onepassword.PUBLISHED_LABELS),
+            sorted(onepassword.PUBLISHED_FIELDS),
         )
         self.assertEqual(written["Issued by"], "An Example Authority")
         self.assertEqual(written["Expires"], "2027-01-14")
@@ -5070,7 +1911,7 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
 
         written = self._written(self._publish({}, spec=spec)[0])
 
-        self.assertEqual(sorted(written), sorted(onepassword.PUBLISHED_LABELS))
+        self.assertEqual(sorted(written), sorted(onepassword.PUBLISHED_FIELDS))
         self.assertNotIn("Recovery Phrase", written)
 
     def test_nothing_on_the_item_is_deleted_and_the_note_is_left_alone(self):
@@ -5126,7 +1967,7 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
         self.assertEqual(types["Expires"], "date")
         self.assertEqual(
             {label for label, kind in types.items() if kind == "text"},
-            set(onepassword.PUBLISHED_LABELS) - {"Expires"},
+            set(onepassword.PUBLISHED_FIELDS) - {"Expires"},
         )
 
     def test_the_expiry_1password_stores_is_read_back_as_the_date_it_was_given(self):
@@ -5247,7 +2088,7 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
                 for argument in command
                 if "[file]=" in argument
             )
-            raise providers.ProviderError("1Password refused the write.")
+            raise ProviderError("1Password refused the write.")
 
         acme = Path(self.enterContext(tempfile.TemporaryDirectory()))
         live = acme / "config" / "live" / A_RECORDED_CERTIFICATE["certificate_name"]
@@ -5256,20 +2097,20 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
         live.joinpath("privkey.pem").write_bytes(A_PRIVATE_KEY)
 
         with (
-            mock.patch.object(providers, "_run", side_effect=run),
+            mock.patch.object(commands, "run_command", side_effect=run),
             mock.patch.dict(
                 "os.environ",
                 {**A_PASSWORD_MANAGER_CONNECTION, "HQ_ACME_DIR": str(acme)},
                 clear=True,
             ),
         ):
-            result = providers._publish_tls_facts(
+            result = tls._publish_tls_facts(
                 A_RECORDED_CERTIFICATE,
-                providers.ProviderResult(
+                ProviderResult(
                     changed=False,
                     status=dict(AN_OBSERVATION),
                     conditions=[
-                        providers._condition("Ready", True, "Verified", "Current.")
+                        provider_http.condition("Ready", True, "Verified", "Current.")
                     ],
                     message="TLS consumers observed.",
                 ),
@@ -5338,13 +2179,13 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
             return b""
 
         with (
-            mock.patch.object(providers, "_run", side_effect=run),
-            mock.patch.object(providers, "reconcile_tls") as observe,
+            mock.patch.object(commands, "run_command", side_effect=run),
+            mock.patch.object(tls_verification, "reconcile_tls") as observe,
         ):
-            observe.return_value = providers.ProviderResult(
+            observe.return_value = ProviderResult(
                 changed=False, status=dict(AN_OBSERVATION), conditions=[], message=""
             )
-            providers._tls_reconcile(A_RECORDED_CERTIFICATE, apply=False)
+            tls._tls_reconcile(A_RECORDED_CERTIFICATE, apply=False)
 
         self.assertEqual(calls, [])
 
@@ -5373,73 +2214,6 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
         )
 
 
-class RecordingTheFactsIsNeverTheCertificatesJobTests(TestCase):
-    """A password manager being unreachable is not a certificate being wrong.
-
-    Raising here would fail the reconcile, which marks the resource degraded and
-    queues an automatic retry of a deployment that had nothing wrong with it,
-    over a note that did not get filed.
-    """
-
-    def _reconcile_with_a_failing_publisher(self, failure):
-        observed = providers.ProviderResult(
-            changed=False,
-            status=dict(AN_OBSERVATION),
-            conditions=[providers._condition("Ready", True, "Verified", "Current.")],
-            message="TLS consumers observed.",
-        )
-        with (
-            mock.patch.object(providers, "apply_tls_reconcile", return_value=observed),
-            mock.patch.object(onepassword, "publish", side_effect=failure),
-        ):
-            return providers._tls_reconcile(A_RECORDED_CERTIFICATE, apply=True)
-
-    def test_a_failed_publication_leaves_the_reconcile_successful(self):
-        result = self._reconcile_with_a_failing_publisher(
-            providers.ProviderError("1Password write for a certificate failed.")
-        )
-
-        self.assertEqual(
-            [condition["type"] for condition in result.conditions], ["Ready"]
-        )
-        self.assertTrue(result.conditions[0]["status"])
-
-    def test_a_failed_publication_is_reported_rather_than_passed_over(self):
-        result = self._reconcile_with_a_failing_publisher(
-            providers.ProviderError("1Password write for a certificate failed.")
-        )
-        published = result.status["published_facts"][0]
-
-        self.assertFalse(published["written"])
-        self.assertEqual(published["target"], "an-example-certificate-onepassword")
-        self.assertIn("Facts were not recorded on", result.message)
-
-    def test_a_tool_that_is_not_installed_degrades_the_same_way(self):
-        """`op` absent raises through the subprocess boundary, not the provider's."""
-
-        result = self._reconcile_with_a_failing_publisher(OSError("no such file"))
-
-        self.assertEqual(
-            [condition["type"] for condition in result.conditions], ["Ready"]
-        )
-        self.assertFalse(result.status["published_facts"][0]["written"])
-
-    def test_a_certificate_recording_nowhere_reports_no_publication_at_all(self):
-        """Every certificate that names no vault must be untouched by this."""
-
-        observed = providers.ProviderResult(
-            changed=False,
-            status={"issuer": "An Example Authority"},
-            conditions=[],
-            message=".",
-        )
-        spec = {**A_RECORDED_CERTIFICATE, "publish_to": []}
-        with mock.patch.object(providers, "apply_tls_reconcile", return_value=observed):
-            result = providers._tls_reconcile(spec, apply=True)
-
-        self.assertNotIn("published_facts", result.status)
-
-
 class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
     """The one credential here can write, so where it can appear is the point.
 
@@ -5450,12 +2224,12 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
 
     def _publish_against(self, run):
         with (
-            mock.patch.object(providers, "_run", side_effect=run),
+            mock.patch.object(commands, "run_command", side_effect=run),
             mock.patch.dict("os.environ", A_PASSWORD_MANAGER_CONNECTION, clear=True),
         ):
-            return providers._publish_tls_facts(
+            return tls._publish_tls_facts(
                 A_RECORDED_CERTIFICATE,
-                providers.ProviderResult(
+                ProviderResult(
                     changed=False,
                     status=dict(AN_OBSERVATION),
                     conditions=[],
@@ -5490,7 +2264,7 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
 
     def test_a_failure_reports_the_step_and_not_the_credential(self):
         def run(command, *, input_bytes=None, step="command", env=None):
-            raise providers.ProviderError(f"{step} failed.")
+            raise ProviderError(f"{step} failed.")
 
         result = self._publish_against(run)
 
@@ -5506,7 +2280,7 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
         """
 
         with (
-            mock.patch.object(providers.subprocess, "run") as run,
+            mock.patch.object(subprocess, "run") as run,
             self.assertLogs("severino.controller", level="WARNING") as logged,
         ):
             run.return_value = mock.Mock(
@@ -5514,8 +2288,8 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
                 stdout=b"",
                 stderr=f"could not use {A_SERVICE_ACCOUNT_TOKEN}".encode(),
             )
-            with self.assertRaises(providers.ProviderError):
-                providers._run(
+            with self.assertRaises(ProviderError):
+                commands.run_command(
                     ["op", "item", "get", "an-item"],
                     step="1Password read for a certificate",
                     env={"OP_SERVICE_ACCOUNT_TOKEN": A_SERVICE_ACCOUNT_TOKEN},
@@ -5531,11 +2305,11 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
         """Replacing it outright would leave `op` without a PATH or a HOME."""
 
         with (
-            mock.patch.object(providers.subprocess, "run") as run,
+            mock.patch.object(subprocess, "run") as run,
             mock.patch.dict("os.environ", {"PATH": "/an/example/path"}, clear=True),
         ):
             run.return_value = mock.Mock(returncode=0, stdout=b"", stderr=b"")
-            providers._run(
+            commands.run_command(
                 ["op", "whoami"], env={"OP_SERVICE_ACCOUNT_TOKEN": "t"}, step="a step"
             )
 
@@ -5545,14 +2319,14 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
 
     def test_cloud_writer_cannot_inherit_connect_authentication(self):
         with (
-            mock.patch.object(providers.subprocess, "run") as run,
+            mock.patch.object(subprocess, "run") as run,
             mock.patch.dict("os.environ", {
                 "OP_CONNECT_HOST": "http://127.0.0.1:8080",
                 "OP_CONNECT_TOKEN": "example-connect-token",
             }),
         ):
             run.return_value = mock.Mock(returncode=0, stdout=b"", stderr=b"")
-            providers._run(
+            commands.run_command(
                 ["op", "item", "edit"],
                 env={"OP_SERVICE_ACCOUNT_TOKEN": "t"},
                 step="a step",
@@ -5564,7 +2338,7 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
         """A vault is not a machine, and `reaches` everywhere else means one."""
 
         with (
-            mock.patch.object(providers, "_run") as run,
+            mock.patch.object(commands, "run_command") as run,
             mock.patch.dict("os.environ", A_PASSWORD_MANAGER_CONNECTION, clear=True),
         ):
             run.return_value = json.dumps(
@@ -5579,10 +2353,10 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
 
     def test_a_vault_list_that_cannot_be_read_is_a_failed_probe(self):
         with (
-            mock.patch.object(providers, "_run", return_value=b"not json"),
+            mock.patch.object(commands, "run_command", return_value=b"not json"),
             mock.patch.dict("os.environ", A_PASSWORD_MANAGER_CONNECTION, clear=True),
         ):
-            with self.assertRaisesRegex(providers.ProviderError, "could not read"):
+            with self.assertRaisesRegex(ProviderError, "could not read"):
                 providers._probe_onepassword("a-password-manager")
 
     def test_an_item_that_cannot_be_read_is_a_failed_publication(self):
@@ -5599,70 +2373,6 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
         self.assertIn("could not read", result.status["published_facts"][0]["detail"])
 
 
-class CaddyDiscoveryByRoleTests(TestCase):
-    """Which SSH connections get asked for Caddy routes, and which never do."""
-
-    class _Runtime:
-        def __init__(self, refs, roles):
-            self._refs = refs
-            self._roles = roles
-            self.asked = []
-
-        def ssh_connection_refs(self):
-            return self._refs
-
-        def connection_refs_for_role(self, role):
-            return tuple(r for r in self._refs if self._roles.get(r) == role)
-
-        def ssh(self, connection_ref, operation, payload=None):
-            self.asked.append((connection_ref, operation))
-            return b'{"apps":{}}'
-
-    def test_every_declared_caddy_host_is_asked(self):
-        """A set, not a host. A second edge is a field, not a code change."""
-
-        from control_plane.provider_adapters import caddy
-
-        runtime = self._Runtime(
-            ("edge", "edge-two", "shared-hosting"),
-            {"edge": "caddy", "edge-two": "caddy", "shared-hosting": "cpanel"},
-        )
-
-        caddy.inventory(runtime)
-
-        self.assertEqual(
-            [ref for ref, _ in runtime.asked], ["edge", "edge-two"]
-        )
-
-    def test_a_connection_declared_for_something_else_is_never_asked(self):
-        """The failure this removes: shared hosting has no Caddy and no routes.
-
-        Asked anyway it refuses, every sweep, forever: a cost paid on a
-        machine somebody else runs.
-        """
-
-        from control_plane.provider_adapters import caddy
-
-        runtime = self._Runtime(
-            ("edge", "shared-hosting"), {"edge": "caddy", "shared-hosting": "cpanel"}
-        )
-
-        caddy.inventory(runtime)
-
-        self.assertNotIn("shared-hosting", [ref for ref, _ in runtime.asked])
-
-    def test_nothing_declared_still_discovers(self):
-        """Absence of a role is nobody having said, not nobody qualifying."""
-
-        from control_plane.provider_adapters import caddy
-
-        runtime = self._Runtime(("edge", "other"), {})
-
-        caddy.inventory(runtime)
-
-        self.assertEqual([ref for ref, _ in runtime.asked], ["edge", "other"])
-
-
 class HostPerimeterTests(TestCase):
     """What an edge relies on to stay shut, and whether it is."""
 
@@ -5677,28 +2387,28 @@ class HostPerimeterTests(TestCase):
         ).encode()
         with (
             mock.patch.object(
-                providers, "connection_refs_for_role", return_value=("an-edge",)
+                connection_env, "connection_refs_for_role", return_value=("an-edge",)
             ),
-            mock.patch.object(providers, "_ssh", return_value=payload),
+            mock.patch.object(commands, "run_ssh", return_value=payload),
             mock.patch.object(
-                providers,
-                "_transport",
+                connection_env,
+                "ssh_target",
                 return_value={"host": "100.64.0.9", "port": 7722, "user": "u", "host_key": "k"},
             ),
             mock.patch.object(
-                providers,
+                portainer,
                 "list_portainer_containers",
                 return_value=containers
                 if containers is not None
                 else [{"host": "an-edge", "ports": [80, 443, 9001]}],
             ),
             mock.patch.object(
-                providers,
+                host_readings,
                 "_answers_from_here",
                 side_effect=lambda address, port, **_: port in answers,
             ),
         ):
-            (reading,) = providers.list_host_perimeter()
+            (reading,) = host_readings.list_host_perimeter()
         return reading
 
     def test_a_shut_perimeter_reports_nothing_answering(self):
@@ -5880,7 +2590,7 @@ class ConnectionManagesTests(TestCase):
         from unittest import mock
 
         with mock.patch.dict("os.environ", env, clear=True):
-            return providers.connection_manages("example-dns")
+            return connection_env.connection_manages("example-dns")
 
     def test_absent_is_observe(self):
         self.assertFalse(self.manages({"CLOUDFLARE_DNS_CONNECTION_REF": "example-dns"}))
@@ -5971,9 +2681,9 @@ class NotConnectedTests(TestCase):
     def test_a_local_tailnet_reading_counts_as_a_source(self):
         from unittest import mock
 
-        with mock.patch.object(providers, "TAILNET_STATUS", "/run/example/status.json"):
+        with mock.patch.object(tailscale, "TAILNET_STATUS", "/run/example/status.json"):
             self.assertTrue(providers._has_source("tailscale.device", set()))
-        with mock.patch.object(providers, "TAILNET_STATUS", ""):
+        with mock.patch.object(tailscale, "TAILNET_STATUS", ""):
             self.assertFalse(providers._has_source("tailscale.device", set()))
 
     def test_connections_shaped_as_a_deployment_names_them_are_sources(self):
@@ -5992,10 +2702,10 @@ class NotConnectedTests(TestCase):
             "ONEPASSWORD_CERTIFICATES_PROVIDER": "onepassword",
         }
         with mock.patch.dict("os.environ", env, clear=True):
-            refs = set(providers.ssh_connection_refs())
+            refs = set(connection_env.ssh_connection_refs())
             connected = {
-                providers.effective_provider(ref, refs)
-                for ref in providers.connection_prefixes()
+                connection_env.effective_provider(ref, refs)
+                for ref in connection_env.connection_prefixes()
             }
             self.assertEqual(connected, {"ssh", "tailscale", "onepassword"})
             for kind in ("host.perimeter", "caddy.route", "tailscale.device",
@@ -6005,9 +2715,9 @@ class NotConnectedTests(TestCase):
     def test_a_host_reading_needs_its_mounted_source(self):
         from unittest import mock
 
-        with mock.patch.object(providers, "HOST_FIREWALL", "/run/example/firewall.json"):
+        with mock.patch.object(host_readings, "HOST_FIREWALL", "/run/example/firewall.json"):
             self.assertTrue(providers._has_source("host.firewall", set()))
-        with mock.patch.object(providers, "HOST_FIREWALL", ""):
+        with mock.patch.object(host_readings, "HOST_FIREWALL", ""):
             self.assertFalse(providers._has_source("host.firewall", set()))
 
     def test_a_host_reading_with_nothing_mounted_is_not_connected(self):
@@ -6015,7 +2725,7 @@ class NotConnectedTests(TestCase):
 
         lister = mock.Mock(return_value=[])
         with (
-            mock.patch.object(providers, "HOST_FIREWALL", ""),
+            mock.patch.object(host_readings, "HOST_FIREWALL", ""),
             mock.patch.dict(providers.PROVIDER_INVENTORY, {"host.firewall": lister}, clear=True),
         ):
             found = providers.inventory()
@@ -6037,30 +2747,6 @@ class NotConnectedTests(TestCase):
             self.assertFalse(providers._has_source("example_reading", set()))
 
 
-class _Page:
-    """A stubbed urlopen answer: where it landed, its content type and body."""
-
-    def __init__(self, body, *, landed, content_type="application/json"):
-        from email.message import Message
-
-        self._body = body
-        self._landed = landed
-        self.headers = Message()
-        self.headers["Content-Type"] = content_type
-
-    def geturl(self):
-        return self._landed
-
-    def read(self):
-        return self._body
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
-
-
 class SignInRedirectTests(TestCase):
     """An API address behind a sign-in proxy answers a login page, and HQ says so."""
 
@@ -6073,12 +2759,12 @@ class SignInRedirectTests(TestCase):
             seen.append(request)
             return answer
 
-        with mock.patch.object(providers.urllib.request, "urlopen", urlopen):
+        with mock.patch.object(urllib.request, "urlopen", urlopen):
             try:
-                return providers._RUNTIME.request(
+                return provider_runtime.RUNTIME.request(
                     self.API, headers={"Authorization": "Bearer example-token"}
                 ), seen
-            except providers.ProviderError as exc:
+            except ProviderError as exc:
                 return exc, seen
 
     def test_a_redirect_to_a_sign_in_page_names_its_host_only(self):
@@ -6090,13 +2776,13 @@ class SignInRedirectTests(TestCase):
             )
         )
 
-        self.assertIsInstance(found, providers.ProviderError)
+        self.assertIsInstance(found, ProviderError)
         self.assertEqual(
             str(found),
             "The address answered with a sign-in page at sso.example.com, not the API. "
             "Use the provider's direct API address.",
         )
-        self.assertEqual(found.failure, providers.ADDRESS_FAILURE)
+        self.assertEqual(found.failure, ADDRESS_FAILURE)
         self.assertEqual(found.refusal, "")
         self.assertNotIn("example-id", str(found))
         self.assertNotIn("state", str(found))
@@ -6106,16 +2792,16 @@ class SignInRedirectTests(TestCase):
             _Page(b"  <html></html>", landed=self.API, content_type="application/json")
         )
 
-        self.assertIsInstance(found, providers.ProviderError)
+        self.assertIsInstance(found, ProviderError)
         self.assertIn("answered with a web page, not the API", str(found))
-        self.assertEqual(found.failure, providers.ADDRESS_FAILURE)
+        self.assertEqual(found.failure, ADDRESS_FAILURE)
 
     def test_a_redirect_to_another_host_is_refused_even_with_json(self):
         found, _ = self.call(_Page(b"[]", landed="https://other.example.com/api"))
 
-        self.assertIsInstance(found, providers.ProviderError)
+        self.assertIsInstance(found, ProviderError)
         self.assertIn("redirected to other.example.com", str(found))
-        self.assertEqual(found.failure, providers.ADDRESS_FAILURE)
+        self.assertEqual(found.failure, ADDRESS_FAILURE)
 
     def test_no_answer_is_the_network_and_a_401_refuses_the_credential(self):
         def raising(error):
@@ -6125,15 +2811,15 @@ class SignInRedirectTests(TestCase):
             return urlopen
 
         cases = (
-            (providers.urllib.error.URLError("no route"), providers.NETWORK_FAILURE, ""),
-            (TimeoutError(), providers.NETWORK_FAILURE, ""),
+            (urllib.error.URLError("no route"), NETWORK_FAILURE, ""),
+            (TimeoutError(), NETWORK_FAILURE, ""),
             (
-                providers.urllib.error.HTTPError(self.API, 401, "Unauthorized", {}, None),
-                providers.CREDENTIAL_REFUSAL,
-                providers.CREDENTIAL_REFUSAL,
+                urllib.error.HTTPError(self.API, 401, "Unauthorized", {}, None),
+                CREDENTIAL_REFUSAL,
+                CREDENTIAL_REFUSAL,
             ),
             (
-                providers.urllib.error.HTTPError(self.API, 500, "Server error", {}, None),
+                urllib.error.HTTPError(self.API, 500, "Server error", {}, None),
                 "",
                 "",
             ),
@@ -6141,17 +2827,17 @@ class SignInRedirectTests(TestCase):
         for error, failure, refusal in cases:
             with self.subTest(error=type(error).__name__):
                 with mock.patch.object(
-                    providers.urllib.request, "urlopen", raising(error)
-                ), self.assertRaises(providers.ProviderError) as raised:
-                    providers._RUNTIME.request(self.API)
+                    urllib.request, "urlopen", raising(error)
+                ), self.assertRaises(ProviderError) as raised:
+                    provider_runtime.RUNTIME.request(self.API)
                 self.assertEqual(raised.exception.failure, failure)
                 self.assertEqual(raised.exception.refusal, refusal)
 
     def test_a_probe_reports_why_it_failed(self):
         def probe(connection_ref):
-            raise providers.ProviderError(
+            raise ProviderError(
                 "The address answered with a web page, not the API.",
-                failure=providers.ADDRESS_FAILURE,
+                failure=ADDRESS_FAILURE,
             )
 
         found = providers._probed(probe, "example-npm")
@@ -6161,7 +2847,7 @@ class SignInRedirectTests(TestCase):
             {
                 "ok": False,
                 "detail": "The address answered with a web page, not the API.",
-                "failure": providers.ADDRESS_FAILURE,
+                "failure": ADDRESS_FAILURE,
             },
         )
 
@@ -6179,68 +2865,6 @@ class SignInRedirectTests(TestCase):
         self.assertEqual(request.headers.get("Accept"), "application/json")
 
 
-class RegistrarRefusalTests(TestCase):
-    def test_a_refused_registrar_read_says_which_refusal(self):
-        refused = providers.ProviderError(
-            "Cloudflare refused the request: Authentication error", refusal="permission"
-        )
-        with mock.patch.object(providers, "_analytics_account", return_value="acct"), \
-                mock.patch.object(providers, "_cloudflare_api_cursor_list", side_effect=refused):
-            with providers.part_ledger() as refused_parts:
-                found = providers._registrar_domains()
-
-        self.assertEqual(found, {})
-        self.assertEqual(
-            refused_parts,
-            [{"part": "registration", "refusal": "permission",
-              "reason": "Cloudflare refused the request: Authentication error",
-              "scope": "", "connection_ref": ""}],
-        )
-
-
-class _Recorder:
-    """A loopback HTTP server that records each request and answers as told."""
-
-    def __init__(self, answer):
-        import http.server
-        import threading
-
-        self.seen = []
-        recorder = self
-
-        class Handler(http.server.BaseHTTPRequestHandler):
-            def _answer(self):
-                length = int(self.headers.get("Content-Length") or 0)
-                recorder.seen.append(
-                    (self.command, self.path, dict(self.headers), self.rfile.read(length))
-                )
-                status, headers, body = answer(self)
-                self.send_response(status)
-                for name, value in headers.items():
-                    self.send_header(name, value)
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-
-            do_GET = do_POST = _answer
-
-            def log_message(self, *args):
-                pass
-
-        self.server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
-        self.url = f"http://127.0.0.1:{self.server.server_port}"
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
-
-    def __enter__(self):
-        self.thread.start()
-        return self
-
-    def __exit__(self, *exc):
-        self.server.shutdown()
-        self.server.server_close()
-        return False
-
-
 class CredentialedTransportTests(TestCase):
     """Every provider request leaves through one opener with one redirect rule."""
 
@@ -6253,8 +2877,8 @@ class CredentialedTransportTests(TestCase):
                 lambda _: (302, {"Location": f"{elsewhere.url}/landing"}, b"")
             )
             with origin:
-                with self.assertRaises(providers.ProviderError) as raised:
-                    providers._open(f"{origin.url}/api", headers=self.TOKEN)
+                with self.assertRaises(ProviderError) as raised:
+                    provider_http.open_url(f"{origin.url}/api", headers=self.TOKEN)
 
         self.assertIn("redirected to 127.0.0.1, not the API", str(raised.exception))
         self.assertEqual(len(origin.seen), 1)
@@ -6268,7 +2892,7 @@ class CredentialedTransportTests(TestCase):
             return 200, {"Content-Type": "application/json"}, b'{"ok": true}'
 
         with _Recorder(answer) as origin:
-            with providers._open(f"{origin.url}/api", headers=self.TOKEN) as response:
+            with provider_http.open_url(f"{origin.url}/api", headers=self.TOKEN) as response:
                 self.assertEqual(json.loads(response.read()), {"ok": True})
 
         (first, second) = origin.seen
@@ -6282,8 +2906,8 @@ class CredentialedTransportTests(TestCase):
             return 200, {"Content-Type": "application/json"}, b"{}"
 
         with _Recorder(answer) as origin:
-            with self.assertRaises(providers.ProviderError) as raised:
-                providers._open(
+            with self.assertRaises(ProviderError) as raised:
+                provider_http.open_url(
                     f"{origin.url}/graphql",
                     method="POST",
                     data=b"{}",
@@ -6300,15 +2924,15 @@ class CredentialedTransportTests(TestCase):
             seen.append(context)
             return _Page(b'{"devices": []}', landed=request.full_url)
 
-        with mock.patch.object(providers.urllib.request, "urlopen", urlopen):
-            providers._tailnet_api_devices("example-token")
+        with mock.patch.object(urllib.request, "urlopen", urlopen):
+            tailnet_api.tailnet_api_devices("example-token")
 
         (context,) = seen
-        self.assertIsInstance(context, providers.ssl.SSLContext)
-        self.assertEqual(context.minimum_version, providers.ssl.TLSVersion.TLSv1_2)
+        self.assertIsInstance(context, ssl.SSLContext)
+        self.assertEqual(context.minimum_version, ssl.TLSVersion.TLSv1_2)
 
     def test_no_provider_request_is_built_outside_the_one_opener(self):
-        """An architecture test: ``urllib.request`` is reached only through ``_open``."""
+        """An architecture test: ``urllib.request`` is reached only through ``open_url``."""
 
         import ast
 
@@ -6317,7 +2941,7 @@ class CredentialedTransportTests(TestCase):
             *sorted((root / "controller_runtime").glob("*.py")),
             *sorted((root / "control_plane" / "provider_adapters").glob("*.py")),
         ]
-        allowed = {"_provider_request", "_open"}
+        allowed = {"_provider_request", "open_url"}
         offenders = []
         for path in sources:
             if path.name.startswith("test"):
@@ -6345,11 +2969,11 @@ class MissingSettingTests(TestCase):
     def test_a_missing_credential_names_no_variable(self):
         with (
             self.assertLogs("severino.controller", "WARNING") as logged,
-            self.assertRaises(providers.ProviderError) as raised,
+            self.assertRaises(ProviderError) as raised,
         ):
-            providers._cloudflare_token("")
+            cloudflare_api.cloudflare_token("")
 
-        self.assertEqual(str(raised.exception), providers.NOT_CONFIGURED)
+        self.assertEqual(str(raised.exception), provider_http.NOT_CONFIGURED)
         self.assertNotIn("API_TOKEN", str(raised.exception))
         self.assertIn("CLOUDFLARE_DNS_API_TOKEN", "\n".join(logged.output))
 
@@ -6363,8 +2987,8 @@ class MissingSettingTests(TestCase):
         clear=True,
     )
     def test_a_bad_port_names_the_connection_not_the_variable(self):
-        with self.assertRaises(providers.ProviderError) as raised:
-            providers._transport("example-edge")
+        with self.assertRaises(ProviderError) as raised:
+            connection_env.ssh_target("example-edge")
 
         self.assertNotIn("EXAMPLE_EDGE", str(raised.exception))
         self.assertIn("example-edge", str(raised.exception))
@@ -6383,24 +3007,24 @@ class ManagesGateTests(TestCase):
         },
     }
 
-    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch("controller_runtime.commands.run_ssh")
     def test_a_write_through_an_observing_connection_is_refused(self, ssh):
         with (
             mock.patch.dict("os.environ", self.OBSERVING, clear=True),
-            self.assertRaisesRegex(providers.ProviderError, "edge only observes"),
+            self.assertRaisesRegex(ProviderError, "edge only observes"),
         ):
             providers.execute(self.ROUTE, "reconcile")
 
         ssh.assert_not_called()
 
-    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch("controller_runtime.commands.run_ssh")
     def test_a_plan_through_an_observing_connection_still_runs(self, ssh):
         with mock.patch.dict("os.environ", self.OBSERVING, clear=True):
             result = providers.execute(self.ROUTE, "reconcile", apply=False)
 
         self.assertEqual(result.status, {"routes": 1})
 
-    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.provider_http.request_json")
     def test_a_resource_naming_no_connection_needs_every_one_of_its_kind_to_manage(
         self, request
     ):
@@ -6417,7 +3041,7 @@ class ManagesGateTests(TestCase):
         with (
             mock.patch.dict("os.environ", env, clear=True),
             self.assertRaisesRegex(
-                providers.ProviderError, "example-adguard-home only observes"
+                ProviderError, "example-adguard-home only observes"
             ),
         ):
             providers.execute(resource, "delete")
@@ -6427,7 +3051,7 @@ class ManagesGateTests(TestCase):
     def test_a_write_with_no_connection_at_all_is_refused(self):
         with (
             mock.patch.dict("os.environ", {}, clear=True),
-            self.assertRaisesRegex(providers.ProviderError, "No connection"),
+            self.assertRaisesRegex(ProviderError, "No connection"),
         ):
             providers.execute(
                 {"kind": "adguard.rewrite", "spec": {"domain": "a.example.com"}},
@@ -6445,7 +3069,7 @@ class ManagesGateTests(TestCase):
         )
         with (
             mock.patch.dict("os.environ", {}, clear=True),
-            self.assertRaises(providers.ProviderError) as raised,
+            self.assertRaises(ProviderError) as raised,
         ):
             providers.execute({"kind": "cloudflare.zone", "spec": {}}, "reconcile")
 

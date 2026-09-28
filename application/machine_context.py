@@ -224,7 +224,7 @@ def serves_links(machine, relationships) -> tuple:
 
     from .connections import machines_once
     from .hq_self import hq_service
-    from .topology import RELATIONS
+    from .topology_model import RELATIONS
 
     group = relationships.group(RELATIONS["runs_on"].inverse)
     serves = [item.entity for item in (group.items if group else ())]

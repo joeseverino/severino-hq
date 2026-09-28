@@ -228,7 +228,7 @@ class VerificationTests(TestCase):
         return _verification(finding, principal or cli_principal(), subject)
 
     def finding(self, **fields):
-        from .findings import Finding
+        from .finding_model import Finding
 
         return Finding(
             rule="example-rule", subject="", title="t", severity="neutral", explanation="e",

@@ -1,7 +1,7 @@
 from dataclasses import replace
 from unittest import TestCase, mock
 
-from control_plane.providers import CONTROLLER_PROVIDER_ADAPTERS
+from control_plane.provider_adapters import CONTROLLER_PROVIDER_ADAPTERS
 from .contracts import ControllerIntegrationAdapter, compile_controller_adapters
 
 

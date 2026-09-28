@@ -18,7 +18,6 @@ from ipaddress import ip_address
 from types import MappingProxyType
 from typing import Any
 
-from .credential_reads import REGISTRAR_READ
 from .names import in_zone, normalized_hostname
 from .observations import OBSERVATIONS, ReadingPart
 from .provider_adapters.contracts import (
@@ -28,24 +27,6 @@ from .provider_adapters.contracts import (
 )
 
 WHOLE = ""
-
-# Parts of resource kinds' sweeps, read through a credential other than the
-# one that lists the kind, or in pieces. Readings declare theirs on the spec.
-RESOURCE_PARTS: Mapping[str, tuple[ReadingPart, ...]] = MappingProxyType(
-    {
-        "cloudflare.zone": (
-            ReadingPart(
-                "posture", "Zone TLS posture", ("Zone Settings Read (zone)",), "cloudflare_api"
-            ),
-            ReadingPart("registration", "Domain registration", (REGISTRAR_READ,), "cloudflare_api"),
-        ),
-        "tailscale.policy": (
-            ReadingPart("settings", "Tailnet settings", ("feature_settings:read",)),
-            ReadingPart("dns", "Tailnet DNS", ("dns:read",)),
-            ReadingPart("services", "Tailnet services", ("services:read",)),
-        ),
-    }
-)
 
 _REASON_LENGTH = 300
 _SCOPE_LENGTH = 253
@@ -64,7 +45,7 @@ def parts_of(kind: str) -> Mapping[str, ReadingPart]:
     else:
         provider = PROVIDERS.get(kind)
         whole = ReadingPart(WHOLE, (provider.label if provider else "") or kind)
-        declared = RESOURCE_PARTS.get(kind, ())
+        declared = provider.parts if provider else ()
     return MappingProxyType({WHOLE: whole, **{part.name: part for part in declared}})
 
 

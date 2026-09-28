@@ -19,14 +19,20 @@ import re
 from typing import Any
 
 from control_plane.names import is_hostname, normalized_hostname
-from control_plane.providers import PROVIDERS, TAILNET_KIND
+from control_plane.providers import PROVIDERS
+from control_plane.provider_adapters.tailscale import TAILNET_KIND
 from control_plane.connection_kinds import CONNECTION_LABELS
 from core.network import is_trusted_proxy, split_host_port
 
-from .connection import Address, Connection, Header, forwarded_chain, socket_peer
+from .connection import Connection
 from .entity_links import entity_link
-from .paths import NETWORK_LABELS, Hop, Route, ServicePath, Source, why_unread
+from .paths import why_unread
+from .path_model import NETWORK_LABELS, Hop, Route, ServicePath, Source, last_machine
 from .reach import network_of
+from .request_addresses import Address
+from .request_channel import forwarded_chain, socket_peer
+from .request_headers import Header
+
 
 PROVEN = "proven"
 CONTRADICTED = "contradicted"
@@ -301,7 +307,7 @@ class _Context:
 
     @property
     def last_machine(self) -> str:
-        return next((hop.name for hop in reversed(self.hops) if hop.step == "machine"), "")
+        return last_machine(self.hops)
 
     def header(self, name: str) -> str:
         return str(self.request.META.get(f"HTTP_{name.upper().replace('-', '_')}", "") or "").strip()
@@ -718,7 +724,9 @@ class RequestPath:
 def request_path(request) -> RequestPath:
     """How ``request`` reached HQ, read once per projection."""
 
-    from .connection import addresses_of, addresses_of_hq, connection, headers_of
+    from .connection import connection
+    from .request_addresses import addresses_of, addresses_of_hq
+    from .request_headers import headers_of
     from .connection_security import observed_request_controls
     from .paths import hq_path
 

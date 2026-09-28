@@ -25,16 +25,12 @@ from typing import Any, Callable, Iterable, Iterator, Mapping
 
 from django.utils import timezone
 
-from control_plane.names import in_zone
+from control_plane.names import in_zone, certificate_covers, normalized_hostname
 from control_plane.observations import OBSERVATIONS, ObservationSpec
 from control_plane.reading_parts import PartRefusal, refused_parts
-from control_plane.providers import (
-    CONTAINER_KIND,
-    PROVIDERS,
-    certificate_covers,
-    expiry_phrase,
-    normalized_hostname,
-)
+from control_plane.providers import PROVIDERS
+from control_plane.provider_adapters.portainer import CONTAINER_KIND
+from control_plane.provider_spec import expiry_phrase
 
 from .entity_links import kind_label
 from .freshness import stale_after
@@ -626,44 +622,6 @@ def facts_about(hostnames: Iterable[str], addresses: Iterable[str]) -> tuple[Fac
         _aged(fact, now - stale_after(fact.source_kind))
         for fact in sorted(found, key=lambda f: (f.source_label, f.connection_ref))
     )
-
-
-def disagreements(facts: Iterable[Fact]) -> dict[Fact, tuple[str, ...]]:
-    """Observed facts another source reports with a different single value.
-
-    A label is compared only where every source reporting it gives exactly one
-    value: a machine has several addresses, and two sources naming different
-    ones do not disagree. Maps each such fact to the labels of the sources that
-    report the label differently.
-    """
-
-    by_label: dict[str, dict[tuple[str, str], set[str]]] = {}
-    labels: dict[tuple[str, str], str] = {}
-    observed = [fact for fact in facts if fact.state != UNREADABLE]
-    for fact in observed:
-        by_label.setdefault(fact.label, {}).setdefault(fact.source, set()).add(fact.value)
-        labels[fact.source] = fact.source_label
-    single = {
-        label
-        for label, sources in by_label.items()
-        if len(sources) > 1 and all(len(values) == 1 for values in sources.values())
-    }
-    found: dict[Fact, tuple[str, ...]] = {}
-    for fact in observed:
-        if fact.label not in single:
-            continue
-        others = tuple(
-            sorted(
-                {
-                    labels[source]
-                    for source, values in by_label[fact.label].items()
-                    if source != fact.source and fact.value not in values
-                }
-            )
-        )
-        if others:
-            found[fact] = others
-    return found
 
 
 def _aged(fact: Fact, stale_before: datetime) -> Fact:

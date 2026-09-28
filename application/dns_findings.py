@@ -1,8 +1,8 @@
 """Findings from what the AdGuard readings say: protection, filtering, upstreams, unused names.
 
 Read off the facts ``topology`` puts on each AdGuard connection node from
-``ObservationSpec.facts``. Detectors return a ``Finding``'s fields and ``RULES``
-a ``FindingRule``'s; ``findings`` builds both, so this module does not import it.
+``ObservationSpec.facts``. Detectors return a ``Finding``'s fields; ``RULES``
+declares each rule beside the detector that decides it.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from control_plane.observations.adguard import (
     PROTECTION_OFF,
 )
 
+from .finding_model import FindingRule, built_findings
 from .ui import counted
 
 
@@ -112,36 +113,36 @@ def unused_names(estate: Any) -> tuple[dict[str, Any], ...]:
     return tuple(sorted(found, key=lambda finding: finding["title"]))
 
 
-RULES: tuple[dict[str, Any], ...] = (
-    dict(
+RULES: tuple[FindingRule, ...] = (
+    FindingRule(
         name="dns-protection-off",
         title="DNS protection off",
         severity="attention",
-        detect=protection_off,
+        detect=lambda estate, detect=protection_off: built_findings(detect(estate)),
         operator_action="Turn protection back on from the AdGuard dashboard.",
     ),
-    dict(
+    FindingRule(
         name="dns-filtering-off",
         title="DNS filtering off",
         severity="attention",
-        detect=filtering_off,
+        detect=lambda estate, detect=filtering_off: built_findings(detect(estate)),
         operator_action="Turn filtering on under Filters, DNS blocklists in AdGuard.",
     ),
-    dict(
+    FindingRule(
         name="dns-plain-upstream",
         title="Upstream DNS unencrypted",
         severity="neutral",
-        detect=plain_upstream,
+        detect=lambda estate, detect=plain_upstream: built_findings(detect(estate)),
         operator_action=(
             "Replace each plain upstream with its provider's DNS-over-TLS or DNS-over-HTTPS "
             "address under Settings, DNS settings in AdGuard, if queries should be encrypted."
         ),
     ),
-    dict(
+    FindingRule(
         name="dns-name-unused",
         title="Name nobody looks up",
         severity="neutral",
-        detect=unused_names,
+        detect=lambda estate, detect=unused_names: built_findings(detect(estate)),
         operator_action=(
             "Remove the service and its rewrite if nothing uses it; otherwise point the "
             "device that should use it at AdGuard for DNS."

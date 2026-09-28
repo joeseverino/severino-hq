@@ -32,465 +32,30 @@ earlier sketch of this:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from functools import cached_property
 from typing import Any
 from urllib.parse import urlparse
 
-from django.urls import reverse
-
-from control_plane.models import (
-    ManagedResource,
-    ProviderInventory,
-)
-from control_plane.names import in_zone
-from control_plane.providers import (
-    CONTAINER_KIND,
-    PROVIDERS,
-    NameContext,
-    certificate_covers,
-    origin_is_authoritative,
-    service_facets,
-    names_a_host,
-    normalized_hostname,
-    resource_home,
-)
+from control_plane.models import ManagedResource, ProviderInventory
+from control_plane.names import certificate_covers, in_zone, normalized_hostname
+from control_plane.providers import PROVIDERS, service_facets, resource_home
+from control_plane.provider_adapters.portainer import CONTAINER_KIND
 from control_plane.connection_kinds import CONNECTION_LABELS
-from projects.models import Project
 
 from .containers import Running, container_watchers
-from .entity_links import EntityLink, entity_link, kind_label
+from .entity_links import EntityLink, entity_link
 from .facts import Joined, Readings, Subject, readings as stored_readings
-from .infrastructure import (
-    context_for_resolution,
-    declared_machines,
-    enabled_resources,
-    resolved_spec,
-    resource_health,
-)
-from .locate import Machines, host_of, machines_index, split_endpoint
+from .infrastructure import enabled_resources
+from .locate import host_of, split_endpoint
 from .naming import name_context
 from .projection import read_once
 from .reach import UNKNOWN, Reach, reach_of
-from .ui import ListRow, moment
-
-
-def _lower_first(text: str) -> str:
-    """A label as it reads mid-sentence, leaving an acronym alone.
-
-    "Proxy host" belongs lowercase after "Add"; "TLS certificate" does not, and
-    lowering its first letter produced "tLS certificate". Only the first word is
-    inspected, because that is the only one being changed.
-    """
-
-    first = text.partition(" ")[0]
-    if not text or first.isupper():
-        return text
-    return text[:1].lower() + text[1:]
-
-
-@dataclass(frozen=True)
-class Reading:
-    """One fact about a resource: what HQ asked for, and what was found.
-
-    ``desired`` is blank where the operator authors nothing: a certificate's
-    expiry is discovered, never declared. ``observed`` is blank until a
-    controller has looked. They are carried together because the whole question
-    a service page answers is whether they agree.
-    """
-
-    label: str
-    desired: str = ""
-    observed: str = ""
-
-    @property
-    def drifted(self) -> bool:
-        return bool(self.desired and self.observed and self.desired != self.observed)
-
-    @property
-    def value(self) -> str:
-        """The one thing to show when there is only room for one.
-
-        What is true beats what was asked for. An operator reading a service
-        page wants the world, and falls back to the declaration only where the
-        world has not been looked at yet.
-        """
-
-        return self.observed or self.desired
-
-
-@dataclass(frozen=True)
-class Claim:
-    """One resource's participation in one service, already resolved."""
-
-    resource_key: str
-    kind: str
-    health: dict[str, str]
-    readings: tuple[Reading, ...] = ()
-    # Whether the provider answers for the name itself (its ``fronts``).
-    fronted: bool = False
-
-    @property
-    def url(self) -> str:
-        return entity_link("resource", self.resource_key).url
-
-    @property
-    def link(self) -> EntityLink:
-        return entity_link(self.kind, self.resource_key)
-
-    @property
-    def edit_url(self) -> str:
-        return reverse("control_plane:edit", kwargs={"key": self.resource_key})
-
-    @property
-    def drifted(self) -> bool:
-        return any(reading.drifted for reading in self.readings)
-
-
-@dataclass(frozen=True)
-class ReadingLine:
-    """The readings of one kind that supply a facet, as one line."""
-
-    label: str
-    detail: str = ""
-    relation: str = ""
-    # The earliest expiry among them, as a person reads it.
-    expiry: str = ""
-    # Whether ``detail`` names issuers rather than the records themselves.
-    issued: bool = False
-    # Each record, through the link builder.
-    entities: tuple[EntityLink, ...] = ()
-    stale: bool = False
-
-    @property
-    def hint(self) -> str:
-        return f"{self.relation} · earliest expires {self.expiry}" if self.expiry else self.relation
-
-
-@dataclass(frozen=True)
-class Facet:
-    """One thing that has to be true for a hostname to answer, and whether it is."""
-
-    id: str
-    label: str
-    claims: tuple[Claim, ...] = ()
-    # What HQ can see supplying this that no declaration accounts for. A facet
-    # has three states, not two: declared, found, and absent. Collapsing the
-    # middle one into absent reports a running service as missing, and offers to
-    # build a second of what is already there.
-    observed: "Running | None" = None
-    # The machine whatever supplies this facet runs on. Held here so the card
-    # links it once, whether the container is declared or merely observed.
-    machine: Any = None
-    # What HQ knows about this name. Held so ``declarable`` can ask each
-    # provider whether it could actually supply it: an offer that cannot work
-    # is worse than no offer, and only the provider knows which is which.
-    context: NameContext = field(default_factory=NameContext)
-    # Readings joined to the name that supply this facet: an edge certificate,
-    # a tunnel. Observed, never a claim.
-    readings: tuple[Joined, ...] = ()
-
-    @property
-    def present(self) -> bool:
-        return bool(self.claims)
-
-    @property
-    def reading_lines(self) -> tuple["ReadingLine", ...]:
-        """One line per reading kind: its short label, issuers or titles, earliest expiry."""
-
-        by_kind: dict[str, list[Joined]] = {}
-        for item in self.readings:
-            by_kind.setdefault(item.kind, []).append(item)
-        lines = []
-        for items in by_kind.values():
-            spec = items[0].spec
-            issuers = tuple(dict.fromkeys(item.issuer for item in items if item.issuer))
-            titles = tuple(dict.fromkeys(item.title for item in items if item.title))
-            dated = [(when, item) for item in items if (when := moment(item.expires))]
-            earliest = min(dated, key=lambda pair: pair[0])[1].expiry if dated else ""
-            lines.append(
-                ReadingLine(
-                    label=spec.short,
-                    detail=", ".join(issuers or titles),
-                    relation=items[0].relation,
-                    expiry=earliest,
-                    issued=bool(issuers),
-                    entities=tuple(
-                        dict.fromkeys(
-                            entity_link(item.kind, "", record=item.record) for item in items
-                        )
-                    ),
-                    stale=any(item.stale for item in items),
-                )
-            )
-        return tuple(lines)
-
-    @property
-    def not_visible(self) -> str:
-        """Why nothing HQ reads could show this facet, or "" when something could.
-
-        "" when a connected kind supplies the facet: then an empty facet means
-        nothing is declared or found. Otherwise names the connections to add,
-        or the connected ones whose credential does not read it.
-        """
-
-        from control_plane.observations import OBSERVATIONS
-        from control_plane.connection_kinds import CONNECTION_LABELS
-
-        from .connections import connection_rows
-
-        kinds: list[str] = []
-        providers: list[str] = []
-        for kind, provider in PROVIDERS.items():
-            if provider.facet == self.id and not provider.unobserved_reason:
-                kinds.append(kind)
-                providers.extend(provider.connection_providers)
-        for kind, spec in OBSERVATIONS.items():
-            if spec.facet == self.id:
-                kinds.append(kind)
-                providers.append(spec.provider)
-        if not providers or connected_kinds() & set(kinds):
-            return ""
-        held = {row.provider for row in connection_rows()}
-        missing = [CONNECTION_LABELS.get(p, p) for p in dict.fromkeys(providers) if p not in held]
-        if missing:
-            return f"Connect {' or '.join(missing)} to see it."
-        unread = [CONNECTION_LABELS.get(p, p) for p in dict.fromkeys(providers)]
-        return f"Not read through {' or '.join(unread)} yet."
-
-    @property
-    def declarable(self) -> tuple[tuple[str, str], ...]:
-        """``(kind, label)`` for each provider that could supply this facet.
-
-        Read from the registry rather than listed here, so the offer to add one
-        appears for a provider declared long after this was written. Only kinds
-        that can be seeded from a hostname.
-
-        A certificate is offered too, only for a facet nothing supplies, so a
-        name already covered is never invited to grow one of its own. Each
-        offer carries the provider's label, never its identifier.
-        """
-
-        public_first = self._in_public_zone()
-        return tuple(
-            (kind, label)
-            for _first, kind, label in sorted(
-                # Only the first letter is lowered. Lowercasing the whole
-                # label turned "Internal DNS record" into "internal dns
-                # record" and shouted at nobody about the acronym.
-                (
-                    not (public_first and provider.public_effect),
-                    kind,
-                    _lower_first(kind_label(kind)),
-                )
-                for kind, provider in PROVIDERS.items()
-                if provider.facet == self.id
-                and provider.seed is not None
-                and not self._refused(provider)
-            )
-        )
-
-    def _in_public_zone(self) -> bool:
-        """Whether the name sits in a public zone HQ holds: one a connected
-        credential edits, or one a public zone declaration manages. There a
-        public provider is offered first."""
-
-        from .naming import public_zones_declared
-
-        name = self.context.hostname
-        if not name:
-            return False
-        return bool(zone_holding(name, {*self.context.public_zones, *public_zones_declared()}))
-
-    @property
-    def unavailable(self) -> tuple[tuple[str, str], ...]:
-        """``(label, reason)`` for providers this name rules out.
-
-        Said rather than silently dropped. A `.home.arpa` service losing its
-        Let's Encrypt option without explanation looks like a missing feature,
-        and the sentence is what turns it into an answer: it names the
-        alternative that does work.
-        """
-
-        return tuple(
-            sorted(
-                (kind_label(kind), refused)
-                for kind, provider in PROVIDERS.items()
-                if provider.facet == self.id
-                and provider.seed is not None
-                and (refused := self._refused(provider))
-            )
-        )
-
-    def _refused(self, provider) -> str:
-        if provider.applies is None:
-            return ""
-        try:
-            return provider.applies(self.context)
-        except (KeyError, TypeError, ValueError):
-            return ""
-
-    @property
-    def routes(self) -> bool:
-        """Whether providers of this facet exist to say where a name is served.
-
-        Read from the registry: a provider that declares an ``origin`` hook is
-        one whose job includes answering "and then what serves it". Tells a
-        facet that is genuinely missing from one that cannot apply, because a
-        name resolving straight to something outside is already routed and needs
-        nothing on this network to answer for it.
-        """
-
-        return any(
-            provider.origin is not None
-            for provider in PROVIDERS.values()
-            if provider.facet == self.id
-        )
-
-    @property
-    def state(self) -> str:
-        """``good``, ``attention`` or ``serious``: blank when nothing supplies it.
-
-        Blank rather than a state, because an absence is not a health reading.
-        Colouring "no certificate declared" as a failure would claim HQ had
-        looked at something and found it wrong, when in fact there is nothing to
-        look at, and the two call for different reactions.
-        """
-
-        if not self.claims:
-            return ""
-        states = {claim.health["state"] for claim in self.claims}
-        if "degraded" in states:
-            return "serious"
-        return "attention" if states - {"healthy"} else "good"
-
-
-@dataclass(frozen=True)
-class Origin:
-    """Where a request for this hostname is finally served."""
-
-    address: str
-    host: str = ""
-    container: str = ""
-    # Whether an ingress declared this, or a record merely pointed here. Both
-    # are origins and they are not the same sentence: an ingress *forwards* to
-    # somewhere, while a record says the name simply answers there. Rendered
-    # from one wording, a name with no ingress at all was told that its ingress
-    # forwards somewhere: directly beneath its own Ingress card reading "not
-    # declared", on the same page.
-    #
-    # Defaults true because every origin that existed before a record could
-    # declare one came from an ingress, and because the sentence it selects is
-    # the one those origins have always been rendered with.
-    routed: bool = True
-    # What readings joined to the origin name as serving it: a Pages project,
-    # the holder of a public address.
-    serving: tuple[str, ...] = ()
-
-    @property
-    def parked(self) -> bool:
-        """Whether the name points at a documentation address, where nothing answers."""
-
-        from .reach import is_documentation
-
-        return not self.known and is_documentation(host_of(self.address))
-
-    @property
-    def external(self) -> bool:
-        """Whether this is served somewhere HQ does not reach.
-
-        A proxy forwards to ``host:port`` by construction; a DNS record names a
-        target with no port. So an address with no port came from the record
-        itself, which means the name is answered outside this network: a
-        Pages site, a mail host, someone else's server.
-
-        Worth separating from "unknown host", which is the same missing lookup
-        with a very different meaning: an ingress pointing at an address no host
-        claims is a thing HQ cannot describe and probably should.
-
-        Read through the shared endpoint parser rather than by looking for a
-        colon. A bare IPv6 answer is full of colons and carries no port at all,
-        and counting them called it an ingress: after which the address was
-        split at its last colon and matched against nothing.
-
-        The absent port is necessary and was briefly taken as sufficient, which
-        is only true while the records that name an origin are public ones. An
-        internal rewrite names an origin too, and it names a *private* address:
-        no port, no machine HQ happens to have been told about, and read on
-        punctuation alone that came out as "served outside this network" for a
-        name served one subnet away. The page then withdrew its offer to add an
-        ingress, on the grounds that a name answered elsewhere needs nothing
-        here, which is the right rule applied to the wrong reading.
-
-        So the question is asked of the address rather than of its spelling.
-        Where an address lives is ``reach``'s to answer and it already does, for
-        the badge on this same page; a private, tailnet or loopback answer is
-        inside by definition, and an unknown host inside the network is what
-        ``qualifier`` exists to say. A name rather than an address (a CNAME to
-        somewhere that hosts pages) classifies as nothing and stays external,
-        which is the case this property was written for.
-        """
-
-        from .reach import network_of
-
-        if self.known or split_endpoint(self.address)[1]:
-            return False
-        return network_of(host_of(self.address)) not in (
-            "network",
-            "tailnet",
-            "loopback",
-        )
-
-    @property
-    def operator(self) -> str:
-        """What a person calls whoever serves this, read off the name itself."""
-
-        from .known_hosts import operator
-
-        return operator(self.address) if self.external else ""
-
-    @property
-    def known(self) -> bool:
-        """Whether the address belongs to a machine HQ knows.
-
-        An ingress forwarding to an address no host claims is not necessarily
-        broken, but it is somewhere HQ cannot describe, reconcile or reach, and
-        that is worth saying out loud rather than printing a bare IP.
-        """
-
-        return bool(self.host)
-
-    @property
-    def label(self) -> str:
-        if self.container:
-            return f"{self.host} · {self.container}"
-        return self.host or self.address
-
-    @property
-    def headline(self) -> str:
-        """What to call whatever serves this, in one phrase.
-
-        Here rather than in a template, because there are two templates and one
-        fact. Phrased in each, they drift, and the board and the page disagree
-        about the same origin.
-        """
-
-        if self.parked:
-            return "Parked"
-        if self.external:
-            named = " · ".join(self.serving)
-            # An address names no operator; only a reading can.
-            operator = "" if self.operator == host_of(self.address) else self.operator
-            if operator and named:
-                return f"{operator} · {named}"
-            return operator or named or self.address
-        return self.label
-
-    @property
-    def qualifier(self) -> str:
-        """The caveat, when the headline needs one."""
-
-        return "" if self.parked or self.external or self.known else "unknown host"
+from .service_declarations import Claim, declarations, runtime_claim
+from .ui import ListRow
+from .whereabouts import Origin, Whereabouts, locate, machine_for, whereabouts
+from .service_facets import CERTIFICATE_FACET, DNS_FACET, Facet, RUNTIME_FACET
+from .published_sites import published_projects
 
 
 HQ_MARK = "hq"
@@ -703,130 +268,6 @@ class Service:
         )
 
 
-# ----- Derivation ------------------------------------------------------------
-
-
-@dataclass
-class _Ledger:
-    """The per-name facts one pass over the enabled declarations collects."""
-
-    declared: dict[str, dict[str, list[Claim]]] = field(default_factory=dict)
-    covering: list[tuple[str, frozenset[str], Claim]] = field(default_factory=list)
-    # Origins in two ranks: a provider that also answers for a name states where
-    # the name points; one that only routes states where the request is served.
-    # Routed wins, resolved fills the gaps, whatever order the rows arrive in.
-    routed: dict[str, str] = field(default_factory=dict)
-    resolved: dict[str, str] = field(default_factory=dict)
-    # Every address each name resolves to, so reachability is derived.
-    answers: dict[str, list[str]] = field(default_factory=dict)
-    # The certificate declarations each name's ingress serves it with.
-    served_with: dict[str, set[str]] = field(default_factory=dict)
-
-    def file(self, provider, claim: Claim, reading: tuple) -> None:
-        hostnames, origin, resolves_to, certificate = reading
-        if provider.covers:
-            self.covering.append((provider.facet, frozenset(hostnames), claim))
-            return
-        for hostname in hostnames:
-            self.declared.setdefault(hostname, {}).setdefault(provider.facet, []).append(
-                claim
-            )
-            if origin:
-                rank = self.routed if origin_is_authoritative(provider) else self.resolved
-                rank.setdefault(hostname, origin)
-            self.answers.setdefault(hostname, []).extend(resolves_to)
-            if certificate:
-                self.served_with.setdefault(hostname, set()).add(certificate)
-
-
-def _read_declaration(provider, spec) -> tuple | None:
-    """``(hostnames, origin, answers, certificate)``, or None for an unreadable spec.
-
-    An unreadable spec is reported on its own resource's health and must not
-    take every other name on the board down with it.
-    """
-
-    try:
-        # Filtered once here: whether a name can be answered at is a property
-        # of the name, not of the provider that published it.
-        hostnames = tuple(
-            name
-            for name in (normalized_hostname(n) for n in provider.hostnames(spec))
-            if names_a_host(name)
-        )
-        origin = provider.origin(spec) if provider.origin else ""
-        resolves_to = provider.answers(spec) if provider.answers else ()
-        certificate = provider.certificate(spec) if provider.certificate else ""
-    except (KeyError, TypeError, ValueError):
-        return None
-    return hostnames, origin, resolves_to, certificate
-
-
-def _split_aliases(declared, origins, aliases) -> dict[str, list[tuple[str, Claim]]]:
-    """Move each alias's claims beside its target service.
-
-    An alias's record belongs to the alias, not to the name it points at, so it
-    is kept beside the service rather than merged into it or dropped.
-    """
-
-    alias_claims: dict[str, list[tuple[str, Claim]]] = {}
-    for alias, target in aliases.items():
-        for claims in declared.pop(alias, {}).values():
-            for claim in claims:
-                alias_claims.setdefault(target, []).append((alias, claim))
-        origins.pop(alias, None)
-    return alias_claims
-
-
-def _declarations():
-    """Every enabled declaration, sorted into what it names and what it covers.
-
-    Shared by the catalogue and by a name nobody has declared anything for yet,
-    so a prospective service is assembled from the same reading of the world.
-    Read once per projection.
-    """
-
-    return read_once("services.declarations", _read_declarations)
-
-
-def _read_declarations():
-
-    machines, targets = context_for_resolution()
-    ledger = _Ledger()
-    for resource in enabled_resources():
-        provider = PROVIDERS.get(resource.kind)
-        if provider is None or not provider.facet or provider.hostnames is None:
-            continue
-        reading = _read_declaration(provider, _resolved(resource, targets))
-        if reading is None:
-            continue
-        claim = Claim(
-            resource.key,
-            resource.kind,
-            resource_health(resource),
-            _readings(provider, resource),
-            fronted=_fronted(provider, resource),
-        )
-        ledger.file(provider, claim, reading)
-
-    origins = {**ledger.resolved, **ledger.routed}
-    aliases = _aliases(ledger.declared, origins)
-    alias_claims = _split_aliases(ledger.declared, origins, aliases)
-    # ``routed`` rides along so a page can say how it knows: an origin an
-    # ingress declared forwards, an origin a record implied simply answers.
-    return (
-        ledger.declared,
-        ledger.covering,
-        origins,
-        aliases,
-        alias_claims,
-        machines,
-        ledger.answers,
-        frozenset(ledger.routed),
-        {name: frozenset(keys) for name, keys in ledger.served_with.items()},
-    )
-
-
 def _certificates_in_use() -> dict[str, dict[str, Any]]:
     """The certificate each proxied name is actually served with.
 
@@ -856,48 +297,6 @@ def _certificates_in_use() -> dict[str, dict[str, Any]]:
     return found
 
 
-def _aliases(declared, origins) -> dict[str, str]:
-    """``{alias: target}`` for names that are another service under a second name.
-
-    A CNAME to a name HQ already serves is not a second service. It is the same
-    service reachable another way: ``www.example.com`` pointing at
-    ``example.com`` is one site, and listing it separately puts a second row on
-    the board with its own health, its own certificate and its own "not routed",
-    describing something that is not separate from anything.
-
-    Only within what HQ declares. A CNAME to somewhere outside is a name HQ
-    publishes and does not otherwise know about, which is a service of its own
-    by every definition that matters here.
-    """
-
-    found: dict[str, str] = {}
-    for hostname in declared:
-        target = normalized_hostname(origins.get(hostname, ""))
-        if not target or ":" in target:
-            # A proxy origin, which is where a name is *served*, not another
-            # name for it.
-            continue
-        if target != hostname and target in declared:
-            found[hostname] = target
-    # And the same site under the one prefix that conventionally means it.
-    # A CNAME says "I am that name"; an address record says only where to go,
-    # so `www.example.com` and `example.com` as two A records to one place look
-    # like two services and are one site. Every other subdomain sharing an
-    # address is a different service on one host (mail and a quiz sitting on
-    # the same cPanel are not each other) so this is `www` and nothing else.
-    for hostname in declared:
-        apex = hostname.partition(".")[2]
-        if not hostname.startswith("www.") or apex not in declared:
-            continue
-        if hostname in found or apex in found:
-            continue
-        here = normalized_hostname(origins.get(hostname, ""))
-        there = normalized_hostname(origins.get(apex, ""))
-        if here and here == there:
-            found[hostname] = apex
-    return found
-
-
 def _service_catalog(favorites: tuple[str, ...]) -> tuple[Service, ...]:
     """Every hostname HQ declares, assembled from the resources that name it.
 
@@ -910,7 +309,7 @@ def _service_catalog(favorites: tuple[str, ...]) -> tuple[Service, ...]:
     (
         declared, covering, origins, aliases, alias_claims, machines, answers, routed,
         served_with,
-    ) = _declarations()
+    ) = declarations()
     estate = _Estate.read(covering, machines)
     by_target: dict[str, list[str]] = {}
     for alias, target in sorted(aliases.items()):
@@ -929,10 +328,12 @@ def _service_catalog(favorites: tuple[str, ...]) -> tuple[Service, ...]:
         )
         for hostname, facets in sorted(declared.items())
     )
-    return _ordered(found, favorites)
+    return ordered_services(found, favorites)
 
 
-def _ordered(found: tuple[Service, ...], favorites: tuple[str, ...]) -> tuple[Service, ...]:
+def ordered_services(
+    found: tuple[Service, ...], favorites: tuple[str, ...]
+) -> tuple[Service, ...]:
     """The operator's favorites first, in their order, then the rest by name."""
 
     if not favorites:
@@ -958,55 +359,6 @@ def service_catalog(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:
     return read_once(
         f"services.catalog:{'|'.join(favorites)}",
         lambda: _service_catalog(favorites),
-    )
-
-
-@dataclass(frozen=True)
-class ZoneMember:
-    """A service a domain holds: one from the catalogue, or HQ's own."""
-
-    hostname: str
-    url: str
-    status: str = "neutral"
-    status_label: str = ""
-    service: "Service | None" = None
-
-
-def zone_holding(hostname: str, zones) -> str:
-    """The most specific of ``zones`` holding ``hostname``, or ""."""
-
-
-    return next(
-        (name for name in sorted(zones, key=len, reverse=True) if in_zone(hostname, name)),
-        "",
-    )
-
-
-def services_by_zone(zones) -> dict[str, tuple[ZoneMember, ...]]:
-    """Each domain's services, HQ's own included, under the most specific domain."""
-
-    from .service_list import listed_services as _listed_services
-
-    members = [
-        ZoneMember(service.hostname, service.url, service.tone, service.status_label, service)
-        for service in _listed_services()
-    ]
-    found: dict[str, list[ZoneMember]] = {}
-    for member in members:
-        zone = zone_holding(member.hostname, zones)
-        if zone:
-            found.setdefault(zone, []).append(member)
-    return {zone: tuple(items) for zone, items in found.items()}
-
-
-def connected_kinds() -> frozenset[str]:
-    """Inventory kinds a connected credential reads, once per projection."""
-
-    return read_once(
-        "services.connected_kinds",
-        lambda: frozenset(
-            ProviderInventory.objects.filter(connected=True).values_list("kind", flat=True)
-        ),
     )
 
 
@@ -1048,7 +400,7 @@ def alias_target(hostname: str) -> str:
     """
 
     wanted = normalized_hostname(hostname)
-    _, _, _, aliases, _, _, _, _, _ = _declarations()
+    aliases = declarations().aliases
     return aliases.get(wanted, "")
 
 
@@ -1068,7 +420,8 @@ def certificates_serving(hostname: str) -> tuple[str, ...]:
     """The declared certificates a name is served with, by key. Read once per projection."""
 
     wanted = normalized_hostname(hostname)
-    _, covering, _, _, _, _, _, _, served_with = _declarations()
+    found = declarations()
+    covering, served_with = found.covering, found.served_with
     named = served_with.get(wanted, frozenset())
     return tuple(
         dict.fromkeys(
@@ -1098,7 +451,7 @@ def prospects(hostnames: tuple[str, ...]) -> tuple[Service, ...]:
     (
         declared, covering, origins, aliases, alias_claims, machines, answers, routed,
         served_with,
-    ) = _declarations()
+    ) = declarations()
     estate = _Estate.read(covering, machines) if hostnames else None
     return tuple(
         _assemble(
@@ -1126,32 +479,6 @@ def service_reading() -> dict[str, int]:
     }
 
 
-@dataclass(frozen=True)
-class MachineLink:
-    """A machine named on a card, and the page for it.
-
-    Built from the origin and the machines the caller already holds. Looking the
-    machine up instead would be a catalogue read per service, which on a board
-    is a catalogue read per row.
-    """
-
-    name: str
-    role: str = ""
-
-    @property
-    def url(self) -> str:
-        return self.link.url
-
-    @property
-    def link(self) -> EntityLink:
-        return entity_link("machine", self.name)
-
-
-RUNTIME_FACET = "runtime"
-DNS_FACET = "dns"
-CERTIFICATE_FACET = "certificate"
-
-
 def _container_declarations() -> dict[tuple[str, str], Any]:
     """Container declarations, keyed by the machine and name they identify."""
 
@@ -1160,68 +487,6 @@ def _container_declarations() -> dict[tuple[str, str], Any]:
         for resource in enabled_resources()
         if resource.kind == CONTAINER_KIND
     }
-
-
-def machine_link(
-    address: str,
-    machines: "tuple[dict[str, Any], ...] | None" = None,
-    at: "_Whereabouts | None" = None,
-) -> "MachineLink | None":
-    """The machine an address belongs to, resolved the way a service resolves it.
-
-    One resolution, so a page naming where something runs and a page naming what
-    runs there cannot disagree about which machine that is.
-
-    A page asking this of every row passes the readings in, because taken here
-    they are three queries per row for facts that are the same on all of them.
-    """
-
-    machines = _machines() if machines is None else machines
-    origin = _locate(address, machines, at)
-    if not origin.host:
-        return None
-    return _machine_for(origin, machines)
-
-
-def _machine_for(origin: "Origin | None", machines: "tuple[dict[str, Any], ...]"):
-    """The machine whatever supplies this facet runs on."""
-
-    if origin is None or not origin.host:
-        return None
-    role = next(
-        (
-            str(machine.get("role", ""))
-            for machine in machines
-            if str(machine.get("name", "")) == origin.host
-        ),
-        "",
-    )
-    return MachineLink(name=origin.host, role=role)
-
-
-def _runtime_claim(
-    origin: "Origin | None", containers: "dict[tuple[str, str], Any]"
-) -> "Claim | None":
-    """The declaration for the container this name is served from, if there is one.
-
-    Matched on what the origin already resolved: a machine and a container on
-    it. That is the same pair the declaration carries, so the two are the same
-    thing recognised from opposite directions: one authored, one observed.
-    """
-
-    if origin is None or not origin.host or not origin.container:
-        return None
-    resource = containers.get((origin.host, origin.container))
-    if resource is None:
-        return None
-    provider = PROVIDERS[resource.kind]
-    return Claim(
-        resource.key,
-        resource.kind,
-        resource_health(resource),
-        _readings(provider, resource),
-        fronted=_fronted(provider, resource),
-    )
 
 
 @dataclass(frozen=True)
@@ -1239,7 +504,7 @@ class _Estate:
     # What places an address: whose machine it is, and what answers there. Read
     # at most once for the whole catalogue, and not at all by a page that lists
     # no service.
-    at: "_Whereabouts | None" = None
+    at: "Whereabouts | None" = None
     in_use: "_CertificatesInUse | None" = None
     readings: "Readings | None" = None
 
@@ -1250,7 +515,7 @@ class _Estate:
         return cls(
             readings=stored_readings(),
             covering=covering,
-            projects=_published_projects(),
+            projects=published_projects(),
             machines=machines,
             containers=_container_declarations(),
             at=whereabouts(machines),
@@ -1285,7 +550,7 @@ def _assemble(
     )
     origin = (
         replace(
-            _locate(origin_address, machines, estate.at),
+            locate(origin_address, machines, estate.at),
             routed=routed,
             serving=_serving(estate.readings, origin_address),
         )
@@ -1297,7 +562,7 @@ def _assemble(
     # so nothing tied it to the name it serves: the runtime card knew the
     # container and the resources table did not list it. The origin already
     # resolves both halves, which is the tie.
-    runtime = _runtime_claim(origin, containers)
+    runtime = runtime_claim(origin, containers)
     facets = tuple(
         Facet(
             id=facet_id,
@@ -1311,7 +576,7 @@ def _assemble(
             ),
             observed=_observed(facet_id, origin),
             machine=(
-                _machine_for(origin, machines) if facet_id == RUNTIME_FACET else None
+                machine_for(origin, machines) if facet_id == RUNTIME_FACET else None
             ),
             context=context,
             readings=tuple(item for item in by_name if item.facet == facet_id),
@@ -1383,53 +648,6 @@ def _observed(facet_id: str, origin: Origin | None) -> "Running | None":
             ):
                 return Running.of(record, snapshot.observed_at, container_watchers())
     return None
-
-
-class _Whereabouts:
-    """What places an address: whose machine it is, and what answers there.
-
-    Both are estate-wide readings that every address in a pass shares, and both
-    were taken per address: resolving one read the connections, and asking what
-    was listening on it read the container sweep and the container
-    declarations. A catalogue of thirty names paid for all three thirty times,
-    and the loopback case paid once per declared machine on top.
-
-    Read at most once each and only if asked, for the same reason as the
-    certificates below: a dashboard listing no service resolves no address, and
-    a query nobody needs is one every page pays for.
-    """
-
-    def __init__(self, machines: "tuple[dict[str, Any], ...]"):
-        self._machines = machines
-        self._index: "Machines | None" = None
-        self._answering: "dict[tuple[str, Any], list[str]] | None" = None
-        self._hosting: "dict[str, list[str]] | None" = None
-
-    def index(self) -> "Machines":
-        if self._index is None:
-            self._index = machines_index(self._machines)
-        return self._index
-
-    def answering(self) -> "dict[tuple[str, Any], list[str]]":
-        if self._answering is None:
-            self._answering = _answering()
-        return self._answering
-
-    def hosting(self) -> "dict[str, list[str]]":
-        if self._hosting is None:
-            self._hosting = _containers_by_name()
-        return self._hosting
-
-
-def whereabouts(machines: "tuple[dict[str, Any], ...] | None" = None) -> _Whereabouts:
-    """The placements a page resolving more than one address should read once.
-
-    Passed to ``_locate`` and to ``machine_link``. Left out, each of them reads
-    what it needs and throws it away, which is right for a single lookup and is
-    a query budget that grows with the estate in a loop.
-    """
-
-    return _Whereabouts(_machines() if machines is None else machines)
 
 
 class _CertificatesInUse:
@@ -1554,227 +772,6 @@ def _served_by_the_provider(dns: "Facet | None") -> bool:
     return dns is not None and any(claim.fronted for claim in dns.claims)
 
 
-def _fronted(provider: Any, resource: ManagedResource) -> bool:
-    """Whether the provider puts itself in front of this declaration's names."""
-
-    if provider.fronts is None:
-        return False
-    try:
-        return bool(provider.fronts(resource.spec))
-    except (KeyError, TypeError, ValueError):
-        return False
-
-
-def _readings(provider: Any, resource: ManagedResource) -> tuple[Reading, ...]:
-    """What this resource actually does, as its own provider describes it.
-
-    Read from the authored spec rather than the resolved one: these are shown
-    beside "what was found", and resolution is HQ's own work. Comparing a
-    resolved value against an observation would report drift between two things
-    the operator never wrote.
-    """
-
-    if provider.readout is None:
-        return ()
-    try:
-        rows = provider.readout(resource.spec, resource.status or {})
-    except (KeyError, TypeError, ValueError):
-        return ()
-    return tuple(
-        Reading(label=label, desired=str(desired or ""), observed=str(observed or ""))
-        for label, desired, observed in rows
-        if desired or observed
-    )
-
-
-def _locate(
-    address: str,
-    machines: tuple[dict[str, Any], ...],
-    at: "_Whereabouts | None" = None,
-    near: str = "",
-) -> Origin:
-    """Match a forwarding address to a machine, and if certain, a container.
-
-    Which machine an address belongs to is ``application.locate``'s question
-    and is asked of it here rather than answered again. What is left is the
-    part that is genuinely about a *service*: the loopback case, where the
-    address deliberately names no machine, and the container, which is observed
-    rather than declared.
-
-    The container is named only when exactly one claims the port. Ambiguity is
-    reported as silence: a guess printed beside four facts reads as a fifth.
-
-    ``at`` is passed by anything resolving more than one address, because both
-    readings behind this are estate-wide. Left out, they are taken here, which
-    is right for a single lookup and wrong in a loop.
-
-    ``near`` is the machine the forwarding proxy runs on: a container name on a
-    docker network resolves there first, since that network is on that machine.
-    """
-
-    at = at if at is not None else _Whereabouts(machines)
-    host_address, port = split_endpoint(address)
-    # A proxy forwarding to loopback is forwarding to itself: the request never
-    # leaves the machine the ingress runs on. No machine is declared at
-    # 127.0.0.1 (every machine is) so matching by address cannot answer it,
-    # and the honest answer is the machine with something listening on that
-    # port. Silence when more than one qualifies, for the reason above.
-    if _is_loopback(host_address):
-        found = [
-            (machine, claimed)
-            for machine in machines
-            if (claimed := _listening(str(machine.get("name", "")), port, at))
-        ]
-        if len(found) == 1:
-            machine, claimed = found[0]
-            return Origin(
-                address=address,
-                host=str(machine.get("name", "")),
-                container=claimed[0] if len(claimed) == 1 else "",
-            )
-        return Origin(address=address)
-    name = at.index().resolve(host_address)
-    if not name:
-        # Not an address at all, but a container name on a docker network,
-        # which is how everything behind a proxy sharing that network is
-        # addressed, and what a Caddy route hands off to. HQ sweeps containers,
-        # so the name is not opaque: it names something HQ can already see, and
-        # the machine running it is the answer to where this is served.
-        #
-        # Silent when more than one machine runs that name, for the reason every
-        # other ambiguity here is silent: a guess printed beside four facts reads
-        # as a fifth.
-        hosts = _hosting(host_address, at)
-        if near and near in hosts:
-            return Origin(address=address, host=near, container=host_address)
-        if len(hosts) == 1:
-            return Origin(address=address, host=hosts[0], container=host_address)
-        # Nothing HQ holds says what is there. The address stays on the page,
-        # which is the true answer and the one an operator can act on.
-        return Origin(address=address)
-    claimed = _listening(name, port, at)
-    return Origin(
-        address=address,
-        host=name,
-        container=claimed[0] if len(claimed) == 1 else "",
-    )
-
-
-def locate(
-    address: str,
-    machines: "tuple[dict[str, Any], ...] | None" = None,
-    at: "_Whereabouts | None" = None,
-    near: str = "",
-) -> Origin:
-    """Where an address is served: the machine and, when certain, the container."""
-
-    machines = _machines() if machines is None else machines
-    return _locate(address, machines, at, near)
-
-
-def _is_loopback(address: str) -> bool:
-    """Whether an address means "this machine", by the ranges rather than a name."""
-
-    from .reach import network_of
-
-    return network_of(address) == "loopback"
-
-
-def _listening(host: str, port: str, at: "_Whereabouts | None" = None) -> list[str]:
-    """Containers answering on one port of one machine, seen or declared.
-
-    A container sharing the machine's network publishes nothing for Docker to
-    report, so a sweep cannot find it by port and the declaration is the only
-    thing that can say. Both are read, because a machine can be running one of
-    each and the answer must not depend on which.
-    """
-
-    if not host or not port.isdigit():
-        return []
-    found = at.answering() if at is not None else _answering()
-    return found.get((host, int(port)), [])
-
-
-def _hosting(container: str, at: "_Whereabouts | None" = None) -> list[str]:
-    """Machines running a container of this name, seen or declared."""
-
-    if not container:
-        return []
-    found = at.hosting() if at is not None else _containers_by_name()
-    return found.get(container, [])
-
-
-def _containers_by_name() -> dict[str, list[str]]:
-    """Which machines run a container of each name.
-
-    The inverse of the index below, and read from the same two tables, because
-    a forwarding target is sometimes a port on a machine and sometimes the name
-    of the thing itself.
-    """
-
-    found: dict[str, set[str]] = {}
-    for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND):
-        for record in snapshot.records:
-            host = str(record.get("host", "") or "")
-            name = str(record.get("name", "") or "")
-            if host and name:
-                found.setdefault(name, set()).add(host)
-    for spec in ManagedResource.objects.filter(
-        kind=CONTAINER_KIND, enabled=True
-    ).values_list("spec", flat=True):
-        host = str(spec.get("host", "") or "")
-        name = str(spec.get("name", "") or "")
-        if host and name:
-            found.setdefault(name, set()).add(host)
-    return {name: sorted(hosts) for name, hosts in found.items()}
-
-
-def _answering() -> dict[tuple[str, Any], list[str]]:
-    """Every container answering on a port of a machine, by that pair.
-
-    Built whole rather than asked per address. The same two tables answer every
-    such question in a pass, and read per question they were the largest part
-    of what a service catalogue spent.
-    """
-
-    found: dict[tuple[str, Any], set[str]] = {}
-
-    def note(host: Any, name: Any, ports: Any) -> None:
-        host = str(host or "")
-        name = str(name or "")
-        if not host or not name:
-            return
-        for port in ports or ():
-            found.setdefault((host, port), set()).add(name)
-
-    for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND):
-        for record in snapshot.records:
-            note(record.get("host"), record.get("name"), record.get("ports"))
-    for spec in ManagedResource.objects.filter(
-        kind=CONTAINER_KIND, enabled=True
-    ).values_list("spec", flat=True):
-        note(spec.get("host"), spec.get("name"), spec.get("serves_ports"))
-    return {key: sorted(names) for key, names in found.items()}
-
-
-def _published_projects() -> dict[str, dict[str, str]]:
-    """Hostname to the project that publishes there, for the ones that do.
-
-    An annotation, never a requirement. Most of what an operator runs has no
-    repository of its own, and a service that cannot name a project is not
-    thereby incomplete.
-    """
-
-    return {
-        hostname: {
-            "name": project.name,
-            "slug": project.slug,
-            "url": entity_link("project", project.slug).url,
-        }
-        for hostname, project in projects_by_hostname().items()
-    }
-
-
 def service_url_for(public_url: str) -> str:
     """The service page for a published URL, when HQ manages that name.
 
@@ -1786,86 +783,3 @@ def service_url_for(public_url: str) -> str:
     if not hostname or not find_service(hostname):
         return ""
     return entity_link("service", hostname).url
-
-
-def projects_by_hostname() -> dict[str, Project]:
-    """The project publishing each name, keyed by that name.
-
-    The one place that decides which project a service belongs to. Nothing
-    points a project at infrastructure; a project that says where it is
-    published has said which service it is, and reading that twice in two
-    modules is two answers to one question.
-    """
-
-    found: dict[str, Project] = {}
-    for project in Project.objects.exclude(public_url=""):
-        hostname = urlparse(project.public_url).hostname
-        if hostname:
-            # Most recently updated wins a contested hostname: the model orders
-            # by ``-updated_at``, and ``setdefault`` keeps the first. Two
-            # projects claiming one name is a data problem, but picking the
-            # stalest of them would be a worse answer than picking the freshest.
-            found.setdefault(normalized_hostname(hostname), project)
-    return found
-
-
-
-
-
-
-
-
-# Shared with the domain view, so two projections of the same declaration
-# cannot disagree about which names a certificate covers.
-_resolved = resolved_spec
-_machines = declared_machines
-
-
-def public_sites() -> tuple[tuple[str, str, str], ...]:
-    """Names HQ publishes to the internet, as (label, sub, url).
-
-    A dashboard link to a site is the site HQ already declares a public record
-    for, so the list is whatever HQ is currently publishing rather than what it
-    was publishing when somebody last edited a template.
-
-    Read through the providers that say their effect is public, and through
-    their own ``hostnames`` hook, which returns nothing for the record types
-    that carry policy, so a DMARC entry never arrives here looking like a site.
-    """
-
-    projects = _published_projects()
-    found: dict[str, str] = {}
-    targets: dict[str, str] = {}
-    for resource in ManagedResource.objects.filter(enabled=True):
-        provider = PROVIDERS.get(resource.kind)
-        if provider is None or not provider.public_effect:
-            continue
-        if provider.hostnames is None:
-            continue
-        try:
-            names = tuple(provider.hostnames(resource.spec))
-            origin = provider.origin(resource.spec) if provider.origin else ""
-        except (KeyError, TypeError, ValueError):
-            continue
-        for name in names:
-            hostname = normalized_hostname(name)
-            # A wildcard is a rule about names, not a name anything answers at.
-            if hostname and names_a_host(hostname) and "*" not in hostname:
-                found.setdefault(
-                    hostname, projects.get(hostname, {}).get("name", "")
-                )
-                targets.setdefault(hostname, normalized_hostname(origin))
-    # A name whose target is another name here is the same site reached a
-    # second way. The board folds those in, and a list that unfolds them shows
-    # one site twice. An address with a port is where a name is served, not
-    # another name for it.
-    aliases = {
-        hostname
-        for hostname, target in targets.items()
-        if target and ":" not in target and target != hostname and target in found
-    }
-    return tuple(
-        (hostname, sub, f"https://{hostname}")
-        for hostname, sub in sorted(found.items())
-        if hostname not in aliases
-    )

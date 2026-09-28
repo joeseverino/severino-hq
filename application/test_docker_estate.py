@@ -14,7 +14,8 @@ from .inventory_testing import store
 from .projection import projection_scope
 from .relationships import relationships_for
 from .security import Capability, Principal
-from .topology import RELATIONS, relation_graph
+from .topology import relation_graph
+from .topology_model import RELATIONS
 
 READER = Principal("reader", "test", frozenset({Capability.READ}))
 ON_LAB = {"connection_ref": "example-portainer", "environment_id": 1, "host": "lab-1",

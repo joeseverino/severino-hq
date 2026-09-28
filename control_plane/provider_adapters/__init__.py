@@ -1,39 +1,37 @@
-"""Statically admitted controller provider adapters."""
+"""The provider modules HQ admits, and every declaration they emit.
 
-from .adguard import build_adapter as build_adguard_adapter
-from .caddy import build_adapter as build_caddy_adapter
-from .github import build_adapter as build_github_adapter
-from .npm import build_adapter as build_npm_adapter
-from .portainer import build_adapter as build_portainer_adapter
+Each module declares its own kinds. One whose controller half lives here emits
+its whole contribution as ``ADAPTER``; one whose actions are still the
+controller core's emits its declarations as ``DEFINITIONS``. Admission is this
+one closed tuple, owned by HQ, and its order is the registry's order: a module
+outside it contributes nothing.
+"""
 
+from . import (
+    adguard,
+    caddy,
+    cloudflare,
+    declarations,
+    github,
+    npm,
+    portainer,
+    tailscale,
+    tls,
+)
 
-def build_controller_provider_adapters(
-    *, provider_model, provider_spec, applies, normalized_hostname
-):
-    return (
-        build_npm_adapter(
-            provider_model=provider_model,
-            provider_spec=provider_spec,
-            applies=applies,
-        ),
-        build_caddy_adapter(
-            provider_model=provider_model,
-            provider_spec=provider_spec,
-            applies=applies,
-            normalized_hostname=normalized_hostname,
-        ),
-        build_adguard_adapter(
-            provider_model=provider_model,
-            provider_spec=provider_spec,
-            applies=applies,
-        ),
-        build_portainer_adapter(),
-        build_github_adapter(
-            provider_model=provider_model,
-            provider_spec=provider_spec,
-            applies=applies,
-        ),
+ADMITTED = (tls, npm, github, portainer, tailscale, declarations, caddy, adguard, cloudflare)
+
+CONTROLLER_PROVIDER_ADAPTERS = tuple(
+    module.ADAPTER for module in ADMITTED if hasattr(module, "ADAPTER")
+)
+
+DECLARATIONS = tuple(
+    definition
+    for module in ADMITTED
+    for definition in (
+        *getattr(module, "DEFINITIONS", ()),
+        *(module.ADAPTER.definitions if hasattr(module, "ADAPTER") else ()),
     )
+)
 
-
-__all__ = ["build_controller_provider_adapters"]
+__all__ = ["ADMITTED", "CONTROLLER_PROVIDER_ADAPTERS", "DECLARATIONS"]

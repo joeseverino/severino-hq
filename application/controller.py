@@ -13,10 +13,12 @@ from django.db.models import Q
 from django.utils import timezone
 
 from control_plane.models import ManagedResource, OperationRequest
-from control_plane.providers import CERTIFICATE_KIND, enabled_controller_actions
+from control_plane.providers import enabled_controller_actions
+from control_plane.provider_adapters.tls import CERTIFICATE_KIND
 
 from .adoption import manages_through, observes_only
-from .infrastructure import controller_contract, serialize_operation, serialize_resource
+from .infrastructure import controller_contract, serialize_resource
+from .resource_operations import serialize_operation
 
 _FORBIDDEN_STATUS_KEYS = ("private", "secret", "token", "password", "credential")
 
@@ -52,7 +54,9 @@ def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any])
     would confirm the wrong row or silently confirm nothing.
     """
 
-    from control_plane.providers import DELIVERY_TARGET_KIND, UPLOADED_CERTIFICATE_KIND
+    from control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
+
+    from control_plane.provider_adapters.tls import UPLOADED_CERTIFICATE_KIND
 
     if resource.kind not in (CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND):
         return

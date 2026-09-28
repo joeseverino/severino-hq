@@ -7,7 +7,7 @@ list page, the topology, the domain cards and the API read this one list.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
 from control_plane.names import normalized_hostname
@@ -18,11 +18,11 @@ from .services import (
     HQ_MARK,
     OBSERVED_MARK,
     Service,
-    _ordered,
+    ordered_services,
     prospects,
     service_catalog,
-    zone_holding,
 )
+from .service_facets import zone_holding
 
 
 def listed_services(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:
@@ -63,7 +63,7 @@ def _listed(favorites: tuple[str, ...]) -> tuple[Service, ...]:
         replace(service, mark=wanted[service.hostname])
         for service in prospects(tuple(wanted))
     )
-    return _ordered(
+    return ordered_services(
         tuple(sorted(marked + unlisted, key=lambda service: service.hostname)), favorites
     )
 
@@ -148,3 +148,29 @@ def get_service(hostname: str) -> dict[str, Any]:
         if found is None:
             raise NotFoundError(f"No service is listed for {hostname!r}.")
         return {"service": serialize_service(found), "path": serialize_path(found.path)}
+
+
+@dataclass(frozen=True)
+class ZoneMember:
+    """A service a domain holds: one from the catalogue, or HQ's own."""
+
+    hostname: str
+    url: str
+    status: str = "neutral"
+    status_label: str = ""
+    service: "Service | None" = None
+
+
+def services_by_zone(zones) -> dict[str, tuple[ZoneMember, ...]]:
+    """Each domain's services, HQ's own included, under the most specific domain."""
+
+    members = [
+        ZoneMember(service.hostname, service.url, service.tone, service.status_label, service)
+        for service in listed_services()
+    ]
+    found: dict[str, list[ZoneMember]] = {}
+    for member in members:
+        zone = zone_holding(member.hostname, zones)
+        if zone:
+            found.setdefault(zone, []).append(member)
+    return {zone: tuple(items) for zone, items in found.items()}

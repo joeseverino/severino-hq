@@ -19,12 +19,15 @@ from application.controller import (
 )
 from application.infrastructure import (
     ManagedResourceCommand,
-    OperationCommand,
     PolicyError,
     controller_contract,
+    save_managed_resource,
+    delivery_targets as delivery_targets_for_test,
+)
+from application.resource_operations import (
+    OperationCommand,
     request_certificate_renewal,
     request_reconcile,
-    save_managed_resource,
 )
 from application.security import cli_principal, mcp_principal
 
@@ -35,9 +38,6 @@ from .models import (
     ProviderInventory,
 )
 from .providers import PROVIDERS, describe_providers
-
-from application.infrastructure import delivery_targets as delivery_targets_for_test
-
 from .desired_state import advance_dependents
 
 
@@ -915,7 +915,7 @@ class OperationPolicyTests(TestCase):
         self.assertFalse(OperationRequest.objects.exists())
 
     @patch(
-        "application.infrastructure.controller_action_policy",
+        "application.resource_operations.controller_action_policy",
         return_value=(True, "active"),
     )
     def test_renewal_is_blocked_outside_window(self, _policy):
@@ -931,7 +931,7 @@ class OperationPolicyTests(TestCase):
             )
 
     @patch(
-        "application.infrastructure.controller_action_policy",
+        "application.resource_operations.controller_action_policy",
         return_value=(True, "active"),
     )
     def test_renewal_is_allowed_for_drift_and_idempotent(self, _policy):
@@ -968,7 +968,7 @@ class OperationPolicyTests(TestCase):
         self.assertEqual(result["error"]["code"], "forbidden")
 
     @patch(
-        "application.infrastructure.controller_action_policy",
+        "application.resource_operations.controller_action_policy",
         return_value=(True, "active"),
     )
     def test_controller_claim_and_report_updates_observed_state(self, _policy):
@@ -1136,8 +1136,8 @@ class InfrastructureViewsTests(TestCase):
 
     def test_findings_render_only_offers_the_projection_authorized(self):
         from application.action_links import ActionLink
-        from application.findings import Finding
-        from application.topology import Topology, TopologyNode
+        from application.finding_model import Finding
+        from application.topology_model import Topology, TopologyNode
 
         subject = TopologyNode(
             "controller:one",
@@ -1158,10 +1158,10 @@ class InfrastructureViewsTests(TestCase):
         )
         with (
             patch(
-                "control_plane.views.derive_topology",
+                "control_plane.finding_views.derive_topology",
                 return_value=Topology((subject,), ()),
             ),
-            patch("control_plane.views.derive_findings", return_value=(finding,)),
+            patch("control_plane.finding_views.derive_findings", return_value=(finding,)),
         ):
             response = self.client.get(reverse("control_plane:findings"))
 
@@ -1326,7 +1326,7 @@ class DnsRecordReadoutTests(TestCase):
     """A record that matches the world must not report drift against itself."""
 
     def test_a_matching_record_reports_no_drift(self):
-        from control_plane.providers import _dns_record_readout
+        from control_plane.provider_adapters.cloudflare import _dns_record_readout
 
         spec = {
             "zone": "example.com",
@@ -1342,7 +1342,7 @@ class DnsRecordReadoutTests(TestCase):
         self.assertEqual(desired, observed)
 
     def test_a_changed_record_still_reports_drift(self):
-        from control_plane.providers import _dns_record_readout
+        from control_plane.provider_adapters.cloudflare import _dns_record_readout
 
         spec = {"record_type": "CNAME", "content": "new.pages.dev", "priority": None}
         status = {"record_type": "CNAME", "content": "old.pages.dev", "priority": None}
@@ -1350,7 +1350,7 @@ class DnsRecordReadoutTests(TestCase):
         self.assertNotEqual(desired, observed)
 
     def test_priority_is_compared_on_both_sides(self):
-        from control_plane.providers import _dns_record_readout
+        from control_plane.provider_adapters.cloudflare import _dns_record_readout
 
         spec = {"record_type": "MX", "content": "mx.example.com", "priority": 10}
         status = {**spec}
@@ -1359,7 +1359,7 @@ class DnsRecordReadoutTests(TestCase):
         self.assertIn("10", desired)
 
     def test_an_unobserved_record_reports_nothing_rather_than_drift(self):
-        from control_plane.providers import _dns_record_readout
+        from control_plane.provider_adapters.cloudflare import _dns_record_readout
 
         spec = {"record_type": "A", "content": "192.0.2.1", "priority": None}
         _, desired, observed = _dns_record_readout(spec, {})[0]
@@ -1440,7 +1440,7 @@ class QueueHeadTests(TestCase):
     def test_removing_a_target_stops_the_certificate_reporting_itself_in_sync(self):
         """Removing one is as much a change as editing one."""
 
-        from application.infrastructure import OperationCommand, request_removal
+        from application.resource_operations import OperationCommand, request_removal
         from application.security import cli_principal
 
         self.certificate.desired_fingerprint = "settled"
@@ -1556,7 +1556,8 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     }
 
     def _resolve(self, *targets, install_on=None):
-        from .providers import ProviderResolutionContext, resolve_provider_spec
+        from .providers import resolve_provider_spec
+        from .provider_spec import ProviderResolutionContext
 
         return resolve_provider_spec(
             "tls.certificate",
@@ -1631,7 +1632,7 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
 
         from pydantic import ValidationError
 
-        from .providers import OnePasswordPublication
+        from .provider_adapters.tls import OnePasswordPublication
 
         with self.assertRaises(ValidationError):
             OnePasswordPublication(
@@ -1652,7 +1653,7 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     def test_a_recording_target_declares_no_name_to_check_it_at(self):
         """Nothing is served there, so a name typed here would never be probed."""
 
-        from .providers import TLSDeliveryTargetSpec
+        from .provider_adapters.declarations import TLSDeliveryTargetSpec
 
         with self.assertRaisesRegex(ValueError, "serves nothing"):
             TLSDeliveryTargetSpec(
@@ -1665,7 +1666,7 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
             )
 
     def test_a_recording_target_needs_both_the_vault_and_the_item(self):
-        from .providers import TLSDeliveryTargetSpec
+        from .provider_adapters.declarations import TLSDeliveryTargetSpec
 
         with self.assertRaisesRegex(ValueError, "needs a vault and an item"):
             TLSDeliveryTargetSpec(
@@ -1678,7 +1679,7 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     def test_a_vault_named_against_another_kind_of_target_is_refused(self):
         """Ignored, it would sit there looking configured and be read by nothing."""
 
-        from .providers import TLSDeliveryTargetSpec
+        from .provider_adapters.declarations import TLSDeliveryTargetSpec
 
         with self.assertRaisesRegex(ValueError, "applies only to onepassword targets"):
             TLSDeliveryTargetSpec(
@@ -1691,7 +1692,8 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     def test_a_certificate_hq_did_not_issue_cannot_be_recorded(self):
         """There are no observed facts to publish, only the declaration."""
 
-        from .providers import ProviderResolutionContext, resolve_provider_spec
+        from .providers import resolve_provider_spec
+        from .provider_spec import ProviderResolutionContext
 
         with self.assertRaisesRegex(ValueError, "cannot be recorded in 1Password"):
             resolve_provider_spec(

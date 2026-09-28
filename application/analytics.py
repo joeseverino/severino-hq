@@ -389,35 +389,6 @@ def traffic_for_hosts(
     }
 
 
-def attach_host_traffic(
-    items, *, attribute: str = "hostname", days: int = DEFAULT_WINDOW_DAYS
-):
-    """Give each item carrying a hostname what that host earned.
-
-    Annotates in place and asks once for the whole page, exactly as
-    :func:`attach_traffic` does for published content: the N+1 is the thing
-    worth avoiding, not the extra column.
-
-    ``pageviews`` is None where nothing was measured, which a template can tell
-    from a real zero: one means nobody visited, the other means nobody looked.
-    A host HQ knows about but Cloudflare never saw is the second case, and it
-    is the more interesting one: it is a site nothing is measuring.
-    """
-
-    items = list(items)
-    if not items:
-        return items
-    hosts = {str(getattr(item, attribute, "") or "") for item in items}
-    traffic = traffic_for_hosts(hosts, days=days)
-    for item in items:
-        host = normalized_hostname(str(getattr(item, attribute, "") or ""))
-        measured = traffic.get(host)
-        item.pageviews = measured["pageviews"] if measured else None
-        item.visits = measured["visits"] if measured else None
-        item.sample_interval = measured["sample_interval"] if measured else None
-    return items
-
-
 def measured_path_count(*, days: int = DEFAULT_WINDOW_DAYS) -> int:
     """How many site-local paths were measured in the window."""
 

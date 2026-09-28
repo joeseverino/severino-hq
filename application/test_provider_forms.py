@@ -344,7 +344,7 @@ class ResourceFormViewTests(TestCase):
         from application.infrastructure import PolicyError
 
         with mock.patch(
-            "control_plane.views.save_managed_resource",
+            "control_plane.resource_form_views.save_managed_resource",
             side_effect=PolicyError("Refused for the example."),
         ):
             response = self.client.post(
@@ -367,10 +367,10 @@ class ResourceFormViewTests(TestCase):
 
         with (
             mock.patch(
-                "control_plane.views._material_form", return_value=forms.Form
+                "control_plane.resource_form_views._material_form", return_value=forms.Form
             ),
             mock.patch(
-                "control_plane.views._store_material",
+                "control_plane.resource_form_views._store_material",
                 side_effect=CertificateError("The example material was refused."),
             ),
         ):

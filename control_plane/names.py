@@ -47,3 +47,17 @@ def certificate_covers(domain: str, names: AbstractSet[str]) -> bool:
         return True
     _, separator, parent = normalized.partition(".")
     return bool(separator and f"*.{parent}" in names)
+
+
+def names_a_host(name: str) -> bool:
+    """Whether a DNS name could ever be something that answers.
+
+    A label beginning with an underscore is reserved by RFC 8552 for metadata
+    about a domain rather than for a host in it: ``_dmarc``, ``_domainkey``,
+    ``_acme-challenge``, ``_sip._tcp``. Nothing is ever served there, and no
+    name of that shape can be a service however it is published. The record
+    type cannot tell: ``sig1._domainkey`` is a DKIM delegation published as a
+    CNAME.
+    """
+
+    return not any(label.startswith("_") for label in str(name).split("."))

@@ -44,7 +44,7 @@ from .integrations import integration_graph
 from .input_errors import pydantic_refusal
 from .integration_validation import required_capability_names
 from .search_contracts import SearchDefinition
-from .security import Capability, Principal
+from .security import Capability, Principal, require_all
 
 
 class ResourceSearchDefinition(SearchDefinition):
@@ -574,8 +574,7 @@ def _resource(name: str) -> ResourceSpec:
 
 
 def _authorize(spec: ResourceSpec, principal: Principal) -> None:
-    for capability in spec.required_capabilities:
-        principal.require(capability)
+    require_all(principal, spec.required_capabilities)
 
 
 def _caller(spec: ResourceSpec, principal: Principal) -> dict[str, Principal]:

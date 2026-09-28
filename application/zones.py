@@ -34,16 +34,16 @@ from django.db import transaction
 from django.urls import reverse
 
 from control_plane.models import ManagedResource, ProviderInventory
-from control_plane.providers import (
+from control_plane.names import normalized_hostname
+from control_plane.provider_adapters.cloudflare import (
     DNS_RECORD_KIND,
     DNS_RECORD_TYPES_BY_ID,
     ZONE_KIND,
-    normalized_hostname,
 )
 
 from .entity_links import entity_link
 from .infrastructure import resource_health
-from .inventory import unmanaged
+from .adoption import unmanaged
 from .ui import ListRow
 
 RECORD_KIND = DNS_RECORD_KIND
@@ -615,7 +615,7 @@ def adopt_zone_records(zone: str, *, principal) -> dict[str, Any]:
     """
 
     from .infrastructure import NotFoundError
-    from .inventory import AdoptCommand, adopt
+    from .adoption import AdoptCommand, adopt
 
     found = find_zone(zone)
     if found is None:

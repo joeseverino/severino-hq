@@ -26,13 +26,13 @@ from django.urls import reverse
 from control_plane.credential_reads import REGISTRAR_READ
 from control_plane.models import ManagedResource
 from control_plane.provider_adapters.contracts import PERMISSION_REFUSAL
-from control_plane.providers import (
+from control_plane.providers import PROVIDERS
+from control_plane.provider_adapters.cloudflare import caa_parts
+from control_plane.provider_adapters.tls import (
     CERTIFICATE_KIND,
-    PROVIDERS,
     UPLOADED_CERTIFICATE_KIND,
-    caa_parts,
-    expiry_phrase,
 )
+from control_plane.provider_spec import expiry_phrase
 
 from control_plane.names import in_zone, normalized_hostname
 
@@ -76,7 +76,7 @@ def services(zone) -> ZoneInsight | None:
     them (a Pages project) and how many sit behind an overlay (Access).
     """
 
-    from .services import services_by_zone
+    from .service_list import services_by_zone
     from .zones import zone_names
 
     members = services_by_zone(zone_names()).get(zone.zone, ())

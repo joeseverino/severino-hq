@@ -30,7 +30,7 @@ from . import assets as asset_use_cases
 from . import projects as project_use_cases
 from .assets import AssetCommand, upsert_asset
 from .projects import ProjectCommand, upsert_project
-from .security import Capability, Principal
+from .security import Capability, Principal, require_all
 from .ui import counted
 
 MAX_IMPORT_RECORDS = 1000
@@ -281,8 +281,7 @@ def import_registry(
 ) -> dict[str, Any]:
     """Validate the whole document, then upsert every record or none."""
 
-    for capability in REQUIRED_CAPABILITIES:
-        principal.require(capability)
+    require_all(principal, REQUIRED_CAPABILITIES)
     total = len(command.projects) + len(command.assets)
     if total > MAX_IMPORT_RECORDS:
         return {

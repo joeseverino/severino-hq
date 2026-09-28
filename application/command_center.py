@@ -8,14 +8,11 @@ from urllib.parse import urlencode
 
 from django.urls import reverse
 
-from control_plane.providers import normalized_hostname
+from control_plane.names import normalized_hostname
 
 from .capabilities import CapabilitySpec
-from .connections import (
-    ConnectionAbility,
-    ConnectionSpec,
-    connection_catalog,
-)
+from .connections import ConnectionAbility, ConnectionSpec
+from .connection_catalog import connection_catalog
 from .contracts import route_url
 from .entity_links import entity_link
 from .integrations import integration_graph
@@ -23,7 +20,7 @@ from .resources import ResourceSpec
 from .security import Capability, Principal
 from .facts import in_zone
 from .findings import finding_rules
-from .topology import topology_lenses
+from .topology_lenses import topology_lenses
 from .ui import counted
 
 
@@ -47,10 +44,6 @@ class DiscoveryItem:
 class CommandRelation:
     labels: tuple[str, ...] = ()
     kinds: tuple[str, ...] = ()
-
-
-def _permitted(required: tuple[Capability | str, ...], principal: Principal) -> bool:
-    return principal.permits(*required)
 
 
 def _matches(item: DiscoveryItem, query: str) -> bool:
@@ -423,7 +416,7 @@ def _matching_estate(items: tuple[DiscoveryItem, ...], query: str) -> tuple[Disc
 def estate_search(query: str, *, principal: Principal) -> tuple[DiscoveryItem, ...]:
     """Machines, services and domains matching ``query``, best first."""
 
-    if not query.strip() or not _permitted((Capability.READ,), principal):
+    if not query.strip() or not principal.permits(Capability.READ):
         return ()
     return _matching_estate(_estate_items(), query)
 
@@ -452,7 +445,7 @@ def _command_center(
     permitted_connections = tuple(
         spec
         for spec in registered_connections
-        if _permitted(spec.required_capabilities, principal)
+        if principal.permits(*spec.required_capabilities)
     )
     # Registry discovery is a zero-query application primitive used by CLI,
     # MCP and contract checks. The web palette explicitly opts into cached live
@@ -491,12 +484,12 @@ def _command_center(
             ),
         )
         for spec in registered_resources
-        if _permitted(spec.required_capabilities, principal)
+        if principal.permits(*spec.required_capabilities)
     )
     commands = tuple(
         item
         for spec in registered_commands
-        if _permitted(spec.required_capabilities, principal)
+        if principal.permits(*spec.required_capabilities)
         for item in (
             _command_item(
                 spec,
@@ -546,7 +539,7 @@ def _command_center(
             )
             for lens in topology_lenses()
         )
-        if _permitted((Capability.READ,), principal)
+        if principal.permits(Capability.READ)
         else ()
     )
     # Rules, not the claims they would make. Live findings here would derive the
@@ -564,7 +557,7 @@ def _command_center(
             )
             for rule in finding_rules()
         )
-        if _permitted((Capability.READ,), principal)
+        if principal.permits(Capability.READ)
         else ()
     )
     # The estate is live state, like the live connections: only the palette

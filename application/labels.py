@@ -14,6 +14,19 @@ def human_label(name: str) -> str:
     return " ".join(word.upper() if word in _ACRONYMS else word.title() for word in words)
 
 
+def lower_first(text: str) -> str:
+    """A label as it reads mid-sentence, leaving an acronym alone.
+
+    "Proxy host" belongs lowercase after "Add"; "TLS certificate" does not, and
+    lowering its first letter produced "tLS certificate". A word whose second
+    letter is a capital ("HQ", "TLS", "IPv6") is an acronym and keeps its case.
+    """
+
+    if text[1:2].isupper():
+        return text
+    return text[:1].lower() + text[1:]
+
+
 def human_bytes(value: int | float) -> str:
     """A byte count as people say it: ``512 B``, ``38 MB``, ``1.7 GB``."""
 

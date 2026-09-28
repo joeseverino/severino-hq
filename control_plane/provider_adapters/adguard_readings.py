@@ -7,6 +7,7 @@ no query, timestamp per query, answer or other name leaves this module.
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from ipaddress import ip_address
@@ -29,16 +30,29 @@ def _refs(runtime: ProviderRuntime) -> tuple[str, ...]:
     return runtime.connection_refs("adguard") or ("",)
 
 
-def _get(runtime: ProviderRuntime, headers_for: Callable, url_for: Callable, ref: str, path: str):
-    return runtime.request(f"{url_for(runtime, ref)}{path}", headers=headers_for(runtime, ref))
+def url(runtime: ProviderRuntime, ref: str = "") -> str:
+    prefix = runtime.connection_prefix("adguard", ref)
+    return runtime.required(prefix, "URL").rstrip("/")
 
 
-def rewrites(runtime: ProviderRuntime, url_for, headers_for, ref: str) -> list[dict[str, Any]]:
+def headers(runtime: ProviderRuntime, ref: str = "") -> dict[str, str]:
+    prefix = runtime.connection_prefix("adguard", ref)
+    encoded = base64.b64encode(
+        f"{runtime.required(prefix, 'USERNAME')}:{runtime.required(prefix, 'PASSWORD')}".encode()
+    ).decode()
+    return {"Authorization": f"Basic {encoded}"}
+
+
+def fetch(runtime: ProviderRuntime, ref: str, path: str) -> Any:
+    return runtime.request(f"{url(runtime, ref)}{path}", headers=headers(runtime, ref))
+
+
+def rewrites(runtime: ProviderRuntime, ref: str) -> list[dict[str, Any]]:
     """One connection's rewrite list, read once per sweep."""
 
     return runtime.snapshot_value(
         ("adguard-rewrites", ref),
-        lambda: list(_get(runtime, headers_for, url_for, ref, "/control/rewrite/list") or ()),
+        lambda: list(fetch(runtime, ref, "/control/rewrite/list") or ()),
     )
 
 
@@ -90,11 +104,11 @@ def client_records(payload: Any, ref: str) -> list[dict[str, Any]]:
     return found
 
 
-def read_clients(runtime: ProviderRuntime, url_for, headers_for) -> list[dict[str, Any]]:
+def read_clients(runtime: ProviderRuntime) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     for ref in _refs(runtime):
         found.extend(
-            client_records(_get(runtime, headers_for, url_for, ref, "/control/clients"), ref)
+            client_records(fetch(runtime, ref, "/control/clients"), ref)
         )
     return found
 
@@ -226,13 +240,13 @@ def summarize(
     ]
 
 
-def read_query_summary(runtime: ProviderRuntime, url_for, headers_for) -> list[dict[str, Any]]:
+def read_query_summary(runtime: ProviderRuntime) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     now = datetime.now(timezone.utc)
     for ref in _refs(runtime):
 
         def get(path: str, ref: str = ref) -> Any:
-            return _get(runtime, headers_for, url_for, ref, path)
+            return fetch(runtime, ref, path)
 
         config = get("/control/querylog/config") or {}
         if config.get("enabled") is False:
@@ -241,7 +255,7 @@ def read_query_summary(runtime: ProviderRuntime, url_for, headers_for) -> list[d
             )
         domains = [
             item.get("domain", "")
-            for item in rewrites(runtime, url_for, headers_for, ref)
+            for item in rewrites(runtime, ref)
             if item.get("enabled", True) is not False
         ]
         anonymized = config.get("anonymize_client_ip") is True
@@ -327,8 +341,8 @@ def dns_record(get: Callable[[str], Any], ref: str) -> dict[str, Any]:
     return record
 
 
-def read_dns(runtime: ProviderRuntime, url_for, headers_for) -> list[dict[str, Any]]:
+def read_dns(runtime: ProviderRuntime) -> list[dict[str, Any]]:
     return [
-        dns_record(lambda path, ref=ref: _get(runtime, headers_for, url_for, ref, path), ref)
+        dns_record(lambda path, ref=ref: fetch(runtime, ref, path), ref)
         for ref in _refs(runtime)
     ]

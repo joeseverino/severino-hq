@@ -9,25 +9,28 @@ from django.conf import settings
 
 from projects.views import PostureView, WatchingRefreshView, WatchingView
 from core.views import (
-    ActionItemCountView,
-    ActionItemReadAllView,
-    ActionItemReadView,
-    DashboardContactsView,
-    ActionItemsView,
-    DashboardLinkChoiceView,
-    DashboardGlanceView,
-    DashboardGlanceSettingsView,
     ConnectionView,
     AgentAccessView,
     AgentPolicyView,
     DemoModeView,
-    DashboardView,
     PublicAddressView,
     SearchView,
     ThrottledLoginView,
-    csp_report,
-    health_live,
-    health_ready,
+)
+from core.csp_views import csp_report
+from core.health_views import health_live, health_ready
+from core.action_item_views import (
+    ActionItemCountView,
+    ActionItemReadAllView,
+    ActionItemReadView,
+    ActionItemsView,
+)
+from core.dashboard_views import (
+    DashboardContactsView,
+    DashboardLinkChoiceView,
+    DashboardGlanceView,
+    DashboardGlanceSettingsView,
+    DashboardView,
 )
 from core.command_views import CommandView
 from application.plugins import plugin_urlpatterns

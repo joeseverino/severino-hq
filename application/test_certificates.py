@@ -333,7 +333,7 @@ class CoverageTests(TestCase):
     def test_a_proxy_can_be_pointed_at_one_from_the_form(self):
         """The only possible answer for a private name was not on the menu."""
 
-        from control_plane.providers import NameContext
+        from control_plane.provider_spec import NameContext
 
         from .provider_choices import proxy_choices
 

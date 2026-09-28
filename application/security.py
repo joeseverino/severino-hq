@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -129,6 +130,16 @@ class Principal:
                 f"{self.interface} principal {self.actor!r} lacks "
                 f"{name!r}."
             )
+
+
+def require_all(principal: Principal, capabilities: Iterable[Capability | str]) -> None:
+    """``Principal.require`` for a set: raise on the first capability it lacks.
+
+    The one authorization rule every registry applies to what a spec requires.
+    """
+
+    for capability in capabilities:
+        principal.require(capability)
 
 
 def _operator_capabilities() -> frozenset[Capability | str]:

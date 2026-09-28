@@ -2,32 +2,19 @@
 
 from __future__ import annotations
 
-import base64
 from typing import Any
 
 from pydantic import Field
 
 from ..observations.adguard import CLIENT_KIND, DNS_KIND, QUERY_KIND
 from . import adguard_readings
+from ..provider_spec import ProviderModel, ProviderSpec, applies
 from .contracts import (
     ControllerIntegrationAdapter,
     ProviderError,
     ProviderResult,
     ProviderRuntime,
 )
-
-
-def _url(runtime: ProviderRuntime, connection_ref: str = "") -> str:
-    prefix = runtime.connection_prefix("adguard", connection_ref)
-    return runtime.required(prefix, "URL").rstrip("/")
-
-
-def _headers(runtime: ProviderRuntime, connection_ref: str = "") -> dict[str, str]:
-    prefix = runtime.connection_prefix("adguard", connection_ref)
-    encoded = base64.b64encode(
-        f"{runtime.required(prefix, 'USERNAME')}:{runtime.required(prefix, 'PASSWORD')}".encode()
-    ).decode()
-    return {"Authorization": f"Basic {encoded}"}
 
 
 def reconcile(
@@ -37,8 +24,8 @@ def reconcile(
     apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
-    base_url = _url(runtime)
-    headers = _headers(runtime)
+    base_url = adguard_readings.url(runtime)
+    headers = adguard_readings.headers(runtime)
     rewrites = runtime.request(f"{base_url}/control/rewrite/list", headers=headers)
     desired = {"domain": spec["domain"], "answer": spec["answer"]}
     matches = [item for item in rewrites if item.get("domain") == spec["domain"]]
@@ -114,8 +101,8 @@ def delete(
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     del observed
-    base_url = _url(runtime)
-    headers = _headers(runtime)
+    base_url = adguard_readings.url(runtime)
+    headers = adguard_readings.headers(runtime)
     rewrites = runtime.request(f"{base_url}/control/rewrite/list", headers=headers)
     matches = [item for item in rewrites if item.get("domain") == spec["domain"]]
     if not matches:
@@ -158,29 +145,22 @@ def inventory(runtime: ProviderRuntime) -> list[dict[str, Any]]:
             "enabled": item.get("enabled", True),
         }
         for ref in runtime.connection_refs("adguard") or ("",)
-        for item in adguard_readings.rewrites(runtime, _url, _headers, ref)
+        for item in adguard_readings.rewrites(runtime, ref)
         if item.get("domain") and item.get("answer")
     ]
 
 
-def _reader(read):
-    def reader(runtime: ProviderRuntime) -> list[dict[str, Any]]:
-        return read(runtime, _url, _headers)
-
-    return reader
-
-
 READINGS = {
-    CLIENT_KIND: _reader(adguard_readings.read_clients),
-    QUERY_KIND: _reader(adguard_readings.read_query_summary),
-    DNS_KIND: _reader(adguard_readings.read_dns),
+    CLIENT_KIND: adguard_readings.read_clients,
+    QUERY_KIND: adguard_readings.read_query_summary,
+    DNS_KIND: adguard_readings.read_dns,
 }
 
 
 def probe(runtime: ProviderRuntime, connection_ref: str) -> dict[str, Any]:
     status = runtime.request(
-        f"{_url(runtime, connection_ref)}/control/status",
-        headers=_headers(runtime, connection_ref),
+        f"{adguard_readings.url(runtime, connection_ref)}/control/status",
+        headers=adguard_readings.headers(runtime, connection_ref),
     )
     if not isinstance(status, dict) or "dns_addresses" not in status:
         raise ProviderError("AdGuard did not return a status.")
@@ -215,51 +195,49 @@ def _seed(context: Any) -> dict[str, Any]:
     return {"domain": context.hostname}
 
 
-def build_adapter(*, provider_model, provider_spec, applies):
-    """Build after the host's provider primitives exist; no parent import cycle."""
 
-    class AdGuardRewriteSpec(provider_model):
-        domain: str = Field(
-            min_length=1,
-            max_length=253,
-            title="Hostname",
-            description="The name that should resolve on your network.",
-        )
-        answer: str = Field(
-            min_length=1,
-            max_length=253,
-            title="Points at",
-            description="The IP address this hostname resolves to.",
-        )
+class AdGuardRewriteSpec(ProviderModel):
+    domain: str = Field(
+        min_length=1,
+        max_length=253,
+        title="Hostname",
+        description="The name that should resolve on your network.",
+    )
+    answer: str = Field(
+        min_length=1,
+        max_length=253,
+        title="Points at",
+        description="The IP address this hostname resolves to.",
+    )
 
-    definition = provider_spec(
-        "adguard.rewrite",
-        "Resolves a hostname to an IP on your network. HQ creates it in "
-        "AdGuard if it does not exist.",
-        AdGuardRewriteSpec,
-        actions={"reconcile": applies(automatic=True), "delete": applies()},
-        label="Internal DNS record",
-        connection_providers=("adguard",),
-        removal_note=lambda spec: (
-            f"{spec.get('domain', 'This name')} stops resolving on your "
-            "network. Anything reached by that name goes offline."
-        ),
-        facet="dns",
-        hostnames=_hostnames,
-        seed=_seed,
-        answers=_answers,
-        origin=_origin,
-        from_record=_from_record,
-        sample_record={"domain": "app.example.com", "answer": "10.0.0.10"},
-        readout=_readout,
-    )
-    return ControllerIntegrationAdapter(
-        definitions=(definition,),
-        inventory={definition.kind: inventory},
-        connection_probes={"adguard": probe},
-        actions={
-            (definition.kind, "reconcile"): reconcile,
-            (definition.kind, "delete"): delete,
-        },
-        readings=READINGS,
-    )
+DEFINITION = ProviderSpec(
+    "adguard.rewrite",
+    "Resolves a hostname to an IP on your network. HQ creates it in "
+    "AdGuard if it does not exist.",
+    AdGuardRewriteSpec,
+    actions={"reconcile": applies(automatic=True), "delete": applies()},
+    label="Internal DNS record",
+    connection_providers=("adguard",),
+    removal_note=lambda spec: (
+        f"{spec.get('domain', 'This name')} stops resolving on your "
+        "network. Anything reached by that name goes offline."
+    ),
+    facet="dns",
+    hostnames=_hostnames,
+    seed=_seed,
+    answers=_answers,
+    origin=_origin,
+    from_record=_from_record,
+    sample_record={"domain": "app.example.com", "answer": "10.0.0.10"},
+    readout=_readout,
+)
+ADAPTER = ControllerIntegrationAdapter(
+    definitions=(DEFINITION,),
+    inventory={DEFINITION.kind: inventory},
+    connection_probes={"adguard": probe},
+    actions={
+        (DEFINITION.kind, "reconcile"): reconcile,
+        (DEFINITION.kind, "delete"): delete,
+    },
+    readings=READINGS,
+)

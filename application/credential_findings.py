@@ -9,7 +9,6 @@ the finding, so this module does not import it.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -22,6 +21,7 @@ from control_plane.provider_adapters.contracts import (
 )
 
 from .ui import counted
+from .finding_model import FindingRule, OperatorStep, built_findings, fact_values
 
 # Fact keys a connection node carries; ``topology`` writes them.
 FAILURE = "connection-failure"
@@ -32,15 +32,6 @@ EXPIRES = "credential-expires"
 MINT = "credential-mint"
 MINT_NOTE = "credential-mint-note"
 BY_HAND = "credential-by-hand"
-
-
-@dataclass(frozen=True)
-class OperatorStep:
-    """A command an operator runs on their own machine. HQ never runs it."""
-
-    label: str
-    command: str = ""
-    notes: tuple[str, ...] = ()
 
 
 def credential_facts(fix: Any) -> tuple[tuple[str, str], ...]:
@@ -58,10 +49,6 @@ def credential_facts(fix: Any) -> tuple[tuple[str, str], ...]:
     if fix.by_hand:
         found.append((BY_HAND, fix.by_hand))
     return tuple(found)
-
-
-def _values(node: Any, key: str) -> tuple[str, ...]:
-    return tuple(value for name, value in node.facts if name == key and value)
 
 
 def operator_steps(
@@ -97,10 +84,10 @@ def mint_steps(node: Any) -> tuple[OperatorStep, ...]:
     """The mint step a connection node's facts describe, for a finding."""
 
     return operator_steps(
-        next(iter(_values(node, MINT)), ""),
-        _values(node, MINT_NOTE),
-        next(iter(_values(node, BY_HAND)), ""),
-        _values(node, MISSING),
+        next(iter(fact_values(node, MINT)), ""),
+        fact_values(node, MINT_NOTE),
+        next(iter(fact_values(node, BY_HAND)), ""),
+        fact_values(node, MISSING),
     )
 
 
@@ -116,7 +103,7 @@ FAILURE_LABELS = {
 def failure_of_node(node: Any) -> str:
     """Why the connection's last probe failed, one of ``FAILURES``, or ""."""
 
-    return next(iter(_values(node, FAILURE)), "")
+    return next(iter(fact_values(node, FAILURE)), "")
 
 
 def answer_steps(node: Any) -> tuple[OperatorStep, ...]:
@@ -125,7 +112,7 @@ def answer_steps(node: Any) -> tuple[OperatorStep, ...]:
     from .credential_mint import address_fields
 
     failure = failure_of_node(node)
-    endpoint = next(iter(_values(node, ENDPOINT)), "")
+    endpoint = next(iter(fact_values(node, ENDPOINT)), "")
     if failure == ADDRESS_FAILURE:
         return (
             OperatorStep(
@@ -171,10 +158,10 @@ def missing_permissions(estate: Any) -> tuple[dict[str, Any], ...]:
     for node in estate.nodes():
         if node.kind != "connection":
             continue
-        missing = _values(node, MISSING)
+        missing = fact_values(node, MISSING)
         if not missing:
             continue
-        unseen = _values(node, UNSEEN)
+        unseen = fact_values(node, UNSEEN)
         found.append(
             dict(
                 rule="credential-missing-permissions",
@@ -200,13 +187,13 @@ def missing_permissions(estate: Any) -> tuple[dict[str, Any], ...]:
 def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
     """A credential inside its renewal window, or past it."""
 
-    from control_plane.providers import expiry_phrase
+    from control_plane.provider_spec import expiry_phrase
 
     found = []
     for node in estate.nodes():
         if node.kind != "connection":
             continue
-        stamp = next(iter(_values(node, EXPIRES)), "")
+        stamp = next(iter(fact_values(node, EXPIRES)), "")
         if not stamp:
             continue
         expired = datetime.fromisoformat(stamp) <= timezone.now()
@@ -229,3 +216,26 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
             )
         )
     return tuple(sorted(found, key=lambda finding: finding["title"]))
+
+
+# The rules this module raises, beside the detectors that decide them.
+RULES: tuple[FindingRule, ...] = (
+    FindingRule(
+        "credential-missing-permissions",
+        "Credential missing permissions",
+        "attention",
+        lambda estate: built_findings(missing_permissions(estate)),
+        operator_action=(
+            "Mint a credential with the missing permissions using the command on the connection's row, then request a fresh sweep."
+        ),
+    ),
+    FindingRule(
+        "credential-expiring",
+        "Credential expiring",
+        "attention",
+        lambda estate: built_findings(expiring(estate)),
+        operator_action=(
+            "Mint a replacement using the command on the connection's row before it expires, then request a fresh sweep."
+        ),
+    ),
+)

@@ -91,7 +91,7 @@ class _Runtime:
 def declared(kind):
     """The reader an admitted adapter declares for ``kind``."""
 
-    from control_plane.providers import CONTROLLER_PROVIDER_ADAPTERS
+    from control_plane.provider_adapters import CONTROLLER_PROVIDER_ADAPTERS
 
     (reader,) = [a.readings[kind] for a in CONTROLLER_PROVIDER_ADAPTERS if kind in a.readings]
     return reader
@@ -116,7 +116,7 @@ def read(kind, runtime=None):
 
 class DeclarationTests(SimpleTestCase):
     def test_the_npm_adapter_declares_every_npm_reading(self):
-        from control_plane.providers import CONTROLLER_PROVIDER_ADAPTERS
+        from control_plane.provider_adapters import CONTROLLER_PROVIDER_ADAPTERS
 
         (adapter,) = [a for a in CONTROLLER_PROVIDER_ADAPTERS
                       if any(d.kind == "npm.proxy_host" for d in a.definitions)]

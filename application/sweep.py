@@ -22,11 +22,11 @@ from django.db import transaction
 
 from .cadence import settle_read_requests
 from .inventory import (
-    adopt_discovered,
     confirm_observed,
     record_inventory,
     retire_departed,
 )
+from .adoption import adopt_discovered
 from .zones import adopt_discovered_records
 
 
@@ -70,7 +70,7 @@ def _ring_for_new_images(payload: dict[str, Any]) -> None:
     image or a digest HQ has not read, so it is read in minutes, not tomorrow."""
 
     from control_plane.observations.portainer import IMAGE_KIND
-    from control_plane.providers import CONTAINER_KIND
+    from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
     from .cadence import ring_registry_doorbell
     from .public_registry import registry_due
@@ -86,7 +86,7 @@ def _adoptable_kinds() -> tuple[str, ...]:
     cannot fall behind the provider registry.
     """
 
-    from .inventory import unmanaged
+    from .adoption import unmanaged
 
     from .zones import RECORD_KIND
 

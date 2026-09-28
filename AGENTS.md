@@ -162,8 +162,10 @@ limit is split into named steps.
 The architectural seams are type checked. `python -m mypy` (a gate in
 `ci-local.sh` and CI's Checks job) runs mypy with django-stubs over the modules
 `mypy.ini` names: the security, capability, plugin, resource and
-integration-spec contracts, `hq_sdk`, `hq_api` and `hq_mcp`, with every
-function in them fully annotated. It loads `config/settings_typecheck.py`, the
+integration-spec contracts, the provider vocabulary and registry with the
+provider modules split out of it, the controller's handler registry and
+connection plumbing, `hq_sdk`, `hq_api` and `hq_mcp`, with every function in
+them fully annotated. It loads `config/settings_typecheck.py`, the
 host's settings without extensions. Fix what it reports rather than silencing
 it; a `# type: ignore[code]` is for a stub that is wrong, with the reason beside
 it. To widen it, add a module to `files` and to the strict section in

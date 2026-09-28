@@ -18,6 +18,7 @@ from control_plane.observations import OBSERVATIONS
 from .expiry import days_until
 from .facts import Joined, inventory_records
 from .ui import moment
+from .finding_model import FindingRule, built_findings
 
 CERTIFICATE_EXPIRES = "certificate-expires"
 # A provider that renews on its own does so with thirty days left; a
@@ -54,7 +55,7 @@ def add(nodes, readers: Callable[[Joined], Iterable[str]]) -> None:
 def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
     """A certificate a connection reads, inside three weeks of expiry or past it."""
 
-    from control_plane.providers import expiry_phrase
+    from control_plane.provider_spec import expiry_phrase
 
     found = []
     for node in estate.nodes():
@@ -99,3 +100,17 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
                 )
             )
     return tuple(sorted(found, key=lambda item: item["title"]))
+
+
+# The rules this module raises, beside the detectors that decide them.
+RULES: tuple[FindingRule, ...] = (
+    FindingRule(
+        "certificate-expiring",
+        "Certificate expiring",
+        "attention",
+        lambda estate: built_findings(expiring(estate)),
+        operator_action=(
+            "Renew the certificate where it is held, or fix the automatic renewal that should have renewed it, then request a fresh sweep."
+        ),
+    ),
+)

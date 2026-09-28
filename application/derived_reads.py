@@ -187,7 +187,7 @@ def get_machine(name: str) -> dict[str, Any]:
 def _domains() -> list[dict[str, Any]]:
     from .estate import estate_reading
     from .infrastructure import enabled_resources
-    from .services import services_by_zone
+    from .service_list import services_by_zone
     from .zones import ZONE_KIND
     from .entity_links import entity_link
 

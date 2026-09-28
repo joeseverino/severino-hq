@@ -22,7 +22,6 @@ from ..observations.npm import (
     SERVING_PARTS,
     STREAM_KIND,
 )
-from . import npm as adapter
 from .contracts import ProviderError, ProviderRuntime
 from .parts import refuse_part
 from .refusals import refused
@@ -61,6 +60,10 @@ def refs(runtime: ProviderRuntime) -> tuple[str, ...]:
 
 def listed(runtime: ProviderRuntime, ref: str, source: tuple[str, str, str]) -> list[dict[str, Any]]:
     path, needs, what = source
+    # Imported here: the adapter admits these readings at its own import, so a
+    # module-level import back into it would leave READINGS undefined for
+    # whichever of the two loads second.
+    from . import npm as adapter
 
     def load() -> list[dict[str, Any]]:
         try:
