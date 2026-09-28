@@ -10,7 +10,8 @@ from control_plane.models import ManagedResource, NotManaged, ProviderConnection
 from core.models import AuditLog
 
 from .adoption_testing import connection
-from .infrastructure import OperationCommand, PolicyError, request_removal
+from .infrastructure import PolicyError
+from .resource_operations import OperationCommand, request_removal
 from .inventory import record_connections
 from .adoption import AdoptCommand, adopt, unmanaged
 from .security import cli_principal

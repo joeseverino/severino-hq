@@ -9,6 +9,7 @@ from typing import Any
 from django.core.exceptions import ValidationError as DjangoValidationError
 from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
+from control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from core.audit import audit_connection
 
 from .labels import human_label
@@ -47,16 +48,14 @@ from .input_errors import (
     pydantic_refusal,
     unknown_field_errors,
 )
-from .infrastructure import (
-    CERTIFICATE_KIND,
-    ManagedResourceCommand,
+from .infrastructure import ManagedResourceCommand, save_managed_resource
+from .resource_operations import (
     OperationCommand,
     request_certificate_renewal,
     request_reach_allow,
     request_route_approval,
     request_reconcile,
     request_removal,
-    save_managed_resource,
 )
 from .approvals import TooManyPendingApprovals, hold_for_approval
 from .capability_policy import Rule, decide

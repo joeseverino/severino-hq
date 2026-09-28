@@ -122,7 +122,7 @@ def resource_capabilities(
 
 
 def _allowed(verb, policy, resource, provider, removal_pending, observes_only) -> Allowed:
-    from .infrastructure import certificate_renewal_allowed
+    from .resource_operations import certificate_renewal_allowed
 
     if removal_pending:
         return Allowed(False, "A removal is in progress.", policy.automatic)

@@ -17,7 +17,8 @@ from control_plane.providers import enabled_controller_actions
 from control_plane.provider_adapters.tls import CERTIFICATE_KIND
 
 from .adoption import manages_through, observes_only
-from .infrastructure import controller_contract, serialize_operation, serialize_resource
+from .infrastructure import controller_contract, serialize_resource
+from .resource_operations import serialize_operation
 
 _FORBIDDEN_STATUS_KEYS = ("private", "secret", "token", "password", "credential")
 

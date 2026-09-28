@@ -18,7 +18,7 @@ from expenses.models import Expense
 from projects.models import Project
 
 from .dashboard import operating_snapshot
-from .infrastructure import operation_summary
+from .resource_operations import operation_summary
 from .resource_context import get_managed_resource
 from .projection import projection_scope, read_once
 from .ui import (

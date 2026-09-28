@@ -15,18 +15,21 @@ from django.views import View
 from django.views.generic import DetailView, ListView
 
 from application.infrastructure import (
-    OperationCommand,
     PolicyError,
     declared_machines,
     delivery_targets,
+    resource_health,
+    serialize_resource,
+    serialize_public_status,
+)
+
+from application.resource_operations import (
+    OperationCommand,
     operation_summary,
     request_certificate_renewal,
     request_lifecycle,
     request_reconcile,
     request_removal,
-    resource_health,
-    serialize_resource,
-    serialize_public_status,
 )
 from application.entity_links import kind_label
 from application.relationships import relationships_for

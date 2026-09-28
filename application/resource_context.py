@@ -22,11 +22,11 @@ from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_wi
 from .infrastructure import (
     NotFoundError,
     controller_contract,
-    operation_summary,
     resolved_spec,
     resource_health,
     serialize_resource,
 )
+from .resource_operations import operation_summary
 from .labels import lower_first
 from .resource_capabilities import ResourceCapabilities, resource_capabilities
 

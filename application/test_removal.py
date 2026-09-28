@@ -15,7 +15,8 @@ from django.urls import reverse
 from control_plane.models import ManagedResource, OperationRequest
 
 from .controller import ControllerReport, claim_next_operation, report_operation
-from .infrastructure import OperationCommand, PolicyError, request_removal
+from .infrastructure import PolicyError
+from .resource_operations import OperationCommand, request_removal
 from .security import cli_principal
 
 REWRITE = {"domain": "app.example.com", "answer": "10.0.0.10"}
@@ -182,7 +183,7 @@ class RemovalReportTests(TestCase):
         resource = a_rewrite()
         resource.generation = 1
         resource.save(update_fields=["generation"])
-        from .infrastructure import request_reconcile
+        from .resource_operations import request_reconcile
 
         request_reconcile(
             OperationCommand(idempotency_key="reconcile-1"),

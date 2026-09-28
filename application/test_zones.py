@@ -1030,7 +1030,7 @@ class StopManagingDomainTests(TestCase):
         )
 
     def _remove(self):
-        from .infrastructure import OperationCommand, request_removal
+        from .resource_operations import OperationCommand, request_removal
 
         return request_removal(
             OperationCommand(idempotency_key="forget-1", reason="no longer mine"),
@@ -1074,7 +1074,7 @@ class StopManagingDomainTests(TestCase):
         """The distinction has to hold in both directions: forgetting a record
         declaration would abandon a live record with nothing pointing at it."""
 
-        from .infrastructure import OperationCommand, request_removal
+        from .resource_operations import OperationCommand, request_removal
 
         key = ManagedResource.objects.filter(kind=RECORD_KIND).first().key
         request_removal(
@@ -1800,7 +1800,7 @@ class PendingRemovalTests(TestCase):
         self.assertNotContains(response, "Removal in progress")
 
     def test_a_queued_removal_withdraws_them(self):
-        from .infrastructure import OperationCommand, request_removal
+        from .resource_operations import OperationCommand, request_removal
 
         request_removal(
             OperationCommand(idempotency_key="r1"),
@@ -1814,7 +1814,7 @@ class PendingRemovalTests(TestCase):
         self.assertNotContains(response, ">Reconcile<")
 
     def test_the_topology_withdraws_them_too(self):
-        from .infrastructure import OperationCommand, request_removal
+        from .resource_operations import OperationCommand, request_removal
         from .topology import derive_topology
 
         request_removal(
@@ -1832,7 +1832,7 @@ class PendingRemovalTests(TestCase):
     def test_the_report_is_still_reachable(self):
         """The one thing still worth doing: reading what it was."""
 
-        from .infrastructure import OperationCommand, request_removal
+        from .resource_operations import OperationCommand, request_removal
 
         request_removal(
             OperationCommand(idempotency_key="r1"),
