@@ -28,6 +28,8 @@ from controller_runtime import (
     portainer,
     provider_http,
     provider_runtime,
+    tailnet_api,
+    tailnet_policy,
     tailscale,
     tls,
     tls_issuance,
@@ -679,7 +681,7 @@ class ProviderAdapterTests(TestCase):
                 {
                     "connection_ref": "example-tailnet",
                     "provider": "tailscale",
-                    "endpoint": tailscale.TAILNET_API,
+                    "endpoint": tailnet_api.TAILNET_API,
                     "manages": False,
                     "probed": True,
                     "ok": True,
@@ -3283,7 +3285,7 @@ class AppConnectorTests(TestCase):
     a DNS record, declared inside the policy rather than anywhere HQ looked."""
 
     def connectors(self, policy):
-        return tailscale._app_connectors(policy)
+        return tailnet_policy._app_connectors(policy)
 
     def test_a_declared_connector_is_read_out_of_the_policy(self):
         found = self.connectors(
@@ -3441,9 +3443,9 @@ class TailnetSweepTests(TestCase):
         ]
         with (
             mock.patch.object(tailscale, "TAILNET_STATUS", ""),
-            mock.patch.object(tailscale, "_tailnet_token", return_value="t"),
-            mock.patch.object(tailscale, "_tailnet_api_devices", return_value=listed),
-            mock.patch.object(tailscale, "_reach_by_device", return_value={}),
+            mock.patch.object(tailnet_api, "tailnet_token", return_value="t"),
+            mock.patch.object(tailnet_api, "tailnet_api_devices", return_value=listed),
+            mock.patch.object(tailnet_policy, "reach_by_device", return_value={}),
         ):
             (device,) = tailscale.list_tailnet_devices()
 
@@ -3465,7 +3467,7 @@ class TailnetSweepTests(TestCase):
         refused = urllib.error.HTTPError("u", 403, "Forbidden", {}, io.BytesIO(b""))
         with mock.patch.object(urllib.request, "urlopen", side_effect=refused):
             with self.assertRaises(ProviderError) as raised:
-                tailscale._tailnet_api_devices("t")
+                tailnet_api.tailnet_api_devices("t")
 
         self.assertIn("devices:core:read", str(raised.exception))
 
@@ -3546,7 +3548,7 @@ class TailnetDeviceTests(TestCase):
         self.assertFalse(result.changed)
 
     def test_a_dry_run_says_what_it_would_do_and_does_not_do_it(self):
-        with mock.patch.object(tailscale, "_tailnet_token") as token:
+        with mock.patch.object(tailnet_api, "tailnet_token") as token:
             result = tailscale.reconcile_tailnet_device(self.spec(), apply=False)
 
         self.assertTrue(result.changed)
@@ -3568,7 +3570,7 @@ class TailnetDeviceTests(TestCase):
 
         refused = urllib.error.HTTPError("u", 403, "Forbidden", {}, None)
         with (
-            mock.patch.object(tailscale, "_tailnet_token", return_value="t"),
+            mock.patch.object(tailnet_api, "tailnet_token", return_value="t"),
             mock.patch.object(urllib.request, "urlopen", side_effect=refused),
             self.assertRaises(ProviderError) as raised,
         ):
@@ -3593,7 +3595,7 @@ class TailnetDeviceTests(TestCase):
             mock.patch.object(urllib.request, "urlopen", side_effect=refused),
             self.assertRaises(ProviderError) as raised,
         ):
-            tailscale._tailnet_token("a-tailnet")
+            tailnet_api.tailnet_token("a-tailnet")
 
         self.assertIn("OAuth client", str(raised.exception))
 
@@ -3615,7 +3617,7 @@ class TailnetDeviceTests(TestCase):
             ),
             self.assertRaises(ProviderError) as raised,
         ):
-            tailscale._tailnet_token("a-tailnet")
+            tailnet_api.tailnet_token("a-tailnet")
 
         self.assertEqual(
             str(raised.exception), "Tailscale did not answer the token request."
@@ -3629,7 +3631,7 @@ class TailnetDeviceTests(TestCase):
         source = _controller_source()
 
         self.assertNotIn("_TOKEN_CACHE", source)
-        self.assertEqual(source.count("def _tailnet_token"), 1)
+        self.assertEqual(source.count("def tailnet_token"), 1)
 
 
 class TailnetPolicyGateTests(TestCase):
@@ -3643,12 +3645,12 @@ class TailnetPolicyGateTests(TestCase):
     def reconcile(self, live, declared):
         spec = {"connection_ref": "a-tailnet", "document": json.dumps(declared)}
         with (
-            mock.patch.object(tailscale, "_tailnet_token", return_value="t"),
-            mock.patch.object(tailscale, "_tailnet_policy", return_value=live),
+            mock.patch.object(tailnet_api, "tailnet_token", return_value="t"),
+            mock.patch.object(tailnet_policy, "_tailnet_policy", return_value=live),
             mock.patch.object(urllib.request, "urlopen") as urlopen,
         ):
             urlopen.return_value.__enter__.return_value.read.return_value = b"{}"
-            result = tailscale.reconcile_tailnet_policy(spec, apply=False)
+            result = tailnet_policy.reconcile_tailnet_policy(spec, apply=False)
         return result, urlopen
 
     def test_a_policy_with_no_tests_is_refused_before_tailscale_is_asked(self):
@@ -3749,7 +3751,7 @@ class RouteApprovalTests(TestCase):
 
         with (
             mock.patch.object(tailscale, "_tailnet_device_id", return_value="node-1"),
-            mock.patch.object(tailscale, "_tailnet_token", return_value="token"),
+            mock.patch.object(tailnet_api, "tailnet_token", return_value="token"),
             mock.patch.object(urllib.request, "urlopen", urlopen),
         ):
             result = tailscale.approve_tailnet_routes(
@@ -3835,7 +3837,7 @@ class RouteApprovalTests(TestCase):
 
         with (
             mock.patch.object(tailscale, "_tailnet_device_id", return_value="node-1"),
-            mock.patch.object(tailscale, "_tailnet_token", return_value="token"),
+            mock.patch.object(tailnet_api, "tailnet_token", return_value="token"),
             mock.patch.object(urllib.request, "urlopen", urlopen),
             self.assertRaises(ProviderError) as raised,
         ):
@@ -3865,7 +3867,7 @@ class RouteApprovalTests(TestCase):
 
         with (
             mock.patch.object(tailscale, "_tailnet_device_id", return_value="node-1"),
-            mock.patch.object(tailscale, "_tailnet_token", return_value="token"),
+            mock.patch.object(tailnet_api, "tailnet_token", return_value="token"),
             mock.patch.object(urllib.request, "urlopen", urlopen),
             self.assertRaisesRegex(
                 ProviderError, "did not report the routes"
@@ -3911,11 +3913,11 @@ class TailnetPolicyWriteTests(TestCase):
     def reconcile(self, document, script=(), *, live=None, apply=True):
         urlopen = _Scripted(script)
         with (
-            mock.patch.object(tailscale, "_tailnet_token", return_value="t"),
-            mock.patch.object(tailscale, "_tailnet_policy", return_value=live),
+            mock.patch.object(tailnet_api, "tailnet_token", return_value="t"),
+            mock.patch.object(tailnet_policy, "_tailnet_policy", return_value=live),
             mock.patch.object(urllib.request, "urlopen", urlopen),
         ):
-            result = tailscale.reconcile_tailnet_policy(
+            result = tailnet_policy.reconcile_tailnet_policy(
                 {"connection_ref": "a-tailnet", "document": document}, apply=apply
             )
         return result, urlopen.sent
@@ -3998,7 +4000,7 @@ class RouteApprovalFailureTests(TestCase):
     def approve(self, script):
         with (
             mock.patch.object(tailscale, "_tailnet_device_id", return_value="node-1"),
-            mock.patch.object(tailscale, "_tailnet_token", return_value="token"),
+            mock.patch.object(tailnet_api, "tailnet_token", return_value="token"),
             mock.patch.object(urllib.request, "urlopen", _Scripted(script)),
         ):
             return tailscale.approve_tailnet_routes({"name": "a-router"})
@@ -4193,7 +4195,7 @@ class TailnetReadingTests(TestCase):
             return _Answer(payload)
 
         with (
-            mock.patch.object(tailscale, "_tailnet_token", return_value="token"),
+            mock.patch.object(tailnet_api, "tailnet_token", return_value="token"),
             mock.patch.object(urllib.request, "urlopen", urlopen),
         ):
             records = handlers.OBSERVATION_READERS[kind]()
@@ -4209,7 +4211,7 @@ class TailnetReadingTests(TestCase):
             )
 
         with (
-            mock.patch.object(tailscale, "_tailnet_token", return_value="token"),
+            mock.patch.object(tailnet_api, "tailnet_token", return_value="token"),
             mock.patch.object(urllib.request, "urlopen", urlopen),
             self.assertRaises(ProviderError) as raised,
         ):
@@ -4234,7 +4236,7 @@ class TailnetReadingTests(TestCase):
     def test_dns_is_read_from_the_configuration_endpoint(self):
         (record,), calls = self.read("tailscale.dns", self.DNS)
 
-        self.assertEqual(calls, [f"{tailscale.TAILNET_API}/tailnet/-/dns/configuration"])
+        self.assertEqual(calls, [f"{tailnet_api.TAILNET_API}/tailnet/-/dns/configuration"])
         self.assertEqual(record["nameservers"], ["100.64.0.53", "192.0.2.53"])
         self.assertTrue(record["magic_dns"])
         self.assertTrue(record["override_local_dns"])
@@ -4272,7 +4274,7 @@ class TailnetReadingTests(TestCase):
     def test_settings_keep_the_named_settings_only(self):
         (record,), calls = self.read("tailscale.settings", self.SETTINGS)
 
-        self.assertEqual(calls, [f"{tailscale.TAILNET_API}/tailnet/-/settings"])
+        self.assertEqual(calls, [f"{tailnet_api.TAILNET_API}/tailnet/-/settings"])
         self.assertEqual(record["devices_key_duration_days"], 90)
         self.assertTrue(record["devices_approval_on"])
         self.assertTrue(record["acls_externally_managed_on"])
@@ -4329,7 +4331,7 @@ class TailnetReadingTests(TestCase):
     def test_users_keep_identity_role_and_presence_only(self):
         (record,), calls = self.read("tailscale.user", self.USERS)
 
-        self.assertEqual(calls, [f"{tailscale.TAILNET_API}/tailnet/-/users"])
+        self.assertEqual(calls, [f"{tailnet_api.TAILNET_API}/tailnet/-/users"])
         self.assertEqual(
             record,
             {
@@ -4377,7 +4379,7 @@ class TailnetReadingTests(TestCase):
 
     def test_an_unreadable_answer_raises_rather_than_reading_as_empty(self):
         with (
-            mock.patch.object(tailscale, "_tailnet_token", return_value="token"),
+            mock.patch.object(tailnet_api, "tailnet_token", return_value="token"),
             mock.patch.object(
                 urllib.request, "urlopen", return_value=_Answer([])
             ),
@@ -4406,10 +4408,10 @@ class TailnetReadingTests(TestCase):
             return _Answer({})
 
         with (
-            mock.patch.object(tailscale, "_tailnet_token", return_value="token"),
+            mock.patch.object(tailnet_api, "tailnet_token", return_value="token"),
             mock.patch.object(urllib.request, "urlopen", urlopen),
         ):
-            (record,) = tailscale.list_tailnet_policy()
+            (record,) = tailnet_policy.list_tailnet_policy()
 
         self.assertEqual(record["services"][0]["name"], "svc:example")
         self.assertFalse(any("vip-services" in url for url in calls))
@@ -4850,8 +4852,8 @@ class CollectorFailureIsReportedTests(TestCase):
         )
         with (
             mock.patch.dict("os.environ", {"TAILSCALE_CONNECTION_REF": "example-tailnet"}),
-            mock.patch.object(tailscale, "_tailnet_token", return_value="t"),
-            mock.patch.object(tailscale, "_tailnet_policy", side_effect=refused),
+            mock.patch.object(tailnet_api, "tailnet_token", return_value="t"),
+            mock.patch.object(tailnet_policy, "_tailnet_policy", side_effect=refused),
         ):
             swept = providers.inventory()
 
@@ -6357,7 +6359,7 @@ class CredentialedTransportTests(TestCase):
             return _Page(b'{"devices": []}', landed=request.full_url)
 
         with mock.patch.object(urllib.request, "urlopen", urlopen):
-            tailscale._tailnet_api_devices("example-token")
+            tailnet_api.tailnet_api_devices("example-token")
 
         (context,) = seen
         self.assertIsInstance(context, ssl.SSLContext)

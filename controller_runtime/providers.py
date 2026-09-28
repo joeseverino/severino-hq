@@ -12,10 +12,7 @@ import os
 import logging
 from typing import Any
 
-from control_plane.providers import (
-    PROVIDERS,
-    controller_capability_registry,
-)
+from control_plane.providers import PROVIDERS, controller_capability_registry
 from control_plane.connection_kinds import CONNECTION_CREDENTIALS
 from control_plane.provider_adapters.contracts import (
     CREDENTIAL_REFUSAL,
@@ -26,12 +23,34 @@ from control_plane.provider_adapters.contracts import (
 from control_plane.provider_adapters import onepassword
 from control_plane.provider_adapters.tailscale import TAILNET_KIND
 from control_plane.provider_adapters.parts import part_ledger
-from . import cloudflare, commands, connection_env, handlers, host_readings, portainer, provider_http, provider_runtime, tailscale, tls
+from . import (
+    cloudflare,
+    commands,
+    connection_env,
+    handlers,
+    host_readings,
+    portainer,
+    provider_http,
+    provider_runtime,
+    tailnet_api,
+    tailnet_policy,
+    tailscale,
+    tls,
+)
 from .handlers import probes
+
 
 logger = logging.getLogger("severino.controller")
 
-REGISTRANTS = (tls, cloudflare, portainer, tailscale, host_readings, provider_runtime)
+REGISTRANTS = (
+    tls,
+    cloudflare,
+    portainer,
+    tailscale,
+    tailnet_policy,
+    host_readings,
+    provider_runtime,
+)
 
 
 @probes("onepassword")
@@ -52,7 +71,7 @@ PROVIDER_INVENTORY = {**handlers.INVENTORY, **handlers.OBSERVATION_READERS}
 
 _CONNECTION_PROBES = handlers.PROBES
 
-_DEFAULT_CONNECTION_ENDPOINTS = {"tailscale": tailscale.TAILNET_API}
+_DEFAULT_CONNECTION_ENDPOINTS = {"tailscale": tailnet_api.TAILNET_API}
 
 
 def _endpoint(prefix: str, provider: str) -> str:
