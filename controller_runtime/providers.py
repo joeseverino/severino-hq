@@ -369,19 +369,6 @@ def _npm_token(base_url: str, connection_ref: str = "") -> str:
     return npm.token(_RUNTIME, base_url, connection_ref)
 
 
-def _npm_api_url(configured_url: str) -> str:
-    return npm.api_url(configured_url)
-
-
-def reconcile_npm(
-    spec: dict[str, Any],
-    *,
-    apply: bool = True,
-    observed: dict[str, Any] | None = None,
-) -> ProviderResult:
-    return npm.reconcile(_RUNTIME, spec, apply=apply, observed=observed)
-
-
 # The port every TLS reading is taken on. Named because what was tried is
 # reported when a reading fails, and a bare 443 in two places drifts.
 TLS_PORT = 443
@@ -2008,19 +1995,6 @@ def delete_uploaded_certificate(
         ],
         message="Certificate removed from NPM.",
     )
-
-
-def delete_npm(
-    spec: dict[str, Any],
-    *,
-    apply: bool = True,
-    observed: dict[str, Any] | None = None,
-) -> ProviderResult:
-    return npm.delete(_RUNTIME, spec, apply=apply, observed=observed)
-
-
-def list_npm() -> list[dict[str, Any]]:
-    return npm.inventory(_RUNTIME)
 
 
 # ----- Readings ---------------------------------------------------------------
@@ -4766,10 +4740,6 @@ PROVIDER_INVENTORY = {
 # it may touch, and both are facts HQ can only get by asking. Reported as names
 # so every menu that offers "which machine" or "which domain" is derived from
 # the credential that would have to carry out the answer.
-
-
-def _probe_npm(connection_ref: str) -> dict[str, Any]:
-    return npm.probe(_RUNTIME, connection_ref)
 
 
 def _token_expiry(verification: Any) -> str:

@@ -13,7 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase, mock
 
-from control_plane.provider_adapters import caddy, onepassword
+from control_plane.provider_adapters import caddy, npm, onepassword
 
 from . import providers, worker
 
@@ -292,11 +292,11 @@ class ProviderAdapterTests(TestCase):
 
     def test_npm_ui_url_derives_api_base_once(self):
         self.assertEqual(
-            providers._npm_api_url("https://npm.example"),
+            npm.api_url("https://npm.example"),
             "https://npm.example/api",
         )
         self.assertEqual(
-            providers._npm_api_url("https://npm.example/api"),
+            npm.api_url("https://npm.example/api"),
             "https://npm.example/api",
         )
 
@@ -684,7 +684,7 @@ class ProviderAdapterTests(TestCase):
         request.side_effect = [{"token": "short-lived"}, []]
 
         with self.assertRaisesRegex(providers.ProviderError, "needs an issued certificate"):
-            providers.reconcile_npm(
+            providers.PROVIDER_ACTIONS[("npm.proxy_host", "reconcile")](
                 {
                     "domain_names": ["hq.example"],
                     "forward_scheme": "http",
@@ -724,7 +724,7 @@ class ProviderAdapterTests(TestCase):
             None,
         ]
 
-        result = providers.delete_npm({"domain_names": ["hq.example"]})
+        result = providers.PROVIDER_ACTIONS[("npm.proxy_host", "delete")]({"domain_names": ["hq.example"]})
 
         self.assertTrue(result.changed)
         deletion = request.call_args_list[-1]
@@ -749,7 +749,7 @@ class ProviderAdapterTests(TestCase):
         """
         request.side_effect = [{"token": "short-lived"}, [], None]
 
-        providers.reconcile_npm(
+        providers.PROVIDER_ACTIONS[("npm.proxy_host", "reconcile")](
             {
                 "domain_names": ["hq.example"],
                 "forward_scheme": "http",
@@ -855,7 +855,7 @@ class ProviderAdapterTests(TestCase):
             None,
         ]
 
-        providers.reconcile_npm(
+        providers.PROVIDER_ACTIONS[("npm.proxy_host", "reconcile")](
             {
                 "domain_names": ["new.example"],
                 "forward_scheme": "http",
@@ -1246,7 +1246,7 @@ class ProviderAdapterTests(TestCase):
             [],
         ]
 
-        found = providers.list_npm()[0]["access_policy"]
+        found = providers.PROVIDER_INVENTORY["npm.proxy_host"]()[0]["access_policy"]
 
         self.assertEqual(found["authorization_count"], 1)
         self.assertTrue(found["implicit_deny"])
