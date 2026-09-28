@@ -1,7 +1,6 @@
 """The Docker readings joined into the relation graph, and what they imply.
 
-Two declared containers on a shared network that Docker did not create talk to
-each other: an edge. A container running an image its own tag no longer names
+A container running an image its own tag no longer names
 locally, or an image with no tag at all, is a fact on its machine, and a
 finding reads it from there, as it reads a container no compose project
 declares. Nothing here calls a registry: "behind" means behind the image
@@ -12,15 +11,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
-from itertools import combinations
 from typing import Any
 
-from control_plane.observations.portainer import (
-    DEFAULT_NETWORKS,
-    IMAGE_KIND,
-    NETWORK_KIND,
-    short_id,
-)
+from control_plane.observations.portainer import IMAGE_KIND, short_id
 from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .facts import inventory_records
@@ -31,9 +24,8 @@ IMAGE_UNTAGGED = "image-untagged"
 
 
 def add(nodes, edges, resources, machine: Callable[[Any], str]) -> None:
-    """Talks-to edges between declared containers, and container facts on machines."""
+    """Container facts on machines."""
 
-    _talks_to(nodes, edges, resources, machine)
     _image_facts(nodes, machine)
     _unrecognised(nodes, machine)
 
@@ -64,33 +56,6 @@ def _unrecognised(nodes, machine) -> None:
 
 def _on(record: Mapping[str, Any], machine: Callable[[Any], str]) -> str:
     return machine(record.get("host")) or machine(record.get("host_address"))
-
-
-def _talks_to(nodes, edges, resources, machine) -> None:
-    from .topology_model import edge_between
-
-    containers: dict[tuple[str, str], str] = {}
-    for resource in resources:
-        node_id = f"resource:{resource.key}"
-        if resource.kind != CONTAINER_KIND or node_id not in nodes:
-            continue
-        spec = resource.spec or {}
-        host = machine(spec.get("host"))
-        if host:
-            containers[(host, str(spec.get("name", "")))] = node_id
-    if not containers:
-        return
-    for _snapshot, record in inventory_records(NETWORK_KIND):
-        name = str(record.get("name", ""))
-        if not name or name in DEFAULT_NETWORKS:
-            continue
-        host = _on(record, machine)
-        declared = sorted(
-            {containers[(host, item)] for item in record.get("containers") or () if (host, item) in containers}
-        )
-        for one, other in combinations(declared, 2):
-            relation = replace(edge_between(one, other, "talks_to"), detail=f"Network {name}")
-            edges[relation.id] = relation
 
 
 def reference_tag(reference: str) -> str:

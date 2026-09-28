@@ -12,6 +12,7 @@ from django.test import SimpleTestCase
 
 from control_plane import observations
 from control_plane.connection_kinds import CONNECTION_KINDS
+from control_plane.observations.contract import ObservationRecord, ObservationSpec, registry
 from control_plane.provider_adapters import (
     ADMITTED,
     CONNECTIONS,
@@ -75,3 +76,12 @@ class ObservationDiscoveryTests(SimpleTestCase):
 
         self.assertEqual(modules, sorted(modules))
         self.assertEqual(len(providers), len(observations.OBSERVATIONS))
+
+    def test_a_reading_that_connects_must_name_what_it_connects(self):
+        spec = ObservationSpec(
+            "example.group", "example", "Example group", ObservationRecord,
+            connects=lambda record: True,
+        )
+
+        with self.assertRaisesMessage(ValueError, "connects needs the containers"):
+            registry((spec,))

@@ -241,6 +241,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         describe=_network,
         containers=_users("containers"),
         container_relation="On network",
+        connects=lambda record: str(record.get("name", "")) not in DEFAULT_NETWORKS,
     ),
     ObservationSpec(
         VOLUME_KIND,

@@ -107,7 +107,7 @@ class GraphTests(TestCase):
             edges = relation_graph(principal=READER).topology.edges
 
         talks = {(edge.source, edge.target, edge.detail) for edge in edges if edge.kind == "talks_to"}
-        self.assertEqual(talks, {("resource:lab-db", "resource:lab-web", "Network shop_default")})
+        self.assertEqual(talks, {("resource:lab-db", "resource:lab-web", "Docker network shop_default")})
 
     def test_the_machine_holds_each_reading_through_the_portainer_connection(self):
         with projection_scope():
