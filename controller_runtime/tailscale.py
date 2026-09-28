@@ -19,7 +19,8 @@ from control_plane.provider_adapters.contracts import (
 from control_plane.observations.tailscale import SETTING_PARTS as TAILNET_SETTING_PARTS
 from control_plane.provider_adapters.parts import refuse_part
 from controller_runtime.tailnet_policy import refuse_weaker_tests
-from .handlers import reads
+from .handlers import acts, lists, probes, reads
+from control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
 from . import connection_env, portainer, provider_http
 
 
@@ -101,6 +102,7 @@ def local_tailnet_devices() -> list[dict[str, Any]]:
     return found
 
 
+@lists(TAILNET_KIND)
 def list_tailnet_devices() -> list[dict[str, Any]]:
     """Every machine on the tailnet, with what the policy says about each.
 
@@ -337,6 +339,7 @@ def _tailnet_device_id(name: str) -> str:
     )
 
 
+@acts(TAILNET_KIND, "reconcile")
 def reconcile_tailnet_device(
     spec: dict[str, Any],
     *,
@@ -474,6 +477,7 @@ def _enable_tailnet_routes(
         raise ProviderError(f"Tailscale did not answer for {name}.") from exc
 
 
+@acts(TAILNET_KIND, "approve-routes")
 def approve_tailnet_routes(
     spec: dict[str, Any],
     *,
@@ -706,6 +710,7 @@ def _current_policy(document: dict[str, Any]) -> ProviderResult:
     )
 
 
+@acts(TAILNET_POLICY_KIND, "reconcile")
 def reconcile_tailnet_policy(
     spec: dict[str, Any],
     *,
@@ -840,6 +845,7 @@ def _app_connectors(policy: dict[str, Any]) -> list[dict[str, Any]]:
     return found
 
 
+@lists(TAILNET_POLICY_KIND)
 def list_tailnet_policy() -> list[dict[str, Any]]:
     """The policy itself: who is grouped, what is tagged, and what it grants.
 
@@ -1242,6 +1248,7 @@ def _ports_worth_asking() -> tuple[int, ...]:
     return tuple(sorted(found))
 
 
+@probes("tailscale")
 def _probe_tailscale(connection_ref: str) -> dict[str, Any]:
     """Prove the OAuth client is accepted without retaining its access token."""
 

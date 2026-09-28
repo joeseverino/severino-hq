@@ -1,7 +1,7 @@
 """An architecture test: a reader reaches ``OBSERVATION_READERS`` one of two ways.
 
 An integration's adapter declares its readers (``readings=``), admitted by
-``_register_adapter_readings``; a core reader in ``providers`` carries
+``_register_adapters``; a core reader in ``providers`` carries
 ``@reads("kind")`` on its own definition. Nothing else registers one.
 """
 
@@ -16,10 +16,10 @@ from control_plane.observations import OBSERVATIONS
 from control_plane.provider_adapters.contracts import CORE_PROBED_CONNECTIONS
 from control_plane.provider_adapters import CONTROLLER_PROVIDER_ADAPTERS
 
-from controller_runtime import handlers, provider_runtime
+from controller_runtime import handlers, provider_runtime, providers
 
 ROOT = Path(__file__).resolve().parent.parent
-ADMITTING = "_register_adapter_readings"
+ADMITTING = "_register_adapters"
 _MUTATORS = frozenset({"update", "setdefault", "pop", "popitem", "clear", "__setitem__"})
 
 
@@ -141,6 +141,47 @@ class AdapterLayerTests(SimpleTestCase):
                     else []
                 )
                 if any(name.split(".")[0] == "controller_runtime" for name in names):
+                    offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}")
+
+        self.assertEqual(offenders, [])
+
+
+class DispatchIsTheRegistriesTests(SimpleTestCase):
+    """The dispatch tables are what handlers registered, and nothing else.
+
+    A handler written into a table by hand is the second list this replaced:
+    it can name a kind the control plane does not declare, or an action it
+    locks, and nothing beside the definition says so.
+    """
+
+    def test_every_table_is_its_registry(self):
+        from . import handlers
+
+        locked = {
+            identity
+            for identity, handler in providers.PROVIDER_ACTIONS.items()
+            if getattr(handler, "__name__", "") == "locked"
+        }
+        self.assertEqual(set(providers.PROVIDER_ACTIONS) - locked, set(handlers.ACTIONS))
+        self.assertEqual(
+            set(providers.PROVIDER_INVENTORY),
+            set(handlers.INVENTORY) | set(handlers.OBSERVATION_READERS),
+        )
+        self.assertIs(providers._CONNECTION_PROBES, handlers.PROBES)
+
+    def test_nothing_writes_a_registry_but_its_decorator(self):
+        tables = ("ACTIONS", "INVENTORY", "PROBES", "PROVIDER_ACTIONS", "PROVIDER_INVENTORY")
+        offenders = []
+        for path, tree in _sources():
+            if path.name == "handlers.py":
+                continue
+            for node in ast.walk(tree):
+                target = node.value if isinstance(node, (ast.Subscript, ast.Attribute)) else None
+                if target is None or not ast.unparse(target).endswith(tables):
+                    continue
+                if isinstance(node, ast.Attribute) and node.attr in _MUTATORS:
+                    offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}")
+                elif isinstance(node, ast.Subscript) and isinstance(node.ctx, (ast.Store, ast.Del)):
                     offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}")
 
         self.assertEqual(offenders, [])

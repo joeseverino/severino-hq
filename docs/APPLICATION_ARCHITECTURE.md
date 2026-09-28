@@ -638,8 +638,19 @@ duplicate kinds, probes, or dispatch identities before the worker can run.
 Admission remains a closed tuple owned by HQ; this is modular composition, not
 arbitrary runtime registration. AdGuard is the first vertical extraction, and
 Caddy proves the same seam for an SSH-backed provider whose one resource
-resolves into a shared file. The remaining legacy provider maps migrate through
-that same parity seam.
+resolves into a shared file.
+
+The kinds the controller core still implements follow the same rule from the
+other side. Each integration is one module in `controller_runtime/` (`tls`,
+`cloudflare`, `portainer`, `tailscale`, `host_readings`), and each handler
+registers itself beside its definition: `@lists(kind)` for inventory,
+`@acts(kind, action)` for an action, `@probes(provider)` for a connection probe
+and `@reads(kind)` for a reading, all in `controller_runtime/handlers.py`. An
+admitted adapter's handlers are registered into the same tables. The dispatch
+tables in `controller_runtime/providers.py` are those registries plus a
+generated refusal for every locked action, and its `REGISTRANTS` tuple is the
+closed set of modules admitted to register; an architecture test rejects a
+handler written into a table by hand.
 
 The homelab controller is a separate root-owned systemd oneshot, not a web
 process. It starts a disposable, capability-dropped container from the exact

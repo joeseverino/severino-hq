@@ -11,6 +11,8 @@ from control_plane.provider_adapters.contracts import (
     ProviderResult,
 )
 from control_plane.provider_adapters import portainer_readings
+from control_plane.provider_adapters.portainer import CONTAINER_KIND, CONTAINER_STACK_KIND
+from .handlers import acts, lists, probes
 from . import connection_env, provider_http, provider_runtime
 
 
@@ -93,6 +95,7 @@ def _stack_payload(spec: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@acts(CONTAINER_STACK_KIND, "reconcile")
 def reconcile_portainer(
     spec: dict[str, Any],
     *,
@@ -195,6 +198,7 @@ def reconcile_portainer(
     )
 
 
+@acts(CONTAINER_STACK_KIND, "delete")
 def delete_portainer(
     spec: dict[str, Any],
     *,
@@ -286,6 +290,7 @@ def _list_portainer_containers() -> list[dict[str, Any]]:
     return records
 
 
+@lists(CONTAINER_KIND)
 def list_portainer_containers() -> list[dict[str, Any]]:
     return provider_http._snapshot_value(("portainer-containers",), _list_portainer_containers)
 
@@ -360,6 +365,7 @@ def _cycle_portainer_container(
     )
 
 
+@acts(CONTAINER_KIND, "restart")
 def restart_portainer_container(
     spec: dict[str, Any],
     *,
@@ -369,6 +375,7 @@ def restart_portainer_container(
     return _cycle_portainer_container(spec, "restart", apply=apply)
 
 
+@acts(CONTAINER_KIND, "start")
 def start_portainer_container(
     spec: dict[str, Any],
     *,
@@ -378,6 +385,7 @@ def start_portainer_container(
     return _cycle_portainer_container(spec, "start", apply=apply)
 
 
+@acts(CONTAINER_KIND, "stop")
 def stop_portainer_container(
     spec: dict[str, Any],
     *,
@@ -387,6 +395,7 @@ def stop_portainer_container(
     return _cycle_portainer_container(spec, "stop", apply=apply)
 
 
+@probes("portainer")
 def _probe_portainer(connection_ref: str) -> dict[str, Any]:
     environments = _portainer_environments(connection_ref)
     reachable = [item for item in environments if item["reachable"]]

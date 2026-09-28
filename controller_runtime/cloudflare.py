@@ -12,6 +12,8 @@ from typing import Any
 
 from control_plane.names import normalized_hostname
 from control_plane.provider_adapters.cloudflare import (
+    DNS_RECORD_KIND,
+    ZONE_KIND,
     caa_parts,
     normalized_record_content,
 )
@@ -27,7 +29,7 @@ from control_plane.provider_adapters.parts import (
     unread_reason as _unread_reason,
 )
 from controller_runtime import redirects
-from .handlers import reads
+from .handlers import acts, lists, probes, reads
 from . import cloudflare_analytics, connection_env, provider_http
 
 
@@ -345,6 +347,7 @@ def _record_status(zone: str, live: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@acts(DNS_RECORD_KIND, "reconcile")
 def reconcile_cloudflare_record(
     spec: dict[str, Any],
     *,
@@ -424,6 +427,7 @@ def reconcile_cloudflare_record(
     )
 
 
+@acts(DNS_RECORD_KIND, "delete")
 def delete_cloudflare_record(
     spec: dict[str, Any],
     *,
@@ -540,6 +544,7 @@ def _cloudflare_zone_posture(zone_id: str, zone: str = "") -> dict[str, str]:
     return found
 
 
+@lists(ZONE_KIND)
 def list_cloudflare_zones() -> list[dict[str, Any]]:
     """Every zone the credential can see, declared or not.
 
@@ -571,6 +576,7 @@ def list_cloudflare_zones() -> list[dict[str, Any]]:
     ]
 
 
+@lists(DNS_RECORD_KIND)
 def list_cloudflare_records() -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     for zone in _cloudflare_zones():
@@ -953,6 +959,7 @@ def _token_expiry(verification: Any) -> str:
     return str((result or {}).get("expires_on") or "") if isinstance(result, dict) else ""
 
 
+@probes("cloudflare_dns")
 def _probe_cloudflare_dns(connection_ref: str) -> dict[str, Any]:
     verification = _cloudflare_envelope(
         "/user/tokens/verify", connection_ref=connection_ref
@@ -975,6 +982,7 @@ def _probe_cloudflare_dns(connection_ref: str) -> dict[str, Any]:
     }
 
 
+@probes("cloudflare_api")
 def _probe_cloudflare_api(connection_ref: str) -> dict[str, Any]:
     """Prove the account credential answers, and report the sites it observes.
 

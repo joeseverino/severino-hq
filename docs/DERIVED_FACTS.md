@@ -38,7 +38,8 @@ ObservationSpec(
 
 and read by one function registered one of two ways, and no other
 (`controller_runtime/test_reader_registration.py` holds it): a core reader in
-`controller_runtime/providers.py`, registered beside its definition:
+one of the controller's integration modules (`controller_runtime/cloudflare.py`,
+`tailscale.py`, `host_readings.py`), registered beside its definition:
 
 ```python
 @reads("cloudflare.pages_project")

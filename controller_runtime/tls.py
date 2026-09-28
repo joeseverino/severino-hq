@@ -22,12 +22,13 @@ from typing import Any
 from application.expiry import days_until
 from control_plane.providers import controller_capability_registry
 from control_plane.names import certificate_covers
-from control_plane.provider_adapters.tls import CERTIFICATE_KIND
+from control_plane.provider_adapters.tls import CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND
 from control_plane.provider_adapters.contracts import (
     ProviderError,
     ProviderResult,
 )
 from control_plane.provider_adapters import npm, onepassword
+from .handlers import acts
 from . import cloudflare, commands, connection_env, provider_http, provider_runtime
 
 
@@ -1097,6 +1098,7 @@ def _publish_tls_facts(
     )
 
 
+@acts(CERTIFICATE_KIND, "reconcile")
 def _tls_reconcile(
     spec: dict[str, Any],
     *,
@@ -1110,6 +1112,7 @@ def _tls_reconcile(
     )
 
 
+@acts(CERTIFICATE_KIND, "renew")
 def _tls_renew(
     spec: dict[str, Any],
     *,
@@ -1131,6 +1134,7 @@ def _tls_renew(
     )
 
 
+@acts(UPLOADED_CERTIFICATE_KIND, "reconcile")
 def reconcile_uploaded_certificate(
     spec: dict[str, Any],
     *,
@@ -1197,6 +1201,7 @@ def reconcile_uploaded_certificate(
     )
 
 
+@acts(UPLOADED_CERTIFICATE_KIND, "delete")
 def delete_uploaded_certificate(
     spec: dict[str, Any],
     *,

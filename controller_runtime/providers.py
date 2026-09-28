@@ -1,4 +1,9 @@
-"""Fail-closed provider adapters used only by the host-side controller."""
+"""The controller's dispatch: which handler serves each kind, action and connection.
+
+Every handler registers itself in ``handlers`` beside its own definition, so the
+tables here are derived rather than listed. ``REGISTRANTS`` is the closed set of
+modules admitted to register one; importing them is admitting them.
+"""
 
 from __future__ import annotations
 
@@ -21,21 +26,14 @@ from control_plane.provider_adapters.contracts import (
 from control_plane.provider_adapters import onepassword
 from control_plane.provider_adapters.parts import part_ledger
 from . import cloudflare, commands, connection_env, handlers, host_readings, portainer, provider_http, provider_runtime, tailscale, tls
+from .handlers import probes
 
 logger = logging.getLogger("severino.controller")
 
-
-PROVIDER_INVENTORY = {
-    "cloudflare.zone": cloudflare.list_cloudflare_zones,
-    "cloudflare.dns_record": cloudflare.list_cloudflare_records,
-    "portainer.container": portainer.list_portainer_containers,
-    "tailscale.device": tailscale.list_tailnet_devices,
-    "tailscale.policy": tailscale.list_tailnet_policy,
-    **handlers.OBSERVATION_READERS,
-    **provider_runtime._ADAPTER_REGISTRY.inventory,
-}
+REGISTRANTS = (tls, cloudflare, portainer, tailscale, host_readings, provider_runtime)
 
 
+@probes("onepassword")
 def _probe_onepassword(connection_ref: str) -> dict[str, Any]:
     return onepassword.probe(provider_runtime._RUNTIME, connection_ref)
 
@@ -49,14 +47,9 @@ def _probe_ssh(connection_ref: str) -> dict[str, Any]:
     }
 
 
-_CONNECTION_PROBES = {
-    "cloudflare_dns": cloudflare._probe_cloudflare_dns,
-    "cloudflare_api": cloudflare._probe_cloudflare_api,
-    "onepassword": _probe_onepassword,
-    "portainer": portainer._probe_portainer,
-    "tailscale": tailscale._probe_tailscale,
-    **provider_runtime._ADAPTER_REGISTRY.connection_probes,
-}
+PROVIDER_INVENTORY = {**handlers.INVENTORY, **handlers.OBSERVATION_READERS}
+
+_CONNECTION_PROBES = handlers.PROBES
 
 _DEFAULT_CONNECTION_ENDPOINTS = {"tailscale": tailscale.TAILNET_API}
 
@@ -271,21 +264,7 @@ PROVIDER_ACTIONS = {
         for action, policy in capability.actions.items()
         if policy.mode == "locked"
     },
-    ("portainer.stack", "reconcile"): portainer.reconcile_portainer,
-    ("portainer.stack", "delete"): portainer.delete_portainer,
-    ("portainer.container", "restart"): portainer.restart_portainer_container,
-    ("portainer.container", "start"): portainer.start_portainer_container,
-    ("portainer.container", "stop"): portainer.stop_portainer_container,
-    ("tls.uploaded_certificate", "reconcile"): tls.reconcile_uploaded_certificate,
-    ("tls.uploaded_certificate", "delete"): tls.delete_uploaded_certificate,
-    ("cloudflare.dns_record", "reconcile"): cloudflare.reconcile_cloudflare_record,
-    ("cloudflare.dns_record", "delete"): cloudflare.delete_cloudflare_record,
-    ("tls.certificate", "reconcile"): tls._tls_reconcile,
-    ("tls.certificate", "renew"): tls._tls_renew,
-    ("tailscale.device", "reconcile"): tailscale.reconcile_tailnet_device,
-    ("tailscale.device", "approve-routes"): tailscale.approve_tailnet_routes,
-    ("tailscale.policy", "reconcile"): tailscale.reconcile_tailnet_policy,
-    **provider_runtime._ADAPTER_REGISTRY.actions,
+    **handlers.ACTIONS,
 }
 
 

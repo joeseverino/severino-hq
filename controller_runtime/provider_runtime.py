@@ -8,7 +8,7 @@ from control_plane.providers import controller_id
 from control_plane.provider_adapters import CONTROLLER_PROVIDER_ADAPTERS
 from control_plane.provider_adapters.contracts import compile_controller_adapters
 from .signing import SigningRuntime
-from .handlers import reads
+from .handlers import acts, lists, probes, reads
 from . import commands, connection_env, portainer, provider_http
 
 
@@ -73,9 +73,17 @@ _RUNTIME = _ProviderRuntime()
 _ADAPTER_REGISTRY = compile_controller_adapters(CONTROLLER_PROVIDER_ADAPTERS, _RUNTIME)
 
 
-def _register_adapter_readings() -> None:
+def _register_adapters() -> None:
+    """Every admitted adapter's readers, inventory, probes and actions, bound to the runtime."""
+
     for kind, reader in _ADAPTER_REGISTRY.readings.items():
         reads(kind)(reader)
+    for kind, lister in _ADAPTER_REGISTRY.inventory.items():
+        lists(kind)(lister)
+    for provider, probe in _ADAPTER_REGISTRY.connection_probes.items():
+        probes(provider)(probe)
+    for (kind, action), handler in _ADAPTER_REGISTRY.actions.items():
+        acts(kind, action)(handler)
 
 
-_register_adapter_readings()
+_register_adapters()
