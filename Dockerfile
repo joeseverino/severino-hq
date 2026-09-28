@@ -2,7 +2,7 @@
 # Multi-stage: build wheel deps, then a slim runtime as a non-root user.
 
 # Both stages pin the base by digest; Dependabot bumps it on these lines.
-FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS build
+FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS build
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_ROOT_USER_ACTION=ignore
@@ -14,7 +14,7 @@ COPY requirements.txt .
 RUN pip install --require-hashes --prefix=/install -r requirements.txt
 
 
-FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS runtime
+FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS runtime
 
 # Non-root user. UID/GID 10001 to be predictable in volume permissions.
 # `apt-get upgrade` applies Debian security fixes published after the base
