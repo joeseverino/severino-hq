@@ -28,7 +28,7 @@ from typing import Any, Literal
 from pydantic import Field
 
 from . import github_app, github_readings
-from ..provider_spec import ProviderModel, ProviderSpec, applies
+from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, applies
 from .contracts import ControllerIntegrationAdapter, ProviderResult, ProviderRuntime
 
 KIND = "github.delivery"
@@ -464,3 +464,11 @@ ADAPTER = ControllerIntegrationAdapter(
     connection_probes={github_app.PROVIDER: probe},
     actions={(KIND, "reconcile"): reconcile},
 )
+
+# The connection this provider's credential arrives through, beside its kinds:
+# admitting the module admits both.
+CONNECTIONS = {
+    # An app's permissions are fine-grained and each token HQ mints is
+    # narrowed again to one call's repositories and permissions.
+    "github_app": ConnectionKind("GitHub App", "scoped"),
+}

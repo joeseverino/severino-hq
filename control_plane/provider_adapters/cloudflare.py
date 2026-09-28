@@ -13,6 +13,7 @@ from ..credential_reads import REGISTRAR_READ
 from ..names import normalized_hostname
 from ..observations.contract import ReadingPart
 from ..provider_spec import (
+    ConnectionKind,
     NameContext,
     ProviderModel,
     ProviderSpec,
@@ -550,3 +551,10 @@ ZONE = ProviderSpec(
 
 # Declarations only: the controller half is still the core's.
 DEFINITIONS = (DNS_RECORD, ZONE)
+
+# The connection this provider's credential arrives through, beside its kinds:
+# admitting the module admits both.
+CONNECTIONS = {
+    "cloudflare_api": ConnectionKind("Cloudflare API", "scoped"),
+    "cloudflare_dns": ConnectionKind("Cloudflare DNS", "scoped"),
+}

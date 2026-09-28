@@ -9,6 +9,7 @@ from pydantic import Field
 from ..consoles import tailscale_machine
 from ..observations.contract import ReadingPart
 from ..provider_spec import (
+    ConnectionKind,
     ControllerVerification,
     ProviderModel,
     ProviderSpec,
@@ -247,3 +248,7 @@ POLICY = ProviderSpec(
 
 # Declarations only: the controller half is still the core's.
 DEFINITIONS = (DEVICE, POLICY)
+
+# The connection this provider's credential arrives through, beside its kinds:
+# admitting the module admits both.
+CONNECTIONS = {"tailscale": ConnectionKind("Tailscale", "scoped")}
