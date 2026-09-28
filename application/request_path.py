@@ -19,7 +19,8 @@ import re
 from typing import Any
 
 from control_plane.names import is_hostname, normalized_hostname
-from control_plane.providers import PROVIDERS, TAILNET_KIND
+from control_plane.providers import PROVIDERS
+from control_plane.provider_adapters.tailscale import TAILNET_KIND
 from control_plane.connection_kinds import CONNECTION_LABELS
 from core.network import is_trusted_proxy, split_host_port
 

@@ -15,7 +15,7 @@ from typing import Any
 from django.urls import reverse
 from django.utils import timezone
 
-from control_plane.providers import (
+from control_plane.provider_adapters.tls import (
     CERTIFICATE_KIND,
     UPLOADED_CERTIFICATE_KIND,
 )

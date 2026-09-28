@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from control_plane.models import ProviderInventory
 from control_plane.observations import OBSERVATIONS, ObservationRecord, ObservationSpec, registry
-from control_plane.providers import CONTAINER_KIND
+from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .facts import OBSERVED, STALE, UNREADABLE, disagreements, facts_about
 from .projection import projection_scope

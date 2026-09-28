@@ -54,7 +54,7 @@ from application.zones import (
     zone_catalog,
 )
 from application.ui import counted
-from control_plane.providers import normalized_hostname
+from control_plane.names import normalized_hostname
 
 
 def _records_lede(zone) -> str:

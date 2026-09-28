@@ -208,7 +208,9 @@ class DerivationTests(TestCase):
         from dataclasses import replace
         from unittest import mock
 
-        from control_plane.providers import PROVIDERS, ZONE_KIND
+        from control_plane.providers import PROVIDERS
+
+        from control_plane.provider_adapters.cloudflare import ZONE_KIND
 
         sweep(A_DNS_TOKEN, {**A_PORTAINER, "connection_ref": "another-dns"})
         widened = replace(PROVIDERS[ZONE_KIND], connection_providers=("cloudflare_dns", "portainer"))

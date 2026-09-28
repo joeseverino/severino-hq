@@ -34,11 +34,11 @@ from django.db import transaction
 from django.urls import reverse
 
 from control_plane.models import ManagedResource, ProviderInventory
-from control_plane.providers import (
+from control_plane.names import normalized_hostname
+from control_plane.provider_adapters.cloudflare import (
     DNS_RECORD_KIND,
     DNS_RECORD_TYPES_BY_ID,
     ZONE_KIND,
-    normalized_hostname,
 )
 
 from .entity_links import entity_link

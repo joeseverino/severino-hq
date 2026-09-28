@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 
 from django.urls import reverse
 
-from control_plane.providers import normalized_hostname
+from control_plane.names import normalized_hostname
 
 from .capabilities import CapabilitySpec
 from .connections import (

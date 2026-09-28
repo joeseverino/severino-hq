@@ -10,7 +10,7 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone as dj_timezone
 
 from control_plane.models import ManagedResource
-from control_plane.providers import CERTIFICATE_KIND
+from control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from control_plane.provider_spec import expiry_phrase
 
 from .expiry import days_until, renewal_opens_at, renewal_window

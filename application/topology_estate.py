@@ -18,7 +18,10 @@ from datetime import datetime
 from typing import Any
 
 
-from control_plane.providers import PROVIDERS, normalized_hostname
+from control_plane.providers import PROVIDERS
+
+
+from control_plane.names import normalized_hostname
 
 from .action_links import ActionLink as TopologyAction
 from .entity_links import entity_link
@@ -330,7 +333,7 @@ def _container_subjects(nodes, resources, estate: _Estate) -> None:
     joins to its machine."""
 
     from control_plane.observations.contract import container_key
-    from control_plane.providers import CONTAINER_KIND
+    from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
     for resource in resources:
         node_id = f"resource:{resource.key}"

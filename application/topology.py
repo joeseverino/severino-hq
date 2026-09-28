@@ -898,7 +898,7 @@ def _resource_node(resource: ManagedResource) -> TopologyNode:
     wherever the machine was already the context.
     """
 
-    from control_plane.providers import CONTAINER_KIND
+    from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
     name = str((resource.spec or {}).get("name", "") or "") if resource.kind == CONTAINER_KIND else ""
     host = str((resource.spec or {}).get("host", "") or "") if name else ""

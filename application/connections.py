@@ -373,7 +373,7 @@ def _one_name(resource) -> str:
     Read from the provider: its hostnames, else an identity of a single value.
     """
 
-    from control_plane.providers import normalized_hostname
+    from control_plane.names import normalized_hostname
 
     provider = PROVIDERS.get(resource.kind)
     if provider is None:
@@ -401,7 +401,7 @@ def _depends(reading: ConnectionReading) -> tuple[
     and carries the declaration's key.
     """
 
-    from control_plane.providers import normalized_hostname
+    from control_plane.names import normalized_hostname
 
     targets = (
         tuple(ConnectionLink(name, url) for name, url in reading.machines)

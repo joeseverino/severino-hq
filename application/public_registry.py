@@ -186,7 +186,7 @@ def read_domain(domain: str, registrations: Callable[..., dict] = domain_registr
 def wanted_images() -> dict[str, tuple[str, ...]]:
     """``{registry/repository: the references running}`` for every image a container runs."""
 
-    from control_plane.providers import CONTAINER_KIND
+    from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
     from .facts import inventory_records
     from .images import ImageRef

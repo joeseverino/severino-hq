@@ -13,7 +13,9 @@ from datetime import datetime
 from typing import Any
 
 from control_plane.models import ManagedResource
-from control_plane.providers import CERTIFICATE_KIND, DELIVERY_TARGET_KIND, PROVIDERS
+from control_plane.providers import PROVIDERS
+from control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
+from control_plane.provider_adapters.tls import CERTIFICATE_KIND
 
 from .entity_links import entity_link
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window

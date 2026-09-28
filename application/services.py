@@ -45,14 +45,16 @@ from control_plane.models import (
 )
 from control_plane.names import in_zone
 from control_plane.providers import (
-    CONTAINER_KIND,
     PROVIDERS,
-    certificate_covers,
     service_facets,
-    names_a_host,
-    normalized_hostname,
     resource_home,
 )
+from control_plane.names import (
+    certificate_covers,
+    normalized_hostname,
+)
+from control_plane.names import names_a_host
+from control_plane.provider_adapters.portainer import CONTAINER_KIND
 from control_plane.provider_spec import (
     NameContext,
     origin_is_authoritative,

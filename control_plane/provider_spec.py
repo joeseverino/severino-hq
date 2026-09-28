@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Literal
 
+from django.urls import NoReverseMatch, reverse
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -511,3 +512,15 @@ def expiry_phrase(stamp: str) -> str:
     if days < 0:
         return f"{expires:%-d %b %Y} · expired"
     return f"{expires:%-d %b %Y} · {counted(days, 'day')}"
+
+
+def named_page(route: str, resource: Any, field: str) -> str:
+    """The page named by one of a resource's own fields, or its generic detail page."""
+
+    value = (resource.spec or {}).get(field)
+    if value:
+        try:
+            return reverse(route, args=[value])
+        except NoReverseMatch:
+            pass
+    return reverse("control_plane:detail", kwargs={"key": resource.key})

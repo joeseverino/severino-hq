@@ -23,7 +23,7 @@ from typing import Any
 
 from django.conf import settings
 
-from control_plane.providers import normalized_hostname
+from control_plane.names import normalized_hostname
 
 from .locate import Machines, host_of
 

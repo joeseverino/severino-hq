@@ -26,6 +26,8 @@ _MANAGED_BY_CADDY = (
     "certificate it loads from a file"
 )
 
+CADDY_ROUTE_KIND = "caddy.route"
+
 
 def upstreams(node: Any) -> list[str]:
     """Every address a possibly nested Caddy handler tree forwards to."""
@@ -304,7 +306,7 @@ def _identity(spec: dict[str, Any]) -> tuple[str, ...]:
     )
 
 DEFINITION = ProviderSpec(
-    "caddy.route",
+    CADDY_ROUTE_KIND,
     "A hostname an edge Caddy serves, and where it sends requests.",
     CaddyRouteSpec,
     ResolvedCaddyRouteSpec,

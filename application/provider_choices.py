@@ -17,17 +17,21 @@ from __future__ import annotations
 from collections.abc import Set as AbstractSet
 
 from control_plane.models import ManagedResource, ProviderInventory
-from control_plane.providers import (
-    CERTIFICATE_KIND,
-    CONTAINER_KIND,
-    DELIVERY_TARGET_KIND,
+from control_plane.providers import PROVIDERS
+from control_plane.provider_adapters.portainer import CONTAINER_KIND
+from control_plane.provider_adapters.cloudflare import (
     DNS_RECORD_TYPES,
+    ZONE_KIND,
+)
+from control_plane.provider_adapters.declarations import (
+    DELIVERY_TARGET_KIND,
     MACHINE_KIND,
-    PROVIDERS,
-    TAILNET_KIND,
+)
+from control_plane.provider_adapters.tailscale import TAILNET_KIND
+from control_plane.provider_adapters.tls import (
+    CERTIFICATE_KIND,
     UPLOADED_CERTIFICATE_KIND,
     UPLOADED_CERTIFICATE_REFUSALS,
-    ZONE_KIND,
 )
 from control_plane.provider_spec import NameContext
 

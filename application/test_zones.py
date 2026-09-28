@@ -24,10 +24,12 @@ from control_plane.models import (
     ProviderInventory,
 )
 from control_plane.providers import (
-    DNS_RECORD_TYPES,
-    DNS_RECORD_TYPES_BY_ID,
     PROVIDERS,
     validate_spec,
+)
+from control_plane.provider_adapters.cloudflare import (
+    DNS_RECORD_TYPES,
+    DNS_RECORD_TYPES_BY_ID,
 )
 
 from .adoption_testing import managing_everything

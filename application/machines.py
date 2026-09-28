@@ -23,11 +23,9 @@ from control_plane.models import ProviderConnection
 
 from .hq_self import hq_hostnames, hq_machine, scoped_served_at
 from .locate import Machines, index_of, observed_answers, points_at_host
-from control_plane.providers import (
-    MACHINE_KIND,
-    PROVIDERS,
-    normalized_hostname,
-)
+from control_plane.providers import PROVIDERS
+from control_plane.names import normalized_hostname
+from control_plane.provider_adapters.declarations import MACHINE_KIND
 from control_plane.provider_spec import origin_is_authoritative
 
 from .containers import Running, container_watchers
@@ -1016,7 +1014,7 @@ def served_by() -> dict[tuple[str, str], set[str]]:
 
 
 def _served_by() -> dict[tuple[str, str], set[str]]:
-    from control_plane.providers import normalized_hostname
+    from control_plane.names import normalized_hostname
 
     from .infrastructure import declared_machines, enabled_resources
     from .services import _locate, whereabouts

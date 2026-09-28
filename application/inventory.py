@@ -302,7 +302,7 @@ def retire_departed(payload: dict[str, Any]) -> list[str]:
     that returns under the same name is adopted again.
     """
 
-    from control_plane.providers import CONTAINER_KIND
+    from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
     report = payload.get(CONTAINER_KIND) or {}
     records = report.get("records") or []

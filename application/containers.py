@@ -30,7 +30,7 @@ from control_plane.observations.public_registry import (
     UPSTREAM_KIND,
     VULNERABILITY_KIND,
 )
-from control_plane.providers import CONTAINER_KIND
+from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .github_public import github_repository
 from .images import ImageRef, affected, compare, newer, version

@@ -549,6 +549,14 @@ service view, the generated create-and-edit forms, adoption) is written once
 and names no provider, so a provider added to the registry appears on all of it
 without another file being edited.
 
+Each provider is one module in `control_plane/provider_adapters/`: its spec
+models, its kind constants, the functions its declaration names, and the
+declaration itself. The vocabulary those are built from (`ProviderSpec`,
+`ProviderModel`, action policies, `NameContext`) is `control_plane/provider_spec.py`,
+which imports no registry. `control_plane.providers.PROVIDERS` is derived from
+the package's closed `ADMITTED` tuple, whose order is the registry's order; the
+registry holds no list of kinds of its own.
+
 **One address-to-machine resolver, in `application/locate.py`.** Every surface
 that draws a line between two things HQ knows (a proxy and the box it forwards
 to, a credential and the machine it opens, a service and where it runs) is

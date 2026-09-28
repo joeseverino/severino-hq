@@ -70,7 +70,7 @@ def _ring_for_new_images(payload: dict[str, Any]) -> None:
     image or a digest HQ has not read, so it is read in minutes, not tomorrow."""
 
     from control_plane.observations.portainer import IMAGE_KIND
-    from control_plane.providers import CONTAINER_KIND
+    from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
     from .cadence import ring_registry_doorbell
     from .public_registry import registry_due

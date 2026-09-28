@@ -46,7 +46,9 @@ from urllib.parse import urlencode
 from django.utils import timezone
 
 from control_plane.provider_adapters.contracts import ADDRESS_FAILURE
-from control_plane.providers import CONTAINER_KIND, PROVIDERS
+from control_plane.providers import PROVIDERS
+from control_plane.provider_adapters.portainer import CONTAINER_KIND
+from control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
 
 from . import certificate_expiry, credential_findings, dns_findings, docker_estate, trusted_networks
 from .action_links import (
@@ -1078,8 +1080,6 @@ def _policy_remedy(estate: _Estate, capability: str, label: str) -> tuple[Remedy
     """
 
     from django.urls import NoReverseMatch, reverse
-
-    from control_plane.providers import TAILNET_POLICY_KIND
 
     policy = next(
         (

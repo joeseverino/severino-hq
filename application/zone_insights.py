@@ -26,11 +26,11 @@ from django.urls import reverse
 from control_plane.credential_reads import REGISTRAR_READ
 from control_plane.models import ManagedResource
 from control_plane.provider_adapters.contracts import PERMISSION_REFUSAL
-from control_plane.providers import (
+from control_plane.providers import PROVIDERS
+from control_plane.provider_adapters.cloudflare import caa_parts
+from control_plane.provider_adapters.tls import (
     CERTIFICATE_KIND,
-    PROVIDERS,
     UPLOADED_CERTIFICATE_KIND,
-    caa_parts,
 )
 from control_plane.provider_spec import expiry_phrase
 

@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from control_plane.models import ProviderInventory
-from control_plane.providers import TAILNET_KIND, TAILNET_POLICY_KIND
+from control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
 
 from .projection import read_once
 from .ui import counted

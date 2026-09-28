@@ -11,16 +11,18 @@ from django.db import transaction
 
 from control_plane.models import ManagedResource, OperationRequest
 from control_plane.providers import (
-    CADDY_ROUTE_KIND,
-    CERTIFICATE_KIND,
-    DELIVERY_TARGET_KIND,
-    MACHINE_KIND,
     PROVIDERS,
     resolve_provider_spec,
     controller_action_policy,
     enabled_controller_actions,
     validate_spec,
 )
+from control_plane.provider_adapters.caddy import CADDY_ROUTE_KIND
+from control_plane.provider_adapters.declarations import (
+    DELIVERY_TARGET_KIND,
+    MACHINE_KIND,
+)
+from control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from control_plane.desired_state import advance_dependents, desired_fingerprint
 from core.audit import operation_context
 

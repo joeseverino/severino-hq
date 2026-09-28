@@ -21,7 +21,7 @@ from control_plane.observations.portainer import (
     NETWORK_KIND,
     short_id,
 )
-from control_plane.providers import CONTAINER_KIND
+from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .facts import inventory_records
 

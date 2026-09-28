@@ -8,7 +8,7 @@ import json
 from django.test import TestCase, override_settings
 
 from control_plane.models import ManagedResource
-from control_plane.providers import CONTAINER_KIND
+from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .capabilities import execute_capability
 from .findings import RULES, FindingRule

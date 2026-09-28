@@ -29,15 +29,19 @@ from application.expiry import days_until
 from application.labels import human_bytes as _human_bytes
 from application.ui import MISSING
 from control_plane.providers import (
-    CERTIFICATE_KIND,
     PROVIDERS,
-    caa_parts,
-    certificate_covers,
     controller_capability_registry,
     controller_id,
-    normalized_record_content,
+)
+from control_plane.names import (
+    certificate_covers,
     normalized_hostname,
 )
+from control_plane.provider_adapters.cloudflare import (
+    caa_parts,
+    normalized_record_content,
+)
+from control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from control_plane.provider_adapters import CONTROLLER_PROVIDER_ADAPTERS
 from control_plane.connection_kinds import CONNECTION_CREDENTIALS
 from control_plane.provider_adapters.contracts import (

@@ -115,14 +115,14 @@ from core.templatetags.nav_tags import returning_to
 
 from .models import ManagedResource, OperationRequest
 from .providers import (
-    CERTIFICATE_KIND,
-    MACHINE_KIND,
     PROVIDERS,
-    normalized_hostname,
     service_facets,
     controller_action_policy,
     describe_providers,
 )
+from .names import normalized_hostname
+from .provider_adapters.declarations import MACHINE_KIND
+from .provider_adapters.tls import CERTIFICATE_KIND
 from .provider_spec import NameContext
 
 

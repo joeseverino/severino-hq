@@ -20,7 +20,7 @@ import re
 from typing import Any, Callable
 
 from control_plane.dns_lookup import LookupUnavailable, registry, resolve
-from control_plane.providers import normalized_hostname
+from control_plane.names import normalized_hostname
 
 from django.utils.timezone import now
 

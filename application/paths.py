@@ -27,10 +27,8 @@ from typing import Any
 from control_plane.certificate_authorities import authority_name
 from control_plane.names import is_hostname, normalized_hostname
 from control_plane.observations import OBSERVATIONS
-from control_plane.providers import (
-    PROVIDERS,
-    TAILNET_KIND,
-)
+from control_plane.providers import PROVIDERS
+from control_plane.provider_adapters.tailscale import TAILNET_KIND
 from control_plane.provider_spec import expiry_phrase
 from control_plane.connection_kinds import CONNECTION_LABELS
 
