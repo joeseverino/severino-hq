@@ -34,7 +34,7 @@ from control_plane.provider_adapters.cloudflare import (
 
 from .adoption_testing import managing_everything
 from .infrastructure import PolicyError, save_managed_resource, suggest_key
-from .inventory import (
+from .adoption import (
     AdoptCommand,
     adopt,
     unmanaged,

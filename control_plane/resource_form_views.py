@@ -22,7 +22,7 @@ from application.infrastructure import (
     suggest_key,
 )
 from application.glance import dashboard_machine_selected, select_dashboard_machine
-from application.inventory import (
+from application.adoption import (
     AdoptCommand,
     AdoptServiceCommand,
     adopt,

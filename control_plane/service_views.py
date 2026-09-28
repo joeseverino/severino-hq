@@ -13,7 +13,8 @@ from django.urls import reverse
 from django.views import View
 from django.views.generic import TemplateView
 
-from application.inventory import inventory_state, unmanaged_services
+from application.adoption import unmanaged_services
+from application.inventory import inventory_state
 from application.connections import machines_once
 from application.entity_links import entity_link
 from application.hq_self import LABEL as HQ_LABEL, hq_service

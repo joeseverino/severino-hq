@@ -98,12 +98,12 @@ def _names(provider, spec) -> tuple[str, ...]:
 
 
 def _swept(kind: str) -> dict[str, list[_Row]]:
-    from .inventory import _identity
+    from .inventory import record_identity
 
     provider = PROVIDERS[kind]
     # Matched by identity, the way the inventory decides a record is managed.
     declared = {
-        _identity(kind, resource.spec): resource.key
+        record_identity(kind, resource.spec): resource.key
         for resource in enabled_resources()
         if resource.kind == kind
     }
@@ -117,7 +117,7 @@ def _swept(kind: str) -> dict[str, list[_Row]]:
             except (KeyError, TypeError, ValueError):
                 continue
             source = Source(kind, str(record.get("connection_ref", "") or ""), snapshot.observed_at)
-            declaration = declared.get(_identity(kind, spec), "")
+            declaration = declared.get(record_identity(kind, spec), "")
             for name in _names(provider, spec):
                 found.setdefault(name, []).append(_Row(kind, record, spec, source, declaration))
     return found

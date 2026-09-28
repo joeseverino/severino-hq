@@ -51,7 +51,7 @@ def _unrecognised(nodes, machine) -> None:
     carries it, and a finding reads it from there.
     """
 
-    from .inventory import unmanaged
+    from .adoption import unmanaged
 
     for item in unmanaged():
         if item.adoptable or item.kind != CONTAINER_KIND:

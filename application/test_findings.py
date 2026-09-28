@@ -1766,7 +1766,8 @@ class UnrecognisedContainerTests(TestCase):
     def test_the_remedy_adopts_exactly_that_record(self):
         from django.urls import reverse
 
-        from .inventory import record_token, unmanaged
+        from .inventory import record_token
+        from .adoption import unmanaged
 
         (finding,) = self.found()
         (remedy,) = finding.remedies
@@ -1805,7 +1806,7 @@ class UnrecognisedContainerTests(TestCase):
         self.assertEqual(self.found(), [])
 
     def test_adopting_it_through_the_service_clears_the_finding(self):
-        from .inventory import AdoptCommand, adopt, unmanaged
+        from .adoption import AdoptCommand, adopt, unmanaged
         from .security import cli_principal
 
         (item,) = unmanaged()
