@@ -96,7 +96,7 @@ def wanted_addresses() -> tuple[str, ...]:
     machine's tailnet client reports."""
 
     from .infrastructure import declared_machines
-    from .machines import tailnet_presence
+    from .tailnet_presence import tailnet_presence
     from .services import service_catalog
 
     found = {

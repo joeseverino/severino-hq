@@ -390,7 +390,7 @@ def connection(request, *, edge=None, firewall=None) -> Connection:
     declared = declared_machines()
     from .connections import machines_once
     from .hq_self import hq_service, served_at
-    from .machines import tailnet_presence
+    from .tailnet_presence import tailnet_presence
 
     own = hq_service(request, catalog=machines_once())
     serving = _serving_device_resolution(

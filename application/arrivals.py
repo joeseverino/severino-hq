@@ -165,7 +165,7 @@ def _arrival(request, address: str) -> dict[str, Any]:
 
     from . import tailnet
     from .request_channel import channel_for_request, forwarded_chain, socket_peer
-    from .machines import tailnet_presence
+    from .tailnet_presence import tailnet_presence
 
     device = tailnet.device_at(address)
     presence = tailnet_presence().get(device.name) if device is not None else None

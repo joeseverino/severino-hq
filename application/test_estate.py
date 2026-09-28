@@ -28,7 +28,8 @@ from .command_center import command_center
 from .estate import attention as estate_attention, cards, estate_reading
 from .glance import dashboard_panels
 from .inventory_testing import store
-from .machines import machine, machine_catalog, tailnet_presence
+from .machines import machine, machine_catalog
+from .tailnet_presence import tailnet_presence
 from .projection import projection_scope
 from .public_registry import wanted_addresses
 from .security import Capability, Principal
