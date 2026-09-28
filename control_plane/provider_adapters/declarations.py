@@ -7,7 +7,6 @@ about the place that no provider reports.
 
 from __future__ import annotations
 
-import re
 from typing import Any, Literal
 
 from django.urls.converters import StringConverter
@@ -18,6 +17,7 @@ from ..provider_spec import (
     ProviderModel,
     ProviderSpec,
     locked,
+    key_from,
     named_page,
 )
 
@@ -298,7 +298,7 @@ class TLSDeliveryTargetSpec(ProviderModel):
 
 
 def _network_key_hint(spec: dict[str, Any]) -> str:
-    return re.sub(r"[^a-z0-9-]+", "-", str(spec.get("name", "")).lower()).strip("-")
+    return key_from(spec.get("name", ""))
 
 
 def _network_readout(
@@ -315,7 +315,7 @@ def _network_readout(
 
 
 def _authority_key_hint(spec: dict[str, Any]) -> str:
-    return re.sub(r"[^a-z0-9-]+", "-", str(spec.get("name", "")).lower()).strip("-")
+    return key_from(spec.get("name", ""))
 
 
 def _authority_readout(

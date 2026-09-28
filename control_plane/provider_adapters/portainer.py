@@ -6,14 +6,13 @@ core's; what is declared about them, and the readings, are here.
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from pydantic import Field, field_validator
 
 from application.github_public import GitHubRepositoryURL
 
-from ..provider_spec import NameContext, ProviderModel, ProviderSpec, applies, locked
+from ..provider_spec import NameContext, ProviderModel, ProviderSpec, applies, key_from, locked
 from .contracts import ControllerIntegrationAdapter
 from .portainer_readings import PROVIDER, READINGS
 
@@ -174,7 +173,7 @@ def _stack_seed(context: NameContext) -> dict[str, Any]:
     compose projects are, so publishing a service does not ask for it twice.
     """
 
-    label = re.sub(r"[^a-z0-9-]+", "-", context.hostname.lower()).strip("-")
+    label = key_from(context.hostname)
     return {"hostnames": [context.hostname], "name": label or "service"}
 
 
@@ -239,9 +238,7 @@ def _container_identity(spec: dict[str, Any]) -> tuple[str, ...]:
 
 
 def _container_key_hint(spec: dict[str, Any]) -> str:
-    host = spec.get("host", "")
-    name = spec.get("name", "")
-    return re.sub(r"[^a-z0-9-]+", "-", f"{host}-{name}".lower()).strip("-")
+    return key_from(f"{spec.get('host', '')}-{spec.get('name', '')}")
 
 
 def _container_removal_note(spec: dict[str, Any]) -> str:

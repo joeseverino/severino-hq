@@ -8,6 +8,7 @@ registry that collects it.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -524,3 +525,9 @@ def named_page(route: str, resource: Any, field: str) -> str:
         except NoReverseMatch:
             pass
     return reverse("control_plane:detail", kwargs={"key": resource.key})
+
+
+def key_from(text: Any) -> str:
+    """A resource key from free text: lowercase, each run of anything else one hyphen."""
+
+    return re.sub(r"[^a-z0-9-]+", "-", str(text).lower()).strip("-")

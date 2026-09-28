@@ -318,6 +318,21 @@ class CadenceWeek:
     detail: str = ""
 
 
+def _hits(weeks: tuple[CadenceWeek, ...]) -> int:
+    return sum(1 for week in weeks if week.hit)
+
+
+def _streak(weeks: tuple[CadenceWeek, ...]) -> int:
+    """Consecutive periods with a hit, counting back from the most recent."""
+
+    run = 0
+    for week in reversed(weeks):
+        if not week.hit:
+            break
+        run += 1
+    return run
+
+
 @dataclass(frozen=True)
 class Cadence:
     title: str
@@ -326,17 +341,12 @@ class Cadence:
 
     @property
     def hits(self) -> int:
-        return sum(1 for week in self.weeks if week.hit)
+        return _hits(self.weeks)
 
     @property
     def streak(self) -> int:
         """Consecutive periods, counting back from the most recent."""
-        run = 0
-        for week in reversed(self.weeks):
-            if not week.hit:
-                break
-            run += 1
-        return run
+        return _streak(self.weeks)
 
 
 @dataclass(frozen=True)
@@ -350,16 +360,11 @@ class CadenceRow:
 
     @property
     def hits(self) -> int:
-        return sum(1 for week in self.weeks if week.hit)
+        return _hits(self.weeks)
 
     @property
     def streak(self) -> int:
-        run = 0
-        for week in reversed(self.weeks):
-            if not week.hit:
-                break
-            run += 1
-        return run
+        return _streak(self.weeks)
 
 
 @dataclass(frozen=True)

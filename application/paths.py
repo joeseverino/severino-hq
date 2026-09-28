@@ -211,6 +211,12 @@ _NAMED_BY_BOTH = frozenset({"redirect", "served", "external"})
 _DETAIL_ONLY = frozenset({"upstream"})
 
 
+def last_machine(hops: tuple[Hop, ...]) -> str:
+    """The machine a walk of hops ends on, or "" when it reaches none."""
+
+    return next((hop.name for hop in reversed(hops) if hop.step == "machine"), "")
+
+
 @dataclass(frozen=True)
 class Route:
     """The hops from one DNS answer to what serves the name."""
@@ -263,9 +269,7 @@ class Route:
 
     @property
     def machine(self) -> str:
-        return next(
-            (hop.name for hop in reversed(self.hops) if hop.step == "machine"), ""
-        )
+        return last_machine(self.hops)
 
     @property
     def unread(self) -> tuple[str, ...]:

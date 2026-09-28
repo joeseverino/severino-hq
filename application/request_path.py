@@ -26,7 +26,7 @@ from core.network import is_trusted_proxy, split_host_port
 
 from .connection import Address, Connection, Header, forwarded_chain, socket_peer
 from .entity_links import entity_link
-from .paths import NETWORK_LABELS, Hop, Route, ServicePath, Source, why_unread
+from .paths import NETWORK_LABELS, Hop, Route, ServicePath, Source, last_machine, why_unread
 from .reach import network_of
 
 PROVEN = "proven"
@@ -302,7 +302,7 @@ class _Context:
 
     @property
     def last_machine(self) -> str:
-        return next((hop.name for hop in reversed(self.hops) if hop.step == "machine"), "")
+        return last_machine(self.hops)
 
     def header(self, name: str) -> str:
         return str(self.request.META.get(f"HTTP_{name.upper().replace('-', '_')}", "") or "").strip()
