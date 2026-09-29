@@ -29,7 +29,7 @@ from .workflow_contracts import ActionLink
 ROOT = Path(__file__).resolve().parent.parent
 # Owned by a change in flight elsewhere; each is listed here, by file, until
 # its items carry help, and the test below fails once one no longer needs it.
-PENDING = {"application/containers.py"}
+PENDING: set[str] = set()
 
 
 def _insight_calls(path: Path) -> list[ast.Call]:
@@ -173,9 +173,8 @@ class ComposedQueueTests(TestCase):
                     "token_approves_reviews": True, "pinning_required": False, "security_fixes": False},
         )
 
-        # The host's own domains, less the one PENDING: an extension's items
-        # are its own suite's to hold.
-        host = {domain.id for domain in all_domains() if domain.origin == "host"} - {"hq.containers"}
+        # The host's own domains: an extension's items are its own suite's to hold.
+        host = {domain.id for domain in all_domains() if domain.origin == "host"}
         entries = [entry for entry in domain_attention_items() if entry["source_id"] in host]
 
         self.assertGreaterEqual(len(entries), 10)

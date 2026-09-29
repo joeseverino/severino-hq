@@ -33,11 +33,13 @@ def attention() -> tuple[Insight, ...]:
         seen.setdefault(item.standing.label, (item.standing, []))[1].append(item)
     items = []
     behind = []
+    behind_running: list[Container] = []
     for label, (standing, running) in seen.items():
         if standing.state == VULNERABLE:
             items.append(_advisory(label, standing, running))
         elif standing.newer:
             behind.append(f"{label} → {standing.latest}")
+            behind_running.extend(running)
     items.extend(_reach_attention())
     if behind:
         items.append(
@@ -48,12 +50,24 @@ def attention() -> tuple[Insight, ...]:
                 title=f"{counted(len(behind), 'running image has', 'running images have')} a newer release",
                 value=str(len(behind)),
                 magnitude=len(behind),
-                body="; ".join(sorted(behind)) + ".",
+                body="; ".join(sorted(behind)) + "." + _not_yet(behind_running),
                 action="Open containers",
                 url=reverse("control_plane:containers"),
+                # Each one's plan, the same help an advisory carries.
+                actions=_limited(_upgrade_link(item) for item in behind_running),
             )
         )
     return tuple(items)
+
+
+def _not_yet(running: list[Container]) -> str:
+    """Why HQ cannot run these upgrades itself yet, said once."""
+
+    from .upgrades import plan_for
+
+    plans = [plan for plan in (plan_for(item) for item in running) if plan is not None]
+    reasons = list(dict.fromkeys(blocker.reason for plan in plans for blocker in plan.blockers))
+    return f" Not yet, because: {'; '.join(reason.rstrip('.') for reason in reasons)}." if reasons else ""
 
 
 def _advisory(label: str, standing: Standing, running: list[Container]) -> Insight:
