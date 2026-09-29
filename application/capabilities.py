@@ -188,6 +188,9 @@ CORE_CAPABILITY_SPECS = (
             "Read the selected project's registered repository URL.",
             "Ask GitHub for current push metadata using the configured connection.",
             "Persist the observed timestamp and attribute the refresh to this operator.",
+            "Where the GitHub App reads the repository, ask the controller to read that "
+            "connection now instead, through infrastructure.controller.refresh; the "
+            "public read is the fallback for a repository it does not read.",
         ),
         label="Refresh project metadata",
     ),

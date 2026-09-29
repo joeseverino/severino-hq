@@ -141,12 +141,25 @@ class ProjectRefreshView(LoginRequiredMixin, View):
         elif content:
             messages.error(request, f"Content sync failed: {content['error']}")
 
-        github = result["github"]
-        if github and github["ok"]:
-            messages.success(request, "Synced GitHub project metadata.")
-        elif github:
-            messages.warning(request, github["error"])
+        _report_github(request, result)
         return redirect("projects:detail", slug=slug)
+
+
+def _report_github(request, result) -> None:
+    """Say what the refresh did about GitHub: the App's read asked for, or the
+    public read it fell back to."""
+
+    app = result.get("github_app")
+    if app and app["ok"]:
+        messages.success(request, app["message"])
+        return
+    if app:
+        messages.warning(request, f"The GitHub App was not asked to read: {app['error']}")
+    github = result["github"]
+    if github and github["ok"]:
+        messages.success(request, "Synced GitHub project metadata.")
+    elif github:
+        messages.warning(request, github["error"])
 
 
 class ProjectPage(PageMixin):
