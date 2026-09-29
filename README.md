@@ -293,88 +293,9 @@ Production** on `main`) and, when something fails, why and what fixes it. See
 
 Coding agents and contributors should read [`AGENTS.md`](AGENTS.md) first. It
 contains the one-page architecture map, placement rules, the host/extension
-boundary, frontend standards, and definition of done. After setup, the entire
-local quality gate is one command:
+boundary, frontend standards, and definition of done.
 
-```bash
-./scripts/check.sh
-```
-
-and everything the pipeline will check is one more:
-
-```bash
-./scripts/ci-local.sh
-```
-
-Whether a change is ready to release is one command whose exit 0 means ready:
-
-```bash
-./scripts/preflight.sh
-```
-
-It runs both of the above with nothing skippable, then checks the deploy host
-read-only over SSH (`SEVERINO_HQ_DEPLOY_HOST`).
-
-`ci-local.sh` includes the code scanning gates: CodeQL with the suite
-`codeql.yml` runs and OpenSSF Scorecard's file-based checks, at the versions
-`scripts/toolchain.env` pins (fetched on first use by
-`scripts/install-scan-tools.sh`), so an alert is reported here before a push.
-
-Both read an optional, gitignored `.env.dev` for the things only your machine
-knows, which interpreter has the extensions importable, where their sources
-are, and which to enable. Copy [`scripts/dev.env.example`](scripts/dev.env.example)
-and fill it in. Without it both commands still run, but quietly cover less:
-`check.sh` skips the composed pass, which is the one that catches what public
-CI cannot, because the host and its extensions first meet there.
-
-Browser layout regressions are a gate of their own. CI runs them in the
-`browser` job and `ci-local.sh` always does (with `CI_LOCAL_REQUIRE_ALL=1` a
-missing Playwright fails the run); in `check.sh` they are opt-in. Playwright is
-a development dependency, pinned by hash and never installed in the image:
-
-```bash
-.venv/bin/python -m pip install --require-hashes -r requirements-browser.txt
-.venv/bin/python -m playwright install chromium
-DJANGO_DEBUG=true .venv/bin/python manage.py test core.browser_tests --parallel=1
-# Or include browser checks in the full gate:
-CHECK_BROWSER=1 ./scripts/check.sh
-```
-
-The suite renders the dashboard, service, connections, machine, topology and
-project list pages through their real views over a synthetic `example.*`
-estate, then loads them with every request answered in process. At 320, 390,
-768 and 1280px it checks that stylesheets load, nothing escapes the page
-sideways (with disclosures open too), tables scroll inside their own container
-rather than stacking, stretched grid rows end together, siblings never overlap,
-and the structural rules of `scripts/layout-audit.js` hold. JavaScript is
-disabled to protect the server-rendered baseline. Failures save a synthetic
-screenshot to an OS temporary directory. `core/test_browser_selectors.py`, in
-the normal suite, fails when a selector the gate or the audit uses names
-nothing a template renders, so a redesign cannot leave the gate waiting for an
-element that no longer exists.
-Set `HQ_BROWSER_ENGINE=webkit` or `firefox` after installing that engine to run
-the same assertions there. An existing Edge installation can be selected with
-`HQ_BROWSER_CHANNEL=msedge` instead of downloading Chromium. See the
-[Playwright browser documentation](https://playwright.dev/python/docs/browsers).
-
-The Django Debug Toolbar is a development layer, pinned by hash in
-`requirements-dev.txt` and never installed in the image (`ci-local.sh` and CI's
-container job both prove the built image cannot import it). It is on only when
-`DJANGO_DEBUG` is on, `SEVERINO_DEBUG_TOOLBAR=1` is set, the package is
-importable, and the suite is not running:
-
-```bash
-.venv/bin/python -m pip install --require-hashes -r requirements-dev.txt
-SEVERINO_DEBUG_TOOLBAR=1 ./scripts/dev.sh
-```
-
-It shows to loopback clients; behind a proxy, name the proxy's address in
-`SEVERINO_DEBUG_TOOLBAR_IPS` (comma separated). The toolbar's scripts carry the
-response's CSP nonce, so `script-src` stays as production sends it. Its panels
-insert fetched HTML through `innerHTML`, which Trusted Types refuses, so while
-it is on the two Trusted Types directives are dropped
-(`config/devtools.py`). Nothing else in the policy changes, and with the flag
-off (always, in production) the policy is the full one.
+### Set up and run
 
 ```bash
 # 1. Clone & enter
@@ -407,6 +328,127 @@ The script collects versioned assets, then runs Uvicorn with reload enabled.
 Using the same ASGI path as production means local browser checks exercise
 compression, cache headers, and routing instead of Django `runserver`'s
 development-only static handler.
+
+### The gates
+
+After setup, the entire local quality gate is one command:
+
+```bash
+./scripts/check.sh
+```
+
+and everything the pipeline will check is one more:
+
+```bash
+./scripts/ci-local.sh
+```
+
+Whether a change is ready to release is one command whose exit 0 means ready:
+
+```bash
+./scripts/preflight.sh
+```
+
+It runs both of the above with nothing skippable, then checks the deploy host
+read-only over SSH (`SEVERINO_HQ_DEPLOY_HOST`).
+
+`ci-local.sh` includes the code scanning gates: CodeQL with the suite
+`codeql.yml` runs and OpenSSF Scorecard's file-based checks, at the versions
+`scripts/toolchain.env` pins (fetched on first use by
+`scripts/install-scan-tools.sh`), so an alert is reported here before a push.
+
+Both read an optional, gitignored `.env.dev` for the things only your machine
+knows, which interpreter has the extensions importable, where their sources
+are, and which to enable. Copy [`scripts/dev.env.example`](scripts/dev.env.example)
+and fill it in. Without it both commands still run, but quietly cover less:
+`check.sh` skips the composed pass, which is the one that catches what public
+CI cannot, because the host and its extensions first meet there.
+
+### What the gates need
+
+`check.sh` needs only the steps above plus the pinned tools:
+`pip install --require-hashes -r requirements-tools.txt` (ruff and mypy) and
+`-r requirements-dev.txt`. `ci-local.sh` covers what CI runs, so it needs what
+CI's runner has. Versions are pinned in [`scripts/toolchain.env`](scripts/toolchain.env);
+the list below says what, never which version, so it cannot drift from the pins.
+
+- **An unprivileged account.** Run the gates as yourself, not as root. The
+  systemd unit contracts model the deploy host's runner with the current
+  account, and the host refuses a runner that is root, so the contract test
+  does too.
+- **A checkout that account can write.** The readiness probe's tests require
+  `var/`, `data/` and `staticfiles/` to be writable and fail with a bare 503
+  when they are not; `.mypy_cache/` has the same need. A tree once touched as
+  root needs its ownership fixed first.
+- **One interpreter per supported Python** (`PYTHON_VERSIONS`), each with the
+  requirements installed, named in `SEVERINO_CI_PYTHONS`. CI runs the matrix, so
+  a version-specific failure is otherwise found by pushing.
+- **System tools:** shellcheck at the pinned version (distribution packages are
+  often older and report differently), `ssh-keygen`, `sqlite3` and `zstd`, which
+  the shell suites call, and `pip-audit`.
+- **Network, the first time:** CodeQL and Scorecard are downloaded and
+  verified by `scripts/install-scan-tools.sh`. Scorecard's vulnerability check
+  queries `api.osv.dev` on every run, so behind a proxy that refuses it, that
+  one check fails while the rest still report.
+- **A container runtime** for the image build and the suite inside the image.
+  Without one `ci-local.sh` says so and skips them. CodeQL wants about 2 GB of
+  memory.
+- **`DJANGO_SECRET_KEY`, or `DJANGO_DEBUG=1`.** With debug off, settings refuse
+  to load without a key, even for a one-line import check.
+
+### Browser layout checks
+
+Browser layout regressions are a gate of their own. CI runs them in the
+`browser` job and `ci-local.sh` always does (with `CI_LOCAL_REQUIRE_ALL=1` a
+missing Playwright fails the run); in `check.sh` they are opt-in. Playwright is
+a development dependency, pinned by hash and never installed in the image:
+
+```bash
+.venv/bin/python -m pip install --require-hashes -r requirements-browser.txt
+.venv/bin/python -m playwright install chromium
+DJANGO_DEBUG=true .venv/bin/python manage.py test core.browser_tests --parallel=1
+# Or include browser checks in the full gate:
+CHECK_BROWSER=1 ./scripts/check.sh
+```
+
+The suite renders the dashboard, service, connections, machine, topology and
+project list pages through their real views over a synthetic `example.*`
+estate, then loads them with every request answered in process. At 320, 390,
+768 and 1280px it checks that stylesheets load, nothing escapes the page
+sideways (with disclosures open too), tables scroll inside their own container
+rather than stacking, stretched grid rows end together, siblings never overlap,
+and the structural rules of `scripts/layout-audit.js` hold. At 375, 820 and
+1360px it checks that only a `.table-scroll` scrolls sideways and that nothing
+runs out of its table cell. JavaScript is disabled to protect the
+server-rendered baseline. Failures save a synthetic screenshot to an OS
+temporary directory. `core/tests/test_browser_selectors.py`, in the normal suite, fails when a selector the gate or the audit uses names
+nothing a template renders, so a redesign cannot leave the gate waiting for an
+element that no longer exists.
+Set `HQ_BROWSER_ENGINE=webkit` or `firefox` after installing that engine to run
+the same assertions there. An existing Edge installation can be selected with
+`HQ_BROWSER_CHANNEL=msedge` instead of downloading Chromium. See the
+[Playwright browser documentation](https://playwright.dev/python/docs/browsers).
+
+### Django Debug Toolbar
+
+The Django Debug Toolbar is a development layer, pinned by hash in
+`requirements-dev.txt` and never installed in the image (`ci-local.sh` and CI's
+container job both prove the built image cannot import it). It is on only when
+`DJANGO_DEBUG` is on, `SEVERINO_DEBUG_TOOLBAR=1` is set, the package is
+importable, and the suite is not running:
+
+```bash
+.venv/bin/python -m pip install --require-hashes -r requirements-dev.txt
+SEVERINO_DEBUG_TOOLBAR=1 ./scripts/dev.sh
+```
+
+It shows to loopback clients; behind a proxy, name the proxy's address in
+`SEVERINO_DEBUG_TOOLBAR_IPS` (comma separated). The toolbar's scripts carry the
+response's CSP nonce, so `script-src` stays as production sends it. Its panels
+insert fetched HTML through `innerHTML`, which Trusted Types refuses, so while
+it is on the two Trusted Types directives are dropped
+(`config/devtools.py`). Nothing else in the policy changes, and with the flag
+off (always, in production) the policy is the full one.
 
 ### Importing a documentation manifest
 
