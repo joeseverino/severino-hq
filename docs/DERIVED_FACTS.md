@@ -492,6 +492,15 @@ push protection, code scanning). What a plan does not offer is "not
 available", never a failure. The action queue holds one item per check not
 met, naming every repository that misses it.
 
+The `workflow_pins` part reads each workflow's `uses:` lines that are not pinned to a
+commit, and the commit each tag or branch names now. It uses the same token, with
+`contents: read`, and resolves each action and tag once per sweep. The pinning item
+then offers one `sed` per workflow file. Each edit replaces a line with
+`owner/action@<sha> # <tag>`, followed by the command that requires pinning. That
+command appears only when every line could be resolved, because requiring pinning
+first would stop every run that still uses a tag. A repository whose workflows were
+not read gets the reason instead.
+
 Watching reads the signed-in person's own GitHub profile and the repositories
 they star from GitHub's public API, credential-free: whose profile is the login
 their sign-in claims (`application.linked_accounts`), never one typed into HQ.

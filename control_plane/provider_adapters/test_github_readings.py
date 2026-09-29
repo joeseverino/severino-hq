@@ -292,3 +292,80 @@ class SweepTokenTests(SimpleTestCase):
         api = [path for _, path in hub.calls if path.startswith("/repos/") and not path.endswith("/installation")]
         self.assertEqual(hub.count("mint"), 1 + len(api))
         self.assertEqual(hub.count("lookup"), len(api))
+
+
+WORKFLOW = """
+jobs:
+  build:
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: "example/setup@v2"   # a quoted one
+      - uses: example/pinned@0123456789abcdef0123456789abcdef01234567
+      - uses: ./.github/actions/local
+      - uses: docker://example/image:1
+      - uses: example/gone@v1
+"""
+
+
+class WithWorkflows(GitHub):
+    """One workflow file, and the public actions it names."""
+
+    def request(self, url, *, method="GET", headers=None, payload=None):
+        import base64
+
+        path = url.removeprefix(github_app.API)
+        base = f"/repos/{REPO}"
+        answers = {
+            f"{base}/contents/.github/workflows?ref=main": [
+                {"path": ".github/workflows/ci.yml"}, {"path": ".github/workflows/README.md"},
+            ],
+            f"{base}/contents/.github/workflows/ci.yml?ref=main": {
+                "content": base64.b64encode(WORKFLOW.encode()).decode()
+            },
+            "/repos/actions/checkout/commits/v4": {"sha": "a" * 40},
+            "/repos/example/setup/commits/v2": {"sha": "b" * 40},
+        }
+        if path in answers and not any(refused in path for refused in self.refuse):
+            self.calls.append((method, path))
+            return answers[path]
+        if path == "/repos/example/gone/commits/v1":
+            self.calls.append((method, path))
+            raise ProviderError("Not Found")
+        return super().request(url, method=method, headers=headers, payload=payload)
+
+
+class WorkflowPinTests(SimpleTestCase):
+    def read(self, hub):
+        with part_ledger() as refused:
+            (record,) = github_readings.read_repositories(hub)
+        return record, refused
+
+    def test_every_unpinned_uses_line_is_read_with_the_commit_its_tag_names(self):
+        hub = WithWorkflows()
+
+        record, _refused = self.read(hub)
+
+        self.assertEqual(
+            [(pin["uses"], pin["sha"]) for pin in record["pins"]],
+            [("actions/checkout@v4", "a" * 40), ("actions/checkout@v4", "a" * 40),
+             ("example/setup@v2", "b" * 40), ("example/gone@v1", "")],
+        )
+        self.assertEqual({pin["path"] for pin in record["pins"]}, {".github/workflows/ci.yml"})
+        # Each action and tag is resolved once however often it is used.
+        self.assertEqual([path for _method, path in hub.calls].count("/repos/actions/checkout/commits/v4"), 1)
+
+    def test_resolving_uses_the_repository_token_and_only_reads(self):
+        hub = WithWorkflows()
+
+        self.read(hub)
+
+        for grant in (grant for grant in hub.minted if "repositories" in grant):
+            self.assertEqual(grant["repositories"], ["alpha"])
+            self.assertEqual(set(grant["permissions"].values()), {"read"})
+
+    def test_workflows_it_may_not_read_are_that_part_refused_not_no_pins(self):
+        record, refused = self.read(WithWorkflows(refuse=("/contents/.github/workflows",)))
+
+        self.assertIsNone(record["pins"])
+        self.assertIn(("workflow_pins", REPO), [(item["part"], item["scope"]) for item in refused])

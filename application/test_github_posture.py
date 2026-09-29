@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .github_posture import COMMANDS, REASONS, STANDARD, WIRED_SECRETS, attention, build_attention, postures
-from .item_help import COMMAND, REASON, item_help
+from .item_help import COMMAND, item_help
 from .standards import MET, UNAVAILABLE, UNMET
 from .test_github_estate import store
 
@@ -165,11 +165,39 @@ class PostureHelpTests(TestCase):
             "gh api -X PUT repos/example/alpha/automated-security-fixes",
         )])
 
-    def test_pinning_offers_no_command_while_hq_cannot_read_the_workflows(self):
+    def test_pinning_offers_no_setting_while_the_workflows_were_not_read(self):
         item = self.item("actions-pinned", access=kept(pinning_required=False))
 
-        self.assertEqual(item_help(item), REASON)
-        self.assertIn("uses:", item.workflow.steps[0].summary)
+        self.assertIn("workflows were not read", item.workflow.steps[-1].summary)
+        self.assertNotIn("sha_pinning_required", str(item.workflow))
+
+    def test_pinning_is_a_paste_per_workflow_then_the_setting(self):
+        pins = [
+            {"path": ".github/workflows/ci.yml", "uses": "actions/checkout@v4",
+             "action": "actions/checkout", "ref": "v4", "sha": "a" * 40},
+            {"path": ".github/workflows/ci.yml", "uses": "actions/checkout@v4",
+             "action": "actions/checkout", "ref": "v4", "sha": "a" * 40},
+        ]
+        item = self.item("actions-pinned", access=kept(pinning_required=False), pins=pins)
+
+        (edit, setting) = runs(item)
+        self.assertEqual(edit[0], "alpha: pin .github/workflows/ci.yml")
+        # The same line is edited once, and the tag stays beside the commit.
+        self.assertEqual(edit[1].count(" -e "), 1)
+        self.assertIn(f"uses: actions/checkout@{'a' * 40} # v4", edit[1])
+        self.assertEqual(
+            setting,
+            ("alpha: then require pinning",
+             "gh api -X PUT repos/example/alpha/actions/permissions -F enabled=true -F sha_pinning_required=true"),
+        )
+
+    def test_a_tag_that_could_not_be_resolved_holds_back_the_setting(self):
+        pins = [{"path": ".github/workflows/ci.yml", "uses": "example/gone@v1",
+                 "action": "example/gone", "ref": "v1", "sha": ""}]
+        item = self.item("actions-pinned", access=kept(pinning_required=False), pins=pins)
+
+        self.assertEqual([label for label, _summary in runs(item)], ["Why HQ cannot do this for you"])
+        self.assertIn("example/gone@v1", item.workflow.steps[-1].summary)
         self.assertNotIn("sha_pinning_required", str(item.workflow))
 
     def test_a_wired_secret_kept_as_a_variable_moves_before_it_is_deleted(self):

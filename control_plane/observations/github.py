@@ -34,7 +34,13 @@ RUNNERS = ReadingPart("runners", "Self-hosted runners", requires=("administratio
 IMAGES = ReadingPart("images", "Container images", requires=("packages: read",))
 ACCESS = ReadingPart("access", "Access and Actions policy", requires=("administration: read",))
 VARIABLES = ReadingPart("variables", "Actions variables", requires=("Actions variables: read",))
-PARTS = (CODE_SCANNING, DEPENDABOT, LEAKED_CREDENTIALS, BRANCH_RULES, ENVIRONMENTS, RUNNERS, IMAGES, ACCESS, VARIABLES)
+# Each workflow's ``uses:`` lines and the commit each tag names now: what a
+# pinning fix replaces them with.
+WORKFLOW_PINS = ReadingPart("workflow_pins", "Workflow action pins", requires=("contents: read",))
+PARTS = (
+    CODE_SCANNING, DEPENDABOT, LEAKED_CREDENTIALS, BRANCH_RULES, ENVIRONMENTS, RUNNERS, IMAGES, ACCESS,
+    VARIABLES, WORKFLOW_PINS,
+)
 
 
 class RepositoryRecord(ObservationRecord):
@@ -62,6 +68,9 @@ class RepositoryRecord(ObservationRecord):
     access: dict[str, Any] | None = None
     # Names only: a variable's value is never read.
     variables: list[str] | None = None
+    # ``{path, uses, action, ref, sha}`` per ``uses:`` line not pinned to a
+    # commit; ``sha`` is the commit its ref names, or "" where it could not be read.
+    pins: list[dict[str, Any]] | None = None
 
 
 OBSERVATIONS: tuple[ObservationSpec, ...] = (

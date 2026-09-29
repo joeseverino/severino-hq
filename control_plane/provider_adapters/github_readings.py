@@ -9,6 +9,7 @@ call for its repository in a sweep.
 from __future__ import annotations
 
 import base64
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -21,6 +22,7 @@ from ..observations.github import (
     ACCESS,
     IMAGES,
     VARIABLES,
+    WORKFLOW_PINS,
     REPOSITORY_KIND,
     RUNNERS,
 )
@@ -87,7 +89,56 @@ def _repository(runtime: ProviderRuntime, name: str, ref: str) -> dict[str, Any]
         "images": _images(runtime, name, ref),
         "access": _part(ACCESS, name, ref, lambda: _access(repo, get)),
         "variables": _part(VARIABLES, name, ref, lambda: [str(item.get("name")) for item in (get("/actions/variables?per_page=100") or {}).get("variables") or ()]),
+        "pins": _part(WORKFLOW_PINS, name, ref, lambda: _pins(runtime, name, branch, get)),
     }
+
+
+# A ``uses:`` value: an action or reusable workflow and the ref it is taken at.
+_USES = re.compile(r"""^\s*(?:-\s*)?uses:\s*["']?([^\s"'#]+)""", re.M)
+_COMMIT = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _pins(runtime: ProviderRuntime, name: str, branch: str, get) -> list[dict[str, Any]]:
+    """Every ``uses:`` line not pinned to a commit, with the commit its ref names.
+
+    Resolved once per action and ref in a sweep, under the same read-only
+    token scoped to this repository: a public action's tags are readable with
+    it, and nothing is asked of any other repository's installation.
+    """
+
+    listing = get(f"/contents/.github/workflows?ref={github_app.quote(branch)}") or []
+    resolved: dict[tuple[str, str], str] = {}
+    found = []
+    for entry in listing if isinstance(listing, list) else ():
+        path = str(entry.get("path") or "")
+        if not path.endswith((".yml", ".yaml")):
+            continue
+        body = get(f"/contents/{path}?ref={github_app.quote(branch)}") or {}
+        text = base64.b64decode(str(body.get("content") or "")).decode("utf-8", "replace")
+        for uses in _USES.findall(text):
+            if uses.startswith(("./", "docker://")) or "@" not in uses:
+                continue
+            action, at = uses.rsplit("@", 1)
+            if _COMMIT.match(at):
+                continue
+            source = "/".join(action.split("/")[:2])
+            if (source, at) not in resolved:
+                resolved[(source, at)] = _commit_of(runtime, name, source, at)
+            found.append({"path": path, "uses": uses, "action": action, "ref": at, "sha": resolved[(source, at)]})
+    return found
+
+
+def _commit_of(runtime: ProviderRuntime, name: str, source: str, at: str) -> str:
+    """The commit a tag or branch of ``source`` names now, or "" if unreadable."""
+
+    try:
+        commit = github_app.call(
+            runtime, f"/repos/{source}/commits/{github_app.quote(at)}", repositories=[name], permissions=READ
+        ) or {}
+    except ProviderError:
+        return ""
+    sha = str(commit.get("sha") or "")
+    return sha if _COMMIT.match(sha) else ""
 
 
 def _part(part, name: str, ref: str, read, empty: Any = None) -> Any:
