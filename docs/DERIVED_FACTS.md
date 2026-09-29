@@ -37,7 +37,7 @@ ObservationSpec(
 ```
 
 and read by one function registered one of two ways, and no other
-(`controller_runtime/test_reader_registration.py` holds it): a core reader in
+(`controller_runtime/tests/test_reader_registration.py` holds it): a core reader in
 one of the controller's integration modules
 (`controller_runtime/cloudflare_account.py`, `tailscale.py`,
 `host_readings.py`), registered beside its definition:

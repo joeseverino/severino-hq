@@ -257,7 +257,7 @@ def _endpoint(methods: tuple[str, ...]) -> Callable[[APIView], View]:
         # A fact a test can read, rather than one a reviewer has to notice.
         # `/api/` is exempt from the login *redirect*, so a view added here
         # without this decorator is not merely unprotected by convention: it
-        # is served to anyone who asks. `core.test_security` walks these routes
+        # is served to anyone who asks. `core.tests.test_security` walks these routes
         # and fails if one lacks the mark.
         setattr(wrapper, "__hq_authenticated__", True)
         return wrapper

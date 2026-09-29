@@ -5,14 +5,14 @@ suite needs neither Playwright nor a browser. `scripts/check.sh` runs it with
 CHECK_BROWSER=1 and `scripts/ci-local.sh` always does.
 
 Pages render through their real views over two synthetic example.* estates,
-a sparse one (core/test_browser_fixtures.py) and a dense, production-shaped
-one (core/test_browser_dense_fixtures.py), then load in a browser whose every request is
+a sparse one (core/tests/test_browser_fixtures.py) and a dense, production-shaped
+one (core/tests/test_browser_dense_fixtures.py), then load in a browser whose every request is
 answered locally: nothing here can reach a real endpoint. Assertions are
 invariants rather than pixels, so a page can change and still pass as long as
 it stays readable.
 
 Every CSS selector the checks use is in SELECTORS, and
-core/test_browser_selectors.py fails when one names nothing the templates
+core/tests/test_browser_selectors.py fails when one names nothing the templates
 render. JavaScript below queries by tag only.
 """
 
@@ -27,8 +27,8 @@ from django.contrib.staticfiles import finders
 from django.db import transaction
 from django.test import SimpleTestCase
 
-from core.test_browser_dense_fixtures import DENSE_PAGES, build_dense_estate, render_dense_pages
-from core.test_browser_fixtures import PAGES, build_estate, render_pages
+from core.tests.test_browser_dense_fixtures import DENSE_PAGES, build_dense_estate, render_dense_pages
+from core.tests.test_browser_fixtures import PAGES, build_estate, render_pages
 
 WIDTHS = (320, 390, 768, 1280)
 # A phone, a tablet held upright, a laptop: where only a table may scroll sideways.

@@ -115,7 +115,7 @@ carries (and the API returns) whenever it has no remedy and no command. A
 queue `Insight` keeps the SDK's shape, so its help travels in existing fields:
 a remedy as one of its `actions`, a command or a reason as a `run` or
 `cannot` step of its `workflow` (`application/item_help.py`).
-`application/test_item_help.py` fails on any host provider that builds an item
+`application/tests/test_item_help.py` fails on any host provider that builds an item
 without one.
 
 A rule is declared beside the detector that decides it: each module that raises
@@ -582,7 +582,7 @@ provider's readings are a module of their own in `control_plane/observations/`;
 the package registers every module beside `contract.py`, in name order, so a
 new file is a registered reading. What may read it is still decided by
 admission. Adding a provider is therefore writing its modules and adding one
-name to `ADMITTED`; `control_plane/provider_adapters/test_admission.py` holds
+name to `ADMITTED`; `control_plane/provider_adapters/tests/test_admission.py` holds
 that to be enough.
 
 Its relationships follow from the same declarations. Nothing in the topology

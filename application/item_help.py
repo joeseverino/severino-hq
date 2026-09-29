@@ -11,7 +11,7 @@ work it out:
 ``Insight`` is the SDK's shape (``hq_sdk/contract.json``), so help travels in
 fields it already has: a remedy as one of its ``actions``, a command or a
 reason as a step of its ``workflow``, told apart by the step's phase. The
-contract test (``application/test_item_help.py``) holds every host provider
+contract test (``application/tests/test_item_help.py``) holds every host provider
 to it.
 """
 
