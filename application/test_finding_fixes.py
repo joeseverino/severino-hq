@@ -153,7 +153,7 @@ class RemoveEmptyGroupsCapabilityTests(TestCase):
         policy.save(update_fields=["conditions"])
         before = policy.spec["document"]
 
-        with self.assertRaisesRegex(PolicyError, "Accept what is there"):
+        with self.assertRaisesRegex(PolicyError, "Keep the live version"):
             request_empty_groups_removal(None, principal=an_operator(), current_key=POLICY_KEY)
         self.assertEqual(ManagedResource.objects.get(key=POLICY_KEY).spec["document"], before)
 
@@ -235,3 +235,104 @@ class FindingsPageTests(TestCase):
 
         self.assertContains(response, '<div class="operator-step">')
         self.assertContains(response, "turn on Device approval")
+
+
+class DriftOffersBothWaysTests(TestCase):
+    """Drift means something changed the live record outside HQ. Reconciling
+    alone would undo that change, so it is never the only way out."""
+
+    def node(self, status_label: str):
+        from .topology_model import TopologyNode
+
+        return TopologyNode(
+            id=f"resource:{POLICY_KEY}", kind="resource", label=POLICY_KEY,
+            subtitle="", status="serious", status_label=status_label,
+            kind_key="tailscale.policy",
+        )
+
+    def test_drift_leads_with_keeping_the_live_version(self):
+        from .controller_findings import _fault_remedies
+        from .infrastructure import DRIFT_LABEL
+
+        remedies = _fault_remedies(self.node(DRIFT_LABEL))
+
+        self.assertEqual(remedies[0].capability, "infrastructure.resource.accept_observed")
+        self.assertEqual(remedies[0].label, "Keep the live version")
+        self.assertEqual(
+            [(r.capability, r.label) for r in remedies[1:]],
+            [("infrastructure.reconcile", "Restore HQ's version")],
+        )
+
+    def test_another_fault_keeps_reconcile_alone(self):
+        from .controller_findings import _fault_remedies
+
+        remedies = _fault_remedies(self.node("Needs attention"))
+
+        self.assertNotIn(
+            "infrastructure.resource.accept_observed", [r.capability for r in remedies]
+        )
+
+
+class KeepTheLiveVersionPageTests(TestCase):
+    """The way to keep a live change is reachable, preselected and plainly worded."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
+        declare_policy(document())
+        user = get_user_model().objects.create_user(
+            "keep-op", password="x" * 20, is_staff=True, is_superuser=True
+        )
+        self.client.force_login(user)
+
+    def drift(self):
+        policy = ManagedResource.objects.get(key=POLICY_KEY)
+        policy.conditions = [{"type": "Drifted", "status": True, "reason": "Drifted", "message": "differs"}]
+        policy.save(update_fields=["conditions"])
+
+    def test_a_target_past_the_first_page_is_listed_and_preselected(self):
+        from django.urls import reverse
+
+        # Keys that sort before the policy's, more than one default page of them.
+        ManagedResource.objects.bulk_create(
+            ManagedResource(
+                key=f"a-{index:03}", kind="adguard.rewrite",
+                spec={"domain": f"h{index}.example.com", "answer": "192.0.2.1"},
+            )
+            for index in range(60)
+        )
+
+        response = self.client.get(
+            reverse("command", kwargs={"name": "infrastructure.resource.accept_observed"}),
+            {"target": POLICY_KEY},
+        )
+
+        self.assertContains(response, f'<option value="{POLICY_KEY}" selected>')
+        self.assertContains(response, "Keep the live version")
+        # It takes a key and a reason, no record: nothing it could blank.
+        self.assertNotContains(response, "This replaces the whole record")
+
+    def test_a_drifted_resource_page_offers_both_ways(self):
+        from django.urls import reverse
+
+        self.drift()
+
+        response = self.client.get(reverse("control_plane:detail", args=[POLICY_KEY]))
+
+        content = response.content.decode()
+        self.assertIn("Keep the live version", content)
+        self.assertIn("Restore HQ&#x27;s version", content)
+        self.assertLess(
+            content.index("Keep the live version"), content.index("Restore HQ&#x27;s version")
+        )
+
+    def test_a_resource_in_step_offers_neither(self):
+        from django.urls import reverse
+
+        response = self.client.get(reverse("control_plane:detail", args=[POLICY_KEY]))
+
+        self.assertNotContains(response, "Keep the live version")
+        self.assertNotContains(response, "Restore HQ&#x27;s version")

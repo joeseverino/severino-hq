@@ -8,7 +8,8 @@ from typing import Any
 from .capabilities import CapabilitySpec
 from .labels import human_label
 from .integrations import integration_graph
-from .resources import get_resource, list_resource
+from .projection import MAX_PAGE_SIZE
+from .resources import ResourceError, get_resource, list_resource
 from .security import Principal
 from core.errors import UpstreamUnavailable
 
@@ -51,6 +52,10 @@ def capability_target_options(
         return None
 
     query = dict(spec.target_query)
+    # A choice list is the whole catalog or it is a trap: the default page
+    # left every resource past the fiftieth unselectable, in every command.
+    if "limit" in resource.list_query_type.model_fields:
+        query.setdefault("limit", MAX_PAGE_SIZE)
     kinds_applied = False
     if governed_kinds:
         query_fields = resource.list_query_type.model_fields
@@ -83,6 +88,37 @@ def capability_target_options(
         value = str(raw_value)
         options.append(CommandTargetOption(value, _option_label(item, value)))
     return tuple(sorted(options, key=lambda option: option.label.casefold()))
+
+
+def with_requested_target(
+    spec: CapabilitySpec,
+    options: tuple[CommandTargetOption, ...],
+    target: str,
+    *,
+    principal: Principal,
+) -> tuple[CommandTargetOption, ...]:
+    """The choices, holding the one a link asked for even past the listed page.
+
+    A remedy links here with its target, and a catalog larger than one page
+    would otherwise drop it. It is added only when the caller may read it and
+    it is the kind this command acts on, so a link cannot widen the choice.
+    """
+
+    if not target or any(option.value == target for option in options):
+        return options
+    if not spec.subject_resource:
+        return options
+    try:
+        detail = get_resource(spec.subject_resource, target, principal=principal)
+    except ResourceError:  # an unknown or malformed target is not offered
+        return options
+    item = detail.get("resource", detail)
+    if not isinstance(item, dict):
+        return options
+    wanted = dict(spec.target_query)
+    if any(item.get(field) != value for field, value in wanted.items()):
+        return options
+    return (CommandTargetOption(target, _option_label(item, target)), *options)
 
 
 def capability_target_initial(

@@ -17,6 +17,7 @@ from application.infrastructure import (
     PolicyError,
     declared_machines,
     delivery_targets,
+    is_drifted,
     resource_health,
     serialize_resource,
     serialize_public_status,
@@ -389,9 +390,12 @@ class InfrastructureDetailView(PageMixin, LoginRequiredMixin, DetailView):
             return ()
         key = self.object.key
         capabilities = self.capabilities
+        drifted = is_drifted(self.object)
         actions = [
             PageAction(
-                VERB_LABELS[verb],
+                "Restore HQ's version"
+                if drifted and verb == "reconcile"
+                else VERB_LABELS[verb],
                 reverse(f"control_plane:{verb}", args=[key]),
                 method="post",
                 primary=verb == "renew",
@@ -400,6 +404,24 @@ class InfrastructureDetailView(PageMixin, LoginRequiredMixin, DetailView):
             )
             for verb, allowed in capabilities.page_actions
         ]
+        if drifted:
+            # Changed outside HQ. Keeping that loses nothing, so it leads, and
+            # restoring HQ's copy is the button beside it rather than the only one.
+            actions.insert(
+                0,
+                PageAction(
+                    "Keep the live version",
+                    returning_to(
+                        reverse(
+                            "command",
+                            kwargs={"name": "infrastructure.resource.accept_observed"},
+                        )
+                        + f"?target={key}",
+                        self.request.get_full_path(),
+                    ),
+                    primary=True,
+                ),
+            )
         actions.append(
             PageAction(
                 "Edit",

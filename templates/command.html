@@ -88,7 +88,7 @@
     hydrating part of the record, which would leave the same fields being
     cleared behind a form that now looked complete.
     {% endcomment %}
-    {% if command.target_kind and command.effect == "remote_write" and not hydrates_target %}
+    {% if command.target_kind and command.effect == "remote_write" and writes_record and not hydrates_target %}
       <div class="notice notice-attention">
         <strong>This replaces the whole record</strong>
         <p>This form does not load current values. Every field is saved as submitted, including blanks and fields not shown here. Fill in the full record, or use the record's edit page.</p>

@@ -29,7 +29,7 @@ from .action_links import (
     topology_url,
 )
 from .entity_links import entity_link, kind_label
-from .infrastructure import resource_health
+from .infrastructure import is_drifted, resource_health
 from .resource_capabilities import removals_pending, resource_capabilities
 from .security import Capability, Principal
 from .topology_model import (
@@ -100,12 +100,27 @@ def _resource_actions(
     capabilities = resource_capabilities(
         resource, running=(), removal_pending=removal_pending, manages=manages
     )
+    drifted = is_drifted(resource)
+    if drifted:
+        # Something changed it outside HQ: keeping that is the choice that
+        # loses nothing, so it is offered, and first.
+        actions.append(
+            TopologyAction(
+                "keep_live",
+                "Keep the live version",
+                "remote_write",
+                f"{reverse('command', kwargs={'name': 'infrastructure.resource.accept_observed'})}"
+                f"?target={key}",
+                capability="infrastructure.resource.accept_observed",
+                target=key,
+            )
+        )
     reconcile = capabilities.actions.get("reconcile")
     if reconcile and reconcile.enabled:
         actions.append(
             TopologyAction(
                 "reconcile",
-                "Reconcile",
+                "Restore HQ's version" if drifted else "Reconcile",
                 "infrastructure_change",
                 reverse("control_plane:reconcile", kwargs={"key": key}),
                 method="POST",

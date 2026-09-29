@@ -474,7 +474,7 @@ CORE_CAPABILITY_SPECS = (
     ),
     CapabilitySpec(
         "infrastructure.resource.accept_observed",
-        "Make a declaration say what the provider holds, keeping a change made there.",
+        "Copy what is live into HQ's record, keeping a change made outside HQ.",
         "remote_write",
         Capability.MANAGE_INFRASTRUCTURE,
         OperationCommand,
@@ -482,8 +482,8 @@ CORE_CAPABILITY_SPECS = (
         "key",
         "infrastructure.resources",
         target_label="Resource key",
-        target_help="The managed infrastructure resource whose live record to keep.",
-        label="Accept what is there",
+        target_help="The managed infrastructure resource whose live version to keep.",
+        label="Keep the live version",
     ),
     CapabilitySpec(
         "infrastructure.reconcile",

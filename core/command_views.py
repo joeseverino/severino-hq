@@ -25,6 +25,7 @@ from application.command_forms import command_form_class
 from application.command_targets import (
     capability_target_initial,
     capability_target_options,
+    with_requested_target,
 )
 from application.contracts import route_url
 from application.idempotency import (
@@ -146,6 +147,13 @@ class CommandView(LoginRequiredMixin, View):
             principal=self.principal,
             governed_kinds=tuple(dict.fromkeys(request.GET.getlist("kind"))),
         )
+        if self.target_options is not None:
+            self.target_options = with_requested_target(
+                self.spec,
+                self.target_options,
+                request.GET.get("target") or request.POST.get("__target", ""),
+                principal=self.principal,
+            )
         self.form_class = command_form_class(
             self.spec, target_options=self.target_options
         )
@@ -204,6 +212,12 @@ class CommandView(LoginRequiredMixin, View):
             ),
             "has_reason": "reason" in form.fields,
             "hydrates_target": bool(self.spec.target_initial_fields),
+            # Only a command that writes a record's fields can blank them; one
+            # that takes just a target and a reason has no record to replace.
+            "writes_record": bool(
+                set(schema.get("properties", {}))
+                - {"idempotency_key", "reason"}
+            ),
             "effect_outcome": {
                 "read": "Reads authorized state without changing it.",
                 "remote_write": "Commits an atomic change to HQ state.",

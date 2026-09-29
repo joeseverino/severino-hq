@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .cadence import slowest_sweep_interval as _slowest_sweep_interval, sweep_interval
 from .topology_lenses import _STALE_AFTER
+from .infrastructure import DRIFT_LABEL
 from .topology_model import TopologyNode
 from .ui import counted, duration
 from .finding_model import (
@@ -260,6 +263,32 @@ def _controller_sweep_stale(estate: FindingEstate) -> tuple[Finding, ...]:
     )
 
 
+def _keep_live(node: TopologyNode) -> Remedy:
+    return Remedy(
+        capability="infrastructure.resource.accept_observed",
+        target=node.label,
+        label="Keep the live version",
+        effect="",
+    )
+
+
+def _fault_remedies(node: TopologyNode) -> tuple[Remedy, ...]:
+    """Drift has two honest answers, and reconciling alone is the destructive one.
+
+    Something changed the live record outside HQ. Reconciling pushes HQ's copy
+    over it; keeping it copies the change into HQ. Which is right is the
+    operator's call, so both are offered, the one that loses nothing first.
+    """
+
+    restore = reconcile_remedy(node)
+    if node.status_label != DRIFT_LABEL:
+        return restore
+    return (
+        _keep_live(node),
+        *(replace(remedy, label="Restore HQ's version") for remedy in restore),
+    )
+
+
 def _reporting_a_fault(estate: FindingEstate) -> tuple[Finding, ...]:
     """A resource whose own condition says it is wrong, now.
 
@@ -287,7 +316,7 @@ def _reporting_a_fault(estate: FindingEstate) -> tuple[Finding, ...]:
                 ("Declared revision", str(node.declared_revision)),
                 ("Observed revision", str(node.observed_revision)),
             ),
-            remedies=reconcile_remedy(node),
+            remedies=_fault_remedies(node),
         )
         for node in estate.nodes()
         if node.kind == "resource"
@@ -331,12 +360,7 @@ def _reconciled_but_still_wrong(estate: FindingEstate) -> tuple[Finding, ...]:
             # the remedy is the declaration this rule points at: keep what the
             # provider holds, when the change there was deliberate, or edit it.
             remedies=(
-                Remedy(
-                    capability="infrastructure.resource.accept_observed",
-                    target=node.label,
-                    label="Accept what is there",
-                    effect="",
-                ),
+                _keep_live(node),
                 Remedy(
                     capability="infrastructure.resource.update",
                     target=node.label,

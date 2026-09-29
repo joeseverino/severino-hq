@@ -256,6 +256,20 @@ RESOURCE_TONES = {
 }
 
 
+# What a drifted resource reads as. The finding that offers the two ways out
+# keys on it, so the wording and the test for it are one value.
+DRIFT_LABEL = "Drift detected"
+
+
+def is_drifted(resource: ManagedResource) -> bool:
+    """Whether the provider holds something other than this declaration."""
+
+    return any(
+        condition.get("type") == "Drifted" and condition.get("status") is True
+        for condition in resource.conditions or ()
+    )
+
+
 def resource_health(resource: ManagedResource) -> dict[str, str]:
     active = {
         condition.get("type"): condition
@@ -263,7 +277,7 @@ def resource_health(resource: ManagedResource) -> dict[str, str]:
         if condition.get("status") is True
     }
     for condition_type, state, label in (
-        ("Drifted", "drifted", "Drift detected"),
+        ("Drifted", "drifted", DRIFT_LABEL),
         ("Degraded", "degraded", "Needs attention"),
         ("Ready", "healthy", "Healthy"),
     ):
