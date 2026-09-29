@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .github_posture import attention, build_attention, postures
+from .github_posture import COMMANDS, REASONS, STANDARD, WIRED_SECRETS, attention, build_attention, postures
+from .item_help import COMMAND, REASON, item_help
 from .standards import MET, UNAVAILABLE, UNMET
 from .test_github_estate import store
 
@@ -140,3 +142,81 @@ class PostureViewTests(TestCase):
         response = self.client.get(reverse("posture"))
 
         self.assertEqual(response.status_code, 302)
+
+
+def runs(item) -> list[tuple[str, str]]:
+    """Each step of an item's workflow: its label and what it says."""
+
+    return [(step.label, step.summary) for step in item.workflow.steps]
+
+
+class PostureHelpTests(TestCase):
+    def item(self, key: str, **record):
+        store(private=True, **{"access": kept(), "variables": [], **record})
+        return {item.key: item for item in attention()}[f"github-posture:{key}"]
+
+    def test_security_fixes_name_the_exact_command_for_the_repository(self):
+        item = self.item("security-fixes", access=kept(security_fixes=False))
+
+        self.assertEqual(item_help(item), COMMAND)
+        self.assertEqual(runs(item), [(
+            "alpha",
+            "gh api -X PUT repos/example/alpha/vulnerability-alerts && "
+            "gh api -X PUT repos/example/alpha/automated-security-fixes",
+        )])
+
+    def test_pinning_offers_no_command_while_hq_cannot_read_the_workflows(self):
+        item = self.item("actions-pinned", access=kept(pinning_required=False))
+
+        self.assertEqual(item_help(item), REASON)
+        self.assertIn("uses:", item.workflow.steps[0].summary)
+        self.assertNotIn("sha_pinning_required", str(item.workflow))
+
+    def test_a_wired_secret_kept_as_a_variable_moves_before_it_is_deleted(self):
+        item = self.item("no-variables", variables=["HQ_APP_CLIENT_ID", "DEPLOY_TARGET"])
+
+        self.assertEqual([summary for _label, summary in runs(item)], [
+            'gh secret set HQ_APP_CLIENT_ID -R example/alpha --body "$(gh variable get HQ_APP_CLIENT_ID -R example/alpha)"',
+            "gh variable delete HQ_APP_CLIENT_ID -R example/alpha",
+            "gh variable delete DEPLOY_TARGET -R example/alpha",
+        ])
+        self.assertIn("only after its workflows read secrets.HQ_APP_CLIENT_ID", runs(item)[1][0])
+
+    def test_the_wired_secrets_are_the_ones_the_wiring_sets(self):
+        wiring = (Path(__file__).resolve().parent.parent / "scripts" / "wire-github-app.py").read_text()
+
+        for name in WIRED_SECRETS:
+            self.assertIn(f'"secret", "set", "{name}"', wiring)
+
+    def test_a_collaborator_and_a_writable_key_are_removed_by_name(self):
+        guest = self.item("only-you", access=kept(collaborators=[
+            {"login": "example", "role": "admin"}, {"login": "guest", "role": "write"}]))
+        key = self.item("keys-read-only", access=kept(deploy_keys=[
+            {"title": "deploy", "read_only": False, "last_used": timezone.now().isoformat()}]))
+
+        self.assertEqual(runs(guest), [("alpha: remove guest", "gh api -X DELETE repos/example/alpha/collaborators/guest")])
+        self.assertEqual(
+            runs(key)[0][1],
+            "gh api -X DELETE repos/example/alpha/keys/"
+            "$(gh api repos/example/alpha/keys --jq '.[] | select(.title == \"deploy\") | .id')",
+        )
+
+    def test_a_public_repository_gets_the_ruleset_and_scanning_commands(self):
+        store(private=False, access=kept(security={"secret_scanning": "disabled", "secret_scanning_push_protection": "enabled"}),
+              variables=[], rules={"pull_request": True, "blocks_force_push": True, "blocks_deletion": False})
+        items = {item.key: item for item in attention()}
+
+        (deletion,) = runs(items["github-posture:deletion-blocked"])
+        (scanning,) = runs(items["github-posture:secret-scanning"])
+
+        self.assertTrue(deletion[1].startswith("gh api -X POST repos/example/alpha/rulesets --input - <<< '"))
+        self.assertIn('"rules":[{"type":"deletion"}]', deletion[1])
+        self.assertEqual(
+            scanning[1],
+            "gh api -X PATCH repos/example/alpha -f 'security_and_analysis[secret_scanning][status]=enabled'",
+        )
+
+    def test_every_check_has_commands_or_a_reason(self):
+        for check in STANDARD:
+            with self.subTest(check=check.id):
+                self.assertTrue(check.id in COMMANDS or REASONS.get(check.id))

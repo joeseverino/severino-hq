@@ -20,6 +20,7 @@ from control_plane.observations.github import REPOSITORY_KIND
 from .containers import SERIOUS
 from .expiry import days_until
 from .github_public import github_repository
+from .item_help import cannot_help, commands
 from .projection import read_once
 from .ui import Insight, counted, moment
 
@@ -174,6 +175,7 @@ def attention() -> tuple[Insight, ...]:
                     body=", ".join(failing[:4]) + (f" and {len(failing) - 4} more" if len(failing) > 4 else ""),
                     action="Open checks",
                     url=f"{repo.url}/commit/{repo.head.get('sha', '')}",
+                    workflow=_failing_help(repo),
                 )
             )
         if repo.production_verified is False:
@@ -188,6 +190,11 @@ def attention() -> tuple[Insight, ...]:
                     body=", ".join(failed),
                     action="Open the deploy",
                     url=str(repo.production.get("url") or repo.url),
+                    workflow=cannot_help(
+                        f"github-unverified:{repo.name}",
+                        "HQ reads which verification step failed, not why; the cause is in the "
+                        "deploy's log and the fix in the repository, which HQ never writes.",
+                    ),
                 )
             )
         if repo.serious_alerts:
@@ -201,6 +208,11 @@ def attention() -> tuple[Insight, ...]:
                     body="High or critical, open.",
                     action="Open security",
                     url=f"{repo.url}/security",
+                    workflow=cannot_help(
+                        f"github-alerts:{repo.name}",
+                        "An alert closes with an upgrade in the repository's code, which HQ reads "
+                        "and never writes.",
+                    ),
                 )
             )
         for artifact in repo.expiring():
@@ -214,9 +226,29 @@ def attention() -> tuple[Insight, ...]:
                     body="Composition stops admitting it when it does. A new admission run renews it.",
                     action="Open actions",
                     url=f"{repo.url}/actions",
+                    workflow=cannot_help(
+                        f"github-artifact:{repo.name}:{artifact['name']}",
+                        "The reading names the artifact but not the workflow that makes it, so HQ "
+                        "cannot name the run to repeat.",
+                    ),
                 )
             )
     return tuple(items)
+
+
+def _failing_help(repo: Repository) -> Any:
+    """The command that lists the failing runs; the fix itself is a code change."""
+
+    key = f"github-failing:{repo.name}"
+    reason = "HQ reads which checks fail, not their logs, and the fix is a change to the code or a workflow."
+    sha = repo.head.get("sha", "")
+    if not sha:
+        return cannot_help(key, reason)
+    return commands(
+        key,
+        (("See the failing runs", f"gh run list -R {repo.name} --commit {sha} --status failure"),),
+        reason=reason,
+    )
 
 
 def _waiting(repo: Repository) -> list[Insight]:
@@ -235,6 +267,11 @@ def _waiting(repo: Repository) -> list[Insight]:
                 body=f"{repo.short} · {run.get('sha', '')[:7]}",
                 action="Review deployment",
                 url=str(run.get("url") or repo.url),
+                workflow=cannot_help(
+                    f"github-waiting:{repo.name}:{run.get('id')}",
+                    "Only a required reviewer can approve a deployment, and HQ reads GitHub "
+                    "with read-only tokens.",
+                ),
             )
         )
     return items

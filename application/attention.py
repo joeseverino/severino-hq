@@ -33,6 +33,7 @@ from .entity_links import entity_link
 from .estate import subject_link
 from .findings import derive_findings
 from .infrastructure import enabled_resources, resource_health
+from .item_help import cannot_help, commands, finding_plan, remedy_link
 from .projection import read_once
 from .security import cli_principal
 from .services import service_catalog
@@ -60,9 +61,13 @@ def _backlog(
     body: str,
     action: str,
     url: str,
+    reason: str,
     status: str = "attention",
 ) -> tuple[Insight, ...]:
-    """One Insight when there is something to do, nothing when there is not."""
+    """One Insight when there is something to do, nothing when there is not.
+
+    ``reason`` is why HQ cannot do it for you: every backlog here is a
+    judgement or a fact only the operator holds."""
 
     if not count:
         return ()
@@ -77,6 +82,7 @@ def _backlog(
             url=url,
             magnitude=count,
             key=key,
+            workflow=cannot_help(key, reason),
         ),
     )
 
@@ -89,6 +95,7 @@ def documentation() -> tuple[Insight, ...]:
         title="Docs need review",
         body="Past their review date.",
         action="Review docs",
+        reason="Whether a doc is still true is a judgement about its content, which HQ cannot make.",
         url=f"{reverse('docs_index:list')}?needs_review=1",
     )
 
@@ -102,6 +109,7 @@ def content() -> tuple[Insight, ...]:
             title="Draft content",
             body="Written but not published.",
             action="Open drafts",
+            reason="HQ does not write content, and publishing a draft is your decision.",
             url=f"{reverse('content:list')}?status=draft",
         ),
         *_backlog(
@@ -119,6 +127,7 @@ def content() -> tuple[Insight, ...]:
             title="Content needs docs",
             body="Published with no linked documentation.",
             action="Link docs",
+            reason="HQ cannot tell which doc describes a piece of content.",
             url=f"{reverse('content:list')}?no_docs=1",
         ),
     )
@@ -148,6 +157,7 @@ def contacts() -> tuple[Insight, ...]:
         title="Unread contact submissions",
         body="Sent through the contact form and not yet answered.",
         action="Read submissions",
+        reason="A reply goes from your own mail; HQ reads the form's submissions and sends nothing.",
         url=f"{reverse('contacts:list')}?status=unread",
     )
 
@@ -164,6 +174,7 @@ def expenses() -> tuple[Insight, ...]:
         title="Expenses need receipts",
         body="No receipt attached.",
         action="Attach receipts",
+        reason="A receipt is a document only you have; HQ has no source to fetch it from.",
         url=f"{reverse('expenses:list')}?no_receipts=1",
     )
 
@@ -178,6 +189,7 @@ def receipts() -> tuple[Insight, ...]:
         title="Receipts need links",
         body="Not attached to an expense or an asset.",
         action="Link receipts",
+        reason="HQ does not know which expense or asset a receipt is for.",
         url=f"{reverse('receipts:list')}?unlinked=1",
     )
 
@@ -194,6 +206,7 @@ def assets() -> tuple[Insight, ...]:
         title="Assets missing purchase info",
         body="No purchase date or cost, so depreciation cannot be calculated.",
         action="Complete assets",
+        reason="HQ has no record of when an asset was bought or what it cost.",
         url=f"{reverse('assets:list')}?missing_purchase=1",
     )
 
@@ -287,6 +300,11 @@ def tailnet() -> tuple[Insight, ...]:
                 action="Open machine",
                 url=entity_link("machine", name).url,
                 subject=subject_link("machine", name),
+                workflow=cannot_help(
+                    f"tailnet-expiry:{name}",
+                    "A node key is renewed by signing in again on the machine itself, and no "
+                    "HQ capability turns off key expiry.",
+                ),
             )
         )
     # Tailnet lock, which is a fact about the tailnet rather than about any one
@@ -309,6 +327,7 @@ def tailnet() -> tuple[Insight, ...]:
                 action="Sign it from a signing node",
                 url=reverse("control_plane:tailnet"),
                 subject=subject_link("machine", name),
+                workflow=cannot_help(f"tailnet-locked-out:{name}", _LOCK_REASON),
             )
         )
     for name, presence in presences:
@@ -324,6 +343,11 @@ def tailnet() -> tuple[Insight, ...]:
                     action="Open machine",
                     url=entity_link("machine", name).url,
                     subject=subject_link("machine", name),
+                    workflow=cannot_help(
+                        f"tailnet-unauthorized:{name}",
+                        "No HQ capability authorizes a device: letting a machine onto the "
+                        "tailnet is kept for a person in the Tailscale admin console.",
+                    ),
                 )
             )
         if presence.lock_error:
@@ -341,6 +365,7 @@ def tailnet() -> tuple[Insight, ...]:
                     action="Open machine",
                     url=entity_link("machine", name).url,
                     subject=subject_link("machine", name),
+                    workflow=cannot_help(f"tailnet-lock-unsigned:{name}", _LOCK_REASON),
                 )
             )
         if presence.update_available:
@@ -355,6 +380,11 @@ def tailnet() -> tuple[Insight, ...]:
                     action="Open machine",
                     url=entity_link("machine", name).url,
                     subject=subject_link("machine", name),
+                    workflow=commands(
+                        f"tailnet-update:{name}",
+                        ((f"On {name}, as an administrator", "tailscale update"),),
+                        reason="HQ has no shell on the machine, so the update runs there.",
+                    ),
                 )
             )
         unapproved = presence.unapproved_routes
@@ -389,9 +419,26 @@ def tailnet() -> tuple[Insight, ...]:
                 action="Approve routes",
                 url=entity_link("machine", name).url,
                 subject=subject_link("machine", name),
+                actions=_approve_routes(name),
             )
         )
     return tuple(items)
+
+
+# Why HQ offers nothing for tailnet lock: the signing key is the whole point.
+_LOCK_REASON = (
+    "Signing takes a tailnet lock key, and by design only your signing devices hold "
+    "one, never HQ."
+)
+
+
+def _approve_routes(name: str) -> tuple[ActionLink, ...]:
+    """The route approval the machine's own page offers, as a remedy."""
+
+    link = remedy_link(
+        "tailnet.routes.approve", "Approve routes", name, url=entity_link("machine", name).url
+    )
+    return (link,) if link else ()
 
 
 # A neutral finding is context, which the queue leaves out.
@@ -456,6 +503,9 @@ def infrastructure() -> tuple[Insight, ...]:
             action="Review evidence",
             url=f"{findings_url}?rule={finding.rule}",
             subject=_node_link(nodes.get(finding.subject)),
+            workflow=finding_plan(
+                finding, f"finding:{finding.rule}:{finding.subject or finding.scope}"
+            ),
         )
         for finding in findings
     ]
@@ -490,9 +540,30 @@ def infrastructure() -> tuple[Insight, ...]:
                 action="Open resource",
                 url=entity_link("resource", resource.key).url,
                 subject=subject_link("resource", resource.key),
+                **_reconcile_help(resource),
             )
         )
     return tuple(items) + tailnet()
+
+
+def _reconcile_help(resource) -> dict:
+    """Reconcile it, where its kind allows; otherwise say why HQ cannot."""
+
+    from control_plane.providers import PROVIDERS
+
+    provider = PROVIDERS.get(resource.kind)
+    policy = provider.actions.get("reconcile") if provider else None
+    link = None
+    if policy is None or policy.mode != "locked":
+        link = remedy_link("infrastructure.reconcile", "Reconcile", resource.key)
+    if link is not None:
+        return {"actions": (link,)}
+    return {
+        "workflow": cannot_help(
+            f"resource:{resource.key}",
+            "Its kind is locked against reconcile, so only a change at the provider settles it.",
+        )
+    }
 
 
 def waiting_for_approval() -> tuple[Insight, ...]:
@@ -561,6 +632,11 @@ def services() -> tuple[Insight, ...]:
             action="Open service",
             url=service.url,
             subject=subject_link("service", service.hostname),
+            workflow=cannot_help(
+                f"service:{service.hostname}",
+                "Each gap is a declaration only you can make: HQ does not guess which "
+                "certificate, host or record a name should have.",
+            ),
         )
         for service in service_catalog()
         if service.faults

@@ -108,6 +108,16 @@ operation or the reader may not run it. A finding carries it as its
 specific steps of its own; the API returns them as `operator_steps` beside the
 remedies.
 
+Every item HQ raises, a finding or a queue entry, carries help, never bare
+prose: a remedy HQ runs, the exact command to run, or HQ's specific reason it
+can offer neither. A rule must also declare `no_help_reason`, which a finding
+carries (and the API returns) whenever it has no remedy and no command. A
+queue `Insight` keeps the SDK's shape, so its help travels in existing fields:
+a remedy as one of its `actions`, a command or a reason as a `run` or
+`cannot` step of its `workflow` (`application/item_help.py`).
+`application/test_item_help.py` fails on any host provider that builds an item
+without one.
+
 A rule is declared beside the detector that decides it: each module that raises
 findings (`perimeter_findings`, `controller_findings`, `docker_estate`,
 `dns_findings` and the rest) exports its own `RULES`, built from the vocabulary

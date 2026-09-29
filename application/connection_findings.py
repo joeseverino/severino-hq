@@ -134,6 +134,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Fix what the connection's error names (its address, its credential, or the route to it) in its 1Password item or on the network, then request a fresh sweep."
         ),
+        no_help_reason=(
+            "The fault is outside HQ: the address, the credential in 1Password, or the network path, none of which HQ writes."
+        ),
     ),
     FindingRule(
         "unreachable-consumer",
@@ -142,6 +145,9 @@ RULES: tuple[FindingRule, ...] = (
         _unreachable_consumer,
         operator_action=(
             "Make the consumer reachable from the controller, or allow the path in the tailnet policy, then reconcile."
+        ),
+        no_help_reason=(
+            "When the tailnet does not refuse the path and the kind is locked against reconcile, HQ has nothing left it may try."
         ),
         # Says the same thing with the name of the consumer in it. The generic
         # rule would otherwise put this in front of an operator twice.
