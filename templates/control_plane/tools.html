@@ -1,14 +1,17 @@
 {% extends "page.html" %}
 {% block page %}
   {% if tabs %}
-    <nav class="tool-tabs" aria-label="Tools">
-      {% for entry in tabs %}
-        <a href="?tab={{ entry.id }}"
-           class="tool-tab{% if entry.id == tab.id %} tool-tab-current{% endif %}"
-           {% if entry.id == tab.id %}aria-current="page"{% endif %}>{{ entry.label }}</a>
-      {% endfor %}
-    </nav>
-    <p class="muted tool-summary">{{ tab.summary }}</p>
+    {% comment %}Tabs, and a line saying which, only when there is a choice.{% endcomment %}
+    {% if tabs|length > 1 %}
+      <nav class="tool-tabs" aria-label="Tools">
+        {% for entry in tabs %}
+          <a href="?tab={{ entry.id }}"
+             class="tool-tab{% if entry.id == tab.id %} tool-tab-current{% endif %}"
+             {% if entry.id == tab.id %}aria-current="page"{% endif %}>{{ entry.label }}</a>
+        {% endfor %}
+      </nav>
+      <p class="muted tool-summary">{{ tab.summary }}</p>
+    {% endif %}
     {% include tab.template %}
   {% else %}
     <p class="muted">No tools available.</p>

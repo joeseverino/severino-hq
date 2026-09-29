@@ -236,7 +236,7 @@ class DomainCardTests(TestCase):
 
         response = self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
 
-        # The count lives in the Security card's one line of facts now.
+        # The count lives in the Security card's one line of facts.
         self.assertContains(response, "2 certificates")
         self.assertContains(response, "example-site")
         self.assertContains(response, 'class="control-summary control-summary-four"')
@@ -266,7 +266,8 @@ class RegistrationFallbackTests(TestCase):
 
         card = registration(self.zone)
 
-        self.assertIn("via Example Registrar, Inc. Auto-renew", card.detail)
+        # Said by its name, as people say it, and never with a doubled stop.
+        self.assertIn("via Example Registrar. Auto-renew", card.detail)
         self.assertNotIn("..", card.detail)
 
     def test_a_refused_permission_names_it_and_keeps_the_reason_in_the_title(self):
@@ -338,7 +339,7 @@ class ServiceColumnTests(TestCase):
         with mock.patch("application.reach.DOCUMENTATION", (ip_network("192.0.2.0/24"),)):
             origin = self.services()["hosted.example.com"].origin
 
-            self.assertEqual(origin.headline, "Address held by Example Hosting")
+            self.assertEqual(origin.headline, "Example Hosting")
 
     def test_the_certificate_cell_is_one_line_per_kind(self):
         declare_record("multi", "multi.example.com", "A", "192.0.2.5")
@@ -629,7 +630,7 @@ class PublicRegistryRefreshTests(TestCase):
         found = readings().about(Subject.of(addresses=("203.0.113.7",), hostnames=("example.com",)))
         self.assertEqual(
             {(item.relation, item.title) for item in found},
-            {("Address held by", "Example Hosting"), ("Registered through", "Example Registrar")},
+            {("On the network of", "Example Hosting"), ("Registered through", "Example Registrar")},
         )
 
     def test_a_second_request_within_the_hour_reads_nothing(self):

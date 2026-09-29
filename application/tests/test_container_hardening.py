@@ -204,7 +204,7 @@ class PageTests(TestCase):
         self.assertContains(page, "Add to <code>/opt/example/web/docker-compose.yml</code>", html=False)
         self.assertContains(page, "user: &quot;1000:1000&quot;", html=False)
         self.assertNotContains(page, "mem_limit")
-        self.assertContains(page, "Mark web as holding the socket (a socket proxy or management agent)")
+        self.assertContains(page, "Mark web as holding the socket")
         self.assertContains(page, "/commands/infrastructure.resource.update/?target=example-box-web")
 
     def test_a_container_meeting_every_check_has_no_block(self):
@@ -232,7 +232,7 @@ class AttentionHelpTests(TestCase):
         item = self.items()["container-posture:no-docker-socket"]
         actions = {action.label: action for action in item.actions}
 
-        mark = actions["Mark web as holding the socket (a socket proxy or management agent)"]
+        mark = actions["Mark web as holding the socket"]
         self.assertEqual(mark.url, "/commands/infrastructure.resource.update/?target=example-box-web")
         self.assertEqual((mark.capability, mark.target, mark.method), ("infrastructure.resource.update", "example-box-web", "GET"))
         adopt = actions["Adopt kuma to mark it"]
@@ -279,7 +279,7 @@ class AttentionHelpTests(TestCase):
         item = self.items()["container-advisory:ghcr.io/example/app:v1.2.0"]
 
         self.assertEqual(item.action, "Upgrade to v1.3.0 (clears 1)")
-        self.assertIn("example-box cannot apply it yet: the upgrade helper needs its sudo rule there", item.body)
+        self.assertIn("example-box cannot apply it yet: the upgrade helper needs a copy and its sudo rule there", item.body)
         self.assertTrue(item.url.endswith("/example-box-app/#upgrade"))
         (action,) = item.actions
         self.assertEqual(action.label, "Upgrade plan for app")

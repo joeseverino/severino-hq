@@ -17,22 +17,16 @@
 
 <section>
   <h2>Related</h2>
-  <div class="two-col">
-    <div><h3>Projects</h3>
-      {% if asset.related_projects.all %}<ul>{% for p in asset.related_projects.all %}<li><a href="{{ p.get_absolute_url }}">{{ p.name }}</a></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
+  {% if asset.related_projects.all or asset.content_items.all or asset.documentation_records.all or asset.expenses.all or asset.receipts.all %}
+    <div class="two-col">
+      {% if asset.related_projects.all %}<div><h3>Projects</h3><ul>{% for p in asset.related_projects.all %}<li><a href="{{ p.get_absolute_url }}">{{ p.name }}</a></li>{% endfor %}</ul></div>{% endif %}
+      {% if asset.content_items.all %}<div><h3>Content items</h3><ul>{% for c in asset.content_items.all %}<li><a href="{{ c.get_absolute_url }}">{{ c.title }}</a></li>{% endfor %}</ul></div>{% endif %}
+      {% if asset.documentation_records.all %}<div><h3>Documentation</h3><ul>{% for d in asset.documentation_records.all %}<li><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} · {{ d.title }}</a></li>{% endfor %}</ul></div>{% endif %}
+      {% if asset.expenses.all %}<div><h3>Expenses</h3><ul>{% for e in asset.expenses.all %}<li><a href="{{ e.get_absolute_url }}">{{ e.date }} {{ e.vendor }}</a> <span class="muted">${{ e.total_cost }}</span></li>{% endfor %}</ul></div>{% endif %}
+      {% if asset.receipts.all %}<div><h3>Receipts</h3><ul>{% for r in asset.receipts.all %}<li><a href="{{ r.get_absolute_url }}">{{ r.original_filename|default:"receipt" }}</a> <span class="muted">${{ r.amount }}</span></li>{% endfor %}</ul></div>{% endif %}
     </div>
-    <div><h3>Content items</h3>
-      {% if asset.content_items.all %}<ul>{% for c in asset.content_items.all %}<li><a href="{{ c.get_absolute_url }}">{{ c.title }}</a></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
-    </div>
-    <div><h3>Documentation</h3>
-      {% if asset.documentation_records.all %}<ul>{% for d in asset.documentation_records.all %}<li><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} · {{ d.title }}</a></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
-    </div>
-    <div><h3>Expenses</h3>
-      {% if asset.expenses.all %}<ul>{% for e in asset.expenses.all %}<li><a href="{{ e.get_absolute_url }}">{{ e.date }} {{ e.vendor }}</a> <span class="muted">${{ e.total_cost }}</span></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
-    </div>
-    <div><h3>Receipts</h3>
-      {% if asset.receipts.all %}<ul>{% for r in asset.receipts.all %}<li><a href="{{ r.get_absolute_url }}">{{ r.original_filename|default:"receipt" }}</a> <span class="muted">${{ r.amount }}</span></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
-    </div>
-  </div>
+  {% else %}
+    <p class="muted">Nothing related yet: no projects, content items, documentation, expenses or receipts name this asset.</p>
+  {% endif %}
 </section>
 {% endblock %}

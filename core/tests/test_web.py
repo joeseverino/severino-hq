@@ -143,6 +143,9 @@ class AuthGateTests(TestCase):
         )
         self.assertEqual(relaxed, ["style-src"])
 
+    # Production's versioning: a live development server names its assets by
+    # run instead (core.context_processors._asset_version).
+    @override_settings(STATIC_LIVE=False)
     def test_application_shell_versions_every_shared_asset(self):
         content = self.client.get("/accounts/login/").content.decode()
         for asset in (
@@ -652,7 +655,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         with patch("contacts.d1.query", side_effect=AssertionError("a page called D1")):
             panel = self.client.get(reverse("dashboard_contacts"))
 
-        self.assertNotContains(panel, "Recent contacts")
+        self.assertEqual(panel.content.decode().strip(), "")
 
     def test_dashboard_routes_infrastructure_findings_to_their_evidence(self):
         from control_plane.models import ManagedResource
@@ -683,7 +686,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         """A shape of the portfolio, not a decision waiting on anyone.
 
         Nothing clears "active work with nothing written about it yet" except
-        months of work, so as a queue entry it was permanently the largest and
+        months of work, so as a queue entry it would be permanently the largest and
         permanently unactionable. The count still shows on the projects card.
         """
 
@@ -790,11 +793,11 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_a_search_that_matches_nothing_is_an_empty_table_not_an_error(self):
-        """`apply_search` returned a bare `.none()` when nothing matched, so
-        the `_search_rank` the table layer orders by did not exist, and
-        Django resolves an ordering name against the model whether or not a row
-        will ever be built. Every list page answered 500 to a misspelt vendor
-        or a doc that was never written."""
+        """A search matching nothing still carries `_search_rank`.
+
+        The table layer orders by it, and Django resolves an ordering name
+        against the model whether or not a row is built, so a bare `.none()`
+        would answer 500 on every list page to a misspelt vendor."""
 
         Project.objects.create(name="Something else entirely")
 
@@ -1067,8 +1070,8 @@ class ManifestImportTests(TestCase):
         self.assertIn("rb-bad-env", by)
         self.assertEqual(DocumentationRecord.objects.count(), 0)
 
-    # The schema's prefixes and required fields were loaded but never read, so
-    # an entry breaking either upserted cleanly. Each rejection is asserted on
+    # An entry breaking the schema's prefixes or required fields is refused,
+    # not upserted. Each rejection is asserted on
     # both paths (the preflight and the write) since they share one check.
     STANDARD_DOC = {
         "doc_id": "rb-complete",
@@ -1504,8 +1507,8 @@ class NavigationTests(TestCase):
 
     def test_every_entry_lights_its_own_group_and_no_other(self):
         """Checked for every entry the registry declares, so a new one cannot
-        claim someone else's section: an entry with no namespace once lit
-        its group on every root page, the dashboard included."""
+        claim someone else's section: an entry with no namespace would
+        light its group on every root page, the dashboard included."""
 
         from django.test import RequestFactory
         from django.urls import NoReverseMatch, resolve
@@ -1529,8 +1532,8 @@ class NavigationTests(TestCase):
                 self.assertEqual(lit, {entry.group} if entry.group else set())
 
     def test_only_the_current_page_is_marked_active(self):
-        # Every entry in a section shares one namespace, so matching on that lit
-        # the whole dropdown at once.
+        # Every entry in a section shares one namespace, so matching on that would
+        # light the whole dropdown at once.
         entries = self._entries(reverse("expenses:list"))
         active = [
             item["label"]

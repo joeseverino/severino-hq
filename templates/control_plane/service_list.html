@@ -4,15 +4,9 @@
 
 {% comment %}
 Columns come from SERVICE_FACETS, not from this markup: minus the runtime one,
-which now shares the "Runs on" column with the origin it was duplicating.
+which shares the "Runs on" column with the origin it would duplicate.
 {% endcomment %}
-{% if favorites %}
-  <h2 class="section-heading">Favorites</h2>
-  {% include "control_plane/_service_rows.html" with rows=favorites reorderable=True show_service_projects=service_projects %}
-{% endif %}
-
-{% if favorites %}<h2 class="section-heading">Other services</h2>{% endif %}
-{% include "control_plane/_service_rows.html" with rows=services show_service_projects=service_projects empty_message="No services. Add a DNS record or a proxy host to create one." %}
+{% include "control_plane/_service_rows.html" with groups=service_groups show_service_projects=service_projects empty_message="No services. Add a DNS record or a proxy host to create one." %}
 
 {% if unmanaged %}
   {% comment %}

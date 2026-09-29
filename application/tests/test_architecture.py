@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -206,6 +207,25 @@ class StyleContractTests(SimpleTestCase):
         root = Path(__file__).parent.resolve().parents[1]
         return (root / "static" / "css" / "app.css").read_text(encoding="utf-8")
 
+    def test_hidden_text_is_anchored_inside_its_box(self):
+        """Left at its static position, an absolutely placed label escapes any
+        scroll box whose containing block lies outside it: a hidden word in the
+        last column of a wide table scrolled a phone's whole page sideways."""
+
+
+        rule = re.search(r"\.visually-hidden\s*\{([^}]*)\}", self._stylesheet())
+        self.assertIsNotNone(rule)
+        body = rule.group(1)
+        for declaration in ("position: absolute", "inset-block-start: 0", "inset-inline-start: 0"):
+            with self.subTest(declaration=declaration):
+                self.assertIn(declaration, body)
+
+    def test_a_long_word_breaks_rather_than_widening_the_page(self):
+
+        body = re.search(r"@layer base \{.*?\nbody \{([^}]*)\}", self._stylesheet(), re.S)
+        self.assertIsNotNone(body)
+        self.assertIn("overflow-wrap: break-word", body.group(1))
+
     @staticmethod
     def _script() -> str:
         root = Path(__file__).parent.resolve().parents[1]
@@ -236,7 +256,6 @@ class StyleContractTests(SimpleTestCase):
         `.table-scroll`; it does not stack into cards.
         """
 
-        import re
 
         root = Path(__file__).parent.resolve().parents[1]
         parts = {"table", "thead", "tbody", "tfoot", "tr", "td", "th"}
@@ -287,13 +306,63 @@ class StyleContractTests(SimpleTestCase):
         """A provider endpoint may be arbitrarily long but never owns layout."""
 
         css = self._stylesheet()
-        self.assertIn(".connection-table { table-layout: fixed; }", css)
+        # The table sizes to its content; the endpoint caps itself instead.
+        self.assertNotIn(".connection-table { table-layout: fixed; }", css)
         endpoint_rule = css.split(".connection-endpoint {", 1)[1].split("}", 1)[0]
+        self.assertIn("max-width: min(100%, 32ch);", endpoint_rule)
         self.assertIn("text-overflow: ellipsis;", endpoint_rule)
         self.assertIn("white-space: nowrap;", endpoint_rule)
 
+    # Viewport breakpoints left, each for something the viewport genuinely
+    # decides: the header and nav, a modal that takes the whole screen, table
+    # sizing, the head's overflow menu, the dashboard strip, a few dense
+    # diagrams. It only goes down. A layout answers to its own width with a
+    # fluid rule (auto-fit, flex-wrap, clamp) or a container query instead.
+    VIEWPORT_BREAKPOINTS = 19
+
+    def test_viewport_breakpoints_only_go_down(self):
+
+        css = re.sub(r"/\*.*?\*/", " ", self._stylesheet(), flags=re.S)
+        found = [q for q in re.findall(r"@media[^{]*\{", css) if "width" in q]
+        self.assertLessEqual(
+            len(found),
+            self.VIEWPORT_BREAKPOINTS,
+            "A new viewport breakpoint: make the layout fluid or ask its container "
+            "(docs/DESIGN.md, 'Size to content, fit the window').",
+        )
+
+    def test_a_selector_is_styled_in_one_place(self):
+        """A component's rule lives once, so a change to it is made once.
+
+        Only rules naming a single selector are counted: a shared list (the
+        frame rule, the band rule) and a state beside its base (`a, a:hover`)
+        are the idioms that put one name in two rules on purpose. Breakpoint
+        and container variants are the same rule at another size and are not
+        counted either.
+        """
+
+        import collections
+
+        css = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group().count("\n"), self._stylesheet(), flags=re.S)
+        seen: dict[str, list[int]] = collections.defaultdict(list)
+        stack: list[str] = []
+        start = 0
+        for match in re.finditer(r"[{}]", css):
+            if match.group() == "{":
+                selector = " ".join(css[start:match.start()].split())
+                stack.append(selector)
+                outer = stack[:-1]
+                top_level = all(s.startswith("@layer") for s in outer)
+                single = "," not in re.sub(r"\([^()]*\)", "", selector)
+                if top_level and single and not selector.startswith("@"):
+                    seen[selector].append(css.count("\n", 0, match.start()) + 1)
+            elif stack:
+                stack.pop()
+            start = match.end()
+        twice = {selector: lines for selector, lines in seen.items() if len(lines) > 1}
+        self.assertEqual(twice, {})
+
     def test_every_referenced_custom_property_is_defined(self):
-        import re
 
         css = self._stylesheet()
         defined = set(re.findall(r"^\s*(--[a-z0-9-]+)\s*:", css, re.MULTILINE))
@@ -311,7 +380,6 @@ class StyleContractTests(SimpleTestCase):
         action cannot reintroduce that split by choosing the wrong element.
         """
 
-        import re
 
         root = Path(__file__).parent.resolve().parents[1]
         template = (root / "templates" / "base.html").read_text(encoding="utf-8")
@@ -327,8 +395,7 @@ class StyleContractTests(SimpleTestCase):
     def test_every_rule_sits_inside_a_cascade_layer(self):
         """Unlayered rules beat every layer, at any specificity.
 
-        Nine hundred lines had collected outside the layers, and the effect
-        compounds: a component written there cannot be overridden from
+        The effect compounds: a component written outside the layers cannot be overridden from
         `components`, so the only available fix is to write the next rule
         outside the layers too: a responsive rule nothing could reach,
         answered by another rule nothing could reach.
@@ -350,20 +417,16 @@ class StyleContractTests(SimpleTestCase):
         )
 
     def test_font_size_comes_from_the_type_scale(self):
-        """Three hundred declarations had drifted across twenty sizes.
+        """A font size is one of the type scale's steps, or it is drift.
 
-        Thirteen of them sat inside a six-pixel band in half-pixel steps,
-        13px and 13.5px used fifty-three and thirty-four times, which is not a
-        distinction anyone can see or intended to make. A size is now one of
-        the scale's steps or it is drift.
+        Sizes half a pixel apart are not a distinction anyone can see.
 
-        `em` is exempt and stays exempt. It means "relative to whatever this
+        `em` is exempt. It means "relative to whatever this
         sits in" (a unit suffix shrinking beside its number, a glyph tracking
         its label) which is a different statement from choosing a step, and
         one an absolute scale cannot make.
         """
 
-        import re
 
         literals = re.findall(r"font-size:\s*([0-9.]+(?:px|rem))", self._stylesheet())
 
@@ -376,20 +439,17 @@ class StyleContractTests(SimpleTestCase):
     def test_spacing_on_the_scale_is_written_as_a_token(self):
         """A value that is on the scale must say so.
 
-        Eight hundred spacing declarations had spread across twenty-nine
-        values: every integer from one to eighteen. The even rungs are now
-        `--space-*`; this stops one being written back as a literal, which is
-        how the ladder came apart the first time.
+        The even rungs are `--space-*`; this stops one being written as a
+        literal.
 
-        Odd values are still literals and are deliberately not failed here.
+        Odd values stay literals and are deliberately not failed here.
         Rounding padding by a pixel is visible in a dense table in a way that
-        moving type by half a pixel is not, so each is being looked at rather
-        than swept. `1px` is exempt for good: it is a hairline rule (the grid
+        moving type by half a pixel is not, so each is judged on its own
+        rather than swept. `1px` is exempt: it is a hairline rule (the grid
         lines in `.sweep-grid` are a 1px gap over a coloured background) and
         not a space at all.
         """
 
-        import re
 
         on_scale = {2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40}
         declaration = re.compile(
@@ -411,35 +471,107 @@ class StyleContractTests(SimpleTestCase):
             offenders, [], "This spacing is on the scale; write it as --space-*."
         )
 
-    def test_status_colour_comes_from_a_tone_token(self):
-        """One status, one set of colours, named once.
+    # Every CSS named colour and system colour, so `color: tomato` is caught as
+    # surely as a hex.
+    _NAMED_COLOURS = frozenset(
+        """aliceblue antiquewhite aqua aquamarine azure beige bisque black
+        blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse
+        chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan
+        darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta
+        darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen
+        darkslateblue darkslategray darkslategrey darkturquoise darkviolet
+        deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite
+        forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green
+        greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender
+        lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan
+        lightgoldenrodyellow lightgray lightgreen lightgrey lightpink
+        lightsalmon lightseagreen lightskyblue lightslategray lightslategrey
+        lightsteelblue lightyellow lime limegreen linen magenta maroon
+        mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen
+        mediumslateblue mediumspringgreen mediumturquoise mediumvioletred
+        midnightblue mintcream mistyrose moccasin navajowhite navy oldlace
+        olive olivedrab orange orangered orchid palegoldenrod palegreen
+        paleturquoise palevioletred papayawhip peachpuff peru pink plum
+        powderblue purple rebeccapurple red rosybrown royalblue saddlebrown
+        salmon sandybrown seagreen seashell sienna silver skyblue slateblue
+        slategray slategrey snow springgreen steelblue tan teal thistle tomato
+        turquoise violet wheat white whitesmoke yellow yellowgreen
+        canvas canvastext linktext visitedtext activetext buttonface
+        buttontext buttonborder field fieldtext highlight highlighttext
+        selecteditem selecteditemtext mark marktext graytext accentcolor
+        accentcolortext""".split()
+    )
 
-        The same seven fill/ink/border trios were written out in hex across
-        pills, messages, connection ticks and worth readouts (five families
-        that knew nothing about each other) so `published`, `reachable` and
-        `success` were three different greens. Components now read `--tone-*`
-        and only the token block names a colour.
+    @classmethod
+    def _declarations_outside_tokens(cls) -> list[tuple[int, str]]:
+        """Every declaration value outside `@layer tokens`, with its line.
 
-        Scoped to the families that carry status. Charts, category dots and
-        print rules legitimately name absolute colours: a categorical palette
-        is identity, not state.
+        Comments are blanked (keeping their newlines, so line numbers hold),
+        the tokens layer is blanked by brace depth, and what is left is split
+        on `{`, `}` and `;`: a segment closed by `{` is a selector or an
+        at-rule prelude and is skipped, so `.pill-green` cannot read as green.
         """
 
-        import re
 
-        status = re.compile(
-            r"^\s*\.(?:pill|msg|conn-kind|conn-decision|worth|control)-[^{\n]*\{([^}]*)\}",
-            re.MULTILINE,
+        def blank(text: str) -> str:
+            return re.sub(r"[^\n]", " ", text)
+
+        css = re.sub(r"/\*.*?\*/", lambda match: blank(match.group()), cls._stylesheet(), flags=re.S)
+        for opening in reversed([match.start() for match in re.finditer(r"@layer\s+tokens\s*\{", css)]):
+            depth, end = 0, len(css)
+            for index in range(css.index("{", opening), len(css)):
+                depth += {"{": 1, "}": -1}.get(css[index], 0)
+                if depth == 0:
+                    end = index + 1
+                    break
+            css = css[:opening] + blank(css[opening:end]) + css[end:]
+
+        values = []
+        for segment in re.finditer(r"[^{};]+(?=[;}])", css):
+            name, colon, value = segment.group().partition(":")
+            if colon and name.strip():
+                values.append((css.count("\n", 0, segment.end()) + 1, value))
+        return values
+
+    def test_colour_is_named_only_in_the_tokens_layer(self):
+        """Colour lives in tokens, so a theme is a set of token overrides.
+
+        The dark palette overrides `--bg`, `--ink` and the rest and nothing
+        else. A literal anywhere else is a colour the theme cannot reach: it
+        stays a light-mode value on a dark page, and nothing but a person
+        looking at that one screen would notice. Literals also let related
+        colours drift apart: hex written per component makes `published`,
+        `reachable` and `success` three different greens.
+
+        Allowed outside the layer: `var()` references, `color-mix()` of two
+        tokens, and the keywords that are not a colour choice (`transparent`,
+        `currentColor`, `inherit`).
+        """
+
+
+        literal = re.compile(
+            r"#[0-9a-fA-F]{3,8}\b"
+            r"|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\("
+            r"|(?<![-\w.#$@])([a-zA-Z]+)(?![-\w(])"
         )
-        offenders = [
-            colour
-            for match in status.finditer(self._stylesheet())
-            for colour in re.findall(r"#[0-9a-fA-F]{3,8}\b", match.group(1))
-        ]
+        offenders = []
+        for line, value in self._declarations_outside_tokens():
+            for match in literal.finditer(value):
+                word = match.group(1)
+                if word is None or word.lower() in self._NAMED_COLOURS:
+                    offenders.append(f"{line}: {value.strip()[:70]}")
+                    break
 
         self.assertEqual(
-            offenders, [], "Status colour belongs in a --tone-* token, not the component."
+            offenders, [], "Colour belongs in a token in `@layer tokens`, not the component."
         )
+
+    def test_the_colour_guard_reads_declarations(self):
+        """The guard above would pass vacuously if its parser found nothing."""
+
+        values = [value.strip() for _line, value in self._declarations_outside_tokens()]
+        self.assertIn("var(--surface)", values)
+        self.assertNotIn("#1f4d57", " ".join(values))
 
     def test_no_tracked_file_names_a_reachable_endpoint(self):
         """Addresses, ports and account names are deployment facts, not source.
@@ -454,7 +586,6 @@ class StyleContractTests(SimpleTestCase):
         and is correctly ignored.
         """
 
-        import re
         import subprocess
 
         root = Path(__file__).parent.resolve().parents[1]
@@ -559,8 +690,6 @@ class StyleContractTests(SimpleTestCase):
     def test_images_live_where_images_belong(self):
         """A screenshot taken while debugging is not an asset of this project.
 
-        A full-page capture taken while checking a rendered page was once
-        committed to the root of this repository and referenced by nothing.
         This repository is public, so a capture of any internal page is
         published the moment it is pushed (carrying whatever happened to be
         on screen) and force-pushing afterwards does not unpublish it.
@@ -619,14 +748,10 @@ class StyleContractTests(SimpleTestCase):
     def test_chart_templates_do_not_hardcode_the_plot_rectangle(self):
         """The geometry is in ui.py, and a copy of it in a template is a bug.
 
-        `plot_right` was added to the bar chart precisely so its template would
-        stop drawing gridlines to 702 whatever the chart's own width was. The
-        line chart's template was then written with 48, 702, 12 and 214 spelled
-        out, so moving the plot moved the bars and the line but left that
-        chart's gridlines and marks behind. Any literal that equals a plot
-        coordinate is the same fault returning.
+        A template that spells out plot coordinates stays behind when the plot
+        moves: the bars and the line move, its gridlines and marks do not. Any
+        literal that equals a plot coordinate is that fault.
         """
-        import re
 
         from ..ui import PLOT_HEIGHT, PLOT_LEFT, PLOT_RIGHT, PLOT_TOP, PLOT_WIDTH
 
@@ -662,13 +787,12 @@ class StyleContractTests(SimpleTestCase):
         """A floor wider than the column it lives in is only ever a scrollbar.
 
         `.two-col` lays out at `minmax(320px, 1fr)`, so a half-width chart card
-        offers roughly 284-446px. Every floor ever set here (620px, then
-        480px) was above that range, so it could not protect a narrow plot;
-        it could only guarantee that every chart on the page scrolled at once.
+        offers roughly 284-446px. A floor above that range cannot protect a
+        narrow plot; it only guarantees that every chart on the page scrolls
+        at once.
         Label collision is handled by `Chart.dense` and a container query,
         which measure the labels and the card rather than guessing at a width.
         """
-        import re
 
         css = self._stylesheet()
         for rule in ("bar-chart", "line-chart"):
@@ -692,7 +816,6 @@ class StyleContractTests(SimpleTestCase):
         rounded pixel and drew a full-height vertical scrollbar for it. Any
         rule that scrolls one axis has to say what the other one does.
         """
-        import re
 
         css = self._stylesheet()
         offenders = []
@@ -711,16 +834,20 @@ class StyleContractTests(SimpleTestCase):
         )
 
     def test_categorical_series_slots_are_defined_and_distinct(self):
-        import re
 
         css = self._stylesheet()
-        slots = re.findall(r"^\s*(--series-\d+)\s*:\s*(#[0-9a-fA-F]{6})", css, re.MULTILINE)
-        values = [value.lower() for _, value in slots]
+        slots = re.findall(
+            r"^\s*(--series-\d+)\s*:\s*light-dark\((#[0-9a-fA-F]{6}),\s*(#[0-9a-fA-F]{6})\)",
+            css,
+            re.MULTILINE,
+        )
         self.assertGreaterEqual(len(slots), 5, "expected at least 5 categorical slots")
-        self.assertEqual(len(values), len(set(values)), "series slots must be distinct")
+        for theme, index in (("light", 1), ("dark", 2)):
+            values = [slot[index].lower() for slot in slots]
+            with self.subTest(theme=theme):
+                self.assertEqual(len(values), len(set(values)), "series slots must be distinct")
 
     def test_series_fills_use_categorical_slots_not_status_colours(self):
-        import re
 
         css = self._stylesheet()
         reserved = {"--danger", "--warn", "--ok", "--attn"}
@@ -735,14 +862,12 @@ class StyleContractTests(SimpleTestCase):
 class SharedPrimitiveStyleTests(SimpleTestCase):
     """Shared partials may only use classes the style bundle actually defines.
 
-    An extension once invented a class name for a card it rendered; nothing
-    errored and nothing was styled. The partials are the host's published UI
+    A class the bundle lacks raises no error; it is simply unstyled. The partials are the host's published UI
     contract, so anything they name has to exist here, otherwise the first
     surface to adopt a primitive is the one that discovers it is unstyled.
     """
 
     def test_partial_classes_are_defined_in_the_stylesheet(self):
-        import re
 
         root = Path(__file__).parent.resolve().parents[1]
         css = (root / "static" / "css" / "app.css").read_text(encoding="utf-8")
@@ -764,13 +889,11 @@ class SharedPrimitiveStyleTests(SimpleTestCase):
 class TemplateCommentTests(SimpleTestCase):
     """Django's {# #} comment is single-line only.
 
-    A multi-line one is not a comment: it renders verbatim into the page. This
-    shipped once, printing template source across the site navigation, and the
+    A multi-line one is not a comment: it renders verbatim into the page. The
     failure is invisible in review because it looks exactly like a comment.
     """
 
     def test_no_multi_line_hash_comments_in_templates(self):
-        import re
 
         root = Path(__file__).parent.resolve().parents[1] / "templates"
         offenders = []
@@ -794,14 +917,12 @@ class TemplateCommentTests(SimpleTestCase):
 class PageTitleTests(SimpleTestCase):
     """A page names itself; the site name is appended once, by the layout.
 
-    Left to each page it drifted both ways: nineteen titles carried no site
-    name at all, and seven hardcoded the string ``SEVERINO_SITE_NAME`` is
-    allowed to change. A title is not visible from inside the page that has it,
-    so neither half showed up in review.
+    Left to each page, a title either omits the site name or hardcodes a string
+    ``SEVERINO_SITE_NAME`` is allowed to change. A title is not visible from
+    inside the page that has it, so neither shows up in review.
     """
 
     def title_blocks(self):
-        import re
 
         root = Path(__file__).parent.resolve().parents[1] / "templates"
         pattern = re.compile(r"\{%\s*block title\s*%\}(.*?)\{%\s*endblock", re.DOTALL)
@@ -860,9 +981,8 @@ class WorkflowSecrecyTests(SimpleTestCase):
         Read by indentation rather than parsed, so this needs no YAML library
         and cannot start disagreeing with one about what a block contains.
 
-        A one-line ``run:`` counts. Checking only block scalars is how a
-        ``docker login`` that piped a token straight into a shell went unnoticed
-        by the check written to find exactly that.
+        A one-line ``run:`` counts. Checking only block scalars would miss a
+        one-line ``docker login`` piping a token straight into a shell.
         """
 
         lines = text.splitlines()
@@ -915,8 +1035,8 @@ class AssertionPrecisionTests(SimpleTestCase):
     """A comparison belongs in the assertion, not inside a boolean.
 
     ``assertTrue(a > b)`` fails with "False is not true", which says nothing
-    about a or b. ``assertGreater(a, b)`` prints both. CodeQL flags this and
-    nothing local did, so it was found in review rather than before it.
+    about a or b. ``assertGreater(a, b)`` prints both. CodeQL flags this; the
+    check here finds it before a push does.
     """
 
     SPECIFIC = {
@@ -932,9 +1052,8 @@ class AssertionPrecisionTests(SimpleTestCase):
         offenders = []
         for path in sorted(root.rglob("test*.py")) + sorted(root.rglob("tests.py")):
             # Any virtualenv in the tree, whatever it happens to be called, and
-            # anything installed into one. Matching the single literal ".venv"
-            # missed a sibling `.venv312` holding an older interpreter,
-            # and this test then reported Django's own `testcases.py` as three
+            # anything installed into one. Matching only ".venv" would miss a
+            # sibling such as `.venv312` and report third-party test files as
             # offenders: a failure about the machine rather than the change.
             # Nor any hidden directory: a worktree under .claude/ is another
             # copy of this tree, checked in its own checkout.
@@ -963,6 +1082,79 @@ class AssertionPrecisionTests(SimpleTestCase):
                 )
 
         self.assertEqual(offenders, [])
+
+
+class SourceEscapeTests(SimpleTestCase):
+    """An unknown escape in a string literal is a warning today, an error later.
+
+    Python compiles ``"rgba\\("`` with a SyntaxWarning that scrolls past in a
+    test run and becomes a SyntaxError in a later interpreter. JavaScript probes
+    embedded in Python strings are where it happens: a regex needs its
+    backslashes, so those strings are raw.
+    """
+
+    def test_no_string_literal_carries_an_invalid_escape(self):
+        import warnings
+
+        root = Path(__file__).parent.resolve().parents[1]
+        offenders = []
+        for path in sorted(root.rglob("*.py")):
+            if any(
+                part == "venv" or part.startswith(".") or part == "site-packages"
+                for part in path.relative_to(root).parts
+            ):
+                continue
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", SyntaxWarning)
+                try:
+                    compile(path.read_text(encoding="utf-8"), str(path), "exec")
+                except SyntaxError as error:
+                    offenders.append(f"{path.relative_to(root)}:{error.lineno}: {error.msg}")
+
+        self.assertEqual(offenders, [])
+
+
+class CommentHistoryTests(SimpleTestCase):
+    """A comment says what the code does and why, in the present tense.
+
+    How the code came to be belongs in the commit message. Narration in a
+    comment is read as a description of the code by everyone who opens the
+    file, long after it stopped being true. The phrases below cannot describe
+    present behaviour, so any of them in a comment is history.
+    """
+
+    NARRATION = re.compile(
+        r"\b(used to be|the first version|the old version|reached production"
+        r"|turned out|until now|until recently|this regression|the bug (?:that|was)"
+        r"|shipped (?:once|unstyled|for a while)|we (?:had|used|found|added|removed|changed|tried))\b",
+        re.IGNORECASE,
+    )
+
+    def _comments(self, path: Path, text: str):
+        if path.suffix in (".css", ".js"):
+            return re.finditer(r"/\*.*?\*/|//[^\n]*", text, re.S)
+        if path.suffix in (".py", ".sh"):
+            return re.finditer(r"#[^\n]*|\"\"\".*?\"\"\"", text, re.S)
+        return re.finditer(r"\{% comment %\}.*?\{% endcomment %\}|\{#.*?#\}", text, re.S)
+
+    def test_no_comment_narrates_history(self):
+        import subprocess
+
+        root = Path(__file__).parent.resolve().parents[1]
+        tracked = subprocess.run(
+            ["git", "ls-files", "*.py", "*.js", "*.css", "*.html", "*.sh"],
+            cwd=root, capture_output=True, text=True, check=True,
+        ).stdout.split()
+        self.assertGreater(len(tracked), 100)
+        found = []
+        for name in tracked:
+            path = root / name
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            for match in self._comments(path, text):
+                if phrase := self.NARRATION.search(match.group()):
+                    line = text.count("\n", 0, match.start()) + 1
+                    found.append(f"{name}:{line}: {phrase.group()}")
+        self.assertEqual(found, [])
 
 
 class CountedTests(SimpleTestCase):
@@ -1032,7 +1224,6 @@ class OnePrimitiveTests(SimpleTestCase):
                 yield relative, path.read_text(encoding="utf-8")
 
     def test_hostnames_are_spelled_by_normalized_hostname(self):
-        import re
 
         inline = re.compile(r'lower\(\)\s*\.rstrip\("\."\)|rstrip\("\."\)\s*\.lower\(\)')
         found = [
@@ -1046,7 +1237,6 @@ class OnePrimitiveTests(SimpleTestCase):
         """One builder, so a target is always encoded the way the form reads
         it: a hand-built ``?target=`` opened a form with nothing chosen."""
 
-        import re
 
         inline = re.compile(r"""reverse\(\s*["']command["']""")
         scanned = list(self.sources("application", "control_plane", "core", "hq_api", "hq_mcp"))
@@ -1065,7 +1255,6 @@ class OnePrimitiveTests(SimpleTestCase):
         self.assertEqual(templates, [])
 
     def test_zone_membership_is_asked_of_in_zone(self):
-        import re
 
         inline = re.compile(r'endswith\(f"\.\{')
         found = [
@@ -1085,7 +1274,6 @@ class OnePrimitiveTests(SimpleTestCase):
         self.assertEqual(found, [])
 
     def test_templates_name_entities_through_the_entity_tag(self):
-        import re
 
         # A button to a page (Cancel, Edit) is an action, not a mention.
         mention = re.compile(
@@ -1100,7 +1288,6 @@ class OnePrimitiveTests(SimpleTestCase):
         self.assertEqual(found, [])
 
     def test_entity_pages_are_addressed_by_entity_link(self):
-        import re
 
         page = re.compile(
             r'reverse\(\s*"(control_plane:machine|control_plane:service|zones:detail|'

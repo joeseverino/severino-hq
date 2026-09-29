@@ -1,9 +1,39 @@
 {% extends "list_page.html" %}
+{% comment %}
+One history. Each row is an application.history.Entry: one audit event, a run
+of like events shown as one line with its events behind a <details>, or a
+moment another source dated (a deploy, a container start).
+{% endcomment %}
 {% block row %}
-  <td class="muted date-col"><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at }}</a></td>
-  <td>{{ row.actor_label }}</td>
-  <td><span class="pill pill-{{ row.action }}">{{ row.get_action_display }}</span></td>
-  <td>{{ row.object_repr|default:row.type_label }}{% if row.object_type and row.object_repr %}<br><span class="muted">{{ row.type_label }}</span>{% endif %}</td>
-  <td class="muted">{{ row.message }}{% if row.operation_id %}<br><code>{{ row.operation_id }}</code>{% endif %}</td>
+  {% if row.moment %}
+    <td class="muted date-col">{% if row.moment.external %}<a href="{{ row.moment.url }}" rel="noopener">{{ row.at }}</a>{% else %}{{ row.at }}{% endif %}</td>
+    <td>{{ row.moment.actor }}</td>
+    <td><span class="pill">{{ row.moment.source }}</span></td>
+    <td>{{ row.moment.title }}</td>
+    <td class="muted">{{ row.moment.detail }}</td>
+  {% elif row.grouped %}
+    {% with first=row.events.0 %}
+    <td class="muted date-col"><a href="{% url 'core:audit_detail' first.pk %}">{{ row.at }}</a></td>
+    <td>{{ first.actor_label }}</td>
+    <td><span class="pill pill-{{ first.action }}">{{ first.get_action_display }}</span></td>
+    <td>
+      <details class="history-run">
+        <summary>{{ row.title }}</summary>
+        <ul class="history-run-list">
+          {% for event in row.events %}<li><a href="{% url 'core:audit_detail' event.pk %}">{{ event.object_repr|default:event.type_label }}</a></li>{% endfor %}
+        </ul>
+      </details>
+    </td>
+    <td class="muted">{{ first.message }}</td>
+    {% endwith %}
+  {% else %}
+    {% with event=row.event %}
+    <td class="muted date-col"><a href="{% url 'core:audit_detail' event.pk %}">{{ event.created_at }}</a></td>
+    <td>{{ event.actor_label }}</td>
+    <td><span class="pill pill-{{ event.action }}">{{ event.get_action_display }}</span></td>
+    <td>{{ event.object_repr|default:event.type_label }}{% if event.object_type and event.object_repr %}<br><span class="muted">{{ event.type_label }}</span>{% endif %}</td>
+    <td class="muted">{{ event.message }}{% if event.operation_id %}<br><code>{{ event.operation_id }}</code>{% endif %}</td>
+    {% endwith %}
+  {% endif %}
 {% endblock %}
 {% block empty %}{% if awaiting %}Nothing is waiting for approval.{% else %}No audit events.{% endif %}{% endblock %}

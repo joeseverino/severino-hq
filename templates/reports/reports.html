@@ -1,13 +1,13 @@
 {% extends "page.html" %}
 {% load humanize %}
 {% block page %}
-<form method="get" class="inline">
-  <label for="year">Year:</label>
-  <select name="year" id="year" data-submit-on-change>
+<form method="get" class="filter-bar" role="search">
+  <select name="year" aria-label="Year" data-submit-on-change>
     {% for y in available_years %}
       <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
     {% endfor %}
   </select>
+  <button class="btn" type="submit">Apply</button>
 </form>
 
 <section class="kpi-grid">
@@ -39,37 +39,40 @@
     {% if largest_expenses %}
       <ul class="list-rows">
         {% for e in largest_expenses %}
-          <li><a href="{{ e.get_absolute_url }}">{{ e.vendor }} · {{ e.item }}</a> <span class="muted">{{ e.date }} · {{ e.get_category_display }}</span> <strong>${{ e.total_cost|floatformat:2|intcomma }}</strong></li>
+          <li><span class="row-main"><a href="{{ e.get_absolute_url }}">{{ e.vendor }} · {{ e.item }}</a></span><span class="row-meta">{{ e.date }} · {{ e.get_category_display }} · <strong>${{ e.total_cost|floatformat:2|intcomma }}</strong></span></li>
         {% endfor %}
       </ul>
     {% else %}<p class="muted">None.</p>{% endif %}
   </section>
 
-  <section>
-    <h2>Content by status</h2>
-    {% if content_status_counts %}
-      <ul class="list-rows">{% for row in content_status_counts %}<li>{{ row.status }} <strong>{{ row.n }}</strong></li>{% endfor %}</ul>
-    {% else %}<p class="muted">No content.</p>{% endif %}
-  </section>
-
-  <section>
-    <h2>Projects by status</h2>
-    {% if project_status_counts %}
-      <ul class="list-rows">{% for row in project_status_counts %}<li>{{ row.status }} <strong>{{ row.n }}</strong></li>{% endfor %}</ul>
-    {% else %}<p class="muted">No projects.</p>{% endif %}
-  </section>
 </div>
 
-<section>
-  <h2>Docs needing review</h2>
-  {% if docs_needing_review %}
-    <ul class="list-rows">
-      {% for d in docs_needing_review %}
-        <li><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} · {{ d.title }}</a> <span class="muted">last reviewed {{ d.last_reviewed|default:"never" }}</span></li>
-      {% endfor %}
-    </ul>
-  {% else %}<p class="muted">No docs need review.</p>{% endif %}
-</section>
+{% comment %}
+Two small readings share a row: the status counts are a line or two each, and
+as two cards of their own they would be mostly empty card.
+{% endcomment %}
+<div class="two-col">
+  <section>
+    <h2>By status</h2>
+    {% if content_status_counts or project_status_counts %}
+      <ul class="list-rows">
+        {% for row in content_status_counts %}<li><span class="row-main">Content · {{ row.status }}</span><span class="row-meta"><strong>{{ row.n }}</strong></span></li>{% endfor %}
+        {% for row in project_status_counts %}<li><span class="row-main">Projects · {{ row.status }}</span><span class="row-meta"><strong>{{ row.n }}</strong></span></li>{% endfor %}
+      </ul>
+    {% else %}<p class="muted">No content or projects yet.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>Docs needing review</h2>
+    {% if docs_needing_review %}
+      <ul class="list-rows">
+        {% for d in docs_needing_review %}
+          <li><span class="row-main"><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} · {{ d.title }}</a></span><span class="row-meta">last reviewed {{ d.last_reviewed|default:"never" }}</span></li>
+        {% endfor %}
+      </ul>
+    {% else %}<p class="muted">No docs need review.</p>{% endif %}
+  </section>
+</div>
 
 <section>
   <h2>Exports</h2>
@@ -82,13 +85,16 @@
     <a class="btn" href="{% url 'reports:content_csv' %}">content.csv</a>
     <a class="btn" href="{% url 'reports:projects_csv' %}">projects.csv</a>
     <a class="btn" href="{% url 'reports:documentation_csv' %}">documentation.csv</a>
-    <a class="btn primary" href="{% url 'reports:year_summary_json' %}?year={{ year }}">year-summary-{{ year }}.json</a>
-    <a class="btn primary" href="{% url 'reports:year_summary_md' %}?year={{ year }}">year-summary-{{ year }}.md</a>
+    <a class="btn" href="{% url 'reports:year_summary_json' %}?year={{ year }}">year-summary-{{ year }}.json</a>
+    <a class="btn" href="{% url 'reports:year_summary_md' %}?year={{ year }}">year-summary-{{ year }}.md</a>
   </div>
 </section>
 
 <section>
-  <h2>Recent audit events</h2>
+  <div class="section-head">
+    <h2>Recent audit events</h2>
+    <a class="subtle-link" href="{% url 'core:audit_list' %}">All &rarr;</a>
+  </div>
   {% if recent_audit %}
     <ul class="audit-list">
       {% for ev in recent_audit %}

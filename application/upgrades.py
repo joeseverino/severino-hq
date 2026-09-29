@@ -71,7 +71,15 @@ class Plan:
 
         if not any(blocker.id == "no-apply-path" for blocker in self.blockers):
             return ()
-        return install_steps(self.container.machine.name)
+        machine = self.container.machine
+        return install_steps(machine.name, deployed_here=bool(getattr(machine, "runs_hq", False)))
+
+    @property
+    def install_brought(self) -> bool:
+        """Whether HQ's own deploys bring the helper to its machine: only to the
+        one HQ runs on, which is the one its deploy targets."""
+
+        return bool(getattr(self.container.machine, "runs_hq", False))
 
     @property
     def stateful(self) -> bool:
@@ -227,12 +235,14 @@ def _blockers(item: Container, standing: Any, introduces) -> tuple[Blocker, ...]
         found.append(Blocker("mounts-unread", "Its mounts have not been read, so its data cannot be found to snapshot."))
     if introduces:
         found.append(Blocker("target-affected", f"{standing.latest} brings a known vulnerability of its own."))
-    # The helper ships with HQ; a machine runs it once its sudo rule is there,
-    # and the queue does not yet send an upgrade to the one machine it concerns.
+    # HQ's deploys bring the helper to the machine HQ runs on; any other needs
+    # its own copy. A machine runs it once its sudo rule is there, and the
+    # queue does not yet send an upgrade to the one machine it concerns.
+    needs = "its sudo rule" if getattr(item.machine, "runs_hq", False) else "a copy and its sudo rule"
     found.append(
         Blocker(
             "no-apply-path",
-            f"{item.machine.name} cannot apply it yet: the upgrade helper needs its sudo rule "
+            f"{item.machine.name} cannot apply it yet: the upgrade helper needs {needs} "
             "there, and HQ does not yet queue upgrades to the machine a container runs on.",
         )
     )
@@ -252,29 +262,52 @@ def _not_automatic(change: str, verified_by, blockers, unvetted=()) -> tuple[Blo
     return tuple(found)
 
 
+OVERRIDES = ("compose.override.yaml", "compose.override.yml", "docker-compose.override.yaml", "docker-compose.override.yml")
+
+
+def _pinned_in(item: Container) -> str:
+    """The override the pin is written to: the stack's own when it has one,
+    else a new one beside its compose file. The compose file is never edited."""
+
+    files = tuple(item.compose_files)
+    for path in files:
+        if path.rsplit("/", 1)[-1] in OVERRIDES:
+            return path
+    if files and "/" in files[0]:
+        return f"{files[0].rsplit('/', 1)[0]}/{OVERRIDES[-1]}"
+    return f"The compose override of {item.running.stack or item.running.name} on {item.machine.name}"
+
+
 def _steps(item: Container, target: str, digest: str, data, verified_by) -> tuple[Step, ...]:
-    where = ", ".join(item.compose_files) or f"{item.running.stack or item.running.name} on {item.machine.name}"
+    where = _pinned_in(item)
     pinned = f"{item.standing.image.short}:{target}, " + ("by its digest" if digest else "once its digest is read")
-    steps = []
+    steps = [Step("pull", "Pull the target by digest", pinned)]
     if data:
-        steps.append(Step("snapshot", "Snapshot its data", ", ".join(str(mount.get("source")) for mount in data)))
+        steps.append(
+            Step(
+                "snapshot",
+                "Stop it and snapshot its data",
+                ", ".join(str(mount.get("source")) for mount in data),
+            )
+        )
     steps += [
-        Step("pull", "Pull the target by digest", pinned),
         Step(
             "trial",
-            "Run it beside the live one",
-            "On an internal network" + (", against a copy of its data" if data else "") + ", until it reports healthy.",
+            "Run the target as the service is defined",
+            "With no network and no published ports"
+            + (", against a copy of its data" if data else "")
+            + ", until it proves itself. The service stays stopped, and is started unchanged if it fails.",
         ),
-        Step("pin", "Pin the digest in its compose file", where),
+        Step("pin", "Pin the digest in its compose override", f"{where}; the compose file itself is not edited"),
         Step("apply", "Recreate the service", f"compose up for {item.running.name} only"),
         Step("verify", "Verify", ", ".join(verified_by) if verified_by else "That it keeps running."),
         Step(
             "keep-or-roll-back",
             "Keep it, or roll back",
             (
-                "The previous digest and the snapshot are restored if verification fails."
+                "The override as it was and the snapshot are restored if verification fails."
                 if data
-                else "The previous digest is restored if verification fails."
+                else "The override as it was is restored if verification fails."
             ),
         ),
     ]
@@ -317,20 +350,105 @@ def readiness_of(item: Container) -> Readiness:
 # Where each deploy syncs the helper, root-owned (scripts/upgrade-container.sh).
 HELPER = "/usr/local/lib/severino-hq/scripts/upgrade-container.sh"
 SUDOERS = "/etc/sudoers.d/severino-hq-upgrade"
+# The one directory whose direct children the helper upgrades. The helper
+# holds the same constant, and nothing a sudo caller passes can move it.
+STACKS_ROOT = "/opt/apps"
+
+# The arguments the sudo rule admits, in the helper's order and its own
+# patterns: a regular expression, which sudo matches from 1.9.10. An older sudo
+# reads it as a literal and admits nothing, so it fails closed.
+ARGUMENTS = (
+    "^--operation [A-Za-z0-9-]{1,64}"
+    f" --project-dir {STACKS_ROOT}/[A-Za-z0-9][A-Za-z0-9_.-]{{0,127}}"
+    " --service [A-Za-z0-9][A-Za-z0-9_.-]{0,62}"
+    " --from [A-Za-z0-9][A-Za-z0-9_./:@-]{0,254}"
+    " --to [A-Za-z0-9][A-Za-z0-9_./:-]{0,200}@sha256:[0-9a-f]{64}"
+    "( --tag [A-Za-z0-9_.-]{1,128})?( --wait [0-9]{1,4})?$"
+)
+# An empty digest: a request the rule admits and the helper refuses harmlessly
+# (no such stack), which is how the check below asks sudo without running it.
+_PROBE = (
+    f"--operation sudo-check --project-dir {STACKS_ROOT}/example --service example "
+    f"--from example/app:1 --to example/app@sha256:{'0' * 64}"
+)
 
 
-def install_steps(machine: str) -> tuple[Step, ...]:
-    """The helper's install on one machine: a sudo rule for it and nothing else."""
+def sudoers_command() -> str:
+    """The helper and its arguments, escaped the way sudoers reads a command's
+    arguments: a comma, colon, equals sign or backslash is literal only
+    behind a backslash."""
 
-    rule = f"CONTROLLER_ACCOUNT ALL=(root) NOPASSWD: {HELPER}"
+    escaped = "".join("\\" + char if char in ",:=\\" else char for char in ARGUMENTS)
+    return f"{HELPER} {escaped}"
+
+
+def _helper_digest() -> str:
+    """The sha256 of the helper this build ships, or "" when it is not here."""
+
+    import hashlib
+    from pathlib import Path
+
+    from django.conf import settings
+
+    shipped = Path(settings.BASE_DIR) / "scripts" / Path(HELPER).name
+    return hashlib.sha256(shipped.read_bytes()).hexdigest() if shipped.is_file() else ""
+
+
+def _copy_steps(machine: str) -> tuple[Step, ...]:
+    """The helper put on a machine HQ's deploys never reach: this build's
+    copy, root-owned, and checked against the digest of the one HQ ships."""
+
+    from django.conf import settings
+
+    source = getattr(settings, "SEVERINO_HQ_SOURCE", "")
+    revision = getattr(settings, "SEVERINO_HQ_REVISION", "")
+    if source and revision:
+        fetch = Step(
+            "fetch",
+            f"Take the helper from the commit this HQ was built from ({revision[:12]})",
+            f"git clone {source} severino-hq && git -C severino-hq checkout --detach {revision}",
+        )
+    else:
+        fetch = Step(
+            "fetch",
+            "Take the helper from a checkout of the HQ release you run",
+            "HQ does not know the commit it was built from (its build did not say), so check out that release's "
+            "commit; the helper is scripts/upgrade-container.sh in it.",
+        )
+    directory = HELPER.rsplit("/", 1)[0]
+    digest = _helper_digest()
+    verify = f" && echo '{digest}  {HELPER}' | sha256sum -c -" if digest else ""
     return (
+        fetch,
+        Step(
+            "install",
+            f"Copy it to {machine} as ./upgrade-container.sh, then install it there owned by root",
+            f"sudo install -d -o root -g root -m 0755 {directory} "
+            f"&& sudo install -o root -g root -m 0755 upgrade-container.sh {HELPER}{verify}",
+        ),
+    )
+
+
+def install_steps(machine: str, *, deployed_here: bool = False) -> tuple[Step, ...]:
+    """The helper's install on one machine: on the machine HQ deploys to, every
+    deploy brings it; anywhere else it is copied there root-owned first. Then
+    a sudo rule for it, with only the arguments it takes, and nothing else.
+
+    HQ does not know which account the controller signs in as on a machine
+    (the controller's own environment holds it), so the step names a
+    placeholder and refuses to write the rule until it is replaced.
+    """
+
+    return (() if deployed_here else _copy_steps(machine)) + (
         Step(
             "allow",
-            f"On {machine}, let the controller's account run it, and nothing else",
-            f"echo '{rule}' | sudo tee {SUDOERS} >/dev/null && sudo chmod 0440 {SUDOERS} "
-            f"&& sudo visudo -cf {SUDOERS}",
+            f"On {machine}, let the controller's account run it with an upgrade's arguments, and nothing else. "
+            "HQ does not know which account that is: set account= to it first.",
+            "account=CONTROLLER_ACCOUNT && id -u \"$account\" >/dev/null "
+            f"&& printf '%s ALL=(root) NOPASSWD: %s\\n' \"$account\" '{sudoers_command()}' "
+            f"| sudo tee {SUDOERS} >/dev/null && sudo chmod 0440 {SUDOERS} && sudo visudo -cf {SUDOERS}",
         ),
-        Step("check", "Check the rule as that account", f"sudo -n -l {HELPER}"),
+        Step("check", "Check the rule as that account", f"sudo -n -l {HELPER} {_PROBE}"),
     )
 
 

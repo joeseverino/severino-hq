@@ -1,22 +1,38 @@
 {% load static %}
 {% load humanize %}
 <!doctype html>
-<html lang="en">
+<html lang="en"{% if THEME == "light" or THEME == "dark" %} data-theme="{{ THEME }}"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   {% comment %}
-  A page names only itself; the site name is appended once, here. Left to each
-  page it drifted both ways: nineteen titles carried no site name at all and
-  seven hardcoded the string `SEVERINO_SITE_NAME` is allowed to change.
+  A page names only itself; the site name is appended once, here, so no title
+  omits it or hardcodes the string `SEVERINO_SITE_NAME` is allowed to change.
   `application/test_architecture.py` fails if a title block names it again.
   {% endcomment %}
   <title>{% block title %}{% endblock %} · {{ SITE_NAME }}</title>
   <link rel="icon" href="{% static 'img/favicon.ico' %}?v={{ ASSET_VERSION }}" sizes="any">
   <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}?v={{ ASSET_VERSION }}">
   <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}?v={{ ASSET_VERSION }}">
+  {% comment %}
+  The theme is decided here, before the stylesheet arrives, so a chosen theme
+  paints on the first frame without a script. `color-scheme` tells the browser
+  which canvas to clear to while it waits; the theme colours tint its chrome
+  and repeat the header surface in each palette (`--accent` light, `--surface`
+  dark in app.css).
+  {% endcomment %}
+  {% if THEME == "light" %}
+  <meta name="color-scheme" content="light">
   <meta name="theme-color" content="#1f4d57">
+  {% elif THEME == "dark" %}
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#18191c">
+  {% else %}
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#1f4d57">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#18191c">
+  {% endif %}
   <link rel="stylesheet" href="{% static 'css/app.css' %}?v={{ ASSET_VERSION }}">
   {% block head_extra %}{% endblock %}
 </head>
@@ -34,10 +50,7 @@
       The sections menu is a link and an `:target` rule, not a scripted or
       `details`-based one. It fails safe: nothing hides the nav by default, so
       a stylesheet that does not load, or a browser that disagrees about how a
-      widget hides its own content, leaves the links plainly visible. A
-      `details` wrapper forced open by CSS did the opposite: Chrome moved
-      that hiding onto `::details-content`, the override stopped applying, and
-      the whole nav disappeared.
+      widget hides its own content, leaves the links plainly visible.
       {% endcomment %}
       {% comment %}
       Two links in one place, swapped by `:target`: closed, the control points
@@ -134,11 +147,10 @@
             <span class="menu-item-status" aria-hidden="true"><span class="conn-dot"></span></span>
           </a>
           {% comment %}
-          A switch, not a verb. The state is the label: a menu entry that
-          renamed itself each time left you reading the button to work out what
-          was currently true. POST because it changes what every number on the
-          page means, and a thing that flips by following a link can be flipped
-          by an image tag on somebody else's page.
+          A switch, not a verb. The state is the label: a menu entry that renames
+          itself leaves the reader working out what is currently true. POST because
+          it changes what every number on the page means, and a thing that flips by
+          following a link can be flipped by an image tag on another site.
           {% endcomment %}
           <form action="{% url 'demo_mode' %}" method="post">
             {% csrf_token %}
@@ -157,6 +169,20 @@
               <span>Agents</span>
               <span class="menu-item-status" aria-hidden="true"><span class="switch-track"><span class="switch-knob"></span></span></span>
             </button>
+          </form>
+          {% comment %}
+          Three choices, so a set of buttons rather than a switch; each sends
+          the choice it names. System follows the operating system.
+          {% endcomment %}
+          <form action="{% url 'theme' %}" method="post" class="menu-theme">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <span class="menu-theme-label" id="menu-theme-label">Theme</span>
+            <span class="menu-theme-options" role="group" aria-labelledby="menu-theme-label">
+              {% for value, label in THEME_CHOICES %}
+              <button type="submit" name="theme" value="{{ value }}" class="menu-item menu-theme-option" aria-pressed="{% if THEME == value %}true{% else %}false{% endif %}" aria-label="{{ label }}" title="{{ label }}">{% if value == "light" %}{% include "partials/_icon.html" with name="sun" %}{% elif value == "dark" %}{% include "partials/_icon.html" with name="moon" %}{% else %}{% include "partials/_icon.html" with name="laptop" %}{% endif %}</button>
+              {% endfor %}
+            </span>
           </form>
           <form action="{% url 'logout' %}" method="post">
             {% csrf_token %}

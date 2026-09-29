@@ -10,15 +10,16 @@ asking for a column that points at infrastructure.
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from control_plane.models import ManagedResource
 from core.models import AuditLog
 from projects.models import Project
 
-from ..service_context import ServiceSection, sections_for
+from ..service_context import Cell, ServiceSection, sections_for
 from ..services import service_or_prospect
+from ..ui import MISSING
 
 
 def a_service(hostname="probe.example.com"):
@@ -121,7 +122,7 @@ class PageTests(TestCase):
                     kwargs={"hostname": "probe.example.com"})
         )
 
-        # The project is a tile of the band, where it was a section of one row.
+        # The project is a tile of the band.
         self.assertContains(response, ">Project<")
         self.assertContains(response, "example/a")
         self.assertContains(response, 'aria-label="On this page"')
@@ -222,11 +223,10 @@ class TrafficSectionTests(TestCase):
 
 
 class OneWindowTests(TestCase):
-    """The page, the graph and the query must mean the same week.
-
-    Two sevens in two modules agree only until someone changes one, and then a
-    service page and the topology node for the same host quietly disagree with
-    nothing on screen to show for it.
+    """The page, the graph and the query must mean the same week. Two sevens in
+    two modules agree only until one changes, and then a service page and the
+    topology node for the same host quietly disagree with nothing on screen to
+    show for it.
     """
 
     def test_the_page_and_the_graph_share_one_window(self):
@@ -281,3 +281,26 @@ class PartRowTests(TestCase):
         self.assertEqual(declared.health, ("Healthy", "pill-reachable"))
         self.assertEqual(broken.health, ("Needs attention", "pill-unreachable"))
         self.assertEqual(read.health, ("Online", "pill-reachable"))
+
+
+class EmptyColumnTests(SimpleTestCase):
+    def test_a_column_no_row_fills_is_not_drawn(self):
+        section = ServiceSection(
+            id="example",
+            label="Example",
+            columns=("Name", "Note", "State"),
+            records=((Cell("one"), Cell(""), Cell("ok")), (Cell("two"), Cell(""), Cell(MISSING))),
+        )
+
+        self.assertEqual(section.columns, ("Name", "State"))
+        self.assertEqual([[c.text for c in row] for row in section.records], [["one", "ok"], ["two", MISSING]])
+
+    def test_an_unknown_value_keeps_its_column(self):
+        section = ServiceSection(
+            id="example",
+            label="Example",
+            columns=("Name", "Note"),
+            records=((Cell("one"), Cell(MISSING)),),
+        )
+
+        self.assertEqual(section.columns, ("Name", "Note"))

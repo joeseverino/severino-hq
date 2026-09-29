@@ -82,7 +82,7 @@ class ReportsView(PageMixin, LoginRequiredMixin, TemplateView):
             ),
             docs_needing_review=docs_needing_review.order_by("last_reviewed")[:25],
             docs_needing_review_count=docs_needing_review.count(),
-            recent_audit=AuditLog.objects.select_related("user")[:25],
+            recent_audit=AuditLog.objects.select_related("user")[:8],
         )
         return ctx
 
@@ -94,10 +94,10 @@ CSV = "text/csv; charset=utf-8"
 class Export:
     """One downloadable report, declared rather than written out.
 
-    Every export did the same four things (build a body, name a file, record
-    that it was taken, and return it as an attachment) and differed only in
-    which builder and which name. Seven view classes stated those differences
-    in prose; here they are data, and the four things happen once.
+    Every export does the same four things (build a body, name a file, record
+    that it was taken, and return it as an attachment) and differs only in
+    which builder and which name, so those differences are data and the four
+    things happen once.
     """
 
     name: str

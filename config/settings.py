@@ -139,8 +139,8 @@ SEVERINO_SITE_HOST = os.environ.get("SEVERINO_SITE_HOST") or site_host(
     CSRF_TRUSTED_ORIGINS, ALLOWED_HOSTS
 )
 
-# Tighter defaults in production. These can be overridden via env if you're
-# behind a TLS-terminating reverse proxy on a Tailscale-only interface.
+# Tighter defaults in production. These can be overridden via env behind a
+# TLS-terminating reverse proxy on a Tailscale-only interface.
 SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", default=not DEBUG)
 CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", default=not DEBUG)
 SESSION_COOKIE_HTTPONLY = True
@@ -196,11 +196,11 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
 SECURE_HSTS_PRELOAD = env_bool("DJANGO_HSTS_PRELOAD")
 
 # HQ binds a plain HTTP port, and behind a TLS proxy that port stays reachable
-# by anything that can route to the host, so the browser UI had two front
+# by anything that can route to the host, so the browser UI has two front
 # doors: the proxied HTTPS name, and the raw port with no TLS, no HSTS, and
 # none of the proxy's own source restrictions.
 #
-# Told that a proxy terminates TLS, HQ now refuses the second one: a request
+# Told that a proxy terminates TLS, HQ refuses the second one: a request
 # that did not arrive as HTTPS is redirected to the canonical name. The
 # healthcheck is exempt because it deliberately probes the raw port from inside
 # the container's own network namespace, which is the one caller for whom plain
@@ -293,8 +293,8 @@ SEVERINO_ENFORCE_TRUSTED_NETWORK = env_bool(
 #
 # Spelled out as the default rather than left to configuration, so a deployment
 # that sets nothing is closed to everything but its VPN. A deployment whose
-# network genuinely is the boundary adds its ranges explicitly, which is a
-# decision someone made rather than one that shipped.
+# network genuinely is the boundary adds its ranges explicitly, so opening
+# one is a decision rather than a default.
 SEVERINO_TRUSTED_NETWORKS = env_list(
     "SEVERINO_TRUSTED_NETWORKS",
     default=[
@@ -310,8 +310,8 @@ SEVERINO_TRUSTED_NETWORKS = env_list(
 # tailnet peer is a client, not infrastructure, and must not be able to
 # nominate the address HQ judges it by.
 #
-# Loopback only by default, because the paragraph above is the rule and the
-# private ranges were the exception that swallowed it. HQ binds the host's
+# Loopback only by default, because the paragraph above is the rule and
+# trusting the private ranges would be an exception that swallows it. HQ binds the host's
 # network namespace, so any peer on the LAN or tailnet can reach the port
 # directly and, if trusted, name whatever address it likes. That address is
 # written into the audit log as the source of a failed sign-in and read back
@@ -427,6 +427,7 @@ TEMPLATES = [
                 "core.context_processors.auth_config",
                 "core.context_processors.connection",
                 "core.context_processors.agent_access",
+                "core.context_processors.appearance",
             ],
             "builtins": [
                 "core.templatetags.value_tags",
@@ -694,9 +695,9 @@ SEVERINO_MCP_ALLOWED_ORIGINS = env_list("SEVERINO_MCP_ALLOWED_ORIGINS")
 SEVERINO_FINDINGS_AUTO_REMEDY = env_bool("SEVERINO_FINDINGS_AUTO_REMEDY", False)
 SEVERINO_MCP_ENABLE_WRITES = env_bool("SEVERINO_MCP_ENABLE_WRITES", False)
 # Mirroring the vault documentation index is gated separately from the broad
-# write flag: it is the one write wanted routinely, and bundling it meant the
-# only way to enable `hq sync` was to also grant write access to expenses,
-# receipts, projects, assets and content.
+# write flag: it is the one write wanted routinely, and bundled, enabling `hq sync`
+# would also grant write access to expenses, receipts, projects, assets and
+# content.
 SEVERINO_MCP_ENABLE_DOC_SYNC = env_bool("SEVERINO_MCP_ENABLE_DOC_SYNC", False)
 SEVERINO_MCP_ENABLE_PRUNE = env_bool("SEVERINO_MCP_ENABLE_PRUNE", False)
 SEVERINO_MCP_ENABLE_DELETES = env_bool("SEVERINO_MCP_ENABLE_DELETES", False)
@@ -773,7 +774,7 @@ STATIC_ROOT = Path(os.environ.get("DJANGO_STATIC_ROOT", str(BASE_DIR / "staticfi
 
 # WhiteNoise: serve compressed, far-future-cached static files in production.
 # Use the non-manifest backend so a missing collectstatic run doesn't 500 the
-# whole site; we accept that asset URLs aren't fingerprinted.
+# whole site, at the cost of asset URLs not being fingerprinted.
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {
@@ -881,7 +882,7 @@ CLOUDFLARE_D1_DATABASE_NAME = os.environ.get("CLOUDFLARE_D1_DATABASE_NAME", "")
 CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
 
 
-# Ensure the directories we depend on exist at startup.
+# Ensure the directories HQ depends on exist at startup.
 for _d in (
     Path(DATABASES["default"]["NAME"]).parent,
     MEDIA_ROOT,

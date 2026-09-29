@@ -240,28 +240,40 @@ def _security_fixes(repo: Repository) -> Runs:
     return ((repo.short, f"{_api(repo, 'PUT', '/vulnerability-alerts')} && {_api(repo, 'PUT', '/automated-security-fixes')}"),)
 
 
-def _bre(text: str) -> str:
-    """``text`` as a literal inside a basic regular expression."""
+def _literal(text: str) -> str:
+    """``text`` as a literal in a Perl pattern or replacement.
 
-    return "".join(f"\\{char}" if char in ".[]*^$\\/|" else char for char in text)
+    Every character but a word character is escaped, which also stops ``@``
+    and ``$`` interpolating.
+    """
+
+    return "".join(char if char.isalnum() or char == "_" else f"\\{char}" for char in text)
 
 
 def _pin_edit(pin: dict[str, Any]) -> str:
-    """One sed expression: the ``uses:`` line, pinned, with the tag kept as a comment."""
+    """One Perl substitution: the ``uses:`` line, pinned, with the tag kept as a comment.
 
-    pinned = f"uses: {pin['action']}@{pin['sha']} # {pin['ref']}"
+    Only a line whose key is ``uses:`` (after indentation and an optional
+    ``- ``) matches, so a commented-out line is never touched. Trailing spaces
+    and a comment already there are replaced; a CRLF ending is kept.
+    """
+
+    pinned = _literal(f"uses: {pin['action']}@{pin['sha']} # {pin['ref']}")
     return (
-        f"s|uses:[[:space:]]*[\"']\\{{0,1\\}}{_bre(pin['uses'])}[\"']\\{{0,1\\}}"
-        f"\\([[:space:]]\\{{1,\\}}#.*\\)\\{{0,1\\}}$|{pinned}|"
+        rf"""s/^([ \t]*(?:-[ \t]+)?)uses:[ \t]*(["']?){_literal(pin['uses'])}\2"""
+        rf"""(?:[ \t]+#[^\r\n]*)?[ \t]*(\r?)$/${{1}}{pinned}${{3}}/;"""
     )
 
 
 def _pinning(repo: Repository) -> Runs:
-    """Each workflow's edit, as one command to paste in a checkout, then the setting.
+    """Each file's edit, as one command to paste in a checkout, then the setting.
 
-    The commit each tag names now, as the App read it. The setting comes last
-    and only when every line could be resolved: requiring pinning before the
-    workflows are pinned stops every run.
+    The commit each tag names now, as the App read it. Perl rather than sed,
+    because ``sed -i`` takes its arguments differently on macOS and on Linux.
+    The setting comes last and only when every line could be resolved and no
+    workflow is called from another repository: requiring pinning before the
+    workflows are pinned stops every run, and it applies as much to what a
+    called workflow uses, which HQ did not read.
     """
 
     if pins_unread(repo):
@@ -275,10 +287,9 @@ def _pinning(repo: Repository) -> Runs:
     for path, found in sorted(by_path.items()):
         edits = dict.fromkeys(_pin_edit(pin) for pin in found if pin.get("sha"))
         if edits:
-            script = " ".join(f"-e {shlex.quote(edit)}" for edit in edits)
-            runs.append((f"{repo.short}: pin {path}", f"sed -i {script} {shlex.quote(path)}"))
-    unresolved = sorted({str(pin.get("uses", "")) for pin in pins if not pin.get("sha")})
-    if not unresolved:
+            script = shlex.quote(" ".join(edits))
+            runs.append((f"{repo.short}: pin {path}", f"perl -pi -e {script} {shlex.quote(path)}"))
+    if not pins_unresolved(repo) and not calls_workflows(repo):
         runs.append(
             (
                 f"{repo.short}: then require pinning",
@@ -294,6 +305,12 @@ def pins_unread(repo: Repository) -> bool:
 
 def pins_unresolved(repo: Repository) -> tuple[str, ...]:
     return tuple(sorted({str(pin.get("uses", "")) for pin in repo.record.get("pins") or () if not pin.get("sha")}))
+
+
+def calls_workflows(repo: Repository) -> tuple[str, ...]:
+    """The workflows from other repositories this one calls, as its ``uses:`` lines name them."""
+
+    return tuple(repo.record.get("called_workflows") or ())
 
 
 _ANALYSIS = "security_and_analysis[{}][status]=enabled"
@@ -330,6 +347,11 @@ PINS_UNREAD = (
     "Its workflows were not read, so HQ cannot say which uses: lines to pin, and requiring "
     "pinning first would stop every run that uses a tag."
 )
+# Said beside a pinning plan for a repository calling another's workflows.
+PINS_CALLED = (
+    "Requiring pinning also applies to the actions a called workflow uses, which HQ did not "
+    "read, so it is not offered here: check those workflows pin theirs before requiring it for"
+)
 
 
 def help_for(check: _Check, missing: list[Repository]) -> Any:
@@ -349,6 +371,7 @@ def _left_out(check: _Check, missing: list[Repository]) -> str:
         return ""
     unread = [repo.short for repo in missing if pins_unread(repo)]
     unresolved = [f"{repo.short} ({', '.join(pins_unresolved(repo))})" for repo in missing if pins_unresolved(repo)]
+    called = [f"{repo.short} ({', '.join(calls_workflows(repo))})" for repo in missing if calls_workflows(repo)]
     parts = []
     if unread:
         parts.append(f"{', '.join(unread)}: {PINS_UNREAD}")
@@ -356,6 +379,8 @@ def _left_out(check: _Check, missing: list[Repository]) -> str:
         parts.append(
             f"Pin these by hand; their tags could not be read, so pinning is not required yet: {'; '.join(unresolved)}."
         )
+    if called:
+        parts.append(f"{PINS_CALLED} {'; '.join(called)}.")
     return " ".join(parts)
 
 

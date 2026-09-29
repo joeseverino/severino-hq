@@ -68,8 +68,8 @@ class PlanTests(TestCase):
         self.assertEqual((plan.change, plan.risk, plan.target_digest), (PATCH, LOW, TARGET))
         self.assertEqual([advisory["id"] for advisory in plan.fixes], ["GHSA-high"])
         self.assertEqual(plan.verified_by, ("its health check",))
-        # Nothing was snapshotted, so only the digest comes back, said in the singular.
-        self.assertEqual(plan.steps[-1].detail, "The previous digest is restored if verification fails.")
+        # Nothing was snapshotted, so only the override comes back.
+        self.assertEqual(plan.steps[-1].detail, "The override as it was is restored if verification fails.")
         # Nothing can apply it until a machine has the helper, and it says so.
         self.assertEqual([blocker.id for blocker in plan.blockers], ["no-apply-path"])
 
@@ -85,7 +85,7 @@ class PlanTests(TestCase):
         plan = self.plan("app")
 
         self.assertEqual([mount["source"] for mount in plan.data], ["app_data"])
-        self.assertEqual(plan.steps[0].id, "snapshot")
+        self.assertEqual([step.id for step in plan.steps][:2], ["pull", "snapshot"])
         self.assertIn("the snapshot", plan.steps[-1].detail)
 
     def test_a_major_version_is_high_risk_and_waits_for_a_person(self):
@@ -190,7 +190,7 @@ class JoinedReadingTests(TestCase):
         self.assertNotIn("mounts-unread", {blocker.id for blocker in plan.blockers})
         self.assertEqual(posture.state_of("no-docker-socket"), "unmet")
 
-    def test_the_pin_step_names_the_compose_file_it_would_edit(self):
+    def test_the_pin_step_names_the_override_it_would_write_never_the_compose_file(self):
         estate()
         published()
         inventory("portainer.compose_project", [
@@ -200,7 +200,23 @@ class JoinedReadingTests(TestCase):
 
         plan = next(plan for plan in plans() if plan.container.running.name == "app")
 
-        self.assertEqual(next(step for step in plan.steps if step.id == "pin").detail, "/opt/apps/app/docker-compose.yml")
+        pin = next(step for step in plan.steps if step.id == "pin")
+        self.assertIn("compose override", pin.label)
+        self.assertTrue(pin.detail.startswith("/opt/apps/app/docker-compose.override.yml;"))
+
+    def test_the_pin_step_names_the_stacks_own_override_when_it_has_one(self):
+        estate()
+        published()
+        inventory("portainer.compose_project", [
+            {"connection_ref": "example-portainer", "host": "example-box", "name": "app",
+             "config_files": ["/opt/apps/app/compose.yaml", "/opt/apps/app/compose.override.yaml"],
+             "containers": ["app"]},
+        ])
+
+        plan = next(plan for plan in plans() if plan.container.running.name == "app")
+
+        pin = next(step for step in plan.steps if step.id == "pin")
+        self.assertTrue(pin.detail.startswith("/opt/apps/app/compose.override.yaml;"))
 
 
 class ReadinessTests(TestCase):
@@ -237,20 +253,79 @@ class HelperInstallTests(TestCase):
 
         plan = next(plan for plan in plans() if plan.container.running.name == "app")
 
-        (allow, check) = plan.install
-        # A rule for the one program, never a broader one.
-        self.assertIn(f"NOPASSWD: {HELPER}'", allow.detail)
+        # HQ does not run on this machine, so its deploys never bring the helper.
+        self.assertFalse(plan.install_brought)
+        (fetch, install, allow, check) = plan.install
+        self.assertEqual((fetch.id, install.id), ("fetch", "install"))
+        self.assertIn(f"-o root -g root -m 0755 upgrade-container.sh {HELPER}", install.detail)
+        # A rule for the one program and only an upgrade's arguments, never a broader one.
+        self.assertIn(f"'{HELPER} ^--operation ", allow.detail)
         self.assertIn(f"visudo -cf {SUDOERS}", allow.detail)
-        self.assertEqual(check.detail, f"sudo -n -l {HELPER}")
+        # The account is not something HQ knows: the step says so, and cannot run as written.
+        self.assertIn("HQ does not know which account", allow.label)
+        self.assertIn('id -u "$account"', allow.detail)
+        self.assertTrue(check.detail.startswith(f"sudo -n -l {HELPER} --operation "))
+
+    def test_on_the_machine_hq_deploys_to_only_the_rule_is_needed(self):
+        from ..upgrades import install_steps
+
+        self.assertEqual([step.id for step in install_steps("example-box", deployed_here=True)], ["allow", "check"])
+
+    def test_elsewhere_the_helper_comes_from_this_build_checked_by_its_digest(self):
+        import hashlib
+        from pathlib import Path
+
+        from django.test import override_settings
+
+        from ..upgrades import HELPER, install_steps
+
+        shipped = Path(__file__).parent.resolve().parent.parent / "scripts" / Path(HELPER).name
+        digest = hashlib.sha256(shipped.read_bytes()).hexdigest()
+        with override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq", SEVERINO_HQ_REVISION="a" * 40):
+            fetch, install, *_ = install_steps("example-edge")
+        self.assertIn(f"checkout --detach {'a' * 40}", fetch.detail)
+        self.assertIn(f"echo '{digest}  {HELPER}' | sha256sum -c -", install.detail)
+        with override_settings(SEVERINO_HQ_SOURCE="", SEVERINO_HQ_REVISION=""):
+            fetch, *_ = install_steps("example-edge")
+        self.assertIn("HQ does not know the commit", fetch.detail)
+
+    def test_the_sudo_rule_admits_an_upgrade_and_nothing_else(self):
+        import re
+
+        from ..upgrades import _PROBE, ARGUMENTS, STACKS_ROOT, sudoers_command
+
+        rule = re.compile(ARGUMENTS)
+        digest = "sha256:" + "a" * 64
+        request = (
+            f"--operation op-1 --project-dir {STACKS_ROOT}/app --service app "
+            f"--from ghcr.io/example/app:1.2.0 --to ghcr.io/example/app@{digest}"
+        )
+        self.assertTrue(rule.fullmatch(request))
+        self.assertTrue(rule.fullmatch(f"{request} --tag 1.2.1 --wait 120"))
+        self.assertTrue(rule.fullmatch(_PROBE))
+        for refused in (
+            request.replace(f"{STACKS_ROOT}/app", "/home/example/app"),
+            request.replace(f"{STACKS_ROOT}/app", f"{STACKS_ROOT}/app/nested"),
+            request.replace(f"@{digest}", ":1.2.1"),
+            f"{request} --data app_data:/data",
+            f"{request} --wait 120 --tag 1.2.1",
+            f"{request}; true",
+        ):
+            self.assertIsNone(rule.fullmatch(refused), refused)
+        # sudoers reads a comma, colon, equals sign or backslash in arguments
+        # literally only behind a backslash.
+        self.assertNotRegex(sudoers_command(), r"(?<!\\)[,:=]")
 
     def test_the_helper_ships_where_the_install_steps_say(self):
         from pathlib import Path
 
-        from ..upgrades import HELPER
+        from ..upgrades import HELPER, STACKS_ROOT
 
         shipped = Path(__file__).parent.resolve().parent.parent / "scripts" / Path(HELPER).name
         self.assertTrue(shipped.is_file())
         self.assertTrue(HELPER.startswith("/usr/local/lib/severino-hq/scripts/"))
+        # The helper holds the stacks root the rule names; neither moves alone.
+        self.assertIn(f"\nSTACKS_ROOT={STACKS_ROOT}\n", shipped.read_text())
 
 
 class ExposureOrderTests(TestCase):

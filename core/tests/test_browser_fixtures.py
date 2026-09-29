@@ -339,20 +339,22 @@ PAGES = {
     "topology": (lambda: reverse("control_plane:topology"), ExitStack),
     "services": (lambda: reverse("control_plane:services"), ExitStack),
     "findings": (lambda: reverse("control_plane:findings"), ExitStack),
-    "exposure": (lambda: reverse("control_plane:exposure"), ExitStack),
-    "timeline": (lambda: reverse("control_plane:timeline"), ExitStack),
     "containers": (lambda: reverse("control_plane:containers"), ExitStack),
     "resource": (lambda: reverse("control_plane:detail", kwargs={"key": "hq-proxy"}), ExitStack),
     "action-items": (lambda: reverse("action_items"), ExitStack),
     "projects": (lambda: reverse("projects:list"), ExitStack),
     # A command that changes infrastructure, so the page carries its consent
-    # checkbox: a form field stretched it across the row once, pushing its
-    # label out past the edge.
+    # checkbox, which must not stretch across the row like a form field and
+    # push its label out past the edge.
     "command-consent": (
         lambda: reverse("command", kwargs={"name": "infrastructure.controller.refresh"}),
         ExitStack,
     ),
     "connection": (lambda: reverse("connection"), _asked_through_the_proxy, _THROUGH_THE_PROXY),
+    # A band whose cells are cards: the frame rule must not zero their padding.
+    "resource-kinds": (lambda: reverse("control_plane:create"), ExitStack),
+    # A form laid out as a grid of fields, with a textarea taking the row.
+    "project-form": (lambda: reverse("projects:create"), ExitStack),
 }
 
 

@@ -267,7 +267,7 @@ class SweepTokenTests(SimpleTestCase):
         self.assertEqual(hub.count("mint"), 3)
 
     def test_a_sweep_of_five_repositories_mints_one_token_each(self):
-        """The measured cost: one metadata token to list the installation, then
+        """The cost: one metadata token to list the installation, then
         one read token per repository, and no per-repository installation
         lookup, because the listing already said which installation it is."""
 
@@ -368,4 +368,135 @@ class WorkflowPinTests(SimpleTestCase):
         record, refused = self.read(WithWorkflows(refuse=("/contents/.github/workflows",)))
 
         self.assertIsNone(record["pins"])
+        self.assertIsNone(record["called_workflows"])
         self.assertIn(("workflow_pins", REPO), [(item["part"], item["scope"]) for item in refused])
+
+    def test_a_repository_without_workflows_has_nothing_to_pin(self):
+        """GitHub answers 404 for a directory that is not there: that is no
+        workflows, not a read that failed."""
+
+        record, refused = self.read(WithoutWorkflows())
+
+        self.assertEqual((record["pins"], record["called_workflows"]), ([], []))
+        self.assertEqual(refused, [])
+
+    def test_a_local_composite_action_is_read_like_a_workflow(self):
+        record, refused = self.read(WithActions())
+
+        local = [(pin["uses"], pin["sha"]) for pin in record["pins"] if pin["path"] == ACTION_PATH]
+        # Its unpinned line, resolved; never the line commented out.
+        self.assertEqual(local, [("example/setup@v2", "b" * 40)])
+        self.assertEqual(refused, [])
+
+    def test_a_workflow_called_from_another_repository_is_named_pinned_or_not(self):
+        record, _refused = self.read(WithActions())
+
+        self.assertEqual(record["called_workflows"], [
+            "example/shared/.github/workflows/build.yml@v1",
+            f"example/shared/.github/workflows/test.yaml@{'c' * 40}",
+        ])
+        self.assertIn("example/shared/.github/workflows/build.yml@v1", [pin["uses"] for pin in record["pins"]])
+
+
+class NotThere(ProviderError):
+    """What the controller raises for a 404: its HTTP error as the cause."""
+
+    def __init__(self, url):
+        import urllib.error
+
+        super().__init__("Provider request failed: HTTPError.")
+        self.__cause__ = urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+
+
+class WithoutWorkflows(GitHub):
+    def request(self, url, *, method="GET", headers=None, payload=None):
+        if "/contents/.github/" in url:
+            raise NotThere(url)
+        return super().request(url, method=method, headers=headers, payload=payload)
+
+
+ACTION_PATH = ".github/actions/setup/action.yml"
+ACTION = """
+runs:
+  using: composite
+  steps:
+    # - uses: example/commented@v9
+    - uses: example/setup@v2
+"""
+CALLER = f"""
+jobs:
+  build:
+    uses: example/shared/.github/workflows/build.yml@v1
+  test:
+    uses: example/shared/.github/workflows/test.yaml@{'c' * 40}
+"""
+
+
+class WithActions(WithWorkflows):
+    """A workflow calling others' workflows, and one local composite action."""
+
+    def request(self, url, *, method="GET", headers=None, payload=None):
+        import base64
+
+        path = url.removeprefix(github_app.API)
+        base = f"/repos/{REPO}/contents"
+        answers = {
+            f"{base}/.github/workflows?ref=main": [{"path": ".github/workflows/call.yml"}],
+            f"{base}/.github/workflows/call.yml?ref=main": {"content": base64.b64encode(CALLER.encode()).decode()},
+            f"{base}/.github/actions?ref=main": [
+                {"name": "setup", "path": ".github/actions/setup", "type": "dir"},
+                {"name": "README.md", "path": ".github/actions/README.md", "type": "file"},
+            ],
+            f"{base}/.github/actions/setup?ref=main": [
+                {"name": "action.yml", "path": ACTION_PATH, "type": "file"},
+                {"name": "script.sh", "path": ".github/actions/setup/script.sh", "type": "file"},
+            ],
+            f"{base}/{ACTION_PATH}?ref=main": {"content": base64.b64encode(ACTION.encode()).decode()},
+            "/repos/example/shared/commits/v1": {"sha": "d" * 40},
+        }
+        if path in answers:
+            self.calls.append((method, path))
+            return answers[path]
+        return super().request(url, method=method, headers=headers, payload=payload)
+
+
+class SweepPinTests(SimpleTestCase):
+    def test_a_tag_is_resolved_once_in_a_sweep_across_repositories(self):
+        hub = FleetWithWorkflows()
+        with provider_http.provider_snapshot(), part_ledger():
+            records = github_readings.read_repositories(hub)
+
+        self.assertEqual({record["pins"][0]["sha"] for record in records}, {"a" * 40})
+        self.assertEqual([path for _method, path in hub.calls].count("/repos/actions/checkout/commits/v4"), 1)
+
+    def test_a_ref_one_repository_could_not_read_is_asked_again_by_the_next(self):
+        hub = FleetWithWorkflows(unreadable_for=1)
+        with provider_http.provider_snapshot(), part_ledger():
+            records = github_readings.read_repositories(hub)
+
+        self.assertEqual([record["pins"][0]["sha"] for record in records][:2], ["", "a" * 40])
+
+
+class FleetWithWorkflows(Sweeping):
+    """Five repositories, each with one workflow using the same action."""
+
+    def __init__(self, *, unreadable_for=0, **kwargs):
+        super().__init__(**kwargs)
+        self.unreadable_for = unreadable_for
+
+    def request(self, url, *, method="GET", headers=None, payload=None):
+        import base64
+
+        path = url.removeprefix(github_app.API)
+        for name in FLEET:
+            if path == f"/repos/{name}/contents/.github/workflows?ref=main":
+                return [{"path": ".github/workflows/ci.yml"}]
+            if path == f"/repos/{name}/contents/.github/workflows/ci.yml?ref=main":
+                return {"content": base64.b64encode(b"steps:\n  - uses: actions/checkout@v4\n").decode()}
+        if path == "/repos/actions/checkout/commits/v4":
+            self.calls.append((method, path))
+            if self.unreadable_for:
+                self.unreadable_for -= 1
+                raise ProviderError("Not Found")
+            return {"sha": "a" * 40}
+        return super().request(url, method=method, headers=headers, payload=payload)

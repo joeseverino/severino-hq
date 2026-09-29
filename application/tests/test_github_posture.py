@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+from unittest import skipUnless
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -183,13 +187,69 @@ class PostureHelpTests(TestCase):
         (edit, setting) = runs(item)
         self.assertEqual(edit[0], "alpha: pin .github/workflows/ci.yml")
         # The same line is edited once, and the tag stays beside the commit.
-        self.assertEqual(edit[1].count(" -e "), 1)
-        self.assertIn(f"uses: actions/checkout@{'a' * 40} # v4", edit[1])
+        self.assertEqual(edit[1].count("s/^"), 1)
+        self.assertIn("checkout\\@" + "a" * 40 + "\\ \\#\\ v4", edit[1])
         self.assertEqual(
             setting,
             ("alpha: then require pinning",
              "gh api -X PUT repos/example/alpha/actions/permissions -F enabled=true -F sha_pinning_required=true"),
         )
+
+    @skipUnless(shutil.which("perl"), "the pasted edit runs perl")
+    def test_the_pasted_edit_pins_only_uses_lines_and_keeps_line_endings(self):
+        sha = "a" * 40
+        pins = [
+            {"path": ".github/workflows/ci.yml", "uses": uses, "action": uses.split("@")[0],
+             "ref": uses.split("@")[1], "sha": sha}
+            for uses in ("actions/checkout@v4", "example/setup@v2")
+        ]
+        before = (
+            "jobs:\r\n"
+            "  build:\r\n"
+            "    steps:\r\n"
+            "      - uses: actions/checkout@v4   \r\n"
+            "      # - uses: actions/checkout@v4\r\n"
+            "      - name: setup\r\n"
+            "        uses: \"example/setup@v2\" # the old tag\r\n"
+            "      - uses: actions/checkout@v4.1\r\n"
+            "      - run: echo uses: actions/checkout@v4\r\n"
+        )
+        after = (
+            "jobs:\r\n"
+            "  build:\r\n"
+            "    steps:\r\n"
+            f"      - uses: actions/checkout@{sha} # v4\r\n"
+            "      # - uses: actions/checkout@v4\r\n"
+            "      - name: setup\r\n"
+            f"        uses: example/setup@{sha} # v2\r\n"
+            "      - uses: actions/checkout@v4.1\r\n"
+            "      - run: echo uses: actions/checkout@v4\r\n"
+        )
+        item = self.item("actions-pinned", access=kept(pinning_required=False), pins=pins)
+        command = runs(item)[0][1]
+
+        with tempfile.TemporaryDirectory() as checkout:
+            workflow = Path(checkout, ".github", "workflows", "ci.yml")
+            workflow.parent.mkdir(parents=True)
+            workflow.write_bytes(before.encode())
+            subprocess.run(["/bin/sh", "-c", command], cwd=checkout, check=True)
+
+            self.assertEqual(workflow.read_bytes().decode(), after)
+            self.assertEqual(sorted(path.name for path in workflow.parent.iterdir()), ["ci.yml"])
+
+    def test_a_workflow_called_from_another_repository_holds_back_the_setting(self):
+        pins = [{"path": ".github/workflows/ci.yml", "uses": "actions/checkout@v4",
+                 "action": "actions/checkout", "ref": "v4", "sha": "a" * 40}]
+        called = ["example/shared/.github/workflows/build.yml@" + "c" * 40]
+        item = self.item(
+            "actions-pinned", access=kept(pinning_required=False), pins=pins, called_workflows=called
+        )
+
+        self.assertEqual(runs(item)[0][0], "alpha: pin .github/workflows/ci.yml")
+        self.assertNotIn("sha_pinning_required", str(item.workflow))
+        reason = item.workflow.steps[-1].summary
+        self.assertIn("also applies to the actions a called workflow uses", reason)
+        self.assertIn(called[0], reason)
 
     def test_a_tag_that_could_not_be_resolved_holds_back_the_setting(self):
         pins = [{"path": ".github/workflows/ci.yml", "uses": "example/gone@v1",

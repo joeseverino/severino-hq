@@ -61,3 +61,19 @@ def names_a_host(name: str) -> bool:
     """
 
     return not any(label.startswith("_") for label in str(name).split("."))
+
+
+# A company's legal suffix, which says nothing about who it is.
+_LEGAL_SUFFIX = re.compile(
+    r"[,\s]+(inc|incorporated|llc|l\.l\.c|ltd|limited|corp|corporation|co|gmbh|ag|sa|bv|plc|pty)\.?$",
+    re.IGNORECASE,
+)
+
+
+def organisation_name(name: str) -> str:
+    """How a person says a registry's organisation: "Example Registrar, Inc." is
+    Example Registrar. Only a trailing legal suffix goes; the name itself is kept."""
+
+    text = " ".join(str(name or "").split())
+    trimmed = _LEGAL_SUFFIX.sub("", text).rstrip(" ,")
+    return trimmed or text

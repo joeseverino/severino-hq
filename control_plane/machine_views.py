@@ -34,7 +34,6 @@ class MachineListView(PageMixin, LoginRequiredMixin, TemplateView):
 
     template_name = "control_plane/machine_list.html"
     page_title = "Machines"
-    page_lede = "Machines HQ can reach or has seen running something."
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -100,7 +99,6 @@ class TailnetView(PageMixin, LoginRequiredMixin, TemplateView):
 
     template_name = "control_plane/tailnet.html"
     page_title = "Tailnet"
-    page_lede = "The tailnet access policy. Devices are on the Machines page."
 
     def get_page_actions(self):
         policy_declaration = self.tailnet.declaration
@@ -138,10 +136,9 @@ class TailnetView(PageMixin, LoginRequiredMixin, TemplateView):
 class MachineDetailView(PageMixin, LoginRequiredMixin, TemplateView):
     """One machine, and everything that ties to it.
 
-    The page exists because the ties did and had nowhere to meet: a container's
-    host, a proxy's forwarding address, what a Portainer says it reaches and
-    which credential opens a shell there were four facts about one thing, on
-    four screens, joined by an operator's memory.
+    A container's host, a proxy's forwarding address, what a Portainer says it
+    reaches and which credential opens a shell there are four facts about one
+    thing, and this is the page where they meet.
     """
 
     template_name = "control_plane/machine_detail.html"

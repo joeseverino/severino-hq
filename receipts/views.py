@@ -52,7 +52,6 @@ from .models import Receipt
 
 
 RECEIPTS_TRAIL = ("Receipts", reverse_lazy("receipts:list"))
-PRIVATE_FILES = "Files are private. Only signed-in users can open them."
 
 
 class ReceiptListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
@@ -60,7 +59,6 @@ class ReceiptListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     template_name = "receipts/receipt_list.html"
     paginate_by = 25
     page_title = "Receipts"
-    page_lede = PRIVATE_FILES
     table_search_scope = "receipts"
     table_selectable = True
     table_columns = (
@@ -215,7 +213,6 @@ class ReceiptMatchView(ReceiptPage, LoginRequiredMixin, TemplateView):
 
 class ReceiptCreateView(ReceiptPage, LoginRequiredMixin, CreateView):
     page_title = "Upload receipt"
-    page_lede = PRIVATE_FILES
     model = Receipt
     form_class = ReceiptUploadForm
     template_name = "receipts/receipt_form.html"
@@ -234,7 +231,6 @@ class ReceiptCreateView(ReceiptPage, LoginRequiredMixin, CreateView):
 
 class ReceiptUpdateView(ReceiptPage, LoginRequiredMixin, UpdateView):
     page_title = "Edit receipt"
-    page_lede = PRIVATE_FILES
     model = Receipt
     form_class = ReceiptUploadForm
     template_name = "receipts/receipt_form.html"

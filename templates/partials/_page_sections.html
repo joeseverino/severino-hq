@@ -14,8 +14,12 @@
 {% endcomment %}
 {% for section in sections %}
 <section id="{{ section.id }}" class="page-section" data-page-section>
-  <h2>{{ section.label }}{% if section.folded %} <span class="heading-aside">{{ section.records|length }}</span>{% endif %}</h2>
-  {% if section.folded %}<details class="control-diagnostics"><summary>Show all</summary>{% endif %}
+  {% comment %}
+  Folded, the heading is the toggle: its count says what is behind it and the
+  mark beside it says it opens. A separate "Show all" under the heading reads as
+  a control belonging to nothing.
+  {% endcomment %}
+  {% if section.folded %}<details class="section-fold"><summary><h2>{{ section.label }} <span class="heading-aside">{{ section.records|length }}</span></h2></summary>{% else %}<h2>{{ section.label }}</h2>{% endif %}
   <div class="table-scroll">
     <table class="data-table{% if section.compact %} compact-table{% endif %}">
       <thead><tr>{% for column in section.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>

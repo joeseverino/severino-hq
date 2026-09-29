@@ -126,7 +126,6 @@ def _operating_snapshot(principal) -> dict[str, Any]:
         "priority": priority,
         # Items, not the numbers they carry: each item shows its own.
         "priority_count": len(priority),
-        "priority_group_count": len(priority),
         "active_projects": sections.recent_active_projects(),
         "draft_content": sections.recent_draft_content(),
         "recent_published": sections.recently_published(),

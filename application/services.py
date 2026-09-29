@@ -17,12 +17,11 @@ There is no Service model and there should not be one. A service is a fact about
 the declarations, so a stored copy could disagree with them, and the entire
 value here is being the thing that cannot.
 
-Two consequences worth stating, because both were the wrong way round in an
-earlier sketch of this:
+Two consequences:
 
 - A service does not hang off a project. A repository is how something gets
   built, and much of what an operator runs was built by somebody else; keyed on
-  a project, those would have been unrepresentable. The project is an annotation
+  a project, those would be unrepresentable. The project is an annotation
   on a service when one happens to publish there, and absent otherwise.
 - A provider is never named here. Which providers supply which facet, and how to
   read hostnames out of their specs, is declared by the providers themselves in
@@ -108,6 +107,15 @@ class Service:
         return path_to(self.hostname)
 
     @property
+    def exposure(self):
+        """Who can reach this name: the internet, through a gate, or only a
+        private network, from the same routes the path walks."""
+
+        from .exposure import exposure_of_name
+
+        return exposure_of_name(self.hostname)
+
+    @property
     def alias_summary(self) -> str:
         """What to call the folded-away records, in the reader's terms.
 
@@ -170,7 +178,7 @@ class Service:
         A service and a domain are different pages about overlapping things,
         one is a hostname and everything that has to be true for it to answer,
         the other is a zone and every record published in it. example.com is
-        both, and neither page had a way to reach the other.
+        both, so each page links to the other.
 
         Matched through the provider that says it contains records, so the tie
         is the one the registry already declares rather than a second opinion
@@ -274,8 +282,7 @@ def _certificates_in_use() -> dict[str, dict[str, Any]]:
     Observed, never declared. HQ does not hold the material for an internally
     signed certificate: the CA that signs it is deliberately air-gapped,
     so it can never own one, and a page that only counts what HQ declares
-    reported "no certificate covers this" for names that were being served over
-    TLS all along.
+    would report "no certificate covers this" for names served over TLS.
 
     Read from the sweeps of the kinds that declare ``served_certificate``,
     because the proxy is the thing that chooses which certificate answers.
@@ -559,9 +566,8 @@ def _assemble(
     )
     context = name_context(hostname)
     # A container declaration names a machine and a container, not a hostname,
-    # so nothing tied it to the name it serves: the runtime card knew the
-    # container and the resources table did not list it. The origin already
-    # resolves both halves, which is the tie.
+    # so nothing else ties it to the name it serves. The origin resolves both
+    # halves, which is the tie.
     runtime = runtime_claim(origin, containers)
     facets = tuple(
         Facet(
@@ -606,8 +612,9 @@ _SERVES = ("runtime", "network")
 
 
 def _serving(index: "Readings | None", origin_address: str) -> tuple[str, ...]:
-    """Readings joined to an origin that say what serves it: what runs it by
-    its title, anything else (who holds the address) by its relation."""
+    """Readings joined to an origin that say what serves it, by name. The
+    column is "Runs on", so the name is the answer: "Example Registrar", not "on the
+    network of Example Registrar". The relation is for the relationships table."""
 
     if index is None:
         return ()
@@ -615,7 +622,7 @@ def _serving(index: "Readings | None", origin_address: str) -> tuple[str, ...]:
     found = index.about(Subject.of(hostnames=(host,), addresses=(host,)), facets=_SERVES)
     return tuple(
         dict.fromkeys(
-            item.title if item.facet == "runtime" else f"{item.relation} {item.title}"
+            item.title
             for item in found
             if item.title
         )
@@ -630,8 +637,8 @@ def _serving(index: "Readings | None", origin_address: str) -> tuple[str, ...]:
 def _observed(facet_id: str, origin: Origin | None) -> "Running | None":
     """What HQ found supplying this facet without having been told.
 
-    Only the runtime facet can answer today, and only because the origin has
-    already done the work: a proxy forwards to an address and a port, and the
+    Only the runtime facet can answer, because the origin has already done the
+    work: a proxy forwards to an address and a port, and the
     container inventory says which container on that machine is listening.
 
     Never a Claim. HQ does not manage this, cannot reconcile it, and a card that
@@ -653,9 +660,8 @@ def _observed(facet_id: str, origin: Origin | None) -> "Running | None":
 class _CertificatesInUse:
     """The proxy's certificates, read at most once and only if asked.
 
-    Named for what it holds rather than for how it defers. A bare `get` on a
-    generic `_Lazy` is indistinguishable from a dict lookup at every call site
-    and in every tool that reads this code.
+    Named for what it holds rather than for how it defers, so no call site
+    reads as a plain dict lookup.
     """
 
     def __init__(self, read):
@@ -738,9 +744,8 @@ def _points_nowhere(origin: Origin | None, dns: "Facet | None" = None) -> str:
     Unless the provider answers on its own behalf. A proxied record puts the
     provider in front of the name: the address in it is a placeholder that no
     packet is meant to reach, and the redirect or page served there is the
-    point. Reading that as "resolves to somewhere nothing answers" reported a
-    working redirect as a fault, on the one record whose address was never
-    supposed to mean anything.
+    point. Reading that as "resolves to somewhere nothing answers" would report
+    a working redirect as a fault.
     """
 
     if origin is None:

@@ -1,18 +1,24 @@
 {% extends "page.html" %}
 {% block page %}
 {% if finding_entries or active_rule %}
-<nav class="topology-lenses" aria-label="Finding rules">
-  <a class="scope-chip{% if not active_rule %} is-active{% endif %}" href="{% url 'control_plane:findings' %}"{% if not active_rule %} aria-current="page"{% endif %}>All</a>
-  {% for rule in finding_rules %}
-    <a class="scope-chip{% if active_rule.name == rule.name %} is-active{% endif %}" href="?rule={{ rule.name|urlencode }}"{% if active_rule.name == rule.name %} aria-current="page"{% endif %}>{{ rule.title }}</a>
-  {% endfor %}
-</nav>
-
-<div class="topology-summary" role="status">
-  <span><strong>{{ finding_entries|length|counted:"finding" }}</strong></span>
-  {% if finding_counts.serious %}<span><strong>{{ finding_counts.serious }}</strong> serious</span>{% endif %}
-  {% if finding_counts.attention %}<span><strong>{{ finding_counts.attention }}</strong> attention</span>{% endif %}
-</div>
+{% comment %}
+The same filter bar every list uses. A chip per rule would spend a phone's
+first screen on chips before the first finding.
+{% endcomment %}
+<form class="filter-bar" method="get" role="search">
+  <select name="rule" aria-label="Rule">
+    <option value="">All rules</option>
+    {% for rule in finding_rules %}<option value="{{ rule.name }}"{% if active_rule.name == rule.name %} selected{% endif %}>{{ rule.title }}</option>{% endfor %}
+  </select>
+  <button class="btn" type="submit">Apply</button>
+  {% if active_rule %}<a class="btn ghost" href="{% url 'control_plane:findings' %}">Clear</a>{% endif %}
+  {% comment %}The count sits in the bar it filters, not in a second bar under it.{% endcomment %}
+  <p class="filter-bar-summary" role="status">
+    <strong>{{ finding_entries|length|counted:"finding" }}</strong>
+    {% if finding_counts.serious %} · <strong>{{ finding_counts.serious }}</strong> serious{% endif %}
+    {% if finding_counts.attention %} · <strong>{{ finding_counts.attention }}</strong> attention{% endif %}
+  </p>
+</form>
 {% endif %}
 
 <div class="finding-list">
@@ -20,13 +26,13 @@
     <article class="card finding-card is-{{ entry.finding.severity }}">
       <div class="section-head">
         <div>
-          <span class="pill pill-{{ entry.finding.severity }}">{{ entry.finding.severity }}</span>
+          <span class="pill pill-{{ entry.finding.severity }}">{{ entry.finding.severity|capfirst }}</span>
           <h2>{{ entry.finding.title }}</h2>
         </div>
       </div>
       <p>{{ entry.finding.explanation }}</p>
       {% if entry.finding.evidence %}
-        <dl class="finding-evidence">
+        <dl class="finding-facts">
           {% for label, value in entry.finding.evidence %}<div><dt>{{ label }}</dt><dd>{{ value|readable }}</dd></div>{% endfor %}
         </dl>
       {% endif %}

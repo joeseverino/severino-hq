@@ -13,6 +13,10 @@ A route has one of four exposures, worst first:
 - **private**: only the tailnet or the local network reaches it;
 - **unrouted**: nothing HQ reads routes a name to it.
 
+A thing with no route is **unknown** rather than unrouted until HQ has read every
+kind that could route to it: a gap in what HQ knows is not evidence that the
+internet cannot reach something, so it never lowers how urgent a problem is.
+
 A thing's exposure is its worst route's. A problem is as urgent as the worst
 exposure of what it is about: a serious advisory on an open route stays
 serious, the same advisory behind a gate or on the tailnet is attention, and
@@ -32,17 +36,26 @@ from .path_model import Route
 from .projection import read_once
 from .reach import network_of
 
-OPEN, GATED, PRIVATE, UNROUTED = "open", "gated", "private", "unrouted"
+OPEN, GATED, PRIVATE, UNKNOWN, UNROUTED = "open", "gated", "private", "unknown", "unrouted"
 # Worst first: the order a page lists them and the index a ranking compares.
-LEVELS = (OPEN, GATED, PRIVATE, UNROUTED)
+# Unknown ranks next to open, because for all HQ knows it is open.
+LEVELS = (OPEN, UNKNOWN, GATED, PRIVATE, UNROUTED)
 LABELS = {
     OPEN: "Open to the internet",
     GATED: "Internet, behind a gate",
     PRIVATE: "Private networks only",
+    UNKNOWN: "Reach not known",
     UNROUTED: "Nothing routes to it",
 }
-# What a serious problem becomes at each exposure.
-_SERIOUS_AT = {OPEN: "serious", GATED: "attention", PRIVATE: "attention", UNROUTED: "neutral"}
+# One word each, for a table column; the sentence says the rest.
+SHORT = {OPEN: "Internet", GATED: "Gated", PRIVATE: "Private", UNKNOWN: "Unknown", UNROUTED: "No route"}
+# What a serious problem becomes at each exposure. Unknown keeps it serious.
+_SERIOUS_AT = {
+    OPEN: "serious", GATED: "attention", PRIVATE: "attention", UNKNOWN: "serious", UNROUTED: "neutral",
+}
+# The ports a machine's front door answers on: a request routed to the machine
+# lands on whichever container publishes one of them.
+FRONT_DOOR_PORTS = frozenset({80, 443})
 _STATUS_ORDER = ("serious", "attention", "neutral", "good")
 
 
@@ -56,6 +69,8 @@ class RouteExposure:
     via: str
     # The readings that gate the name: "Behind Access: Example app".
     gates: tuple[str, ...] = ()
+    # Gates in front of some paths only, which leave the name as it was.
+    path_gates: tuple[str, ...] = ()
 
     @property
     def label(self) -> str:
@@ -67,14 +82,23 @@ class Exposure:
     """The routes reaching one thing, worst first."""
 
     routes: tuple[RouteExposure, ...] = ()
+    # False when HQ has not read everything that could route to it, so an
+    # empty ``routes`` means "not known" rather than "nothing".
+    known: bool = True
 
     @property
     def level(self) -> str:
-        return self.routes[0].level if self.routes else UNROUTED
+        if self.routes:
+            return self.routes[0].level
+        return UNROUTED if self.known else UNKNOWN
 
     @property
     def label(self) -> str:
         return LABELS[self.level]
+
+    @property
+    def short(self) -> str:
+        return SHORT[self.level]
 
     @property
     def worst(self) -> RouteExposure | None:
@@ -86,9 +110,10 @@ class Exposure:
 
         worst = self.worst
         if worst is None:
-            return LABELS[UNROUTED]
+            return LABELS[self.level]
         gate = f" ({'; '.join(worst.gates)})" if worst.gates else ""
-        return f"{worst.label} as {worst.hostname}{gate}"
+        partial = f"; gated only at {', '.join(worst.path_gates)}" if worst.path_gates else ""
+        return f"{worst.label} as {worst.hostname}{gate}{partial}"
 
 
 def worse(one: str, other: str) -> str:
@@ -115,16 +140,47 @@ def status_rank(status: str) -> int:
 
 
 def gates_of(hostname: str) -> tuple[str, ...]:
-    """The readings that admit only whom they allow in front of ``hostname``."""
+    """The readings that admit only whom they allow in front of all of ``hostname``."""
 
+    return tuple(dict.fromkeys(label for label, paths in _gates(hostname) if not paths))
+
+
+def path_gates_of(hostname: str) -> tuple[str, ...]:
+    """The paths of ``hostname`` a gate stands in front of, when none covers
+    all of it: the name stays as open as it was, and these are the parts that
+    are not."""
+
+    return tuple(dict.fromkeys(path for _label, paths in _gates(hostname) for path in paths))
+
+
+def _gates(hostname: str) -> tuple[tuple[str, tuple[str, ...]], ...]:
     subject = Subject.of(hostnames=(hostname,))
     return tuple(
-        dict.fromkeys(
-            f"{joined.relation}: {joined.title}".rstrip(": ")
-            for joined in readings().about(subject)
-            if joined.spec.restricts and joined.hostnames
-        )
+        (f"{joined.relation}: {joined.title}".rstrip(": "), _gated_paths(joined.record, hostname))
+        for joined in readings().about(subject)
+        if joined.spec.restricts and joined.hostnames
     )
+
+
+def _gated_paths(record, hostname: str) -> tuple[str, ...]:
+    """The paths a gate covers on ``hostname``, or () when it covers all of it.
+
+    A gate scoped as ``host/wp-admin*`` protects that path, not the name: the
+    rest of the site answers anyone. Only a bare host, ``host/`` or ``host/*``
+    stands in front of everything. A gate that states no scope (an access
+    list on a proxy host) covers the host it is attached to.
+    """
+
+    scopes = [str(item) for item in (record.get("domain"), *(record.get("domains") or ())) if item]
+    paths = []
+    for scope in scopes:
+        host, _, path = scope.partition("/")
+        if normalized_hostname(host) != hostname:
+            continue
+        if path in ("", "*"):
+            return ()
+        paths.append(f"/{path}")
+    return tuple(paths)
 
 
 def public_name(route: Route) -> bool:
@@ -174,6 +230,7 @@ def _exposure_of_name(name: str) -> Exposure:
                 line=route.line,
                 via=route.via,
                 gates=gates_of(name) if level == GATED else (),
+                path_gates=path_gates_of(name) if level == OPEN else (),
             )
         )
     return Exposure(tuple(sorted(found, key=lambda item: LEVELS.index(item.level))))
@@ -229,11 +286,41 @@ def _routed_containers() -> dict[tuple[str, str], frozenset[str]]:
                     machine = hop.name
                 elif hop.step == "container" and machine:
                     found.setdefault((machine, hop.name), set()).add(name)
+                elif hop.step == "ingress" and machine:
+                    # Through the machine's front door: "" stands for whichever
+                    # container publishes it, which the route does not name.
+                    found.setdefault((machine, ""), set()).add(name)
     return {place: frozenset(names) for place, names in found.items()}
 
 
+def listening_ports(item) -> tuple[int, ...]:
+    """The host ports a container answers on: what it publishes, or, on the
+    host's own network, what its image exposes, since there it binds them
+    directly."""
+
+    if item.running.network_mode != "host":
+        return item.running.ports
+    return tuple(int(port) for port in (item.runtime or {}).get("exposed_ports") or ())
+
+
+def front_door_names(item) -> frozenset[str]:
+    """The names routed through this container's machine's ingress, when this
+    container is the one publishing the front door: a proxy is as exposed as
+    the worst route it takes in, though no route names it."""
+
+    if not FRONT_DOOR_PORTS.intersection(listening_ports(item)):
+        return frozenset()
+    return routed_containers().get((item.machine.name, ""), frozenset())
+
+
 def _exposure_of_container(item) -> Exposure:
-    names = {*item.serves, *routed_containers().get((item.machine.name, item.running.name), ())}
+    from .paths import reads_every_route
+
+    names = {
+        *item.serves,
+        *routed_containers().get((item.machine.name, item.running.name), ()),
+        *front_door_names(item),
+    }
     named = exposure_of_names(names)
     machine = item.machine
     answering = publicly_answering((*getattr(machine, "addresses", ()), getattr(machine, "address", "")))
@@ -247,4 +334,18 @@ def _exposure_of_container(item) -> Exposure:
         )
         for port in ports
     )
-    return Exposure(tuple(sorted((*direct, *named.routes), key=lambda route: LEVELS.index(route.level))))
+    # Nothing routes to it only when HQ read every routing kind and, for a
+    # container publishing ports, checked which answer from the internet.
+    checked = not item.running.ports or bool(_perimeter_read(machine))
+    return Exposure(
+        tuple(sorted((*direct, *named.routes), key=lambda route: LEVELS.index(route.level))),
+        known=reads_every_route() and checked,
+    )
+
+
+def _perimeter_read(machine) -> bool:
+    from control_plane.observations.host import PERIMETER_KIND
+
+    addresses = (*getattr(machine, "addresses", ()), getattr(machine, "address", ""))
+    subject = Subject.of(addresses=tuple(address for address in addresses if address))
+    return bool(readings().about(subject, kinds=(PERIMETER_KIND,)))

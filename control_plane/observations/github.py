@@ -69,8 +69,12 @@ class RepositoryRecord(ObservationRecord):
     # Names only: a variable's value is never read.
     variables: list[str] | None = None
     # ``{path, uses, action, ref, sha}`` per ``uses:`` line not pinned to a
-    # commit; ``sha`` is the commit its ref names, or "" where it could not be read.
+    # commit, in the workflows and the local composite actions; ``sha`` is the
+    # commit its ref names, or "" where it could not be read.
     pins: list[dict[str, Any]] | None = None
+    # Each ``uses:`` of a reusable workflow another repository holds, pinned or
+    # not: what it uses in turn is not read here.
+    called_workflows: list[str] | None = None
 
 
 OBSERVATIONS: tuple[ObservationSpec, ...] = (

@@ -218,12 +218,15 @@ def socket_holder_link(item: Container) -> ActionLink:
     key = item.running.watcher
     return ActionLink(
         "mark-socket-holder",
-        f"Mark {item.running.name} as holding the socket (a socket proxy or management agent)",
+        f"Mark {item.running.name} as holding the socket",
         "remote_write",
         command_url(UPDATE_CAPABILITY, key),
         capability=UPDATE_CAPABILITY,
         target=key,
-        reason="Set holds_docker_socket on its declaration; the socket stays listed, never an action item.",
+        reason=(
+            "For a socket proxy or a management agent, whose job is Docker: the "
+            "socket stays listed on its page, never an action item."
+        ),
     )
 
 

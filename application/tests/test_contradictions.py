@@ -118,6 +118,66 @@ class ContradictionTests(TestCase):
         self.assertIn("stray on edge-1 answers the internet on port 9000", finding.title)
 
 
+@PUBLIC_RANGE
+class NotContradictionsTests(TestCase):
+    """What looks like a disagreement on a real estate and is not one."""
+
+    def setUp(self):
+        estate()
+
+    def test_the_proxy_every_route_enters_through_is_what_is_in_front(self):
+        store(
+            "portainer.container",
+            {"host": "lab-1", "name": "app", "ports": [8000], "state": "running"},
+            {"host": "edge-1", "name": "shop", "ports": [8080], "state": "running"},
+            {"host": "edge-1", "name": "caddy", "ports": [80, 443], "state": "running"},
+        )
+        store("host.perimeter", {"record": "perimeter", "connection_ref": "example-ssh",
+                                 "public_addresses": ["198.51.100.20"], "ports_checked": [80, 443],
+                                 "answered_publicly": [80, 443]})
+
+        self.assertEqual(raised("published-port-unfronted"), ())
+
+    def test_a_gate_on_a_domain_hq_does_not_read_names_nothing_it_could_see(self):
+        store("cloudflare.access_app", {"connection_ref": CLOUDFLARE, "id": "a1", "name": "Login",
+                                        "domain": "team.provider.example/warp", "type": "warp"})
+
+        self.assertEqual(raised("gate-guards-nothing"), ())
+
+    def test_an_edge_that_proxies_on_to_the_internal_machine_is_a_front(self):
+        # Public: through the edge, whose route forwards to lab-1. Inside: lab-1 directly.
+        store("caddy.route", {"connection_ref": "example-edge", "domain": "shop.example.com",
+                              "upstream": "100.64.0.10:8000"})
+        store(
+            "adguard.rewrite",
+            {"domain": "app.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
+            {"domain": "shop.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
+        )
+
+        with projection_scope():
+            from ..paths import path_to
+
+            lines = [route.line for route in path_to("shop.example.com").routes]
+        self.assertTrue(any("lab-1" in line and "edge-1" in line for line in lines), lines)
+        self.assertEqual(raised("split-horizon-disagrees"), ())
+
+    def test_a_host_network_proxy_serves_the_names_that_reach_its_machine(self):
+        store(
+            "cloudflare.dns_record",
+            record("shop.example.com", "A", "198.51.100.20"),
+            record("old.example.com", "A", "198.51.100.20", proxied=False),
+        )
+        store(
+            "portainer.container",
+            {"host": "lab-1", "name": "app", "ports": [8000], "state": "running"},
+            {"host": "edge-1", "name": "proxy", "ports": [], "network_mode": "host", "state": "running"},
+        )
+        store("portainer.runtime", {"host": "edge-1", "container": "proxy", "network_mode": "host",
+                                    "exposed_ports": [80, 443], "connection_ref": "example-portainer"})
+
+        self.assertEqual(raised("public-name-served-by-nothing"), ())
+
+
 class ServedCertificateTests(TestCase):
     def test_a_host_serving_another_certificate_offers_the_reinstall(self):
         from .test_paths import declare_certificate

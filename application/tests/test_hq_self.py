@@ -119,8 +119,8 @@ class PageTests(TestCase):
         self.assertEqual(service.machine, "example-host")
         # A row of the services table, marked, not a table of its own.
         self.assertNotContains(response, "<th>Hostname</th><th>Runs on</th><th>State</th>", html=False)
-        self.assertContains(response, '<span class="pill">HQ</span>', html=False)
-        # The mark is the badge; the state is HQ's health, never its mode.
+        self.assertNotContains(response, '<span class="pill">HQ</span>', html=False)
+        # Its state is HQ's health, never its mode.
         self.assertContains(response, '<span class="pill pill-good" title="Answering this request.">Up</span>', html=False)
         self.assertNotContains(response, ">Read-only<")
         self.assertContains(response, "hq.example.com")

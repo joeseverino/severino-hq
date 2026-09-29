@@ -52,13 +52,33 @@ standard. Each said once; the band above has its version and standing.
       {% else %}
         <p class="muted">Not yet, because:</p>
         <ul>{% for blocker in plan.blockers %}<li>{{ blocker.reason }}</li>{% endfor %}</ul>
-        {% if plan.install %}
-          <p class="muted">Every deploy brings the helper, owned by root. To let this machine run it:</p>
-          <ol>{% for step in plan.install %}<li><strong>{{ step.label }}</strong> <code>{{ step.detail }}</code></li>{% endfor %}</ol>
-        {% endif %}
       {% endif %}
     </div>
   </div>
+  {% comment %}
+  Commands get the width of the page and a copy button, like the compose
+  change below: squeezed into the side column they wrap mid-path.
+  {% endcomment %}
+  {% if not plan.viable and plan.install %}
+  <div class="upgrade-install boxed-facts">
+    {% if plan.install_brought %}
+      <p class="muted">Every deploy of HQ brings the helper to this machine, owned by root. To let it run the helper:</p>
+    {% else %}
+      <p class="muted">HQ's deploys bring the helper only to the machine HQ runs on. To give this one its own copy, owned by root, and let it run the helper:</p>
+    {% endif %}
+    <ol class="upgrade-install-steps">
+      {% for step in plan.install %}
+        <li>
+          <div class="hardening-head">
+            <strong>{{ step.label }}</strong>
+            <button class="btn compact ghost" type="button" data-copy-target="install-{{ forloop.counter }}" hidden>Copy</button>
+          </div>
+          <pre id="install-{{ forloop.counter }}"><code>{{ step.detail }}</code></pre>
+        </li>
+      {% endfor %}
+    </ol>
+  </div>
+  {% endif %}
 </section>
 {% endif %}
 

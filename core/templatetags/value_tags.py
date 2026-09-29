@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from urllib.parse import unquote, urlsplit
 
@@ -173,3 +174,23 @@ def connection_anchor(ref):
     from application.entity_links import connection_anchor as anchor
 
     return anchor(str(ref or ""))
+
+
+# An identifier: a key, a hostname, an address, a path, a port spec. Anything
+# with a character plain prose does not use.
+_IDENTIFIER = re.compile(r"[-_./:@=#]")
+
+
+@register.filter
+def readout(value):
+    """A value as a readout shows it: an identifier in code, anything a person
+    would write in a sentence (a count, a word, a phrase) as text.
+
+    Every value in code made "11", "On" and "Need approval" look like keys to
+    copy, and put a grey chip around each number in a list of three numbers.
+    """
+
+    text = str(value)
+    if " " not in text.strip() and _IDENTIFIER.search(text):
+        return format_html("<code>{}</code>", text)
+    return text

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
-from ..exposure import GATED, OPEN, PRIVATE, UNROUTED, exposure_of_name, status_at
+from ..exposure import GATED, OPEN, PRIVATE, UNKNOWN, UNROUTED, exposure_of_name, status_at
 from ..projection import projection_scope
 from .test_paths import CLOUDFLARE, PUBLIC_RANGE, estate, record, store
 
@@ -40,6 +40,24 @@ class ExposureTests(TestCase):
         self.assertEqual(exposure.worst.gates, ("Behind Access: Shop admin",))
         self.assertIn("behind a gate as shop.example.com", exposure.sentence)
 
+    def test_a_gate_on_every_path_gates_the_name(self):
+        store("cloudflare.access_app", {"connection_ref": CLOUDFLARE, "id": "a1", "name": "Shop",
+                                        "domain": "shop.example.com/*", "type": "self_hosted"})
+
+        self.assertEqual(self.level("shop.example.com"), GATED)
+
+    def test_a_gate_on_one_path_leaves_the_name_open_and_says_where(self):
+        store("cloudflare.access_app", {"connection_ref": CLOUDFLARE, "id": "a1", "name": "Shop admin",
+                                        "domain": "shop.example.com/admin*", "type": "self_hosted"})
+
+        with projection_scope():
+            exposure = exposure_of_name("shop.example.com")
+
+        self.assertEqual(exposure.level, OPEN)
+        self.assertEqual(exposure.worst.gates, ())
+        self.assertEqual(exposure.worst.path_gates, ("/admin*",))
+        self.assertIn("gated only at /admin*", exposure.sentence)
+
     def test_a_name_nothing_resolves_is_unrouted(self):
         self.assertEqual(self.level("nothing.example.com"), UNROUTED)
 
@@ -47,8 +65,8 @@ class ExposureTests(TestCase):
 class RankingTests(TestCase):
     def test_exposure_only_ever_lowers_urgency(self):
         self.assertEqual(
-            [status_at("serious", level) for level in (OPEN, GATED, PRIVATE, UNROUTED)],
-            ["serious", "attention", "attention", "neutral"],
+            [status_at("serious", level) for level in (OPEN, UNKNOWN, GATED, PRIVATE, UNROUTED)],
+            ["serious", "serious", "attention", "attention", "neutral"],
         )
         self.assertEqual(
             [status_at("attention", level) for level in (OPEN, GATED, PRIVATE, UNROUTED)],
@@ -58,7 +76,9 @@ class RankingTests(TestCase):
 
 
 @PUBLIC_RANGE
-class ExposurePageTests(TestCase):
+class ServiceReachTests(TestCase):
+    """Who reaches each name, on the pages that already list the names."""
+
     def setUp(self):
         from django.contrib.auth import get_user_model
 
@@ -69,14 +89,26 @@ class ExposurePageTests(TestCase):
     def page(self):
         from django.urls import reverse
 
-        return self.client.get(reverse("control_plane:exposure"))
+        return self.client.get(reverse("control_plane:services"))
 
-    def test_names_are_listed_worst_first_with_who_can_reach_them(self):
+    def service(self, name):
+        from django.urls import reverse
+
+        return self.client.get(reverse("control_plane:service", args=[name])).content.decode()
+
+    def test_each_name_says_who_can_reach_it(self):
         body = self.page().content.decode()
 
-        self.assertLess(body.index("shop.example.com"), body.index("app.example.com"))
-        self.assertIn("Open to the internet", body)
+        self.assertIn(
+            '<span class="exposure exposure-open" title="Open to the internet as example.com">Internet</span>',
+            body,
+        )
+
+    def test_a_private_name_offers_no_gate(self):
+        body = self.service("app.example.com")
+
         self.assertIn("Private networks only", body)
+        self.assertNotIn("Put an access list in front", body)
 
     def test_an_open_name_behind_a_declared_proxy_offers_its_access_list(self):
         from control_plane.models import ManagedResource
@@ -88,7 +120,7 @@ class ExposurePageTests(TestCase):
                   "connection_ref": "example-npm"},
         )
 
-        body = self.page().content.decode()
+        body = self.service("shop.example.com")
 
         self.assertIn("Put an access list in front of example-shop-proxy", body)
         self.assertIn("infrastructure.resource.update/?target=example-shop-proxy", body)

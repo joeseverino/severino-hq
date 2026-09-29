@@ -32,6 +32,13 @@ readings. The path is the next section, drawn once.
   <h2>Path{% if routes|length == 1 %} <span class="heading-aside">via {{ routes.0.via_phrase }}</span>{% endif %}</h2>
   {% if topology_url %}<a class="btn ghost compact" href="{{ topology_url }}">See in topology</a>{% endif %}
 </div>
+<p class="path-reach"><span class="exposure exposure-{{ exposure.level }}">{{ exposure.label }}</span>{% if exposure.worst.path_gates %} <span class="muted">· gated only at {% for path in exposure.worst.path_gates %}<code>{{ path }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</p>
+{% if gate_fixes and not read_only %}
+  <div class="notice notice-attention">
+    <strong>Anyone on the internet reaches this unasked</strong>
+    <p>{% for fix in gate_fixes %}<a class="btn compact" href="{{ fix.url }}" title="{{ fix.reason }}">{{ fix.label }}</a> {% endfor %}</p>
+  </div>
+{% endif %}
 {% for route, parts in route_parts %}
   {% if routes|length > 1 %}<h3 class="section-heading">Via {{ route.via_phrase }}</h3>{% endif %}
   {% include "control_plane/_path_hops.html" with route=route label="Path via "|add:route.via %}
@@ -62,9 +69,9 @@ readings. The path is the next section, drawn once.
       <span class="control-label">{{ facet.label }}</span>
       {% comment %}
       A facet HQ both declares and watches says it once. The container's key is
-      its machine and its name joined, so printing the key under them repeated
-      both halves a third time, and the state the sweep knows was nowhere,
-      because a declaration nothing reconciles observes nothing.
+      its machine and its name joined, so printing it under them repeats both,
+      and the state comes from the sweep, because a declaration nothing
+      reconciles observes nothing.
       {% endcomment %}
       {% if facet.present and facet.observed %}
         {% with claim=facet.claims.0 %}
@@ -104,9 +111,8 @@ readings. The path is the next section, drawn once.
           </span>
         {% endfor %}
         {% comment %}
-        Where it runs, once, as a link. Named in prose on the observed card and
-        as a plain readout row on the declared one, it went nowhere either way,
-        so "what else is on this machine" meant going to find it.
+        Where it runs, once, as a link, so "what else is on this machine" is one
+        click away.
         {% endcomment %}
         {% if facet.machine %}
           <span class="readout"><span class="readout-label">On</span> {% entity facet.machine.link %}</span>
@@ -117,9 +123,9 @@ readings. The path is the next section, drawn once.
       {% elif service.origin.external and facet.routes %}
         {% comment %}
         Not a gap. A name resolving straight to something outside is already
-        routed, and nothing on this network should answer for it: the page
-        said "nothing supplies this" beside a card naming exactly what does,
-        and offered to add a proxy in front of a site that must not have one.
+        routed, and nothing on this network should answer for it: saying "nothing
+        supplies this" beside a card naming what does, or offering a proxy in front
+        of a site that must not have one, would both be wrong.
 
         Named by what it would otherwise have taken, rather than by whoever
         answers instead. Every facet that routes takes this branch, so naming
@@ -200,7 +206,7 @@ readings. The path is the next section, drawn once.
         <strong class="control-unknown">Not declared</strong>
         <span>None for {{ service.hostname }}.</span>
         {% comment %}
-        Named by the provider's own label. Offered as the bare kind, this read
+        Named by the provider's own label. The bare kind reads as
         "Add cloudflare.dns_record": an identifier where a sentence belongs.
         The hostname rides along, so the form opens already knowing which name
         it is being asked about.
@@ -259,13 +265,12 @@ the same shape from the same file.
 The declarations behind the other names, folded away.
 
 Not in the cards above: a card describes what answers for *this* name, and an
-alias's CNAME put a second answer in the DNS box that read as two records
-competing for one name: HQ raised a wiring fault and called a working site
-incomplete. Dropped instead, which is where this started, the record appeared
-on no page at all.
+alias's CNAME there would read as a second record competing for one name and
+raise a false wiring fault. Not dropped either, or the record would appear on
+no page at all.
 
 So: present, attached to the service it belongs to, and out of the way, because
-it is not what anyone opened this page to read.
+it is not what anyone opens this page to read.
 {% endcomment %}
   <details class="control-diagnostics">
     <summary>{{ service.alias_summary }}</summary>

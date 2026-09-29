@@ -426,7 +426,9 @@ def _holder_edges(nodes, edges, resources) -> None:
             for resource_id in declared.get((kind, _mirrored_identity(kind, record)), ()):
                 for holder in holders:
                     relation = edge_between(holder, resource_id, "used_by")
-                    edges[relation.id] = relation
+                    # The connection may already use this declaration by name,
+                    # with its own status: that edge says more, so it stays.
+                    edges.setdefault(relation.id, relation)
 
 
 def _mirrored_identity(kind: str, record) -> tuple[str, ...]:
@@ -451,8 +453,8 @@ def _holders(provider, record, by_ref, by_provider) -> list[str]:
 def _connects_edges(nodes, edges, estate: _Estate) -> None:
     """Declared containers a connecting record names together talk to each other.
 
-    Any reading whose spec says it ``connects`` draws them: a Docker network
-    today, whatever groups containers tomorrow.
+    Any reading whose spec says it ``connects`` draws them, a Docker network or
+    anything else that groups containers.
     """
 
     declared = {

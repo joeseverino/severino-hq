@@ -6,7 +6,7 @@ drawn: a page template extends page.html rather than including this.
 Page field, so the SDK's Page is unchanged.
 {% endcomment %}
 <header class="page-head">
-  <div>
+  <div class="page-head-copy">
     {% if page.trail %}<p class="page-trail">{% for label, url in page.trail %}<a href="{{ url }}">{{ label }}</a> / {% endfor %}</p>{% endif %}
     <div class="page-title-row">
       <h1>{{ page.title }}</h1>
@@ -15,16 +15,27 @@ Page field, so the SDK's Page is unchanged.
     {% if page.lede %}<p class="page-lede">{{ page.lede }}</p>{% endif %}
   </div>
   {% if page.actions %}
+    {% comment %}
+    Every control beside the title on a wide screen, the lead one first. On a
+    phone only that one stays there and the rest sit behind "More", so a head
+    is always one line: a toolbar wrapped between a title and its lede reads as
+    neither.
+    {% endcomment %}
+    {% with lead=page.actions|lead_action %}
     <div class="page-actions">
+      {% include "partials/_page_action.html" with action=lead extra="" %}
       {% for action in page.actions %}
-        {% if action.method == "post" %}
-          {% post_button action.label action.url value=action.value css=action.css title=action.title disabled=action.disabled %}
-        {% elif action.disabled %}
-          <span class="{{ action.css }}" aria-disabled="true"{% if action.title %} title="{{ action.title }}"{% endif %}>{{ action.label }}</span>
-        {% else %}
-          <a class="{{ action.css }}" href="{{ action.url }}"{% if action.modal %} data-modal-open="{{ action.modal }}"{% endif %}{% if action.title %} title="{{ action.title }}"{% endif %}>{{ action.label }}</a>
-        {% endif %}
+        {% if action != lead %}{% include "partials/_page_action.html" with extra="" %}{% endif %}
       {% endfor %}
+      {% if page.actions|length > 1 %}
+        <details class="overflow-menu" data-menu>
+          <summary aria-label="More actions"><span aria-hidden="true">⋯</span></summary>
+          <div class="overflow-menu-panel">
+            {% for action in page.actions %}{% if action != lead %}{% include "partials/_page_action.html" with extra="" %}{% endif %}{% endfor %}
+          </div>
+        </details>
+      {% endif %}
     </div>
+    {% endwith %}
   {% endif %}
 </header>

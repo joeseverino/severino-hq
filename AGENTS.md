@@ -50,8 +50,8 @@ reason the file exists.
 Local development uses `./scripts/dev.sh`. It collects assets and runs the same
 ASGI/Uvicorn path as production with reload enabled.
 
-`check.sh` runs the suite in parallel, which is why the gate takes ~46s rather
-than ~100s. `core/test_runner.py` is what makes that safe on WAL SQLite: read
+`check.sh` runs the suite in parallel, which roughly halves the gate's time.
+`core/test_runner.py` is what makes that safe on WAL SQLite: read
 it before changing anything about the test database. `CHECK_PARALLEL=1` rules
 parallelism out when a failure looks order- or isolation-dependent.
 
@@ -158,6 +158,10 @@ same review, and should fail when its path matches nothing rather than pass.
   `--no-deps`; the host-owned plugin check reproduces that production boundary.
 
 ## Frontend quality bar
+
+`docs/DESIGN.md` is the design language: the primitives a page is built from
+and the rules they keep. Read it before adding UI; grow a primitive rather
+than styling a page.
 
 - Server-render useful HTML first; JavaScript progressively enhances working
   links and forms.

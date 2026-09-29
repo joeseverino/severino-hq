@@ -4,6 +4,9 @@ A list: the toolbar, the table and its empty state, drawn from the view's
 TableListMixin. The header comes from `table.columns`; a page writes only the
 cells of one row in `{% block row %}`, which renders once per row with `row`
 set. `{% block summary %}` sits between the toolbar and the table.
+`{% block empty %}` says what an empty list means ("No assets yet."); a list
+emptied by its own search or filters says so here instead, with the way out,
+so a page never has to tell the two apart.
 {% endcomment %}
 {% block page %}
 {% include "partials/_table_toolbar.html" %}
@@ -21,11 +24,11 @@ set. `{% block summary %}` sits between the toolbar and the table.
     <tbody>
       {% for row in object_list %}
         <tr>
-          {% if table.selectable %}<td class="select-column"><input type="checkbox" data-row-select value="{{ row.pk }}" aria-label="Select row"></td>{% endif %}
+          {% if table.selectable %}<td class="select-column">{% if row.pk %}<input type="checkbox" data-row-select value="{{ row.pk }}" aria-label="Select row">{% endif %}</td>{% endif %}
           {% block row %}{% endblock %}
         </tr>
       {% empty %}
-        <tr class="row-empty"><td colspan="{{ table.columns|length|add:table.selectable }}">{% block empty %}Nothing here yet.{% endblock %}</td></tr>
+        <tr class="row-empty"><td colspan="{{ table.columns|length|add:table.selectable }}">{% if table.active_count %}Nothing matches. <a href="?">Clear the search and filters</a>{% else %}{% block empty %}Nothing here yet.{% endblock %}{% endif %}</td></tr>
       {% endfor %}
     </tbody>
     {% block foot %}{% endblock %}

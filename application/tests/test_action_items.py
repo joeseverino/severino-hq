@@ -154,6 +154,19 @@ class PageTests(TestCase):
         self.assertEqual(page.context["profile_action_count"], 1)
         self.assertEqual(page.context["action_queue_count"], 1)
 
+    def test_the_dashboard_counts_items_not_the_numbers_they_carry(self):
+        # ITEM stands for two widgets and stays unread: one thing needs you.
+        self.client.post(reverse("action_items_mark_read"), {"key": OTHER["key"]})
+
+        with mock.patch("application.dashboard.work_queue", return_value=[ITEM, OTHER]):
+            page = self.client.get(reverse("dashboard"))
+
+        expected = self.client.get(reverse("action_item_count")).json()["count"]
+        self.assertEqual(expected, 1)
+        self.assertEqual(page.context["action_queue_count"], expected)
+        self.assertEqual(page.context["profile_action_count"], expected)
+        self.assertContains(page, "1 thing needs you")
+
     def test_mark_all_read_empties_the_unread_list(self):
         self.client.post(
             reverse("action_items_mark_read"), {"key": [ITEM["key"], OTHER["key"]]}

@@ -7,7 +7,11 @@ partial cannot own a document-unique id. Two timelines on one page (a domain's
 horizon beside the composed one) would both emit id="timeline-title", and a
 screen reader resolves a duplicate id to the first match, so the second section
 would announce the first one's name.
+
+A horizon with nothing on it draws nothing: an empty card that says so is a
+band of page spent on the absence of news.
 {% endcomment %}
+{% if timeline.items %}
 <section class="timeline{% if not plain %} card{% endif %}" aria-label="{{ timeline.title }}">
   <div class="section-head timeline-head">
     <div>
@@ -19,9 +23,8 @@ would announce the first one's name.
   {% if timeline.items %}
     {% comment %}
     The year appears only when it is not this one. A horizon can run years out
-    a passport, a licence, and month-and-day alone rendered "Sep 15" above
-    "Mar 19" with no way to tell they were 2029 and 2030, so a correctly sorted
-    list read as a sorting bug. Stamping every row with the current year instead
+    (a passport, a licence), and month-and-day alone makes a correctly sorted
+    list read as a sorting bug. Stamping every row with the current year
     would be noise on the rows that are actually soon.
     {% endcomment %}
     {% now "Y" as current_year %}
@@ -41,7 +44,6 @@ would announce the first one's name.
         </li>
       {% endfor %}
     </ol>
-  {% else %}
-    {% include "partials/_empty_state.html" with message="Nothing scheduled in this horizon." %}
   {% endif %}
 </section>
+{% endif %}

@@ -161,6 +161,8 @@ class RuntimeRecord(_OnMachine):
     devices: tuple[str, ...] = ()
     mounts: tuple[RuntimeMount, ...] = ()
     port_bindings: tuple[PortBinding, ...] = ()
+    # The ports the image says it listens on ("80/tcp" read as 80).
+    exposed_ports: tuple[int, ...] = ()
     # Bytes and CPUs; zero is no limit.
     memory_limit: int = 0
     cpu_limit: float = 0.0

@@ -71,7 +71,7 @@ class ActionItemsView(PageMixin, LoginRequiredMixin, TemplateView):
             action_items=unread,
             read_action_items=[item for item in items if item["read"]],
             action_item_total=len(unread),
-            profile_action_count=sum(1 for item in all_items if not item["read"]),
+            profile_action_count=read_state.count_unread(all_items),
             show_action_count=True,
             action_sources=sources,
             action_query=self.request.GET.get("q", "").strip(),

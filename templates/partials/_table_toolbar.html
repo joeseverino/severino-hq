@@ -2,7 +2,7 @@
   <input class="table-search" type="search" name="q" value="{{ table.query }}" placeholder="{{ table.search_placeholder }}" aria-label="{{ table.search_placeholder }}">
   <div class="table-filters" aria-label="Table filters">
     {% for filter in table.filters %}
-      <details class="table-filter-menu">
+      <details class="table-filter-menu" data-menu>
         <summary>{{ filter.label }}{% if filter.selected_count %} <span class="filter-count">{{ filter.selected_count }}</span>{% endif %}</summary>
         <div class="table-filter-options">
           {% for option in filter.options %}

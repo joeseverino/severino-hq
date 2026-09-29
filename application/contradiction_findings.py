@@ -76,12 +76,16 @@ def _subject(hostname: str) -> str:
 
 
 def _answered_by_nothing() -> tuple[Finding, ...]:
+    from .containers import containers
+    from .exposure import FRONT_DOOR_PORTS, listening_ports
     from .paths import path_to, routed_names
 
-    # A machine where a container publishes a web port serves names HQ cannot
-    # enumerate, so nothing there is called unserved.
-    serving = {machine for (machine, _name), record in _containers_by_place().items()
-               if {80, 443} & {int(port) for port in record.get("ports") or () if str(port).isdigit()}}
+    # A machine where a container answers on a web port serves names HQ cannot
+    # enumerate, so nothing there is called unserved. On the host's network a
+    # proxy publishes nothing, so what it listens on is what its image exposes.
+    serving = {
+        item.machine.name for item in containers() if FRONT_DOOR_PORTS & set(listening_ports(item))
+    }
     found = []
     for name in routed_names():
         for route in path_to(name).routes:
@@ -187,10 +191,16 @@ def _routed_to_stopped() -> tuple[Finding, ...]:
 def _gates_guarding_nothing() -> tuple[Finding, ...]:
     from control_plane.observations import OBSERVATIONS
 
+    from control_plane.names import in_zone
+
     from .facts import inventory_records
     from .paths import routed_names
+    from .zones import zone_names
 
     routed = set(routed_names())
+    # Only a name in a domain HQ reads can be said to have no record: a gate on
+    # the provider's own login domain names nothing HQ could have seen.
+    zones = zone_names()
     found = []
     for spec in OBSERVATIONS.values():
         if not spec.restricts:
@@ -198,7 +208,7 @@ def _gates_guarding_nothing() -> tuple[Finding, ...]:
         for _snapshot, record in inventory_records(spec.kind):
             title = spec.title(record)
             for name in sorted({normalized_hostname(host) for host in spec.hostnames(record)} - routed - {""}):
-                if "*" in name:
+                if "*" in name or not any(in_zone(name, zone) for zone in zones):
                     continue
                 console = spec.console(record)
                 found.append(
@@ -236,7 +246,12 @@ def _split_horizon() -> tuple[Finding, ...]:
         routes = path_to(name).routes
         public = {route.machine for route in routes if public_name(route) and route.machine}
         internal = {route.machine for route in routes if not public_name(route) and route.machine}
-        if not public or not internal or public & internal:
+        # Every machine a public request crosses: an edge that proxies on to
+        # the machine the internal record names is a front, and deliberate.
+        crossed = {
+            hop.name for route in routes if public_name(route) for hop in route.hops if hop.step == "machine"
+        }
+        if not public or not internal or public & internal or internal <= crossed:
             continue
         rewrites = _declared(name, (kind for kind, provider in PROVIDERS.items() if provider.facet == "dns" and not provider.public_effect))
         found.append(
@@ -268,12 +283,16 @@ def _split_horizon() -> tuple[Finding, ...]:
 
 def _unfronted_ports() -> tuple[Finding, ...]:
     from .containers import containers
-    from .exposure import publicly_answering, routed_containers
+    from .exposure import front_door_names, publicly_answering, routed_containers
 
     routed = routed_containers()
     found = []
     for item in containers():
         if not item.running.ports or item.serves or (item.machine.name, item.running.name) in routed:
+            continue
+        # The proxy every route enters through is what is in front, not a
+        # thing with nothing in front of it.
+        if front_door_names(item):
             continue
         machine = item.machine
         answering = publicly_answering((*getattr(machine, "addresses", ()), getattr(machine, "address", "")))

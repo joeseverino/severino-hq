@@ -106,7 +106,7 @@ def record_inventory(
         # A refused read refuses every part; only a read that answered has some.
         parts = clean_refused_parts(kind, report.get("refused_parts")) if reached else []
         # The last records, for a kind whose changes are worth a moment on the
-        # timeline (see ``_record_change``); other kinds pay no query for it.
+        # history (see ``_record_change``); other kinds pay no query for it.
         logs_changes = reached and getattr(PROVIDERS.get(kind), "from_record", None) is not None
         before = (
             ProviderInventory.objects.filter(kind=kind).values_list("records", flat=True).first()
@@ -143,8 +143,8 @@ def record_inventory(
 
     # Adoption is not done here. A record in a domain HQ has been made
     # responsible for is HQ's, but which records those are is `zones`' to say,
-    # and reaching for it from inside the sweep made the two modules import
-    # each other. `application.sweep` composes the pair instead.
+    # and reaching for it from inside the sweep would make the two modules
+    # import each other. `application.sweep` composes the pair instead.
     return {
         "ok": True,
         "recorded": stored,
@@ -157,7 +157,7 @@ READING_AUDIT_TYPE = "Reading"
 
 
 def _record_change(row: ProviderInventory, before: list[Any], after: list[Any], controller_id: str) -> None:
-    """A reading's records changed between two sweeps: the moment, for the timeline.
+    """A reading's records changed between two sweeps: the moment, for the history.
 
     Readings keep only their latest records, so without this a DNS record or a
     policy edited outside HQ changes nothing anyone can point at in time.
@@ -214,11 +214,9 @@ def confirm_observed(payload: dict[str, Any]) -> int:
     """Mark declarations the sweep just found still matching as observed.
 
     A declaration is "in sync" when what HQ asked for is what is there, and a
-    sweep is HQ going and looking. Yet only a reconcile ever wrote that down,
-    so a declaration nothing had changed sat reporting "never reported", and
-    nothing queues a reconcile for a resource that has not drifted, so the
-    first look never came. Whole services read as unverified while every part
-    of them was running and had just been seen.
+    sweep is HQ going and looking. Nothing queues a reconcile for a resource
+    that has not drifted, so without this an unchanged declaration would never
+    be recorded as observed.
 
     Only where the spec still matches the live record. A declaration that has
     drifted is exactly the one a reconcile should visit, and quietly calling it
@@ -336,10 +334,9 @@ def _differences(
 ) -> tuple[tuple[str, str, str], ...]:
     """``(field, asked for, found)`` for every field the live record contradicts.
 
-    The comparison rule above, stated once and returning what it saw rather than
-    only whether it saw anything. Asking "do these match" and asking "how do
-    these differ" with two implementations is how a page comes to report drift
-    it cannot describe, or describe drift that is not there.
+    The comparison rule above, returning what it saw rather than only whether
+    it saw anything, so "do these match" and "how do they differ" cannot
+    disagree.
     """
 
     unobservable = PROVIDERS[kind].unobservable_fields
@@ -357,9 +354,7 @@ def _text(value: Any) -> str:
 
     A browser submits a textarea as CRLF and every provider returns LF, so a
     multi-line field saved through a form differs from the identical document
-    read back: byte for byte the same but for the line endings. A tailnet
-    policy sat drifted on that for a week, having been applied successfully and
-    accepted by Tailscale seconds earlier.
+    read back: byte for byte the same but for the line endings.
     """
 
     text = str(value)
@@ -370,17 +365,13 @@ def _text(value: Any) -> str:
 def _canonical_document(text: str) -> str:
     """A JSON document reduced to what it says, so layout is not a difference.
 
-    Line endings were only half of it. HQ stores the tailnet policy it applied
-    minified, on one line, and Tailscale hands the same policy back
-    pretty-printed across three hundred. Compared as text they never match, so
-    the policy read "Drifted" from the moment it was applied, and because a
-    drifted record is never stamped as observed, the kind then aged into "nothing
-    has observed this for 12 days". Two alarms, both false, and a real change to
-    the ACL would have looked exactly the same as either.
+    HQ stores a document such as the tailnet policy minified, and the provider
+    hands it back pretty-printed. Compared as text they never match, so a
+    policy would read as drifted from the moment it was applied.
 
     Only a value that parses as a JSON object or array is touched; anything else,
     including a policy written as HuJSON with comments, is compared as the text
-    it is, which is the old behaviour and errs towards reporting a difference.
+    it is, which errs towards reporting a difference.
     """
 
     stripped = text.strip()
@@ -412,8 +403,7 @@ def _record_drift(
     # ``Drifted`` asserted true, not ``Ready`` asserted false. A condition here
     # is a fact that holds, and ``resource_health`` reads only the ones that do
     # so a false Ready is not the opposite of a true one, it is a condition
-    # nothing looks at, and the summary card went on saying "not observed" above
-    # a table that described the drift in full.
+    # nothing looks at.
     # Stamped, so the drift keeps the moment it was first seen however many
     # sweeps find it again: that is what lets a finding say what happened then.
     resource.conditions = stamped(resource.conditions, [
@@ -646,8 +636,8 @@ def service_hostnames(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
 def record_identity(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
     """What makes a live record and a declaration the same thing.
 
-    Falls back to the hostnames, which is what identity meant when every
-    provider had one record per name. A provider that can hold several records
+    Falls back to the hostnames, which suffices for a provider with one record
+    per name. A provider that can hold several records
     for a single name says so itself (see ``ProviderSpec.identity``) because
     hostname identity would silently merge them and adopt whichever the provider
     listed first.

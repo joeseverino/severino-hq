@@ -1,4 +1,4 @@
-"""Highlight cards keep their figures in even rows at every card width."""
+"""A card's stats stay in even rows at every card width."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def _column_rules() -> tuple[tuple[int, str, int], ...]:
             width = int(match.group(2))
         elif match.group(5):
             width = 0
-        elif ".highlight-card > .kpi-grid" in match.group(3):
+        elif ".card > .kpi-grid" in match.group(3):
             columns = re.search(r"--kpi-columns:\s*(\d+)", match.group(4))
             if not columns:
                 continue
@@ -77,12 +77,10 @@ class HighlightGridTests(SimpleTestCase):
 
     def test_at_most_two_highlight_cards_share_a_row(self):
         css = (Path(settings.BASE_DIR) / "static" / "css" / "app.css").read_text(encoding="utf-8")
-        content = int(re.search(r"\.content \{ max-width: (\d+)px", css).group(1))
-        card = int(
-            re.search(r"\.dashboard-highlights \{[^}]*minmax\(min\(100%, (\d+)px\)", css).group(1)
-        )
+        rule = re.search(r"\.dashboard-highlights \{([^}]*)\}", css).group(1)
 
-        self.assertGreater(card * 3, content)
+        # Every track is at least half the row, so a third never fits beside two.
+        self.assertIn("calc(50% - var(--layout-gap))", rule)
         self.assertIn(
             ".dashboard-highlights > .highlight-card:nth-child(odd):last-child "
             "{ grid-column: 1 / -1; }",

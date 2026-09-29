@@ -10,7 +10,7 @@ from django.utils import timezone
 from control_plane.models import ManagedResource, ProviderInventory
 
 from ..containers import BEHIND, CURRENT, UNKNOWN, VULNERABLE, attention, containers
-from ..exposure import OPEN, PRIVATE, Exposure, RouteExposure
+from ..exposure import OPEN, PRIVATE, Exposure, RouteExposure, front_door_names, listening_ports
 
 
 def exposed(level):
@@ -136,12 +136,18 @@ class StandingTests(TestCase):
             opened = status()
         with exposed(PRIVATE):
             private = status()
-        unrouted = status()
+        # No routing kind is read here, so HQ does not know what reaches it.
+        unknown = status()
+        with mock.patch("application.paths.reads_every_route", return_value=True):
+            unrouted = status()
 
         self.assertEqual(opened[0], "serious")
         self.assertIn("open to the internet as app.example.com", opened[1])
         self.assertEqual(private[0], "attention")
-        # Nothing routes to it: information, which the queue leaves out.
+        # A gap in what HQ read is not evidence nothing reaches it.
+        self.assertEqual(unknown[0], "serious")
+        self.assertIn("reach not known", unknown[1])
+        # Nothing routes to it, and HQ read everything that could: information.
         self.assertEqual(unrouted[0], "neutral")
         self.assertIn("nothing routes to it", unrouted[1])
 
@@ -307,3 +313,38 @@ class RetryTests(TestCase):
 
         (record,) = ProviderInventory.objects.get(kind="registry.image").records
         self.assertEqual((record["digests"]["1.0.1"], record["unresolved"]), ("sha256:" + "1" * 64, []))
+
+
+class FrontDoorTests(TestCase):
+    """A proxy is on no route, since routes pass through it; it is as exposed
+    as the worst route that enters its machine."""
+
+    def item(self, *, ports=(), network_mode="bridge", exposed_ports=(), machine="example-box"):
+        running = mock.Mock(ports=tuple(ports), network_mode=network_mode)
+        running.name = "proxy"
+        box = mock.Mock()
+        box.name = machine
+        return mock.Mock(running=running, machine=box, runtime={"exposed_ports": list(exposed_ports)})
+
+    def entering(self, names):
+        return mock.patch(
+            "application.exposure.routed_containers",
+            return_value={("example-box", ""): frozenset(names)},
+        )
+
+    def test_the_container_publishing_the_front_door_takes_in_its_routes(self):
+        with self.entering({"app.example.com"}):
+            self.assertEqual(front_door_names(self.item(ports=(80, 443))), {"app.example.com"})
+
+    def test_on_the_host_network_the_image_says_what_it_listens_on(self):
+        host = self.item(network_mode="host", exposed_ports=(80, 81, 443))
+
+        self.assertEqual(listening_ports(host), (80, 81, 443))
+        with self.entering({"app.example.com"}):
+            self.assertEqual(front_door_names(host), {"app.example.com"})
+
+    def test_a_container_off_the_front_door_takes_in_nothing(self):
+        with self.entering({"app.example.com"}):
+            self.assertEqual(front_door_names(self.item(ports=(9000,))), frozenset())
+            self.assertEqual(front_door_names(self.item(network_mode="host", exposed_ports=(53,))), frozenset())
+            self.assertEqual(front_door_names(self.item(ports=(443,), machine="other-box")), frozenset())

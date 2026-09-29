@@ -279,3 +279,25 @@ class UpstreamReading(models.Model):
     key = models.CharField(max_length=100, primary_key=True)
     value = models.JSONField()
     observed_at = models.DateTimeField()
+
+
+class Appearance(models.Model):
+    """How one person wants HQ drawn. No row means follow the operating system.
+
+    Kept on the person rather than in the session, because a session ends every
+    twelve hours and a choice of theme should not quietly revert with it.
+    """
+
+    class Theme(models.TextChoices):
+        SYSTEM = "system", "System"
+        LIGHT = "light", "Light"
+        DARK = "dark", "Dark"
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="appearance"
+    )
+    theme = models.CharField(max_length=8, choices=Theme.choices, default=Theme.SYSTEM)
+    changed_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self) -> str:
+        return f"{self.user_id}:{self.theme}"

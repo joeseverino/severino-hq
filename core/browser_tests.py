@@ -57,7 +57,26 @@ SELECTORS = {
     "pill": ".pill",
     # The one box allowed to scroll sideways.
     "table_scroll": ".table-scroll",
+    # Frames by design: a control, a chip, a path's steps, a diagram's nodes.
+    "frame_exempt": ".btn, .pill, .request-path li, .topology-node, label",
+    # Everything inside a menu or a dialog, which float over the page.
+    "frame_exempt_within": "dialog, [data-menu]",
+    # The lead control renders first, so it is the one a narrow head keeps.
+    "head_lead": ".page-head .page-actions > :first-child",
+    "head_title": ".page-head .page-title-row",
+    # Where the contrast check samples text: the page and the header over it.
+    "contrast_scope": "main, .site-header",
+    # A band's cells. Stats inside a card are the one band laid out with real
+    # gaps instead of padded cells, so the KPI band is not listed.
+    "band_cell": (
+        ":is(.control-summary, .service-band, .fact-band, .finding-facts, .insight-grid,"
+        " .command-preview-path, .connection-control-grid, .sweep-grid,"
+        " .machine-telemetry-metrics) > *"
+    ),
 }
+# WCAG AA: body text, and text large enough to need less (24px, or 18.66px bold).
+TEXT_CONTRAST = 4.5
+LARGE_TEXT_CONTRAST = 3.0
 
 # Structural rules from scripts/layout-audit.js that hold on every page at
 # every width. The audit's density heuristics (card-too-wide, empty-card-bottom,
@@ -126,6 +145,42 @@ _ESCAPES = "() => {" + _DESCRIBE + """
     if (!held) found.push(`${describe(el)} spans ${Math.round(r.left)}..${Math.round(r.right)}px`);
   }
   return found.slice(0, 10);
+}"""
+
+_NESTED_FRAMES = "([exemptSelector, withinSelector]) => {" + _DESCRIBE + r"""
+  // One frame per thing. A box that draws its own border inside a box that
+  // draws one is two borders, two paddings and often two shadows around the
+  // same content; the design has one surface per thing and dividers inside it.
+  // Controls, chips, the steps of a path and menus are frames by design.
+  const framed = (el) => {
+    const style = getComputedStyle(el);
+    const sides = ['Top', 'Right', 'Bottom', 'Left'].filter((side) =>
+      parseFloat(style[`border${side}Width`]) > 0 && style[`border${side}Style`] !== 'none'
+      && !/rgba\(0, 0, 0, 0\)|transparent/.test(style[`border${side}Color`]));
+    const r = box(el);
+    return sides.length >= 3 && r.width > 60 && r.height > 30;
+  };
+  const exempt = (el) => ['TABLE', 'TD', 'TH', 'TR', 'INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'SUMMARY', 'CODE', 'PRE', 'IMG'].includes(el.tagName)
+    || el.matches(exemptSelector)
+    || el.closest(withinSelector);
+  const found = [];
+  for (const el of document.querySelectorAll('main *')) {
+    if (exempt(el) || !el.checkVisibility() || !framed(el)) continue;
+    for (let up = el.parentElement; up && up.tagName !== 'MAIN'; up = up.parentElement) {
+      if (!exempt(up) && framed(up)) { found.push(`${describe(el)} framed inside ${describe(up)}`); break; }
+    }
+  }
+  return found.slice(0, 10);
+}"""
+
+_HEAD_ON_ONE_LINE = """([leadSelector, titleSelector]) => {
+  // A narrow head is one line: the title and its lead control, nothing
+  // between them and the lede.
+  const lead = document.querySelector(leadSelector);
+  const title = document.querySelector(titleSelector);
+  if (!lead || !title) return null;
+  const a = lead.getBoundingClientRect(), t = title.getBoundingClientRect();
+  return a.top < t.bottom && a.bottom > t.top;
 }"""
 
 _SIDEWAYS = "(allowed) => {" + _DESCRIBE + """
@@ -297,6 +352,117 @@ _ROW_HEIGHTS = "(lines) => {" + _DESCRIBE + """
   return [...new Set(found)].slice(0, 10);
 }"""
 
+_CONTRAST = "([scope, body, large]) => {" + _DESCRIBE + """
+  // Every visible element that holds text of its own, measured against the
+  // colour actually behind it: the nearest ancestor that paints a background,
+  // with translucent layers composited down to an opaque one. A colour
+  // written for one palette only is what this catches: a light-mode ink left
+  // on a dark card reads as nothing, and no other check looks at colour.
+  const canvas = document.createElement('canvas').getContext('2d', {willReadFrequently: true});
+  canvas.canvas.width = canvas.canvas.height = 1;
+  // Whatever syntax the browser serialises a colour in (rgb(), color(srgb),
+  // oklch from a color-mix), paint it and read the pixel back.
+  const cache = new Map();
+  const rgba = (value) => {
+    if (cache.has(value)) return cache.get(value);
+    canvas.clearRect(0, 0, 1, 1);
+    canvas.fillStyle = '#000'; canvas.fillStyle = value;
+    canvas.fillRect(0, 0, 1, 1);
+    const [r, g, b, a] = canvas.getImageData(0, 0, 1, 1).data;
+    const parsed = [r, g, b, a / 255];
+    cache.set(value, parsed);
+    return parsed;
+  };
+  const over = (top, under) => {
+    const a = top[3];
+    return [0, 1, 2].map((i) => top[i] * a + under[i] * (1 - a)).concat(1);
+  };
+  const background = (el) => {
+    const layers = [];
+    for (let up = el; up; up = up.parentElement) {
+      const colour = rgba(getComputedStyle(up).backgroundColor);
+      if (colour[3] > 0) layers.push(colour);
+      if (colour[3] >= 1) break;
+    }
+    let result = rgba(getComputedStyle(document.documentElement).backgroundColor);
+    if (result[3] < 1) result = [255, 255, 255, 1];
+    for (const layer of layers.reverse()) result = over(layer, result);
+    return result;
+  };
+  const luminance = ([r, g, b]) => {
+    const [R, G, B] = [r, g, b].map((c) => {
+      c /= 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+  };
+  const ratio = (a, b) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  // Inactive controls and deliberately faded content are exempt, as WCAG
+  // exempts them: they say they are not in play.
+  const inactive = (el) => el.closest(':disabled, [aria-disabled="true"], [hidden]')
+    || [...function* () { for (let up = el; up; up = up.parentElement) yield up; }()]
+      .some((up) => parseFloat(getComputedStyle(up).opacity) < 1);
+  const found = [];
+  let sampled = 0;
+  for (const root of document.querySelectorAll(scope)) {
+    for (const el of root.querySelectorAll('*')) {
+      const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+      if (!own || !el.checkVisibility()) continue;
+      const r = box(el);
+      if (r.width < 2 || r.height < 2 || inactive(el)) continue;
+      const style = getComputedStyle(el);
+      const size = parseFloat(style.fontSize);
+      const bold = parseInt(style.fontWeight, 10) >= 700;
+      const needed = size >= 24 || (bold && size >= 18.66) ? large : body;
+      const behind = background(el);
+      const ink = over(rgba(style.color), behind);
+      const measured = ratio(ink, behind);
+      sampled += 1;
+      if (measured < needed) {
+        found.push(`${describe(el)} ${measured.toFixed(2)}:1 (${style.color} on ${behind.slice(0, 3).map(Math.round)}): ${el.textContent.trim().slice(0, 40)}`);
+      }
+    }
+  }
+  return {sampled, found: [...new Set(found)].slice(0, 10)};
+}"""
+
+
+# A band cell with no padding: its content touches the hairlines around it.
+# The frame rule zeroes the inset of anything nested in a surface, and a band
+# is one, so a component placed in a band loses its padding without a trace.
+_UNPADDED_CELLS = "(selector) => {" + _DESCRIBE + """
+  return [...document.querySelectorAll(selector)]
+    .filter((el) => el.getBoundingClientRect().width > 0)
+    .filter((el) => {
+      const style = getComputedStyle(el);
+      return parseFloat(style.paddingLeft) < 4 || parseFloat(style.paddingTop) < 4;
+    })
+    .map(describe);
+}"""
+
+
+# A table with one row whose only clipped text is for screen readers, beside
+# a decoration hidden from them, and one row whose value really is cut off.
+_ROW_TOGGLE_PROBE = f"""<!doctype html><html><head>
+<link rel="stylesheet" href="{settings.STATIC_URL}css/app.css">
+<script defer src="{settings.STATIC_URL}js/tables.js"></script>
+</head><body><main><div class="table-scroll"><table class="data-table"><tbody>
+<tr data-probe="screen-reader"><th scope="row">Chest</th>
+<td><span class="cadence-mark is-hit" aria-hidden="true"></span>
+<span class="visually-hidden">One session in the week of Aug 10, said in full</span></td></tr>
+<tr data-probe="clamped"><th scope="row">Name</th>
+<td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
+</tbody></table></div></main></body></html>"""
+_ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr')].map((row) => ({
+  probe: row.dataset.probe,
+  toggles: row.querySelectorAll('button[aria-expanded]').length,
+  beside_name: row.querySelector('th button[aria-expanded]') !== null,
+  in_decoration: row.querySelector('[aria-hidden=true] button[aria-expanded]') !== null,
+}))"""
+
 
 class LayoutBrowserTests(SimpleTestCase):
     databases = {"default"}
@@ -332,13 +498,25 @@ class LayoutBrowserTests(SimpleTestCase):
         cls.addClassCleanup(cls.browser.close)
 
     def setUp(self):
-        # Layout must hold before progressive enhancement, so script is off.
-        self.context = self.browser.new_context(java_script_enabled=False)
-        self.addCleanup(self.context.close)
+        self.context = None
+        self.start()
+        self.addCleanup(lambda: self.context.close())
+        self.addCleanup(self.capture_failure)
+
+    def start(self, **options):
+        """A fresh browser context, replacing any the test already has.
+
+        Layout must hold before progressive enhancement, so script is off
+        unless a test is checking the enhancement itself.
+        """
+
+        if self.context is not None:
+            self.context.close()
+        options.setdefault("java_script_enabled", False)
+        self.context = self.browser.new_context(**options)
         self.context.set_default_timeout(5000)
         self.context.route("**/*", self.respond)
         self.page = self.context.new_page()
-        self.addCleanup(self.capture_failure)
 
     def respond(self, route):
         path = urlsplit(route.request.url).path
@@ -416,6 +594,28 @@ class LayoutBrowserTests(SimpleTestCase):
 
         self.each(check)
 
+    def test_nothing_is_framed_inside_a_frame(self):
+        def check(_name):
+            self.assertEqual(
+                self.page.evaluate(
+                    _NESTED_FRAMES, [SELECTORS["frame_exempt"], SELECTORS["frame_exempt_within"]]
+                ),
+                [],
+            )
+
+        self.across(check)
+
+    def test_a_narrow_head_keeps_its_lead_control_beside_the_title(self):
+        for name in ALL_PAGES:
+            with self.subTest(page=name):
+                self.open(name, 390)
+                self.assertIn(
+                    self.page.evaluate(
+                        _HEAD_ON_ONE_LINE, [SELECTORS["head_lead"], SELECTORS["head_title"]]
+                    ),
+                    (None, True),
+                )
+
     def test_only_a_table_scrolls_sideways(self):
         """At a phone, tablet and laptop width, with every disclosure open."""
 
@@ -485,6 +685,30 @@ class LayoutBrowserTests(SimpleTestCase):
 
         self.each(check)
 
+    def test_text_reads_in_the_dark_theme(self):
+        """Text clears WCAG AA on whatever it sits on, in the dark palette.
+
+        Colour lives in tokens and each token carries both palettes, so a
+        light-only colour can only come from a component that went round them.
+        The stylesheet test catches a literal; this catches the rest (a token
+        whose dark half was never checked, ink meant for one surface drawn on
+        another) by measuring what the browser actually paints.
+        """
+
+        self.start(color_scheme="dark")
+
+        def check(_name):
+            self.assertEqual(
+                self.page.evaluate("() => matchMedia('(prefers-color-scheme: dark)').matches"), True
+            )
+            report = self.page.evaluate(
+                _CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_TEXT_CONTRAST]
+            )
+            self.assertGreater(report["sampled"], 0)
+            self.assertEqual(report["found"], [])
+
+        self.across(check)
+
     def test_the_dashboard_pairs_its_cards_on_a_wide_screen(self):
         self.open("dashboard", 1280)
         for key in ("highlights", "patterns"):
@@ -504,6 +728,31 @@ class LayoutBrowserTests(SimpleTestCase):
 
     def test_a_dashboard_without_contributors_draws_no_empty_pairs(self):
         self.open("dashboard-bare", 1280)
-        for key in SELECTORS:
+        # The dashboard's card rows, not every selector the gate knows: a
+        # bare dashboard still has buttons and labels.
+        for key in ("highlights", "patterns"):
             with self.subTest(cards=key):
                 self.assertEqual(self.boxes(key), [])
+
+    def test_a_row_toggle_is_owed_only_to_what_a_reader_cannot_see(self):
+        """The row expander measures what is cut off, so it runs with script on.
+
+        Screen-reader text is clipped to a pixel by design and a decoration is
+        hidden from assistive technology; neither is content a row withholds.
+        A row that really is cut gets one toggle, beside the cell that names it.
+        """
+
+        self.start(java_script_enabled=True)
+        self.pages = {**self.pages, "row-toggle-probe": _ROW_TOGGLE_PROBE}
+        self.open("row-toggle-probe", 1280)
+        rows = {row["probe"]: row for row in self.page.evaluate(_ROW_TOGGLES)}
+        self.assertEqual(rows["screen-reader"]["toggles"], 0)
+        self.assertEqual(rows["clamped"]["toggles"], 1)
+        self.assertTrue(rows["clamped"]["beside_name"])
+        self.assertFalse(rows["clamped"]["in_decoration"])
+
+    def test_a_band_cell_keeps_its_padding(self):
+        def check(_name):
+            self.assertEqual(self.page.evaluate(_UNPADDED_CELLS, SELECTORS["band_cell"]), [])
+
+        self.across(check)

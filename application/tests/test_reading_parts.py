@@ -1,8 +1,7 @@
-"""A part of a reading refused while the rest read is never shown as fully readable.
-
-The regression: redirect rules refused on every zone while page rules read
-stored a marker record per zone, so the kind counted those as records, read as
-"Readable", and the apex's path said "Edge answers" with nothing unread.
+"""A part of a reading refused while the rest read is never shown as fully
+readable. With redirect rules refused on every zone and page rules read, the
+stored marker record per zone must not count as a record, read as "Readable",
+or let the apex's path say the edge answers with nothing unread.
 """
 
 from __future__ import annotations
@@ -109,7 +108,10 @@ class PartlyRefusedReadingTests(TestCase):
         with projection_scope():
             path = path_to("example.net")
 
-        self.assertEqual(path.ends_at.label, "Edge answers")
+        # Named for the edge that answers, which is what "runs on" asks.
+        edge = next(hop for hop in path.routes[0].hops if hop.step == "edge")
+        self.assertEqual(path.ends_at.label, edge.name)
+        self.assertTrue(path.ends_at.label)
         self.assertEqual(path.ends_at.unread, PHRASE)
         self.assertIn(PHRASE, path.gaps)
 

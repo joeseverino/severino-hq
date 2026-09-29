@@ -392,7 +392,9 @@ class ListedServiceTests(TestCase):
 
         self.assertTrue(found["app.example.com"].is_hq)
         response = self.client.get(reverse("control_plane:services"))
-        self.assertContains(response, '<span class="pill">HQ</span>', count=1, html=False)
+        # One row among the rest, with no mark widening its column.
+        self.assertNotContains(response, '<span class="pill">HQ</span>', html=False)
+        self.assertContains(response, 'app.example.com</a>', html=False)
 
 
 @PUBLIC_RANGE
@@ -598,3 +600,33 @@ class HqHealthTests(TestCase):
             (service,) = prospects(("nothing.example.org",))
 
         self.assertEqual(service.status_label, "Nothing declared")
+
+
+class RoutedNamesTests(TestCase):
+    """The names HQ knows a record for, and whether it knows them all."""
+
+    def test_a_declared_record_the_last_read_missed_still_names_its_host(self):
+        from ..paths import routed_names
+
+        estate()
+        ManagedResource.objects.create(
+            key="declared-rewrite", kind="adguard.rewrite",
+            spec={"domain": "declared.example.com", "answer": "100.64.0.10"},
+        )
+
+        with projection_scope():
+            names = routed_names()
+
+        self.assertIn("declared.example.com", names)
+        self.assertIn("app.example.com", names)
+
+    def test_every_route_is_read_only_when_every_routing_kind_answered(self):
+        from ..paths import reads_every_route
+
+        estate()
+        with projection_scope():
+            self.assertTrue(reads_every_route())
+
+        ProviderInventory.objects.filter(kind="caddy.route").delete()
+        with projection_scope():
+            self.assertFalse(reads_every_route())

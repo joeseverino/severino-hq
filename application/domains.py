@@ -127,9 +127,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         ),
         # No attention provider, deliberately. "Active work with nothing
         # written about it yet" is a shape of the portfolio, not a decision:
-        # nothing clears it except months of work, so it sat at the top of the
-        # queue as its largest entry and never moved. The number still shows,
-        # on the projects card, as "N need output".
+        # only months of work clear it, so it does not belong in the queue.
+        # The number shows on the projects card as "N need output".
         integration=PluginIntegration(
             dashboard=_provider("application.sections:projects"),
             # What GitHub holds for a person: a deploy waiting on approval, a
@@ -161,10 +160,9 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         ),
     ),
     DomainDescriptor(
-        # The id stays `hq.content` though the label does not. It is the
-        # registry's stable key (what attribution is keyed on) and the
-        # section being renamed is a change to what an operator reads, not to
-        # which domain reported an item.
+        # The id `hq.content` need not match the label. It is the registry's
+        # stable key (what attribution is keyed on); the label is only what
+        # an operator reads.
         id="hq.content",
         label="Writeups",
         # The published work, and the section this group exists for. Its
@@ -264,16 +262,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(
             NavigationItem(
                 "Findings", "control_plane:findings", "control_plane", 128,
-                "Infrastructure",
-            ),
-            # Beside the findings: the same problems, ranked by who can reach them.
-            NavigationItem(
-                "Exposure", "control_plane:exposure", "control_plane", 128,
-                "Infrastructure",
-            ),
-            # What changed and when, across every connection: where drift is explained.
-            NavigationItem(
-                "Timeline", "control_plane:timeline", "control_plane", 128,
                 "Infrastructure",
             ),
         ),

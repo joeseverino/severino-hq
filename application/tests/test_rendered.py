@@ -58,6 +58,12 @@ def _page_routes(patterns=None, prefix=""):
                 yield path
 
 
+# Elements with no end tag, so never left open.
+_VOID = frozenset(
+    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+)
+
+
 class _Page(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -68,9 +74,17 @@ class _Page(HTMLParser):
         self.links: list[str] = []
         self.text: list[str] = []
         self._hidden = 0
+        # Open elements, each marked when it is a sideways scroll container.
+        self._open: list[tuple[str, bool]] = []
+        self.unwrapped_tables = 0
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        classes = (attrs.get("class") or "").split()
+        if tag == "table" and "data-table" in classes and not any(scroll for _tag, scroll in self._open):
+            self.unwrapped_tables += 1
+        if tag not in _VOID:
+            self._open.append((tag, "table-scroll" in classes))
         if tag == "form":
             self.form_depth += 1
             self.nested_forms += self.form_depth > 1
@@ -84,6 +98,10 @@ class _Page(HTMLParser):
             self._hidden += 1
 
     def handle_endtag(self, tag):
+        for index in range(len(self._open) - 1, -1, -1):
+            if self._open[index][0] == tag:
+                del self._open[index:]
+                break
         if tag == "form":
             self.form_depth = max(self.form_depth - 1, 0)
         if tag in {"script", "style", "template"}:
@@ -143,6 +161,10 @@ class RenderedPageTests(TestCase):
                 problems.append(f"{path}: {page.h1} h1 elements")
             if page.nested_forms:
                 problems.append(f"{path}: a form inside a form")
+            # A table is the one thing allowed to scroll sideways, and only
+            # inside its own scroll box: unwrapped, a phone scrolls the page.
+            if page.unwrapped_tables:
+                problems.append(f"{path}: a data table outside .table-scroll")
             doubled = sorted(name for name, count in page.ids.items() if count > 1)
             if doubled:
                 problems.append(f"{path}: ids used twice: {', '.join(doubled[:5])}")

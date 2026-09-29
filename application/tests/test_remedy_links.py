@@ -6,7 +6,7 @@ does nothing; one that opens the "replaces the whole record" trap turns a fix
 into a way to blank a record. Both happened. These tests make either
 impossible as a class: every command that takes a target preselects any target
 it acts on, however far down the catalogue, and every link the findings, the
-action queue and the exposure page emit is followed and checked.
+action queue and the service pages emit is followed and checked.
 """
 
 from __future__ import annotations
@@ -25,8 +25,8 @@ from control_plane.providers import PROVIDERS
 from ..action_links import command_url
 from ..capabilities import capability_registry
 from ..dashboard import work_queue
-from ..exposure_board import exposure_board
 from ..findings import derive_findings
+from ..paths import routed_names
 from ..projection import MAX_PAGE_SIZE, projection_scope
 from ..security import web_principal
 from .test_approvals import POLICY_KEY, declare_policy
@@ -109,7 +109,7 @@ def _command_links(links) -> list[tuple[str, str]]:
 
 @PUBLIC_RANGE
 class EveryEmittedRemedyOpensReadyTests(TestCase):
-    """The emitting side: follow what findings, the queue and exposure offer."""
+    """The emitting side: follow what findings, the queue and the service pages offer."""
 
     def setUp(self):
         estate()
@@ -162,16 +162,14 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
                 links += [(action["label"], action["url"], action["method"]) for action in item["actions"]]
                 for step in (item["workflow"] or {}).get("steps", ()):
                     links += [(action["label"], action["url"], action["method"]) for action in step.get("actions", ())]
-            board = exposure_board()
-            for section in board.sections:
-                links += [(cell.text, cell.url, "GET") for row in section.records for cell in row if cell.url]
         return links + self.rendered()
 
     def rendered(self) -> list[tuple[str, str, str]]:
         """Every command link the pages themselves render, as a person meets them."""
 
         pages = [
-            reverse("control_plane:findings"), reverse("action_items"), reverse("control_plane:exposure"),
+            reverse("control_plane:findings"), reverse("action_items"),
+            *(reverse("control_plane:service", args=[name]) for name in routed_names()),
             *(resource.get_absolute_url() for resource in ManagedResource.objects.all()),
         ]
         found = []

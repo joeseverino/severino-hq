@@ -17,6 +17,8 @@ from application.adoption import unmanaged_services
 from application.inventory import inventory_state
 from application.connections import machines_once
 from application.entity_links import entity_link
+from application.exposure import OPEN
+from application.exposure_fixes import gate_links
 from application.hq_self import LABEL as HQ_LABEL, hq_service
 from application.service_list import listed_service, listed_services
 from application.services import alias_target
@@ -42,7 +44,6 @@ class ServiceListView(PageMixin, LoginRequiredMixin, TemplateView):
 
     template_name = "control_plane/service_list.html"
     page_title = "Services"
-    page_lede = "Hostnames HQ manages, with their DNS, ingress and certificate."
 
     def get_page_actions(self):
         # "Add" on the services board starts a service, not the resource picker.
@@ -62,14 +63,18 @@ class ServiceListView(PageMixin, LoginRequiredMixin, TemplateView):
         favorites = ordered(self.request.user, SERVICE)
         # HQ's own name and observed names are rows like any other, marked.
         found = listed_services(favorites)
-        # Two tables rather than one with a rule through it. The few an
-        # operator keeps at the top are a different list with a different
-        # question: "is my stuff healthy" against "what else is out there",
-        # and reordering only means anything within the first.
-        context["favorites"] = [item for item in found if item.pinned]
-        context["services"] = [item for item in found if not item.pinned]
-        # One answer for both tables: asked separately, the two halves of one
-        # catalogue could render different columns.
+        # One table, a group each: the few an operator keeps at the top answer
+        # "is my stuff healthy", the rest "what else is out there", and
+        # reordering only means anything within the first. One table is what
+        # keeps both on one set of columns without fixing their widths.
+        pinned = [item for item in found if item.pinned]
+        rest = [item for item in found if not item.pinned]
+        context["service_groups"] = tuple(
+            group
+            for group in (("Favorites", pinned, True), ("Other services", rest, False))
+            if group[1]
+        )
+        # One answer for both groups, which share the table's columns.
         context["service_projects"] = any(item.project for item in found)
         # Where a service runs is one column, not two. The runtime facet named
         # the container declaration and the origin named the machine it runs
@@ -234,6 +239,11 @@ class ServiceDetailView(PageMixin, LoginRequiredMixin, TemplateView):
         context["sections"] = self.sections
         context["relationships"] = self.relationships
         context["read_only"] = self.own is not None
+        # Who reaches it, and, when that is anyone on the internet unasked,
+        # the gate HQ can put in front.
+        exposure = self.service.exposure
+        context["exposure"] = exposure
+        context["gate_fixes"] = gate_links(self.service) if exposure.level == OPEN else ()
         context["hq_label"] = HQ_LABEL
         context["runtime_facet"] = RUNTIME_FACET
         context["hq_machine"] = (

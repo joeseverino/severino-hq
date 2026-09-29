@@ -779,8 +779,9 @@ class CostTests(TestCase):
         # brake: this is a full page, so it draws the operator's menu, and the
         # switch there shows its state. Read once however many times the
         # template asks, and not cached across requests: a brake must never
-        # display a state that no longer holds.
-        with self.assertNumQueries(11):
+        # display a state that no longer holds. And one for the operator's
+        # theme, which `<html>` carries so the page paints in it first time.
+        with self.assertNumQueries(12):
             self.client.get(reverse("connection"))
 
     def test_the_panel_costs_the_same_however_many_devices_there_are(self):
@@ -791,7 +792,7 @@ class CostTests(TestCase):
             *(a_device(f"another-{index}", f"100.64.1.{index}") for index in range(12)),
         )
 
-        with self.assertNumQueries(11):
+        with self.assertNumQueries(12):
             self.client.get(reverse("connection"))
 
 
@@ -1021,8 +1022,8 @@ class CarriageTests(TestCase):
     """Which network the tailnet session is actually riding over.
 
     Being on the tailnet says the traffic is encrypted and the peer enrolled.
-    It says nothing about where the packets went, and a laptop in the next room
-    and one in an airport lounge produced an identical page before this.
+    It says nothing about where the packets went, so without this a laptop in
+    the next room and one in an airport lounge produce an identical page.
     """
 
     # A globally routable endpoint, built rather than written: the architecture

@@ -74,6 +74,11 @@ class UiProjectionTests(TestCase):
         self.assertIn('datetime="2026-11-01"', rendered)
         self.assertIn('href="/tasks/enroll/"', rendered)
 
+    def test_an_empty_timeline_draws_nothing(self):
+        rendered = render_to_string("partials/_timeline.html", {"timeline": Timeline("Next", "", ())})
+
+        self.assertEqual(rendered.strip(), "")
+
     def test_timeline_rejects_unsorted_events(self):
         with self.assertRaisesMessage(ValueError, "chronologically"):
             Timeline(
@@ -316,11 +321,10 @@ class LineChartTests(TestCase):
         # line up, and the line does start at the edge.
         self.assertEqual(line.ticks[0].y, bars.ticks[0].y)
         self.assertEqual(line.ticks[-1].y, bars.ticks[-1].y)
-        # Against the constants, not against 48 and 702. Written as literals
-        # this test pinned a copy of the geometry rather than the geometry, so
-        # moving the plot broke the test that exists to prove the plot moved
-        # everywhere at once: the same copied-constant fault the templates
-        # had.
+        # Against the constants, not against 48 and 702. Literals would pin a
+        # copy of the geometry rather than the geometry, so moving the plot
+        # would break the test that exists to prove the plot moved everywhere
+        # at once.
         self.assertAlmostEqual(line.series[0].points[0].x, PLOT_LEFT, places=1)
         self.assertAlmostEqual(
             line.series[0].points[-1].x, PLOT_LEFT + PLOT_WIDTH, places=1
@@ -459,6 +463,7 @@ class DashboardProjectionTests(TestCase):
         self.assertEqual(snapshot["kpis"]["projects_needing_output"], 1)
         # Items, not the numbers they carry.
         self.assertEqual(snapshot["priority_count"], len(snapshot["priority"]))
+        self.assertNotIn("priority_group_count", snapshot)
 
     def test_expense_kpis_respect_fiscal_year_start(self):
         today = timezone.localdate()

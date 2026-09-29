@@ -1,12 +1,14 @@
+{% comment %}
+Nothing at all when there is nothing to show: the dashboard's loader removes an
+empty answer, so the row closes up instead of carrying a card that says so.
+{% endcomment %}
+{% if recent_contacts %}
 <section class="card">
   <div class="section-head">
     <h2>Contacts</h2>
     {% if unread_contacts_count %}<span class="count">{{ unread_contacts_count }} unread</span>{% endif %}
   </div>
-  {% if recent_contacts %}
-    {% include "partials/_record_list.html" with rows=recent_contacts %}
-    <p class="section-foot"><a href="{% url 'contacts:list' %}">All messages &rarr;</a></p>
-  {% else %}
-    <p class="dash-empty">No messages.</p>
-  {% endif %}
+  {% include "partials/_record_list.html" with rows=recent_contacts %}
+  <p class="section-foot"><a href="{% url 'contacts:list' %}">All messages &rarr;</a></p>
 </section>
+{% endif %}

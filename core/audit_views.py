@@ -6,7 +6,9 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse
 from django.views.generic import DetailView, ListView
 
+from application import history
 from application.pages import PageAction, PageMixin
+from application.projection import projection_scope
 from application.tables import TableColumn, TableFilter, TableListMixin
 from .models import AuditLog
 
@@ -17,10 +19,10 @@ class AuditLogListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     context_object_name = "events"
     paginate_by = 50
     page_title = "Audit log"
-    page_lede = "Every change, sign-in, export and refusal, newest first."
     table_search_scope = "audit"
     table_selectable = True
     table_filters = (
+        TableFilter("source", "Source", "source", history.SOURCES),
         TableFilter("action", "Action", "action", AuditLog.Action.choices),
     )
     table_columns = (
@@ -48,7 +50,7 @@ class AuditLogListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
         )
 
     def get_queryset(self):
-        qs = AuditLog.objects.select_related("user")
+        qs = AuditLog.objects.select_related("user").annotate(source=history.source_of_event())
         if self._awaiting():
             from application.approvals import AUDIT_LABELS, awaiting_ids
 
@@ -62,7 +64,54 @@ class AuditLogListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["awaiting"] = self._awaiting()
+        page = list(context["object_list"])
+        if self._chronological():
+            with projection_scope():
+                found = history.external(self._external_sources(), **self._span(context, page))
+            page = history.entries(page, found)
+        else:
+            page = history.entries(page, group=False)
+        context["object_list"] = context["events"] = page
         return context
+
+    def _chronological(self) -> bool:
+        """The log read as history: newest first, unsearched, not a queue.
+
+        Only then do like events run together and the deploys and container
+        starts HQ's readings hold take their place between them. A search, a
+        sort by another column, an action filter or the approval queue asks for
+        the rows themselves.
+        """
+
+        get = self.request.GET
+        return not (
+            self._awaiting()
+            or get.get("q", "").strip()
+            or get.get("sort", self.table_default_sort) != self.table_default_sort
+            or self.table_values("action")
+        )
+
+    def _external_sources(self) -> frozenset[str]:
+        chosen = self.table_values("source")
+        return history.EXTERNAL.intersection(chosen) if chosen else history.EXTERNAL
+
+    def _span(self, context, page) -> dict:
+        """The stretch of time this page covers, so each moment lands on one page.
+
+        From the page's oldest event (unbounded on the last page) up to the
+        oldest event of the page before (unbounded on the first).
+        """
+
+        page_obj = context.get("page_obj")
+        if page_obj is None:
+            return {}
+        span = {}
+        if page_obj.has_next() and page:
+            span["since"] = page[-1].created_at
+        if page_obj.has_previous():
+            before = self.object_list[page_obj.start_index() - 2 : page_obj.start_index() - 1]
+            span["until"] = next(iter(before.values_list("created_at", flat=True)), None)
+        return span
 
     def _awaiting(self) -> bool:
         """The log narrowed to requests still waiting for a person."""

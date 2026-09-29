@@ -15,6 +15,7 @@ from django.utils import timezone
 from django.views.generic import TemplateView, View
 
 from application.agent_access import set_agents_paused
+from application.appearance import set_theme
 from application.command_center import command_center
 from application.projection import projection_scope
 from application.search import global_search
@@ -54,9 +55,8 @@ class ThrottledLoginView(LoginView):
     def get(self, request, *args, **kwargs):
         """Go straight to Pocket ID rather than asking which door to use.
 
-        Strictly less friction than the button it replaces: signing in is
-        already a redirect to the identity provider, and stopping to confirm
-        that is a click that decides nothing.
+        Signing in is already a redirect to the identity provider, so stopping
+        to confirm that is a click that decides nothing.
 
         Except after signing out, where bouncing would immediately return the
         still-valid provider session and make the sign-out look broken. There,
@@ -149,6 +149,23 @@ class AgentAccessView(LoginRequiredMixin, View):
         return redirect(safe_next(request, fallback=reverse("dashboard")))
 
 
+class ThemeView(LoginRequiredMixin, View):
+    """Choose system, light or dark. The form sends a choice, never a toggle."""
+
+    def post(self, request):
+        try:
+            set_theme(
+                request.POST.get("theme", ""),
+                principal=web_principal(request.user),
+                user=request.user,
+            )
+        except ValueError:
+            # A fixed reply: the service's own message is for logs and callers
+            # in-process, not something a request gets to read back.
+            return HttpResponseBadRequest("Choose system, light or dark.")
+        return redirect(safe_next(request, fallback=reverse("dashboard")))
+
+
 class AgentPolicyView(PageMixin, LoginRequiredMixin, TemplateView):
     """Capability policy. Reads from matrix(), writes through apply_changes()."""
 
@@ -211,7 +228,6 @@ class AgentPolicyView(PageMixin, LoginRequiredMixin, TemplateView):
 class SearchView(PageMixin, LoginRequiredMixin, TemplateView):
     template_name = "search.html"
     page_title = "Command Center"
-    page_lede = "Search records, resources, connections, and commands."
     result_limit = 8
     palette_search_limit = 3
     palette_search_total_limit = 12

@@ -104,6 +104,37 @@ for program in "${sbin}"/severino-hq-*; do
 done
 [ -e "${sbin}/severino-hq-sync-scripts" ] || bad "${sbin}/severino-hq-sync-scripts is missing; run fix-root-ownership.sh"
 
+# 4b. The upgrade helper, which a sudo rule lets another account run as root:
+#     root's, and the directories above it too, writable by no one else, and
+#     the release's copy. Absent is not a fault: the release adds it.
+helper="${lib}/scripts/upgrade-container.sh"
+root_uid="${PREFLIGHT_ROOT_UID:-0}"
+if [ -e "${helper}" ] || [ -L "${helper}" ]; then
+    guarded=1
+    for path in "${lib}" "${lib}/scripts" "${helper}"; do
+        # shellcheck disable=SC2012  # ls -ln reads mode and owner alike on every system
+        listing="$(ls -ldn -- "${path}")"
+        if [ -L "${path}" ]; then
+            bad "${path} is a symlink; a sudo rule runs the helper as root"
+        elif [ "$(printf '%s\n' "${listing}" | awk '{print $3}')" != "${root_uid}" ]; then
+            bad "${path} is not owned by root; a sudo rule runs the helper as root"
+        elif printf '%s\n' "${listing}" | cut -c6,9 | grep -q w; then
+            bad "${path} is writable by its group or others; a sudo rule runs the helper as root"
+        else
+            continue
+        fi
+        guarded=0
+    done
+    shipped="$(printf '%s\n' "${manifest}" | awk '$2 == "scripts/upgrade-container.sh" {print $1}')"
+    if [ "${guarded}" -eq 0 ]; then
+        :
+    elif [ "$(sha256sum <"${helper}" | cut -d' ' -f1)" = "${shipped}" ]; then
+        ok "${helper} is root's alone and identical to the release"
+    else
+        warn "${helper} differs from the release, which installs its own"
+    fi
+fi
+
 # 5. Every unit the release expects to find already installed.
 missing=0
 for unit in ${PREFLIGHT_UNITS:-}; do

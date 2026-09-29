@@ -59,10 +59,10 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
             {% if standing.advisories or standing.urgent %}
               <ul class="container-advisories">
                 {% for advisory in standing.advisories %}
-                  <li><span class="pill pill-{% if advisory.severity == "critical" or advisory.severity == "high" %}serious{% else %}attention{% endif %}">{{ advisory.severity }}</span> <a class="external-link" href="{{ advisory.url }}" rel="noopener">{{ advisory.id }}</a> {{ advisory.summary }}</li>
+                  <li><span class="pill pill-{% if advisory.severity == "critical" or advisory.severity == "high" %}serious{% else %}attention{% endif %}">{{ advisory.severity|capfirst }}</span> <a class="external-link" href="{{ advisory.url }}" rel="noopener">{{ advisory.id }}</a> {{ advisory.summary }}</li>
                 {% endfor %}
                 {% for finding in standing.urgent|slice:":3" %}
-                  <li><span class="pill pill-serious">{{ finding.severity }}</span> <a class="external-link" href="{{ finding.url }}" rel="noopener">{{ finding.id }}</a> <code>{{ finding.package }}</code> {{ finding.installed }} → {{ finding.fixed|join:", " }}</li>
+                  <li><span class="pill pill-serious">{{ finding.severity|capfirst }}</span> <a class="external-link" href="{{ finding.url }}" rel="noopener">{{ finding.id }}</a> <code>{{ finding.package }}</code> {{ finding.installed }} → {{ finding.fixed|join:", " }}</li>
                 {% endfor %}
                 {% if standing.urgent|length > 3 %}<li class="muted">and {{ standing.urgent|length|add:"-3" }} more on <a href="{{ group.containers.0.url }}#supply-chain">its page</a></li>{% endif %}
               </ul>
@@ -103,7 +103,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
             {% include "control_plane/_container_standing.html" %}
             {% with posture=item.posture %}<td>{% if posture.serious %}<span class="container-reach" tabindex="0" data-tip="{% for result in posture.unmet %}{% if result.check.serious %}{{ result.check.label }}&#10;{% endif %}{% endfor %}">Reach over its machine</span>{% elif posture.unmet %}<span tabindex="0" data-tip="{% for result in posture.unmet %}{{ result.check.label }}&#10;{% endfor %}">{{ posture.unmet|length|counted:"setting to harden,settings to harden" }}</span>{% elif posture.measured %}<span class="muted">{{ posture.met }} of {{ posture.measured }} met</span>{% else %}{% empty_value %}{% endif %}</td>{% endwith %}
             <td>{% for hostname in item.serves %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
-            <td>{% if not item.running.healthy %}<span class="pill pill-serious">{{ item.running.state }}</span><br>{% endif %}{{ item.running.uptime|default:item.running.status }}{% if item.running.check %}<br><span class="muted">{{ item.running.check }}</span>{% endif %}</td>
+            <td>{% if not item.running.healthy %}<span class="pill pill-serious">{{ item.running.state|capfirst }}</span><br>{% endif %}{{ item.running.uptime|default:item.running.status }}{% if item.running.check %}<br><span class="muted">{{ item.running.check }}</span>{% endif %}</td>
           </tr>
         {% endwith %}{% endfor %}
       </tbody>

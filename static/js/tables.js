@@ -18,10 +18,9 @@
   const selectedIds = new Set(readSelection());
 
   // A bounded scroll region has to be operable from the keyboard, and a plain
-  // `div` that scrolls is not focusable. This is the whole helper now: the
+  // `div` that scrolls is not focusable. That is all this helper does: the
   // heading itself is `position: sticky` in the stylesheet, so the browser
-  // pins it on the compositor and there is nothing here to measure, to
-  // schedule, or to fall a frame behind.
+  // pins it on the compositor and there is nothing here to measure.
   //
   // `is-pane` marks a wrapper that is genuinely its own scroll box: one
   // holding a table too wide to fit, or one an author capped to a reading
@@ -52,9 +51,92 @@
     });
   }
 
-  // Kept under the old name so the places that re-run after a table refresh
-  // keep working.
-  const scheduleStickyHeader = markScrollRegions;
+  // A row can say more than it shows: a clamped name, an ellipsis, a list
+  // folded behind "+5 more". Such a row gets one toggle that shows all of it,
+  // every cut-off value in full and every folded part open, and puts it back.
+  // The parts keep their own toggles too; this is the row's, not a
+  // replacement. Measured, not declared: a row that fits gets no toggle, and a
+  // resize that makes it fit takes the toggle away.
+  // Screen-reader text is clipped to a pixel on purpose, and a decoration
+  // hidden from assistive technology says nothing a reader could miss, so
+  // neither makes a row "say more".
+  const unseen = (el) => el.closest(".visually-hidden, [aria-hidden=true]") !== null;
+
+  const isCut = (el) => {
+    if (unseen(el)) return false;
+    const style = getComputedStyle(el);
+    if (style.overflowX === "visible" && style.overflowY === "visible") return false;
+    return el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
+  };
+
+  const rowSaysMore = (row) =>
+    [...row.querySelectorAll(":is(td, th) *")].some(isCut) || row.querySelectorAll(":is(td, th) details").length >= 2;
+
+  // The row's first cell, header or data: the toggle sits beside what names
+  // the row, not in whichever column happens to be the first <td>.
+  const toggleCell = (row) =>
+    [...row.children].find((cell) => !cell.querySelector("input[type=checkbox]"));
+
+  function markExpandableRows() {
+    document.querySelectorAll(".data-table > tbody > tr").forEach((row) => {
+      if (row.classList.contains("is-expanded")) return;
+      const toggle = row.querySelector(".row-expand");
+      const expandable = rowSaysMore(row);
+      if (expandable && !toggle) {
+        let cell = toggleCell(row);
+        if (!cell) return;
+        // Into the cell's own layout, so it sits beside the first value
+        // rather than on a line above a flex row of its own.
+        for (let depth = 0; depth < 2 && cell.firstElementChild && !unseen(cell.firstElementChild)
+          && ["flex", "inline-flex", "grid"].includes(getComputedStyle(cell.firstElementChild).display); depth++) {
+          cell = cell.firstElementChild;
+        }
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "row-expand";
+        button.setAttribute("aria-expanded", "false");
+        button.setAttribute("aria-label", "Show all of this row");
+        const mark = document.createElement("span");
+        mark.setAttribute("aria-hidden", "true");
+        mark.textContent = "▸";
+        button.append(mark);
+        cell.prepend(button);
+      } else if (!expandable && toggle) {
+        toggle.remove();
+      }
+    });
+  }
+
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest(".row-expand");
+    if (!button) return;
+    const row = button.closest("tr");
+    const expanding = !row.classList.contains("is-expanded");
+    row.classList.toggle("is-expanded", expanding);
+    button.setAttribute("aria-expanded", String(expanding));
+    button.setAttribute("aria-label", expanding ? "Show less of this row" : "Show all of this row");
+    // Open what was folded, and on the way back close only what this opened.
+    row.querySelectorAll(":is(td, th) details").forEach((details) => {
+      if (expanding && !details.open) {
+        details.open = true;
+        details.dataset.rowOpened = "";
+      } else if (!expanding && "rowOpened" in details.dataset) {
+        details.open = false;
+        delete details.dataset.rowOpened;
+      }
+    });
+  });
+
+  let rowsTimer = null;
+  const markTables = () => {
+    markScrollRegions();
+    markExpandableRows();
+  };
+  const markTablesSoon = () => {
+    window.clearTimeout(rowsTimer);
+    rowsTimer = window.setTimeout(markTables, 120);
+  };
+
 
   function preserveDisclosureState(next, url) {
     const currentQuery = new URL(window.location.href).searchParams.get("q");
@@ -67,8 +149,8 @@
     });
   }
 
-  markScrollRegions();
-  window.addEventListener("resize", markScrollRegions);
+  markTables();
+  window.addEventListener("resize", markTablesSoon);
 
   const persistSelection = () => {
     try {
@@ -212,7 +294,7 @@
       tableLocation = `${window.location.pathname}${window.location.search}`;
       initializeSelection();
       restoreFocus(focusMemo);
-      scheduleStickyHeader();
+      markTables();
     } catch (error) {
       if (error.name !== "AbortError") window.location.assign(url);
     } finally {
@@ -281,6 +363,6 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     initializeSelection();
-    scheduleStickyHeader();
+    markTables();
   });
 })();

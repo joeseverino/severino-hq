@@ -557,7 +557,9 @@ class TopologyPageTests(TestCase):
         )
 
     def test_a_node_body_carries_the_triage_the_projection_already_derived(self):
-        """Declared versus observed is the whole of triage; both were discarded."""
+        """Declared versus observed is the whole of triage, so the node body
+        carries both.
+        """
 
         ManagedResource.objects.create(
             key="behind-name",
@@ -1197,6 +1199,25 @@ class HolderEdgeTests(TestCase):
         edges = self._edges(kind, declared=provider.from_record(record), record=record)
 
         self.assertIn((self.CONNECTION, "resource:example-declared", "used_by"), edges)
+
+    def test_holding_a_record_keeps_the_status_of_an_edge_already_drawn(self):
+        kind, provider = self.mirrored()[0]
+        record = {**provider.sample_record, "connection_ref": "example-holder"}
+        # The connection also names the declaration it uses, and it is failing.
+        uses = ((), (ConnectionLink("example-declared", resource_key="example-declared"),))
+        with mock.patch("application.connections._depends", return_value=uses):
+            self._edges(kind, declared=provider.from_record(record), record=record)
+            ProviderConnection.objects.update(reachable=False)
+            with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
+                topology = derive_topology(principal=READ)
+
+        statuses = {
+            edge.status
+            for edge in topology.edges
+            if (edge.source, edge.target, edge.kind)
+            == (self.CONNECTION, "resource:example-declared", "used_by")
+        }
+        self.assertEqual(statuses, {"serious"})
 
     def test_a_record_naming_another_connection_draws_no_edge_from_this_one(self):
         kind, provider = self.mirrored()[0]

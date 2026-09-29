@@ -2,7 +2,7 @@
 {% block page %}
 {% comment %}
 Nothing to act on while a removal is in flight, so the head offers nothing and
-this says why. Shown unchanged, the page invited an operator to edit something
+this says why. Otherwise the page would invite an operator to edit something
 about to stop existing, and to queue a convergence racing the deletion already
 waiting for the same controller.
 {% endcomment %}
@@ -14,7 +14,7 @@ waiting for the same controller.
 {% endif %}
 
 {% comment %}
-Said here as well as on the queue. This is the page somebody opens when a
+Said here as well as on the queue. This is the page an operator opens when a
 declaration has not moved and they want to know why, and "a credential asked for
 this and nobody has answered" is the answer: invisible otherwise, because a
 held request writes nothing and queues nothing by design.
@@ -76,7 +76,6 @@ declaration's machinery: the controller's actions are the buttons above, and
 {% endif %}
 
 {% if resolved_spec or resolution_error %}
-  {% if resolution_error %}<p class="message error">{{ resolution_error }}</p>{% endif %}
   <div class="two-col">
     <section class="control-card">
       <h2>Certificate</h2>
@@ -91,6 +90,8 @@ declaration's machinery: the controller's actions are the buttons above, and
     </section>
     <section class="control-card">
       <h2>Consumers</h2>
+      {% if display_consumers %}
+      <div class="table-scroll">
       <table class="data-table compact-table">
         <thead><tr><th>Installed on</th><th>Verification names</th></tr></thead>
         <tbody>
@@ -106,6 +107,13 @@ declaration's machinery: the controller's actions are the buttons above, and
           {% endfor %}
         </tbody>
       </table>
+      </div>
+      {% elif resolution_error %}
+        {% comment %}Why it is installed nowhere, where the list would be.{% endcomment %}
+        <div class="notice notice-attention"><strong>Not installed</strong><p>{{ resolution_error }}</p></div>
+      {% else %}
+        <p class="muted">Not installed anywhere yet.</p>
+      {% endif %}
       {% comment %}
       Named beside the consumers that answered. A reading that covers six of
       seven is still a reading, and this is the part it does not cover.
@@ -160,10 +168,7 @@ declaration's machinery: the controller's actions are the buttons above, and
   {% comment %}
   One card for every kind that is not a certificate, rendered from what the
   provider says about itself rather than from markup that knows what a proxy
-  host is. There were two hand-written cards here (one reaching into
-  spec.domain_names and spec.forward_host, one into spec.answer) and a
-  provider added afterwards got no card at all, because nobody remembered to
-  come back and write a third.
+  host is, so a new provider gets its card without an edit here.
 
   The certificate keeps its own section above: renewal, topology and consumers
   are machinery, not a description, and no readout expresses them.
@@ -173,18 +178,15 @@ declaration's machinery: the controller's actions are the buttons above, and
   <section class="control-card">
     <h2>{{ label }}</h2>
     {% comment %}
-    The names this serves, and the way through to them. The page identified a
-    record only by the key HQ invented for it, so the hostname appeared nowhere
-    outside a collapsed disclosure, and the service page, where the rest of
-    what answers for that name lives, could only be reached by typing its URL.
+    The names this serves, and the way through to them: the hostname, and the
+    service page where the rest of what answers for that name lives, rather
+    than only the key HQ invented for the record.
     {% endcomment %}
     {% comment %}
     Named for what it is. This is the machine the *provider* runs on (the
-    Portainer, the proxy, the DNS server) not the machine this resource is on,
-    and "Runs on" said the second. A container managed by a Portainer one box
-    over read "Runs on example-host" directly above its own "Runs on
-    example-edge": the same two words for two different facts, wrong one
-    first.
+    Portainer, the proxy, the DNS server) not the machine this resource is on.
+    "Runs on" would say the second, and a container managed by a Portainer one
+    box over would carry the same two words for two different facts.
     {% endcomment %}
     {% if provider_machine %}
       <p class="muted">Managed through {% entity provider_machine.link %}</p>
@@ -238,7 +240,7 @@ declaration's machinery: the controller's actions are the buttons above, and
         {% for row_label, desired, observed, links in readout_rows %}
           <dt>{{ row_label }}</dt>
           <dd>
-            {% if links %}{% for link in links %}{% entity link code=True %}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}{% with value=observed|default:desired %}{% if value is None or value == "" %}{% empty_value %}{% else %}<code>{{ value }}</code>{% endif %}{% endwith %}{% endif %}
+            {% if links %}{% for link in links %}{% entity link code=True %}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}{% with value=observed|default:desired %}{% if value is None or value == "" %}{% empty_value %}{% else %}{{ value|readout }}{% endif %}{% endwith %}{% endif %}
             {% if desired and observed and desired != observed %}
               <span class="pill pill-serious">declared {{ desired }}</span>
             {% endif %}
@@ -248,18 +250,18 @@ declaration's machinery: the controller's actions are the buttons above, and
     {% endif %}
     {% comment %}
     Only what the readout above has not already said. On a declaration with a
-    handful of fields the readout is the whole spec, and this printed it again
-    under a heading promising more.
+    handful of fields the readout is the whole spec, and printing it again
+    under a heading promising more says nothing.
     {% endcomment %}
     {% if spec_rows.primary or spec_rows.advanced %}
       <details class="control-diagnostics">
         <summary>Other settings</summary>
         <dl class="kv compact">
           {% for row_label, value in spec_rows.primary %}
-            <dt>{{ row_label }}</dt><dd><code>{{ value }}</code></dd>
+            <dt>{{ row_label }}</dt><dd>{{ value|readout }}</dd>
           {% endfor %}
           {% for row_label, value in spec_rows.advanced %}
-            <dt>{{ row_label }}</dt><dd><code>{{ value }}</code></dd>
+            <dt>{{ row_label }}</dt><dd>{{ value|readout }}</dd>
           {% endfor %}
         </dl>
       </details>

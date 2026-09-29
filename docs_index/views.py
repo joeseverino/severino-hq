@@ -50,7 +50,6 @@ class DocsListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     template_name = "docs_index/docs_list.html"
     paginate_by = 25
     page_title = "Documentation index"
-    page_lede = "Metadata only. Doc bodies stay in the vault."
     table_search_scope = "documentation"
     table_selectable = True
     table_columns = (
@@ -219,11 +218,7 @@ class ManifestImportView(LoginRequiredMixin, View):
                 "form": form,
                 **page_context(
                     "Import documentation manifest",
-                    format_html(
-                        "Upload a JSON array of doc records, one per vault doc. "
-                        "Schema: <code>{}</code>.",
-                        "docs_index/importer.py",
-                    ),
+                    "Upload a JSON array of doc records, one per vault doc.",
                     trail=(DOCS_TRAIL,),
                 ),
             },
