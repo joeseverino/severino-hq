@@ -73,5 +73,8 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Renew the domain or turn on auto-renew at its registrar."
         ),
+        no_help_reason=(
+            "HQ reads the registrar but holds no credential that renews a domain or turns on auto-renew."
+        ),
     ),
 )

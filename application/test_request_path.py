@@ -374,10 +374,13 @@ class ContainerHopTests(TestCase):
         )
         with mock.patch("application.connections.machines_once", return_value=(machine,)), \
                 mock.patch("application.request_path.own_container_id", return_value=here):
-            return module._container(Hop("container", "example-hq"), None)
+            # Built as paths.py builds it: step, kind label, then the name.
+            return module._container(Hop("container", "Container", "example-hq"), None)
 
     def test_its_own_container_is_proven(self):
         evidence, check = self.check(here="0123456789ab", listed="0123456789ab")
+
+        self.assertIn("inside example-hq", check.detail)
 
         self.assertEqual(check.state, PROVEN)
         self.assertEqual(evidence[0].value, "0123456789ab")

@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 import os
 import logging
+import time
 from typing import Any
 
 from control_plane.providers import PROVIDERS, controller_capability_registry
@@ -187,6 +188,7 @@ def _inventory(only: frozenset[str] = frozenset()) -> dict[str, Any]:
     """
 
     found: dict[str, Any] = {}
+    took: dict[str, float] = {}
     ssh_refs = set(connection_env.ssh_connection_refs())
     connected = {connection_env.effective_provider(ref, ssh_refs) for ref in connection_env.connection_prefixes()}
     for kind, lister in PROVIDER_INVENTORY.items():
@@ -195,8 +197,33 @@ def _inventory(only: frozenset[str] = frozenset()) -> dict[str, Any]:
         if not _has_source(kind, connected):
             found[kind] = {"ok": True, "records": [], "connected": False}
             continue
+        started = time.monotonic()
         found[kind] = _read_kind(lister)
+        took[kind] = time.monotonic() - started
+    _say_if_slow(took)
     return found
+
+
+# A sweep runs every minute while HQ is in use; one that takes longer than this
+# is overlapping itself, and which reader it spent the time in is the question.
+SLOW_SWEEP_SECONDS = 60
+
+
+def _say_if_slow(took: dict[str, float]) -> None:
+    """One line naming the slowest readers when a sweep ran long. Kinds only,
+    never a record, so the line is safe to copy anywhere."""
+
+    total = sum(took.values())
+    if total < SLOW_SWEEP_SECONDS:
+        return
+    slowest = sorted(took.items(), key=lambda item: item[1], reverse=True)[:5]
+    logger.warning(
+        "sweep read %d kinds in %.0fs; slowest: %s",
+        len(took),
+        total,
+        ", ".join(f"{kind} {seconds:.0f}s" for kind, seconds in slowest),
+        extra={"event": "controller.sweep.slow", "seconds": round(total, 1)},
+    )
 
 
 def _read_kind(lister: Callable[[], list[dict[str, Any]]]) -> dict[str, Any]:

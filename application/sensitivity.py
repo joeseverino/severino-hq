@@ -4,19 +4,20 @@ MCP and API results, search and the relationship lists every record carries
 all ask the same question of a documentation record. Answered in five places,
 a sensitivity added to one of them would quietly widen one surface and not
 the others.
+
+The set is defined beside the model's sensitivity choices, which it is made
+of, and the model's own ``is_safe_for_ai_export`` reads it there. This module
+is how every other surface asks: it imports the model, never the reverse, so
+persistence does not depend on the application layer.
 """
 
 from __future__ import annotations
 
 from django.db.models import QuerySet
 
-from docs_index.models import DocumentationRecord
+from docs_index.models import SAFE_SENSITIVITIES, DocumentationRecord
 
-
-SAFE_SENSITIVITIES = (
-    DocumentationRecord.Sensitivity.PUBLIC,
-    DocumentationRecord.Sensitivity.INTERNAL,
-)
+__all__ = ["SAFE_SENSITIVITIES", "safe_doc_ids"]
 
 
 def safe_doc_ids(documentation: QuerySet[DocumentationRecord]) -> list[str]:

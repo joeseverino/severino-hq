@@ -328,8 +328,15 @@ def _reconciled_but_still_wrong(estate: FindingEstate) -> tuple[Finding, ...]:
                 ("Detail", node.detail or "none"),
             ),
             # Reconciling again is the one thing already known not to work, so
-            # the remedy is the declaration this rule points at.
+            # the remedy is the declaration this rule points at: keep what the
+            # provider holds, when the change there was deliberate, or edit it.
             remedies=(
+                Remedy(
+                    capability="infrastructure.resource.accept_observed",
+                    target=node.label,
+                    label="Accept what is there",
+                    effect="",
+                ),
                 Remedy(
                     capability="infrastructure.resource.update",
                     target=node.label,
@@ -476,6 +483,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Read the controller log for the failing step on this connection and fix what it names."
         ),
+        no_help_reason=(
+            "The cause is in the controller's log for the failing step, which HQ does not read."
+        ),
     ),
     FindingRule(
         "controller-sweep-stale",
@@ -484,6 +494,9 @@ RULES: tuple[FindingRule, ...] = (
         _controller_sweep_stale,
         operator_action=(
             "Check that the controller runs and can reach HQ, then request a fresh sweep."
+        ),
+        no_help_reason=(
+            "The controller runs on its own machine; HQ cannot start it or reach it once it stops reporting."
         ),
         subsumes=("kind-never-swept",),
     ),
@@ -495,6 +508,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Mark it on demand if it only runs sometimes, or remove its declaration."
         ),
+        no_help_reason=(
+            "When its kind is locked against reconcile and removal, whether it still exists is yours to say."
+        ),
     ),
     FindingRule(
         "kind-never-swept",
@@ -503,6 +519,9 @@ RULES: tuple[FindingRule, ...] = (
         _kind_never_swept,
         operator_action=(
             "Check the connection that reads this kind, then request a fresh sweep."
+        ),
+        no_help_reason=(
+            "The connection that reads this kind is not answering for it, and what it needs is outside HQ."
         ),
         # When the sweep itself is the fault, every record of the kind looks
         # skipped. Saying it once about the kind beats saying it about each.
@@ -516,6 +535,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Read the provider's message on the resource, fix the cause, then reconcile."
         ),
+        no_help_reason=(
+            "When its kind is locked against reconcile, only the provider's own message says what to change."
+        ),
     ),
     FindingRule(
         "reconciled-but-still-wrong",
@@ -524,6 +546,9 @@ RULES: tuple[FindingRule, ...] = (
         _reconciled_but_still_wrong,
         operator_action=(
             "Correct the declaration so it describes what the provider can hold, then reconcile."
+        ),
+        no_help_reason=(
+            "What a provider can hold is its own limit; HQ cannot tell which declared field it rejects."
         ),
     ),
     FindingRule(
@@ -534,6 +559,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Make the provider report these fields, or declare them unobservable on the kind."
         ),
+        no_help_reason=(
+            "Whether a provider reports a field is a fact about the provider, which HQ does not change."
+        ),
     ),
     FindingRule(
         "never-observed",
@@ -542,6 +570,9 @@ RULES: tuple[FindingRule, ...] = (
         _never_observed,
         operator_action=(
             "Check that the record exists at the provider under its declared name, or remove the declaration."
+        ),
+        no_help_reason=(
+            "When its kind is locked against reconcile, whether the record exists at the provider is yours to confirm."
         ),
     ),
 )

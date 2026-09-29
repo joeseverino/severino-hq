@@ -180,4 +180,8 @@ def _django_reason(error: DjangoValidationError) -> str:
         return f"must have at most {limit} characters"
     if code == "min_length" and isinstance(limit, int):
         return f"must have at least {limit} characters"
+    if code == "max_value" and isinstance(limit, int):
+        return f"must be at most {limit}"
+    if code == "min_value" and isinstance(limit, int):
+        return f"must be at least {limit}"
     return "is invalid"

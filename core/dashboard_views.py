@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -23,6 +23,7 @@ from application.glance import (
     save_dashboard_settings,
 )
 from application.security import safe_next, web_principal
+from application.timestamps import moment
 from application.pages import page_context
 from application.ui import ListRow
 from contacts import inbox
@@ -77,10 +78,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         highlights = dashboard_highlights()
         glance = glance_context()
         for project in snapshot["active_projects"]:
-            project["updated_at"] = datetime.fromisoformat(project["updated_at"])
+            project["updated_at"] = moment(project["updated_at"], naive="keep")
         for collection in (snapshot["draft_content"], snapshot["recent_published"]):
             for item in collection:
-                item["updated_at"] = datetime.fromisoformat(item["updated_at"])
+                item["updated_at"] = moment(item["updated_at"], naive="keep")
                 if item["published_at"]:
                     item["published_at"] = date.fromisoformat(item["published_at"])
         # Unread only, as everywhere else the count is shown.

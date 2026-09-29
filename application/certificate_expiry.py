@@ -112,5 +112,8 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Renew the certificate where it is held, or fix the automatic renewal that should have renewed it, then request a fresh sweep."
         ),
+        no_help_reason=(
+            "The certificate is held by a provider HQ only reads, so it is renewed there."
+        ),
     ),
 )

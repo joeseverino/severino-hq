@@ -1,8 +1,9 @@
 """What the GitHub App reads about each repository its installation covers.
 
 One record per repository (``observations.github``). Every call runs under a
-token minted for that repository alone, with read permissions only: the App
-may hold more, and a reading asks for none of it.
+token scoped to that repository alone, with read permissions only: the App
+may hold more, and a reading asks for none of it. One such token serves every
+call for its repository in a sweep.
 """
 
 from __future__ import annotations

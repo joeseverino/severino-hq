@@ -169,6 +169,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Set the tailnet nameserver to the DNS server's tailnet address in the tailnet DNS settings."
         ),
+        no_help_reason=(
+            "HQ has no capability that writes the tailnet's DNS settings."
+        ),
     ),
     FindingRule(
         "devices-join-without-approval",
@@ -177,6 +180,9 @@ RULES: tuple[FindingRule, ...] = (
         _devices_join_without_approval,
         operator_action=(
             "In the Tailscale admin console, open Settings, then Device management, and turn on Device approval."
+        ),
+        no_help_reason=(
+            "Device approval is a tailnet setting no HQ capability changes."
         ),
     ),
     FindingRule(
@@ -187,6 +193,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Remove the group from the policy's groups and from every rule that names it, or add its members."
         ),
+        no_help_reason=(
+            "Without a declaration of the tailnet policy, HQ has nothing it may amend."
+        ),
     ),
     FindingRule(
         "trusted-wider-than-tailnet",
@@ -195,6 +204,9 @@ RULES: tuple[FindingRule, ...] = (
         _trusted_wider_than_tailnet,
         operator_action=(
             "Set SEVERINO_TRUSTED_NETWORKS to the addresses and routes the tailnet uses, then restart HQ."
+        ),
+        no_help_reason=(
+            "HQ's trusted networks are set in its environment at start, which only your deploy writes."
         ),
     ),
 )

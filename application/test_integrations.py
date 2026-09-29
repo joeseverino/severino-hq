@@ -50,7 +50,7 @@ class IntegrationGraphTests(TestCase):
         self.assertIsInstance(graph.connections, MappingProxyType)
         self.assertIsInstance(graph.search, MappingProxyType)
         with self.assertRaises(TypeError):
-            graph.connections["example.mutable"] = graph.connections["hq.github"]
+            graph.connections["example.mutable"] = graph.connections["hq.cloudflare_d1"]
 
     def test_the_composed_graph_is_compiled_once_until_explicitly_cleared(self):
         first = integration_graph()
@@ -263,14 +263,14 @@ class IntegrationGraphTests(TestCase):
 
     def test_a_connection_emits_its_capability_edge_once(self):
         graph = integration_graph()
-        github = graph.connections["hq.github"]
-        refresh = next(
-            ability
-            for ability in github.abilities
-            if ability.name == "github.repository_metadata"
+        d1 = graph.connections["hq.cloudflare_d1"]
+        review = next(
+            ability for ability in d1.abilities if ability.capability == "contact.submission.review"
         )
 
-        self.assertIs(graph.capabilities[refresh.capability], graph.capabilities["project.refresh"])
+        self.assertIs(
+            graph.capabilities[review.capability], graph.capabilities["contact.submission.review"]
+        )
 
     def test_every_projection_sees_one_synthetic_contribution(self):
         resource = ResourceSpec(

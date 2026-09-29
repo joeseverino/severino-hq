@@ -1,10 +1,13 @@
-"""A GitHub App as a connection: tokens minted per call, narrowed per call.
+"""A GitHub App as a connection: tokens narrowed to each call's scope.
 
 The app's private key never reaches this process. It is rendered beside the
 controller's SSH identities, and ``ProviderRuntime.sign`` hands it to openssl,
 which returns only the signature over GitHub's JWT. Every installation token is
-minted for the repositories and permissions of one call and lasts an hour, so
-nothing here holds a credential broader or longer-lived than the call it makes.
+minted for exactly the repositories and permissions a call names, and is reused
+only by later calls that name the same ones, within the same sweep: the
+runtime's per-sweep snapshot holds it, and it is gone when the sweep ends. So
+nothing here holds a credential broader than the call it makes, and none
+outlives the sweep that minted it.
 """
 
 from __future__ import annotations
@@ -121,7 +124,12 @@ def token(
     permissions: Mapping[str, str],
     connection_ref: str = "",
 ) -> str:
-    """An hour-long token for exactly these repositories and permissions.
+    """A token for exactly these repositories and permissions.
+
+    Minted once per sweep for each distinct scope: the key is the connection,
+    the sorted repositories and the sorted permissions, so a call naming a
+    different repository or one more permission gets a token of its own rather
+    than a broader one. Outside a sweep's snapshot every call mints afresh.
 
     All repositories share an owner: an installation is one account, and a token
     spanning two would be two installations' worth of authority in one string.
@@ -163,7 +171,9 @@ def installation_repositories(runtime: ProviderRuntime, connection_ref: str = ""
 
     The installation's own list: choosing repositories on GitHub is what
     decides what HQ reads. Each is asked for under a token that can read
-    metadata and nothing else.
+    metadata and nothing else. The list also says which installation covers
+    each repository, so a token later minted for one of them within the sweep
+    need not ask GitHub again.
     """
 
     def load() -> tuple[str, ...]:
@@ -185,9 +195,22 @@ def installation_repositories(runtime: ProviderRuntime, connection_ref: str = ""
             for repo in (listed or {}).get("repositories") or ():
                 if isinstance(repo, Mapping) and isinstance(repo.get("full_name"), str):
                     found.append(repo["full_name"])
+                    _remember_installation(runtime, repo["full_name"], installed["id"], connection_ref)
         return tuple(sorted(set(found)))
 
     return runtime.snapshot_value(("github_app.repositories", connection_ref), load)
+
+
+def _remember_installation(
+    runtime: ProviderRuntime, name: str, installed: int, connection_ref: str
+) -> None:
+    """Record, for this sweep, the installation a listing named for ``name``."""
+
+    try:
+        owner, repo = repository(name)
+    except ProviderError:
+        return
+    runtime.snapshot_value(("github_app.installation", connection_ref, owner, repo), lambda: installed)
 
 
 def call(
@@ -200,7 +223,11 @@ def call(
     payload: dict[str, Any] | None = None,
     connection_ref: str = "",
 ) -> Any:
-    """One API call under a token minted for it alone."""
+    """One API call under a token scoped to exactly its repositories and permissions.
+
+    The token is shared with the sweep's other calls of the same scope; see
+    ``token``.
+    """
 
     minted = token(runtime, repositories, permissions, connection_ref)
     return runtime.request(

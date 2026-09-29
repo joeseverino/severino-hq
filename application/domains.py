@@ -132,7 +132,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # on the projects card, as "N need output".
         integration=PluginIntegration(
             dashboard=_provider("application.sections:projects"),
-            connections=_provider("projects.github:connection_specs"),
             # What GitHub holds for a person: a deploy waiting on approval, a
             # failing default branch, a serious alert, a lapsing admission.
             # Decisions, not the portfolio's shape, which is why it is here.

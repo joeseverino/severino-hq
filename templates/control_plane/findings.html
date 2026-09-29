@@ -37,6 +37,7 @@
       {% endcomment %}
       <div class="finding-fix">
         {% for step in entry.finding.steps %}{% include "partials/_operator_step.html" %}{% endfor %}
+        {% if entry.finding.no_help_reason %}<p class="muted">Why HQ cannot do this for you: {{ entry.finding.no_help_reason }}</p>{% endif %}
         {% if entry.layout.fix %}
           <div class="finding-actions">
             {% for action in entry.layout.fix %}

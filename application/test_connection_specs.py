@@ -340,6 +340,7 @@ class ConnectionRegistrationTests(TestCase):
             {
                 "infrastructure.resource.create",
                 "infrastructure.resource.update",
+                "infrastructure.resource.accept_observed",
                 "infrastructure.reconcile",
                 "infrastructure.resource.remove",
                 # Scoped to the device kind, so it surfaces here for the same

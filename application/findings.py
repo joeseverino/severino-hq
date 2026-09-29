@@ -320,7 +320,19 @@ def _resolved(
         affected_scopes=finding.affected_scopes,
         workflow=workflow,
         steps=finding_steps(finding),
+        no_help_reason=_no_help_reason(finding),
     )
+
+
+def _no_help_reason(finding: Finding) -> str:
+    """The finding's own reason, else its rule's, when it has no remedy to
+    offer and no exact command to name. Judged before a principal's remedies
+    are filtered: a remedy this reader may not run is still a remedy."""
+
+    if finding.remedies or any(step.command for step in finding.steps):
+        return ""
+    found = _RULE_BY_NAME.get(finding.rule)
+    return finding.no_help_reason or (found.no_help_reason if found else "")
 
 
 def _read_subject(finding: Finding, subject: TopologyNode | None) -> dict[str, Any] | None:
@@ -520,6 +532,7 @@ def serialize_finding(finding: Finding) -> dict[str, Any]:
         "investigations": [asdict(action) for action in finding.investigations],
         "workflow": serialize_workflow(finding.workflow),
         "operator_steps": [asdict(step) for step in finding.steps],
+        "no_help_reason": finding.no_help_reason or None,
     }
 
 

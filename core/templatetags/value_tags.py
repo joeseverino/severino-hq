@@ -6,6 +6,7 @@ from django.utils import timezone
 from django.utils.formats import date_format
 from django.utils.html import format_html
 
+from application.timestamps import moment
 from application.ui import MISSING, ago as _ago, counted as _counted, elapsed as _elapsed
 
 register = template.Library()
@@ -86,13 +87,12 @@ def readable(value):
 
     if not isinstance(value, str) or "T" not in value:
         return value
-    try:
-        moment = datetime.fromisoformat(value)
-    except ValueError:
+    when = moment(value, naive="keep")
+    if when is None:
         return value
-    if timezone.is_aware(moment):
-        moment = timezone.localtime(moment)
-    return date_format(moment, "DATETIME_FORMAT")
+    if timezone.is_aware(when):
+        when = timezone.localtime(when)
+    return date_format(when, "DATETIME_FORMAT")
 
 
 def _is_this_page(context, url: str) -> bool:

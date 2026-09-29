@@ -186,7 +186,12 @@ class DocumentationRecord(TimestampedModel):
 
     @property
     def is_safe_for_ai_export(self) -> bool:
-        return self.sensitivity in {
-            self.Sensitivity.PUBLIC,
-            self.Sensitivity.INTERNAL,
-        }
+        return self.sensitivity in SAFE_SENSITIVITIES
+
+
+# Which sensitivities an AI-facing surface may name: the one definition, beside
+# the choices it is made of. application.sensitivity serves it to every surface.
+SAFE_SENSITIVITIES: tuple[str, ...] = (
+    DocumentationRecord.Sensitivity.PUBLIC.value,
+    DocumentationRecord.Sensitivity.INTERNAL.value,
+)

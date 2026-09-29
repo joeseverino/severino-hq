@@ -241,7 +241,7 @@ class SearchSnippetTests(TestCase):
 
 class EstateCardTests(TestCase):
     def setUp(self):
-        devices(device("example-host"), device("example-laptop", online=False))
+        devices(device("example-host"), device("example-nas", online=False, tags=["tag:server"]))
         declare_record("app-record", "app.example.com", "100.64.0.5")
         connection("example-ssh", reachable=False, detail="Timed out")
         declared(
@@ -505,6 +505,7 @@ class ActionItemTests(TestCase):
                 "example-host",
                 online=False,
                 addresses=["100.64.0.5"],
+                tags=["tag:server"],
                 last_seen=(timezone.now() - timedelta(hours=5)).isoformat(),
             ),
             device(
@@ -516,6 +517,7 @@ class ActionItemTests(TestCase):
                 "example-restart",
                 online=False,
                 addresses=["100.64.0.7"],
+                tags=["tag:server"],
                 last_seen=(timezone.now() - timedelta(minutes=5)).isoformat(),
             ),
         )
@@ -530,6 +532,25 @@ class ActionItemTests(TestCase):
         self.assertEqual(
             found[0].subject.url, reverse("control_plane:machine", args=["example-host"])
         )
+
+    def test_a_persons_device_away_is_not_an_outage(self):
+        """Untagged is a user's own device: a laptop asleep serving a dev name
+        is normal, where the same machine tagged as a server is down."""
+
+        devices(
+            device(
+                "example-laptop",
+                online=False,
+                addresses=["100.64.0.9"],
+                last_seen=(timezone.now() - timedelta(days=2)).isoformat(),
+            ),
+        )
+        declare_record("dev-record", "dev.example.com", "100.64.0.9")
+
+        with projection_scope():
+            found = [item for item in estate_attention() if item.eyebrow == "Machines"]
+
+        self.assertEqual(found, [])
 
     def test_a_managed_certificate_inside_its_renewal_window(self):
         for key, days in (("soon-cert", 5), ("later-cert", 80)):

@@ -11,7 +11,6 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Any, Callable, Literal
 
 from django.urls import NoReverseMatch, reverse
@@ -508,13 +507,12 @@ def expiry_phrase(stamp: str) -> str:
     left) is the entire reason anyone looks at it.
     """
 
-    try:
-        expires = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
-    except (AttributeError, TypeError, ValueError):
-        return stamp or ""
-    if expires.tzinfo is None:
-        expires = expires.replace(tzinfo=timezone.utc)
     from application.expiry import days_until
+    from application.timestamps import moment
+
+    expires = moment(stamp)
+    if expires is None:
+        return stamp or ""
 
     days = days_until(expires)
     if days < 0:

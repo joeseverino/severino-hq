@@ -340,17 +340,24 @@ PAGES = {
     "services": (lambda: reverse("control_plane:services"), ExitStack),
     "findings": (lambda: reverse("control_plane:findings"), ExitStack),
     "projects": (lambda: reverse("projects:list"), ExitStack),
+    # A command that changes infrastructure, so the page carries its consent
+    # checkbox: a form field stretched it across the row once, pushing its
+    # label out past the edge.
+    "command-consent": (
+        lambda: reverse("command", kwargs={"name": "infrastructure.controller.refresh"}),
+        ExitStack,
+    ),
     "connection": (lambda: reverse("connection"), _asked_through_the_proxy, _THROUGH_THE_PROXY),
 }
 
 
-def render_pages(user):
-    """Every page in PAGES as its view renders it for ``user``."""
+def render_pages(user, pages=None):
+    """Every page in ``pages`` (PAGES by default) as its view renders it for ``user``."""
 
     client = Client()
     client.force_login(user)
     rendered = {}
-    for name, (url, patches, *request) in PAGES.items():
+    for name, (url, patches, *request) in (PAGES if pages is None else pages).items():
         with patches():
             response = client.get(url(), **(request[0] if request else {}))
         if response.status_code != 200:

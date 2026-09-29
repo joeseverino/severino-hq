@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from functools import cached_property
 from typing import Any
 
@@ -39,6 +38,7 @@ from application.resource_context import (
     readout_rows,
     resource_context,
 )
+from application.timestamps import moment
 from application.whereabouts import whereabouts
 from application.security import safe_next, web_principal
 from application.pages import PageAction, PageMixin, page_context
@@ -467,11 +467,8 @@ class InfrastructureDetailView(PageMixin, LoginRequiredMixin, DetailView):
             for operation in self.object.operations.all()[:20]
         ]
         for operation in context["operations"]:
-            operation["created_at"] = datetime.fromisoformat(operation["created_at"])
-            if operation["completed_at"]:
-                operation["completed_at"] = datetime.fromisoformat(
-                    operation["completed_at"]
-                )
+            operation["created_at"] = moment(operation["created_at"], naive="keep")
+            operation["completed_at"] = moment(operation["completed_at"], naive="keep")
         context["resolved_spec"] = derived.resolved_spec
         context["resolution_error"] = derived.resolution_error
         context["display_consumers"] = derived.display_consumers

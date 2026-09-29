@@ -94,7 +94,9 @@ class StandingTests(TestCase):
         advisory = items["container-advisory:ghcr.io/example/app:v1.2.0"]
         self.assertEqual((advisory.status, advisory.magnitude), ("serious", 1))
         self.assertIn("Fixed in 1.2.1", advisory.body)
-        self.assertEqual(items["container-updates"].body, "example/kuma:1 → 2.")
+        self.assertTrue(items["container-updates"].body.startswith("example/kuma:1 → 2."))
+        # With help: why HQ cannot run the upgrade itself yet.
+        self.assertIn("Not yet, because:", items["container-updates"].body)
 
     def test_many_advisories_are_one_thing_to_do(self):
         estate(advisories=[HIGH, {**HIGH, "id": "GHSA-high-2"}, {**HIGH, "id": "GHSA-high-3"}])

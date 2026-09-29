@@ -120,6 +120,9 @@ RULES: tuple[FindingRule, ...] = (
         severity="attention",
         detect=lambda estate, detect=protection_off: built_findings(detect(estate)),
         operator_action="Turn protection back on from the AdGuard dashboard.",
+        no_help_reason=(
+            "HQ reads AdGuard's protection state but has no capability that changes it."
+        ),
     ),
     FindingRule(
         name="dns-filtering-off",
@@ -127,6 +130,9 @@ RULES: tuple[FindingRule, ...] = (
         severity="attention",
         detect=lambda estate, detect=filtering_off: built_findings(detect(estate)),
         operator_action="Turn filtering on under Filters, DNS blocklists in AdGuard.",
+        no_help_reason=(
+            "HQ reads AdGuard's filtering state but has no capability that changes it."
+        ),
     ),
     FindingRule(
         name="dns-plain-upstream",
@@ -137,6 +143,9 @@ RULES: tuple[FindingRule, ...] = (
             "Replace each plain upstream with its provider's DNS-over-TLS or DNS-over-HTTPS "
             "address under Settings, DNS settings in AdGuard, if queries should be encrypted."
         ),
+        no_help_reason=(
+            "Which encrypted upstream to use is your choice, and no HQ capability writes AdGuard's upstreams."
+        ),
     ),
     FindingRule(
         name="dns-name-unused",
@@ -146,6 +155,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Remove the service and its rewrite if nothing uses it; otherwise point the "
             "device that should use it at AdGuard for DNS."
+        ),
+        no_help_reason=(
+            "Whether anything still needs the name is something only you know."
         ),
     ),
 )

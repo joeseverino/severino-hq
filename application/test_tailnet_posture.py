@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -214,3 +216,28 @@ class PortNameTests(TestCase):
         response = self.client.get(reverse("control_plane:tailnet"))
 
         self.assertContains(response, "<code>tcp:7722 · SSH</code>", html=False)
+
+
+class TrustedNetworksWidthTests(TestCase):
+    """The trusted range only matters where the tailnet policy lets anyone in."""
+
+    def admits(self, reach):
+        from types import SimpleNamespace
+
+        from . import tailnet
+
+        machine = SimpleNamespace(runs_hq=True, addresses=("100.64.0.5",))
+        device = SimpleNamespace(addresses=("100.64.0.5",), reach=reach)
+        with mock.patch("application.connections.machines_once", return_value=(machine,)), \
+                mock.patch("application.tailnet.devices", return_value={"hq-box": device}):
+            return tailnet._policy_admits_only_named()
+
+    def test_named_devices_only_means_the_width_exposes_nothing(self):
+        self.assertTrue(self.admits({443: ("example-mac", "tag:admin"), 22: ("example-mac",)}))
+
+    def test_a_port_open_to_anyone_keeps_the_finding(self):
+        self.assertFalse(self.admits({443: ("example-mac",), 8080: ("*",)}))
+        self.assertFalse(self.admits({443: ("autogroup:member",)}))
+
+    def test_an_unknown_never_silences_it(self):
+        self.assertFalse(self.admits({}))

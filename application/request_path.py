@@ -635,7 +635,9 @@ def _container(hop: Hop, context: _Context):
         running.id
         for machine in machines_once()
         for running in machine.containers
-        if running.name == hop.label and running.id
+        # The container's name, not the hop's label ("Container"): comparing
+        # against the label matched nothing, so this hop was never proven.
+        if running.name == hop.name and running.id
     }
     if not known:
         return (), Check(UNPROVEN, "A request cannot show which container answered it.")
@@ -647,11 +649,11 @@ def _container(hop: Hop, context: _Context):
     )
     if here in known:
         return evidence, Check(
-            PROVEN, f"This request was answered inside {hop.label}: HQ runs in that container."
+            PROVEN, f"This request was answered inside {hop.name}: HQ runs in that container."
         )
     return evidence, Check(
         UNPROVEN,
-        f"HQ answered from a container the last sweep did not list as {hop.label}, "
+        f"HQ answered from a container the last sweep did not list as {hop.name}, "
         "as after a deploy. The next sweep settles it.",
     )
 

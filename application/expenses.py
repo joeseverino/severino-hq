@@ -16,6 +16,7 @@ from expenses.models import Expense
 from projects.models import Project
 
 from core.audit import operation_context
+from .business_use import require_business_use
 from .sensitivity import SAFE_SENSITIVITIES
 from .security import Capability, Principal
 
@@ -104,6 +105,7 @@ def save_expense(
                 raise ConflictError(f"Expense {current_id!r} changed after it was read.")
 
         values = asdict(command)
+        require_business_use(values)
         relations = {
             "related_project": _one(Project, "slug", values.pop("related_project")),
             "related_asset": _one(Asset, "slug", values.pop("related_asset")),

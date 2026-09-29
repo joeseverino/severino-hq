@@ -144,6 +144,19 @@ class RemoveEmptyGroupsCapabilityTests(TestCase):
         with self.assertRaisesRegex(PolicyError, "no empty group"):
             request_empty_groups_removal(None, principal=operator, current_key=POLICY_KEY)
 
+    def test_a_drifted_policy_is_refused_so_a_live_change_is_not_overwritten(self):
+        """The live policy gained something (a connector's grant); editing HQ's
+        stale copy and applying it would take that away with the fix."""
+
+        policy = ManagedResource.objects.get(key=POLICY_KEY)
+        policy.conditions = [{"type": "Drifted", "status": True, "reason": "Drifted", "message": "differs"}]
+        policy.save(update_fields=["conditions"])
+        before = policy.spec["document"]
+
+        with self.assertRaisesRegex(PolicyError, "Accept what is there"):
+            request_empty_groups_removal(None, principal=an_operator(), current_key=POLICY_KEY)
+        self.assertEqual(ManagedResource.objects.get(key=POLICY_KEY).spec["document"], before)
+
     def test_an_unknown_or_other_kind_of_key_is_not_found(self):
         ManagedResource.objects.create(
             key="example-rewrite", kind="adguard.rewrite",

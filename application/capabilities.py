@@ -50,6 +50,7 @@ from .input_errors import (
 )
 from .infrastructure import ManagedResourceCommand, save_managed_resource
 from .resource_operations import (
+    accept_observed,
     OperationCommand,
     request_certificate_renewal,
     request_reach_allow,
@@ -185,7 +186,10 @@ CORE_CAPABILITY_SPECS = (
         target_help="The project whose external metadata to refresh.",
         execution_notes=(
             "Read the selected project's registered repository URL.",
-            "Ask GitHub for current push metadata using the configured connection.",
+            "Where the GitHub App reads the repository, ask the controller to read that "
+            "connection now, through infrastructure.controller.refresh.",
+            "For a repository the App does not read, read its last push from GitHub's "
+            "public API, which needs no credential.",
             "Persist the observed timestamp and attribute the refresh to this operator.",
         ),
         label="Refresh project metadata",
@@ -467,6 +471,19 @@ CORE_CAPABILITY_SPECS = (
         target_help="The managed infrastructure resource to update.",
         target_initial_fields=("key", "kind", "spec", "enabled"),
         label="Update resource",
+    ),
+    CapabilitySpec(
+        "infrastructure.resource.accept_observed",
+        "Make a declaration say what the provider holds, keeping a change made there.",
+        "remote_write",
+        Capability.MANAGE_INFRASTRUCTURE,
+        OperationCommand,
+        accept_observed,
+        "key",
+        "infrastructure.resources",
+        target_label="Resource key",
+        target_help="The managed infrastructure resource whose live record to keep.",
+        label="Accept what is there",
     ),
     CapabilitySpec(
         "infrastructure.reconcile",

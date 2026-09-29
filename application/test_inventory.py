@@ -1386,3 +1386,81 @@ class ObservationKindTests(TestCase):
         self.assertFalse(
             ProviderInventory.objects.filter(kind="host.something-newer").exists()
         )
+
+
+class AcceptObservedTests(TestCase):
+    """Keeping a change made at the provider, instead of reconciling it away."""
+
+    def setUp(self):
+        from .inventory_testing import store
+
+        self.resource = ManagedResource.objects.create(
+            key="a-device",
+            kind="tailscale.device",
+            spec={"connection_ref": "", "name": "a-box", "key_expiry_disabled": False},
+        )
+        # The provider now says the key never expires: someone changed it there.
+        store("tailscale.device", {"name": "a-box", "key_expires": "", "tags": []})
+
+    def accept(self, principal=None):
+        from .resource_operations import OperationCommand, accept_observed
+
+        return accept_observed(
+            OperationCommand(idempotency_key="accept-1", reason="changed on purpose"),
+            principal=principal or cli_principal(),
+            current_key="a-device",
+        )
+
+    def test_the_declaration_takes_what_the_provider_holds(self):
+        self.accept()
+
+        self.resource.refresh_from_db()
+        self.assertTrue(self.resource.spec["key_expiry_disabled"])
+        self.assertTrue(AuditLog.objects.filter(object_repr__contains="a-device").exists())
+
+    def test_it_is_refused_without_authority_over_infrastructure(self):
+        from .security import AuthorizationError, Principal
+
+        with self.assertRaises(AuthorizationError):
+            self.accept(Principal("test", "viewer", frozenset()))
+        self.resource.refresh_from_db()
+        self.assertFalse(self.resource.spec["key_expiry_disabled"])
+
+    def test_nothing_seen_is_nothing_to_accept(self):
+        ProviderInventory.objects.filter(kind="tailscale.device").delete()
+
+        with self.assertRaises(NotFoundError):
+            self.accept()
+
+
+class DriftPhraseTests(TestCase):
+    """A drift is said so a person can see what changed, not pasted whole."""
+
+    def test_a_short_value_is_quoted(self):
+        from .inventory import _difference_phrase
+
+        self.assertEqual(
+            _difference_phrase("answer", "192.0.2.1", "192.0.2.2"),
+            "answer is 192.0.2.2, where this asks for 192.0.2.1",
+        )
+
+    def test_two_documents_are_compared_by_what_they_say(self):
+        import json
+
+        from .inventory import _difference_phrase
+
+        declared = {"grants": [{"src": ["a"]}] * 20, "groups": {"group:empty": []}, "hosts": {"x": "192.0.2.1"}}
+        live = {**declared, "autoApprovers": {"services": {}}, "grants": declared["grants"] + [{"src": ["b"]}]}
+        del live["groups"]
+
+        phrase = _difference_phrase("document", json.dumps(declared), json.dumps(live))
+
+        self.assertEqual(phrase, "document differs from what this asks for: + autoApprovers, - groups, grants changed")
+
+    def test_a_long_value_that_is_not_a_document_is_sized_not_pasted(self):
+        from .inventory import _difference_phrase
+
+        phrase = _difference_phrase("note", "a" * 200, "b" * 300)
+
+        self.assertNotIn("aaaa", phrase)
+        self.assertIn("300 characters live", phrase)

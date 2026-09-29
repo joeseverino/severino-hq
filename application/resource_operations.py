@@ -114,6 +114,25 @@ def operation_summary(operation: OperationRequest) -> dict[str, Any]:
     }
 
 
+def refuse_while_drifted(resource: ManagedResource) -> None:
+    """Refuse to amend a declaration the provider no longer matches.
+
+    A remedy that edits a declaration edits HQ's copy, and applying it pushes
+    that whole copy. While the live record differs, whatever changed there
+    would be overwritten along with the one intended change, so the operator
+    decides first: accept what is there, or reconcile it back.
+    """
+
+    if any(
+        condition.get("type") == "Drifted" and condition.get("status") is True
+        for condition in resource.conditions or ()
+    ):
+        raise PolicyError(
+            f"{resource.key} differs from what the provider holds. Accept what is there "
+            "or reconcile it first, so this change is made to what is actually in force."
+        )
+
+
 def _resource_for_operation(key: str) -> ManagedResource:
     try:
         return ManagedResource.objects.select_for_update().get(key=key)
@@ -315,6 +334,51 @@ def request_lifecycle(
         return _queue_operation(resource, command, principal=principal, action=action)
 
 
+@transaction.atomic
+def accept_observed(
+    command: OperationCommand,
+    *,
+    principal: Principal,
+    current_key: str,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    """Make the declaration say what the provider holds.
+
+    For a change made at the provider on purpose: a policy a connector edited,
+    a setting changed in its own console. Reconciling would undo it; this
+    keeps it, by copying the live record into the declaration, the same way
+    adopting does. Fields no sweep can observe (hidden, on demand) stay as
+    they were declared. Nothing is written to the provider, and the next sweep
+    finds the two agreeing.
+    """
+
+    from .inventory import live_spec
+
+    del expected_updated_at
+    principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    resource = _resource_for_operation(current_key)
+    found = live_spec(resource.kind, resource.spec)
+    if found is None:
+        raise NotFoundError(f"No live record was last seen for {resource.key!r}, so there is nothing to accept.")
+    kept = {
+        field: resource.spec[field]
+        for field in PROVIDERS[resource.kind].unobservable_fields
+        if field in resource.spec
+    }
+    with operation_context(
+        interface=principal.interface,
+        actor=principal.actor,
+        operation="infrastructure.resource.accept_observed",
+    ):
+        result = save_managed_resource(
+            ManagedResourceCommand(key=resource.key, kind=resource.kind, spec={**found, **kept}, enabled=resource.enabled),
+            principal=principal,
+            current_key=resource.key,
+            copied_from_live=True,
+        )
+    return {**result, "reason": command.reason}
+
+
 def request_removal(
     command: OperationCommand,
     *,
@@ -493,6 +557,7 @@ def request_reach_allow(
     policy = ManagedResource.objects.filter(kind=POLICY_KIND).first()
     if policy is None:
         raise PolicyError("No tailnet policy is declared.")
+    refuse_while_drifted(policy)
 
     document = str(policy.spec.get("document", ""))
     moved: list[str] = []

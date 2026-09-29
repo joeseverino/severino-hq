@@ -82,21 +82,42 @@ def _socket_held(container: Any) -> bool | None:
         return None
     if _no_socket([mount for mount in mounts if mount.get("type") == "bind"]):
         return True
-    from .containers import socket_holders
-
-    return (container.machine.name, container.running.name) in socket_holders()
+    return holds_socket(container)
 
 
 def _no_socket(binds) -> bool:
     return not any(mount.get("source") in DOCKER_SOCKETS for mount in binds)
 
 
-def _no_writable_system_path(binds) -> bool:
-    return not any(
-        system_path(str(mount.get("source", ""))) and not mount.get("read_only")
+def writable_system_binds(binds, docker_held: bool = False) -> tuple[Mapping[str, Any], ...]:
+    """The bind mounts that let it write a system path."""
+
+    return tuple(
+        mount
         for mount in binds
-        if mount.get("source") not in DOCKER_SOCKETS
+        if (source := str(mount.get("source", ""))) not in DOCKER_SOCKETS
+        and system_path(source) and not mount.get("read_only")
+        # Docker's own data is no more than its socket already reaches, for a
+        # container declared to hold the socket (a management agent reads
+        # volumes there). Any other system path still counts.
+        and not (docker_held and (source == "/var/lib/docker" or source.startswith("/var/lib/docker/")))
     )
+
+
+def holds_socket(container: Any) -> bool:
+    """Whether its declaration says holding the Docker socket is its job."""
+
+    from .containers import socket_holders
+
+    return (container.machine.name, container.running.name) in socket_holders()
+
+
+def _system_path_kept(container: Any) -> bool | None:
+    mounts = container.mounts
+    if mounts is None:
+        return None
+    binds = [mount for mount in mounts if mount.get("type") == "bind"]
+    return not writable_system_binds(binds, holds_socket(container))
 
 
 def _confined(runtime: Mapping[str, Any]) -> bool:
@@ -124,7 +145,7 @@ STANDARD: tuple[Check, ...] = (
     Check("confined", "Confined by seccomp and AppArmor", _on(_confined),
           "An unconfined container can make any system call the kernel offers.",
           "Remove the unconfined security option.", serious=True),
-    Check("no-system-path-writable", "No system path writable", _mounted(_no_writable_system_path),
+    Check("no-system-path-writable", "No system path writable", _system_path_kept,
           "A writable mount of a system path is a way to change the machine from inside the container.",
           "Mount it read-only, or mount only the one file it needs.", serious=True),
     Check("no-powerful-capability", "No machine-level capability", _on(_no_powerful_capability),

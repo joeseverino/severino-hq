@@ -13,7 +13,6 @@ from control_plane.models import (
 from projects.models import Project
 
 from .capabilities import capability_registry, execute_capability
-from .command_center import command_center
 from .connections import list_connections
 from .integrations import integration_graph
 from .security import Capability, Principal
@@ -34,7 +33,6 @@ OPERATOR = Principal(
 
 
 @override_settings(
-    GITHUB_API_TOKEN="github-secret",
     CLOUDFLARE_API_TOKEN="cloudflare-secret",
     SEVERINO_LOOKUP_ENDPOINT="https://resolver.example",
     SEVERINO_RDAP_ENDPOINT="https://rdap.example",
@@ -65,19 +63,17 @@ class GatewayConnectionTests(TestCase):
         names = set(integration_graph().connections)
 
         self.assertLessEqual(
-            {"hq.github", "hq.cloudflare_d1", "hq.public_registries", "hq.nws"},
+            {"hq.cloudflare_d1", "hq.public_registries", "hq.nws"},
             names,
         )
+        # Retired: the GitHub App is HQ's one GitHub connection, and the public
+        # read behind it holds no credential to show.
+        self.assertNotIn("hq.github", names)
 
     def test_safe_runtime_catalog_contains_relationships_and_no_tokens(self):
         payload = list_connections(principal=OPERATOR)
         groups = {group["name"]: group for group in payload["groups"]}
 
-        github = groups["hq.github"]["instances"][0]
-        self.assertEqual(github["targets"][0]["label"], "Registered projects")
-        self.assertEqual(
-            github["abilities"][0]["capability"], "project.refresh"
-        )
         d1 = groups["hq.cloudflare_d1"]["instances"][0]
         self.assertEqual(
             {ability["capability"] for ability in d1["abilities"]},
@@ -88,7 +84,6 @@ class GatewayConnectionTests(TestCase):
             },
         )
         rendered = str(payload)
-        self.assertNotIn("github-secret", rendered)
         self.assertNotIn("cloudflare-secret", rendered)
         nws = groups["hq.nws"]["instances"][0]
         self.assertEqual(nws["status_label"], "keyless")
@@ -110,37 +105,12 @@ class GatewayConnectionTests(TestCase):
 
         self.assertEqual(instances[0].endpoint, "https://api.weather.gov")
 
-    def test_command_center_derives_github_process_from_the_connection(self):
-        result = command_center("github", principal=OPERATOR)
-
-        self.assertIn("hq.github", {item.name for item in result["connections"]})
-        self.assertIn("project.refresh", {item.name for item in result["commands"]})
-
-    @override_settings(GITHUB_API_TOKEN="")
-    def test_github_still_emits_public_access_without_a_token(self):
-        groups = {
-            group["name"]: group
-            for group in list_connections(principal=OPERATOR)["groups"]
-        }
-
-        github = groups["hq.github"]["instances"][0]
-        self.assertEqual(github["status_label"], "public access")
-        self.assertEqual(github["targets"][0]["label"], "Registered projects")
-
-    def test_github_discovery_is_query_free(self):
-        spec = integration_graph().connections["hq.github"]
-
-        with self.assertNumQueries(0):
-            instances = spec.instance_provider()
-
-        self.assertEqual(instances[0].endpoint, "https://api.github.com")
-
     def test_capabilities_emit_the_process_steps_the_connection_names(self):
         registry = capability_registry()
 
-        self.assertEqual(
-            registry["project.refresh"].execution_notes[1],
-            "Ask GitHub for current push metadata using the configured connection.",
+        self.assertIn(
+            "public API, which needs no credential",
+            " ".join(registry["project.refresh"].execution_notes),
         )
         self.assertEqual(
             registry["contact.submission.review"].subject_resource,

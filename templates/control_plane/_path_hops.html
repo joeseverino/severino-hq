@@ -12,7 +12,7 @@ it could read is a lock after the hop's name.
     <li title="{{ hop.label }}: {% if hop.link and hop.link.label %}{{ hop.link.label }}{% elif hop.name %}{{ hop.name }}{% else %}{{ hop.detail }}{% endif %}" class="{% if hop.unread or hop.certificate.unread %}is-unknown{% endif %}{% if hop.check.state == "proven" %} is-proven{% elif hop.check.state == "contradicted" %} is-attention{% endif %}">
       <span class="hop-icon">{% include "partials/_icon.html" with name=hop.icon|default:"page" %}</span>
       <span class="hop-label">{{ hop.label }}</span>
-      <strong>{% if hop.link and hop.link.url %}{% entity hop.link %}{% elif hop.name %}{{ hop.name }}{% elif hop.detail %}{{ hop.detail }}{% else %}{% empty_value %}{% endif %}{% if hop.certificate and not hop.certificate.unread %}{% with certificate=hop.certificate %}{% include "control_plane/_certificate_mark.html" %}{% endwith %}{% endif %}</strong>
+      <strong>{% if hop.link and hop.link.url %}{% entity hop.link %}{% elif hop.name %}<span>{{ hop.name }}</span>{% elif hop.detail %}<span>{{ hop.detail }}</span>{% else %}{% empty_value %}{% endif %}{% if hop.certificate and not hop.certificate.unread %}{% with certificate=hop.certificate %}{% include "control_plane/_certificate_mark.html" %}{% endwith %}{% endif %}</strong>
       {% if hop.certificate.unread %}<small>{{ hop.certificate.line }}</small>{% endif %}
       {% if hop.facts %}<small class="hop-facts">{% for text, url in hop.facts %}{% if url %}<a class="external-link" href="{{ url }}" rel="noopener">{{ text }}</a>{% else %}{{ text }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</small>{% endif %}
       {% if hop.unread %}<small>{{ hop.unread|capfirst }}</small>{% endif %}

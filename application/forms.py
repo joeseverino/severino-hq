@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from django import forms
 
+from .business_use import check_business_use
+
 
 class MultipleFileInput(forms.FileInput):
     """A file input that reports every selected file.
@@ -63,12 +65,12 @@ class LinesField(forms.Field):
 class BusinessUseMixin:
     """The share of a purchase used for the business, as a whole percentage.
 
-    The web forms are still the only place this range is enforced; the save
-    services accept any integer and the model clamps it.
+    The UI face of the rule ``application.business_use`` owns: the save
+    services enforce the same check for every adapter, and this shows its
+    refusal on the field before the form reaches them.
     """
 
     def clean_business_use_percentage(self):
-        v = int(self.cleaned_data.get("business_use_percentage") or 0)
-        if not 0 <= v <= 100:
-            raise forms.ValidationError("Must be between 0 and 100.")
-        return v
+        return check_business_use(
+            int(self.cleaned_data.get("business_use_percentage") or 0)
+        )

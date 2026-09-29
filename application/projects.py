@@ -114,7 +114,12 @@ def refresh_project(
     github_fetcher: GitHubFetcher = fetch_last_push,
     content_sync: ContentSync = sync_content_index,
 ) -> dict[str, Any]:
-    """Refresh external project metadata through injected integration gateways."""
+    """Refresh external project metadata through injected integration gateways.
+
+    A repository the GitHub App reads is refreshed by asking the controller to
+    read that connection now; one it does not read falls back to the anonymous
+    public read of when it was last pushed.
+    """
 
     principal.require(Capability.WRITE_PROJECTS)
     try:
@@ -122,7 +127,7 @@ def refresh_project(
     except Project.DoesNotExist as exc:
         raise NotFoundError(f"Project {slug!r} was not found.") from exc
 
-    result: dict[str, Any] = {"ok": True, "content": None, "github": None}
+    result: dict[str, Any] = {"ok": True, "content": None, "github": None, "github_app": None}
     if slug == getattr(settings, "CONTENT_INDEX_PROJECT_SLUG", ""):
         try:
             with operation_context(
@@ -146,11 +151,15 @@ def refresh_project(
         result["github"] = {"ok": False, "error": "Project has no GitHub repository URL."}
         return result
 
+    app = request_app_read(project.repository_url, principal=principal)
+    if app is not None:
+        result["github_app"] = app
+        if app["ok"]:
+            result["github"] = _record_push(project, app.pop("pushed_at"), principal)
+            return result
+
     try:
-        pushed_at = github_fetcher(
-            project.repository_url,
-            token=getattr(settings, "GITHUB_API_TOKEN", ""),
-        )
+        pushed_at = github_fetcher(project.repository_url)
     except GitHubMetadataError as exc:
         result["github"] = {"ok": False, "error": str(exc)}
         return result
@@ -158,7 +167,62 @@ def refresh_project(
     if pushed_at is None:
         result["github"] = {"ok": False, "error": "GitHub returned no push metadata."}
         return result
+    result["github"] = _record_push(project, pushed_at, principal)
+    return result
 
+
+def request_app_read(repository_url: str, *, principal: Principal) -> dict[str, Any] | None:
+    """Ask the controller to read the GitHub App connection that reads this repository.
+
+    None when the App does not read it, which leaves the anonymous public read
+    as the only source. Otherwise the same request the Connections page's Read
+    now makes, through the same capability: whether this principal may wake the
+    controller, and whether policy holds the request for a person, are decided
+    there and nowhere else. The pull requests, checks and workflows on the
+    project page follow on the controller's next pass.
+    """
+
+    from .action_links import READ_NOW_CAPABILITY
+    from .capabilities import execute_capability
+    from .github_estate import repository_for
+
+    repository = repository_for(repository_url)
+    connection_ref = str(repository.record.get("connection_ref") or "") if repository else ""
+    if not connection_ref:
+        return None
+    answer = execute_capability(
+        READ_NOW_CAPABILITY, {"connection_ref": connection_ref}, principal=principal
+    )
+    if answer.get("ok") and answer.get("requested"):
+        return {
+            "ok": True,
+            "connection_ref": connection_ref,
+            "message": str(answer.get("message") or ""),
+            "pushed_at": _pushed_at(repository.record.get("pushed_at")),
+        }
+    error = answer.get("error") or {}
+    return {
+        "ok": False,
+        "connection_ref": connection_ref,
+        "error": str(error.get("message") or answer.get("message") or "The controller was not asked."),
+    }
+
+
+def _pushed_at(stamp: Any) -> datetime | None:
+    """The App's last read of when the repository moved, if it read one."""
+
+    from .timestamps import moment
+
+    return moment(stamp)
+
+
+def _record_push(
+    project: Project, pushed_at: datetime | None, principal: Principal
+) -> dict[str, Any]:
+    """Persist when the repository last moved, where a source said."""
+
+    if pushed_at is None:
+        return {"ok": True, "last_push_at": iso(project.last_push_at) or None}
     with transaction.atomic(), operation_context(
         interface=principal.interface,
         actor=principal.actor,
@@ -172,8 +236,7 @@ def refresh_project(
         # is also the `expected_updated_at` token, which a refresh must not
         # invalidate mid-edit.
         project.save(update_fields=["last_push_at"])
-    result["github"] = {"ok": True, "last_push_at": pushed_at.isoformat()}
-    return result
+    return {"ok": True, "last_push_at": pushed_at.isoformat()}
 
 
 def execute_project_refresh(

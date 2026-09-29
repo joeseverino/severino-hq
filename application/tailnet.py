@@ -664,6 +664,35 @@ class _PortNamer:
         return any(port in self.ssh_ports.get(ref, ()) for ref in refs)
 
 
+# A fact on the tailnet connection: every port the policy opens on HQ's machine
+# admits only named devices, users or tags, never anyone who joins.
+HQ_ADMITS_ONLY_NAMED = "hq-admits-only-named"
+
+
+def _policy_admits_only_named() -> bool:
+    """Whether the tailnet policy admits only named principals to HQ's machine.
+
+    False when it cannot say (no machine known to run HQ, no device for it, no
+    policy read), so an unknown never silences the finding.
+    """
+
+    from .connections import machines_once
+
+    machine = next((item for item in machines_once() if item.runs_hq), None)
+    if machine is None or not machine.addresses:
+        return False
+    addresses = set(machine.addresses)
+    device = next((item for item in devices().values() if addresses & set(item.addresses)), None)
+    if device is None or not device.reach:
+        return False
+    return not any(
+        principal == "*" or principal.startswith("autogroup:")
+        for admitted in device.reach.values()
+        for principal in admitted
+    )
+
+
+
 def posture_facts() -> tuple[tuple[str, str], ...]:
     """Policy settings worth a finding, as topology facts on the tailnet connection.
 
@@ -680,6 +709,8 @@ def posture_facts() -> tuple[tuple[str, str], ...]:
 
     found = policy()
     entries: list[tuple[str, str]] = []
+    if _policy_admits_only_named():
+        entries.append((HQ_ADMITS_ONLY_NAMED, "yes"))
     if found.settings.get("devicesApprovalOn") is False and not found.lock.get("enabled"):
         entries.append(("devices-join-unapproved", "Off"))
     named = {

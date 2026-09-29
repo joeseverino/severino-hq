@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from .timestamps import moment
 from .workflow_contracts import ActionLink, WorkflowPlan
 
 # The one status vocabulary. Every surface that shows state (dashboard cards,
@@ -60,27 +61,6 @@ def ended(text: str) -> str:
 
 
 PAGE_SECTION_ID = re.compile(r"[a-z][a-z0-9-]*\Z")
-
-
-def moment(stamp: str):
-    """A provider's timestamp, parsed, or nothing when there is not one.
-
-    Beside ``ago`` because it is never wanted without it, and shared because a
-    fourth copy of "parse what a provider wrote" was about to exist. Tailscale
-    writes the zero time for "never", which as an age reads as two thousand
-    years and looks like a bug rather than a fact.
-    """
-
-    from datetime import datetime, timezone as _tz
-
-    text = str(stamp or "").strip()
-    if not text or text.startswith("0001-01-01"):
-        return None
-    try:
-        found = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return found if found.tzinfo else found.replace(tzinfo=_tz.utc)
 
 
 def elapsed(stamp: str) -> str:

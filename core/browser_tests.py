@@ -4,8 +4,9 @@ This filename does not match Django's default test*.py discovery, so the plain
 suite needs neither Playwright nor a browser. `scripts/check.sh` runs it with
 CHECK_BROWSER=1 and `scripts/ci-local.sh` always does.
 
-Pages render through their real views over a synthetic example.* estate
-(core/test_browser_fixtures.py), then load in a browser whose every request is
+Pages render through their real views over two synthetic example.* estates,
+a sparse one (core/test_browser_fixtures.py) and a dense, production-shaped
+one (core/test_browser_dense_fixtures.py), then load in a browser whose every request is
 answered locally: nothing here can reach a real endpoint. Assertions are
 invariants rather than pixels, so a page can change and still pass as long as
 it stays readable.
@@ -26,11 +27,25 @@ from django.contrib.staticfiles import finders
 from django.db import transaction
 from django.test import SimpleTestCase
 
+from core.test_browser_dense_fixtures import DENSE_PAGES, build_dense_estate, render_dense_pages
 from core.test_browser_fixtures import PAGES, build_estate, render_pages
 
 WIDTHS = (320, 390, 768, 1280)
 # A phone, a tablet held upright, a laptop: where only a table may scroll sideways.
 OVERFLOW_WIDTHS = (375, 820, 1360)
+# Every page, from the sparse estate and the dense one. The overflow and
+# density checks run all of them at OVERFLOW_WIDTHS.
+ALL_PAGES = (*PAGES, *DENSE_PAGES)
+# How tall a table row may be, in lines of its own body text. The tallest row
+# the tables are designed for is a connection's: its name, endpoint, who holds
+# its secret, where it reaches from, and a closed "Can see" disclosure, one
+# line each, with room for the owner line to wrap once at a tablet: six. A
+# name is clamped to two lines (.table-clamp, `[data-entity]` in a cell), so a
+# row past six is a list put in a cell (a machine's every hostname, a
+# container's every port) that belongs on the record's own page, with a count
+# or the first few in the row. Half a line of slack absorbs the smaller type
+# the secondary lines are set in.
+ROW_LINES = 6
 # The stylesheet's phone breakpoint: `@media (max-width: 640px)`.
 PHONE = 640
 ORIGIN = "http://hq.example.test"
@@ -246,6 +261,42 @@ _OVERLAPS = "() => {" + _DESCRIBE + """
   return found.slice(0, 10);
 }"""
 
+_ROW_HEIGHTS = "(lines) => {" + _DESCRIBE + """
+  // A row is as tall as its tallest cell's content. The cell itself is
+  // stretched to the row, so what is measured is the visible text in it: not
+  // a closed disclosure's body, not the lines a clamp cuts off.
+  const shown = (text, cell) => {
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    let bottom = range.getBoundingClientRect().bottom;
+    for (let up = text.parentElement; up && up !== cell; up = up.parentElement) {
+      if (getComputedStyle(up).overflowY !== 'visible') bottom = Math.min(bottom, box(up).bottom);
+    }
+    return bottom;
+  };
+  const found = [];
+  for (const row of document.querySelectorAll('main tbody tr')) {
+    if (!row.getClientRects().length || row.cells.length === 1) continue;
+    for (const cell of row.cells) {
+      const style = getComputedStyle(cell);
+      const size = parseFloat(style.fontSize);
+      const line = style.lineHeight === 'normal' ? size * 1.2 : parseFloat(style.lineHeight);
+      const top = box(cell).top + parseFloat(style.paddingTop);
+      let bottom = top;
+      const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+      for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+        if (!text.textContent.trim() || !text.parentElement.checkVisibility()) continue;
+        bottom = Math.max(bottom, shown(text, cell));
+      }
+      const height = bottom - top;
+      if (height > (lines + 0.5) * line) {
+        found.push(`${describe(row.closest('table'))} row ${row.rowIndex}: ${describe(cell)} is ${(height / line).toFixed(1)} lines: ${cell.textContent.trim().replace(/\\s+/g, ' ').slice(0, 60)}`);
+      }
+    }
+  }
+  return [...new Set(found)].slice(0, 10);
+}"""
+
 
 class LayoutBrowserTests(SimpleTestCase):
     databases = {"default"}
@@ -257,6 +308,9 @@ class LayoutBrowserTests(SimpleTestCase):
         # database access while Playwright's event loop runs on this thread.
         with transaction.atomic():
             cls.pages = render_pages(build_estate())
+            transaction.set_rollback(True)
+        with transaction.atomic():
+            cls.pages |= render_dense_pages(build_dense_estate())
             transaction.set_rollback(True)
         try:
             from playwright.sync_api import sync_playwright
@@ -326,6 +380,15 @@ class LayoutBrowserTests(SimpleTestCase):
                     self.open(name, width)
                     check(name)
 
+    def across(self, check, pages=ALL_PAGES):
+        """Run ``check(name)`` on ``pages`` at every OVERFLOW_WIDTHS width."""
+
+        for name in pages:
+            for width in OVERFLOW_WIDTHS:
+                with self.subTest(page=name, width=width):
+                    self.open(name, width)
+                    check(name)
+
     def boxes(self, key):
         return self.page.locator(SELECTORS[key]).evaluate_all(
             "elements => elements.map(e => { const r = e.getBoundingClientRect(); "
@@ -356,22 +419,32 @@ class LayoutBrowserTests(SimpleTestCase):
     def test_only_a_table_scrolls_sideways(self):
         """At a phone, tablet and laptop width, with every disclosure open."""
 
-        for name in PAGES:
-            for width in OVERFLOW_WIDTHS:
-                with self.subTest(page=name, width=width):
-                    self.open(name, width)
-                    self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
-                    self.page.evaluate(
-                        "() => document.querySelectorAll('details').forEach((d) => { d.open = true; })"
-                    )
-                    self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
+        def check(_name):
+            self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
+            self.page.evaluate(
+                "() => document.querySelectorAll('details').forEach((d) => { d.open = true; })"
+            )
+            self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
+
+        self.across(check)
 
     def test_nothing_runs_out_of_its_table_cell(self):
-        for name in PAGES:
-            for width in OVERFLOW_WIDTHS:
-                with self.subTest(page=name, width=width):
-                    self.open(name, width)
-                    self.assertEqual(self.page.evaluate(_CELLS), [])
+        self.across(lambda _name: self.assertEqual(self.page.evaluate(_CELLS), []))
+
+    def test_a_table_row_stays_within_its_height_budget(self):
+        self.across(
+            lambda _name: self.assertEqual(self.page.evaluate(_ROW_HEIGHTS, ROW_LINES), [])
+        )
+
+    def test_dense_pages_keep_to_their_boxes(self):
+        """Nothing escapes, overlaps, or wraps a pill with production-sized data."""
+
+        def check(_name):
+            self.assertEqual(self.page.evaluate(_ESCAPES), [])
+            self.assertEqual(self.page.evaluate(_OVERLAPS), [])
+            self.assertEqual(self.page.evaluate(_WRAPPED_PILLS, SELECTORS["pill"]), [])
+
+        self.across(check, DENSE_PAGES)
 
     def test_tables_scroll_inside_their_own_container(self):
         """On a phone a wide table scrolls sideways; it never stacks into cards."""

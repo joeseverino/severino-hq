@@ -1,6 +1,7 @@
 """Trusted networks that admit a whole Tailscale range the tailnet only uses part of.
 
-Informational: trust is configuration, and HQ never narrows it itself. The rule
+Informational: trust is configuration, and HQ never narrows it itself. Raised
+only while the tailnet policy leaves HQ's machine open to anyone; the rule
 returns a ``Finding``'s fields; ``findings`` builds the finding.
 """
 
@@ -15,18 +16,25 @@ from core.network import parse_ip
 
 from .finding_model import OperatorStep
 from .reach import TAILNET
+from .tailnet import HQ_ADMITS_ONLY_NAMED
 from .ui import counted
 
 
 def wider_than_tailnet(estate: Any) -> tuple[dict[str, Any], ...]:
-    """Trusted networks admit a whole Tailscale range; the tailnet uses less."""
+    """Trusted networks admit a whole Tailscale range; the tailnet uses less.
+
+    Only when that width can matter. The tailnet policy decides who reaches
+    HQ's machine before a packet reaches HQ, so if every port there admits only
+    named devices, users or tags, a wider trusted range exposes nothing, and
+    saying otherwise is a finding nobody can act on.
+    """
 
     wide = _wide_trust()
     if not wide:
         return ()
     found: list[dict[str, Any]] = []
     for node in estate.nodes():
-        if node.kind != "connection":
+        if node.kind != "connection" or any(key == HQ_ADMITS_ONLY_NAMED for key, _ in node.facts):
             continue
         addresses = tuple(
             address

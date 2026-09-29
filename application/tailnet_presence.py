@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from django.utils.dateparse import parse_datetime
 
 from .tailnet import TAILNET_KIND
 
@@ -88,6 +87,17 @@ class Presence:
     # record names one.
     controller_id: str = ""
     connection_ref: str = ""
+
+    @property
+    def personal(self) -> bool:
+        """A user's own device, whose being offline is not a fault.
+
+        Tailscale's own line between a server and a person's device: a tagged
+        node belongs to the tailnet and is infrastructure; an untagged one
+        belongs to a user, and a laptop asleep or a phone away is normal.
+        """
+
+        return not self.tags
 
     @property
     def peered(self) -> bool:
@@ -184,14 +194,11 @@ class Presence:
         an expiry far away: one is a decision and the other is a deadline.
         """
 
-        if not self.key_expires:
-            return None
-        moment = parse_datetime(self.key_expires)
-        if moment is None:
-            return None
         from .expiry import days_until
+        from .timestamps import moment
 
-        return days_until(moment)
+        when = moment(self.key_expires)
+        return days_until(when) if when is not None else None
 
 
 def tailnet_presence() -> dict[str, Presence]:

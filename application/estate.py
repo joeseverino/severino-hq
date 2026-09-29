@@ -9,7 +9,7 @@ center read ``estate_reading``; none keeps a list of its own.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import datetime, timedelta
 from typing import Any
 
 from django.urls import reverse
@@ -24,7 +24,9 @@ from control_plane.provider_spec import expiry_phrase
 
 from .entity_links import entity_link
 from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
+from .item_help import cannot_help, remedy_link
 from .projection import read_once
+from .timestamps import moment
 from .ui import Insight, Kpi, ago, counted
 from .workflow_contracts import ActionLink
 
@@ -47,17 +49,6 @@ def subject_link(kind: str, name: str) -> ActionLink | None:
         return None
     link = entity_link(kind, name)
     return ActionLink("subject", link.label, "read", link.url) if link.url else None
-
-
-def _moment(value: Any) -> datetime | None:
-    if isinstance(value, datetime):
-        found = value
-    else:
-        try:
-            found = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
-        except ValueError:
-            return None
-    return found if found.tzinfo else found.replace(tzinfo=dt_timezone.utc)
 
 
 @dataclass(frozen=True)
@@ -127,7 +118,11 @@ class Estate:
 
     @property
     def offline(self) -> tuple[Any, ...]:
-        return tuple(item for item in self.machines if item.state[0] == "offline")
+        # Only what the estate depends on: a personal device away is not down.
+        return tuple(
+            item for item in self.machines
+            if item.state[0] == "offline" and not (item.presence is not None and item.presence.personal)
+        )
 
     @property
     def empty(self) -> bool:
@@ -205,14 +200,14 @@ def _registrations(domains: tuple[str, ...]) -> tuple[Expiry, ...]:
         registration: dict[str, Any] = {}
         for _snapshot, record in inventory_about(ZONE_KIND, subject):
             registration = dict(record.get("registration") or {})
-        expires = None if registration.get("unread") else _moment(registration.get("expires_at"))
+        expires = None if registration.get("unread") else moment(registration.get("expires_at"))
         auto_renew = bool(registration.get("auto_renew")) if expires else None
         if expires is None:
             expires = min(
                 (
                     when
                     for item in index.about(subject, facets=("registration",))
-                    if (when := _moment(item.expires))
+                    if (when := moment(item.expires))
                 ),
                 default=None,
             )
@@ -234,7 +229,7 @@ def _certificates(domains: tuple[str, ...], hostnames: set[str]) -> tuple[Expiry
     found = []
     if domains:
         for item in readings().about(Subject.of(zones=domains), facets=("certificate",)):
-            when = _moment(item.expires)
+            when = moment(item.expires)
             if when is None:
                 continue
             name = next(iter(item.hostnames), "") or item.title
@@ -248,7 +243,7 @@ def _certificates(domains: tuple[str, ...], hostnames: set[str]) -> tuple[Expiry
     for resource in enabled_resources():
         if resource.kind not in MANAGED_CERTIFICATE_KINDS:
             continue
-        when = _moment((resource.status or {}).get("not_after"))
+        when = moment((resource.status or {}).get("not_after"))
         if when is None:
             continue
         spec = resource.spec or {}
@@ -390,9 +385,10 @@ def _offline(estate: Estate) -> tuple[Insight, ...]:
     items = []
     for machine in estate.machines:
         presence = machine.presence
-        if presence is None or presence.online or not _holds_something(machine):
+        # A person's laptop asleep or phone away is normal, not an outage.
+        if presence is None or presence.online or presence.personal or not _holds_something(machine):
             continue
-        seen = _moment(presence.last_seen)
+        seen = moment(presence.last_seen)
         if seen is None or seen.year < 2000 or now - seen < OFFLINE_AFTER:
             continue
         serves = bool(machine.hostnames or machine.roles or machine.runs_hq)
@@ -416,6 +412,11 @@ def _offline(estate: Estate) -> tuple[Insight, ...]:
                 action="Open machine",
                 url=machine.url,
                 subject=subject_link("machine", machine.name),
+                workflow=cannot_help(
+                    f"estate-offline:{machine.name}",
+                    "HQ has no power or console access to a machine, so it is brought back "
+                    "where it runs.",
+                ),
             )
         )
     return tuple(items)
@@ -435,6 +436,10 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
                 "renewal did not run."
             )
             action = "Open certificate"
+            renew = remedy_link("certificate.renew", "Renew certificate", expiry.resource_key)
+            offered: dict[str, Any] = {"actions": (renew,)} if renew else {
+                "workflow": cannot_help(key, "The renewal command is not mounted on this HQ.")
+            }
         else:
             key = f"estate-certificate:{expiry.source}:{expiry.subject}"
             body = (
@@ -443,6 +448,13 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
                 "settings."
             )
             action = "Open"
+            offered = {
+                "workflow": cannot_help(
+                    key,
+                    f"The {expiry.source} provider holds and renews it; HQ only reads it and "
+                    "cannot change its settings.",
+                )
+            }
         items.append(
             Insight(
                 status="serious" if days <= CERTIFICATE_SERIOUS_DAYS else "attention",
@@ -458,6 +470,7 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
                 action=action,
                 url=expiry.url,
                 subject=expiry.link,
+                **offered,
             )
         )
     return tuple(items)
