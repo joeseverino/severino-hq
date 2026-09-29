@@ -1137,23 +1137,31 @@ class CommentHistoryTests(SimpleTestCase):
             return re.finditer(r"#[^\n]*|\"\"\".*?\"\"\"", text, re.S)
         return re.finditer(r"\{% comment %\}.*?\{% endcomment %\}|\{#.*?#\}", text, re.S)
 
-    def test_no_comment_narrates_history(self):
-        import subprocess
+    SUFFIXES = {".py", ".js", ".css", ".html", ".sh"}
+    # Generated or installed trees, and anything hidden (.git, .venv). The suite
+    # also runs inside the image, where there is no git to ask what is tracked.
+    SKIPPED = {"node_modules", "staticfiles", "build", "data", "var", "media", "exports", "backups"}
 
+    def _sources(self, root: Path):
+        for path in sorted(root.rglob("*")):
+            parts = path.relative_to(root).parts
+            if path.suffix not in self.SUFFIXES or not path.is_file():
+                continue
+            if any(part.startswith(".") or part in self.SKIPPED for part in parts[:-1]):
+                continue
+            yield path
+
+    def test_no_comment_narrates_history(self):
         root = Path(__file__).parent.resolve().parents[1]
-        tracked = subprocess.run(
-            ["git", "ls-files", "*.py", "*.js", "*.css", "*.html", "*.sh"],
-            cwd=root, capture_output=True, text=True, check=True,
-        ).stdout.split()
-        self.assertGreater(len(tracked), 100)
+        sources = list(self._sources(root))
+        self.assertGreater(len(sources), 100)
         found = []
-        for name in tracked:
-            path = root / name
+        for path in sources:
             text = path.read_text(encoding="utf-8", errors="ignore")
             for match in self._comments(path, text):
                 if phrase := self.NARRATION.search(match.group()):
                     line = text.count("\n", 0, match.start()) + 1
-                    found.append(f"{name}:{line}: {phrase.group()}")
+                    found.append(f"{path.relative_to(root)}:{line}: {phrase.group()}")
         self.assertEqual(found, [])
 
 
