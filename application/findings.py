@@ -50,6 +50,7 @@ from control_plane.providers import PROVIDERS
 from . import (
     certificate_expiry,
     connection_findings,
+    contradiction_findings,
     controller_findings,
     credential_findings,
     dns_findings,
@@ -182,6 +183,7 @@ RULE_MODULES = (
     controller_findings,
     tailnet_findings,
     dns_findings,
+    contradiction_findings,
 )
 RULES: tuple[FindingRule, ...] = tuple(
     rule for module in RULE_MODULES for rule in module.RULES

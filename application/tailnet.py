@@ -724,4 +724,25 @@ def posture_facts() -> tuple[tuple[str, str], ...]:
         for group in found.groups
         if not group.get("members") and group.get("name") in named
     )
+    entries.extend(("tag-granted-to-nobody", tag) for tag in unworn_tags(named))
     return tuple(entries)
+
+
+def unworn_tags(named) -> tuple[str, ...]:
+    """Tags a rule names that no device carries, once devices were read.
+
+    A rule's destination names a tag with its ports (``tag:web:443``); the tag
+    is the part before them. Nothing is said while no device was read: every
+    tag would look unworn.
+    """
+
+    from control_plane.provider_adapters.tailscale import TAILNET_KIND
+
+    from .facts import inventory_records
+
+    records = [record for _snapshot, record in inventory_records(TAILNET_KIND)]
+    if not records:
+        return ()
+    worn = {str(tag) for record in records for tag in record.get("tags") or ()}
+    tags = {":".join(str(entry).split(":")[:2]) for entry in named if str(entry).startswith("tag:")}
+    return tuple(sorted(tags - worn))

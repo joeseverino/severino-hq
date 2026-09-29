@@ -127,7 +127,7 @@ def gates_of(hostname: str) -> tuple[str, ...]:
     )
 
 
-def _public_name(route: Route) -> bool:
+def public_name(route: Route) -> bool:
     """Whether the route starts at a record anyone on the internet can resolve."""
 
     first = route.hops[0] if route.hops else None
@@ -141,14 +141,14 @@ def route_level(hostname: str, route: Route) -> str:
 
     networks = {network_of(hop.detail) for hop in route.hops if hop.step == "network"}
     through_edge = any(hop.step == "edge" for hop in route.hops)
-    if "public" in networks or (through_edge and _public_name(route)):
+    if "public" in networks or (through_edge and public_name(route)):
         reachable = True
     elif networks:
         reachable = False
     else:
         # A public name whose answer HQ could not place: the internet can
         # resolve it, so it is not called private on a guess.
-        reachable = _public_name(route)
+        reachable = public_name(route)
     if not reachable:
         return PRIVATE
     return GATED if gates_of(hostname) else OPEN
@@ -207,8 +207,34 @@ def exposure_of_container(item) -> Exposure:
     return read_once(f"exposure.container:{item.address}", lambda: _exposure_of_container(item))
 
 
+def routed_containers() -> dict[tuple[str, str], frozenset[str]]:
+    """``{(machine, container): names}``: every container a walked route ends at.
+
+    From the paths themselves, so a route HQ only reads (a proxy host nobody
+    declared) counts as much as one it declares.
+    """
+
+    return read_once("exposure.routed_containers", _routed_containers)
+
+
+def _routed_containers() -> dict[tuple[str, str], frozenset[str]]:
+    from .paths import path_to, routed_names
+
+    found: dict[tuple[str, str], set[str]] = {}
+    for name in routed_names():
+        for route in path_to(name).routes:
+            machine = ""
+            for hop in route.hops:
+                if hop.step == "machine":
+                    machine = hop.name
+                elif hop.step == "container" and machine:
+                    found.setdefault((machine, hop.name), set()).add(name)
+    return {place: frozenset(names) for place, names in found.items()}
+
+
 def _exposure_of_container(item) -> Exposure:
-    named = exposure_of_names(item.serves)
+    names = {*item.serves, *routed_containers().get((item.machine.name, item.running.name), ())}
+    named = exposure_of_names(names)
     machine = item.machine
     answering = publicly_answering((*getattr(machine, "addresses", ()), getattr(machine, "address", "")))
     ports = sorted(port for port in item.running.ports if port in answering)

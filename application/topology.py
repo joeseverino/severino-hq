@@ -42,6 +42,7 @@ from .topology_model import (
     newest_stamp,
 )
 from .topology_lenses import TOPOLOGY_LENSES, TopologyLens, apply_lens, apply_trace, lens_for
+from .contradiction_findings import add_contradiction_facts
 from .topology_facts import add_connection_facts, add_observed_facts
 
 
@@ -559,6 +560,7 @@ def _derive(principal: Principal) -> Topology:
     _connection_nodes(groups, nodes, edges, principal)
     add_estate(nodes, edges, resources)
     add_connection_facts(nodes)
+    add_contradiction_facts(nodes)
     _governs_edges(groups, resources, edges)
     _measure(nodes)
 

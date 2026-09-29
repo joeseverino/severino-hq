@@ -289,6 +289,25 @@ stays on the exposure page and off the action queue. The page
 exposure, and each open name offers the fix HQ can run: an access list on the
 proxy host it declares.
 
+## Contradictions
+
+Each connection reports alone, and each report can be healthy while together
+they describe something that cannot work. `application/contradiction_findings.py`
+reads the walked paths and stored readings for these, polling nothing:
+
+| Rule | Two sides that disagree | Fix HQ offers |
+| --- | --- | --- |
+| `public-name-served-by-nothing` | Public DNS sends a name to a machine; every proxy and container reading for that machine was read, and none serves it | Repoint the declared record; removal stays on its page |
+| `route-to-stopped-container` | A route ends at a container Docker reports not running | Repoint the declared proxy; `docker start` as a step |
+| `gate-guards-nothing` | A gate (`restricts`) names a host no DNS record answers | The provider console step |
+| `split-horizon-disagrees` | The public and internal records end on different machines | Repoint the declared rewrite |
+| `published-port-unfronted` | A container port answers the internet and no route leads to it | The compose change on its page |
+| `tag-granted-to-nobody` | A grant names a tag no read device carries | Edit the declared tailnet policy |
+
+A machine where a container publishes 80 or 443 itself is never called
+unserved, since HQ cannot enumerate what it answers for. Removal is
+destructive, so a finding never offers it as a remedy.
+
 ## Relationships
 
 Entity pages are views of one relation graph. `topology.relation_graph` builds
