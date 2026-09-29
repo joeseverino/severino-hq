@@ -133,6 +133,23 @@ standard. Each said once; the band above has its version and standing.
       {% endif %}{% endfor %}
     </ul>
   {% endif %}
+  {% with patch=item.hardening %}{% if patch.any %}
+  <div id="hardening" class="hardening-patch boxed-facts">
+    {% if patch.yaml %}
+      <div class="hardening-head">
+        <strong>Add to {% if patch.compose_file %}<code>{{ patch.compose_file }}</code>{% else %}its compose file{% endif %}</strong>
+        <button class="btn compact ghost" type="button" data-copy-target="hardening-yaml" hidden>Copy</button>
+      </div>
+      <pre id="hardening-yaml"><code>{{ patch.yaml }}</code></pre>
+      <p class="muted">A key its service already has is replaced by this one. Then <code>docker compose up -d {{ patch.service }}</code>.</p>
+    {% endif %}
+    <ul class="hardening-notes">
+      {% for removal in patch.removals %}<li><strong>Remove</strong> {% for line in removal.lines %}<code>{{ line }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% if removal.caution %} <span class="muted">{{ removal.caution }}</span>{% endif %}</li>{% endfor %}
+      {% for change in patch.cautions %}<li><code>{{ change.key }}</code> <span class="muted">{{ change.caution }}</span></li>{% endfor %}
+      {% for gap in patch.unwritten %}<li><strong>Not written</strong> <span class="muted">{{ gap.reason }}</span>{% if gap.check == "no-docker-socket" and patch.socket_link %} <a href="{{ patch.socket_link.url }}">{{ patch.socket_link.label }}</a>{% endif %}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}{% endwith %}
   <dl class="github-facts container-facts boxed-facts">
     {% if item.compose_files or item.running.stack %}<div><dt>Defined in</dt><dd>{% if item.running.stack %}{{ item.running.stack }}{% if item.compose_files %} <span class="muted">·</span> {% endif %}{% endif %}{% for path in item.compose_files %}<code>{{ path }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</dd></div>{% endif %}
     {% if item.running.published %}<div><dt>Publishes</dt><dd>{{ item.running.published }}</dd></div>{% endif %}

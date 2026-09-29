@@ -20,7 +20,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Mapping
 
-from django.urls import reverse
 
 from control_plane.observations.portainer import (
     IMAGE_KIND as PULLED_KIND,
@@ -415,6 +414,12 @@ class Container:
         from .container_standard import posture_of
 
         return posture_of(self)
+
+    @property
+    def hardening(self):
+        from .container_hardening import hardening_of
+
+        return hardening_of(self)
 
     @property
     def supply_chain(self):
@@ -813,95 +818,9 @@ def _by(kind: str, key: str) -> dict[str, Mapping[str, Any]]:
 
 
 def attention() -> tuple[Insight, ...]:
-    """A version with a known advisory, one item per image and version; and
-    every image with a newer release, as one item, because updates are a
-    chore to schedule rather than a fire."""
+    """What needs doing about the containers, each item with the help HQ
+    derived for it (``application.container_attention``)."""
 
-    seen: dict[str, tuple[Standing, list[Container]]] = {}
-    for item in containers():
-        seen.setdefault(item.standing.label, (item.standing, []))[1].append(item)
-    items = []
-    behind = []
-    for label, (standing, running) in seen.items():
-        where = ", ".join(sorted({f"{item.running.name} on {item.machine.name}" for item in running}))
-        if standing.state == VULNERABLE:
-            fixed = _fixed_in(standing)
-            known = len(standing.advisories) or len(standing.urgent)
-            # One upgrade however many advisories; none yet if no release fixes them.
-            waiting = not standing.newer
-            items.append(
-                Insight(
-                    status="serious" if standing.serious and not waiting else "attention",
-                    eyebrow="Containers",
-                    key=f"container-advisory:{standing.image.name}:{standing.tag}",
-                    title=f"{label} has {standing.summary}" + ("; no release fixes it yet" if waiting else ""),
-                    value=str(known),
-                    magnitude=1,
-                    body=f"Worst: {standing.worst}. Runs as {where}.{f' Fixed in {fixed}.' if fixed else ''}",
-                    action="Open containers",
-                    url=reverse("control_plane:containers"),
-                )
-            )
-        elif standing.newer:
-            behind.append(f"{label} → {standing.latest}")
-    items.extend(_reach_attention())
-    if behind:
-        items.append(
-            Insight(
-                status="attention",
-                eyebrow="Containers",
-                key="container-updates",
-                title=f"{counted(len(behind), 'running image has', 'running images have')} a newer release",
-                value=str(len(behind)),
-                magnitude=len(behind),
-                body="; ".join(sorted(behind)) + ".",
-                action="Open containers",
-                url=reverse("control_plane:containers"),
-            )
-        )
-    return tuple(items)
+    from .container_attention import attention as items
 
-
-def _reach_attention() -> list[Insight]:
-    """One item per serious check a container fails, naming every container
-    that fails it. Hardening waits on the page; reach over a machine does not."""
-
-    from .container_standard import STANDARD
-    from .standards import UNMET
-
-    found = containers()
-    items = []
-    for check in STANDARD:
-        if not check.serious:
-            continue
-        failing = sorted(
-            f"{item.running.name} on {item.machine.name}"
-            for item in found
-            if item.posture.state_of(check.id) == UNMET
-        )
-        if failing:
-            items.append(
-                Insight(
-                    status="serious",
-                    eyebrow="Containers",
-                    key=f"container-posture:{check.id}",
-                    title=f"{check.label}: not met by {counted(len(failing), 'container', 'containers')}",
-                    value=str(len(failing)),
-                    magnitude=len(failing),
-                    body=f"{', '.join(failing)}. {check.why} {check.fix}",
-                    action="Open containers",
-                    url=reverse("control_plane:containers"),
-                )
-            )
-    return items
-
-
-def _fixed_in(standing: Standing) -> str:
-    fixes = {
-        patched.strip()
-        for advisory in standing.advisories
-        for _vulnerable, patched in advisory.get("vulnerabilities") or ()
-        for patched in str(patched).split(",")
-        if patched.strip()
-    }
-    return ", ".join(sorted(fixes, key=version)) if fixes else ""
+    return items()

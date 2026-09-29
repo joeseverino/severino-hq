@@ -1263,7 +1263,9 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .pie-chart path, .pie-chart circle { stroke: var(--surface); stroke-width: 2; paint-order: stroke; }
 .chart-data { margin-top: var(--space-3); color: var(--muted); font-size: var(--text-xs); }
 .section-readout { margin-top: var(--space-3); font-size: var(--text-sm); }
-.section-readout pre { max-height: 18rem; margin-top: var(--space-4); }
+/* A raw reading holds paths and names of any length: wrapped, so only its
+   height scrolls and never the page sideways. */
+.section-readout pre { max-height: 18rem; margin-top: var(--space-4); white-space: pre-wrap; overflow-wrap: anywhere; }
 .control-label { color: var(--muted); font-size: var(--text-xs); font-weight: 500; }
 .control-good, .control-healthy { color: var(--ok); }
 .control-warn, .control-degraded, .control-drifted { color: var(--warn); }
@@ -1349,6 +1351,8 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .control-diagnostics { margin: var(--space-10) 0; }
 .control-diagnostics > summary { color: var(--muted); cursor: pointer; font-size: var(--text-sm); font-weight: 600; }
 .control-diagnostics[open] > summary { margin-bottom: var(--space-6); }
+/* Names and paths of any length, in half the width: wrapped, never sideways. */
+.control-diagnostics pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 /* Inside a metric card the disclosure is one more row, not a section. */
 .control-metric > .control-diagnostics { margin: var(--space-2) 0 0; }
 /* A short record list on a card reads at body size, not headline size. */
@@ -5061,6 +5065,8 @@ form[data-clean] .save-bar { display: none; }
   .container-needs-where { display: flex; flex-wrap: wrap; gap: var(--space-2); max-width: 100%; }
   .container-needs-where .workflow-chip { padding: var(--space-1) var(--space-5); font-size: var(--text-xs); box-shadow: none; }
   .container-standing { white-space: nowrap; }
+  /* Words rather than a pill: a narrow column wraps them instead of widening. */
+  .container-reach { color: var(--danger); font-size: var(--text-xs); font-weight: 500; }
   .container-standing .icon { vertical-align: -0.15em; }
   .container-standing.is-vulnerable { color: var(--danger); }
   .container-standing.is-behind { color: var(--tone-caution-ink); }
@@ -5083,6 +5089,19 @@ form[data-clean] .save-bar { display: none; }
   /* Why not on its own: the band's own bottom row, a line each. */
   .upgrade-reasons { list-style: none; margin: 0; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
   .upgrade-reasons li::before { content: "·"; margin-right: var(--space-3); color: var(--muted-2); }
+
+  /* The compose change that meets its unmet checks: one block to paste, then
+     what each line can break and what HQ could not write. */
+  .hardening-patch { display: grid; gap: var(--space-4); min-width: 0; }
+  .hardening-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; }
+  .hardening-head code { overflow-wrap: anywhere; }
+  /* Wrapped rather than scrolled: a long path stays on screen, and the copy
+     takes the text, not the wrapping. */
+  .hardening-patch pre { margin: 0; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .hardening-patch > p { margin: 0; font-size: var(--text-sm); }
+  .hardening-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); font-size: var(--text-sm); }
+  .hardening-notes li { min-width: 0; overflow-wrap: anywhere; }
+  [data-copy-target][hidden] { display: none; }
 
   /* Posture, led by what is not met: a row per gap with the repositories
      that miss it, then a row per repository with a segment per check. */
