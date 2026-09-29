@@ -5,24 +5,19 @@ all ask the same question of a documentation record. Answered in five places,
 a sensitivity added to one of them would quietly widen one surface and not
 the others.
 
-The record's own ``is_safe_for_ai_export`` reads this set too, so this module
-must not import the model at runtime: the model imports it. The values are the
-``DocumentationRecord.Sensitivity`` choices' stored strings (a ``TextChoices``
-member equals its value), and ``test_sensitivity`` holds them to those choices.
+The set is defined beside the model's sensitivity choices, which it is made
+of, and the model's own ``is_safe_for_ai_export`` reads it there. This module
+is how every other surface asks: it imports the model, never the reverse, so
+persistence does not depend on the application layer.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from django.db.models import QuerySet
 
-if TYPE_CHECKING:
-    from django.db.models import QuerySet
+from docs_index.models import SAFE_SENSITIVITIES, DocumentationRecord
 
-    from docs_index.models import DocumentationRecord
-
-
-# DocumentationRecord.Sensitivity.PUBLIC and .INTERNAL.
-SAFE_SENSITIVITIES: tuple[str, ...] = ("public", "internal")
+__all__ = ["SAFE_SENSITIVITIES", "safe_doc_ids"]
 
 
 def safe_doc_ids(documentation: QuerySet[DocumentationRecord]) -> list[str]:

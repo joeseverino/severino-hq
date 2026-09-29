@@ -44,9 +44,9 @@ class SafeSensitivityTests(SimpleTestCase):
     def test_the_record_reads_the_one_set(self):
         """Not an equal copy: the model's check is this set, so it cannot drift."""
 
-        import docs_index.models
+        from docs_index.models import SAFE_SENSITIVITIES as MODEL_SET
 
-        self.assertIs(docs_index.models.SAFE_SENSITIVITIES, SAFE_SENSITIVITIES)
+        self.assertIs(MODEL_SET, SAFE_SENSITIVITIES)
 
     def test_sensitive_and_restricted_documentation_is_never_safe(self):
         for level in (
