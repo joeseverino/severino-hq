@@ -83,10 +83,10 @@ alphabetical is the order and there is nothing to move.
             {% elif service.path.ends_at.step == "origin" %}
               {{ service.path.ends_at.label }}{% if service.path.ends_at.unread %} <span class="muted">· redirect not read</span>{% endif %}
             {% elif service.origin %}
-              {% for facet in service.facets %}{% if facet.id == runtime_facet %}{% for claim in facet.claims %}{% if forloop.first %}<a href="{{ claim.url }}">{{ service.origin.headline }}</a>{% endif %}{% empty %}{{ service.origin.headline }}{% endfor %}{% endif %}{% endfor %}
+              {% for facet in service.facets %}{% if facet.id == runtime_facet %}{% for claim in facet.claims %}{% if forloop.first %}<a class="cell-line" href="{{ claim.url }}" title="{{ service.origin.headline }}">{{ service.origin.headline }}</a>{% endif %}{% empty %}<span class="cell-line" title="{{ service.origin.headline }}">{{ service.origin.headline }}</span>{% endfor %}{% endif %}{% endfor %}
               {% if service.origin.qualifier %}<span class="muted">{{ service.origin.qualifier }}</span>{% endif %}
             {% elif service.served_by %}
-              {{ service.served_by|join:" · " }}
+              {% for name in service.served_by %}<span class="cell-line" title="{{ name }}">{{ name }}</span>{% if not forloop.last %}<br>{% endif %}{% endfor %}
             {% elif service.path.machine %}
               {% entity "machine"|entity_of:service.path.machine %}
             {% else %}

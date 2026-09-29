@@ -344,13 +344,13 @@ PAGES = {
 }
 
 
-def render_pages(user):
-    """Every page in PAGES as its view renders it for ``user``."""
+def render_pages(user, pages=None):
+    """Every page in ``pages`` (PAGES by default) as its view renders it for ``user``."""
 
     client = Client()
     client.force_login(user)
     rendered = {}
-    for name, (url, patches, *request) in PAGES.items():
+    for name, (url, patches, *request) in (PAGES if pages is None else pages).items():
         with patches():
             response = client.get(url(), **(request[0] if request else {}))
         if response.status_code != 200:
