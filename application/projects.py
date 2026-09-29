@@ -159,10 +159,7 @@ def refresh_project(
             return result
 
     try:
-        pushed_at = github_fetcher(
-            project.repository_url,
-            token=getattr(settings, "GITHUB_API_TOKEN", ""),
-        )
+        pushed_at = github_fetcher(project.repository_url)
     except GitHubMetadataError as exc:
         result["github"] = {"ok": False, "error": str(exc)}
         return result

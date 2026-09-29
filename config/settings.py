@@ -879,7 +879,6 @@ SEVERINO_MCP_ENABLE_LOOKUP = env_bool("SEVERINO_MCP_ENABLE_LOOKUP", False)
 
 CLOUDFLARE_D1_DATABASE_NAME = os.environ.get("CLOUDFLARE_D1_DATABASE_NAME", "")
 CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
-GITHUB_API_TOKEN = os.environ.get("GITHUB_API_TOKEN", "")
 
 
 # Ensure the directories we depend on exist at startup.
