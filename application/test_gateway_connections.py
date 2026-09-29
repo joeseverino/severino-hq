@@ -13,7 +13,6 @@ from control_plane.models import (
 from projects.models import Project
 
 from .capabilities import capability_registry, execute_capability
-from .command_center import command_center
 from .connections import list_connections
 from .integrations import integration_graph
 from .security import Capability, Principal
