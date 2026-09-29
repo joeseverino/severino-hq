@@ -14,6 +14,7 @@ from django.utils.html import escape
 from django.utils import timezone
 
 from control_plane.models import ManagedResource, ProviderConnection
+from control_plane.providers import PROVIDERS
 from control_plane.topology_views import TopologyView
 
 from .action_links import topology_investigation_links, topology_url
@@ -1142,3 +1143,64 @@ class AnUnrecognisedContainerIsCarriedByItsMachineTests(TestCase):
 
     def test_it_has_no_node_of_its_own(self):
         self.assertNotIn("a-stray", {node.label for node in self.nodes.values()})
+
+
+class HolderEdgeTests(TestCase):
+    """Every kind mirroring a provider's records is joined to the connection
+    holding its live record, by declaring ``from_record`` and nothing else."""
+
+    CONNECTION = "connection:infrastructure.controllers:example-controller:example-holder"
+
+    def _edges(self, kind, *, declared, record):
+        from control_plane.models import ProviderInventory
+
+        ManagedResource.objects.all().delete()
+        ProviderInventory.objects.all().delete()
+        ProviderConnection.objects.all().delete()
+        provider = PROVIDERS[kind]
+        ManagedResource.objects.create(key="example-declared", kind=kind, spec=declared)
+        ProviderInventory.objects.create(kind=kind, observed_at=timezone.now(), records=[record])
+        ProviderConnection.objects.create(
+            controller_id="example-controller",
+            connection_ref="example-holder",
+            provider=(provider.connection_providers or ("example",))[0],
+            endpoint="https://api.example.test/",
+            reachable=True,
+            probed=True,
+            observed_at=timezone.now(),
+        )
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
+            topology = derive_topology(principal=READ)
+        return {(edge.source, edge.target, edge.kind) for edge in topology.edges}
+
+    def mirrored(self):
+        return [
+            (kind, provider)
+            for kind, provider in PROVIDERS.items()
+            if provider.from_record is not None and provider.sample_record
+        ]
+
+    def test_every_mirrored_kind_is_used_by_the_connection_holding_its_record(self):
+        self.assertTrue(self.mirrored())
+        for kind, provider in self.mirrored():
+            with self.subTest(kind=kind):
+                record = {**provider.sample_record, "connection_ref": "example-holder"}
+                edges = self._edges(kind, declared=provider.from_record(record), record=record)
+
+                self.assertIn((self.CONNECTION, "resource:example-declared", "used_by"), edges)
+
+    def test_a_record_naming_no_connection_is_held_by_its_providers_connections(self):
+        kind, provider = next(
+            (kind, provider) for kind, provider in self.mirrored() if provider.connection_providers
+        )
+        record = dict(provider.sample_record)
+        edges = self._edges(kind, declared=provider.from_record(record), record=record)
+
+        self.assertIn((self.CONNECTION, "resource:example-declared", "used_by"), edges)
+
+    def test_a_record_naming_another_connection_draws_no_edge_from_this_one(self):
+        kind, provider = self.mirrored()[0]
+        record = {**provider.sample_record, "connection_ref": "example-elsewhere"}
+        edges = self._edges(kind, declared=provider.from_record(record), record=record)
+
+        self.assertNotIn((self.CONNECTION, "resource:example-declared", "used_by"), edges)
