@@ -259,6 +259,36 @@ the same path to every adapter, and the service page renders it: a summary, the
 path hop by hop, what it depends on and what depends on it, then the parts and
 raw readings.
 
+## Exposure
+
+`exposure.exposure_of_name(hostname)` reads each route `path_to` walked and says
+who it admits, worst first:
+
+- **open**: the internet reaches it and nothing in front asks who is asking. The
+  route starts at a record a public provider holds (`public_effect`) and meets
+  the edge, or its answer is a public address.
+- **gated**: it is reachable from the internet, but a reading that `restricts` names
+  it (Cloudflare Access, an NPM access list). HQ reads that the gate exists, not
+  what its policy admits.
+- **private**: the answer is on the tailnet or the local network.
+- **unrouted**: nothing HQ reads routes a name to it.
+
+A container's exposure is the worst of the names routed to it (`serves`) and of
+any port it publishes that the host's perimeter check saw answer publicly. A
+problem is as urgent as the worst exposure of what it is about
+(`exposure.status_at`):
+
+| Status | Open | Gated or private | Unrouted |
+| --- | --- | --- | --- |
+| Serious | serious | attention | information |
+| Attention | attention | attention | information |
+
+This applies to container advisories and to container posture failures. Information
+stays on the exposure page and off the action queue. The page
+(`/infrastructure/exposure/`) lists every name a DNS record answers for, by
+exposure, and each open name offers the fix HQ can run: an access list on the
+proxy host it declares.
+
 ## Relationships
 
 Entity pages are views of one relation graph. `topology.relation_graph` builds

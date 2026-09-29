@@ -10,6 +10,16 @@ from django.utils import timezone
 from control_plane.models import ManagedResource, ProviderInventory
 
 from .containers import BEHIND, CURRENT, UNKNOWN, VULNERABLE, attention, containers
+from .exposure import OPEN, PRIVATE, Exposure, RouteExposure
+
+
+def exposed(level):
+    """Every container reached at ``level``, through one synthetic name."""
+
+    return mock.patch(
+        "application.container_attention.exposure_of_container",
+        return_value=Exposure((RouteExposure("app.example.com", level, "", ""),)),
+    )
 
 
 def inventory(kind, records):
@@ -88,7 +98,8 @@ class StandingTests(TestCase):
     def test_an_advisory_is_one_item_per_version_and_updates_are_one_item(self):
         estate(advisories=[HIGH])
 
-        items = {item.key: item for item in attention()}
+        with exposed(OPEN):
+            items = {item.key: item for item in attention()}
 
         self.assertEqual(set(items), {"container-advisory:ghcr.io/example/app:v1.2.0", "container-updates"})
         advisory = items["container-advisory:ghcr.io/example/app:v1.2.0"]
@@ -108,10 +119,31 @@ class StandingTests(TestCase):
     def test_an_advisory_no_release_fixes_yet_is_said_not_raised(self):
         estate(advisories=[HIGH], app_tags=("v1.2.0",))
 
-        (advisory,) = [item for item in attention() if item.key.startswith("container-advisory:")]
+        with exposed(OPEN):
+            (advisory,) = [item for item in attention() if item.key.startswith("container-advisory:")]
 
         self.assertEqual(advisory.status, "attention")
         self.assertIn("no release fixes it yet", advisory.title)
+
+    def test_an_advisory_is_as_urgent_as_what_reaches_it(self):
+        estate(advisories=[HIGH])
+
+        def status():
+            (advisory,) = [item for item in attention() if item.key.startswith("container-advisory:")]
+            return advisory.status, advisory.body
+
+        with exposed(OPEN):
+            opened = status()
+        with exposed(PRIVATE):
+            private = status()
+        unrouted = status()
+
+        self.assertEqual(opened[0], "serious")
+        self.assertIn("open to the internet as app.example.com", opened[1])
+        self.assertEqual(private[0], "attention")
+        # Nothing routes to it: information, which the queue leaves out.
+        self.assertEqual(unrouted[0], "neutral")
+        self.assertIn("nothing routes to it", unrouted[1])
 
     def test_nothing_known_asks_for_nothing(self):
         estate(app_tags=("v1.2.0",))

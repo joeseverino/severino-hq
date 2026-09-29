@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import approval_views, connection_views, finding_views, machine_views, resource_form_views, service_views, tool_views, topology_views, views
+from . import approval_views, connection_views, exposure_views, finding_views, machine_views, resource_form_views, service_views, tool_views, topology_views, views
 from .container_views import ContainerListView
 from .models import OperationRequest
 
@@ -9,6 +9,7 @@ app_name = "control_plane"
 urlpatterns = [
     path("", views.InfrastructureListView.as_view(), name="list"),
     path("findings/", finding_views.FindingsView.as_view(), name="findings"),
+    path("exposure/", exposure_views.ExposureView.as_view(), name="exposure"),
     path("topology/", topology_views.TopologyView.as_view(), name="topology"),
     path("topology/node/", topology_views.TopologyNodeView.as_view(), name="topology_node"),
     path("providers.json", views.ProviderSchemaView.as_view(), name="providers"),

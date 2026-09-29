@@ -55,30 +55,33 @@ def work_queue() -> list[dict[str, Any]]:
     a link.
     """
 
-    from .action_items import item_key, item_revision
-
     return [
-        {
-            "key": item_key(entry["source_id"], entry["item"]),
-            "revision": item_revision(entry["item"]),
-            "source_id": entry["source_id"],
-            "source": entry["source"],
-            "label": entry["item"].title,
-            "detail": entry["item"].body,
-            "count": entry["item"].magnitude or 1,
-            "status": entry["item"].status,
-            "url": entry["item"].url,
-            "action": entry["item"].action,
-            "workflow": serialize_workflow(entry["item"].workflow),
-            "actions": [asdict(action) for action in entry["item"].actions],
-            "subject": (
-                asdict(subject)
-                if (subject := getattr(entry["item"], "subject", None))
-                else None
-            ),
-        }
+        queue_item(entry["source_id"], entry["source"], entry["item"])
         for entry in domain_attention_items()
     ]
+
+
+def queue_item(source_id: str, source: str, item: Any) -> dict[str, Any]:
+    """One action item in the shape the queue partial and the API carry."""
+
+    from .action_items import item_key, item_revision
+
+    subject = getattr(item, "subject", None)
+    return {
+        "key": item_key(source_id, item),
+        "revision": item_revision(item),
+        "source_id": source_id,
+        "source": source,
+        "label": item.title,
+        "detail": item.body,
+        "count": item.magnitude or 1,
+        "status": item.status,
+        "url": item.url,
+        "action": item.action,
+        "workflow": serialize_workflow(item.workflow),
+        "actions": [asdict(action) for action in item.actions],
+        "subject": asdict(subject) if subject else None,
+    }
 
 
 def operating_snapshot(*, principal) -> dict[str, Any]:

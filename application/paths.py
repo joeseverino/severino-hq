@@ -146,6 +146,12 @@ def _rows(kind: str) -> dict[str, list[_Row]]:
     )
 
 
+def routed_names() -> tuple[str, ...]:
+    """Every name a DNS record HQ reads, or else declares, answers for."""
+
+    return tuple(sorted({name for kind in _kinds("dns") for name in _rows(kind) if name}))
+
+
 def _about(hostname: str, **filters: Any) -> tuple[Joined, ...]:
     return readings().about(Subject.of(hostnames=(hostname,)), **filters)
 

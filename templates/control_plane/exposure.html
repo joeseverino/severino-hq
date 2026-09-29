@@ -1,0 +1,23 @@
+{% extends "page.html" %}
+{% block page %}
+<div class="topology-summary" role="status">
+  {% for level, label, count in exposure_counts %}
+    <span><strong>{{ count }}</strong> {{ label|lower }}</span>
+  {% endfor %}
+</div>
+<p class="muted">Derived from the routes HQ already reads: public DNS, the edge, the network each answer is on, and what serves it. A gate is a reading that admits only whom it allows, such as an Access application or an access list; what its policy allows is not read.</p>
+
+<section class="page-section" id="problems">
+  <h2>Problems, by who can reach them</h2>
+  {% if exposure_problems %}
+    {% include "partials/_work_queue.html" with items=exposure_problems %}
+  {% else %}
+    {% include "partials/_empty_state.html" with message="No container problem is known." %}
+  {% endif %}
+</section>
+
+{% include "partials/_page_sections.html" %}
+{% if not sections %}
+  {% include "partials/_empty_state.html" with message="No service names are known yet." %}
+{% endif %}
+{% endblock %}

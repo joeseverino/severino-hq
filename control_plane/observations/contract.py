@@ -128,6 +128,10 @@ class ObservationSpec:
     # A header a request carries once it has passed through what a record
     # describes: an Access application's signed assertion.
     request_header: str = ""
+    # Whether a record stands in front of the hostnames it names and admits
+    # only whom it allows: an Access application, an access list. A name one
+    # restricts is reachable from the internet only through that gate.
+    restricts: bool = False
     # What a record tells about the connection that read it, as ``(key, value)``
     # facts the findings read off that connection's node.
     facts: Callable[[Mapping[str, Any]], tuple[tuple[str, str], ...]] = lambda record: ()

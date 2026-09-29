@@ -266,6 +266,11 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Findings", "control_plane:findings", "control_plane", 128,
                 "Infrastructure",
             ),
+            # Beside the findings: the same problems, ranked by who can reach them.
+            NavigationItem(
+                "Exposure", "control_plane:exposure", "control_plane", 128,
+                "Infrastructure",
+            ),
         ),
     ),
     DomainDescriptor(

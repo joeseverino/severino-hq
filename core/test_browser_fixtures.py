@@ -339,6 +339,7 @@ PAGES = {
     "topology": (lambda: reverse("control_plane:topology"), ExitStack),
     "services": (lambda: reverse("control_plane:services"), ExitStack),
     "findings": (lambda: reverse("control_plane:findings"), ExitStack),
+    "exposure": (lambda: reverse("control_plane:exposure"), ExitStack),
     "containers": (lambda: reverse("control_plane:containers"), ExitStack),
     "resource": (lambda: reverse("control_plane:detail", kwargs={"key": "hq-proxy"}), ExitStack),
     "action-items": (lambda: reverse("action_items"), ExitStack),

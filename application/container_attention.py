@@ -18,6 +18,7 @@ from django.urls import reverse
 from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .containers import VULNERABLE, Container, Standing, containers
+from .exposure import LEVELS, UNROUTED, exposure_of_container, status_at, worse
 from .images import version
 from .ui import Insight, counted
 from .workflow_contracts import ActionLink
@@ -85,8 +86,10 @@ def _advisory(label: str, standing: Standing, running: list[Container]) -> Insig
     if reasons:
         body += f" Not yet, because: {'; '.join(reason.rstrip('.') for reason in reasons)}."
     watched = next((item for item in running if item.running.watcher), None)
+    level, reached = _reach(running)
+    body += reached
     return Insight(
-        status="serious" if standing.serious and not waiting else "attention",
+        status=status_at("serious" if standing.serious and not waiting else "attention", level),
         eyebrow="Containers",
         key=f"container-advisory:{standing.image.name}:{standing.tag}",
         title=f"{label} has {standing.summary}" + ("; no release fixes it yet" if waiting else ""),
@@ -143,25 +146,49 @@ def _reach_attention() -> list[Insight]:
             continue
         failing = sorted(
             (item for item in found if item.posture.state_of(check.id) == UNMET),
-            key=lambda item: (item.running.name, item.machine.name),
+            key=lambda item: (
+                LEVELS.index(exposure_of_container(item).level),
+                item.running.name,
+                item.machine.name,
+            ),
         )
         if failing:
+            level, reached = _reach(failing)
             items.append(
                 Insight(
-                    status="serious",
+                    status=status_at("serious", level),
                     eyebrow="Containers",
                     key=f"container-posture:{check.id}",
                     title=f"{check.label}: not met by {counted(len(failing), 'container', 'containers')}",
                     value=str(len(failing)),
                     magnitude=len(failing),
                     body=f"{', '.join(f'{item.running.name} on {item.machine.name}' for item in failing)}. "
-                    f"{check.why} {check.fix} {_help(check.id)}",
+                    f"{check.why} {check.fix} {_help(check.id)}{reached}",
                     action="Open containers",
                     url=reverse("control_plane:containers"),
                     actions=_limited(_posture_link(check.id, item) for item in failing),
                 )
             )
     return items
+
+
+def _reach(running) -> tuple[str, str]:
+    """The worst exposure among ``running``, and the sentence that says so.
+
+    What ranks an item: the same problem is urgent where the internet reaches
+    it and information where nothing routes to it.
+    """
+
+    level = UNROUTED
+    worst = None
+    for item in running:
+        exposure = exposure_of_container(item)
+        if worst is None or worse(exposure.level, level) != level:
+            level, worst = exposure.level, (item, exposure)
+    if worst is None:
+        return UNROUTED, ""
+    item, exposure = worst
+    return level, f" Most exposed: {item.running.name} on {item.machine.name}, {exposure.sentence[:1].lower()}{exposure.sentence[1:]}."
 
 
 def _help(check_id: str) -> str:
