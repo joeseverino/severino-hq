@@ -328,8 +328,15 @@ def _reconciled_but_still_wrong(estate: FindingEstate) -> tuple[Finding, ...]:
                 ("Detail", node.detail or "none"),
             ),
             # Reconciling again is the one thing already known not to work, so
-            # the remedy is the declaration this rule points at.
+            # the remedy is the declaration this rule points at: keep what the
+            # provider holds, when the change there was deliberate, or edit it.
             remedies=(
+                Remedy(
+                    capability="infrastructure.resource.accept_observed",
+                    target=node.label,
+                    label="Accept what is there",
+                    effect="",
+                ),
                 Remedy(
                     capability="infrastructure.resource.update",
                     target=node.label,

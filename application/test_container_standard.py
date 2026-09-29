@@ -58,6 +58,25 @@ class StandardTests(TestCase):
 
         self.assertEqual(self.posture(**{**KEPT, "mounts": [socket]}).state_of("no-docker-socket"), MET)
 
+    def test_a_declared_socket_holder_may_write_dockers_own_data_but_nothing_else(self):
+        from control_plane.models import ManagedResource
+
+        socket = {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True}
+        volumes = {"type": "bind", "source": "/var/lib/docker/volumes", "destination": "/var/lib/docker/volumes", "read_only": False}
+        etc = {"type": "bind", "source": "/etc", "destination": "/host-etc", "read_only": False}
+        ManagedResource.objects.create(
+            key="example-box-web", kind="portainer.container",
+            spec={"connection_ref": "example-portainer", "host": "example-box", "name": "web", "holds_docker_socket": True},
+        )
+
+        self.assertEqual(self.posture(**{**KEPT, "mounts": [socket, volumes]}).state_of("no-system-path-writable"), MET)
+        self.assertEqual(self.posture(**{**KEPT, "mounts": [socket, volumes, etc]}).state_of("no-system-path-writable"), UNMET)
+
+    def test_an_undeclared_container_writing_dockers_data_is_still_flagged(self):
+        volumes = {"type": "bind", "source": "/var/lib/docker/volumes", "destination": "/v", "read_only": False}
+
+        self.assertEqual(self.posture(**{**KEPT, "mounts": [volumes]}).state_of("no-system-path-writable"), UNMET)
+
     def test_a_container_not_declared_to_hold_the_socket_still_is(self):
         socket = {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True}
 

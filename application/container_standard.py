@@ -91,12 +91,26 @@ def _no_socket(binds) -> bool:
     return not any(mount.get("source") in DOCKER_SOCKETS for mount in binds)
 
 
-def _no_writable_system_path(binds) -> bool:
+def _no_writable_system_path(binds, docker_held: bool = False) -> bool:
     return not any(
-        system_path(str(mount.get("source", ""))) and not mount.get("read_only")
+        system_path(source) and not mount.get("read_only")
         for mount in binds
-        if mount.get("source") not in DOCKER_SOCKETS
+        if (source := str(mount.get("source", ""))) not in DOCKER_SOCKETS
+        # Docker's own data is no more than its socket already reaches, for a
+        # container declared to hold the socket (a management agent reads
+        # volumes there). Any other system path still counts.
+        and not (docker_held and (source == "/var/lib/docker" or source.startswith("/var/lib/docker/")))
     )
+
+
+def _system_path_kept(container: Any) -> bool | None:
+    mounts = container.mounts
+    if mounts is None:
+        return None
+    from .containers import socket_holders
+
+    held = (container.machine.name, container.running.name) in socket_holders()
+    return _no_writable_system_path([mount for mount in mounts if mount.get("type") == "bind"], held)
 
 
 def _confined(runtime: Mapping[str, Any]) -> bool:
@@ -124,7 +138,7 @@ STANDARD: tuple[Check, ...] = (
     Check("confined", "Confined by seccomp and AppArmor", _on(_confined),
           "An unconfined container can make any system call the kernel offers.",
           "Remove the unconfined security option.", serious=True),
-    Check("no-system-path-writable", "No system path writable", _mounted(_no_writable_system_path),
+    Check("no-system-path-writable", "No system path writable", _system_path_kept,
           "A writable mount of a system path is a way to change the machine from inside the container.",
           "Mount it read-only, or mount only the one file it needs.", serious=True),
     Check("no-powerful-capability", "No machine-level capability", _on(_no_powerful_capability),

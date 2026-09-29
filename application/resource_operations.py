@@ -315,6 +315,51 @@ def request_lifecycle(
         return _queue_operation(resource, command, principal=principal, action=action)
 
 
+@transaction.atomic
+def accept_observed(
+    command: OperationCommand,
+    *,
+    principal: Principal,
+    current_key: str,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    """Make the declaration say what the provider holds.
+
+    For a change made at the provider on purpose: a policy a connector edited,
+    a setting changed in its own console. Reconciling would undo it; this
+    keeps it, by copying the live record into the declaration, the same way
+    adopting does. Fields no sweep can observe (hidden, on demand) stay as
+    they were declared. Nothing is written to the provider, and the next sweep
+    finds the two agreeing.
+    """
+
+    from .inventory import live_spec
+
+    del expected_updated_at
+    principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    resource = _resource_for_operation(current_key)
+    found = live_spec(resource.kind, resource.spec)
+    if found is None:
+        raise NotFoundError(f"No live record was last seen for {resource.key!r}, so there is nothing to accept.")
+    kept = {
+        field: resource.spec[field]
+        for field in PROVIDERS[resource.kind].unobservable_fields
+        if field in resource.spec
+    }
+    with operation_context(
+        interface=principal.interface,
+        actor=principal.actor,
+        operation="infrastructure.resource.accept_observed",
+    ):
+        result = save_managed_resource(
+            ManagedResourceCommand(key=resource.key, kind=resource.kind, spec={**found, **kept}, enabled=resource.enabled),
+            principal=principal,
+            current_key=resource.key,
+            copied_from_live=True,
+        )
+    return {**result, "reason": command.reason}
+
+
 def request_removal(
     command: OperationCommand,
     *,

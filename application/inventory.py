@@ -255,6 +255,19 @@ def retire_departed(payload: dict[str, Any]) -> list[str]:
     return retired
 
 
+def live_spec(kind: str, spec: dict[str, Any]) -> dict[str, Any] | None:
+    """What the last sweep found for the record ``spec`` declares, as a spec."""
+
+    from .facts import inventory_records
+
+    identity = record_identity(kind, spec)
+    for _snapshot, record in inventory_records(kind):
+        found = _spec_from_record(kind, record)
+        if found is not None and record_identity(kind, found) == identity:
+            return found
+    return None
+
+
 def _spec_from_record(kind: str, record: dict[str, Any]) -> dict[str, Any] | None:
     provider = PROVIDERS[kind]
     if provider.from_record is None:

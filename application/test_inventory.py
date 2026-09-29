@@ -1386,3 +1386,48 @@ class ObservationKindTests(TestCase):
         self.assertFalse(
             ProviderInventory.objects.filter(kind="host.something-newer").exists()
         )
+
+
+class AcceptObservedTests(TestCase):
+    """Keeping a change made at the provider, instead of reconciling it away."""
+
+    def setUp(self):
+        from .inventory_testing import store
+
+        self.resource = ManagedResource.objects.create(
+            key="a-device",
+            kind="tailscale.device",
+            spec={"connection_ref": "", "name": "a-box", "key_expiry_disabled": False},
+        )
+        # The provider now says the key never expires: someone changed it there.
+        store("tailscale.device", {"name": "a-box", "key_expires": "", "tags": []})
+
+    def accept(self, principal=None):
+        from .resource_operations import OperationCommand, accept_observed
+
+        return accept_observed(
+            OperationCommand(idempotency_key="accept-1", reason="changed on purpose"),
+            principal=principal or cli_principal(),
+            current_key="a-device",
+        )
+
+    def test_the_declaration_takes_what_the_provider_holds(self):
+        self.accept()
+
+        self.resource.refresh_from_db()
+        self.assertTrue(self.resource.spec["key_expiry_disabled"])
+        self.assertTrue(AuditLog.objects.filter(object_repr__contains="a-device").exists())
+
+    def test_it_is_refused_without_authority_over_infrastructure(self):
+        from .security import AuthorizationError, Principal
+
+        with self.assertRaises(AuthorizationError):
+            self.accept(Principal("test", "viewer", frozenset()))
+        self.resource.refresh_from_db()
+        self.assertFalse(self.resource.spec["key_expiry_disabled"])
+
+    def test_nothing_seen_is_nothing_to_accept(self):
+        ProviderInventory.objects.filter(kind="tailscale.device").delete()
+
+        with self.assertRaises(NotFoundError):
+            self.accept()

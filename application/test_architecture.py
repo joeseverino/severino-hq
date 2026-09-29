@@ -936,9 +936,11 @@ class AssertionPrecisionTests(SimpleTestCase):
             # missed a sibling `.venv312` holding an older interpreter,
             # and this test then reported Django's own `testcases.py` as three
             # offenders: a failure about the machine rather than the change.
+            # Nor any hidden directory: a worktree under .claude/ is another
+            # copy of this tree, checked in its own checkout.
             if any(
-                part == "venv" or part.startswith(".venv") or part == "site-packages"
-                for part in path.parts
+                part == "venv" or part.startswith(".") or part == "site-packages"
+                for part in path.relative_to(root).parts
             ):
                 continue
             tree = ast.parse(path.read_text(encoding="utf-8"))

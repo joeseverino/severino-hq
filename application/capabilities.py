@@ -50,6 +50,7 @@ from .input_errors import (
 )
 from .infrastructure import ManagedResourceCommand, save_managed_resource
 from .resource_operations import (
+    accept_observed,
     OperationCommand,
     request_certificate_renewal,
     request_reach_allow,
@@ -467,6 +468,19 @@ CORE_CAPABILITY_SPECS = (
         target_help="The managed infrastructure resource to update.",
         target_initial_fields=("key", "kind", "spec", "enabled"),
         label="Update resource",
+    ),
+    CapabilitySpec(
+        "infrastructure.resource.accept_observed",
+        "Make a declaration say what the provider holds, keeping a change made there.",
+        "remote_write",
+        Capability.MANAGE_INFRASTRUCTURE,
+        OperationCommand,
+        accept_observed,
+        "key",
+        "infrastructure.resources",
+        target_label="Resource key",
+        target_help="The managed infrastructure resource whose live record to keep.",
+        label="Accept what is there",
     ),
     CapabilitySpec(
         "infrastructure.reconcile",
