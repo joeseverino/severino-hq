@@ -4223,10 +4223,10 @@ textarea.code {
 /* The star keeps a full touch target but hangs into the cell's padding, so
    the name starts on the line every other cell in the row starts on. */
 .service-name > .pin-toggle { margin-block: -7px; }
-/* A hostname is one token: where the table sizes to its content, it scrolls
-   rather than breaking it. A locked grid cannot grow a column, so there the
-   name breaks like every other cell rather than running under the next one. */
-.service-name strong { white-space: nowrap; min-width: 0; max-width: var(--identifier-max); overflow: hidden; text-overflow: ellipsis; }
+/* A hostname is one token: it is never broken, and past --identifier-max it is
+   cut on the link itself, so nothing runs under the next column. */
+.service-name strong { display: flex; min-width: 0; max-width: var(--identifier-max); }
+.service-name strong > [data-entity] { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .service-name > form { display: inline-flex; }
 .pin-toggle {
   background: none; border: 0; box-shadow: none; padding: 0 var(--space-1); cursor: pointer;
