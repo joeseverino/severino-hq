@@ -1431,3 +1431,36 @@ class AcceptObservedTests(TestCase):
 
         with self.assertRaises(NotFoundError):
             self.accept()
+
+
+class DriftPhraseTests(TestCase):
+    """A drift is said so a person can see what changed, not pasted whole."""
+
+    def test_a_short_value_is_quoted(self):
+        from .inventory import _difference_phrase
+
+        self.assertEqual(
+            _difference_phrase("answer", "192.0.2.1", "192.0.2.2"),
+            "answer is 192.0.2.2, where this asks for 192.0.2.1",
+        )
+
+    def test_two_documents_are_compared_by_what_they_say(self):
+        import json
+
+        from .inventory import _difference_phrase
+
+        declared = {"grants": [{"src": ["a"]}] * 20, "groups": {"group:empty": []}, "hosts": {"x": "192.0.2.1"}}
+        live = {**declared, "autoApprovers": {"services": {}}, "grants": declared["grants"] + [{"src": ["b"]}]}
+        del live["groups"]
+
+        phrase = _difference_phrase("document", json.dumps(declared), json.dumps(live))
+
+        self.assertEqual(phrase, "document differs from what this asks for: + autoApprovers, - groups, grants changed")
+
+    def test_a_long_value_that_is_not_a_document_is_sized_not_pasted(self):
+        from .inventory import _difference_phrase
+
+        phrase = _difference_phrase("note", "a" * 200, "b" * 300)
+
+        self.assertNotIn("aaaa", phrase)
+        self.assertIn("300 characters live", phrase)

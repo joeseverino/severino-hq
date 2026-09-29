@@ -367,15 +367,43 @@ def _record_drift(
             "status": True,
             "reason": "Drifted",
             "message": "The last sweep found "
-            + "; ".join(
-                f"{field} is {live or 'blank'}, where this asks for "
-                f"{asked or 'blank'}"
-                for field, asked, live in drift
-            )
+            + "; ".join(_difference_phrase(field, asked, live) for field, asked, live in drift)
             + ".",
         }
     ]
     resource.save(update_fields=["conditions"])
+
+
+# Past this, a value is described rather than repeated: a policy document is
+# three hundred lines, and a condition message is read in a table cell.
+_QUOTABLE = 120
+
+
+def _difference_phrase(field: str, asked: str, live: str) -> str:
+    """One field's disagreement, said so a person can see what changed.
+
+    Short values are quoted. Two JSON documents are compared by their top-level
+    keys: what the live one has that the declaration does not, what it lacks,
+    and what differs. Anything else long is sized, not pasted.
+    """
+
+    if len(asked) <= _QUOTABLE and len(live) <= _QUOTABLE:
+        return f"{field} is {live or 'blank'}, where this asks for {asked or 'blank'}"
+    try:
+        wanted, found = json.loads(asked), json.loads(live)
+    except ValueError:
+        wanted = found = None
+    if isinstance(wanted, dict) and isinstance(found, dict):
+        added = sorted(set(found) - set(wanted))
+        missing = sorted(set(wanted) - set(found))
+        changed = sorted(key for key in set(found) & set(wanted) if found[key] != wanted[key])
+        parts = [
+            *(f"+ {key}" for key in added),
+            *(f"- {key}" for key in missing),
+            *(f"{key} changed" for key in changed),
+        ]
+        return f"{field} differs from what this asks for: {', '.join(parts) or 'layout only'}"
+    return f"{field} differs from what this asks for ({len(live)} characters live, {len(asked)} declared)"
 
 
 @transaction.atomic
