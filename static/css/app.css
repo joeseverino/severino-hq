@@ -5069,6 +5069,23 @@ form[data-clean] .save-bar { display: none; }
   .container-needs-where { display: flex; flex-wrap: wrap; gap: var(--space-2); max-width: 100%; }
   .container-needs-where .workflow-chip { padding: var(--space-1) var(--space-5); font-size: var(--text-xs); box-shadow: none; }
   .container-standing { white-space: nowrap; }
+  /* Above 640px a table does not scroll (its heading sticks to the page), so
+     this one has to fit a tablet. A long image name and the standing are the
+     only cells that would not wrap; on a tablet they may. A phone scrolls the
+     table instead, where wrapping would only make its rows taller. */
+  @media (min-width: 641px) and (max-width: 900px) {
+    /* One line, cut with its full name on hover: wrapped, a long name made
+       its row too tall, and unwrapped it made the table too wide. */
+    .container-table code {
+      display: inline-block;
+      max-width: 16ch;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      vertical-align: bottom;
+    }
+    .container-table .container-standing { white-space: normal; }
+  }
   /* Words rather than a pill: a narrow column wraps them instead of widening. */
   .container-reach { color: var(--danger); font-size: var(--text-xs); font-weight: 500; }
   .container-standing .icon { vertical-align: -0.15em; }

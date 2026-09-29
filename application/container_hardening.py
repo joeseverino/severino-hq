@@ -267,7 +267,12 @@ def _health(container, runtime, unmet):
     if "health-checked" not in unmet:
         return
     known = KNOWN_HEALTH.get(container.standing.image.short)
-    port, path, why = (*known, "the health endpoint its image documents") if known else (*_served_port(runtime), "")
+    if known:
+        port, path = known
+        why = "the health endpoint its image documents"
+    else:
+        port, path = _served_port(runtime)
+        why = ""
     if not port:
         yield Unwritten(
             "health-checked",
