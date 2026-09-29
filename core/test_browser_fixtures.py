@@ -340,6 +340,13 @@ PAGES = {
     "services": (lambda: reverse("control_plane:services"), ExitStack),
     "findings": (lambda: reverse("control_plane:findings"), ExitStack),
     "projects": (lambda: reverse("projects:list"), ExitStack),
+    # A command that changes infrastructure, so the page carries its consent
+    # checkbox: a form field stretched it across the row once, pushing its
+    # label out past the edge.
+    "command-consent": (
+        lambda: reverse("command", kwargs={"name": "infrastructure.controller.refresh"}),
+        ExitStack,
+    ),
     "connection": (lambda: reverse("connection"), _asked_through_the_proxy, _THROUGH_THE_PROXY),
 }
 

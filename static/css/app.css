@@ -2392,6 +2392,10 @@ a.kpi:hover { background: var(--surface-2); }
   margin: 0;
   line-height: 1.4;
 }
+/* A box to tick, never a field to fill: `.field input` stretches every input to
+   the column, which made the consent checkbox the width of its row and pushed
+   its label out past the edge. */
+.field input[type=checkbox], .field input[type=radio] { width: auto; }
 .check-row input { flex: 0 0 auto; margin-top: var(--space-1); }
 .field.has-errors input, .field.has-errors textarea, .field.has-errors select { border-color: var(--danger); }
 /* Django renders errors as a plain `<ul class="errorlist">`, which nothing
