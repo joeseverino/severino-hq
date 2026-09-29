@@ -15,10 +15,10 @@ import json
 import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
-from datetime import datetime
 
 from django.conf import settings
 
+from application.timestamps import moment
 from content.models import ContentItem
 from projects.models import Project
 
@@ -28,12 +28,8 @@ class ContentSyncError(RuntimeError):
 
 
 def _parse_date(value):
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).date()
-    except (ValueError, TypeError):
-        return None
+    when = moment(value, naive="keep")
+    return when.date() if when is not None else None
 
 
 def fetch_content_index(url: str | None = None, timeout: int = 10) -> dict:

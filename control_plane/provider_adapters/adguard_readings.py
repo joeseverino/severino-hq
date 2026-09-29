@@ -14,6 +14,8 @@ from ipaddress import ip_address
 from typing import Any
 from urllib.parse import quote
 
+from application.timestamps import moment
+
 from ..names import in_zone, normalized_hostname
 from ..observations.adguard import CLIENTS_KEPT, CLIENTS_PART, DNS_PARTS, upstream
 from .contracts import ProviderError, ProviderRuntime
@@ -116,17 +118,6 @@ def read_clients(runtime: ProviderRuntime) -> list[dict[str, Any]]:
 # ----- Query log aggregate ---------------------------------------------------
 
 
-def _moment(value: Any) -> datetime | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        found = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return found if found.tzinfo else found.replace(tzinfo=timezone.utc)
-
-
 class _Names:
     """The names the rewrites answer for, with AdGuard's wildcard meaning."""
 
@@ -197,7 +188,7 @@ def _query_pages(get: Callable[[str], Any], cutoff: datetime, span: dict[str, bo
         answer = get(path) or {}
         entries = answer.get("data") or ()
         for entry in entries:
-            when = _moment(entry.get("time"))
+            when = moment(entry.get("time"))
             if when is None:
                 continue
             if when < cutoff:

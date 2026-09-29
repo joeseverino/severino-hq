@@ -22,10 +22,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import Field
+
+from application.timestamps import moment
 
 from . import github_app, github_readings
 from ..provider_spec import ProviderModel, ProviderSpec, applies
@@ -92,13 +93,6 @@ def _basename(workflow: str) -> str:
     return str(workflow).rsplit("/", 1)[-1]
 
 
-def _when(value: Any) -> datetime | None:
-    try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-
-
 def _latest_admission(runtime: ProviderRuntime, extension: Extension, every: tuple[str, ...]):
     owner, repo = github_app.repository(extension.repository)
     answer = github_app.call(
@@ -133,10 +127,10 @@ def _pipeline_runs(runtime: ProviderRuntime, spec: Mapping[str, Any]) -> list[Ma
 def _run_after(runs: list[Mapping[str, Any]], since: str) -> Mapping[str, Any] | None:
     """The newest run created at or after ``since``."""
 
-    start = _when(since)
+    start = moment(since, naive="keep")
     if start is None:
         return None
-    later = [run for run in runs if (_when(run.get("created_at")) or start) >= start]
+    later = [run for run in runs if (moment(run.get("created_at"), naive="keep") or start) >= start]
     return max(later, key=lambda run: str(run.get("created_at", "")), default=None)
 
 

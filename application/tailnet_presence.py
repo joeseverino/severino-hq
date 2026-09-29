@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from django.utils.dateparse import parse_datetime
 
 from .tailnet import TAILNET_KIND
 
@@ -184,14 +183,11 @@ class Presence:
         an expiry far away: one is a decision and the other is a deadline.
         """
 
-        if not self.key_expires:
-            return None
-        moment = parse_datetime(self.key_expires)
-        if moment is None:
-            return None
         from .expiry import days_until
+        from .timestamps import moment
 
-        return days_until(moment)
+        when = moment(self.key_expires)
+        return days_until(when) if when is not None else None
 
 
 def tailnet_presence() -> dict[str, Presence]:

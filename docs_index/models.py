@@ -18,6 +18,7 @@ from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 
+from application.sensitivity import SAFE_SENSITIVITIES
 from core.models import TimestampedModel
 
 
@@ -186,7 +187,4 @@ class DocumentationRecord(TimestampedModel):
 
     @property
     def is_safe_for_ai_export(self) -> bool:
-        return self.sensitivity in {
-            self.Sensitivity.PUBLIC,
-            self.Sensitivity.INTERNAL,
-        }
+        return self.sensitivity in SAFE_SENSITIVITIES

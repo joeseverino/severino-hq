@@ -12,6 +12,7 @@ from django.db import transaction
 from assets.models import Asset
 from core.audit import operation_context
 from projects.models import Project
+from .business_use import require_business_use
 from .sensitivity import safe_doc_ids
 from .security import Capability, Principal
 from .upserts import upsert_by_slug
@@ -129,6 +130,7 @@ def save_asset(
                 )
 
         values = asdict(command)
+        require_business_use(values)
         project_slugs = values.pop("related_projects")
         projects = list(Project.objects.filter(slug__in=project_slugs))
         found_slugs = {project.slug for project in projects}
