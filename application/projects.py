@@ -214,10 +214,9 @@ def request_app_read(repository_url: str, *, principal: Principal) -> dict[str, 
 def _pushed_at(stamp: Any) -> datetime | None:
     """The App's last read of when the repository moved, if it read one."""
 
-    try:
-        return datetime.fromisoformat(str(stamp or "").replace("Z", "+00:00")) if stamp else None
-    except ValueError:
-        return None
+    from .timestamps import moment
+
+    return moment(stamp)
 
 
 def _record_push(

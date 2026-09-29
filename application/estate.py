@@ -117,7 +117,11 @@ class Estate:
 
     @property
     def offline(self) -> tuple[Any, ...]:
-        return tuple(item for item in self.machines if item.state[0] == "offline")
+        # Only what the estate depends on: a personal device away is not down.
+        return tuple(
+            item for item in self.machines
+            if item.state[0] == "offline" and not (item.presence is not None and item.presence.personal)
+        )
 
     @property
     def empty(self) -> bool:
@@ -380,7 +384,8 @@ def _offline(estate: Estate) -> tuple[Insight, ...]:
     items = []
     for machine in estate.machines:
         presence = machine.presence
-        if presence is None or presence.online or not _holds_something(machine):
+        # A person's laptop asleep or phone away is normal, not an outage.
+        if presence is None or presence.online or presence.personal or not _holds_something(machine):
             continue
         seen = moment(presence.last_seen)
         if seen is None or seen.year < 2000 or now - seen < OFFLINE_AFTER:

@@ -89,6 +89,17 @@ class Presence:
     connection_ref: str = ""
 
     @property
+    def personal(self) -> bool:
+        """A user's own device, whose being offline is not a fault.
+
+        Tailscale's own line between a server and a person's device: a tagged
+        node belongs to the tailnet and is infrastructure; an untagged one
+        belongs to a user, and a laptop asleep or a phone away is normal.
+        """
+
+        return not self.tags
+
+    @property
     def peered(self) -> bool:
         """Whether HQ and this machine have actually completed a handshake.
 
