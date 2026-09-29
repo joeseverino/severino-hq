@@ -32,7 +32,7 @@ class ToolsView(PageMixin, LoginRequiredMixin, TemplateView):
 
     template_name = "control_plane/tools.html"
     page_title = "Tools"
-    page_lede = "Lookups run from outside this network."
+    page_lede = "Lookups run from outside this network, not through its rewrites."
 
     def get_context_data(self, **kwargs):
         from application.capabilities import execute_capability

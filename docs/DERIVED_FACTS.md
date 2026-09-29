@@ -37,7 +37,7 @@ ObservationSpec(
 ```
 
 and read by one function registered one of two ways, and no other
-(`controller_runtime/test_reader_registration.py` holds it): a core reader in
+(`controller_runtime/tests/test_reader_registration.py` holds it): a core reader in
 one of the controller's integration modules
 (`controller_runtime/cloudflare_account.py`, `tailscale.py`,
 `host_readings.py`), registered beside its definition:
@@ -52,7 +52,7 @@ or, for an integration with a controller adapter, in the adapter's `readings`
 map (`control_plane/provider_adapters/`), which admits only a registered kind
 read through a connection the integration holds (its definitions' connections,
 or `reads_through` for an integration whose resource kinds the controller core
-still holds). A reading through such a connection is always the adapter's:
+holds). A reading through such a connection is always the adapter's:
 
 ```python
 ControllerIntegrationAdapter(..., readings={"adguard.client": read_clients})
@@ -259,6 +259,91 @@ the same path to every adapter, and the service page renders it: a summary, the
 path hop by hop, what it depends on and what depends on it, then the parts and
 raw readings.
 
+## Exposure
+
+`exposure.exposure_of_name(hostname)` reads each route `path_to` walked and says
+who it admits, worst first:
+
+- **open**: the internet reaches it and nothing in front asks who is asking. The
+  route starts at a record a public provider holds (`public_effect`) and meets
+  the edge, or its answer is a public address.
+- **gated**: it is reachable from the internet, but a reading that `restricts` names
+  it (Cloudflare Access, an NPM access list). HQ reads that the gate exists, not
+  what its policy admits.
+- **private**: the answer is on the tailnet or the local network.
+- **unrouted**: nothing HQ reads routes a name to it.
+- **unknown**: nothing routes to it that HQ saw, but HQ has not read every kind
+  that could (`paths.reads_every_route`), or the container publishes ports and no
+  perimeter check has run on its machine. Unknown ranks next to open: a gap in
+  what HQ read is not evidence that the internet cannot reach something.
+
+A container's exposure is the worst of the names routed to it (`serves`), of any
+port it publishes that the host's perimeter check saw answer publicly, and, for
+the container on a machine's front door (it publishes 80 or 443, or on the host
+network its image exposes them), of every route entering that machine through an
+ingress. A route passes through a proxy rather than ending at it, so without that
+last clause the one container every public name crosses would read as reached by
+none. A problem is as urgent as the worst exposure of what it is about
+(`exposure.status_at`):
+
+| Status | Open or unknown | Gated or private | Unrouted |
+| --- | --- | --- | --- |
+| Serious | serious | attention | information |
+| Attention | attention | attention | information |
+
+This applies to container advisories and to container posture failures, and the
+item says which container is most exposed and how. Information stays off the
+action queue. The services list gives each name its reach in one word, with the
+route as its title, and a name open to the internet offers, on its page, the fix
+HQ can run: an access list on the proxy host it declares.
+
+## History
+
+The audit log (`/audit/`) is the one history. `application.history` lays what
+each source dates on it, newest first, and its Source filter picks them apart:
+- Through HQ: what anyone did through HQ, from the audit log.
+- Outside HQ: when a reading's records changed between two sweeps. The sweep
+  writes a `Reading` audit event with counts only, comparing each record as its
+  kind's `from_record` would declare it, so a container's uptime is not a
+  change and its image is.
+- Deploys: the deploys GitHub records.
+- Containers: when each container last started, from Docker's inspect.
+
+Read as history (newest first, no search, no action filter, not the approval
+queue), consecutive events of one verb by one actor on one type of thing, each
+within five minutes of the last, are one line ("Created 14 containers") with
+each event behind it, and each deploy or container start lands on the page its
+time falls on. A search, another sort, an action filter or `?awaiting=1` lists
+the audit rows one by one.
+
+Every condition a resource reports carries `since`, which is kept while the
+condition holds the same way (`application.conditions`). So a drift keeps the
+moment it was first seen. The topology gives a drifted declaration that moment
+and what the same history holds within six hours of it
+(`application.history.near`), and the drift findings show both beside the
+key-level difference. That way "Keep the live version" or "Restore HQ's
+version" is decided next to the deploy, recreate or edit that likely caused it.
+
+## Contradictions
+
+Each connection reports alone, and each report can be healthy while together
+they describe something that cannot work. `application/contradiction_findings.py`
+reads the walked paths and stored readings for these, polling nothing:
+
+| Rule | Two sides that disagree | Fix HQ offers |
+| --- | --- | --- |
+| `public-name-served-by-nothing` | Public DNS sends a name to a machine; every proxy and container reading for that machine was read, and none serves it | Repoint the declared record; removal stays on its page |
+| `route-to-stopped-container` | A route ends at a container Docker reports not running | Repoint the declared proxy; `docker start` as a step |
+| `gate-guards-nothing` | A gate (`restricts`) names a host no DNS record answers | The provider console step |
+| `split-horizon-disagrees` | The public and internal records end on different machines | Repoint the declared rewrite |
+| `published-port-unfronted` | A container port answers the internet and no route leads to it | The compose change on its page |
+| `tag-granted-to-nobody` | A grant names a tag no read device carries | Edit the declared tailnet policy |
+| `served-certificate-not-held` | The controller found a consumer serving a certificate other than the one HQ installed | Install it again (reconcile) |
+
+A machine where a container publishes 80 or 443 itself is never called
+unserved, since HQ cannot enumerate what it answers for. Removal is
+destructive, so a finding never offers it as a remedy.
+
 ## Relationships
 
 Entity pages are views of one relation graph. `topology.relation_graph` builds
@@ -441,6 +526,23 @@ the default branch protected from force pushes and deletion, secret scanning,
 push protection, code scanning). What a plan does not offer is "not
 available", never a failure. The action queue holds one item per check not
 met, naming every repository that misses it.
+
+The `workflow_pins` part reads the `uses:` lines that are not pinned to a commit, in
+each workflow and in each local composite action (`.github/actions/*/action.yml`), and
+the commit each tag or branch names now. It uses the same token, with
+`contents: read`, and resolves each action and tag once per sweep: a commit read for
+one repository serves the rest, a ref one repository could not read is asked again by
+the next. A repository with no `.github/workflows` (GitHub answers 404) has nothing to
+pin, which is not a failed read. It also names each workflow called from another
+repository (`owner/repo/.github/workflows/x.yml@ref`), pinned or not. The pinning item
+then offers one `perl -pi` per file (the same on macOS and Linux, where `sed -i`
+differs). Each edit replaces only a line whose key is `uses:`, never a commented one,
+with `owner/action@<sha> # <tag>`, keeping its indentation and line ending. The
+command that requires pinning follows only when every line could be resolved and no
+workflow is called from another repository: requiring pinning first would stop every
+run that still uses a tag, and the setting applies as much to what a called workflow
+uses, which HQ does not read, so the item says to check those first. A repository
+whose workflows were not read gets the reason instead.
 
 Watching reads the signed-in person's own GitHub profile and the repositories
 they star from GitHub's public API, credential-free: whose profile is the login

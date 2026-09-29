@@ -76,8 +76,7 @@ PEERING_UNKNOWN = Peering(
     "This device is on the tailnet, but no direct or relayed path is currently "
     "negotiated, so HQ cannot say which network the session is riding over.",
 )
-# Not the same statement, and conflating the two was the first thing this row
-# got wrong. "No peering" is a fact about the device; this is a fact about
+# Not the same statement. "No peering" is a fact about the device; this is a fact about
 # HQ's view of it. Behind a proxy it has not been told to trust, HQ judges the
 # proxy and declines to attribute the request to any device at all, so it has
 # nothing to read a peering from, which is not evidence that none exists.
@@ -514,9 +513,8 @@ def _machine_name(addresses, declared) -> str:
     address is the one thing every source of a machine agrees on.
 
     Resolved through the shared index, over the declarations this page has
-    already read, so it costs no query. This once intersected two sets of
-    strings, which meant an address recorded with a port on one side and
-    without on the other failed to match a machine HQ had both halves of.
+    already read, so it costs no query, and an address recorded with a port
+    matches the same address recorded without one.
     """
 
     from .locate import index_of

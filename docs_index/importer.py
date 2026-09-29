@@ -18,7 +18,7 @@ Reads a JSON array like:
     }, ...]
 
 and upserts DocumentationRecord rows. The Obsidian vault stays the source of
-truth: we only track metadata + relationships.
+truth: HQ tracks only metadata and relationships.
 """
 
 from __future__ import annotations
@@ -178,7 +178,7 @@ def validate_manifest_data(items: Iterable[dict]) -> list[dict]:
     """Read-only preflight: validate every entry against the canonical schema
     WITHOUT touching the database, so contract drift (a bad doc_id prefix, a
     missing required field, or an invalid status / doc_type / environment /
-    sensitivity: the class that wedged `hq sync`) is caught locally before the
+    sensitivity: the class that stops `hq sync`) is caught locally before the
     deployed importer ever runs. Returns a list of ``{doc_id, errors:[...]}`` for
     entries that fail; empty means the manifest is importable. Validates exactly
     what the write path does, via the shared ``_build_record_defaults``.
@@ -201,7 +201,7 @@ def validate_manifest_data(items: Iterable[dict]) -> list[dict]:
 def _sync_relation(record, manager, slugs, *, kind: str, doc_id: str, stats: dict):
     """Set a record's M2M relation to the registry rows matching ``slugs`` and
     record any slug with no matching row as a missing relation. One implementation
-    for both projects and assets (was copy-pasted). Returns the resolved queryset
+    for both projects and assets. Returns the resolved queryset
     (so the caller can, e.g., backfill project tech) and whether it changed.
     """
     qs = manager.filter(slug__in=slugs)

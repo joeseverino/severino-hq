@@ -26,6 +26,12 @@ def _status(exc: BaseException) -> int:
     return 0
 
 
+def not_found(exc: BaseException) -> bool:
+    """Whether a failure is the provider saying the thing asked for is not there."""
+
+    return _status(exc) == 404
+
+
 def refused(exc: BaseException, *, what: str, needs: str) -> ProviderError:
     """``exc`` as a ProviderError carrying its refusal, where it is one."""
 

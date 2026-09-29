@@ -9,7 +9,7 @@ of one: use _activity_calendar.html for what actually happened on given dates.
 <section class="card week-plan-card">
   <div class="section-head">
     <h2>{{ plan.title }}</h2>
-    {% if plan.url %}<a class="section-action" href="{{ plan.url }}">Edit &rarr;</a>{% endif %}
+    {% if plan.url %}<a class="subtle-link" href="{{ plan.url }}">Edit &rarr;</a>{% endif %}
   </div>
   <ol class="week-plan">
     {% for day in plan.days %}

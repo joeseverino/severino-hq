@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from urllib.parse import urlencode
-
 from control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
 
 from . import trusted_networks
+from .action_links import command_url
 from .finding_model import (
     OperatorStep,
     Finding,
@@ -82,14 +81,49 @@ def _empty_group_granted(estate: FindingEstate) -> tuple[Finding, ...]:
     return tuple(sorted(found, key=lambda finding: finding.title))
 
 
+def _tag_granted_to_nobody(estate: FindingEstate) -> tuple[Finding, ...]:
+    """A tag a grant names that no device carries: the policy and the devices disagree."""
+
+    found: list[Finding] = []
+    for node in estate.nodes():
+        if node.kind != "connection":
+            continue
+        tags = fact_values(node, "tag-granted-to-nobody")
+        if not tags:
+            continue
+        found.append(
+            Finding(
+                rule="tag-granted-to-nobody",
+                subject=node.id,
+                title=(
+                    f"{tags[0]} is granted access but no device carries it"
+                    if len(tags) == 1
+                    else f"{counted(len(tags), 'tag is', 'tags are')} granted access but no device carries them"
+                ),
+                severity="neutral",
+                explanation=(
+                    "The policy grants a tag that no device in the tailnet wears, so the "
+                    "rule admits nothing today, and admits whatever is tagged with it "
+                    "tomorrow without anyone looking at the rule again."
+                ),
+                evidence=tuple(("Unworn tag", tag) for tag in tags),
+                remedies=_policy_remedy(estate, "infrastructure.resource.update", "Edit the tailnet policy"),
+                steps=(
+                    OperatorStep(
+                        label=f"Remove {', '.join(tags)} from the grants that name them, or tag the devices they were meant for."
+                    ),
+                ),
+            )
+        )
+    return tuple(found)
+
+
 def _policy_remedy(estate: FindingEstate, capability: str, label: str) -> tuple[Remedy, ...]:
     """A policy amendment, offered when a tailnet policy is declared to amend.
 
     The capability re-derives the change from the declaration and writes it
     through the gated policy kind, so a person still consents.
     """
-
-    from django.urls import NoReverseMatch, reverse
 
     policy = next(
         (
@@ -101,9 +135,8 @@ def _policy_remedy(estate: FindingEstate, capability: str, label: str) -> tuple[
     )
     if policy is None:
         return ()
-    try:
-        url = reverse("command", kwargs={"name": capability})
-    except NoReverseMatch:
+    url = command_url(capability, policy.label) if policy is not None else ""
+    if not url:
         return ()
     return (
         Remedy(
@@ -111,7 +144,7 @@ def _policy_remedy(estate: FindingEstate, capability: str, label: str) -> tuple[
             target=policy.label,
             label=label,
             effect="",
-            url=f"{url}?{urlencode({'target': policy.label})}",
+            url=url,
         ),
     )
 
@@ -161,6 +194,14 @@ def _trusted_wider_than_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
 
 # The rules this module raises, beside the detectors that decide them.
 RULES: tuple[FindingRule, ...] = (
+    FindingRule(
+        "tag-granted-to-nobody",
+        "A granted tag no device carries",
+        "neutral",
+        _tag_granted_to_nobody,
+        operator_action="Remove the tag from the grants, or tag the devices it was meant for.",
+        no_help_reason="Which side is right is a decision; HQ opens the policy for editing.",
+    ),
     FindingRule(
         "tailnet-dns-off-tailnet",
         "Tailnet DNS is not a tailnet address",

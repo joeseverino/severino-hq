@@ -14,10 +14,10 @@ from .finding_model import (
 def _reached_but_unmeasured(estate: FindingEstate) -> tuple[Finding, ...]:
     """A name a connection reports reaching that nothing is measuring.
 
-    The first claim here that neither half of HQ can make alone. Infrastructure
-    knows a connection reaches this name; analytics knows what every name it
-    watches served. Put beside each other they answer a question neither was
-    asked: which of the things we run is nobody watching.
+    A claim neither half of HQ can make alone. Infrastructure knows a
+    connection reaches this name; analytics knows what every name it watches
+    served. Put beside each other they answer which of the things HQ reaches
+    nobody is watching.
 
     ``None`` and zero are the whole rule. A measured site with no visitors is a
     fact about the site; an unmeasured one is a fact about HQ, and only the

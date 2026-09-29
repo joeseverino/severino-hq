@@ -9,7 +9,9 @@ concurrency = multiprocessing, thread
 sigterm = true
 omit =
     */migrations/*
-    */tests*.py
+    # Coverage measures the application, not the tests that exercise it.
+    */tests/*
+    */tests.py
     manage.py
     config/*
     .venv/*

@@ -1,6 +1,6 @@
 """Coverage-guided fuzzing of the parsers that read outside input.
 
-The property tests in ``application/test_properties.py`` generate inputs from
+The property tests in ``application/tests/test_properties.py`` generate inputs from
 a strategy; this lets a fuzzer grow them from coverage instead, which finds
 the shapes a strategy did not think to describe. The same four parsers:
 image references, package URLs, provenance sources and failure logs.
@@ -9,7 +9,7 @@ image references, package URLs, provenance sources and failure logs.
     DJANGO_SETTINGS_MODULE=config.settings python fuzz/parsers.py -max_total_time=300
 
 ``test_one_input`` is also run by the suite over a fixed set of seeds
-(``application/test_fuzz_harness.py``), so the harness cannot rot unnoticed.
+(``application/tests/test_fuzz_harness.py``), so the harness cannot rot unnoticed.
 """
 
 from __future__ import annotations

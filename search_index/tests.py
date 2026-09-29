@@ -165,9 +165,9 @@ class GlobalSearchTests(TestCase):
 
     def test_a_structured_field_is_indexed_as_words_not_as_python(self):
         """The snippet under a result is cut out of the body. ``str()`` on a
-        JSONField put ``{'key_expiry_disabled': False}`` there, and the
+        JSONField would put ``{'key_expiry_disabled': False}`` there, and the
         punctuation carrying the meaning is what the tokenizer discards, so
-        the key and its value were indexed as unrelated words."""
+        the key and its value would be indexed as unrelated words."""
         ManagedResource.objects.create(
             key="example-node",
             kind="example.device",

@@ -1,11 +1,9 @@
 /* Severino HQ: internal ops console. */
 
-/* Cascade layers, declared once and in priority order. Everything below sits
-   in one of them, so which rule wins is decided by the layer it is in rather
-   than by how many classes its selector happens to name. A component can be
-   written with a single class and still beat a base element rule, which is
-   what keeps a 2,000-line stylesheet from turning into a specificity contest
-   as it grows.
+/* Cascade layers, declared once and in priority order. Every rule sits in one
+   of them, so the layer it is in decides which rule wins rather than how many
+   classes its selector names: a single-class component still beats a base
+   element rule.
 
    There is deliberately no fourth layer for "things that must win": narrowing
    a component at a breakpoint is what "later in the same layer" means.
@@ -14,57 +12,72 @@
 
 @layer tokens {
 
+/* Two palettes, one set of names. Every colour token is written
+   `light-dark(<light>, <dark>)`, so each pair is decided side by side and a
+   token cannot exist in one theme only; `color-scheme` picks the half, and
+   also moves the form controls, scrollbars and other native widgets with it.
+   With no `data-theme` the page follows the operating system; the attribute,
+   rendered by the server from the operator's choice, pins one or the other.
+
+   The dark half is not the light half inverted. Surfaces step up in
+   lightness as they come forward (page, card, raised row), because a shadow
+   has nothing to fall on; hairlines are lighter than the surfaces they
+   divide; status inks lighten and their fills deepen so a tone keeps its hue
+   and its contrast; chart and category colours lift until they clear 5:1 on
+   the card they sit on. Text, muted text included, clears 4.5:1 on every
+   surface, and `core.browser_tests` samples it to keep that true. */
 :root {
-  color-scheme: light;
-  accent-color: #1f4d57;
-  --bg: #f6f6f3;
-  --bg-tint: #efefe9;
-  --surface: #ffffff;
-  --surface-2: #fafaf7;
-  --ink: #18181b;
-  --ink-2: #2a2a2e;
-  --muted: #6b6b73;
-  --muted-2: #95959c;
-  --line: #e6e6e1;
-  --line-2: #f0f0eb;
-  --accent: #1f4d57;
-  --accent-2: #2a6976;
-  --accent-ink: #ffffff;
-  --accent-tint: #e3eef0;
-  --danger: #a8261c;
-  --warn: #a35a00;
-  --ok: #1d6b35;
-  --attn: #b0521a;
+  color-scheme: light dark;
+  accent-color: var(--accent);
+  --bg: light-dark(#f6f6f3, #111215);
+  --bg-tint: light-dark(#efefe9, #1c1d21);
+  --surface: light-dark(#ffffff, #18191c);
+  --surface-2: light-dark(#fafaf7, #1d1e22);
+  --ink: light-dark(#18181b, #ececee);
+  --ink-2: light-dark(#2a2a2e, #d6d6da);
+  --muted: light-dark(#6b6b73, #a4a4ad);
+  --muted-2: light-dark(#95959c, #8d8d96);
+  --line: light-dark(#e6e6e1, #303238);
+  --line-2: light-dark(#f0f0eb, #26272c);
+  --accent: light-dark(#1f4d57, #8fd0dc);
+  --accent-2: light-dark(#2a6976, #6fbccb);
+  --accent-ink: light-dark(#ffffff, #0a1b1f);
+  --accent-tint: light-dark(#e3eef0, #1a3238);
+  --danger: light-dark(#a8261c, #f08276);
+  --warn: light-dark(#a35a00, #e8a64a);
+  --ok: light-dark(#1d6b35, #62c585);
+  --attn: light-dark(#b0521a, #ef9258);
 
   /* Code surface. Dark by intent, not by theme: a block of code reads as a
-     quoted artefact rather than as more page. */
-  --code-bg: #161922;
-  --code-ink: #eaeef2;
+     quoted artefact rather than as more page. On a dark page it sinks below
+     the page instead, for the same reason. */
+  --code-bg: light-dark(#161922, #0b0c0f);
+  --code-ink: light-dark(#eaeef2, #e3e7ec);
 
   /* The border a control takes when pointed at: one step firmer than
      --line, which is the resting rule. */
-  --line-strong: #c4c4c0;
+  --line-strong: light-dark(#c4c4c0, #4c4e56);
 
   /* Category identity. Like --series-* these are a set, not a list: they are
      chosen against each other and against the page for separation under
      normal and colour-deficient vision. Changing one means re-checking all. */
-  --cat-homelab: #2e7d8c;
-  --cat-automation: #6c4ab5;
-  --cat-wordpress-security: #1b6b3f;
-  --cat-cloudflare: #c2691c;
-  --cat-dns-email-security: #7a3886;
-  --cat-vps: #21525c;
-  --cat-tailscale: #2a5cb0;
-  --cat-adguard: #1e5e3a;
-  --cat-networking: #4c4f5c;
-  --cat-tls-certificates: #8c5a16;
-  --cat-cybersecurity-labs: #9b2a2a;
-  --cat-other: #6b6b73;
+  --cat-homelab: light-dark(#2e7d8c, #5bb4c4);
+  --cat-automation: light-dark(#6c4ab5, #a18ae6);
+  --cat-wordpress-security: light-dark(#1b6b3f, #4fb47b);
+  --cat-cloudflare: light-dark(#c2691c, #e39150);
+  --cat-dns-email-security: light-dark(#7a3886, #bf82cc);
+  --cat-vps: light-dark(#21525c, #6aa6b4);
+  --cat-tailscale: light-dark(#2a5cb0, #7399e6);
+  --cat-adguard: light-dark(#1e5e3a, #56a87a);
+  --cat-networking: light-dark(#4c4f5c, #9a9fb0);
+  --cat-tls-certificates: light-dark(#8c5a16, #cc9a4c);
+  --cat-cybersecurity-labs: light-dark(#9b2a2a, #e57373);
+  --cat-other: light-dark(#6b6b73, #a4a4ad);
 
   /* Topology node kinds: the same kind of set as --cat-*, for the graph. */
-  --topology-controller: #6c7480;
-  --topology-ability: #7b68a6;
-  --topology-target: #b5762d;
+  --topology-controller: light-dark(#6c7480, #9aa2ae);
+  --topology-ability: light-dark(#7b68a6, #a996d8);
+  --topology-target: light-dark(#b5762d, #d99a52);
   --topology-lane-head: 44px;
 
   /* Print is a different medium: its ink is ink, not the screen palette. */
@@ -74,18 +87,16 @@
   --print-muted: #333;
 
   /* Route bands, ordered warm to cool so adjacent hops stay distinguishable. */
-  --route-band-1: #b4531f;
-  --route-band-2: #c98a2b;
-  --route-band-3: #9a9a34;
-  --route-band-4: #3f9268;
-  --route-band-5: #0e7f9c;
+  --route-band-1: light-dark(#b4531f, #de7a45);
+  --route-band-2: light-dark(#c98a2b, #e2aa55);
+  --route-band-3: light-dark(#9a9a34, #c0c05c);
+  --route-band-4: light-dark(#3f9268, #62bc8d);
+  --route-band-5: light-dark(#0e7f9c, #42b3cf);
 
-  /* Space scale. Eight hundred spacing declarations had spread over
-     twenty-nine values: every integer from one to eighteen. These are the
-     even rungs; odd values are drift and are being retired as each is
-     checked, since a one-pixel change to padding is visible in a dense
-     table in a way a half-pixel change to type is not. 1px is deliberately
-     absent: it is a hairline rule, not a space.  */
+  /* Space scale: the even rungs only. An odd value is drift, since a one-pixel
+     change to padding is visible in a dense table in a way a half-pixel change
+     to type is not. 1px is deliberately absent: it is a hairline rule, not a
+     space. */
   --space-1: 2px;
   --space-2: 4px;
   --space-3: 6px;
@@ -104,10 +115,8 @@
   --space-32: 64px;
   --space-40: 80px;
 
-  /* Type scale. Three hundred font-size declarations had drifted across
-     twenty sizes: thirteen of them inside a six-pixel band, in half-pixel
-     steps nobody can distinguish and nobody chose. These are the steps; a
-     size that is not one of them is drift, and the guard says so. */
+  /* Type scale. These are the steps; a size that is not one of them is drift,
+     and the guard says so. */
   --text-3xs: 10px;
   --text-2xs: 11px;
   --text-xs: 12px;
@@ -131,17 +140,17 @@
   --tone-neutral-ink: var(--ink-2);
   --tone-neutral-line: var(--line);
 
-  --tone-positive-bg: #e1efe5;
-  --tone-positive-ink: #16522a;
-  --tone-positive-line: #b8dac3;
+  --tone-positive-bg: light-dark(#e1efe5, #16301f);
+  --tone-positive-ink: light-dark(#16522a, #9adcb0);
+  --tone-positive-line: light-dark(#b8dac3, #2a5238);
 
-  --tone-caution-bg: #fbf1d6;
-  --tone-caution-ink: #6c5300;
-  --tone-caution-line: #ecdba0;
+  --tone-caution-bg: light-dark(#fbf1d6, #302810);
+  --tone-caution-ink: light-dark(#6c5300, #ebcd6e);
+  --tone-caution-line: light-dark(#ecdba0, #574619);
 
-  --tone-critical-bg: #f0dcdc;
-  --tone-critical-ink: #6a1f1f;
-  --tone-critical-line: #dfb4b4;
+  --tone-critical-bg: light-dark(#f0dcdc, #3a1c1c);
+  --tone-critical-ink: light-dark(#6a1f1f, #f4afaf);
+  --tone-critical-line: light-dark(#dfb4b4, #653232);
 
   /* The second fill level. A chip is small enough to carry a saturated tint;
      a banner covering half the page is not, and the same value that reads as
@@ -149,34 +158,34 @@
      shared with the tone above (only the fill lightens) so a banner and
      the chip beside it are recognisably the same status. Tones without a
      wash have no large-surface use yet; add one when they do. */
-  --tone-positive-wash: #e8f5ec;
-  --tone-caution-wash: #fbf1d6;
-  --tone-critical-wash: #fbeaea;
-  --tone-info-wash: #eef2f7;
+  --tone-positive-wash: light-dark(#e8f5ec, #14261a);
+  --tone-caution-wash: light-dark(#fbf1d6, #272110);
+  --tone-critical-wash: light-dark(#fbeaea, #2d1818);
+  --tone-info-wash: light-dark(#eef2f7, #172030);
 
   /* The third fill, for marks that carry the strong ink rather than the muted
      one: a tick inside a decision step, a kind badge on a hop. Paired with
      `--ok`/`--warn`/`--danger` above, which are darker and more saturated than
      the tone inks because they sit on less fill and often stand alone. */
-  --tone-positive-tint: #e2efe6;
-  --tone-caution-tint: #f4ead8;
-  --tone-critical-tint: #f6e2e0;
+  --tone-positive-tint: light-dark(#e2efe6, #193422);
+  --tone-caution-tint: light-dark(#f4ead8, #342b15);
+  --tone-critical-tint: light-dark(#f6e2e0, #3a1d1d);
 
-  --tone-severe-bg: #fcdcd0;
-  --tone-severe-ink: #843300;
-  --tone-severe-line: #ffbfa8;
+  --tone-severe-bg: light-dark(#fcdcd0, #3a2212);
+  --tone-severe-ink: light-dark(#843300, #f7bb94);
+  --tone-severe-line: light-dark(#ffbfa8, #693b1d);
 
-  --tone-info-bg: #e4ebf3;
-  --tone-info-ink: #1f3656;
-  --tone-info-line: #c9d3e3;
+  --tone-info-bg: light-dark(#e4ebf3, #1a2536);
+  --tone-info-ink: light-dark(#1f3656, #b0c8ea);
+  --tone-info-line: light-dark(#c9d3e3, #2f425e);
 
-  --tone-notable-bg: #dfe6f1;
-  --tone-notable-ink: #1c3463;
-  --tone-notable-line: #c5d2e9;
+  --tone-notable-bg: light-dark(#dfe6f1, #1b2640);
+  --tone-notable-ink: light-dark(#1c3463, #b0c2f2);
+  --tone-notable-line: light-dark(#c5d2e9, #314368);
 
-  --tone-special-bg: #ebe0f0;
-  --tone-special-ink: #4a2a72;
-  --tone-special-line: #d3c2e8;
+  --tone-special-bg: light-dark(#ebe0f0, #2a1e3a);
+  --tone-special-ink: light-dark(#4a2a72, #d4bff2);
+  --tone-special-line: light-dark(#d3c2e8, #4a3666);
 
   /* Categorical series palette. Assigned in fixed order, never cycled: colour
      follows the entity, not its rank, so filtering a series must not repaint
@@ -184,18 +193,19 @@
      colour-vision separation, normal-vision floor) against the white chart
      surface: do not hand-tune a slot without re-validating the whole set.
      Slots 3-5 sit under 3:1 contrast on white, so any chart using them must
-     also carry visible labels or its data table (both shipped by the chart
-     primitive). Status colours above are reserved and never used as a slot. */
-  --series-1: #0e88a8;
-  --series-2: #eb6834;
-  --series-3: #1baf7a;
-  --series-4: #eda100;
-  --series-5: #e87ba4;
+     also carry visible labels or its data table (both provided by the
+     chart primitive). Status colours above are reserved and never used as a slot.
+     The dark halves keep each hue and its order and lift it until every slot
+     clears 7:1 on the dark card. */
+  --series-1: light-dark(#0e88a8, #3fb8d8);
+  --series-2: light-dark(#eb6834, #f28a5e);
+  --series-3: light-dark(#1baf7a, #42c992);
+  --series-4: light-dark(#eda100, #f0b93e);
+  --series-5: light-dark(#e87ba4, #f098bc);
   --radius: 8px;
   --radius-sm: 5px;
   /* Every square control in the header bar (the collapsed search button and
-     the sections toggle) so the two cannot drift apart by being sized in
-     two places. */
+     the sections toggle), sized once so the two cannot drift apart. */
   --control-size: 34px;
   /* Every control in the header bar reads these, so none can be drawn as a
      different kind of thing from the ones beside it. */
@@ -209,26 +219,39 @@
   --page-nav-height: 0px;
   --motion-fast: 150ms;
   /* Fluid sizes. These scale with the viewport instead of stepping at a
-     breakpoint, so the page has no width at which padding or a heading jumps.
-     Each replaces a rule that existed only to restate the same value smaller. */
+     breakpoint, so the page has no width at which padding or a heading jumps. */
   --content-pad: clamp(14px, 2.2vw, 28px);
+  /* The page uses the window: content runs to the gutters up to this, and only
+     a very wide monitor sees margins. */
+  --content-max: 1600px;
+  /* A paragraph's measure, whatever the column: past about 80 characters a
+     line is hard to track back to the start of the next. */
+  --measure: 80ch;
   --font-h1: clamp(19px, 0.55vw + 17.2px, 22px);
   --font-h2: clamp(12px, 0.18vw + 11.4px, 13px);
   /* Two spacing steps, and only two. `--layout-gap` separates siblings inside a
      grid; `--stack-gap` separates stacked page sections. */
   --layout-gap: var(--space-8);
+  /* How much of an identifier a table cell shows before cutting it; the row
+     expander shows the rest. */
+  --identifier-max: 32ch;
+  /* Track floors for a band of a fixed number of cells, so it lays out as a
+     whole number of even rows at any width: 4, 2 or 1 columns (never 3+1),
+     or 3 or 1. Read where they are used, so 100% is that grid's width.
+     `(x - 100%) * 999` is a step, hugely positive below x and negative above
+     it, so clamp() lands on one end or the other. For gapless bands. */
+  --tracks-4-2-1: clamp(clamp(25%, (48rem - 100%) * 999, 50%), (24rem - 100%) * 999, 100%);
+  --tracks-3-1: clamp(33.333%, (36rem - 100%) * 999, 100%);
   --stack-gap: var(--space-9);
-  /* The bar chart SVG is authored at a fixed 720x260. Rendered edge-to-edge it
-     scales with its card, so the same chart drew at 516px in a half-width card
-     and 1086px in a full-width one: axis type, bar widths and tick labels all
-     inflated, and two charts on one page read as two different applications.
-     Capping the rendered width fixes the drawing's size; only the surrounding
-     card changes.
+  /* The widest a chart drawing with type inside it renders. Its SVG scales
+     with its card, so uncapped its axis type and marks inflate in a wide card
+     and two charts on one page stop matching. Bar and line charts draw their
+     type as HTML over the plot, so they are exempt.
 
      There is deliberately no matching floor: `.two-col` lays out at
-     `minmax(320px, 1fr)`, so a floor would only ever add a scrollbar.
-     Label collision is instead measured: `Chart.dense` sums the width the
-     labels need, and a container query asks how wide the card is. */
+     `minmax(320px, 1fr)`, so a floor would only ever add a scrollbar. Label
+     collision is instead measured: `Chart.dense` sums the width the labels
+     need, and a container query asks how wide the card is. */
   --chart-max: 640px;
   /* Where one axis label sits, as a share of the drawing it labels. Set per
      label on the element itself, because there is one per data point and the
@@ -244,9 +267,28 @@
      the data, so the template supplies the number and this file decides what a
      share looks like. Declared here so it is part of the contract. */
   --part: 0%;
-  --shadow-sm: 0 1px 2px rgba(20, 20, 30, .05), 0 1px 1px rgba(20, 20, 30, .03);
-  --shadow: 0 1px 2px rgba(20, 20, 30, .06), 0 4px 14px rgba(20, 20, 30, .07);
+  /* On a dark page a soft shadow has nothing to fall on, so there it is
+     darker and tighter, and the edge is carried by the surface's own hairline
+     and its step up in lightness. */
+  --shadow-sm: 0 1px 2px light-dark(rgba(20, 20, 30, .05), rgba(0, 0, 0, .35)), 0 1px 1px light-dark(rgba(20, 20, 30, .03), rgba(0, 0, 0, .25));
+  --shadow: 0 1px 2px light-dark(rgba(20, 20, 30, .06), rgba(0, 0, 0, .4)), 0 4px 14px light-dark(rgba(20, 20, 30, .07), rgba(0, 0, 0, .3));
+  /* A panel that floats over the page (a dropdown, the sections drawer)
+     rather than sitting on it. */
+  --shadow-pop: 0 8px 24px light-dark(rgba(20, 20, 30, .12), rgba(0, 0, 0, .55));
+  /* The small lift under a switch knob. */
+  --shadow-knob: 0 1px 2px light-dark(rgba(0, 0, 0, .18), rgba(0, 0, 0, .5));
+  /* What a modal dims the page with. */
+  --scrim: light-dark(rgba(24, 24, 27, .38), rgba(0, 0, 0, .6));
+  /* Selected text: the accent's tint, dark enough on a dark page that the
+     ink over it still reads. */
+  --selection: light-dark(#c9e0e5, #24505a);
 }
+
+/* The operator's choice, when there is one. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+/* Paper is light whatever the screen was. */
+@media print { :root { color-scheme: light; } }
 
 }
 
@@ -266,6 +308,10 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "cv11", "ss01", "ss03";
+  /* A word too long for its line (a URL, a key, a digest) breaks rather than
+     pushing the page wide. It breaks only where it would overflow, and does
+     not change how wide a table cell asks to be. */
+  overflow-wrap: break-word;
 }
 a { color: var(--accent-2); text-decoration: none; }
 a:hover { color: var(--accent); text-decoration: underline; }
@@ -275,6 +321,8 @@ pre code { background: transparent; padding: 0; color: inherit; }
 a code { color: var(--accent-2); }
 a:hover code { color: var(--accent); text-decoration: underline; }
 pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7) var(--space-8); border-radius: var(--radius); overflow-x: auto; font-size: var(--text-sm); line-height: 1.55; }
+::selection { background: var(--selection); color: var(--ink); }
+pre ::selection { color: var(--code-ink); }
 
 /* A node key is one long unbroken token. Stacked so the machine's name sits
    above it rather than competing for width, and allowed to break anywhere so
@@ -322,8 +370,7 @@ pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7
 /* One row, always. The sections are the header's job; the search field is the
    part that gives way. It collapses to a button that expands back over the nav
    on focus, so a cramped header costs a click rather than a second row, and
-   the nav is never handed less room than its own content, which is what let a
-   whole section paint underneath the search field and disappear. */
+   the nav is never handed less room than its own content. */
 .site-header {
   display: flex;
   flex-wrap: nowrap;
@@ -348,19 +395,17 @@ pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7
 .brand:hover { text-decoration: none; }
 .primary-nav {
   display: flex;
-  /* Single row, deliberately. Wrapping put controls on a second row directly
-     beneath an open dropdown, where the panel covered them and swallowed the
+  /* Single row, deliberately: a control wrapped onto a second row would sit
+     beneath an open dropdown, where the panel covers it and swallows its
      clicks. Grouping keeps the bar short enough that one row is enough. */
   flex-wrap: nowrap;
   gap: var(--space-1);
-  /* Never squeezed below its own content. With `min-width: 0` the header could
-     hand the nav less room than it needs, and because `overflow` must stay
-     visible there was nothing to clip or scroll: the tail simply painted
-     underneath the search field, so a whole section vanished with no
-     affordance. Refusing to shrink makes the header wrap instead. */
+  /* Never squeezed below its own content. `overflow` must stay visible, so a
+     nav handed less room than it needs has nothing to clip or scroll it: its
+     tail would paint underneath the search field. */
   flex: 0 1 auto;
   /* Must stay visible: an overflow scroll container clips absolutely
-     positioned descendants, which silently swallowed the group dropdowns. */
+     positioned descendants, the group dropdowns included. */
   overflow: visible;
 }
 .primary-nav a {
@@ -379,8 +424,8 @@ pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7
 .nav-group { position: relative; }
 /* Safari stops toggling <details> when `display` on <summary> is changed away
    from list-item, so the summary keeps its default display and an inner span
-   does the layout. Chromium toggles either way, which is exactly why this has
-   to be checked in Safari rather than assumed. */
+   does the layout. Chromium toggles either way, so this has to be checked in
+   Safari rather than assumed. */
 .nav-group > summary {
   display: list-item; list-style: none;
   cursor: pointer; user-select: none;
@@ -435,9 +480,8 @@ pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7
 
 /* overflow-x: clip, not hidden: clip contains sideways overflow without making
    this a scroll container, so position: sticky and the chart tooltip still
-   work. A single wide table (the eight-week split matrix on a phone) was
-   otherwise able to widen the whole document behind its own card's scroller,
-   which reads as the page drifting rather than as a table that scrolls. */
+   work. A single wide table stays behind its own card's scroller instead of
+   widening the whole document. */
 
 /* Every form control looks like HQ's wherever it sits, not only inside .field.
    Components still override this; it is the floor. */
@@ -463,9 +507,8 @@ textarea:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0
 
 /* ── Tone assignment ─────────────────────────────────────────────────
    The one place a status name maps to a tone, for every component that has
-   statuses. Grouped by tone rather than by component, because the alternative
-   each family assigning its own, is what let `published`, `reachable` and
-   `success` mean the same thing in three different greens.
+   statuses. Grouped by tone rather than by component, so `published`,
+   `reachable` and `success` cannot become three different greens.
 
    A component decides which fill level it reads (`--tone-bg` for a chip,
    `--tone-wash` for a banner, `--tone-tint` for a mark carrying strong ink);
@@ -502,7 +545,7 @@ textarea:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0
   --tone-ink: var(--tone-critical-ink);
   --tone-line: var(--tone-critical-line);
 }
-.pill-idea, .pill-draft, .pill-viewed, .msg-info, .notice-info {
+.pill-idea, .pill-draft, .pill-viewed, .msg-info {
   --tone-bg: var(--tone-info-bg);
   --tone-wash: var(--tone-info-wash);
   --tone-ink: var(--tone-info-ink);
@@ -534,45 +577,47 @@ textarea:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0
   --tone-line: var(--tone-neutral-line);
 }
 
-.content { max-width: 1180px; margin: 0 auto; padding: var(--content-pad); overflow-x: clip; }
+.content { max-width: var(--content-max); margin: 0 auto; padding: var(--content-pad); overflow-x: clip; }
 /* One rhythm for every stacked page section, set in one place. Adjacent sibling
    margins collapse, so a section that already declares its own bottom margin
    keeps whichever is larger rather than adding to this. `dialog` is excluded:
    an open modal centres itself with `margin: auto`, which a margin-top here would quietly override. */ .content > * + *:not(dialog){ margin-top: var(--stack-gap); }
 
 h1 { font-size: var(--font-h1); margin: 0 0 var(--space-2); letter-spacing: -.012em; font-weight: 650; }
-/* A section heading reads as a heading: ink, sentence case, a step above body.
-   It was grey tracked capitals, which every label on the page also was, so
-   nothing on a page outranked anything else. */
+/* A section heading reads as a heading: ink, sentence case, a step above body,
+   so it outranks the tracked-capital labels around it. */
 h2 { font-size: var(--text-xl); margin: 0 0 var(--space-6); color: var(--ink); font-weight: 650; letter-spacing: -.01em; }
 h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-weight: 600; }
 
-.page-lede { color: var(--muted); font-size: var(--text-sm); margin: 0 0 var(--space-12); }
+.page-lede { color: var(--muted); font-size: var(--text-sm); margin: 0 0 var(--space-12); max-width: var(--measure); }
 .muted { color: var(--muted); }
-.muted-2 { color: var(--muted-2); }
 
-.page-head { display: flex; align-items: flex-end; gap: var(--space-6); margin-bottom: var(--stack-gap); }
-.page-head-compact { margin-bottom: 0; }
-.page-head-compact .page-lede { margin-bottom: 0; }
+/* One head at every width. The copy steps aside (`display: contents`) so its
+   parts can be ordered: the trail on its own row, the title and the controls
+   sharing the next row while they fit (the browser decides, not a count of
+   controls), and the lede the full width under both. Actions wrap under the
+   title only when they cannot fit beside it. */
+.page-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); margin-bottom: var(--stack-gap); }
+.page-head-copy { display: contents; }
+.page-head .page-trail { flex: 1 1 100%; order: 0; margin-bottom: calc(-1 * var(--space-2)); }
+/* The title yields width before the controls do: a long name wraps in its
+   own column rather than pushing the lead control onto a row of its own. */
+.page-head .page-title-row { flex: 1 1 0; order: 1; min-width: 0; }
+.page-head .page-title-row > h1 { overflow-wrap: anywhere; }
+.page-head > .page-actions { order: 2; }
+/* Full width so it always takes its own row; the reading measure is kept by
+   padding rather than a width cap, which would let it fit beside the title. */
+.page-head .page-lede { flex: 1 1 100%; order: 3; max-width: none; margin-bottom: 0; padding-inline-end: max(0px, 100% - var(--measure)); margin-top: calc(-1 * var(--space-1)); }
 .page-head h1 { margin: 0; }
 .page-head p { margin: 0; }
-.page-head .page-lede { margin-bottom: 0; }
 .page-trail { margin: 0 0 var(--space-2); color: var(--muted); font-size: var(--text-xs); }
 .page-trail a { color: var(--muted); }
 .page-trail a:hover { color: var(--ink); }
-.page-head-copy:has(.page-head-status) {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  align-items: baseline;
-  gap: var(--space-2) var(--space-3);
-}
-.page-head-copy:has(.page-head-status) h1 { grid-column: 1 / -1; }
-.page-head-status { grid-column: 1; }
-.page-head-copy:has(.page-head-status) p { grid-column: 2; }
+
 /* Never squeezed by the lede beside it. A flex item defaults to shrinking at
-   its content, so a long lede wrapped "Download .md" onto two lines and left
-   the two controls beside it different heights. */
-.page-head .page-actions { margin-left: auto; display: flex; gap: var(--space-4); flex-shrink: 0; flex-wrap: wrap; }
+   its content, which would wrap a control's label onto two lines and leave the
+   controls beside it different heights. */
+.page-head .page-actions { margin-left: auto; display: flex; gap: var(--space-4); flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
 .page-head .page-actions > * { white-space: nowrap; }
 /* One strip: each panel is a segment, the controls are its last segment. A
    panel opens in place into a popover; the strip itself never changes height. */
@@ -608,8 +653,8 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .glance-panel-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .glance-symbol { grid-row: 1 / span 2; color: var(--muted); }
 .glance-symbol .icon { width: 18px; height: 18px; }
-/* A panel's name gives way before the strip does: a machine called by forty
-   characters ran past its segment and under the weather beside it. */
+/* A panel's name gives way before the strip does, so a long name cannot run
+   past its segment and under the one beside it. */
 .glance-name { min-width: 0; overflow: hidden; color: var(--muted); font-weight: 600; text-overflow: ellipsis; }
 .glance-readings { display: flex; align-items: baseline; gap: var(--space-5); min-width: 0; white-space: nowrap; }
 .glance-reading { display: inline-flex; align-items: baseline; gap: var(--space-2); font-size: var(--text-xs); }
@@ -769,9 +814,8 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   font-size: var(--text-sm);
   font-weight: 500;
   /* Stated rather than inherited, so a button holding an icon is exactly as
-     tall as one holding a word. Left to the content, a 16px glyph and a line
-     of 13.5px text computed different heights and the pair sat mismatched
-     wherever they appeared side by side. */
+     tall as one holding a word, and the two match wherever they sit side by
+     side. */
   line-height: 1.45;
   min-height: 34px;
   text-decoration: none;
@@ -882,7 +926,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 }
 .switch-knob {
   display: block; width: 11px; height: 11px; margin: 1px; border-radius: 50%;
-  background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, .18);
+  background: var(--surface); box-shadow: var(--shadow-knob);
   transition: transform .12s ease-out;
 }
 [aria-checked="true"] .switch-track { background: var(--accent); border-color: var(--accent); }
@@ -890,14 +934,44 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 @media (prefers-reduced-motion: reduce) {
   .switch-track, .switch-knob { transition: none; }
 }
-.control-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
+/* The theme choice: a label in the row's own inset, then three buttons that
+   share one track. The pressed one is the choice in force. */
+.menu-theme { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5); }
+.menu-theme-label { color: var(--ink); font-size: var(--text-sm); font-weight: 500; }
+/* Three icons in one small track: a screen for the system's choice, a sun, a
+   moon. Named for a screen reader and in their tooltip; the words would make
+   a menu row a paragraph. */
+.menu-theme-options { display: inline-flex; gap: var(--space-1); padding: var(--space-1); border-radius: 999px; background: var(--bg-tint); }
+.menu-item.menu-theme-option {
+  display: grid; place-items: center; width: 26px; height: 26px; min-height: 0; padding: 0;
+  border: 0; border-radius: 999px; background: none; box-shadow: none;
+  color: var(--muted); font-size: var(--text-md); cursor: pointer;
+}
+.menu-item.menu-theme-option:hover { background: var(--surface); color: var(--ink); border: 0; }
+.menu-item.menu-theme-option[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); }
+/* A band: one surface whose cells are divided by hairlines. Each cell draws
+   its own left and top edge and the band clips the ones on its outer rim, so
+   a row that wraps keeps its dividers at any width and a short last row ends
+   in plain surface. One technique for every band; none needs a breakpoint. */
+/* `:is`, not `:where`: a cell that is also a surface (a control metric, a
+   control card) has its shadow and inset cleared by the frame rule, and the
+   cell rule has to win that. A band that needs a gap (stats inside a card)
+   says so with a more specific selector. */
+:is(.kpi-grid, .insight-grid, .machine-telemetry-metrics, .service-band, .fact-band, .control-summary, .command-preview-path, .finding-facts, .connection-control-grid, .sweep-grid) {
+  gap: 0;
+  overflow: clip;
+  & > * {
+    box-shadow: -1px 0 0 var(--line-2), 0 -1px 0 var(--line-2);
+    /* A cell is not a frame nested in a frame: it keeps its own padding. The
+       frame rule zeroes the inset of anything inside a surface, and a band is
+       one. */
+    --surface-inset: initial;
+  }
+}
+.control-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); margin: 0 0 var(--stack-gap); }
 .control-summary > *, .two-col > * { min-width: 0; }
 .machine-telemetry {
-  padding: var(--space-8) var(--space-9);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
+  padding: var(--surface-inset, var(--space-8) var(--space-9));
 }
 .machine-telemetry .section-head { margin-bottom: var(--space-6); }
 .machine-telemetry .section-head h2 { margin-bottom: var(--space-1); }
@@ -906,67 +980,42 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .machine-telemetry-metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 1px;
   margin: 0;
-  overflow: hidden;
-  border: 1px solid var(--line-2);
-  border-radius: var(--radius-sm);
-  background: var(--line-2);
 }
 .machine-telemetry-metrics > div { min-width: 0; padding: var(--space-5) var(--space-6); background: var(--surface-2); }
 .machine-telemetry-metrics dt { color: var(--muted); font-size: var(--text-3xs); text-transform: uppercase; letter-spacing: .05em; }
 .machine-telemetry-metrics dd { margin: var(--space-1) 0 1px; font-size: var(--text-2xl); font-weight: 650; font-variant-numeric: tabular-nums; }
 .machine-telemetry-metrics span { color: var(--muted); font-size: var(--text-2xs); }
-/* Two stated columns so an odd last metric can span, rather than leaving a
-   gap the hairline grid fills in. */
-@media (max-width: 640px) {
-  .machine-telemetry-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .machine-telemetry-metrics > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
-}
-.control-metric, .control-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-6) var(--space-7); box-shadow: var(--shadow-sm); }
-/* Label and headline share a line when they fit: the label is three small
-   words and the value is usually two, so stacking them spent a whole row on
-   whitespace: four cards deep on a phone that is most of a screen. Anything
-   further down (a caption, a readout, a pill) takes a full line of its own,
-   and a headline too long to sit beside its label wraps to one as well. */
-/* `space-between` rather than `margin-left: auto`, so the pairing survives a long value. A short headline sits opposite its label; one too wide to share
+
+.control-metric, .control-card { padding: var(--surface-inset, var(--space-6) var(--space-7)); }
+/* Label and headline share a line when they fit, so a short value does not
+   spend a whole row on whitespace. Anything further down (a caption, a
+   readout, a pill) takes a full line of its own, and a headline too long to
+   sit beside its label wraps to one as well. */
+/* `space-between` rather than `margin-left: auto`, so the pairing survives a
+   long value. A short headline sits opposite its label; one too wide to share
    the line wraps to its own and stays left-aligned there, because a lone item
    on a `space-between` line starts at the beginning of it. Pushed right with
-   `auto` instead, a URL or a list of eight names wrapped *and* stayed
-   right-aligned, leaving a ragged column and a hole under the label. */
+   `auto`, a wrapped value would stay right-aligned and leave a ragged column. */
 /* `align-content: flex-start` so a card's rows sit at the top whatever height
-   the card ends up. Cards share a height with the tallest in the row, and left
-   to stretch the spare space was distributed between the rows: a two-line
-   card beside an expanded one rendered with its value floating in the middle
-   of nothing. */
+   the card ends up. Cards share a height with the tallest in the row;
+   stretched, the spare space would spread between the rows and float the value
+   in the middle of nothing. */
 .control-metric { display: flex; flex-wrap: wrap; align-items: baseline;
   align-content: flex-start; justify-content: space-between; gap: var(--space-2) var(--space-6); }
 /* A fixed line box, so the label sits at the same height whether its headline
-   shares the line or wraps below. Left to the 11px font's own leading, a card
-   whose value was too long to share the row ("CNAME name.pages.dev") put its
-   label three pixels above the three beside it. */
+   shares the line or wraps below. */
 .control-metric > .control-label { flex: 0 1 auto; line-height: 20px; }
 .control-metric > strong { text-align: left; }
 .control-metric > *:not(.control-label):not(strong) { flex: 1 1 100%; }
-/* Smaller than it was: at 18px a value like "CNAME name.pages.dev" could not
-   share a line with its label and dropped underneath, so the card grew a row
-   to say one thing. At 15px most values sit opposite the label and the card is
-   the height of what it contains. */
+/* Sized so most values sit opposite their label and the card stays the height
+   of what it contains. */
 .control-metric strong { font-size: var(--text-lg); line-height: 1.35; overflow-wrap: anywhere; }
 .control-metric > span:last-child { color: var(--muted); font-size: var(--text-sm); line-height: 1.4; overflow-wrap: anywhere; }
-/* A summary is one raised band, not a box per fact. Each fact is its label over
-   its value, divided from its neighbours by a hairline; a row that wraps keeps
-   its hairlines because each cell draws its own left and top edge and the band
-   clips whatever falls outside it. A box per fact spread two words across a
-   card and repeated the same border, radius and shadow four times in a row. */
-.control-summary {
-  gap: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-}
+/* A summary is one raised band, not a box per fact. Each fact is its label
+   over its value, divided from its neighbours by a hairline; a row that wraps
+   keeps its hairlines because each cell draws its own left and top edge and
+   the band clips whatever falls outside it. */
 .control-summary > .control-metric {
   flex-direction: column;
   flex-wrap: nowrap;
@@ -976,21 +1025,18 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   border: 0;
   border-radius: 0;
   background: none;
-  box-shadow: -1px 0 0 var(--line-2), 0 -1px 0 var(--line-2);
   padding: var(--space-8) var(--space-9);
 }
 .control-summary > .control-metric > * { flex: none; max-width: 100%; }
 /* A supporting row inside a control metric. Several stack under one headline,
-   so they carry their own muted styling rather than relying on the
-   :last-child rule above, which dresses exactly one caption and left every
-   earlier row rendered as body copy. */
+   so they carry their own muted styling rather than relying on the :last-child
+   rule above, which dresses exactly one caption. */
 .readout { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); color: var(--muted); font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere; }
 .readout-label { color: var(--ink-2); font-weight: 600; }
 /* Inside a table, a readout keeps its line. `.table-scroll td` breaks words so
    a long cell wraps rather than widening the page: right for prose, wrong for
-   an address: on a phone a dotted-quad IP became a column one digit wide and
-   thirteen lines tall. The wrapper already scrolls, so the honest answer is to
-   let the row be as wide as it is and let the reader swipe. */
+   an address. The wrapper already scrolls, so the row is as wide as it is and
+   the reader swipes. */
 td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 /* A provider offered as a starting point, laid out in the same card grid.
    align-items keeps every child its own width: stretched, a pill spans the card
@@ -998,7 +1044,7 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 .kind-choice { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); text-decoration: none; }
 .kind-choice strong { color: var(--ink); font-size: var(--text-xl); font-weight: 650; }
 .kind-choice-summary { color: var(--ink-2); font-size: var(--text-sm); line-height: 1.45; }
-.kind-choice:hover { border-color: var(--ink-2); }
+.kind-choice:hover { background: var(--surface-2); text-decoration: none; }
 /* Switching between domains. Links rather than a select, because the whole set
    is small enough to show and a select would hide every other domain behind a
    click and then need a second one to arrive anywhere. Wraps rather than
@@ -1032,17 +1078,13 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 /* A record's value is data, not prose: an IPv4 address broken across lines to
    fit a narrow column is unreadable, and the table already scrolls. */
 .zone-value { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--text-xs); overflow-wrap: normal; }
-/* A status pill is a label, not a paragraph. Allowed to wrap inside a table
-   cell, "Not observed" broke across two lines and grew the row it sat in,
-   which on a list of thirty records is thirty ragged rows. The table already
-   scrolls horizontally, so the honest answer is to keep the label whole. */
+/* A status pill is a label, not a paragraph: wrapped, it grows the row it sits
+   in. The table already scrolls horizontally, so the label stays whole. */
 .data-table .pill { white-space: nowrap; }
 /* A name in a table cell takes two lines at most, and so does a `.cell-line`:
-   one fact written as a line. A hyphenated name of forty characters broke at
-   every hyphen and stood a container row eight lines tall. Clamped, it still
-   breaks where it must, so its column can narrow to fit the page, and the row
-   stays within the height core/browser_tests.py holds it to. The whole name
-   is the record's own page. */
+   one fact written as a line. Clamped, it still breaks where it must, so its
+   column can narrow to fit the page, and the row stays within the height
+   core/browser_tests.py holds it to. The whole name is the record's own page. */
 .data-table td [data-entity],
 .data-table td .cell-line {
   display: -webkit-inline-box;
@@ -1058,58 +1100,50 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
    cut: it wraps at its hyphens, and the names beside it give way instead. */
 .data-table td strong > [data-entity],
 .data-table td strong > .cell-line { display: inline; overflow: visible; -webkit-line-clamp: none; line-clamp: none; }
-/* A cell that leads with the row's name keeps room to show it; left to the
-   table's arithmetic, a column of forty-character names narrowed to 110px and
-   stood each one five lines tall beside a wide image reference. */
+/* A cell that leads with the row's name keeps room to show it, rather than
+   letting the table's arithmetic narrow the column until each name stands
+   several lines tall. */
 .data-table td:has(> strong:first-child) { min-width: 11rem; }
 /* A name in the muted line under it is context the row already shares with
    its neighbours ("on example-host"): one line, cut at the cell's edge. */
 .data-table td .muted [data-entity] { -webkit-line-clamp: 1; line-clamp: 1; }
-/* Two links in one cell need to read as two. Separated by whitespace alone
-   they rendered as "Edit Remove": one control with a strange name.
-   The class sits on a span in one place and on a td in two others, and a cell
-   given a flex display leaves table layout, so only the span gets the box and
-   the cells space their children directly. */
-.row-actions { white-space: nowrap; }
+/* Two links in one cell need to read as two, not as one control with a strange
+   name. The class sits on a span in one place and on a td in two others, and a
+   cell given a flex display leaves table layout, so only the span gets the box
+   and the cells space their children directly. */
+.row-actions { white-space: nowrap; vertical-align: middle; }
 span.row-actions { display: inline-flex; gap: var(--space-6); }
 td.row-actions > * + * { margin-left: var(--space-6); }
 .chart-grid { stroke: var(--line-2); stroke-width: 1; }
 /* Axis labels are HTML over the plot, not <text> inside it.
 
    Text in an SVG is drawn in the SVG's own coordinates, so it scales with the
-   drawing: the same chart is 720 units wide in a half-width card and 1400 in a
-   full-width one, and on a phone either is squeezed into about 340 real pixels.
-   An 11px label came out at five. Compensating by enlarging the type in chart
-   units means guessing the scale, and the guess is wrong the moment a card
-   changes width, which is the whole point of a responsive card.
+   drawing and shrinks to illegibility in a phone-width card. Compensating by
+   enlarging the type in chart units means guessing the scale, and the guess is
+   wrong the moment a card changes width.
 
    Positioned by percentage of the same viewBox the geometry uses, so a label
    sits exactly over its bar at any size, and rendered by the browser at a real
-   11px whatever that size is. The plot keeps the SVG, which is what SVG is for:
-   the bars and lines are geometry and are supposed to scale. */
+   11px whatever that size is. The plot keeps the SVG, which is what SVG is
+   for: the bars and lines are geometry and are supposed to scale. */
 /* Capped with the drawing it labels. Every label is positioned as a percentage
-   of this box, so this box must be the drawing's box: the line chart is held to
-   `--chart-max` and the frame was not, so in a full-width card the labels
-   spread to 1400px while the drawing stopped at 640 and every date sat right of
-   the point it named. */
+   of this box, so this box must be the drawing's box. */
 .chart-frame {
   position: relative;
   container-type: inline-size;
   max-width: var(--chart-max);
 }
-/* The bar chart has no cap and stretches to its card, so its frame must not
-   have one either, or the same fault appears the other way round. */
+/* Bar and line charts have no cap and stretch to their card, so their frame
+   must not have one either. */
 .chart-frame:has(> .bar-chart), .chart-frame:has(> .line-chart) { max-width: none; }
-/* A crowded axis in a card too narrow to hold it. The template says the axis
-   is crowded (it counted the labels; the container query says the card is
-   narrow) only the browser knows that. Neither could decide it alone, and
-   guessing a viewport width would have been wrong for the same chart placed in
-   a half-width card on a desktop.
+/* A crowded axis in a card too narrow to hold it. The template knows the axis
+   is crowded (it counted the labels); only the container query knows the card
+   is narrow. Neither can decide it alone, and a viewport width would be wrong
+   for the same chart in a half-width card on a desktop.
    The ends survive rather than every other one: first and last are the two
-   labels that say what range is being looked at, they are the two already
-   anchored inward so they cannot clip, and choosing them is a statement about
-   an axis rather than an accident of how many bars there happen to be. Every
-   period is still named in the data table under the chart. */
+   labels that say what range is being looked at, and choosing them is a
+   statement about an axis rather than an accident of how many bars there
+   happen to be. Every period is still named in the data table under the chart. */
 @container (max-width: 460px) {
   .chart-frame-dense .chart-category { display: none; }
   .chart-frame-dense .chart-cats .chart-category:first-child,
@@ -1117,9 +1151,8 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 }
 /* The one thing a stylesheet cannot know is where a given label goes, because
    there is one per data point and the position is computed from the data. That
-   single coordinate arrives as `--at`; every decision about how the label looks
-   size, colour, weight, how it is anchored, is here, where decisions
-   belong. */
+   single coordinate arrives as `--at`; every decision about how the label
+   looks (size, colour, weight, anchoring) is here. */
 .chart-frame .chart-axis {
   position: absolute;
   color: var(--muted);
@@ -1130,49 +1163,48 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 }
 /* Right-aligned against the plot's own left edge, wherever that has ended up.
    The strip it sits in is the drawing's gutter, given as the same share of the
-   width the geometry uses, so the two cannot disagree at any card size. Fixed
-   at 44px it stayed put while the drawing shrank, and on a phone the opening
-   date was printed over the bottom tick. */
+   width the geometry uses, so the two cannot disagree at any card size. */
 .chart-frame .chart-tick {
   top: var(--at);
   left: var(--gutter);
   padding-right: var(--space-3);
   transform: translate(-100%, -50%);
 }
-/* Under the plot, centred on the point named. The first and last sit on points
-   at the very edge of the drawing, so half of each would fall outside the card;
-   those two anchor inward instead. */
-/* A layer of its own, so "first" and "last" mean the first and last date,
-   as spans among the y-axis ticks they meant the topmost tick. */
+/* A layer of its own, so "first" and "last" mean the first and last date
+   rather than the topmost of the y-axis ticks. */
 .chart-cats { position: absolute; inset: 0; pointer-events: none; }
-/* Every label is centred on the point it names, including the two at the ends.
-   Anchoring those two inward instead did stop them hanging off the drawing,
-   but it moved them off their own points and into their neighbours: the first
-   two and last two dates then overlapped on every chart on the page. Room is
-   made for the overhang below rather than taken out of the label. */
+/* Every label is centred on the point it names, including the two at the ends:
+   anchored inward, the end labels leave their own points and overlap their
+   neighbours. Room is made for the overhang below rather than taken out of the
+   label. */
 .chart-frame .chart-category {
   left: var(--at);
   bottom: 0;
   transform: translateX(-50%);
 }
-/* <figure> carries a UA margin of 1em 40px, which inset every chart card from
-   the surrounding grid and broke the page's left/right alignment. */
+/* <figure> carries a UA margin of 1em 40px, which would inset every chart card
+   from the surrounding grid. */
 .chart-card { margin: 0 0 var(--stack-gap); }
 .chart-card figcaption h2 { margin: 0; }
 /* Held to the plot's own width so the figure reads as one column instead of a
    full-bleed sentence sitting over a fixed-width drawing. */
-.chart-card figcaption p { margin: var(--space-2) 0 0; max-width: var(--chart-max); color: var(--muted); font-size: var(--text-sm); line-height: 1.45; min-height: calc(2 * 1.45em); }
+.chart-card figcaption p { margin: var(--space-2) 0 0; max-width: var(--chart-max); color: var(--muted); font-size: var(--text-sm); line-height: 1.45; }
+/* Two lines are reserved only when the pair sits side by side, so the drawings
+   start level; a stacked card has no neighbour to line up with and reserves
+   nothing. 656px is two 320px tracks and the 16px gap `.two-col` resolves to. */
+@container pair (min-width: 656px) {
+  .chart-card figcaption p { min-height: calc(2 * 1.45em); }
+}
 .chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-6); margin: var(--space-6) 0 var(--space-1); color: var(--muted); font-size: var(--text-xs); }
 .chart-legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
 .chart-legend i { inline-size: 9px; block-size: 9px; border-radius: 2px; }
 /* Padded by half a label, and pulled back by the same amount, so the drawing
-   sits exactly where it did while the first and last labels have somewhere to
-   hang. Without it the scroller clipped them, or grew a scrollbar to show
-   twenty pixels of date. */
-/* Both axes stated, which is the point of the second one: `overflow-x: auto`
-   alone does not leave the other axis alone: a `visible` counterpart computes
-   to `auto`. The drawing's height is fractional, so every chart overflowed
-   itself by one rounded pixel and drew a full-height scrollbar for it.
+   stays put while the first and last labels have somewhere to hang, rather
+   than being clipped by the scroller or growing a scrollbar. */
+/* Both axes stated, which is the point of the second one: with `overflow-x:
+   auto` alone, a `visible` counterpart computes to `auto`. The drawing's
+   height is fractional, so the chart would overflow itself by one rounded
+   pixel and draw a full-height scrollbar for it.
    `clip` says what is meant. Alongside a scrolling axis the spec uses it as
    `hidden`, which is the same result here. The tooltip is appended to <body>,
    so it is not clipped. */
@@ -1186,12 +1218,10 @@ td.row-actions > * + * { margin-left: var(--space-6); }
    the viewBox dictates. Its parts are rectangles and horizontal rules, so
    `preserveAspectRatio="none"` stretches them to the box without saying
    anything untrue, and because the labels are HTML over the top, none of the
-   type stretches with it. That is what removed the cap: it was there to stop a
-   full-width card upscaling the words inside the drawing, and there are no
-   longer any words inside the drawing.
-   No floor either, for the reason recorded at `--chart-max`: a half-width card
-   is narrower than any floor worth setting, so a floor could only ever turn
-   into a scrollbar. */
+   type stretches with it, so it needs no cap.
+   No floor either, for the reason given at `--chart-max`: a half-width card is
+   narrower than any floor worth setting, so a floor could only ever turn into
+   a scrollbar. */
 .bar-chart {
   display: block;
   width: 100%;
@@ -1208,19 +1238,18 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .chart-series-5 { fill: var(--series-5); background: var(--series-5); }
 /* 2px surface gap between stacked segments so adjacent fills read as separate
    marks rather than one block; also carries the CVD relief for close hues. */
-.bar-chart rect { stroke: var(--surface); stroke-width: 2; paint-order: stroke; }
+.bar-chart rect { stroke: var(--surface); stroke-width: 2; paint-order: stroke; transition: opacity .08s ease; }
 /* A line chart is the same drawing box as a bar chart, so it borrows the
    sizing rather than restating it: two charts stacked in a column have to
    share an axis position, and two rules that nearly agree is how they stop. */
-/* Filled to its card, for the reason the bar chart above was: the cap existed
-   to stop a wide card upscaling type inside the drawing, and a line chart's
-   axis is HTML over the top, so there is no type in there to upscale. What is
-   left inside is geometry, which is what SVG is for.
-   `preserveAspectRatio="none"` in the template stretches it, so the stroke has
-   to be pinned, otherwise a 2px line thickens with the card and the trend
-   dashes stretch into a different dash. The dots are circles and do go slightly
-   oval at full width; at r=2.5 across ninety points that reads as a dot, and
-   the alternative was ~480px of empty card, which reads as a bug. */
+/* Filled to its card, like the bar chart: a line chart's axis is HTML over the
+   top, so there is no type inside the drawing to upscale, only geometry, which
+   is what SVG is for.
+   `preserveAspectRatio="none"` in the template stretches it, so the stroke is
+   pinned; otherwise a 2px line thickens with the card and the trend dashes
+   stretch into a different dash. The dots are circles and go slightly oval at
+   full width; at r=2.5 that still reads as a dot, and a capped width would
+   leave a band of empty card. */
 .line-chart {
   display: block;
   width: 100%;
@@ -1274,7 +1303,6 @@ td.row-actions > * + * { margin-left: var(--space-6); }
    other is a resource between being declared and being applied. Both take the
    neutral colour rather than a warning one. */
 .control-declared, .control-pending { color: var(--muted); }
-.kv.compact { margin-bottom: 0; }
 .compact-table { box-shadow: none; }
 /* A node's relationships: the phrase once per group, then each end. */
 .relationship-table th[scope="rowgroup"] { width: 12rem; color: var(--muted); font-weight: 600; vertical-align: top; }
@@ -1283,9 +1311,10 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .code-list code { white-space: nowrap; }
 .external-link::after { content: " \2197"; font-size: .85em; }
 /* Four cards that each answer one question sit in one row where they fit. */
-.control-summary-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-@media (max-width: 900px) { .control-summary-four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 520px) { .control-summary-four { grid-template-columns: 1fr; } }
+.control-summary-four {
+  grid-template-columns: repeat(auto-fit, minmax(var(--tracks-4-2-1), 1fr));
+}
+
 /* A service's overview: one raised band, not a box per fact. Each fact is its
    icon tile, then its label over its value; hairlines divide them. Health's
    tile takes its tone, so the state reads before the word does. */
@@ -1293,13 +1322,8 @@ td.row-actions > * + * { margin-left: var(--space-6); }
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   margin: 0 0 var(--stack-gap);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
 }
 .band-fact { display: flex; gap: var(--space-6); align-items: flex-start; min-width: 0; padding: var(--space-8) var(--space-9); }
-.band-fact + .band-fact { border-left: 1px solid var(--line-2); }
 .band-icon {
   display: grid; place-items: center; flex: none;
   width: 36px; height: 36px; border-radius: var(--radius);
@@ -1315,19 +1339,11 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .page-title-row > h1 { margin: 0; }
 .heading-aside { color: var(--muted); font-size: var(--text-md); font-weight: 500; letter-spacing: 0; }
 .band-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); padding: var(--space-5) var(--space-9); border-top: 1px solid var(--line-2); color: var(--muted); font-size: var(--text-sm); }
-@media (max-width: 520px) { .band-fact + .band-fact { border-left: 0; border-top: 1px solid var(--line-2); } }
-/* The origin reads under the facet row rather than as a fifth card in it:
-   four is what a name needs to answer, and a fifth wrapped the row. */
+/* The origin reads under the facet row rather than as a fifth card in it: four
+   is what a name needs to answer, and a fifth would wrap the row. */
 .control-origin { margin: calc(var(--space-3) * -1) 0 22px; color: var(--muted); font-size: var(--text-sm); line-height: 1.5; }
 .control-origin strong { color: var(--ink); font-weight: 600; }
 
-/* The row of things you can do to an observed container. Buttons are each in
-   their own form because each is a different POST, and a wrapping flex row is
-   what keeps them reading as one set rather than three stacked submissions. */
-/* A button whose mark and word read as one thing. `1em` so the icon is the
-   height of the text beside it, and `currentColor` so it inherits the button's
-   state rather than needing a second rule per variant. */
-.icon-btn { display: inline-flex; align-items: center; gap: var(--space-3); }
 /* The links chooser opens as a dialog; "Edit" is its trigger. */
 .ext-edit { margin-left: auto; color: var(--muted); font-size: var(--text-xs); }
 .ext-edit:hover { color: var(--ink); }
@@ -1344,8 +1360,8 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .ext-chooser-actions { display: flex; align-items: center; gap: var(--space-4); }
 .ext-chooser-status { font-size: var(--text-xs); }
 .icon { width: 1em; height: 1em; flex: none; }
-/* Each control is its own POST, so each is its own form. Without this the page
-   actions row treated three forms as three blocks and stacked them. */
+/* Each control is its own POST, so each is its own form, laid inline so the
+   page actions row does not stack them as blocks. */
 .page-actions form { margin: 0; display: inline-flex; }
 
 .control-diagnostics { margin: var(--space-10) 0; }
@@ -1359,8 +1375,8 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .control-metric .list-rows strong { font-size: var(--text-sm); font-weight: 600; }
 .control-metric .list-rows li { padding: var(--space-2) 0; }
 /* Stacked, not two columns. A metric card is 220px at its narrowest and the
-   shared definition list reserves 200px for the term alone, so every value in
-   it rendered outside the card it was supposed to be inside. */
+   shared definition list reserves 200px for the term alone, so two columns
+   would put every value outside the card. */
 .control-metric .kv { grid-template-columns: 1fr; gap: var(--space-1) 0; padding: var(--space-5) var(--space-6); }
 .control-metric .kv dt { margin-top: var(--space-4); font-size: var(--text-xs); }
 .control-metric .kv dt:first-of-type { margin-top: 0; }
@@ -1376,23 +1392,29 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); box-shadow: none; }
 .btn.ghost:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; }
 /* A destructive action that should not be the loudest thing in its row. */
-.btn.ghost.danger { background: transparent; border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); color: var(--danger); }
-.btn.ghost.danger:hover { background: color-mix(in srgb, var(--danger) 8%, transparent); color: var(--danger); }
+/* A button like its neighbours, in red: the same surface and lift, so it does
+   not read as an outline with the page showing through beside solid ones. */
+.btn.ghost.danger { background: var(--surface); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); color: var(--danger); box-shadow: var(--shadow-sm); }
+.btn.ghost.danger:hover { background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--danger); }
 
 /* ── Filter bar ─────────────────────────────────────────────────── */
 
 .filter-bar {
   display: flex; flex-wrap: wrap; gap: var(--space-4);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  padding: var(--space-5); border-radius: var(--radius);
+  padding: var(--surface-inset, var(--space-5));
   margin-bottom: var(--space-8);
-  box-shadow: var(--shadow-sm);
+
 }
 .content input[type=search], .filter-bar select, .filter-bar input[type=text] {
   padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); font: inherit; font-size: var(--text-sm);
 }
 .filter-bar input[type=search] { flex: 1 1 240px; }
+/* One height for every control in the bar, so a wrapped row still reads as one
+   row of controls rather than a field, two shorter selects and a taller button. */
+.filter-bar > input, .filter-bar > select, .filter-bar > .btn { height: var(--control-size); box-sizing: border-box; }
+/* A select is as wide as its longest option unless told otherwise. */
+.filter-bar > select { max-width: 100%; min-width: 0; }
+.filter-bar > .btn { padding-block: 0; }
 /* One field and its button on a line: the field takes the room. */
 .field-row { display: flex; gap: var(--space-4); align-items: center; margin-top: var(--space-6); }
 .field-row > input { flex: 1; min-width: 0; }
@@ -1402,25 +1424,23 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 
 /* min-width:0 so the scroller can actually be narrower than its table. Without
    it a grid or flex ancestor sizes to the table's content instead, and the
-   overflow escapes to the page: the widest table on the site pushed the
-   whole layout sideways on a phone rather than scrolling inside its card. */
+   overflow escapes to the page rather than scrolling inside its card. */
 /* A wide table scrolls sideways rather than widening the page. `overflow-y`
    is stated for the same reason as `.chart-scroll`: left alone it computes to
    `auto` and offers a scrollbar it has no content for. */
 .table-scroll { overflow-x: auto; overflow-y: clip; -webkit-overflow-scrolling: touch; margin-bottom: var(--space-8); min-width: 0; max-width: 100%; }
 .table-scroll .data-table { margin-bottom: 0; }
 /* The surface is the scroll box's, not the table's. A box that scrolls clips
-   what overflows it, which included the table's own shadow: every table in HQ
-   drew one nobody could see, and sat flat beside cards that lifted. The box
-   can show its own, so it carries the border, the radius and the shadow. */
-.table-scroll:has(> .data-table) { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+   what overflows it, the table's own shadow included, so the box carries the
+   border, the radius and the shadow. */
 .table-scroll > .data-table { border: 0; border-radius: 0; box-shadow: none; }
-/* Nothing follows it, so the gap it reserves is dead card. The same is true
-   of anything that ends a card: a trailing margin inside a padded box is a
-   band of empty card, and it was showing up on every panel that ended in a
-   table, a grid or a footnote. */
+/* A run of like events in a history: one line, its events a click away. */
+.history-run > summary { cursor: pointer; }
+.history-run-list { margin: var(--space-2) 0 0; padding-left: var(--space-5); font-size: var(--text-sm); }
+/* Nothing follows it, so the gap it reserves is dead card. The same is true of
+   anything that ends a card: a trailing margin inside a padded box is a band
+   of empty card. */
 .table-scroll:last-child { margin-bottom: 0; }
-.card > :last-child, figure.chart-card > :last-child { margin-bottom: 0; }
 /* Refreshes pin column widths (fixed layout); long unbroken tokens must
    wrap inside their cell instead of bleeding across the pinned columns. */
 .table-scroll td { overflow-wrap: break-word; }
@@ -1431,11 +1451,11 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 
    `overflow-x: auto` on the wrapper makes the browser compute `overflow-y` to
    `auto` as well, so the wrapper is a vertical scroll container whether it was
-   asked to be or not, and a sticky cell pins to its nearest scroll container.
-   That is what pinned the heading to the wrapper and lost it the moment the
-   page scrolled past. But these tables fit: `width: 100%` with wrapping cells
-   means the measured content width equals the client width exactly, so all
-   that `auto` was doing was standing in the way.
+   asked to be or not, and a sticky cell pins to its nearest scroll container:
+   the heading would pin to the wrapper and be lost the moment the page scrolls
+   past. But these tables fit: `width: 100%` with wrapping cells means the
+   measured content width equals the client width exactly, so the wrapper does
+   not need `auto`.
 
    With no scroll container in between, the heading pins to the viewport at the
    chrome's own height and holds that line for the whole page scroll. Nothing
@@ -1444,13 +1464,17 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 
    Three details are load-bearing and each is silent when missed: `overflow:
    hidden` on `.data-table` would make the *table* the nearest scroll container
-   (a box with no scroll range, where the heading never moves); a sticky cell is
-   transparent by default and rows scroll through it; and `border-collapse:
+   (a box with no scroll range, where the heading never moves); a sticky cell
+   is transparent by default and rows scroll through it; and `border-collapse:
    collapse` drops borders from sticky cells, so the rule is an inset shadow.
 
-   No `overscroll-behavior` on purpose: that belongs on dialogs and sheets;
-   on a table it stops scroll chaining and traps the wheel at the last row. */
-@media (min-width: 641px) {
+   No `overscroll-behavior` on purpose: that belongs on dialogs and sheets; on
+   a table it stops scroll chaining and traps the wheel at the last row. */
+/* Where tables fit (1280px and up, where they are not content-sized). Below
+   that a table can be wider than its box at any moment, including after a
+   disclosure opens, so the wrapper stays a scroll container from the start
+   rather than once a script has measured it. */
+@media (min-width: 1280px) {
   .table-scroll:not([data-chart]):not(.is-pane) { overflow: visible; }
   .table-scroll:not([data-chart]) .data-table { overflow: visible; }
 
@@ -1511,13 +1535,16 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 
 /* One row: the search field takes the room the filters leave, and one button
    applies both. Enter in the field submits the same form. */
-.table-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin: 0 0 var(--space-6); padding: var(--space-5); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
+.table-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin: 0 0 var(--space-6); padding: var(--surface-inset, var(--space-5)); }
 .table-search { flex: 1 1 260px; min-width: 0; }
 .table-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
 .table-filter-menu { position: relative; }
-.table-filter-menu summary, .table-toggle, .table-sort { min-height: 34px; display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--ink-2); font-size: var(--text-sm); cursor: pointer; }
+.table-filter-menu summary, .table-toggle, .table-sort { min-height: var(--control-size); display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--ink-2); font-size: var(--text-sm); cursor: pointer; }
 .table-filter-menu summary { list-style: none; }
 .table-filter-menu summary::-webkit-details-marker { display: none; }
+/* A disclosure's panel that would run off the right of the screen hangs from
+   the disclosure's right edge instead; app.js decides when it opens. */
+details > [data-edge="end"] { left: auto; right: 0; }
 .table-filter-options { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; min-width: 220px; max-width: calc(100vw - 32px); max-height: 280px; overflow: auto; display: grid; gap: var(--space-1); padding: var(--space-4); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow); }
 .table-filter-options label { display: flex; gap: var(--space-4); align-items: center; padding: var(--space-3); border-radius: 4px; font-size: var(--text-sm); }
 .table-filter-options label:hover { background: var(--surface-2); }
@@ -1549,39 +1576,18 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .row-actions a { font-size: var(--text-sm); }
 .actions-col { width: 1%; text-align: right; white-space: nowrap; }
 
-/* A pill in a table fits the cell's line: on the baseline, with its border
-   and padding, it made every row that had one two pixels taller than the
-   rows that did not. */
+/* A pill in a table fits the cell's line, so a row holding one is no taller
+   than a row without. */
 .data-table td .pill { vertical-align: top; line-height: 1.4; }
 
-/* ── One table rendered twice ───────────────────────────────────────
-   A partial included twice measures its columns per copy, so declared widths
-   are what keep both on one grid. Fixed layout cannot grow to fit a cell, so
-   cells must break, including children setting `overflow-wrap` themselves,
-   such as `.zone-value`.
-
-   Above the phone breakpoint only: below it a table is content-sized, and
-   Chromium lays out a fixed table wider than its scroll container with
-   automatic widths on first paint. */
-@media (min-width: 761px) {
-  .grid-locked { table-layout: fixed; }
-  .grid-locked td, .grid-locked th, .grid-locked td * { overflow-wrap: anywhere; }
-  /* A pill is one short state: it never breaks. Its column is sized for it. */
-  .grid-locked td .pill { overflow-wrap: normal; }
-}
-/* The hostname earns room, the state gets what its pill needs; facets split
-   the rest, so a new facet needs no change here. */
-.service-table th:first-child { width: 22%; }
-/* Sized for the longest state label, "Nothing declared", at pill size. */
-.service-table th:last-child { width: 8.5rem; }
-/* Everything but the value is a short known shape; the value takes what is
-   left. Actions are two fixed-length links, so px rather than a percentage:
-   a fixed table clips what it cannot fit. */
-.zone-record-table th:nth-child(1) { width: 24%; }
-.zone-record-table th:nth-child(2) { width: 10%; }
-.zone-record-table th:nth-child(4) { width: 11%; }
-.zone-record-table th:nth-child(5) { width: 15%; }
-.zone-record-table th.actions-col { width: 108px; }
+/* Columns size to what they hold: a table has no fixed widths to fall out of
+   step with its content. An identifier in a cell never breaks across lines,
+   so "hq-proxy" is never "hq-" over "proxy"; the column widens instead, and a
+   table too wide for its box scrolls in it. One longer than any column can
+   hold is cut with an ellipsis, which the row's expander lifts. */
+/* An identifier never breaks and never sets the table's width: past
+   --identifier-max it is cut, and the row expander shows it whole. */
+.data-table td code { white-space: nowrap; overflow-wrap: normal; display: inline-block; max-width: min(100%, var(--identifier-max)); overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 .icon-link {
   display: inline-flex;
   align-items: center;
@@ -1672,7 +1678,11 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    becomes five lines per record. Dropping the columns that merely identify
    a row keeps it a table, and the row still says which account it is. */
 @media (max-width: 640px) {
-  .data-table .optional-col { display: none; }
+  /* Not in a table that declares its column widths: a hidden cell leaves the
+     row, the cells after it move one slot left into the next column's width,
+     and the declared slot it left stays empty at the end of every row. That
+     table scrolls sideways instead, with every column where it belongs. */
+  .data-table:not(:has(colgroup)) .optional-col { display: none; }
 }
 
 /* ── Pills / tags ───────────────────────────────────────────────── */
@@ -1707,7 +1717,6 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .row-unread td { background: var(--accent-tint); }
 .row-unread .msg-preview a, .row-unread td:first-child a { font-weight: 650; }
 .msg-preview { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row-actions { vertical-align: middle; }
 .row-actions form { display: inline-block; margin: 0; }
 .inline-form { display: inline; margin: 0; }
 .row-actions button.icon-link { cursor: pointer; font-size: var(--text-sm); }
@@ -1736,12 +1745,11 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 /* ── KPI grid ───────────────────────────────────────────────────── */
 
 /* Wrapping row, not a track grid. The 1px hairlines are the container's own
-   background showing through the gaps, so any track a grid left empty painted
-   as a solid grey block: four tiles in a half-width card wrapped 3+1 and the
-   two unused cells read as broken chrome. A flex row has no cells to leave
-   empty: whatever wraps grows to fill its row instead, at every width. */
-.kpi-grid { display: flex; flex-wrap: wrap; gap: 1px; margin: 0 0 var(--stack-gap); background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
-.kpi { flex: 1 1 150px; min-width: 0; background: var(--surface); padding: var(--space-7) var(--space-8); display: flex; flex-direction: column; gap: var(--space-2); }
+   background showing through the gaps, so any track a grid left empty would
+   paint as a solid grey block. A flex row has no cells to leave empty:
+   whatever wraps grows to fill its row instead, at every width. */
+.kpi-grid { display: flex; flex-wrap: wrap; margin: 0 0 var(--stack-gap); }
+.kpi { flex: 1 1 150px; min-width: 0; padding: var(--space-7) var(--space-8); display: flex; flex-direction: column; gap: var(--space-2); }
 /* A linked KPI is a whole tile target, so it should not also wear inline-link
    underlines on its label and value. */
 a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
@@ -1753,9 +1761,6 @@ a.kpi:hover { background: var(--surface-2); }
 /* Nested in a card, the grid's own bottom margin becomes dead space inside the
    card's padding rather than separation between sections. */
 .card > .kpi-grid:last-child, .card > .insight-grid:last-child { margin-bottom: 0; }
-/* A module band with one entry should read as a tile, not a full-bleed banner
-   carrying a single number across the whole page. Sized to its contents, it
-   lines up with the tiles above it; past the page width it wraps and fills. */
 
 /* The tooltip: chart marks, and anything else carrying data-tip. Fixed to the viewport and inert to the pointer, so it can
    never sit between the cursor and the mark it is describing. */
@@ -1775,7 +1780,6 @@ a.kpi:hover { background: var(--surface-2); }
   box-shadow: var(--shadow);
   font-feature-settings: "tnum";
 }
-.bar-chart rect { transition: opacity .08s ease; }
 .bar-chart:hover rect:not(:hover) { opacity: .78; }
 
 /* ── Insight grid ───────────────────────────────────────────────────
@@ -1784,22 +1788,19 @@ a.kpi:hover { background: var(--surface-2); }
    an undefined class is silent at runtime and simply renders unstyled. */
 
 .insight-grid {
+  /* One band, like the KPI band: one frame, and each reading a cell of it
+     rather than a floating card with its own margin and shadow. */
   display: grid;
   /* A narrower track ceiling lets four insights share one row at desktop
      widths instead of stranding the fourth alone beside two empty columns. */
-  grid-template-columns: repeat(auto-fit, minmax(clamp(240px, 22%, 290px), 1fr));
-  gap: var(--layout-gap);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, clamp(240px, 22%, 290px)), 1fr));
   margin: 0 0 var(--stack-gap);
 }
 .insight-card {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: var(--space-8) var(--space-9);
-  box-shadow: var(--shadow-sm);
+  padding: var(--space-7) var(--space-8);
   min-width: 0;
 }
 .insight-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); flex-wrap: wrap; }
@@ -1807,19 +1808,13 @@ a.kpi:hover { background: var(--surface-2); }
 .insight-title { margin: 0; font-size: var(--text-2xs); font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .insight-title a { color: inherit; }
 .insight-body { margin: 0; font-size: var(--text-sm); line-height: 1.5; color: var(--ink-2); }
-/* Sits with the body it follows, not pinned to the card's floor. Pinning it
-   aligned the "Next" lines across a row at the cost of a hole in the middle of
-   every card whose body was shorter than its tallest neighbour, which reads as
-   a rendering fault. Cards still share a height; the slack goes underneath. */
+/* Sits with the body it follows, not pinned to the card's floor: pinned, it
+   leaves a hole in the middle of every card whose body is shorter than its
+   tallest neighbour. Cards still share a height; the slack goes underneath. */
 .insight-action { margin: 0; font-size: var(--text-sm); line-height: 1.5; color: var(--muted); }
 .insight-action-label { font-weight: 650; color: var(--ink-2); }
 .insight-action-label::after { content: ":"; }
 
-/* Status pills for insights carry the host's shared status vocabulary, and
-   each carries its own text so meaning never rests on colour alone. Their
-   tones are assigned with every other status at the top of this layer: they
-   were the clearest case of the drift the tone system exists to stop, spelling
-   out the same three greens as `.pill-published` three hundred lines away. */
 
 /* ── Attention queue ────────────────────────────────────────────────
    Cross-surface list of things awaiting a decision. A row, not a card: these
@@ -1836,8 +1831,8 @@ a.kpi:hover { background: var(--surface-2); }
   border-top: 1px solid var(--line-2);
 }
 .attention-row:first-child { border-top: 0; padding-top: var(--space-2); }
-/* Grid items stretch to fill their track by default, which inflated the pill
-   into a wide oval instead of hugging its label. */
+/* Grid items stretch to fill their track by default; the pill hugs its label
+   instead of inflating into a wide oval. */
 .attention-row > .pill { justify-self: start; align-self: start; }
 .attention-body { min-width: 0; }
 .attention-title { display: block; font-size: var(--text-md); font-weight: 650; color: var(--ink); letter-spacing: -.005em; }
@@ -1864,10 +1859,10 @@ a.kpi:hover { background: var(--surface-2); }
 .finding-card .section-head > div { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
 .finding-card h2 { margin: 0; color: var(--ink); font-size: var(--text-lg); letter-spacing: 0; text-transform: none; }
 .finding-card > p { margin: 0; color: var(--ink-2); line-height: 1.55; }
-.finding-evidence { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1px; margin: var(--space-7) 0 0; background: var(--line-2); border: 1px solid var(--line-2); border-radius: var(--radius-sm); overflow: hidden; }
-.finding-evidence > div { min-width: 0; padding: var(--space-4) var(--space-5); background: var(--surface-2); }
-.finding-evidence dt { color: var(--muted); font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .045em; }
-.finding-evidence dd { margin: var(--space-1) 0 0; overflow-wrap: anywhere; font-size: var(--text-sm); }
+.finding-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); margin: var(--space-7) 0 0; }
+.finding-facts > div { min-width: 0; padding: var(--space-4) var(--space-5); background: var(--surface-2); }
+.finding-facts dt { color: var(--muted); font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .045em; }
+.finding-facts dd { margin: var(--space-1) 0 0; overflow-wrap: anywhere; font-size: var(--text-sm); }
 .finding-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-6); }
 .finding-actions form { display: inline-flex; }
 .finding-fix { margin-top: var(--space-6); }
@@ -1877,13 +1872,12 @@ a.kpi:hover { background: var(--surface-2); }
 .resolution-workflow-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-6); }
 .resolution-workflow-head > strong { color: var(--ink-2); font-size: var(--text-2xs); letter-spacing: .045em; text-transform: uppercase; }
 .resolution-workflow-head > span { color: var(--muted); font-size: var(--text-2xs); text-align: right; }
-/* auto-fit rather than a fixed three: a claim HQ cannot act on has no Act step,
-   so the plan is Understand and Verify, and a three-column track left the row
-   two-thirds full with a third of it blank. auto-fit collapses the empty track
-   and the steps that exist share the row. The minimum is real because auto-fit
-   cannot count tracks against a flexible one. */
+/* auto-fit rather than a fixed three: a claim HQ cannot act on has no Act
+   step, so the plan is Understand and Verify. auto-fit collapses the empty
+   track and the steps that exist share the row. The minimum is real because
+   auto-fit cannot count tracks against a flexible one. */
 .resolution-workflow ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); margin: var(--space-5) 0 0; padding: 0; list-style: none; counter-reset: none; }
-.resolution-workflow li { min-width: 0; padding: var(--space-5); border: 1px solid var(--line-2); border-radius: var(--radius-sm); background: var(--surface-2); }
+.resolution-workflow li { min-width: 0; padding: var(--surface-inset, var(--space-5)); background: var(--surface-2); }
 .resolution-workflow li.is-recommended { border-color: color-mix(in srgb, var(--accent) 45%, var(--line-2)); background: color-mix(in srgb, var(--accent) 5%, var(--surface-2)); }
 .resolution-workflow li.is-after_action { border-style: dashed; }
 .resolution-workflow-step { display: flex; align-items: flex-start; gap: var(--space-4); }
@@ -1896,9 +1890,16 @@ a.kpi:hover { background: var(--surface-2); }
 .resolution-workflow.is-compact { margin-top: var(--space-4); padding-top: var(--space-4); }
 .resolution-workflow.is-compact ol { grid-template-columns: 1fr; }
 
+/* A viewport query, not a container one: inside a size container Chrome
+   restyles every element once the container is measured and runs their
+   transitions from nothing, so each button in the queue would fade in on load. */
 @media (max-width: 720px) {
-  .attention-row { grid-template-columns: 1fr auto; }
-  .attention-row > .pill { grid-column: 1 / -1; justify-self: start; }
+  /* The count and "Mark read" ride beside the pill, so the explanation gets
+     the whole width instead of a strip beside a column of its own. */
+  .attention-row { grid-template-columns: 1fr auto; grid-template-areas: "pill end" "body body"; row-gap: var(--space-3); }
+  .attention-row > .pill { grid-area: pill; justify-self: start; }
+  .attention-row > .attention-body { grid-area: body; }
+  .attention-row > .attention-end { grid-area: end; flex-direction: row; align-items: center; gap: var(--space-4); }
   .finding-card .section-head { flex-direction: column; }
   .finding-card .section-head > div { width: 100%; }
   .finding-card .section-head > .finding-actions { margin-top: var(--space-1); }
@@ -1907,81 +1908,35 @@ a.kpi:hover { background: var(--surface-2); }
   .resolution-workflow ol { grid-template-columns: 1fr; }
 }
 
-/* ── Operations panels ──────────────────────────────────────────── */
-
-.ops-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: var(--layout-gap);
-  margin: 0 0 var(--stack-gap);
-}
-.action-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: var(--space-4);
-}
-.action-list a {
-  display: flex;
-  align-items: center;
-  gap: var(--space-5);
-  padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--line-2);
-  border-radius: var(--radius-sm);
-  color: var(--ink);
-  background: var(--surface-2);
-}
-.action-list a:hover {
-  border-color: var(--line);
-  background: var(--bg-tint);
-  text-decoration: none;
-}
-.action-list strong {
-  min-width: 28px;
-  color: var(--attn);
-  font-variant-numeric: tabular-nums;
-}
-.action-list .action-arrow { margin-left: auto; color: var(--muted-2); }
-.quick-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); }
 .quick-actions.vertical { display: grid; grid-template-columns: 1fr; }
-.health-list {
-  display: grid;
-  gap: var(--space-4);
-  margin: 0;
-}
-.health-list div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-6);
-  padding: var(--space-4) 0;
-  border-bottom: 1px solid var(--line-2);
-}
-.health-list div:last-child { border-bottom: 0; }
-.health-list dt { color: var(--muted); font-size: var(--text-sm); }
-.health-list dd {
-  margin: 0;
-  color: var(--ok);
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-.health-list dd.warn { color: var(--attn); }
 
 /* ── Section cards / two-col ────────────────────────────────────── */
 
-/* Side-by-side panels share a top and a bottom edge. Sizing each to its own
-   content left a ragged lower edge that reads as a rendering fault rather than
-   as a layout. Anything short simply has room underneath. */
-.two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--layout-gap); align-items: stretch; margin: 0 0 var(--stack-gap); }
+/* Side-by-side panels share a top and a bottom edge: a ragged lower edge reads
+   as a rendering fault rather than as a layout. Anything short simply has room
+   underneath. */
+/* Two columns at most: a track is never narrower than half the row, so four
+   cards pair up 2+2 instead of leaving one orphaned, and below two 320px
+   tracks it is one column with no breakpoint. */
+.two-col { container: pair / inline-size; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, max(320px, (100% - var(--layout-gap)) / 2)), 1fr)); gap: var(--layout-gap); align-items: stretch; margin: 0 0 var(--stack-gap); }
 
-/* One main panel with a narrower companion. A three-row list does not deserve
-   half the page, and pairing it with a long one wasted the half it took. */
 /* A main panel with a companion. Unlike two equal siblings, the companion is
    sized to its own contents: stretching a three-row list to match a long one
    just produces a tall empty box, which reads worse than a short card that is
    honestly short. */
-.split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--layout-gap); align-items: start; margin: 0 0 var(--stack-gap); }
+.split { margin: 0 0 var(--stack-gap); }
+/* Main content and a narrower companion. They share a row while both keep a
+   readable width and wrap to a column when they cannot, at whatever width the
+   page or card gives them. One layout for every such pairing: no breakpoint,
+   no per-page columns. */
+:where(.split, .upgrade-detail, .command-layout) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--layout-gap);
+}
+:where(.split, .upgrade-detail, .command-layout) > * { flex: 1 1 16rem; min-width: 0; }
+:where(.split, .upgrade-detail, .command-layout) > :first-child { flex: 2 1 28rem; }
 /* min-width:0 so a child that scrolls its own overflow (a wide table in its
    scroll wrapper) cannot instead force the column open and push the page
    sideways. A grid item defaults to min-width:auto, which means "as wide as my
@@ -1989,20 +1944,18 @@ a.kpi:hover { background: var(--surface-2); }
 .split > * { margin: 0; min-width: 0; }
 /* The wide column second. A drawing sized to itself beside a table of six
    columns wants the narrow half, and reading order puts the drawing first. */
-.split.lead-narrow { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
 .two-col > * { min-width: 0; }
 /* Cards sized to their own content rather than to the tallest in the row.
    Stretching is right when both sides are lists that read as one block, and
    wrong when one is a short table beside a tall drawing: the short one grows a
    band of empty card under its last row. */
 .two-col.align-top { align-items: start; }
-/* A paired row whose two cards end at different points is the complaint this
-   file has answered more times than any other. `align-top` was the wrong
-   answer: it stops a short card stretching, which is exactly what makes the
-   pair ragged. The right one is to let them stretch and give the shorter card
-   somewhere to put the difference, so a card in a stretched pair is a
-   column, and its drawing sits in the middle of whatever height the row ends
-   up being rather than leaving the slack in one lump at the bottom. */
+/* A paired row whose two cards end at different points reads as broken.
+   `align-top` stops a short card stretching, which is exactly what makes the
+   pair ragged; instead the cards stretch and the shorter one gets somewhere to
+   put the difference. A card in a stretched pair is a column, and its drawing
+   sits in the middle of whatever height the row ends up being rather than
+   leaving the slack in one lump at the bottom. */
 .two-col:not(.align-top) > .card,
 .two-col:not(.align-top) > .chart-card {
   display: flex;
@@ -2020,30 +1973,41 @@ a.kpi:hover { background: var(--surface-2); }
 .card-columns { columns: 22rem 2; column-gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
 .card-columns > * { break-inside: avoid; margin: 0 0 var(--layout-gap); display: block; width: 100%; }
 .dashboard-patterns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: var(--layout-gap); margin-bottom: var(--stack-gap); }
-/* At most two per row at the content width; an odd last card takes the row. */
-.dashboard-highlights { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: var(--layout-gap); margin-bottom: var(--stack-gap); }
+/* Two cards across at most, so a wide screen never leaves a third track empty
+   beside a pair while the odd card takes a row of its own. */
+.dashboard-highlights { display: grid; grid-template-columns: repeat(auto-fit, minmax(max(min(100%, 440px), calc(50% - var(--layout-gap))), 1fr)); gap: var(--layout-gap); margin-bottom: var(--stack-gap); }
 .dashboard-highlights > .highlight-card:nth-child(odd):last-child { grid-column: 1 / -1; }
-.highlight-card.card { display: flex; flex-direction: column; min-width: 0; padding: var(--space-6); container-type: inline-size; }
-.highlight-card > .kpi-grid {
-  flex: 1;
+.highlight-card.card { display: flex; flex-direction: column; min-width: 0; padding: var(--space-6); }
+.highlight-card > .kpi-grid { flex: 1; }
+/* A card holding a band of stats is the container its columns are measured
+   against, so the same count-aware columns hold in any card, not only the
+   dashboard's. */
+.card:has(> .kpi-grid) { container-type: inline-size; }
+.card > .kpi-grid {
   --kpi-columns: 3;
 }
 .highlight-card .section-head { margin-bottom: var(--space-4); }
 .highlight-card .kpi { flex: 1 1 calc(100% / var(--kpi-columns) - 1px); padding: var(--space-5); }
 /* Columns follow the cell count and the card's width (110px a cell), so rows
    stay even: four cells are 4 or 2+2, six are 6 or 3+3, never 3+1. */
-.highlight-card > .kpi-grid:has(> :only-child) { --kpi-columns: 1; }
-.highlight-card > .kpi-grid:has(> :nth-child(2):last-child),
-.highlight-card > .kpi-grid:has(> :nth-child(4):last-child) { --kpi-columns: 2; }
+.card > .kpi-grid:has(> :only-child) { --kpi-columns: 1; }
+.card > .kpi-grid:has(> :nth-child(2):last-child),
+.card > .kpi-grid:has(> :nth-child(4):last-child),
+.card > .kpi-grid:has(> :nth-child(6):last-child) { --kpi-columns: 2; }
+/* Two rows of three wait for a card wide enough to fit them; in a phone's card
+   three columns are cramped. */
+@container (min-width: 480px) {
+  .card > .kpi-grid:has(> :nth-child(6):last-child) { --kpi-columns: 3; }
+}
 @container (min-width: 440px) {
-  .highlight-card > .kpi-grid:has(> :nth-child(4):last-child),
-  .highlight-card > .kpi-grid:has(> :nth-child(7)) { --kpi-columns: 4; }
+  .card > .kpi-grid:has(> :nth-child(4):last-child),
+  .card > .kpi-grid:has(> :nth-child(7)) { --kpi-columns: 4; }
 }
 @container (min-width: 550px) {
-  .highlight-card > .kpi-grid:has(> :nth-child(5):last-child) { --kpi-columns: 5; }
+  .card > .kpi-grid:has(> :nth-child(5):last-child) { --kpi-columns: 5; }
 }
 @container (min-width: 660px) {
-  .highlight-card > .kpi-grid:has(> :nth-child(6):last-child) { --kpi-columns: 6; }
+  .card > .kpi-grid:has(> :nth-child(6):last-child) { --kpi-columns: 6; }
 }
 .dashboard-counts { display: flex; flex-wrap: wrap; gap: var(--space-5) var(--space-9); padding: var(--space-4) 0; margin-bottom: var(--stack-gap); border-block: 1px solid var(--line); }
 .dashboard-counts .kpi { display: flex; flex: 0 1 auto; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); padding: 0; background: none; }
@@ -2059,17 +2023,15 @@ a.kpi:hover { background: var(--surface-2); }
 .dashboard-patterns .calendar-marks { display: inline-flex; margin: 0 0 0 var(--space-1); min-height: 6px; }
 .dashboard-patterns .calendar-dot { width: 5px; height: 5px; }
 .dashboard-patterns .calendar-legend { margin-block: var(--space-3); }
-.two-col > section, .two-col > div, .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-8) var(--space-9); box-shadow: var(--shadow-sm); }
+.two-col > section, .two-col > div:not(.col-stack), .card { padding: var(--surface-inset, var(--space-8) var(--space-9)); }
 /* Inside a layout container the gap is the separation, so a section's own
-   stacking margin is dead space: it padded the container's height and pushed
-   the next section further away than the one before it. Declared after the
-   section rules above so it wins on source order at equal specificity. */
+   stacking margin is dead space. Declared after the section rules above so it
+   wins on source order at equal specificity. */
 .two-col > *,
-.ops-grid > *,
 .dash-row > *,
 .search-results > * { margin-bottom: 0; }
 
-.section-head { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-5); }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-6); margin-bottom: var(--space-6); }
 .section-head h2 { margin: 0; flex: 1; }
 .section-head .count { font-size: var(--text-2xs); color: var(--muted-2); font-weight: 500; }
 
@@ -2079,16 +2041,16 @@ a.kpi:hover { background: var(--surface-2); }
 .domain-stack { display: grid; gap: calc(var(--stack-gap) * 1.5); }
 .domain-stack > * { min-width: 0; }
 .domain-stack > section { display: grid; gap: var(--space-6); }
-.domain-stack-head,
+/* The section's gap spaces its parts; their own stack margins would double it. */
+.domain-stack > section > * { margin-block: 0; }
 .domain-head {
   display: flex;
-  align-items: flex-end;
+  align-items: baseline;
   justify-content: space-between;
   gap: var(--layout-gap);
 }
-.domain-stack-head h2,
-.domain-head h2 { margin: 0; }
 .domain-head h2 {
+  margin: 0;
   color: var(--ink);
   font-size: var(--text-2xl);
   font-weight: 650;
@@ -2098,55 +2060,33 @@ a.kpi:hover { background: var(--surface-2); }
 .domain-head-copy { min-width: 0; }
 .domain-head-copy .eyebrow { display: block; margin-bottom: var(--space-2); }
 .domain-head-copy p { margin: var(--space-2) 0 0; max-width: 680px; }
-.domain-head .btn { flex: 0 0 auto; }
-.domain-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
-  gap: var(--layout-gap);
-  align-items: start;
-}
-.domain-workspace > * { min-width: 0; margin: 0; }
-.domain-workspace .bar-chart { max-width: none; }
-.domain-workspace .chart-card figcaption p { max-width: 62ch; }
-.domain-workspace .attention-row { grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-4); }
-.domain-workspace .attention-row > .pill { display: none; }
+.domain-head > a { flex: 0 0 auto; }
 
 /* A domain's featured analysis: the chart and the calendar beside it. Two
    explicit columns rather than .two-col's auto-fit, so the pair stays paired.
-   A chart alone in this row is the case that went wrong twice: capped it sat
-   in a card twice its width and read as broken spacing; uncapped it scaled its
-   720x260 viewBox across the row and rendered ~520px tall. The answer was not
-   a better cap, it was putting something worth reading in the other half. */
+   A chart alone in this row either sits in a card twice its width or scales
+   its viewBox across the row, so the other half holds something worth reading. */
 .domain-charts {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr));
   gap: var(--layout-gap);
   margin: 0 0 var(--stack-gap);
 }
 .domain-charts > * { min-width: 0; margin: 0; }
 .domain-charts .chart-card figcaption p { max-width: 62ch; }
-@media (max-width: 1080px) { .domain-charts { grid-template-columns: minmax(0, 1fr); } }
 
 /* Activity calendar: one month of plan against execution. */
 .calendar-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-6); }
 .calendar-head h2 { margin: 0; }
 .calendar-head-copy { min-width: 0; }
 /* A column inside a layout cell: stack cards under one another where the
-   neighbouring cell is taller. A bare wrapper, not a card: `.two-col > div`
-   carries card chrome, so without this the stack drew its own border and
-   padding around the cards it holds, boxing them twice. */
-.col-stack,
-.two-col > .col-stack,
-.split > .col-stack {
+   neighbouring cell is taller. A bare wrapper, not a card: the frame rule
+   leaves it out, so the cards it holds keep their own frame and padding. */
+.col-stack {
   display: flex;
   flex-direction: column;
   gap: var(--layout-gap);
   min-width: 0;
-  background: none;
-  border: 0;
-  border-radius: 0;
-  padding: 0;
-  box-shadow: none;
 }
 .col-stack > * { margin: 0; }
 
@@ -2181,8 +2121,8 @@ a.kpi:hover { background: var(--surface-2); }
 .calendar-controls { display: flex; align-items: center; gap: var(--space-3); flex: 0 0 auto; }
 .calendar-period { color: var(--ink); font-size: var(--text-md); font-weight: 650; white-space: nowrap; }
 .calendar-nav { display: flex; gap: var(--space-2); flex: 0 0 auto; }
-/* Scoped to beat `.calendar-nav a`, which fixes the arrows at a 28px square,
-   the label was being forced into that box and overlapping the next arrow. */
+/* Scoped to beat `.calendar-nav a`, which fixes the arrows at a 28px square;
+   otherwise the label is forced into that box and overlaps the next arrow. */
 .calendar-nav .calendar-now {
   width: auto;
   flex: 0 0 auto;
@@ -2249,7 +2189,7 @@ a.kpi:hover { background: var(--surface-2); }
 .calendar-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
 .calendar-dot.is-missed { background: transparent; border: 1.5px solid var(--muted-2); }
 /* A day still ahead is drawn faintly: information, not a verdict. Drawn like a
-   miss, every plan looks broken by Monday lunchtime. */
+   miss, every plan would look broken early in the week. */
 .calendar-dot.is-planned { background: transparent; border: 1.5px dashed var(--line-2); }
 /* Trained days are the figure, everything else the ground. */
 .calendar-day.is-done { background: var(--surface-2); border-color: var(--line-2); }
@@ -2270,9 +2210,8 @@ a.kpi:hover { background: var(--surface-2); }
 .list-rows .row-main { display: flex; align-items: center; gap: var(--space-4); min-width: 0; flex: 1; flex-wrap: wrap; }
 .list-rows .row-main > a { min-width: 0; overflow-wrap: anywhere; }
 /* The title keeps the line its marker is on. Wrapping places a flex item by
-   its full content width, so a long name moved below its dot and left the dot
-   alone on a line; a modest basis keeps them together and the name wraps
-   inside itself instead. */
+   its full content width, so a long name would drop below its dot; a modest
+   basis keeps them together and the name wraps inside itself instead. */
 .list-rows .row-main > :is(a, strong) { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
 .list-rows .row-meta { color: var(--muted); font-size: var(--text-xs); margin-left: auto; white-space: nowrap; }
 .list-rows a strong { color: var(--ink); font-weight: 600; }
@@ -2290,25 +2229,19 @@ a.kpi:hover { background: var(--surface-2); }
 .prose-list li:last-child { margin-bottom: 0; }
 .prose-list li::marker { color: var(--muted); }
 .prose-list strong { font-weight: 650; }
-.prose-list .prose-meta { color: var(--muted); white-space: nowrap; }
+/* A quiet link: a section head's trailing "All →", an inline "Edit". One class
+   for both. */
 .subtle-link {
   color: var(--muted);
   font-size: var(--text-xs);
   font-weight: 500;
 }
+.subtle-link:hover { color: var(--accent); }
 
 .section-foot { margin: var(--space-6) 0 0; font-size: var(--text-sm); }
 .section-foot a { color: var(--muted); font-weight: 500; }
 .section-foot a:hover { color: var(--accent); }
 .dash-row .section-foot { margin-top: auto; padding-top: var(--space-6); text-align: right; }
-
-/* The trailing action in a section head: "Edit →", "All →". Shipped unstyled
-   for a while: two plugins used the class and no rule ever defined it, because
-   the style test only reads the host's own partials and a plugin's templates
-   live in another repository. It renders as a plain browser link, which is why
-   it read as slightly wrong rather than obviously broken. */
-.section-action { color: var(--muted); font-size: var(--text-xs); font-weight: 500; }
-.section-action:hover { color: var(--accent); }
 
 /* Empty state: make zero panels feel intentional, not broken */
 .empty {
@@ -2322,7 +2255,7 @@ a.kpi:hover { background: var(--surface-2); }
 
 /* ── KV grid ────────────────────────────────────────────────────── */
 
-.kv { display: grid; grid-template-columns: 200px 1fr; gap: var(--space-4) var(--space-8); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-8) var(--space-9); box-shadow: var(--shadow-sm); font-size: var(--text-sm); }
+.kv { display: grid; grid-template-columns: minmax(0, clamp(7rem, 30%, 200px)) minmax(0, 1fr); gap: var(--space-4) var(--space-8); padding: var(--surface-inset, var(--space-8) var(--space-9)); font-size: var(--text-sm); }
 .kv dt { color: var(--muted); font-weight: 500; }
 .kv dd { margin: 0; color: var(--ink); }
 .eyebrow { display: block; margin-bottom: var(--space-1); color: var(--muted-2); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
@@ -2377,7 +2310,29 @@ a.kpi:hover { background: var(--surface-2); }
 
 /* ── Forms ──────────────────────────────────────────────────────── */
 
-.form { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-10); max-width: 800px; box-shadow: var(--shadow-sm); }
+/* Fields flow into as many columns as fit, never narrower than 18rem, in
+   reading order: a long form uses the width it is given instead of one column
+   and a page of empty card beside it. Anything that is not a single short
+   field (a textarea, a group of boxes, errors, the actions) takes the row. */
+.form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  gap: var(--space-7) var(--space-10);
+  align-items: start;
+  padding: var(--surface-inset, var(--space-10));
+}
+.form > :not(.field) { grid-column: 1 / -1; }
+.form > .field:has(textarea) { grid-column: 1 / -1; }
+.form > .field:has(> div > * + *) { grid-column: 1 / -1; }
+.form > .field { margin-bottom: 0; }
+/* A lone checkbox sits beside its label, the help under both, rather than
+   alone on a line under its own question. */
+.field:has(> input[type=checkbox]) { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: var(--space-4); }
+.field:has(> input[type=checkbox]) > input { grid-column: 1; grid-row: 1; margin: 0; }
+.field:has(> input[type=checkbox]) > label { grid-column: 2; grid-row: 1; margin: 0; }
+.field:has(> input[type=checkbox]) > :not(label, input) { grid-column: 1 / -1; }
+/* A group of boxes reads across, not one per line. */
+.field > div:has(> div input[type=checkbox], > div input[type=radio]) { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); }
 .field { margin-bottom: var(--space-7); }
 /* A control inside a table cell or a row, where the gap that separates stacked
    form fields is just a taller row. `.field` has to stay the wrapper: the
@@ -2396,14 +2351,14 @@ a.kpi:hover { background: var(--surface-2); }
   margin: 0;
   line-height: 1.4;
 }
-/* A box to tick, never a field to fill: `.field input` stretches every input to
-   the column, which made the consent checkbox the width of its row and pushed
-   its label out past the edge. */
+/* A box to tick, never a field to fill: `.field input` stretches every input
+   to the column, which would make a checkbox the width of its row and push its
+   label past the edge. */
 .field input[type=checkbox], .field input[type=radio] { width: auto; }
 .check-row input { flex: 0 0 auto; margin-top: var(--space-1); }
 .field.has-errors input, .field.has-errors textarea, .field.has-errors select { border-color: var(--danger); }
-/* Django renders errors as a plain `<ul class="errorlist">`, which nothing
-   styled. */
+/* Django renders errors as a plain `<ul class="errorlist">`, unstyled by
+   default. */
 .errorlist {
   list-style: none;
   margin: var(--space-2) 0 0;
@@ -2426,7 +2381,7 @@ a.kpi:hover { background: var(--surface-2); }
 }
 .form-errors .errorlist { margin: 0; }
 .errors { color: var(--danger); margin: var(--space-2) 0 0; padding-left: var(--space-8); font-size: var(--text-sm); }
-.form-actions { display: flex; gap: var(--space-4); margin-top: var(--space-6); }
+.form-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-6); }
 
 /* ── Dropzone ───────────────────────────────────────────────────────
    The real file input covers the zone, so the click target and the drop target
@@ -2447,10 +2402,10 @@ a.kpi:hover { background: var(--surface-2); }
   transition: border-color .12s ease, background .12s ease;
 }
 /* `.field label.dropzone` above is (0,2,1), so a bare `.dropzone:hover` at
-   (0,2,0) lost to it and neither state applied to a dropzone inside a form
-   field, which is every dropzone on a form. Matched here rather than lowered
-   there, because the base rule's specificity is what makes it beat the generic
-   `.field label` styling in the first place. */
+   (0,2,0) would lose to it inside a form field, which is every dropzone on a
+   form. Matched here rather than lowered there, because the base rule's
+   specificity is what makes it beat the generic `.field label` styling in the
+   first place. */
 .field label.dropzone:hover, .dropzone:hover,
 .field label.dropzone:focus-within, .dropzone:focus-within {
   border-color: var(--accent-2); background: var(--accent-tint);
@@ -2491,7 +2446,7 @@ a.kpi:hover { background: var(--surface-2); }
   color: var(--ink);
   width: min(520px, calc(100vw - 32px));
 }
-.modal::backdrop { background: rgba(24, 24, 27, .38); }
+.modal::backdrop { background: var(--scrim); }
 .modal-panel { padding: var(--space-9) var(--space-10) var(--space-10); }
 .modal-panel:focus { outline: none; }
 .modal-head { display: flex; align-items: center; gap: var(--space-6); margin-bottom: var(--space-2); }
@@ -2687,6 +2642,7 @@ a.kpi:hover { background: var(--surface-2); }
 .discovery-list li:first-child { border-top: 0; }
 .discovery-link {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-7);
@@ -2695,8 +2651,7 @@ a.kpi:hover { background: var(--surface-2); }
   text-decoration: none;
 }
 a.discovery-link:hover strong { color: var(--accent); }
-.discovery-destination { font-size: var(--text-2xs); white-space: nowrap; }
-.discovery-main { display: grid; gap: var(--space-1); min-width: 0; }
+.discovery-main { display: grid; gap: var(--space-1); min-width: 0; flex: 1 1 20rem; }
 .discovery-main .muted { font-size: var(--text-xs); line-height: 1.4; }
 .discovery-meta {
   display: flex;
@@ -2704,7 +2659,7 @@ a.discovery-link:hover strong { color: var(--accent); }
   justify-content: flex-end;
   gap: var(--space-2);
   flex-wrap: wrap;
-  flex: 0 1 48%;
+  flex: 1 1 16rem;
 }
 .discovery-meta code { font-size: var(--text-3xs); overflow-wrap: anywhere; }
 .command-hint { margin: var(--space-2) 0 0; }
@@ -2718,12 +2673,6 @@ a.discovery-link:hover strong { color: var(--accent); }
   font-size: var(--text-xs);
 }
 .command-contract code { color: var(--ink-2); }
-.command-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
-  gap: var(--layout-gap);
-  align-items: start;
-}
 .command-layout > * { min-width: 0; }
 .command-runner { margin: 0; }
 .command-fields {
@@ -2764,9 +2713,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 }
 .command-preview-live > div {
   min-width: 0;
-  padding: var(--space-5) var(--space-6);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  padding: var(--surface-inset, var(--space-5) var(--space-6));
   background: var(--surface-2);
 }
 .command-preview-live dt,
@@ -2774,12 +2721,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 .command-preview-live dd { margin: var(--space-1) 0 0; overflow-wrap: anywhere; font-weight: 600; }
 .command-preview-path {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--line);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
 }
 .command-preview-path > div {
   display: grid;
@@ -2787,10 +2729,7 @@ a.discovery-link:hover strong { color: var(--accent); }
   gap: var(--space-2);
   min-width: 0;
   padding: var(--space-5) var(--space-6);
-  background: var(--surface);
 }
-/* An odd last panel spans, rather than leaving a filled empty cell. */
-.command-preview-path > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .command-preview-path code { overflow-wrap: anywhere; }
 .command-preview-path small { color: var(--muted); line-height: 1.4; }
 .command-preview-steps {
@@ -2803,7 +2742,9 @@ a.discovery-link:hover strong { color: var(--accent); }
 }
 .command-confirm {
   padding: var(--space-6) var(--space-7);
-  border: 1px solid var(--warn);
+  /* A callout, like .notice: inside a surface its tint and its bar, not a frame. */
+  border: var(--surface-border, 1px solid var(--warn));
+  border-left: 3px solid var(--warn);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--warn) 7%, var(--surface));
 }
@@ -2845,8 +2786,8 @@ a.discovery-link:hover strong { color: var(--accent); }
 }
 /* A reference behind a disclosure: capped, scrolling in its own box. */
 .command-schema pre { max-height: 28rem; }
-/* The answer is not a reference. Capped, it showed a fraction of the result
-   through a nested scrollbar. The page already scrolls. */
+/* The answer is not a reference: capped, it would show a fraction of the
+   result through a nested scrollbar. The page already scrolls. */
 .command-result pre { max-height: none; }
 .command-result-note { margin: var(--space-3) 0 0; font-size: var(--text-sm); }
 .command-result { margin-bottom: var(--layout-gap); border-left: 3px solid var(--ok); }
@@ -2885,7 +2826,8 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-summary .is-attention strong { color: var(--attn); }
 .connection-inspect { margin-left: auto; }
 .connection-row-meta { color: var(--muted); font-size: var(--text-2xs); }
-.connection-available { padding: var(--space-8) var(--space-8) var(--space-6); border-top: 1px solid var(--line-2); }
+/* Its own section under the table, not a second compartment of a card around it. */
+.connection-available { margin-top: var(--space-10); }
 .connection-available h2 { margin: 0 0 var(--space-4); }
 .connection-available ul { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
 .connection-available li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); font-size: var(--text-sm); }
@@ -2933,36 +2875,6 @@ a.discovery-link:hover strong { color: var(--accent); }
   background: radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 12%, transparent), transparent 68%);
   pointer-events: none;
 }
-.connection-security-story {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-10);
-  padding: var(--space-10) var(--space-10) var(--space-9);
-}
-.connection-security-story h2 { margin: var(--space-1) 0 var(--space-2); font-size: clamp(20px, 2.2vw, 28px); }
-.connection-security-story p { max-width: 720px; margin: 0; color: var(--muted); }
-.connection-security-story .button { flex: none; }
-.connection-security-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-top: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface-2) 55%, var(--surface));
-}
-.connection-security-metrics > div {
-  display: grid;
-  gap: var(--space-1);
-  min-width: 0;
-  padding: var(--space-7) var(--space-9);
-  border-right: 1px solid var(--line);
-}
-.connection-security-metrics > div:last-child { border-right: 0; }
-.connection-security-metrics strong { font-size: var(--text-4xl); line-height: 1; }
-.connection-security-metrics strong span { color: var(--muted); font-size: var(--text-sm); font-weight: 500; }
-.connection-security-metrics > div > span { font-size: var(--text-xs); font-weight: 650; }
-.connection-security-metrics small { color: var(--muted); font-size: var(--text-3xs); line-height: 1.35; }
 .connection-security-serious { border-top-color: var(--danger); }
 .connection-security-advanced { margin-top: calc(var(--layout-gap) * 1.5); padding: 0; overflow: hidden; }
 .connection-security-advanced > summary {
@@ -2987,32 +2899,34 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-security-advanced[open] > summary::after { content: "−"; }
 .connection-security-advanced > summary .count { margin-left: auto; }
 .connection-trust-path {
-  display: grid;
-  grid-template-columns: minmax(220px, .7fr) minmax(0, 2fr);
-  gap: var(--space-12);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6) var(--space-12);
   align-items: center;
   padding: var(--space-9);
   border-top: 1px solid var(--line);
   background: var(--surface-2);
 }
+.connection-trust-path > :first-child { flex: 1 1 14rem; min-width: 0; }
+.connection-trust-path > :last-child { flex: 3 1 24rem; min-width: 0; }
 .connection-trust-path h3 { margin: var(--space-1) 0 var(--space-2); font-size: var(--text-lg); }
 .connection-trust-path p { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
 .request-path {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: var(--space-8);
   margin: 0;
-  padding: 0;
+  padding: var(--space-2) var(--space-2) var(--space-4);
   list-style: none;
   max-width: 100%;
 }
 /* Each hop a card of its own, raised off the page, joined by an arrow: an icon
    tile that says what kind of thing it is, then what it is called. */
-.request-path { gap: var(--space-8); padding: var(--space-2) var(--space-2) var(--space-4); }
-/* Every hop the same shape, whatever it carries: a header row (icon, what
-   kind of thing, its proof), the name on one line, then at most one line of
-   facts. The hops share the width, each at least 8.5rem, and a route longer
-   than one row continues on the next: a strip that scrolled hid its last hops
-   past the edge of a phone, where nobody finds them. */
+/* Every hop the same shape, whatever it carries: a header row (icon, what kind
+   of thing, its proof), the name on one line, then at most one line of facts.
+   The hops share the width, each at least 8.5rem, and a route longer than one
+   row continues on the next, since a strip that scrolls hides its last hops
+   past the edge of a phone. */
 .request-path li {
   position: relative;
   display: grid;
@@ -3060,10 +2974,9 @@ a.discovery-link:hover strong { color: var(--accent); }
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.request-path li > strong { font-size: var(--text-sm); font-weight: 650; line-height: 1.3; }
+.request-path li > strong { display: flex; align-items: baseline; font-size: var(--text-sm); font-weight: 650; line-height: 1.3; }
 /* The name gives way at the hop's edge and its certificate mark stays: a
    name longer than the hop is cut inside the link, never past the card. */
-.request-path li > strong { display: flex; align-items: baseline; }
 .request-path li > strong > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .request-path li > strong > .cert-mark { flex-shrink: 0; overflow: visible; }
 .request-path li > small { margin: 0; color: var(--muted); font-size: var(--text-2xs); line-height: 1.35; }
@@ -3083,12 +2996,10 @@ a.discovery-link:hover strong { color: var(--accent); }
 .request-path li.is-attention { box-shadow: inset 0 3px 0 var(--danger), var(--shadow); }
 .connection-control-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(var(--tracks-3-1), 1fr));
   border-top: 1px solid var(--line);
-  background: var(--line);
-  gap: 1px;
 }
-.connection-control { min-width: 0; padding: var(--space-8) var(--space-9); background: var(--surface); }
+.connection-control { min-width: 0; padding: var(--space-8) var(--space-9); }
 .connection-control header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); margin-bottom: var(--space-6); }
 .connection-control h3 { margin: 0; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .045em; color: var(--muted); }
 .connection-control > strong { display: block; margin-bottom: var(--space-2); font-size: var(--text-md); }
@@ -3103,35 +3014,19 @@ a.discovery-link:hover strong { color: var(--accent); }
    a td drops it out of table layout and stacks the row into one column. */
 .connection-table .muted,
 .connection-table code { font-size: var(--text-2xs); }
-.connection-table { table-layout: fixed; }
-/* On a phone the table scrolls, and a fixed table has no content to size it
-   by: sized to max-content it gave the name column half its width and wrapped
-   every ability under it. It keeps a tablet's width and scrolls instead. */
-@media (max-width: 760px) {
-  .table-scroll .data-table.connection-table { width: 48rem; max-width: none; }
-}
-.connection-col-identity { width: 29%; }
-.connection-col-abilities { width: 20%; }
-.connection-col-dependencies { width: 18%; }
-.connection-col-state { width: 15%; }
-.connection-col-next { width: 18%; }
+/* An endpoint may be arbitrarily long and never owns the table's width: it
+   caps itself, and the row's expander shows the rest. */
 .connection-endpoint {
   display: inline-block;
   overflow: hidden;
-  max-width: 100%;
+  max-width: min(100%, 32ch);
   text-overflow: ellipsis;
   vertical-align: bottom;
   white-space: nowrap;
 }
-/* Here the name is one line, like the endpoint under it: the column is fixed
-   and cannot grow, and the name leads five more facts in the same cell. */
+/* Here the name is one line, like the endpoint under it: the name leads five
+   more facts in the same cell. */
 .connection-table td > strong > [data-entity] { display: -webkit-inline-box; overflow: hidden; -webkit-line-clamp: 1; line-clamp: 1; }
-.connection-row-kind {
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: var(--text-3xs);
-}
 .connection-ability-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .connection-ability-list li {
   display: grid;
@@ -3159,10 +3054,10 @@ a.discovery-link:hover strong { color: var(--accent); }
 /* Lifecycle, authority and the reading's age, one under the other, in the
    table and in the stacked card alike. */
 .connection-standing { display: grid; gap: var(--space-1); justify-items: start; min-width: 0; }
-/* Each fact under the lifecycle word is one line, cut at the column's edge.
-   Left to run on it ran under the next column ("Whole-account credential" did,
-   by 60px at a tablet); left to wrap, a column this narrow stood four short
-   facts eight lines tall. The title on each carries the whole line. */
+/* Each fact under the lifecycle word is one line, cut at the column's edge:
+   left to run on, it runs under the next column; left to wrap, a column this
+   narrow stands four short facts eight lines tall. The title on each carries
+   the whole line. */
 .connection-standing > :not(.connection-state) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .connection-standing .muted { font-size: var(--text-2xs); }
 .connection-last-activity { font-size: var(--text-2xs); }
@@ -3192,7 +3087,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 /* Each destination is its own target, so two commands on one row cannot read
    as one link. */
 /* Spacing only. Setting `display` here would be (0,1,1) and would silently
-   beat any single-class variant, which is what un-centred the icon. */
+   beat any single-class variant, un-centring the icon. */
 .connection-next > a,
 .connection-next > .btn { margin: 0 var(--space-2) var(--space-2) 0; }
 .connection-next > a:last-child,
@@ -3201,33 +3096,7 @@ a.discovery-link:hover strong { color: var(--accent); }
   display: inline-block;
   font-size: var(--text-2xs);
 }
-.connection-topology-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-}
-.connection-topology-link:hover { color: var(--accent); border-color: var(--accent); }
-.connection-row-empty td { background: var(--bg-tint); }
 
-/* Families, once each: a readable grid rather than a run-on line. */
-.connection-family-legend {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: var(--space-4) var(--space-6);
-  border-top: 1px solid var(--line);
-  padding: var(--space-5);
-  font-size: var(--text-2xs);
-}
-.connection-legend-item { display: grid; gap: var(--space-2); align-content: start; }
-.connection-legend-name { display: flex; align-items: baseline; gap: var(--space-2); }
-.connection-legend-name strong { color: var(--ink); font-size: var(--text-xs); }
-.connection-legend-links { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
-.connection-legend-item.is-unconfigured .connection-legend-name strong { color: var(--muted); }
 .connection-ability { margin-bottom: var(--space-2); }
 .connection-ability summary { cursor: pointer; }
 .connection-ability[open] { display: grid; gap: var(--space-1); }
@@ -3237,7 +3106,6 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-more { margin-top: var(--space-2); }
 .connection-more summary { color: var(--accent); cursor: pointer; font-size: var(--text-xs); }
 .connection-more[open] summary { margin-bottom: var(--space-2); }
-.connection-scope-summary { display: block; margin-top: var(--space-4); }
 .connection-next { min-width: 0; }
 .connection-next > .muted { display: block; max-width: 240px; margin-top: var(--space-2); font-size: var(--text-2xs); line-height: 1.35; }
 .connection-actions { margin-top: var(--space-3); }
@@ -3269,8 +3137,9 @@ kbd {
 .notice {
   margin: 0 0 var(--stack-gap);
   padding: var(--space-6) var(--space-7);
-  border: 1px solid var(--tone-line, var(--line));
-  border-left-width: 3px;
+  /* A callout: inside a surface it keeps its tint and its bar, not a frame. */
+  border: var(--surface-border, 1px solid var(--tone-line, var(--line)));
+  border-left: 3px solid var(--tone-line, var(--line));
   border-radius: var(--radius-sm);
   background: var(--tone-wash, var(--surface));
   color: var(--tone-ink, inherit);
@@ -3292,8 +3161,7 @@ kbd {
 
 .export-grid { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-4); }
 
-.auth-card { max-width: 380px; margin: var(--space-40) auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-14); box-shadow: var(--shadow); }
-.auth-card { text-align: center; }
+.auth-card { max-width: 380px; margin: clamp(var(--space-20), 10vh, var(--space-40)) auto; padding: var(--surface-inset, var(--space-14)); text-align: center; }
 .auth-logo { display: block; width: 64px; height: 64px; margin: 0 auto var(--space-7); }
 .auth-card h1 { font-size: var(--text-2xl); margin-bottom: var(--space-9); }
 .auth-card label { display: block; margin: var(--space-5) 0 var(--space-2); font-weight: 600; font-size: var(--text-sm); text-align: left; }
@@ -3304,8 +3172,6 @@ kbd {
 .site-footer { text-align: center; padding: var(--space-14) var(--space-12); color: var(--muted-2); font-size: var(--text-xs); }
 
 /* ── Dashboard: external links ─────────────────────────────────── */
-.proj-name { display: inline-flex; align-items: center; gap: var(--space-4); }
-.proj-desc { margin-top: var(--space-1); font-size: var(--text-xs); line-height: 1.35; max-width: 56ch; }
 .link-cell { white-space: nowrap; }
 .link-cell a { font-size: var(--text-xs); font-weight: 500; margin-right: var(--space-5); }
 .link-cell a:last-child { margin-right: 0; }
@@ -3327,12 +3193,6 @@ kbd {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
 
-@media (max-width: 900px) {
-  .domain-workspace { grid-template-columns: minmax(0, 1fr); }
-  .kv { grid-template-columns: 1fr; gap: var(--space-1) 0; padding: var(--space-7) var(--space-8); }
-  .kv dt { margin-top: var(--space-4); font-size: var(--text-xs); }
-  .kv dt:first-of-type { margin-top: 0; }
-}
 
 /* Sections behind one control. Below this width the bar cannot hold every
    section beside the brand and the account chip, and a second row is not the
@@ -3360,9 +3220,8 @@ kbd {
   .nav-is-open .nav-backdrop {
     display: block; position: fixed; inset: 0; z-index: 9;
   }
-  /* Matches the collapsed search button and the account chip exactly. It was
-     the one control in the bar drawn on `--surface` with a shadow, which read
-     as a different kind of thing sitting beside them. */
+  /* Matches the collapsed search button and the account chip exactly, so it
+     reads as the same kind of control as the ones beside it. */
   .nav-toggle { align-items: center; justify-content: center;
     inline-size: var(--control-size); block-size: var(--control-size); order: 4;
     border: 1px solid var(--bar-control-line); border-radius: var(--radius-sm);
@@ -3395,7 +3254,7 @@ kbd {
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--radius-sm);
-    box-shadow: 0 8px 24px rgba(20, 20, 30, .12);
+    box-shadow: var(--shadow-pop);
   }
   .site-header:target .primary-nav > a,
   .site-header:target .primary-nav .nav-group > summary,
@@ -3406,10 +3265,9 @@ kbd {
     font-size: var(--text-md);
   }
 
-  /* A section's own links fly out beside the list, not inside it. Opening one
-     in place pushed every section below it down the panel, so reaching the
-     next section meant first closing the one that had opened on the way past.
-     The list is anchored to the right edge, so the room is to its left. */
+  /* A section's own links fly out beside the list, not inside it: opened in
+     place, one would push every section below it down the panel. The list is
+     anchored to the right edge, so the room is to its left. */
   .site-header:target .primary-nav .nav-group-panel,
   .nav-is-open .primary-nav .nav-group-panel {
     top: -5px;
@@ -3429,7 +3287,6 @@ kbd {
 /* The nav row is nowrap, so below roughly 830px the four grid tracks do not
    fit; the nav gets its own row here rather than overlapping the search. */
 @media (max-width: 860px) {
-  .split { grid-template-columns: minmax(0, 1fr); }
   .site-header { gap: var(--space-4) var(--space-6); padding: var(--space-5) var(--space-7); }
   .brand { font-size: var(--text-md); }
   /* The sections live in the toggle's panel from 1080px down, so the bar stays
@@ -3454,112 +3311,6 @@ kbd {
   }
   .user-menu { order: 2; }
 }
-
-@media (max-width: 640px) {
-
-  /* The header needs four rows on a phone (brand, search, and the nav over
-     two lines) which is 169px of a ~900px viewport held permanently by
-     `position: sticky`. It scrolls away here instead: the nav is one swipe
-     back, and the page gets the fifth of its height that was being spent on
-     chrome. Tightened as well, so the four rows cost less while on screen. */
-  /* Sticky again. It was made static to reclaim a fifth of a phone screen from
-     chrome, and that reasoning ended when the nav collapsed: the bar is one
-     short row now, so it costs little to keep and the sections menu is
-     reachable without scrolling back up. Sticky also establishes the
-     containing block the menu panel hangs off. */
-  .site-header { position: sticky; top: 0; z-index: 10; padding: var(--space-4) var(--space-6); gap: var(--space-3) var(--space-5); }
-
-  /* Navigation sections do not fit one row on a phone, so `:target` collapses
-     them behind one control with no script.
-
-     The header carries the id, not the nav: the browser scrolls a target into
-     view, and targeting the nav pushed the header off the top of the screen
-     the moment the menu opened. Targeting the header scrolls to the top of the
-     page, which is where it already was. */
-
-  /* The chart floor was zeroed here for phones. It is gone altogether now
-     (it never fit a half-width card either) so there is nothing to override. */
-
-
-  /* The action stays beside the title. Given a full-width row of its own it
-     dropped under the lede, which left the space to the right of a two-word
-     heading empty and put a band of nothing between the head and the first
-     card: a phone is the surface with the least room to spend on that. It
-     sits against the top instead, level with the heading, and the lede runs
-     its full width underneath both.
-
-     `flex-wrap` keeps that true only while it fits. `.page-actions` does not
-     shrink and its children do not wrap their text, so a head carrying three
-     controls had no way to give the title room: at 390px the heading was
-     squeezed to 27px, printing "Fina" with the lede running one word per line
-     down the left edge, 292px of head before the first card. Wrapping moves
-     the controls to their own line exactly when they cannot fit beside the
-     title, so the single-action case above is unchanged. */
-  .page-head { align-items: flex-start; gap: var(--space-4) var(--space-6); flex-wrap: wrap; justify-content: space-between; }
-  .page-head > div:first-child { flex: 1 1 auto; min-width: 0; }
-  /* The kind sits beside the name rather than under it, for the same reason:
-     two short strings, two rows. The lede keeps its own line. */
-  .page-head > div:first-child { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-5); }
-  .page-head > div:first-child > p { flex: 1 1 100%; }
-  /* The rule above pairs a kind with a name; an eyebrow is neither, and takes
-     its own row like the lede. */
-  .page-head > div:first-child > .eyebrow { flex: 1 1 100%; }
-  /* The primary state is emitted once. On a phone it moves beside the title;
-     the supporting reachability line keeps its own row instead of stacking
-     two pills until they touch. Desktop keeps the quieter state-first lede. */
-  .page-head-copy:has(.page-head-status) {
-    display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
-    align-items: center;
-    gap: var(--space-1) var(--space-4);
-  }
-  .page-head-copy:has(.page-head-status) h1 { grid-column: 1; }
-  .page-head-status { grid-column: 2; justify-self: start; }
-  .page-head-copy:has(.page-head-status) p { grid-column: 1 / -1; }
-  /* `margin-left: auto` eats every pixel of free space, and in a wrapping row that is enough on its own to push the controls onto a line of their own (even when they would have fitted beside the title. `space-between` puts them at the same edge without claiming the gap, so a short title and two controls stay on one line and only genuinely-too-wide heads wrap. */ /* `flex-shrink: 0` is right beside a title with room to spare and wrong when there is none: a row that cannot shrink never reaches the width at which its children would wrap, so it stayed one line at its full max-content width and `overflow-x: clip` on the content column quietly cut the last control off. Allowed to shrink, it wraps instead. */ /* Right-aligned wherever it lands: beside the title when it fits, on its own line when it does not. `flex-shrink: 1` is what lets it reach the width at which its children wrap) without it the row stayed at max-content and `overflow-x: clip` on the content column cut the last control off. */ .page-head .page-actions{ margin-left: auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; flex-shrink: 1; }
-  /* Page actions use the same compact touch target as the phone header. Four
-     ordinary verbs then fit one row at 390px instead of leaving one button on
-     a second line and spending another 46px before the page begins. Longer
-     sets still wrap because the container keeps its general flex contract. */
-  .page-head .page-actions .btn,
-  .page-head .page-actions button {
-    min-height: var(--control-size);
-    padding: var(--space-3) var(--space-5);
-    font-size: var(--text-sm);
-  }
-  .domain-stack-head,
-  .domain-head { align-items: flex-start; flex-direction: column; gap: var(--space-4); }
-
-  .filter-bar { padding: var(--space-4); gap: var(--space-3); }
-  .filter-bar input[type=search] { flex-basis: 100%; }
-
-  /* Two per row: the basis leaves no room for a third, and the leftover pixel
-     is reclaimed by flex-grow so the pair still meets both edges. */
-  .kpi { flex-basis: calc(50% - 1px); padding: var(--space-5) var(--space-6); }
-  .kpi .value { font-size: var(--text-3xl); }
-  /* Nothing to line up with on a phone: the band takes the column. */
-
-  .ops-grid { grid-template-columns: 1fr; gap: var(--space-6); }
-  .two-col { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
-  .two-col > section, .two-col > div, .card { padding: var(--space-7) var(--space-8); }
-
-  .list-rows li { gap: var(--space-3) var(--space-5); padding: var(--space-5) 0; }
-  .list-rows .row-meta { margin-left: 0; flex-basis: 100%; font-size: var(--text-2xs); }
-
-  .form { padding: var(--space-8); }
-  .form-actions { flex-wrap: wrap; }
-
-  .auth-card { margin: var(--space-20) var(--space-6); padding: var(--space-10); }
-
-  .btn, button { padding: var(--space-4) var(--space-7); font-size: var(--text-md); min-height: 38px; }
-  .btn.ghost { min-height: 0; }
-  .user-menu > summary { min-height: var(--control-size); }
-
-  .data-table th, .data-table td { padding: var(--space-4) var(--space-5); font-size: var(--text-sm); }
-
-  .site-footer { padding: var(--space-10) var(--space-8); }
-}
-
 
 /* ── Renewal timeline ───────────────────────────────────────────────
    A countdown list. The number leads because "how long have I got" is the
@@ -3598,8 +3349,11 @@ kbd {
   margin: var(--space-2) 0 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
   column-gap: var(--space-14);
+  /* Each item draws the rule above it and the list clips the first row's, so
+     the dividers are right in one column or two without counting items. */
+  overflow: clip;
 }
 .timeline-item {
   display: grid;
@@ -3608,9 +3362,8 @@ kbd {
   column-gap: var(--space-6);
   min-height: 62px;
   padding: var(--space-3) 0;
-  border-top: 1px solid var(--line-2);
+  box-shadow: 0 -1px 0 var(--line-2);
 }
-.timeline-item:nth-child(-n+2) { border-top: 0; }
 .timeline-item time { display: flex; flex-direction: column; align-items: center; font-feature-settings: "tnum"; }
 .timeline-month { color: var(--muted); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .timeline-day { color: var(--ink); font-size: var(--text-2xl); font-weight: 650; line-height: 1.1; }
@@ -3618,30 +3371,7 @@ kbd {
 .timeline-copy { display: flex; flex-direction: column; min-width: 0; gap: var(--space-1); font-size: var(--text-sm); }
 .timeline-copy a { color: var(--ink); }
 .timeline-copy a:hover { color: var(--accent); }
-@media (max-width: 640px) {
-  .timeline-list { grid-template-columns: minmax(0, 1fr); }
-  .timeline-item,
-  .timeline-item:nth-child(2) { border-top: 1px solid var(--line-2); }
-  .timeline-item:first-child { border-top: 0; }
-  .timeline-item { grid-template-columns: 40px minmax(0, 1fr); column-gap: var(--space-4); padding: var(--space-4) 0; }
-  .timeline-item > .pill { grid-column: 2; justify-self: start; margin-top: var(--space-2); }
-}
 
-/* Low-frequency administration should stay reachable without presenting
-   itself as another primary domain. */
-.utility-links {
-  display: flex;
-  align-items: center;
-  gap: var(--space-7);
-  padding: var(--space-4) var(--space-1);
-}
-.utility-links .eyebrow { margin-right: var(--space-2); }
-.utility-links a { color: var(--muted); font-size: var(--text-sm); font-weight: 550; }
-.utility-links a:hover { color: var(--accent); }
-@media (max-width: 720px) {
-  .utility-links { flex-wrap: wrap; }
-  .utility-links .eyebrow { flex-basis: 100%; }
-}
 
 /* ── Notice pages (404 / 500) ───────────────────────────────────────
    Deliberately plain: the operator is here by accident, so the page
@@ -3694,7 +3424,11 @@ kbd {
 .cadence-mark.is-hit { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .cadence-label { font-size: var(--text-3xs); color: var(--muted-2); white-space: nowrap; }
 .cadence-note { margin: 0; font-size: var(--text-xs); color: var(--muted); line-height: 1.5; }
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* Anchored at the top-left of its containing block. At its static position, a
+   label in the last column of a wide table would sit past the page edge,
+   outside both the table's scroll box and main's clip, and scroll the whole
+   page sideways. */
+.visually-hidden { position: absolute; inset-block-start: 0; inset-inline-start: 0; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* Cadence matrix: the same marks as a single strip, aligned in columns so the
    rows can be read against each other. Deliberately not stacked on a phone: a
@@ -3711,8 +3445,7 @@ kbd {
 .cadence-period { font-size: var(--text-2xs); color: var(--muted-2); font-weight: 500; white-space: nowrap; }
 .cadence-total { text-align: center; font-feature-settings: "tnum"; color: var(--muted); white-space: nowrap; }
 /* Compact: for a matrix sharing a row with a chart, where the default cell
-   padding pushed eight columns past a half-width card and put a scrollbar on
-   something that should simply fit. */
+   padding would push eight columns past a half-width card. */
 .cadence-matrix.is-compact th,
 .cadence-matrix.is-compact td { padding: var(--space-3) var(--space-2); }
 .cadence-matrix.is-compact .cadence-period { font-size: var(--text-3xs); }
@@ -3781,7 +3514,7 @@ kbd {
 .route-map { display: block; width: 100%; height: auto; }
 /* Semi-transparent so a retraced route shows its repeats as density rather
    than hiding every pass but the last under an opaque line. */
-.route-line { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; stroke-opacity: .55; }
+.route-line { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; stroke-opacity: .55; transition: opacity .08s ease; }
 /* A sequential ramp, slowest to fastest. Deliberately not the categorical
    series palette: these bands are ordered, and a reader has to be able to see
    which way the order runs without consulting the legend. */
@@ -3801,7 +3534,6 @@ kbd {
 .route-finish { fill: var(--tone-severe-ink); }
 .route-scale { stroke: var(--ink-2); stroke-width: 2; }
 .route-map:hover .route-line:not(:hover) { opacity: .55; }
-.route-line { transition: opacity .08s ease; }
 
 /* ── Background jobs ────────────────────────────────────────────── */
 /* Work that outlives its request, reporting where it has got to. */
@@ -3870,7 +3602,7 @@ kbd {
      search box cannot be typed into, buttons cannot be pressed. */
   .site-header, .primary-nav, .global-search, .user-menu, .user-menu-panel,
   .page-nav,
-  .table-controls, .table-filter-menu, .table-selection, .section-foot,
+  .table-filter-menu, .table-selection, .section-foot,
   .btn, button, .job-progress, .page-actions, form,
   /* `.pill` in a page head is a link ("Markdown", "Care →"). Status pills
      inside a table are content and are kept. */
@@ -3986,10 +3718,9 @@ kbd {
 
 
 /* ---- Responsive and late component rules ------------------------------
-   Same layer, later in source: a rule here beats the one it narrows by
-   order alone, which is how CSS is meant to express 'and at this width,
-   this instead'. These lived outside every layer until they were folded
-   in; nothing here needs to outrank anything by specificity. */
+   Same layer, later in source: a rule here beats the one it narrows by order
+   alone, which is how CSS is meant to express 'and at this width, this
+   instead'. Nothing here needs to outrank anything by specificity. */
 
 /* The folded half of a zone. Its table keeps the same styling as the one above
    it, so opening it reads as more of the same list rather than a new thing. */
@@ -4030,21 +3761,27 @@ kbd {
   text-align: left;
 }
 /* The nav panel's own item metrics *and* its type: same colour, weight, size
-   and padding. Matching the box but not the text left two dropdowns that were
-   obviously different objects: link-teal 400 at 13px beside muted 500 at
-   13.5px. Measured from the nav rather than guessed. */
+   and padding, so the two dropdowns read as one object. */
 .overflow-menu-panel a,
-.overflow-menu-panel span {
+.overflow-menu-panel span,
+.overflow-menu-panel button {
   padding: var(--space-3) var(--space-5); border-radius: var(--radius-sm);
   font-size: var(--text-sm); font-weight: 500; color: var(--muted);
   white-space: nowrap;
 }
-.overflow-menu-panel a:hover { color: var(--ink); background: var(--bg-tint); text-decoration: none; }
+.overflow-menu-panel a:hover, .overflow-menu-panel button:hover { color: var(--ink); background: var(--bg-tint); text-decoration: none; }
+/* A control from a page head, in the menu: a row like the others, whatever
+   kind of button it was beside the title. Destructive keeps only its colour. */
+.overflow-menu-panel :is(a, button, span).btn {
+  display: flex; width: 100%; justify-content: flex-start; min-height: 0;
+  border: 0; background: none; box-shadow: none;
+}
+.overflow-menu-panel .btn.danger { color: var(--danger); }
 
-/* A list of names, as a list. */
-.name-list { display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-start; }
-.name-list-row { display: flex; gap: var(--space-3); width: 100%; }
-.name-list-row input { flex: 1 1 auto; min-width: 0; }
+.name-list { display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-start; max-width: 40rem; }
+.name-list-row { display: flex; flex-wrap: wrap; gap: var(--space-3); width: 100%; }
+/* Beside its Remove, whatever `.field input` says about width. */
+.name-list-row input { flex: 1 1 12rem; width: auto; min-width: 0; }
 .name-list-add { margin-top: var(--space-1); }
 /* Says which values HQ can see for itself, beside the ones only this field
    records. Wraps under the input on a narrow screen rather than squeezing it. */
@@ -4064,10 +3801,6 @@ kbd {
   font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   overflow-wrap: anywhere;
 }
-@media (max-width: 40rem) {
-  .name-list-row { flex-wrap: wrap; }
-  .name-list-note { flex-basis: 100%; }
-}
 
 /* What a field will cause, said before it is caused. */
 .field-effect { color: var(--warn); font-weight: 500; }
@@ -4075,7 +3808,7 @@ kbd {
 
 /* Email policy: four stages, then the one decision worth making. */
 .mail-stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
-.mail-stage { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-6) var(--space-7); box-shadow: var(--shadow-sm); }
+.mail-stage { padding: var(--surface-inset, var(--space-6) var(--space-7)); }
 .mail-stage-concern { border-color: var(--warn); }
 .mail-stage-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-5); }
 .mail-stage-head strong { font-size: var(--text-lg); overflow-wrap: anywhere; }
@@ -4085,7 +3818,8 @@ kbd {
 .mail-records li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); font-size: var(--text-sm); }
 .mail-record-value { color: var(--muted); overflow-wrap: anywhere; }
 
-.policy-choices { display: flex; flex-direction: column; gap: var(--space-4); }
+/* Choices side by side while each keeps a readable width. */
+.policy-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--space-4); }
 .policy-choice { display: flex; gap: var(--space-5); align-items: flex-start; padding: var(--space-5) var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; background: var(--surface); }
 .policy-choice:hover { border-color: var(--line-strong); background: var(--surface-2); }
 .policy-choice:has(input:checked) { border-color: var(--accent); background: var(--bg-tint); }
@@ -4094,17 +3828,16 @@ kbd {
 .policy-choice-label { font-weight: 600; font-size: var(--text-md); }
 .policy-choice-consequence { color: var(--muted); font-size: var(--text-sm); line-height: 1.45; }
 
-.mail-editor { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-7) var(--space-8); box-shadow: var(--shadow-sm); margin: 0 0 var(--stack-gap); }
+.mail-editor { padding: var(--surface-inset, var(--space-7) var(--space-8)); margin: 0 0 var(--stack-gap); }
 .mail-editor h3 { margin: 0 0 var(--space-6); font-size: var(--text-lg); }
-.mail-editor .form { max-width: 620px; }
 /* A number with its unit beside it, so a percentage never reads as a count. */
 .input-suffix { display: flex; align-items: center; gap: var(--space-2); max-width: 9rem; }
 .input-suffix input { flex: 1 1 auto; min-width: 0; }
 .input-suffix span { color: var(--muted); font-weight: 600; }
 
-/* A record shown inside help text is one long unbreakable token; on a phone it
-   ran past the content column, which clips rather than scrolls, so the end of
-   the policy was simply not there. */
+/* A record shown inside help text is one long unbreakable token, and the
+   content column clips rather than scrolls, so it breaks anywhere rather than
+   losing its end on a phone. */
 .help code, .mail-record-value { overflow-wrap: anywhere; }
 
 /* ── Reachability answer ───────────────────────────────────────── */
@@ -4112,8 +3845,6 @@ kbd {
 .verdict { display: flex; align-items: baseline; gap: var(--space-4); margin: var(--space-7) 0 var(--space-2); }
 .modal .filter-bar { margin-bottom: var(--space-2); align-items: center; }
 .modal .filter-bar .control-label { margin: 0 var(--space-1) 0 0; }
-.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-6); }
-.section-head h2 { margin-bottom: var(--space-4); }
 /* ── Row-header tables ──────────────────────────────────────────────
    A `th[scope=row]` table with no `thead` is a description list in table
    markup, and fixed layout holds every one to the same grid.
@@ -4121,7 +3852,9 @@ kbd {
    `:not(:has(thead))` is load-bearing: the cadence matrix also uses row
    headers but is a real grid and must size its own columns. */
 .data-table:has(th[scope=row]):not(:has(thead)) { table-layout: fixed; }
-.data-table th[scope=row] { width: 180px; font-weight: 600; color: var(--muted); }
+/* In viewport units, not %: a table cell ignores a percentage inside clamp(),
+   and fixed layout would then split the table in half. */
+.data-table th[scope=row] { width: clamp(7rem, 25vw, 180px); font-weight: 600; color: var(--muted); }
 /* Fixed layout means a value cannot widen its column, so it has to break. */
 .data-table:has(th[scope=row]):not(:has(thead)) td { overflow-wrap: anywhere; }
 
@@ -4136,7 +3869,7 @@ textarea.code {
 /* ----- This connection -------------------------------------------------- */
 
 /* Wider than a normal dialog because this one is a table of readings rather
-   than a short task, and at the shared width every row wrapped onto four
+   than a short task; at the shared width every row would wrap onto several
    lines. */
 .modal-wide {
   width: min(780px, calc(100vw - 32px));
@@ -4259,8 +3992,6 @@ textarea.code {
 .conn-protocol > summary > span:first-child { display: grid; gap: var(--space-1); }
 .conn-protocol > summary strong { font-size: var(--text-sm); }
 .conn-protocol > summary small { color: var(--muted); font-size: var(--text-2xs); }
-.conn-protocol > summary::after { content: "+"; color: var(--muted); font-size: var(--text-2xl); }
-.conn-protocol[open] > summary::after { content: "−"; }
 .conn-protocol > summary .count { margin-left: auto; }
 .conn-protocol-body { display: grid; gap: var(--space-10); padding: var(--space-8) var(--space-7); border-top: 1px solid var(--line); }
 
@@ -4463,14 +4194,14 @@ textarea.code {
    term with one value, and this value is three things (a verdict, why it
    matters, and sometimes an address worth asking about) so the cell stacks
    rather than fighting the grid for a single line. */
-/* Named for the question it answers, not for the mechanism: `.conn-peering`
-   was already the You-to-HQ strip at the top of this panel, and reusing it
-   here silently overrode that element's own grid.
+/* Named for the question it answers, not for the mechanism: `.conn-peering` is
+   the You-to-HQ strip at the top of this panel, and reusing it here would
+   override that element's own grid.
 
-   Not `justify-items: start`. The cell inherits `overflow-wrap: anywhere`
-   from `.conn-pairs dd`, so a grid item sized to fit-content resolves to
-   min-content, and with that wrap rule min-content is one character. The
-   verdict rendered as a column of single letters. */
+   Not `justify-items: start`. The cell inherits `overflow-wrap: anywhere` from
+   `.conn-pairs dd`, so a grid item sized to fit-content resolves to
+   min-content, and with that wrap rule min-content is one character: the
+   verdict would render as a column of single letters. */
 .conn-carriage { display: grid; gap: var(--space-1); }
 .conn-carriage > strong { font-weight: 600; }
 /* Riding over the internet is not a fault, so it is not red. It is the one
@@ -4480,9 +4211,9 @@ textarea.code {
 .conn-carriage-relay > strong { color: var(--warn); }
 .conn-carriage-unknown > strong { color: var(--muted); }
 .conn-carriage .conn-more { width: 100%; }
-/* The verdict is the answer; the reasoning is available, not imposed. Four
-   lines of prose under every row turned a scannable panel into an essay, and
-   the explanation is only wanted when the verdict is surprising. */
+/* The verdict is the answer; the reasoning is available, not imposed. Prose
+   under every row would turn a scannable panel into an essay, and the
+   explanation is only wanted when the verdict is surprising. */
 .conn-why > summary { padding: var(--space-1) 0; }
 .conn-why > p { margin: var(--space-1) 0 0; }
 
@@ -4492,19 +4223,18 @@ textarea.code {
 /* The star keeps a full touch target but hangs into the cell's padding, so
    the name starts on the line every other cell in the row starts on. */
 .service-name > .pin-toggle { margin-block: -7px; }
-/* A hostname is one token: where the table sizes to its content, it scrolls
-   rather than breaking it. A locked grid cannot grow a column, so there the
-   name breaks like every other cell rather than running under the next one. */
-.service-name strong { white-space: nowrap; }
-@media (min-width: 761px) {
-  .grid-locked .service-name strong { white-space: normal; }
-}
+/* A hostname is one token: it is never broken, and past --identifier-max it is
+   cut on the link itself, so nothing runs under the next column. */
+.service-name strong { display: flex; min-width: 0; max-width: var(--identifier-max); }
+.service-name strong > [data-entity] { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .service-name > form { display: inline-flex; }
 .pin-toggle {
   background: none; border: 0; box-shadow: none; padding: 0 var(--space-1); cursor: pointer;
-  font-size: var(--text-lg); line-height: 1; color: var(--line); /* an empty star, not an absent one */
+  /* An empty star, not an absent one: quiet, but it has to be findable. The
+     hairline colour would vanish on a dark page. */
+  font-size: var(--text-lg); line-height: 1; color: var(--muted-2);
 }
-.pin-toggle:hover { color: var(--muted-2); }
+.pin-toggle:hover { color: var(--muted); }
 .pin-toggle.pinned { color: var(--warn); }
 .pin-move { display: inline-flex; gap: var(--space-1); margin-left: auto; }
 .pin-move button {
@@ -4512,8 +4242,6 @@ textarea.code {
   font-size: var(--text-xs); line-height: 1; color: var(--muted-2);
 }
 .pin-move button:hover { color: var(--ink); }
-/* Where the operator's own order stops and the rest of the estate begins. */
-.data-table tr.service-rest > * { border-top: 2px solid var(--line); }
 
 /* On a phone a wide table scrolls sideways inside `.table-scroll`. Squeezing
    every column to fit stands each value up as a vertical strip, which is what
@@ -4523,19 +4251,24 @@ textarea.code {
 
    The exemptions sit immediately after the rule they exempt, which is what
    makes them win: same layer, same specificity or better, later in source
-   order. */
-@media (max-width: 760px) {
+   order.
+
+   Below 1280px, not only on a phone: a table squeezed to a laptop's width
+   stands its values up as strips just as it does on a phone. */
+@media (max-width: 1279px) {
   /* Content-sized but bounded: `max-content` is the width with no line
      breaking at all, which for a prose column is its longest sentence on one
-     line. Past the cap the browser wraps what can wrap. */
+     line. Past the cap the browser wraps what can wrap. The cap is a fixed
+     length: 1400px stops a prose column running to a four-screen swipe without
+     squeezing the other columns into strips. */
   .table-scroll .data-table {
     width: max-content;
     min-width: 100%;
-    max-width: 200vw;
+    max-width: 1400px;
   }
   .table-scroll .data-table td,
   .table-scroll .data-table th { overflow-wrap: normal; }
-  /* An empty table has no content to size to, so the header row sized it.
+  /* An empty table has no content to size to, so the header row would size it.
      The headings wait until there is something to head. */
   .table-scroll .data-table:not(:has(tbody td:not([colspan]))) {
     width: 100%;
@@ -4543,8 +4276,6 @@ textarea.code {
     max-width: 100%;
   }
   .data-table:not(:has(tbody td:not([colspan]))) thead { display: none; }
-  /* A locked grid is an ordinary content-sized table below this breakpoint;
-     see where `.grid-locked` is defined. */
   /* A row-header table has no columns to align. Later in source order at
      higher specificity, which is what makes this an exemption. */
   .table-scroll .data-table:has(th[scope=row]):not(:has(thead)) {
@@ -4553,19 +4284,6 @@ textarea.code {
     max-width: 100%;
   }
   .table-scroll .data-table:has(th[scope=row]):not(:has(thead)) td { overflow-wrap: anywhere; }
-  /* 180px is a sixth of a desktop content column but half a phone's. */
-  .data-table:not(:has(thead)) th[scope=row] { width: 112px; }
-  .discovery-link { display: grid; gap: var(--space-3); }
-  .discovery-meta { justify-content: flex-start; max-width: 100%; }
-  .connection-security-story { display: grid; padding: var(--space-8) var(--space-8) var(--space-7); }
-  .connection-security-story .button { width: max-content; }
-  .connection-security-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .connection-security-metrics > div { padding: var(--space-6) var(--space-7); }
-  .connection-security-metrics > div:nth-child(2) { border-right: 0; }
-  .connection-security-metrics > div:nth-child(-n + 2) { border-bottom: 1px solid var(--line); }
-  .connection-control-grid { grid-template-columns: 1fr; }
-  .connection-security-advanced > summary small { max-width: 260px; }
-  .connection-trust-path { grid-template-columns: 1fr; gap: var(--space-6); padding: var(--space-8); }
 }
 
 /* ----- Provider readings ------------------------------------------------ */
@@ -4578,14 +4296,13 @@ textarea.code {
    painting its gaps: a short last row then leaves blank card, not a grey
    block. Auto-fit lets a single row of readings take the whole width. */
 .sweep-grid {
-  display: grid; gap: 1px; background: var(--surface);
-  grid-template-columns: repeat(auto-fit, minmax(228px, 1fr));
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 228px), 1fr));
   border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
 }
 .sweep-item {
   display: grid; grid-template-columns: 1fr auto; gap: var(--space-1) var(--space-5);
-  align-items: baseline; padding: var(--space-4) var(--space-6); background: var(--surface);
-  box-shadow: 0 0 0 1px var(--line);
+  align-items: baseline; padding: var(--space-4) var(--space-6);
 }
 .sweep-label { font-size: var(--text-xs); color: var(--ink-2); }
 /* The count is the number on the row, so it leads rather than trails. */
@@ -4606,11 +4323,6 @@ textarea.code {
 /* A lens is chosen by following a link, so these are the shared chip primitive
    with one modifier for the current choice. aria-current carries it for anyone
    the border weight does not reach. */
-.topology-lenses { display: flex; flex-wrap: wrap; gap: var(--space-3); max-width: 100%; margin-bottom: var(--space-5); }
-.topology-lenses .scope-chip.is-active {
-  background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600;
-}
-.topology-lenses .scope-chip.is-active:hover { color: var(--accent-ink); border-color: var(--accent); }
 .topology-lens-note { margin: 0 0 var(--space-5); font-size: var(--text-sm); }
 .topology-trace-bar {
   display: flex; flex-wrap: wrap; gap: var(--space-5) var(--space-8); align-items: center;
@@ -4622,15 +4334,9 @@ textarea.code {
 .topology-trace-controls .scope-chip { background: var(--surface); }
 .topology-hop { display: flex; align-items: center; gap: var(--space-3); }
 
-.topology-summary {
-  display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-9); align-items: center;
-  padding: var(--space-5) var(--space-7); border: 1px solid var(--line); border-radius: var(--radius);
-  background: var(--surface-2); color: var(--muted); font-size: var(--text-sm);
-}
-.topology-summary strong { color: var(--ink); font-variant-numeric: tabular-nums; }
 .topology-workspace {
-  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2);
-  box-shadow: var(--shadow-sm); overflow: hidden;
+    background: var(--surface-2);
+   overflow: hidden;
 }
 .topology-toolbar {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-8);
@@ -4801,17 +4507,6 @@ textarea.code {
 .topology-relations .table-scroll { max-height: 480px; margin-top: var(--space-6); overflow-y: auto; }
 .topology-relations tr.is-related { background: var(--accent-tint); }
 
-@media (max-width: 760px) {
-  .command-layout { grid-template-columns: minmax(0, 1fr); }
-  .command-contract { margin-top: 0; }
-  .command-evidence { grid-template-columns: minmax(0, 1fr); }
-  .command-preview-path { grid-template-columns: minmax(0, 1fr); }
-  .topology-toolbar { align-items: stretch; }
-  .topology-search { flex-basis: 100%; }
-  /* Wrapped rather than scrolled: a lens or a kind past the edge of a phone
-     is one nobody finds. Only a table scrolls sideways. */
-  .topology-kind-filters { width: 100%; }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .topology-node { transition: none; }
@@ -4838,11 +4533,11 @@ textarea.code {
 .lookup-grid { display: grid; gap: var(--space-9); grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
 .lookup-form { display: flex; gap: var(--space-5); align-items: flex-end; margin: var(--space-6) 0 var(--space-8); flex-wrap: wrap; }
 .lookup-form .field { flex: 1 1 200px; }
-/* The input and its button share a line, so the spacing that separates
-   stacked fields is what knocked them out of alignment: `flex-end` lines up
-   margin boxes, and a 14px margin under the field plus 12px above the actions
-   put the button 26px below the box it belongs to. The field takes the
-   existing `.compact` modifier; the actions give up their stack margin here. */
+/* The input and its button share a line, so the spacing that separates stacked
+   fields would knock them out of alignment: `flex-end` lines up margin boxes,
+   so a margin under the field plus one above the actions drops the button
+   below the box it belongs to. The field takes the existing `.compact`
+   modifier; the actions give up their stack margin here. */
 .lookup-form .form-actions { margin-top: 0; }
 .tool-intro > :last-child, .tool-result > :last-child { margin-bottom: 0; }
 
@@ -4861,6 +4556,9 @@ textarea.code {
 @supports (grid-template-rows: subgrid) {
   @media (min-width: 760px) {
     .lookup-grid { grid-template-rows: auto auto auto; }
+    /* No result yet in either card: two rows, not a third holding nothing. */
+    .lookup-grid:not(:has(.tool-result)) { grid-template-rows: auto auto; }
+    .lookup-grid:not(:has(.tool-result)) > .card { grid-row: span 2; }
     .lookup-grid > .card {
       display: grid; grid-row: span 3; grid-template-rows: subgrid;
       align-content: start;
@@ -4952,18 +4650,15 @@ textarea.code {
 .policy-dormant-note { margin-left: auto; color: var(--muted-2); }
 .agent-state-facts strong { color: var(--ink); font-variant-numeric: tabular-nums; }
 .policy-agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
-.policy-agents li { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-5) var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: var(--text-xs); }
+.policy-agents li { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--surface-inset, var(--space-5) var(--space-6)); font-size: var(--text-xs); }
 .policy-agent-name { font-size: var(--text-md); font-weight: 600; color: var(--ink); }
 .policy-none { margin: 0; font-size: var(--text-sm); }
 .policy { display: grid; gap: var(--stack-gap); }
-.policy-table { table-layout: fixed; }
 .policy-table th, .policy-table td { vertical-align: middle; }
-.policy-table th:first-child { width: 32%; }
-.policy-table th:nth-child(2) { width: 16%; }
 .policy-table .policy-select { width: 100%; max-width: 11rem; }
 .policy-off { display: block; color: var(--muted-2); font-size: var(--text-3xs); font-weight: 500; letter-spacing: 0; text-transform: none; }
 .policy-table thead th:first-child { color: var(--ink-2); font-size: var(--text-xs); }
-.policy-table tbody th { width: 40%; font-weight: 500; color: var(--ink); }
+.policy-table tbody th { font-weight: 500; color: var(--ink); }
 .policy-effect { margin-left: var(--space-3); font-size: var(--text-3xs); font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted-2); }
 .policy-effect.effect-destructive { color: var(--danger); }
 .policy-effect.effect-infrastructure_change { color: var(--warn); }
@@ -5014,28 +4709,19 @@ form[data-clean] .save-bar { display: none; }
   .gh-identity { flex: 1 1 260px; min-width: 0; }
   .gh-identity p { margin: 0; }
   .gh-name { font-size: var(--text-xl); font-weight: 650; }
-  /* A list whose first column is the thing and the rest describe it: the rest
-     shrink to their content, so a status does not float mid-row. */
-  .fit-table td:not(:first-child) { width: 1%; white-space: nowrap; }
-  /* What a repository's settings mean, one row each: a label and a sentence. */
-  /* Four facts, four columns: an auto-fitting grid grew an empty fifth track
-     once the settings row below spanned every column. */
-  .fact-band { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  @media (max-width: 900px) { .fact-band { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  @media (max-width: 520px) { .fact-band { grid-template-columns: minmax(0, 1fr); } }
+  /* Four facts, four columns: an auto-fitting grid would grow an empty fifth
+     track once the settings row below spans every column. */
+  .fact-band { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-4-2-1), 1fr)); }
   /* The band's lower half: the same repository's settings, under a hairline. */
   .github-facts { grid-column: 1 / -1; display: grid; gap: var(--space-4); margin: 0; padding: var(--space-7) var(--space-9); border-top: 1px solid var(--line-2); font-size: var(--text-sm); }
-  .github-facts > div { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: var(--space-6); }
+  .github-facts > div { display: grid; grid-template-columns: minmax(0, clamp(7rem, 30%, 160px)) minmax(0, 1fr); gap: var(--space-6); }
   .github-facts dt { color: var(--muted); }
   .github-facts dd { margin: 0; }
   .github-gap { color: var(--tone-caution-ink, var(--muted)); }
-  @media (max-width: 520px) { .github-facts > div { grid-template-columns: 1fr; gap: var(--space-1); } }
   /* A repository's lists: one surface, a row per item read left to right. */
-  .github-list { list-style: none; margin: 0 0 var(--space-6); padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+  .github-list { list-style: none; margin: 0 0 var(--space-6); padding: var(--surface-inset, 0); }
   .github-list li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); padding: var(--space-4) var(--space-7); font-size: var(--text-sm); }
   .github-list li + li { border-top: 1px solid var(--line-2); }
-  /* Short items flow across the width in tiles, rather than a row each that
-     used a third of it. Hairlines between tiles, clipped at the surface. */
   /* Workflows as chips that wrap like tags: the mark in its colour, the name. */
   .workflow-chips { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0 0 var(--space-6); }
   .workflow-chip { display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-6); border: 1px solid var(--line); border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-sm); color: var(--ink); font-size: var(--text-sm); }
@@ -5053,39 +4739,23 @@ form[data-clean] .save-bar { display: none; }
   .github-verified { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--danger); cursor: default; }
   .github-verified.is-verified { color: var(--ok); }
   /* The same rows on their own surface, where no band carries them. */
-  .account-facts { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+  .account-facts { }
   /* Containers: what needs you, one row per image and version, then the table. */
-  .container-needs { list-style: none; margin: 0 0 var(--space-7); padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
+  .container-needs { list-style: none; margin: 0 0 var(--space-7); padding: var(--surface-inset, 0); overflow: hidden; }
   .container-needs > li { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-3) var(--space-6); padding: var(--space-5) var(--space-7); border-left: 3px solid var(--line); }
   .container-needs > li + li { border-top: 1px solid var(--line-2); }
   .container-needs > li.is-serious { border-left-color: var(--danger); }
   .container-needs > li.is-attention, .container-needs > li.is-behind { border-left-color: var(--tone-caution-line); }
   .container-needs-icon { color: var(--tone-caution-ink); font-size: var(--text-lg); line-height: 1; }
   .container-needs > li.is-serious .container-needs-icon { color: var(--danger); }
-  .container-needs-body { flex: 1 1 22rem; min-width: 0; }
+  /* Never wider than the row beside its icon, so the icon keeps its line. */
+  .container-needs-body { flex: 1 1 min(22rem, 100% - 3rem); min-width: 0; }
   .container-needs-body p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); }
   .container-arrow { color: var(--muted-2); font-weight: 400; }
   .container-advisories { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-2); font-size: var(--text-sm); }
   .container-needs-where { display: flex; flex-wrap: wrap; gap: var(--space-2); max-width: 100%; }
   .container-needs-where .workflow-chip { padding: var(--space-1) var(--space-5); font-size: var(--text-xs); box-shadow: none; }
   .container-standing { white-space: nowrap; }
-  /* Above 640px a table does not scroll (its heading sticks to the page), so
-     this one has to fit a tablet. A long image name and the standing are the
-     only cells that would not wrap; on a tablet they may. A phone scrolls the
-     table instead, where wrapping would only make its rows taller. */
-  @media (min-width: 641px) and (max-width: 900px) {
-    /* One line, cut with its full name on hover: wrapped, a long name made
-       its row too tall, and unwrapped it made the table too wide. */
-    .container-table code {
-      display: inline-block;
-      max-width: 16ch;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      vertical-align: bottom;
-    }
-    .container-table .container-standing { white-space: normal; }
-  }
   /* Words rather than a pill: a narrow column wraps them instead of widening. */
   .container-reach { color: var(--danger); font-size: var(--text-xs); font-weight: 500; }
   .container-standing .icon { vertical-align: -0.15em; }
@@ -5096,17 +4766,24 @@ form[data-clean] .save-bar { display: none; }
   /* A container's upgrade: four facts, then its steps beside what stands in the way. */
   .upgrade-band { margin-bottom: var(--space-6); }
   /* Three facts across the band's full width, not three narrow tiles and a gap. */
-  .fact-band.readiness-band { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  @media (max-width: 760px) { .fact-band.readiness-band { grid-template-columns: minmax(0, 1fr); } }
-  .upgrade-detail { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-8); }
-  @media (max-width: 760px) { .upgrade-detail { grid-template-columns: minmax(0, 1fr); } }
-  .upgrade-steps { margin: 0; padding-left: var(--space-10); display: grid; gap: var(--space-3); font-size: var(--text-sm); }
+  .fact-band.readiness-band { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-3-1), 1fr)); }
+  /* align-content: start, or the grid spreads the steps to the height of the
+     column beside it. */
+  .upgrade-steps { margin: 0; padding-left: var(--space-10); display: grid; gap: var(--space-2); align-content: start; font-size: var(--text-sm); }
+  .upgrade-install { margin-top: var(--space-4); font-size: var(--text-sm); }
+  .upgrade-install > p { margin: 0 0 var(--space-3); }
+  .upgrade-install-steps { margin: 0; padding-left: var(--space-8); display: grid; gap: var(--space-4); }
+  /* A long step label wraps beside its Copy button rather than pushing it
+     onto a line of its own. */
+  .upgrade-install-steps .hardening-head { flex-wrap: nowrap; align-items: flex-start; }
+  .upgrade-install-steps .hardening-head strong { flex: 1 1 auto; min-width: 0; }
+  .upgrade-install-steps pre { margin: var(--space-2) 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   .upgrade-blockers { font-size: var(--text-sm); }
   .upgrade-blockers p { margin: 0 0 var(--space-3); }
   .upgrade-blockers ul { margin: 0; padding-left: var(--space-9); display: grid; gap: var(--space-2); }
   .container-facts code { font-size: var(--text-xs); }
   /* Facts on their own raised surface, as every other section sits. */
-  .boxed-facts { margin: 0 0 var(--space-8); padding: var(--space-5) var(--space-7); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+  .boxed-facts { margin: 0 0 var(--space-8); padding: var(--surface-inset, var(--space-5) var(--space-7)); }
   /* Why not on its own: the band's own bottom row, a line each. */
   .upgrade-reasons { list-style: none; margin: 0; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
   .upgrade-reasons li::before { content: "·"; margin-right: var(--space-3); color: var(--muted-2); }
@@ -5126,14 +4803,15 @@ form[data-clean] .save-bar { display: none; }
 
   /* Posture, led by what is not met: a row per gap with the repositories
      that miss it, then a row per repository with a segment per check. */
-  .posture-gaps, .posture-repos { list-style: none; margin: 0 0 var(--space-7); padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
+  .posture-gaps, .posture-repos { list-style: none; margin: 0 0 var(--space-7); padding: var(--surface-inset, 0); overflow: hidden; }
   .posture-gaps li, .posture-repos li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-6); padding: var(--space-5) var(--space-7); }
   .posture-gaps li + li, .posture-repos li + li { border-top: 1px solid var(--line-2); }
   .posture-gaps li { align-items: flex-start; border-left: 3px solid var(--tone-caution-line); }
   .posture-gaps li.is-serious { border-left-color: var(--danger); }
   .posture-gap-icon { color: var(--tone-caution-ink); font-size: var(--text-lg); line-height: 1; }
   .posture-gaps li.is-serious .posture-gap-icon { color: var(--danger); }
-  .posture-gap-body { flex: 1 1 22rem; min-width: 0; }
+  /* Never wider than the row beside its icon, so the icon keeps its line. */
+  .posture-gap-body { flex: 1 1 min(22rem, 100% - 3rem); min-width: 0; }
   .posture-gap-body p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); }
   .posture-gap-body p .muted { color: var(--muted-2); }
   .posture-gap-repos { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); max-width: 100%; }
@@ -5144,9 +4822,6 @@ form[data-clean] .save-bar { display: none; }
   .posture-access { flex: 1 1 12rem; min-width: 0; color: var(--muted); font-size: var(--text-sm); }
   .posture-access .icon { color: var(--muted-2); vertical-align: -0.15em; }
   .posture-access .is-unmet { color: var(--danger); }
-  @media (max-width: 640px) {
-    .posture-access { flex-basis: 100%; }
-  }
   /* Fixed segments, the shared checks first, so one check sits in the same
      column on every row and a gap reads straight down the list. */
   .posture-meter span { flex: 0 1 1.6rem; min-width: 0.4rem; height: 0.6rem; border-radius: 2px; background: var(--line); cursor: default; }
@@ -5177,4 +4852,166 @@ form[data-clean] .save-bar { display: none; }
   .gh-stats dd { margin: 0; font-size: var(--text-xl); font-weight: 650; font-feature-settings: "tnum"; }
   .gh-stats dd a { color: inherit; }
   .gh-stats dd a:hover { color: var(--accent-2); }
+
+  /* Who can reach a name, in one word: only the internet-facing and the unknown
+     draw the eye; everything private reads as settled. */
+  .exposure { font-size: var(--text-sm); white-space: nowrap; color: var(--muted); }
+  .exposure-open { color: var(--danger); font-weight: 600; }
+  .exposure-unknown { color: var(--warn); }
+  .path-reach { margin: 0 0 var(--space-4); }
+
+  /* A compact list is short labels beside short values: a column each, at
+     every width, so a few numbers do not spend a screen stacked label over
+     value. A value too long for its column wraps inside it. */
+  .kv.compact { margin-bottom: 0; grid-template-columns: minmax(5rem, max-content) minmax(0, 1fr); gap: var(--space-2) var(--space-7); padding: var(--surface-inset, var(--space-5) var(--space-6)); align-items: baseline; }
+  .kv.compact dt { margin-top: 0; }
+
+  /* ── Surface: the one frame ─────────────────────────────────────────────
+     Every box that holds content draws its frame here and nowhere else: one
+     border, one radius, one background, one shadow. A component names itself
+     in this list and declares only its layout; it never spells out a frame.
+
+     Nesting is handled once, by inheritance: a surface sets the frame
+     properties to "none" for everything inside it, so a surface inside a
+     surface (stats in a card, a list in a band) draws no second frame and adds
+     no second inset. Nothing downstream has to remember that rule.
+
+     A grid that draws its dividers with a coloured background behind 1px gaps
+     keeps that background; the frame around it is still this one. */
+  :where(
+  .table-scroll:has(> .data-table), .card, .two-col > section, .two-col > div:not(.col-stack), .control-card,
+  .control-metric, .control-summary, .service-band, .fact-band,
+  .filter-bar, .table-toolbar, .kpi-grid, .insight-grid,
+  .finding-facts, .resolution-workflow li, .kv, .form,
+  .auth-card, .mail-stage, .mail-editor,
+  .topology-workspace, .github-list, .account-facts, .container-needs,
+  .boxed-facts, .command-preview-path, .command-preview-live > div, .policy-agents li,
+  .posture-gaps, .posture-repos, .machine-telemetry, .machine-telemetry-metrics) {
+    border: var(--surface-border, 1px solid var(--line));
+    border-radius: var(--surface-radius, var(--radius));
+    background: var(--surface-bg, var(--surface));
+    box-shadow: var(--surface-shadow, var(--shadow-sm));
+
+    & > * {
+      --surface-border: 0 none;
+      --surface-radius: 0;
+      --surface-bg: transparent;
+      --surface-shadow: none;
+      --surface-inset: 0;
+    }
+  }
+  /* Stats inside a card are the card's content: an even grid with real gaps,
+     no tile padding doubling the card's own. */
+  :is(.card, .highlight-card) > .kpi-grid {
+    display: grid;
+    /* Exactly the card's --kpi-columns, which the card sets from how many
+       stats it holds and how wide it is (4 or 2+2, 6 or 3+3, never 3+1). A
+       fit-as-many-as-fit grid would not hold that. */
+    grid-template-columns: repeat(var(--kpi-columns, 2), minmax(0, 1fr));
+    gap: var(--space-6) var(--space-7);
+    background: none;
+  }
+  :is(.card, .highlight-card) > .kpi-grid > .kpi { padding: 0; background: none; box-shadow: none; }
+
+  /* The last thing in a card ends the card: its own bottom margin would be
+     dead space inside the card's padding. */
+  /* A frame's own padding is its edge: the first and last thing in it keep no
+     margin of their own, or a heading's top margin doubles the padding above it. */
+  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div:not(.col-stack)) > :last-child { margin-bottom: 0; }
+  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div:not(.col-stack)) > :first-child { margin-top: 0; }
+
+
+  /* The recommended step, unframed, keeps its emphasis as a rule down its edge. */
+  .card .resolution-workflow li.is-recommended { box-shadow: inset 3px 0 0 var(--accent); padding-left: var(--space-6); }
+
+
+  /* ── Disclosure: one marker for everything that opens in place ─────────
+     Every details that is not a menu shows the same mark, turned when open,
+     so "this opens" looks the same everywhere: a folded section, raw
+     readings, a list behind "+5 more", a table's own row toggle. Menus carry
+     data-menu and dress their summary as a control instead. A connection's
+     hops and layers show their state with their own tick, in a fixed grid
+     an extra mark would shift, so they carry none. */
+  main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary { list-style: none; cursor: pointer; }
+  main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary::-webkit-details-marker { display: none; }
+  main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary::before {
+    content: "▸"; display: inline-block; width: 1em; margin-inline-end: var(--space-1);
+    color: var(--muted); font-size: 1.05em; line-height: 1; text-align: center;
+    transition: transform .12s ease;
+  }
+  main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop])[open] > summary::before { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary::before { transition: none; } }
+
+  /* A section that folds: its heading is the toggle. */
+  .section-fold > summary { display: flex; align-items: baseline; }
+  .section-fold > summary:hover h2 { color: var(--accent-2); }
+  .section-fold > summary h2 { margin: 0; }
+  .section-fold[open] > summary { margin-bottom: var(--space-5); }
+
+  /* The topology's view picker, first in its own filter row. */
+  .topology-view { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; margin: 0; }
+
+  /* What the filter bar currently shows, at its far end. */
+  .filter-bar-summary { margin: 0 0 0 auto; align-self: center; color: var(--muted); font-size: var(--text-sm); }
+  .filter-bar-summary strong { color: var(--ink); }
+
+  /* A head's controls on a phone: the lead one beside the title, the rest in
+     the overflow menu, which is hidden wherever every control fits. */
+  .page-head .page-actions > .overflow-menu { display: none; }
+  @media (max-width: 640px) {
+    .page-head .page-actions > :not(:first-child):not(.overflow-menu) { display: none; }
+    .page-head .page-actions > .overflow-menu { display: flex; }
+    .page-head .page-actions { flex-wrap: nowrap; }
+  }
+
+  /* The row toggle tables.js adds where a row says more than it shows. Quiet
+     until wanted: a small mark before the first value, turned when open. */
+  .row-expand {
+    min-height: 0; padding: 0 var(--space-2) 0 0; margin: 0;
+    border: 0; background: none; box-shadow: none;
+    color: var(--muted-2); font-size: var(--text-xs); line-height: 1; cursor: pointer;
+    vertical-align: baseline;
+  }
+  .row-expand:hover { border: 0; background: none; color: var(--ink); }
+  .row-expand > span { display: inline-block; transition: transform .12s ease; }
+  .row-expand[aria-expanded="true"] > span { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { .row-expand > span { transition: none; } }
+  /* Every clamp in the row lifted at once. The rules it lifts are scattered and
+     each is specific to its column, so this one outranks them on purpose: an
+     expanded row shows everything, whatever clamped it. */
+  .data-table tr.is-expanded :is(td, th),
+  .data-table tr.is-expanded :is(td, th) *:not(.visually-hidden) {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    -webkit-line-clamp: unset !important;
+    line-clamp: none !important;
+    max-height: none !important;
+    max-width: none !important;
+  }
+
+  /* A band too narrow for two cells is a list, like every other summary:
+     each fact one row, its label and its value at the right edge, the detail
+     under both. Asked of the band's own width, so a band in a narrow card
+     reads the same as one on a phone. 27.5rem is two 220px cells. */
+  :is(.service-band, .fact-band, .control-summary) { container: band / inline-size; }
+  @container band (max-width: 27.5rem) {
+    .band-fact { gap: var(--space-4); padding: var(--space-5) var(--space-6); align-items: center; }
+    .band-icon { width: 24px; height: 24px; font-size: var(--text-lg); border-radius: var(--radius-sm); }
+    /* The label keeps its words; a long value wraps at the right instead of
+       squeezing the label to a letter a line. */
+    .band-fact > div { flex: 1 1 auto; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; column-gap: var(--space-4); }
+    .band-fact > div > .band-label { grid-column: 1; grid-row: 1; font-size: var(--text-sm); }
+    .band-fact > div > strong { grid-column: 2; grid-row: 1; text-align: right; font-size: var(--text-md); }
+    .band-fact > div > :not(.band-label):not(strong) { grid-column: 1 / -1; }
+    .control-summary > .control-metric {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-1) var(--space-5);
+      padding: var(--space-5) var(--space-6);
+    }
+    .control-summary > .control-metric > :not(.control-label):not(strong) { flex: 1 1 100%; }
+  }
 }

@@ -25,7 +25,14 @@ from .cadence import ring_doorbell
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .security import Capability, Principal
 from .ui import counted
-from .infrastructure import ManagedResourceCommand, NotFoundError, PolicyError, delivery_targets, save_managed_resource
+from .infrastructure import (
+    ManagedResourceCommand,
+    NotFoundError,
+    PolicyError,
+    delivery_targets,
+    is_drifted,
+    save_managed_resource,
+)
 
 
 @dataclass(frozen=True)
@@ -120,16 +127,13 @@ def refuse_while_drifted(resource: ManagedResource) -> None:
     A remedy that edits a declaration edits HQ's copy, and applying it pushes
     that whole copy. While the live record differs, whatever changed there
     would be overwritten along with the one intended change, so the operator
-    decides first: accept what is there, or reconcile it back.
+    decides first: keep the live version, or restore HQ's.
     """
 
-    if any(
-        condition.get("type") == "Drifted" and condition.get("status") is True
-        for condition in resource.conditions or ()
-    ):
+    if is_drifted(resource):
         raise PolicyError(
-            f"{resource.key} differs from what the provider holds. Accept what is there "
-            "or reconcile it first, so this change is made to what is actually in force."
+            f"{resource.key} differs from what is live. Keep the live version or "
+            "restore HQ's first, so this change is made to what is actually in force."
         )
 
 

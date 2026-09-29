@@ -342,6 +342,9 @@ class Policy:
     services: tuple[dict, ...] = ()
     app_connectors: tuple[dict, ...] = ()
     ssh_rules: tuple[dict, ...] = ()
+    # Access rules in the older ``acls`` form, which a policy may still use
+    # instead of grants or beside them.
+    acls: tuple[dict, ...] = ()
 
     @property
     def facts(self) -> tuple[tuple[str, str], ...]:
@@ -469,11 +472,13 @@ def policy() -> Policy:
 
     for snapshot in snapshots()[POLICY_KIND]:
         for record in snapshot.records:
+            document = _document(record)
             return Policy(
-                groups=tuple(record.get("groups") or ()),
-                tags=tuple(record.get("tags") or ()),
-                grants=tuple(record.get("grants") or ()),
-                tests=tuple(record.get("tests") or ()),
+                groups=tuple(record.get("groups") or _named(document.get("groups"), "members")),
+                tags=tuple(record.get("tags") or _named(document.get("tagOwners"), "owners")),
+                grants=tuple(record.get("grants") or document.get("grants") or ()),
+                tests=tuple(record.get("tests") or document.get("tests") or ()),
+                acls=tuple(rule for rule in document.get("acls") or () if isinstance(rule, dict)),
                 settings=record.get("settings") or {},
                 hosts=record.get("hosts") or {},
                 dns=record.get("dns") or {},
@@ -483,6 +488,30 @@ def policy() -> Policy:
                 ssh_rules=tuple(record.get("ssh_rules") or ()),
             )
     return Policy()
+
+
+def _document(record) -> dict:
+    """The policy document a reading carries, parsed, or {} when it cannot be.
+
+    The parsed lists in a reading are what the controller chose to extract;
+    the document is the whole policy. A summary built from the lists alone
+    would read "0 grants" for a policy written as ``acls``, or for a reading
+    whose lists were never extracted.
+    """
+
+    try:
+        parsed = json.loads(str(record.get("document") or "{}"))
+    except ValueError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _named(mapping, field: str) -> tuple[dict, ...]:
+    """``{"group:a": [...]}`` as the reading's ``[{"name", field}]`` rows."""
+
+    if not isinstance(mapping, dict):
+        return ()
+    return tuple({"name": name, field: sorted(values or ())} for name, values in sorted(mapping.items()))
 
 
 def policy_allowing(
@@ -724,4 +753,25 @@ def posture_facts() -> tuple[tuple[str, str], ...]:
         for group in found.groups
         if not group.get("members") and group.get("name") in named
     )
+    entries.extend(("tag-granted-to-nobody", tag) for tag in unworn_tags(named))
     return tuple(entries)
+
+
+def unworn_tags(named) -> tuple[str, ...]:
+    """Tags a rule names that no device carries, once devices were read.
+
+    A rule's destination names a tag with its ports (``tag:web:443``); the tag
+    is the part before them. Nothing is said while no device was read: every
+    tag would look unworn.
+    """
+
+    from control_plane.provider_adapters.tailscale import TAILNET_KIND
+
+    from .facts import inventory_records
+
+    records = [record for _snapshot, record in inventory_records(TAILNET_KIND)]
+    if not records:
+        return ()
+    worn = {str(tag) for record in records for tag in record.get("tags") or ()}
+    tags = {":".join(str(entry).split(":")[:2]) for entry in named if str(entry).startswith("tag:")}
+    return tuple(sorted(tags - worn))

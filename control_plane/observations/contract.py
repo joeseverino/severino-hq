@@ -93,6 +93,10 @@ class ObservationSpec:
     # ``containers``, as the container says it; ``relation`` if blank.
     address_relation: str = ""
     container_relation: str = ""
+    # Whether the containers a record names reach each other through it: a
+    # network does, unless the runtime made it for every container. Set, the
+    # topology draws "talks to" between each pair it names that are declared.
+    connects: Callable[[Mapping[str, Any]], bool] | None = None
     # What a joined record supplies, from ``READING_FACETS``, or blank. A
     # service shows a record under the facet it supplies; "runtime" and
     # "network" name what serves an origin.
@@ -124,6 +128,10 @@ class ObservationSpec:
     # A header a request carries once it has passed through what a record
     # describes: an Access application's signed assertion.
     request_header: str = ""
+    # Whether a record stands in front of the hostnames it names and admits
+    # only whom it allows: an Access application, an access list. A name one
+    # restricts is reachable from the internet only through that gate.
+    restricts: bool = False
     # What a record tells about the connection that read it, as ``(key, value)``
     # facts the findings read off that connection's node.
     facts: Callable[[Mapping[str, Any]], tuple[tuple[str, str], ...]] = lambda record: ()
@@ -193,6 +201,8 @@ def registry(specs: tuple[ObservationSpec, ...]) -> Mapping[str, ObservationSpec
             raise ValueError(f"{spec.kind!r}: unknown facet {spec.facet!r}.")
         if spec.read_by not in READERS:
             raise ValueError(f"{spec.kind!r}: read_by is one of {READERS}.")
+        if spec.connects is not None and spec.containers is _none:
+            raise ValueError(f"{spec.kind!r}: connects needs the containers it names.")
         _check_parts(spec)
         found[spec.kind] = spec
     return MappingProxyType(found)

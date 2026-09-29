@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+
+from collections.abc import Mapping
 from typing import Any
 
 from pydantic import Field
@@ -9,6 +12,7 @@ from pydantic import Field
 from ..consoles import tailscale_machine
 from ..observations.contract import ReadingPart
 from ..provider_spec import (
+    ConnectionKind,
     ControllerVerification,
     ProviderModel,
     ProviderSpec,
@@ -73,10 +77,9 @@ class TailnetPolicySpec(ProviderModel):
     document: str = Field(
         default="",
         title="Policy",
-        description=(
-            "The tailnet's access policy. Saving records it. Reconciling "
-            "applies it if the policy's own tests pass."
-        ),
+        # What saving does is the provider's declared change effect, which the
+        # form states under the field; saying it here too would print it twice.
+        description="The tailnet's access policy.",
     )
 
 
@@ -191,6 +194,30 @@ DEVICE = ProviderSpec(
     ),
 )
 
+def _policy_readout(spec: Mapping[str, Any] | None, status: Mapping[str, Any] | None) -> tuple[tuple[str, str, str], ...]:
+    """How many grants, groups and tests the policy holds, counted from the
+    document itself: what was last read when there is one, else what is asked.
+
+    The status stores the document as text, not its parts, so there is no
+    ``status["grants"]`` to count. A policy written as ``acls`` counts those as
+    its grants.
+    """
+
+    text = str((status or {}).get("document") or (spec or {}).get("document") or "")
+    try:
+        parsed = json.loads(text) if text else None
+    except ValueError:
+        parsed = None
+    if not isinstance(parsed, dict):
+        return (("Grants", "", ""), ("Groups", "", ""), ("Tests", "", ""))
+    grants = [*(parsed.get("grants") or ()), *(parsed.get("acls") or ())]
+    return (
+        ("Grants", "", str(len(grants))),
+        ("Groups", "", str(len(parsed.get("groups") or {}))),
+        ("Tests", "", str(len(parsed.get("tests") or ()))),
+    )
+
+
 POLICY = ProviderSpec(
     TAILNET_POLICY_KIND,
     "The tailnet's access policy. HQ runs the policy's tests before "
@@ -233,11 +260,7 @@ POLICY = ProviderSpec(
             "tests pass.",
         ),
     ),
-    readout=lambda spec, status: (
-        ("Grants", "", str(len(status.get("grants", ())) if status else "")),
-        ("Groups", "", str(len(status.get("groups", ())) if status else "")),
-        ("Tests", "", str(len(status.get("tests", ())) if status else "")),
-    ),
+    readout=_policy_readout,
     parts=(
         ReadingPart("settings", "Tailnet settings", ("feature_settings:read",)),
         ReadingPart("dns", "Tailnet DNS", ("dns:read",)),
@@ -247,3 +270,7 @@ POLICY = ProviderSpec(
 
 # Declarations only: the controller half is still the core's.
 DEFINITIONS = (DEVICE, POLICY)
+
+# The connection this provider's credential arrives through, beside its kinds:
+# admitting the module admits both.
+CONNECTIONS = {"tailscale": ConnectionKind("Tailscale", "scoped")}

@@ -28,3 +28,16 @@ def post_button(label, url, *, name="action", value="", css="btn", title="", dis
         mark_safe(" disabled") if disabled else "",
         label,
     )
+
+
+@register.filter
+def lead_action(actions):
+    """The one control a narrow head keeps beside its title: the page's primary
+    action, else its first that is not destructive, else its first."""
+
+    actions = tuple(actions or ())
+    return (
+        next((action for action in actions if getattr(action, "primary", False)), None)
+        or next((action for action in actions if not getattr(action, "danger", False)), None)
+        or (actions[0] if actions else None)
+    )

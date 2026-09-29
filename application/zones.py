@@ -126,7 +126,7 @@ class ZoneRecord:
         Cloudflare serves types HQ deliberately does not model: SRV, NS, PTR,
         SVCB and more. They are real records in the zone and are listed as such,
         but HQ cannot declare one, so it must never try: adoption runs inside
-        the controller sweep, and a spec the model rejects took the whole
+        the controller sweep, and a spec the model rejects would take the whole
         transaction down with it, losing every provider's inventory over one
         delegated subdomain.
         """
@@ -176,8 +176,8 @@ class ZoneInsight:
 
     ``value`` is the answer and stays short enough to read at a glance, because
     it is set in the card's headline type. Anything needing a sentence goes in
-    ``detail``, the caption: an explanation in the headline slot rendered as a
-    paragraph of bold text and drowned the cards beside it.
+    ``detail``, the caption: an explanation in the headline slot renders as a
+    paragraph of bold text and drowns the cards beside it.
 
     ``url`` is what makes these worth more than the provider's own dashboard. A
     card that restates a DNS record is Cloudflare with different fonts; one that
@@ -202,8 +202,8 @@ class ZoneInsight:
     # The note's full reason, where the note says it in fewer words.
     note_title: str = ""
     # Reserved for things that are wrong by their own definition rather than by
-    # a policy nobody declared: a leftover challenge record is garbage whoever
-    # you ask, and a CAA record that forbids the authority HQ renews with will
+    # a policy nobody declared: a leftover challenge record is garbage by any
+    # reading, and a CAA record that forbids the authority HQ renews with will
     # fail a renewal. A permissive DMARC policy is a choice.
     concern: bool = False
     # ``(label, links)``: entities the card names, through the link builder.
@@ -559,11 +559,10 @@ def adopt_discovered_records(*, principal) -> dict[str, Any]:
     Run on each controller sweep, so "a record HQ has not adopted yet" is a
     state that closes itself within a minute rather than a chore on a screen.
 
-    There was never a decision in it. Declaring a domain is the decision, and
-    it is made once; asking again per record (seventeen times on a working
-    zone, and again for every record added at the provider afterwards)
-    presented a question whose answer is always yes, and left a page reporting
-    outstanding work that nobody intended to do.
+    There is no decision in it. Declaring a domain is the decision, and it is
+    made once; asking again per record presents a question whose answer is
+    always yes, and leaves a page reporting outstanding work that nobody
+    intends to do.
 
     Safe for the reason every adoption is safe: the spec is read back out of
     the live record, so each declaration starts equal to the world and the
@@ -593,7 +592,7 @@ def adopt_discovered_records(*, principal) -> dict[str, Any]:
             #
             # ValueError is not redundant beside Django's ValidationError:
             # pydantic raises its own, which is a ValueError and nothing else.
-            # Without it, one NS record in a declared zone rolled back every
+            # Without it, one NS record in a declared zone would roll back every
             # provider's inventory on every pass.
             continue
     return {"ok": True, "adopted": adopted}

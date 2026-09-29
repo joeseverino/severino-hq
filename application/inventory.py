@@ -35,6 +35,7 @@ from core.models import AuditLog
 
 from control_plane.names import normalized_hostname
 
+from .conditions import stamped
 from .contracts import endpoint_has_private_parts
 from .credential_mint import parse_expiry, store_references
 from .security import Capability, Principal
@@ -104,6 +105,14 @@ def record_inventory(
         seen = {"records": records, "observed_at": observed_at}
         # A refused read refuses every part; only a read that answered has some.
         parts = clean_refused_parts(kind, report.get("refused_parts")) if reached else []
+        # The last records, for a kind whose changes are worth a moment on the
+        # history (see ``_record_change``); other kinds pay no query for it.
+        logs_changes = reached and getattr(PROVIDERS.get(kind), "from_record", None) is not None
+        before = (
+            ProviderInventory.objects.filter(kind=kind).values_list("records", flat=True).first()
+            if logs_changes
+            else None
+        )
         row, _ = ProviderInventory.objects.update_or_create(
             kind=kind,
             # An unreachable provider leaves the last sweep's records and the
@@ -129,17 +138,61 @@ def record_inventory(
         )
         stored.append(kind)
         summary[kind] = _summary(row)
+        if before is not None:
+            _record_change(row, before, records, controller_id)
 
     # Adoption is not done here. A record in a domain HQ has been made
     # responsible for is HQ's, but which records those are is `zones`' to say,
-    # and reaching for it from inside the sweep made the two modules import
-    # each other. `application.sweep` composes the pair instead.
+    # and reaching for it from inside the sweep would make the two modules
+    # import each other. `application.sweep` composes the pair instead.
     return {
         "ok": True,
         "recorded": stored,
         "observed_at": observed_at.isoformat(),
         "kinds": summary,
     }
+
+
+READING_AUDIT_TYPE = "Reading"
+
+
+def _record_change(row: ProviderInventory, before: list[Any], after: list[Any], controller_id: str) -> None:
+    """A reading's records changed between two sweeps: the moment, for the history.
+
+    Readings keep only their latest records, so without this a DNS record or a
+    policy edited outside HQ changes nothing anyone can point at in time.
+
+    Compared as what a declaration of each record would hold (the kind's
+    ``from_record``), so a container's "Up 3 days" is not a change and its image
+    is. A kind with no such shape is not logged. Counts only, never the records:
+    a policy document in the log is a second copy of it.
+    """
+
+    provider = PROVIDERS.get(row.kind)
+    if provider is None or provider.from_record is None:
+        return
+
+    def canonical(records: list[Any]) -> set[str]:
+        found = set()
+        for record in records or ():
+            spec = _spec_from_record(row.kind, record)
+            if spec is not None:
+                found.add(json.dumps(spec, sort_keys=True, default=str))
+        return found
+
+    old, new = canonical(before), canonical(after)
+    if old == new:
+        return
+    added, gone = len(new - old), len(old - new)
+    parts = [counted(added, "record new or changed", "records new or changed")] if added else []
+    parts += [counted(gone, "record gone", "records gone")] if gone else []
+    record_event(
+        action=AuditLog.Action.OBSERVED,
+        obj=row,
+        type_label=READING_AUDIT_TYPE,
+        message=f"{registry_label(row.kind)} changed: {', '.join(parts)}",
+        metadata={"kind": row.kind, "controller_id": controller_id, "new": added, "gone": gone},
+    )
 
 
 def _summary(row: ProviderInventory) -> dict[str, Any]:
@@ -161,11 +214,9 @@ def confirm_observed(payload: dict[str, Any]) -> int:
     """Mark declarations the sweep just found still matching as observed.
 
     A declaration is "in sync" when what HQ asked for is what is there, and a
-    sweep is HQ going and looking. Yet only a reconcile ever wrote that down,
-    so a declaration nothing had changed sat reporting "never reported", and
-    nothing queues a reconcile for a resource that has not drifted, so the
-    first look never came. Whole services read as unverified while every part
-    of them was running and had just been seen.
+    sweep is HQ going and looking. Nothing queues a reconcile for a resource
+    that has not drifted, so without this an unchanged declaration would never
+    be recorded as observed.
 
     Only where the spec still matches the live record. A declaration that has
     drifted is exactly the one a reconcile should visit, and quietly calling it
@@ -197,14 +248,14 @@ def confirm_observed(payload: dict[str, Any]) -> int:
             resource.observed_generation = resource.generation
             resource.last_observed_at = seen
             resource.status = dict(found)
-            resource.conditions = [
+            resource.conditions = stamped(resource.conditions, [
                 {
                     "type": "Ready",
                     "status": True,
                     "reason": "Observed",
                     "message": "The last sweep found this exactly as declared.",
                 }
-            ]
+            ])
             resource.save(
                 update_fields=[
                     "observed_generation",
@@ -283,10 +334,9 @@ def _differences(
 ) -> tuple[tuple[str, str, str], ...]:
     """``(field, asked for, found)`` for every field the live record contradicts.
 
-    The comparison rule above, stated once and returning what it saw rather than
-    only whether it saw anything. Asking "do these match" and asking "how do
-    these differ" with two implementations is how a page comes to report drift
-    it cannot describe, or describe drift that is not there.
+    The comparison rule above, returning what it saw rather than only whether
+    it saw anything, so "do these match" and "how do they differ" cannot
+    disagree.
     """
 
     unobservable = PROVIDERS[kind].unobservable_fields
@@ -304,9 +354,7 @@ def _text(value: Any) -> str:
 
     A browser submits a textarea as CRLF and every provider returns LF, so a
     multi-line field saved through a form differs from the identical document
-    read back: byte for byte the same but for the line endings. A tailnet
-    policy sat drifted on that for a week, having been applied successfully and
-    accepted by Tailscale seconds earlier.
+    read back: byte for byte the same but for the line endings.
     """
 
     text = str(value)
@@ -317,17 +365,13 @@ def _text(value: Any) -> str:
 def _canonical_document(text: str) -> str:
     """A JSON document reduced to what it says, so layout is not a difference.
 
-    Line endings were only half of it. HQ stores the tailnet policy it applied
-    minified, on one line, and Tailscale hands the same policy back
-    pretty-printed across three hundred. Compared as text they never match, so
-    the policy read "Drifted" from the moment it was applied, and because a
-    drifted record is never stamped as observed, the kind then aged into "nothing
-    has observed this for 12 days". Two alarms, both false, and a real change to
-    the ACL would have looked exactly the same as either.
+    HQ stores a document such as the tailnet policy minified, and the provider
+    hands it back pretty-printed. Compared as text they never match, so a
+    policy would read as drifted from the moment it was applied.
 
     Only a value that parses as a JSON object or array is touched; anything else,
     including a policy written as HuJSON with comments, is compared as the text
-    it is, which is the old behaviour and errs towards reporting a difference.
+    it is, which errs towards reporting a difference.
     """
 
     stripped = text.strip()
@@ -359,9 +403,10 @@ def _record_drift(
     # ``Drifted`` asserted true, not ``Ready`` asserted false. A condition here
     # is a fact that holds, and ``resource_health`` reads only the ones that do
     # so a false Ready is not the opposite of a true one, it is a condition
-    # nothing looks at, and the summary card went on saying "not observed" above
-    # a table that described the drift in full.
-    resource.conditions = [
+    # nothing looks at.
+    # Stamped, so the drift keeps the moment it was first seen however many
+    # sweeps find it again: that is what lets a finding say what happened then.
+    resource.conditions = stamped(resource.conditions, [
         {
             "type": "Drifted",
             "status": True,
@@ -370,7 +415,7 @@ def _record_drift(
             + "; ".join(_difference_phrase(field, asked, live) for field, asked, live in drift)
             + ".",
         }
-    ]
+    ])
     resource.save(update_fields=["conditions"])
 
 
@@ -591,8 +636,8 @@ def service_hostnames(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
 def record_identity(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
     """What makes a live record and a declaration the same thing.
 
-    Falls back to the hostnames, which is what identity meant when every
-    provider had one record per name. A provider that can hold several records
+    Falls back to the hostnames, which suffices for a provider with one record
+    per name. A provider that can hold several records
     for a single name says so itself (see ``ProviderSpec.identity``) because
     hostname identity would silently merge them and adopt whichever the provider
     listed first.

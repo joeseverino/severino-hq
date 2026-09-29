@@ -23,7 +23,7 @@
       <span class="pill pill-good">Committed once</span>
     {% endif %}
   </div>
-  {% comment %}Said in words too: a two-word badge assumed knowledge.{% endcomment %}
+  {% comment %}Said in words too: a two-word badge assumes knowledge.{% endcomment %}
   <p class="muted command-result-note">
     {% if result.replayed %}
       Already run. This is the first result.
@@ -65,7 +65,7 @@
   <section class="card command-runner">
     {% comment %}
     One heading per section. `h2` is already a small-caps section label, so a
-    kicker above it said the same thing twice.
+    kicker above it would say the same thing twice.
     {% endcomment %}
     <div class="section-head">
       <h2>Run command</h2>
@@ -86,12 +86,19 @@
     where the form opens empty unless the command declares
     `target_initial_fields`, and only one does. Said plainly rather than
     hydrating part of the record, which would leave the same fields being
-    cleared behind a form that now looked complete.
+    cleared behind a form that looks complete.
     {% endcomment %}
-    {% if command.target_kind and command.effect == "remote_write" and not hydrates_target %}
+    {% if command.target_kind and command.effect == "remote_write" and writes_record and not hydrates_target %}
       <div class="notice notice-attention">
         <strong>This replaces the whole record</strong>
         <p>This form does not load current values. Every field is saved as submitted, including blanks and fields not shown here. Fill in the full record, or use the record's edit page.</p>
+      </div>
+    {% endif %}
+
+    {% if unoffered_target %}
+      <div class="notice notice-attention">
+        <strong>{{ unoffered_target }} is not a target here</strong>
+        <p>The link asked for it, but this command does not act on it or you cannot read it. Choose a target below.</p>
       </div>
     {% endif %}
 

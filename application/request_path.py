@@ -205,8 +205,8 @@ def _catalogued(addresses) -> str:
     """The machine the catalogue knows at these addresses.
 
     The catalogue, not only declarations: the path's machine hop is named from
-    it, so a caller on an undeclared machine (a laptop running HQ) read as two
-    different computers, one named and linked, the other neither.
+    it, so a caller on an undeclared machine (a laptop running HQ) is the same
+    computer in both places.
     """
 
     from .connections import machines_once
@@ -219,8 +219,8 @@ def _proxy_hop(found: Connection) -> Hop | None:
     """The proxy the request itself proves it passed, when the walked path names none.
 
     A name nobody has declared a proxy for can still be reached through one;
-    the forwarded request from a trusted peer is the evidence, and leaving the
-    hop out drew the request as going straight from the caller to HQ.
+    the forwarded request from a trusted peer is the evidence, and without the
+    hop the request would appear to go straight from the caller to HQ.
     """
 
     if not found.forwarder_name:
@@ -635,8 +635,8 @@ def _container(hop: Hop, context: _Context):
         running.id
         for machine in machines_once()
         for running in machine.containers
-        # The container's name, not the hop's label ("Container"): comparing
-        # against the label matched nothing, so this hop was never proven.
+        # The container's name, not the hop's label ("Container"), which
+        # matches nothing.
         if running.name == hop.name and running.id
     }
     if not known:

@@ -13,10 +13,12 @@ from django.urls import reverse
 from django.views import View
 from django.views.generic import DetailView, ListView
 
+from application.action_links import command_url
 from application.infrastructure import (
     PolicyError,
     declared_machines,
     delivery_targets,
+    is_drifted,
     resource_health,
     serialize_resource,
     serialize_public_status,
@@ -57,9 +59,9 @@ from .provider_adapters.tls import CERTIFICATE_KIND
 from .providers import PROVIDERS, describe_providers
 
 
-# Which use case serves which verb. A ladder here meant every verb but one fell
-# through to reconciliation: pressing Restart queued a reconcile, which is
-# locked for a container, so the button reported a policy error and did nothing.
+# Which use case serves which verb. A table rather than a fall-through, so a
+# lifecycle verb such as Restart never reaches reconciliation, which is locked
+# for a container.
 _OPERATION_USE_CASE = {
     OperationRequest.Action.RECONCILE: request_reconcile,
     OperationRequest.Action.RENEW: request_certificate_renewal,
@@ -107,9 +109,8 @@ def _spec_rows(resource) -> dict[str, tuple[tuple[str, str], ...]]:
     provider = PROVIDERS[resource.kind]
     fields = provider.spec_type.model_fields
     # What the readout above already printed. On anything with a handful of
-    # fields the readout *is* the spec, so the disclosure repeated it whole,
-    # a machine showed "What it is for" and its addresses, then offered "every
-    # field of this declaration" and showed the same two again with the name.
+    # fields the readout *is* the spec, and the disclosure would repeat it
+    # whole.
     shown = {str(label).strip().casefold() for label, _, _ in readout_rows(resource)}
     primary: list[tuple[str, str]] = []
     advanced: list[tuple[str, str]] = []
@@ -125,7 +126,7 @@ def _spec_rows(resource) -> dict[str, tuple[tuple[str, str], ...]]:
             continue
         rendered = _spec_value(value)
         # And not the thing the page is already titled. A machine's name is its
-        # identifier here, so the last row left after the readout was the
+        # identifier here, so the last row left after the readout would be the
         # heading repeated inside a disclosure offering more.
         #
         # Only when they are the same string: a declaration whose name differs
@@ -272,7 +273,6 @@ class InfrastructureListView(PageMixin, LoginRequiredMixin, ListView):
     template_name = "control_plane/resource_list.html"
     context_object_name = "resources"
     page_title = "Infrastructure"
-    page_lede = "Declared resources and their last observed state."
 
     def get_page_actions(self):
         return (
@@ -389,9 +389,12 @@ class InfrastructureDetailView(PageMixin, LoginRequiredMixin, DetailView):
             return ()
         key = self.object.key
         capabilities = self.capabilities
+        drifted = is_drifted(self.object)
         actions = [
             PageAction(
-                VERB_LABELS[verb],
+                "Restore HQ's version"
+                if drifted and verb == "reconcile"
+                else VERB_LABELS[verb],
                 reverse(f"control_plane:{verb}", args=[key]),
                 method="post",
                 primary=verb == "renew",
@@ -400,6 +403,20 @@ class InfrastructureDetailView(PageMixin, LoginRequiredMixin, DetailView):
             )
             for verb, allowed in capabilities.page_actions
         ]
+        if drifted:
+            # Changed outside HQ. Keeping that loses nothing, so it leads, and
+            # restoring HQ's copy is the button beside it rather than the only one.
+            actions.insert(
+                0,
+                PageAction(
+                    "Keep the live version",
+                    returning_to(
+                        command_url("infrastructure.resource.accept_observed", key),
+                        self.request.get_full_path(),
+                    ),
+                    primary=True,
+                ),
+            )
         actions.append(
             PageAction(
                 "Edit",
@@ -503,9 +520,8 @@ class OperationView(LoginRequiredMixin, View):
         resource = get_object_or_404(ManagedResource, key=key)
         # Back where the verb was offered. These forms are on pages that show
         # the fact the verb answers (a machine's routes, a service's
-        # container) and they have been sending `next` all along while this
-        # view returned to the resource record regardless. Validated through
-        # the shared helper, so the field cannot become an open redirect.
+        # container) and send `next`. Validated through the shared helper, so
+        # the field cannot become an open redirect.
         destination = safe_next(
             request, fallback=reverse("control_plane:detail", kwargs={"key": key})
         )

@@ -141,9 +141,8 @@ class AdminPolicyMiddleware:
 
     The application policy requires Trusted Types, which makes assigning a
     string to `innerHTML` throw rather than parse. HQ's own scripts never do
-    that; admin's bundled jQuery does, on every page it renders. The choice was
-    between weakening the policy everywhere for one surface and scoping the
-    relaxation to that surface, and this is the second.
+    that; admin's bundled jQuery does, on every page it renders. So the relaxation
+    is scoped to that surface rather than weakening the policy everywhere.
 
     A middleware rather than a decorator because the admin routes a view per
     registered model and generates most of them: a decorator that has to be

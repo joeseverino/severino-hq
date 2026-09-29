@@ -6,11 +6,9 @@ Every assertion that reads "nothing else is installed" then passes locally and
 is wrong in production, and no per-repo CI can see it: the sibling lives in a
 different repository.
 
-The failure this exists to prevent, verbatim: a composing page asserted its
-empty state and an empty cross-extension queue. Both held when it was the only
-extension loaded. Installed beside a real sibling, the page had a panel and the
-queue had entries, and the tests that should have caught it were the ones
-asserting the opposite.
+A composing page that asserts an empty state or an empty cross-extension queue
+must hold that assertion with a sibling installed, because production always
+has one.
 
     class HomeTests(ComposedPluginTestCase, TestCase):
         siblings = (sibling(cards=({"id": "a", "label": "Open", "value": 3,
@@ -53,9 +51,6 @@ def undefined_style_classes(template_root) -> list[str]:
     its own partials, but it cannot see an extension's templates: they live in
     another repository and are not installed when the host's suite runs. So the
     check has to run from the extension's side, against the host's real bundle.
-
-    It caught `.section-action`: a section-head link two extensions used and
-    nothing ever styled, shipped to production reading as a plain browser link.
 
         class StyleTests(SimpleTestCase):
             def test_templates_only_use_defined_classes(self):
@@ -162,11 +157,9 @@ class ComposedPluginTestCase:
                     # unsigned plugin and every suite using it fails.
                     #
                     # Stated rather than inherited, because admission defaults
-                    # to off under DEBUG and on otherwise. Both the local gate
-                    # and CI run with DEBUG on, so this passed everywhere it
-                    # was run and failed in the one place it was not: the
-                    # composed image, which runs this suite with DEBUG off.
-                    # A test kit must not behave differently there.
+                    # to off under DEBUG and on otherwise, and the composed
+                    # image runs this suite with DEBUG off. A test kit must
+                    # behave the same in both.
                     "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION": "0",
                 },
                 clear=False,

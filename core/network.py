@@ -148,7 +148,7 @@ def client_ip(request) -> str:
     peer = str(request.META.get("REMOTE_ADDR", "") or "").strip()
     forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
     if not forwarded or not is_trusted_proxy(peer):
-        # Not behind a proxy we know, so the header is unverifiable hearsay and
+        # Not behind a known proxy, so the header is unverifiable hearsay and
         # the peer is the only fact available.
         return peer
     hops = [hop.strip() for hop in str(forwarded).split(",") if hop.strip()]

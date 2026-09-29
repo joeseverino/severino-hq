@@ -84,12 +84,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 item["updated_at"] = moment(item["updated_at"], naive="keep")
                 if item["published_at"]:
                     item["published_at"] = date.fromisoformat(item["published_at"])
-        # Unread only, as everywhere else the count is shown.
-        action_queue_count = sum(
-            item["count"]
-            for item in read_state.with_read_state(snapshot["priority"], self.request.user)
-            if not item["read"]
-        )
+        # Unread items, counted as the header's count endpoint counts them.
+        action_queue_count = read_state.unread_count(snapshot["priority"], self.request.user)
         hour = timezone.localtime().hour
         greeting = (
             "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"

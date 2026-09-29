@@ -146,6 +146,33 @@ def _rows(kind: str) -> dict[str, list[_Row]]:
     )
 
 
+def routed_names() -> tuple[str, ...]:
+    """Every name a DNS record HQ reads or declares answers for.
+
+    Both, not either: a declared record the last read happened to miss still
+    names its host, and a check built on this list ("no record names it")
+    would otherwise report HQ's gap in knowledge as a fault in the estate.
+    """
+
+    return tuple(
+        sorted(
+            {
+                name
+                for kind in _kinds("dns")
+                for name in (*_rows(kind), *_declared(kind))
+                if name
+            }
+        )
+    )
+
+
+def reads_every_route() -> bool:
+    """Whether every kind that can route a name was read, so a name or a
+    container nothing routes to is known to be unrouted, not merely unseen."""
+
+    return not any(why_unread(kind) for facet in ("dns", "proxy") for kind in _kinds(facet))
+
+
 def _about(hostname: str, **filters: Any) -> tuple[Joined, ...]:
     return readings().about(Subject.of(hostnames=(hostname,)), **filters)
 
@@ -324,7 +351,8 @@ def _from_dns(name: str, row: _Row, depth: int) -> list[Hop]:
         hops.extend(edge)
         if done:
             return hops
-    hops.extend(_from_answer(name, answer, fronted=fronted, depth=depth))
+    edge = _edge_operator(row.kind) if fronted else ""
+    hops.extend(_from_answer(name, answer, fronted=fronted, depth=depth, edge=edge))
     return hops
 
 
@@ -506,7 +534,7 @@ def _endpoint(value: str) -> str:
     return text
 
 
-def _from_answer(name: str, answer: str, *, fronted: bool, depth: int) -> list[Hop]:
+def _from_answer(name: str, answer: str, *, fronted: bool, depth: int, edge: str = "") -> list[Hop]:
     """From the address or name a record answers with, to what serves ``name``."""
 
     host = host_of(answer)
@@ -514,7 +542,7 @@ def _from_answer(name: str, answer: str, *, fronted: bool, depth: int) -> list[H
     if not network:
         return _alias(name, host, fronted=fronted, depth=depth)
     if is_documentation(host):
-        return [_placeholder(name, host, fronted)]
+        return [_placeholder(name, host, fronted, edge)]
     hops = [Hop("network", NETWORK_LABELS.get(network, network), "", detail=host)]
     machine = _machine(host)
     if machine is None:
@@ -532,12 +560,14 @@ def _from_answer(name: str, answer: str, *, fronted: bool, depth: int) -> list[H
     return hops
 
 
-def _placeholder(name: str, host: str, fronted: bool) -> Hop:
+def _placeholder(name: str, host: str, fronted: bool, edge: str = "") -> Hop:
     if fronted:
         gap = _reading_gap(_redirect_kinds(), name)
+        # Named for who answers, since that is what "runs on" asks: the edge
+        # itself, with nothing behind it.
         return Hop(
             "origin",
-            "Edge answers",
+            edge or "The edge",
             host,
             detail="A documentation address: the edge answers, nothing behind it does.",
             unread=gap,
@@ -773,8 +803,8 @@ def _upstream(address: str, connector: tuple[str, ...] = (), on: str = "") -> li
         from .containers import container_watchers
 
         source, running = _container_reading(origin.container, origin.host)
-        # Its page, when a declaration watches it: every other hop names its
-        # page, and the container was the one a click could not reach.
+        # Its page, when a declaration watches it, as every other hop names
+        # its page.
         watcher = container_watchers().get((origin.host, origin.container), ("", False))[0]
         hops.append(
             Hop(
@@ -782,7 +812,7 @@ def _upstream(address: str, connector: tuple[str, ...] = (), on: str = "") -> li
                 "Container",
                 origin.container,
                 # Named as the container, not its declaration's key: the machine
-                # is the hop before it, and the key said it again.
+                # is the hop before it, and the key would say it again.
                 entity_link("resource", watcher, label=origin.container) if watcher else None,
                 source=source,
                 facts=running,

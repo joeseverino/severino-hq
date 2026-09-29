@@ -25,11 +25,12 @@ from .connection_catalog import ConnectionGroup, connection_catalog
 from .action_links import (
     ActionLink as TopologyAction,
     capability_action_link,
+    command_url,
     connection_action_links,
     topology_url,
 )
 from .entity_links import entity_link, kind_label
-from .infrastructure import resource_health
+from .infrastructure import is_drifted, resource_health
 from .resource_capabilities import removals_pending, resource_capabilities
 from .security import Capability, Principal
 from .topology_model import (
@@ -42,6 +43,7 @@ from .topology_model import (
     newest_stamp,
 )
 from .topology_lenses import TOPOLOGY_LENSES, TopologyLens, apply_lens, apply_trace, lens_for
+from .contradiction_findings import add_contradiction_facts
 from .topology_facts import add_connection_facts, add_observed_facts
 
 
@@ -100,12 +102,26 @@ def _resource_actions(
     capabilities = resource_capabilities(
         resource, running=(), removal_pending=removal_pending, manages=manages
     )
+    drifted = is_drifted(resource)
+    if drifted:
+        # Something changed it outside HQ: keeping that is the choice that
+        # loses nothing, so it is offered, and first.
+        actions.append(
+            TopologyAction(
+                "keep_live",
+                "Keep the live version",
+                "remote_write",
+                command_url("infrastructure.resource.accept_observed", key),
+                capability="infrastructure.resource.accept_observed",
+                target=key,
+            )
+        )
     reconcile = capabilities.actions.get("reconcile")
     if reconcile and reconcile.enabled:
         actions.append(
             TopologyAction(
                 "reconcile",
-                "Reconcile",
+                "Restore HQ's version" if drifted else "Reconcile",
                 "infrastructure_change",
                 reverse("control_plane:reconcile", kwargs={"key": key}),
                 method="POST",
@@ -216,10 +232,9 @@ def _unconfirmed(resource: ManagedResource, provider) -> tuple[str, ...]:
     known gap rather than a silent one. And a field carrying no value is
     excluded because there is nothing there to confirm.
 
-    Without that last clause every DNS record that is not an MX asserted an
-    unconfirmed ``priority``: twenty-eight of them, none clearable, since the
-    provider correctly declines to read a priority back for a type that has
-    none. They buried the findings that were real.
+    Without that last clause every DNS record that is not an MX would assert
+    an unconfirmed ``priority`` that nothing can clear, since the provider
+    correctly declines to read a priority back for a type that has none.
     """
 
     if not resource.last_observed_at or not isinstance(resource.status, dict):
@@ -470,8 +485,8 @@ def _resource_node(resource: ManagedResource) -> TopologyNode:
     """A declaration as a node: its name, its kind's label, its page.
 
     A container is named as itself, with its machine in the subtitle: its
-    key joins the two, and printed as the name it said the machine twice
-    wherever the machine was already the context.
+    key joins the two, and printed as the name it would repeat the machine
+    wherever the machine is already the context.
     """
 
     from control_plane.provider_adapters.portainer import CONTAINER_KIND
@@ -544,6 +559,7 @@ def _derive(principal: Principal) -> Topology:
     _connection_nodes(groups, nodes, edges, principal)
     add_estate(nodes, edges, resources)
     add_connection_facts(nodes)
+    add_contradiction_facts(nodes)
     _governs_edges(groups, resources, edges)
     _measure(nodes)
 

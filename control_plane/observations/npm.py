@@ -204,6 +204,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         hostnames=lambda record: _names(record.get("protects")),
         title=lambda record: str(record.get("name", "")),
         relation="Behind access list",
+        restricts=True,
     ),
     ObservationSpec(
         DEAD_HOST_KIND,

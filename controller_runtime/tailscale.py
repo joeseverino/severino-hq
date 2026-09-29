@@ -175,8 +175,8 @@ def _tailnet_record(node: dict[str, Any]) -> dict[str, Any] | None:
         "os": str(node.get("OS") or ""),
         # Two different questions, and only the second is a fact about the
         # device. `ExitNode` is whether this peer is the exit node *this*
-        # machine is currently routing through: a statement about our own
-        # preference. `ExitNodeOption` is whether the peer offers to be one at
+        # machine is currently routing through: a statement about the reading
+        # machine's own preference. `ExitNodeOption` is whether the peer offers to be one at
         # all. A machine page saying "exit node" means the latter.
         "exit_node_in_use": bool(node.get("ExitNode")),
         "offers_exit_node": bool(node.get("ExitNodeOption")),

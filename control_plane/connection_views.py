@@ -14,7 +14,7 @@ from application.action_links import READ_NOW_CAPABILITY, read_now_payload
 from application.capabilities import execute_capability
 from application.connection_context import connections_context
 from application.security import safe_next, web_principal
-from application.pages import PageMixin
+from application.pages import PageAction, PageMixin
 
 
 class ConnectionListView(PageMixin, LoginRequiredMixin, TemplateView):
@@ -27,13 +27,29 @@ class ConnectionListView(PageMixin, LoginRequiredMixin, TemplateView):
 
     template_name = "control_plane/connection_list.html"
     page_title = "Connections"
-    page_lede = "What HQ connects to and what each connection can do."
+
+    def _connections(self):
+        if not hasattr(self, "_context"):
+            self._context = connections_context(
+                principal=web_principal(self.request.user), request=self.request
+            )
+        return self._context
+
+    def get_page_actions(self):
+        # Beside the title with every other page's controls, not on a line of
+        # their own halfway down the summary.
+        inspect = reverse("connection")
+        actions = [PageAction("Inspect this request", inspect, modal="connection")]
+        read_all = self._connections().read_all
+        if read_all:
+            actions.append(
+                PageAction(read_all.label, read_all.url, method="post", title=read_all.reason)
+            )
+        return tuple(actions)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["connections"] = connections_context(
-            principal=web_principal(self.request.user), request=self.request
-        )
+        context["connections"] = self._connections()
         return context
 
 

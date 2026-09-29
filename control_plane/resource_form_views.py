@@ -122,8 +122,8 @@ class ResourceFormView(LoginRequiredMixin, View):
                 ),
                 # The form is built knowing which name it is about, so its
                 # menus can offer what suits that name rather than everything
-                # that exists. A certificate menu with one entry was right by
-                # luck; the second certificate is what makes it a question.
+                # that exists. A certificate menu with one entry is right by
+                # luck; a second certificate is what makes it a question.
                 "spec": spec,
                 # Collected here rather than on a page of its own. A resource
                 # that is not usable without material should not be creatable
@@ -133,9 +133,9 @@ class ResourceFormView(LoginRequiredMixin, View):
                 "apply_note": _apply_note(kind),
                 # What this resource already is, when editing one. A form whose
                 # fields are mostly derived elsewhere shows empty boxes and
-                # nothing else: an edit page for a certificate said nothing
-                # about the names it covers or where it is installed, which is
-                # the whole of what a person came to check.
+                # nothing else, and an edit page for a certificate would say
+                # nothing about the names it covers or where it is installed,
+                # which is the whole of what a person comes to check.
                 "facts": _form_facts(resource, spec) if resource else (),
                 "show_on_dashboard": bool(
                     resource
@@ -229,7 +229,7 @@ class ResourceFormView(LoginRequiredMixin, View):
         )
         # Back where the operator was working. Publishing a service
         # takes two or three declarations, and landing on each one's
-        # own page after saving it made the next step a navigation
+        # own page after saving would make the next step a navigation
         # problem: the service page is the thing being built.
         return redirect(_after_save(request, kind, resource, saved))
 
@@ -247,12 +247,10 @@ def _form_page(kind: str, resource) -> dict:
 def _apply_note(kind: str) -> str:
     """What actually happens after saving, which is not the same for every kind.
 
-    The form promised every resource would be applied at the provider within
-    about a minute. That is true of most of them and false of any whose actions
-    are locked: a domain declaration records what HQ is responsible for and
-    changes nothing, so the page was making a promise the capability registry
-    already contradicted. The registry's own reason is the honest answer, and it
-    is written once, there.
+    Most resources are applied at the provider within about a minute. A kind
+    whose actions are locked is not: a domain declaration records what HQ is
+    responsible for and changes nothing. The capability registry's own reason
+    is the honest answer, and it is written once, there.
     """
 
     applies, explanation = controller_action_policy(
@@ -269,13 +267,11 @@ def _form_facts(resource, form) -> tuple[tuple[str, str, str], ...]:
     The panel exists for the fields a form cannot show: a certificate's edit
     page asks which target it installs on and says nothing about the names it
     covers or what is actually served with it, which is the whole of what a
-    person came to check.
+    person comes to check.
 
-    On a machine it had the opposite problem. Every field on that form is on
-    that form, so the panel repeated them: "What it is for" twice and the
-    addresses twice, once as text and once as inputs, on one screen. Matched by
-    label against the form's own fields, a row survives only when nothing below
-    is asking about it.
+    A machine's form already holds every field, so repeating them here would
+    say each one twice. Matched by label against the form's own fields, a row
+    survives only when nothing below is asking about it.
 
     The identifier leads, and is the reason this is not empty for a machine.
 
@@ -313,9 +309,9 @@ def _return_to(request) -> str:
     """The page that sent the operator here, if it said so and is ours.
 
     A form is reached from wherever the thing being edited appears (a
-    service, a domain, a list) and returning to the resource instead put the
-    operator somewhere they had not been, several clicks from the page they
-    were working on. The origin is carried explicitly rather than guessed from
+    service, a domain, a list), and returning to the resource instead puts the
+    operator somewhere they have not been, several clicks from the page they
+    are working on. The origin is carried explicitly rather than guessed from
     Referer, which is absent, stale or forged often enough not to navigate by.
 
     Checked before use: an unvalidated redirect target taken from a query
@@ -454,8 +450,7 @@ def _readable_error(exc) -> str:
 
     Django collects several messages on one ValidationError, and str() of that
     renders the list with its brackets and quotes intact. Shared with the domain
-    views, which had their own copy: two readers of the same exception would
-    show the same refusal differently depending on which page you were on.
+    views, so one refusal reads the same on every page.
     """
 
     messages_found = getattr(exc, "messages", None)

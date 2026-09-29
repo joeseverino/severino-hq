@@ -9,6 +9,7 @@ a projection never advertises authority its principal does not hold.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import replace
 from typing import Protocol
 from urllib.parse import urlencode
@@ -55,6 +56,26 @@ def connection_action_links(spec: ConnectionLinkSpec) -> tuple[ActionLink, ...]:
     return tuple(actions)
 
 
+def command_url(name: str, target: str = "", *, kinds: Iterable[str] = (), **query: str) -> str:
+    """The one way to link to a command's form: its page, its target, encoded.
+
+    Every remedy, action item and page action reaches a command through here,
+    so a target is always encoded the same way the form reads it back, and a
+    command whose route is not mounted yields "" rather than a dead link.
+    ``kinds`` narrows the target choices (``?kind=`` once per kind). An
+    architecture test holds every other module to it.
+    """
+
+    try:
+        url = reverse("command", kwargs={"name": name})
+    except NoReverseMatch:
+        return ""
+    params = [("target", target)] if target else []
+    params += [("kind", kind) for kind in kinds]
+    params += [(key, value) for key, value in query.items() if value]
+    return f"{url}?{urlencode(params)}" if params else url
+
+
 def capability_action_link(
     name: str,
     effect: str,
@@ -66,15 +87,14 @@ def capability_action_link(
 
     if _permitted_spec(name, principal) is None:
         return None
-    try:
-        command_url = reverse("command", kwargs={"name": name})
-    except NoReverseMatch:
+    url = command_url(name)
+    if not url:
         return None
     return ActionLink(
         "command",
         label,
         effect,
-        command_url,
+        url,
         capability=name,
         reason="Connection scopes and permissions confirmed.",
     )

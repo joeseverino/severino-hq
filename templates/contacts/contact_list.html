@@ -40,7 +40,7 @@
           <div class="muted">{{ s.email }}</div>
         </td>
         <td class="msg-preview"><a class="subtle-link" href="{% url 'contacts:detail' s.id %}">{{ s.message_preview|truncatechars:120 }}</a></td>
-        <td><span class="pill pill-{{ s.status }}">{{ s.status }}</span></td>
+        <td><span class="pill pill-{{ s.status }}">{{ s.status|capfirst }}</span></td>
         <td class="muted">{{ s.country|or_empty }}</td>
         <td class="actions-col row-actions">
           {% url 'contacts:set_status' s.id as status_url %}

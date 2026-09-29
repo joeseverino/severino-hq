@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..names import normalized_hostname
+from ..names import normalized_hostname, organisation_name
 from .contract import ObservationRecord, ObservationSpec
 
 ADDRESS_KIND = "registry.address"
@@ -146,10 +146,10 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Address registration",
         AddressHolderRecord,
         addresses=_address,
-        title=lambda record: str(
-            record.get("organisation") or record.get("network") or ""
+        title=lambda record: organisation_name(
+            str(record.get("organisation") or record.get("network") or "")
         ),
-        relation="Address held by",
+        relation="On the network of",
         facet="network",
         read_by="hq",
     ),
@@ -159,7 +159,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Domain registration",
         DomainRegistrationRecord,
         hostnames=_domain,
-        title=lambda record: str(record.get("registrar") or ""),
+        title=lambda record: organisation_name(str(record.get("registrar") or "")),
         relation="Registered through",
         facet="registration",
         expires=lambda record: str(record.get("expires_at", "")),

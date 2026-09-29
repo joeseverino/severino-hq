@@ -56,9 +56,9 @@ def _identity(machine) -> ServiceSection | None:
     ``x`` and ``x-2`` describing one thing, which reads as two machines to
     anyone who meets the second one first.
 
-    HQ has always known they were the same: the machine carries both keys. It
-    simply never said so. This says so, because a name that looks like a
-    duplicate is worth one row to explain and expensive to rediscover.
+    The machine carries both keys, so HQ knows they are the same. This says
+    so, because a name that looks like a duplicate is worth one row to explain
+    and expensive to rediscover.
     """
 
     from control_plane.models import ManagedResource

@@ -40,17 +40,22 @@ so a rule is read and changed where it sits rather than behind a disclosure.
 {% endcomment %}
 <form method="post" class="policy">
   {% csrf_token %}
-  {% for group in groups %}
-    <div class="table-scroll">
-      <table class="data-table policy-table">
-        <thead>
-          <tr>
-            <th scope="col">{{ group.label }}</th>
-            <th scope="col">Default</th>
-            {% for head in column_heads %}<th scope="col" title="{{ head.column.detail }}">{{ head.column.label }}{% if head.dormant %} <span class="policy-off">off on this server</span>{% endif %}</th>{% endfor %}
-          </tr>
-        </thead>
+  {% comment %}
+  One table, a group per resource: the columns are the same for every resource,
+  so they are headed once rather than once per resource.
+  {% endcomment %}
+  <div class="table-scroll">
+    <table class="data-table policy-table">
+      <thead>
+        <tr>
+          <th scope="col">Action</th>
+          <th scope="col">Default</th>
+          {% for head in column_heads %}<th scope="col" title="{{ head.column.detail }}">{{ head.column.label }}{% if head.dormant %} <span class="policy-off">off on this server</span>{% endif %}</th>{% endfor %}
+        </tr>
+      </thead>
+      {% for group in groups %}
         <tbody>
+          <tr class="row-group"><th colspan="{{ column_heads|length|add:2 }}" scope="rowgroup">{{ group.label }}</th></tr>
           {% for row in group.rows %}
             <tr>
               <th scope="row">{{ row.label }} <span class="policy-effect effect-{{ row.effect }}">{{ row.effect_label }}</span></th>
@@ -59,9 +64,9 @@ so a rule is read and changed where it sits rather than behind a disclosure.
             </tr>
           {% endfor %}
         </tbody>
-      </table>
-    </div>
-  {% endfor %}
+      {% endfor %}
+    </table>
+  </div>
   <div class="save-bar"><button type="submit" class="btn primary">Save changes</button></div>
 </form>
 {% endblock %}

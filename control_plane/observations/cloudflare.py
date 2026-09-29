@@ -219,6 +219,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         relation="Behind Access",
         names_services=True,
         request_header="Cf-Access-Jwt-Assertion",
+        restricts=True,
         console=lambda record: cloudflare_zero_trust(record, "access", "apps"),
     ),
     ObservationSpec(

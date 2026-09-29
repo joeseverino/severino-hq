@@ -151,7 +151,7 @@ fi
 
 # ------------------------------------------------------------- browser job
 # Real-browser layout invariants over synthetic pages (core/browser_tests.py).
-# Optional for check.sh, required here: a gate nobody runs is how it rotted.
+# Optional for check.sh, required here: a gate nobody runs rots.
 step "browser"
 browser_pin="$(sed -n 's/^playwright==\([^ ]*\).*/\1/p' requirements-browser.txt)"
 browser_install="$PY -m pip install --require-hashes -r requirements-browser.txt && $PY -m playwright install chromium"

@@ -5,8 +5,8 @@ gets cut from. Production runs ``migrate`` on every boot and nothing else, so
 this is the only place a projection gets rebuilt without an operator
 remembering to.
 
-Field lists come from the live registry rather than being restated -- the
-previous reindex restated them, which put a body's definition in two places.
+Field lists come from the live registry rather than being restated, so a
+body's definition lives in one place.
 Rows come from the historical models, as a migration requires. A scope whose
 model is not in this migration's state is skipped; its own saves reindex it.
 """

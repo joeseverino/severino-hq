@@ -189,11 +189,8 @@ def machine_catalog(*, served_at: tuple[str, ...] | None = None) -> tuple[Machin
             for name, entry in declared.items()
         ]
         # The tailnet's own addresses, as evidence rather than as something
-        # somebody has to retype. They were read on the line above and thrown
-        # away: the index held only what a declaration listed, so a tailnet
-        # address resolved to a machine exactly when an operator had copied it
-        # into the form, and removing it from there, a value plainly marked as
-        # observed, silently broke the resolution it looked redundant to.
+        # somebody has to retype: without them a tailnet address resolves to a
+        # machine only when an operator has copied it into the declaration.
         #
         # After the declarations, so a declared name still wins the address it
         # claims and nothing about precedence moves.
@@ -477,7 +474,7 @@ def _reaches_machines(provider: str) -> bool:
 
     ``reaches`` is deliberately polymorphic (a Portainer reports the machines
     it holds and a DNS token reports the zones it may edit) and read the same
-    way, four domains appeared on this page as though they were servers.
+    way, a zone would appear on this page as though it were a server.
 
     Told apart by what the providers behind each connection actually declare: a
     provider that has a ``host`` field is one whose things live on machines.
@@ -547,10 +544,7 @@ def _services_by_host(index: Machines) -> dict[str, set[str]]:
 
     The origin is resolved through the same index every other surface uses, so
     the machine this board files a name under and the machine that name's own
-    page says it is served from cannot disagree. They did: this once kept its
-    own map, in which a name and an address shared a namespace and a credential
-    outranked a declaration, so a service appeared under the credential's name
-    on the board and under the declared machine's on the service page.
+    page says it is served from cannot disagree.
     """
 
     from .infrastructure import enabled_resources

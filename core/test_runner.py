@@ -57,8 +57,8 @@ class _HeldLogs(logging.Handler):
 
     Many tests exercise a failure on purpose (a refused token, an audit write
     that raises) and the code under test logs it, correctly. Printed as they
-    happen, those records filled the suite's output with warnings and
-    tracebacks that were all expected, and a real one could not be told from
+    happen, those records would fill the suite's output with warnings and
+    tracebacks that are all expected, and a real one could not be told from
     them. Django's ``--buffer`` would hold them, but it refuses ``--parallel``.
     So the root logger writes here for the length of each test, and the
     records are printed only if that test fails or errors. Nothing is dropped
@@ -186,7 +186,7 @@ def _checkpoint(alias: str) -> None:
         if (cursor.fetchone() or [""])[0].lower() != "wal":
             return
         # TRUNCATE rather than PASSIVE: PASSIVE gives up if a reader is mid-read
-        # and reports success anyway, which would put us right back to copying a
+        # and reports success anyway, which would leave the clone copied from a
         # file that is missing its newest pages.
         cursor.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import secrets
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
@@ -15,6 +15,7 @@ from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.views import View
 
+from application.action_links import command_url
 from application.capabilities import (
     authorize_capability,
     capability_registry,
@@ -25,6 +26,7 @@ from application.command_forms import command_form_class
 from application.command_targets import (
     capability_target_initial,
     capability_target_options,
+    with_requested_target,
 )
 from application.contracts import route_url
 from application.idempotency import (
@@ -146,6 +148,13 @@ class CommandView(LoginRequiredMixin, View):
             principal=self.principal,
             governed_kinds=tuple(dict.fromkeys(request.GET.getlist("kind"))),
         )
+        if self.target_options is not None:
+            self.target_options = with_requested_target(
+                self.spec,
+                self.target_options,
+                request.GET.get("target") or request.POST.get("__target", ""),
+                principal=self.principal,
+            )
         self.form_class = command_form_class(
             self.spec, target_options=self.target_options
         )
@@ -204,6 +213,12 @@ class CommandView(LoginRequiredMixin, View):
             ),
             "has_reason": "reason" in form.fields,
             "hydrates_target": bool(self.spec.target_initial_fields),
+            # Only a command that writes a record's fields can blank them; one
+            # that takes just a target and a reason has no record to replace.
+            "writes_record": bool(
+                set(schema.get("properties", {}))
+                - {"idempotency_key", "reason"}
+            ),
             "effect_outcome": {
                 "read": "Reads authorized state without changing it.",
                 "remote_write": "Commits an atomic change to HQ state.",
@@ -224,9 +239,11 @@ class CommandView(LoginRequiredMixin, View):
                 capability_target_initial(self.spec, target, principal=self.principal)
             )
         form = self.form_class(initial=initial)
-        return TemplateResponse(
-            request, self.template_name, self._context(form, result=self._result())
-        )
+        context = self._context(form, result=self._result())
+        # A link that named a target the form cannot offer says so, rather than
+        # opening on an empty choice that looks like the link worked.
+        context["unoffered_target"] = target if target and "__target" not in initial else ""
+        return TemplateResponse(request, self.template_name, context)
 
     def post(self, request, name: str):
         form = self.form_class(request.POST)
@@ -288,9 +305,4 @@ class CommandView(LoginRequiredMixin, View):
             "payload": result,
             "replayed": replayed,
         }
-        destination = reverse("command", kwargs={"name": self.spec.name})
-        params = {"result": token}
-        return_url = safe_next(request)
-        if return_url:
-            params["next"] = return_url
-        return redirect(f"{destination}?{urlencode(params)}")
+        return redirect(command_url(self.spec.name, result=token, next=safe_next(request) or ""))

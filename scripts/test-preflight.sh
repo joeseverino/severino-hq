@@ -21,7 +21,7 @@ cd "${repo_dir}"
 cp -R config deploy docker-compose.yml "${repo}/"
 find "${repo}" -name __pycache__ -prune -exec rm -rf {} +
 for f in preflight.sh preflight-host.sh root-tree-manifest.sh deploy-image.sh \
-    severino-hq-sync-scripts lib/checkout.sh lib/systemd-units.sh; do
+    severino-hq-sync-scripts lib/checkout.sh lib/systemd-units.sh upgrade-container.sh; do
     cp "scripts/${f}" "${repo}/scripts/${f}"
 done
 for gate in ci-local check; do
@@ -67,7 +67,7 @@ cat >"${bin}/ssh" <<EOF
 #!/bin/sh
 echo "ssh \$*" >>"\${TEST_LOG}"
 PATH="${host}/bin:\${PATH}" PREFLIGHT_LIB="${lib}" PREFLIGHT_SBIN="${host}/sbin" \\
-    PREFLIGHT_APP="${host}/app" PREFLIGHT_SYSTEMD="${host}/etc" exec sh -s
+    PREFLIGHT_APP="${host}/app" PREFLIGHT_SYSTEMD="${host}/etc" PREFLIGHT_ROOT_UID="$(id -u)" exec sh -s
 EOF
 # sudo refuses to run unless its stdin is empty: stdin is the host script.
 cat >"${host}/bin/sudo" <<'EOF'
@@ -127,6 +127,7 @@ grep -qx "ssh -o BatchMode=yes deploy.example.test sh -s" "${TEST_LOG}" ||
 says "warn    the release changes scripts/deploy-image.sh"
 says "carries this release up to its sync"
 says "warn    the release adds deploy/systemd/severino-hq-example.timer"
+says "upgrade-container.sh is root's alone and identical to the release"
 if grep -q "secret-marker-example" "${work}/out"; then
     fail "the host check printed the sudo rules"
 fi
@@ -212,6 +213,10 @@ git_ show HEAD~1:config/controller-connections.json >"${lib}/config/controller-c
 : >"${host}/sbin/severino-hq-check-scripts"
 host_fault "a hand-installed program no release updates" "severino-hq-check-scripts is not shipped by this release"
 rm "${host}/sbin/severino-hq-check-scripts"
+
+chmod g+w "${lib}/scripts/upgrade-container.sh"
+host_fault "a helper sudo runs as root that others can write" "upgrade-container.sh is writable by its group or others"
+chmod g-w "${lib}/scripts/upgrade-container.sh"
 
 TEST_ACCOUNT=nobody
 host_fault "a checkout .git not owned by the runner's account" "not owned by nobody; fix: sudo chown -R nobody:"

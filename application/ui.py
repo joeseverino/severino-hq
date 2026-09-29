@@ -374,26 +374,19 @@ class CadenceMatrix:
 # a bar chart placed one above the other share an axis position rather than
 # nearly sharing one.
 PLOT_LEFT, PLOT_TOP, PLOT_WIDTH, PLOT_HEIGHT = 48.0, 12.0, 606.0, 202.0
-# The strip after the plot, and the mirror of the gutter before it. The left
-# gutter holds the y-axis labels and so was always there; the right had nothing
-# to hold and was given nothing, which put the last gridline, the last bar and
-# the final point hard against the edge of the drawing while the opposite side
-# breathed for 48 units. A chart read as leaning left, and the most recent
-# period (the one actually being looked at) was the one with no room
-# around it.
-# The same number as the left rather than a smaller one chosen to taste: the
-# end labels are centred on their points, so equal margins are what make the
-# first and last label clear their edges by the same amount. At 24 the last
-# label still hung 2px past the frame while the first cleared it by 17.
+# The strip after the plot, and the mirror of the gutter before it, so the
+# most recent period (the one being looked at) has room around it and the
+# chart does not lean left.
+# The same number as the left: the end labels are centred on their points, so
+# equal margins make the first and last label clear their edges by the same
+# amount.
 # Taken out of the plot rather than added to the box: the drawing stays 702
-# units wide, so every chart keeps the aspect ratio it already had and a line
-# chart sized by `height: auto` does not change height on its own.
+# units wide, so every chart keeps its aspect ratio and a line chart sized by
+# `height: auto` does not change height on its own.
 PLOT_RIGHT = PLOT_LEFT
-# A chart in a card of its own, rather than one of a pair. The drawing was
-# capped at the width of a half-width card whatever it was placed in, so a
-# full-width card held a 640px chart and six hundred pixels of nothing beside
-# it. The height is unchanged: this is the same chart given the room it was
-# put in, not a bigger one.
+# A chart in a card of its own, rather than one of a pair: the drawing fills a
+# full-width card instead of stopping at half-width. The height is unchanged:
+# this is the same chart given the room it is put in, not a bigger one.
 # Room to the right of the plot for the last category label, which is centred
 # on the last point and so hangs half its width past the axis. Sized for the
 # label at its largest: a phone scales the whole drawing down, so the type
@@ -458,8 +451,7 @@ class PlacedLabel:
     than in chart units. Derived by the chart rather than supplied with the
     category, because the share depends on the chart's width and a caller
     building its own categories (the mile profile and the route elevation
-    both do) has no reason to know it. Asked for it, all three forgot, and
-    every label on those charts stacked at zero.
+    both do) has no reason to know it.
     """
 
     at: float
@@ -522,10 +514,9 @@ class Chart:
     def gutter(self) -> float:
         """Where the plot starts, as a share of the drawing.
 
-        The y-axis labels sit in the strip to the left of it. Given a fixed
-        width instead, that strip stayed 44px while the drawing's own gutter
-        shrank with the card, and on a phone the first date label was printed
-        on top of the bottom tick.
+        The y-axis labels sit in the strip to the left of it. A share rather
+        than a fixed width, so the strip scales with the drawing's own gutter
+        and the first date label clears the bottom tick on a phone.
 
         Read from `plot_left` rather than the module constant, so a chart that
         is given a plot different from the standard one reports the gutter it
@@ -816,7 +807,7 @@ def _trend_path(points, place_x, place_y) -> str:
 # What a calendar day can be. "planned" is a commitment not yet due; "missed"
 # is one whose day has passed. They are separate states because they call for
 # opposite reactions, and a single hollow ring for both makes the plan look
-# broken every time you check it mid-week.
+# broken on any mid-week check.
 CALENDAR_STATES = frozenset({"done", "missed", "planned", "empty"})
 
 
@@ -1080,10 +1071,9 @@ def stacked_bar_chart(
     )
 
 
-# Round numbers an axis may end on. The coarse (1, 2, 5, 10) set forced a
-# maximum of 57k up to 100k, leaving bars filling barely half the plot height,
-# the chart read as mostly empty space. These intermediate steps keep the labels
-# round while landing much closer to the data.
+# Round numbers an axis may end on. The intermediate steps keep the labels
+# round while landing close to the data, so bars fill the plot rather than half
+# of it.
 _AXIS_STEPS = (1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10)
 
 

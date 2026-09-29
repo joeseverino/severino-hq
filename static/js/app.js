@@ -34,11 +34,9 @@ const hqParseDocument = (() => {
 // letting fetch follow a cross-origin redirect that CSP correctly blocks.
 // `renewSession` decides whether a request is allowed to take the page away.
 // A request the operator made can: they asked for something, and renewing is
-// the way to get it. A background one must not. The provider returns to the
-// address that triggered the renewal, so a fetch the operator never asked for
-// sent them through sign-in and landed them on the JSON that fetch wanted,
-// from opening a menu. It went unexplained because it needs a session that
-// happens to be expiring, which is rare and looks random.
+// the way to get it. A background one must not: the provider returns to the
+// address that triggered the renewal, so a renewing background fetch would
+// land the operator on the JSON that fetch wanted.
 const hqFetch = async (input, options = {}) => {
   const { renewSession = true, ...rest } = options;
   const headers = new Headers(rest.headers);
@@ -56,11 +54,31 @@ window.hqFetch = hqFetch;
 
 // Disclosure menus that dismiss on an outside click or Escape. One selector
 // covers every such menu, so adding another is handled by construction rather
-// than by remembering to extend a hardcoded query. That query was extended
-// twice, once per menu somebody added and then found stayed open over the top
-// of the next one, so a menu now says for itself that it dismisses, and the
-// third case fixed itself before anyone noticed it.
+// than by remembering to extend a hardcoded query: a menu says for itself
+// that it dismisses.
 const DISMISSIBLE_MENUS = "details[data-menu]";
+
+// A panel that hangs from a disclosure stays on screen. Each is placed from
+// its own edge in the stylesheet, so one near the right of a row (the last
+// filter in a toolbar) can overflow a phone. Measured when it opens: a panel that
+// would cross the viewport's right edge hangs from its disclosure's right
+// edge instead. One rule for every panel, so a new one needs nothing here.
+const EDGE_MARGIN = 8;
+document.addEventListener(
+  "toggle",
+  (event) => {
+    const details = event.target;
+    if (!(details instanceof HTMLDetailsElement)) return;
+    const panel = [...details.children].find((child) => child.tagName !== "SUMMARY");
+    if (!panel || getComputedStyle(panel).position !== "absolute") return;
+    delete panel.dataset.edge;
+    if (!details.open) return;
+    if (panel.getBoundingClientRect().right > document.documentElement.clientWidth - EDGE_MARGIN) {
+      panel.dataset.edge = "end";
+    }
+  },
+  true,
+);
 const sectionMenuOpen = document.querySelector(".nav-toggle-open");
 const sectionMenuClose = document.querySelector(".nav-toggle-close");
 const sectionMenuBackdrop = document.querySelector(".nav-backdrop");
@@ -227,10 +245,9 @@ document.addEventListener("change", (event) => {
 // unavailable.
 // The height of the chrome is a fact about every page, not only the ones with
 // a section nav. Measured here so `--site-header-height` is true at every
-// breakpoint: the header's padding changes on narrow screens, and anything
-// positioned against the stylesheet's static fallback sat a few pixels below
-// it with a gap showing through. Once per load and per resize; nothing reads
-// layout while scrolling.
+// breakpoint: the header's padding changes on narrow screens, and the
+// stylesheet's static fallback is only right at one of them. Once per load
+// and per resize; nothing reads layout while scrolling.
 (() => {
   const header = document.querySelector(".site-header");
   if (!header) return;
@@ -425,8 +442,8 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
     setActive(-1, { scroll: false });
     options.forEach((option, index) => {
       // Movement, not merely appearing under a stationary pointer. Results are
-      // replaced while the operator types; `pointerenter` promoted whatever
-      // new row happened to land under the cursor and made Enter navigate when
+      // replaced while the operator types, so `pointerenter` would promote
+      // whatever new row lands under the cursor and make Enter navigate when
       // the operator intended the full search fallback.
       option.addEventListener("pointermove", () => setActive(index, { scroll: false }));
       option.addEventListener("focus", () => setActive(index, { scroll: false }));
@@ -449,9 +466,9 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
         "[data-command-center-results]",
       );
       if (!next) {
-        // Not a results fragment. Almost always the sign-in page after the
-        // session ended underneath an open tab; the palette sat on
-        // "Loading" and looked broken instead of saying what happened.
+        // Not a results fragment: almost always the sign-in page after the
+        // session ended underneath an open tab. Say so rather than sit on
+        // "Loading".
         results.replaceChildren();
         const message = document.createElement("p");
         message.className = "notice notice-attention";
@@ -719,7 +736,7 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
 (() => {
   // Pointer devices only, for the same reason the nav menus are. A touch drag
   // across a chart fires pointermove but never pointerleave, so a tooltip
-  // raised by a scroll gesture stayed on screen with nothing to dismiss it.
+  // raised by a scroll gesture would have nothing to dismiss it.
   // Touch already has the chart's data table, which is always rendered.
   if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
 
@@ -992,8 +1009,8 @@ document.addEventListener("click", (event) => {
 
 // Reachability, answered in place. The form is a real GET to a page that
 // renders the same answer, so it works without this; what this adds is not
-// losing the dialog, the machine behind it and the scroll position every time
-// somebody asks a second question.
+// losing the dialog, the machine behind it and the scroll position on every
+// further question.
 document.addEventListener("submit", (event) => {
   const form = event.target.closest("form[data-whatif]");
   if (!form || !window.fetch) return;

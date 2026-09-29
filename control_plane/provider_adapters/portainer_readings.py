@@ -228,10 +228,10 @@ def container_record(
     ports, port, reachable = published(container)
     stack = labels.get("com.docker.compose.project", "")
     return {
-        # Whether Portainer created this, or merely sees it. Everything running
-        # today was started by compose on the machine, so Portainer holds no
-        # stack for any of it, and a declaration built as though it did would
-        # ask Portainer to stand up a second copy of something already serving.
+        # Whether Portainer created this, or merely sees it. A container
+        # started by compose on the machine has no Portainer stack, and a
+        # declaration built as though it did would ask Portainer to stand up a
+        # second copy of something already serving.
         "portainer_managed": bool(stack) and stack in portainer_stacks,
         "name": (container.get("Names") or ["/"])[0].lstrip("/"),
         # The short ID, which Docker also makes the container's hostname: how
@@ -522,6 +522,15 @@ def _runtime(api: PortainerReads, at: _Environment) -> Iterator[dict[str, Any]]:
                 for port, bindings in sorted((host.get("PortBindings") or {}).items())
                 for bound in bindings or ()
                 if isinstance(bound, dict)
+            ),
+            # What the image says it listens on: the only port fact there is for
+            # a container on the host's network, which publishes nothing.
+            "exposed_ports": tuple(
+                sorted(
+                    int(port.split("/", 1)[0])
+                    for port in (config.get("ExposedPorts") or {})
+                    if port.split("/", 1)[0].isdigit()
+                )
             ),
             "memory_limit": int(host.get("Memory") or 0),
             "cpu_limit": round(int(host.get("NanoCpus") or 0) / 1e9, 2),

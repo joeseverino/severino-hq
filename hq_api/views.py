@@ -257,7 +257,7 @@ def _endpoint(methods: tuple[str, ...]) -> Callable[[APIView], View]:
         # A fact a test can read, rather than one a reviewer has to notice.
         # `/api/` is exempt from the login *redirect*, so a view added here
         # without this decorator is not merely unprotected by convention: it
-        # is served to anyone who asks. `core.test_security` walks these routes
+        # is served to anyone who asks. `core.tests.test_security` walks these routes
         # and fails if one lacks the mark.
         setattr(wrapper, "__hq_authenticated__", True)
         return wrapper
@@ -338,9 +338,8 @@ def _projection(
 
     `topology` and `findings` are the same adapter: authorize, read one query
     parameters, hand them to the application layer, and turn a refusal into a
-    403. Written out per projection they were flagged as duplicates, which was
-    the graph noticing something true: an adapter that adds no behaviour of its
-    own should not be copied once per read model.
+    403. An adapter that adds no behaviour of its own is not copied once per
+    read model.
 
     An unrecognized filter value is the application's business, not the
     transport's: both projections answer it by returning everything and saying

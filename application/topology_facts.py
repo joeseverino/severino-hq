@@ -194,6 +194,14 @@ def add_observed_facts(
     if blocked:
         found = _policy_verdicts(found, blocked)
 
+    # When a drifted declaration was first seen drifting, and what happened
+    # near then: the deploy, recreate or edit that likely did it. Paid for only
+    # when something has drifted.
+    for resource in resources:
+        drift = _drift_facts(resource)
+        if drift:
+            found[f"resource:{resource.key}"] = found.get(f"resource:{resource.key}", ()) + drift
+
     # Nothing further when the estate holds no zone, the way `_measure` pays
     # nothing when nothing is named like a host. This runs inside the shared
     # projection that the dashboard budget measures, so a deployment with no
@@ -223,6 +231,23 @@ def add_observed_facts(
             ("registrar", str(registration.get("registrar", ""))),
         )
     return found
+
+
+def _drift_facts(resource) -> tuple[tuple[str, str], ...]:
+    from .conditions import held_since
+    from .history import near
+    from .ui import ago_short
+
+    since = held_since(resource.conditions, "Drifted")
+    if since is None:
+        return ()
+    return (
+        ("drift-since", since.isoformat()),
+        *(
+            ("drift-near", f"{item.source}: {item.title} ({ago_short(item.at)})")
+            for item in near(since)
+        ),
+    )
 
 
 def add_connection_facts(nodes: dict[str, TopologyNode]) -> None:

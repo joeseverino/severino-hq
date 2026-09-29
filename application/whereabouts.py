@@ -23,13 +23,11 @@ class Origin:
     # Whether an ingress declared this, or a record merely pointed here. Both
     # are origins and they are not the same sentence: an ingress *forwards* to
     # somewhere, while a record says the name simply answers there. Rendered
-    # from one wording, a name with no ingress at all was told that its ingress
-    # forwards somewhere: directly beneath its own Ingress card reading "not
-    # declared", on the same page.
+    # from one wording, a name with no ingress would be told that its ingress
+    # forwards somewhere, beneath its own Ingress card reading "not declared".
     #
-    # Defaults true because every origin that existed before a record could
-    # declare one came from an ingress, and because the sentence it selects is
-    # the one those origins have always been rendered with.
+    # Defaults true: an origin comes from an ingress unless a record says
+    # otherwise.
     routed: bool = True
     # What readings joined to the origin name as serving it: a Pages project,
     # the holder of a public address.
@@ -57,18 +55,11 @@ class Origin:
         claims is a thing HQ cannot describe and probably should.
 
         Read through the shared endpoint parser rather than by looking for a
-        colon. A bare IPv6 answer is full of colons and carries no port at all,
-        and counting them called it an ingress: after which the address was
-        split at its last colon and matched against nothing.
+        colon: a bare IPv6 answer is full of colons and carries no port at all.
 
-        The absent port is necessary and was briefly taken as sufficient, which
-        is only true while the records that name an origin are public ones. An
-        internal rewrite names an origin too, and it names a *private* address:
-        no port, no machine HQ happens to have been told about, and read on
-        punctuation alone that came out as "served outside this network" for a
-        name served one subnet away. The page then withdrew its offer to add an
-        ingress, on the grounds that a name answered elsewhere needs nothing
-        here, which is the right rule applied to the wrong reading.
+        The absent port is necessary but not sufficient. An internal rewrite
+        names an origin too, with a *private* address and no port, and a name
+        served one subnet away is not served outside this network.
 
         So the question is asked of the address rather than of its spelling.
         Where an address lives is ``reach``'s to answer and it already does, for
@@ -76,7 +67,7 @@ class Origin:
         inside by definition, and an unknown host inside the network is what
         ``qualifier`` exists to say. A name rather than an address (a CNAME to
         somewhere that hosts pages) classifies as nothing and stays external,
-        which is the case this property was written for.
+        which is the case this property exists for.
         """
 
         from .reach import network_of
@@ -202,11 +193,9 @@ def machine_for(origin: "Origin | None", machines: "tuple[dict[str, Any], ...]")
 class Whereabouts:
     """What places an address: whose machine it is, and what answers there.
 
-    Both are estate-wide readings that every address in a pass shares, and both
-    were taken per address: resolving one read the connections, and asking what
-    was listening on it read the container sweep and the container
-    declarations. A catalogue of thirty names paid for all three thirty times,
-    and the loopback case paid once per declared machine on top.
+    Both are estate-wide readings that every address in a pass shares: the
+    connections, the container sweep and the container declarations. Taken per
+    address, a catalogue would pay for all three once per name.
 
     Read at most once each and only if asked, for the same reason as the
     certificates below: a dashboard listing no service resolves no address, and
@@ -381,8 +370,8 @@ def _answering() -> dict[tuple[str, Any], list[str]]:
     """Every container answering on a port of a machine, by that pair.
 
     Built whole rather than asked per address. The same two tables answer every
-    such question in a pass, and read per question they were the largest part
-    of what a service catalogue spent.
+    such question in a pass, and read per question they would dominate what a
+    service catalogue spends.
     """
 
     found: dict[tuple[str, Any], set[str]] = {}

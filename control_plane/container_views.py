@@ -51,7 +51,6 @@ class ContainerListView(PageMixin, LoginRequiredMixin, TemplateView):
 
     template_name = "control_plane/container_list.html"
     page_title = "Containers"
-    page_lede = "Every container running on your machines, and whether what it runs is current and safe."
 
     def get_context_data(self, **kwargs):
         from application.containers import BEHIND, CURRENT, VULNERABLE, containers

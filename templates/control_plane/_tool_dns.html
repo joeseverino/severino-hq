@@ -3,7 +3,7 @@
   <section class="card">
     <div class="tool-intro">
       <h2>Name lookup</h2>
-      <p class="help">Resolved from outside this network.</p>
+      <p class="help">Every public record for a name.</p>
     </div>
     <form method="get" class="lookup-form">
       <input type="hidden" name="tab" value="dns">
@@ -18,9 +18,9 @@
       </div>
     </form>
 
-    <div class="tool-result">
     {% with reading=results|dictkey:"lookup.name" %}
       {% if reading %}
+    <div class="tool-result">
         {% if reading.ok %}
           <div class="table-scroll">
             <table>
@@ -44,9 +44,9 @@
         {% else %}
           <p class="help">{{ reading.message|default:"Lookup failed." }}</p>
         {% endif %}
+    </div>
       {% endif %}
     {% endwith %}
-    </div>
   </section>
 
   <section class="card">
@@ -67,9 +67,9 @@
       </div>
     </form>
 
-    <div class="tool-result">
     {% with reading=results|dictkey:"lookup.address" %}
       {% if reading %}
+    <div class="tool-result">
         {% if reading.ok %}
           <dl class="conn-pairs">
             <dt>Address</dt>
@@ -111,8 +111,8 @@
         {% else %}
           <p class="help">{{ reading.message|default:"Lookup failed." }}</p>
         {% endif %}
+    </div>
       {% endif %}
     {% endwith %}
-    </div>
   </section>
 </div>

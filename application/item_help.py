@@ -11,7 +11,7 @@ work it out:
 ``Insight`` is the SDK's shape (``hq_sdk/contract.json``), so help travels in
 fields it already has: a remedy as one of its ``actions``, a command or a
 reason as a step of its ``workflow``, told apart by the step's phase. The
-contract test (``application/test_item_help.py``) holds every host provider
+contract test (``application/tests/test_item_help.py``) holds every host provider
 to it.
 """
 
@@ -19,10 +19,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from typing import Any
-from urllib.parse import urlencode
 
-from django.urls import NoReverseMatch, reverse
-
+from .action_links import command_url
 from .finding_model import Finding
 from .workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, WorkflowStep
 from .workflows import claim_identity
@@ -78,12 +76,9 @@ def remedy_link(capability: str, label: str, target: str = "", *, url: str = "")
     """
 
     if not url:
-        try:
-            url = reverse("command", kwargs={"name": capability})
-        except NoReverseMatch:
+        url = command_url(capability, target)
+        if not url:
             return None
-        if target:
-            url = f"{url}?{urlencode({'target': target})}"
     return ActionLink(REMEDY, label, "remote_write", url, capability=capability, target=target, recommended=True)
 
 

@@ -7,8 +7,6 @@
   {% if connections.all_custodied %}<span>No secrets stored in HQ</span>{% endif %}
   {% if connections.oldest %}<span>Oldest reading <a href="#{{ connections.oldest.label|connection_anchor }}">{{ connections.oldest.label }}</a>, {{ connections.oldest.observed_at|ago }}</span>{% endif %}
   {% if connections.reading_everything_since %}<span>Read of everything asked {{ connections.reading_everything_since|ago }}</span>{% endif %}
-  <a class="connection-inspect" href="{% url 'connection' %}" data-modal-open="connection" data-connection-source="{% url 'connection' %}">Inspect this request</a>
-  {% if connections.read_all %}{% post_button connections.read_all.label connections.read_all.url css="btn compact" title=connections.read_all.reason %}{% endif %}
 </div>
 
 {% comment %}
@@ -17,16 +15,9 @@ Families with nothing configured keep a single muted row so
 they stay visible and stay in the same table.
 {% endcomment %}
 {% if connections.groups %}
-<section class="card connection-all">
+<section class="connection-all">
   <div class="table-scroll">
     <table class="data-table connection-table">
-      <colgroup>
-        <col class="connection-col-identity">
-        <col class="connection-col-abilities">
-        <col class="connection-col-dependencies">
-        <col class="connection-col-state">
-        <col class="connection-col-next">
-      </colgroup>
       <thead>
         <tr>
           <th>Connection</th>
@@ -43,7 +34,7 @@ they stay visible and stay in the same table.
             <td>
               <strong>{% entity "connection"|entity_of:connection.instance.label %}</strong>
               {% if connection.instance.endpoint %}<br><code class="connection-endpoint" title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint }}</code>{% endif %}
-              {% comment %}Where a group starts: every row under it shares this, and repeating it on each said nothing new.{% endcomment %}
+              {% comment %}Where a group starts: every row under it shares this, and repeating it on each says nothing new.{% endcomment %}
               {% ifchanged group.spec.label group.spec.secret_store %}<br><span class="connection-row-meta">
                 {% if group.spec.label != connection.instance.label %}{{ group.spec.label }} · {% endif %}{% if group.spec.secret_store %}Secret store: {{ group.spec.secret_store }}{% else %}No credential needed{% endif %}
                 {% if group.spec.documentation_url %} · <a href="{{ group.spec.documentation_url }}">Docs</a>{% endif %}
@@ -73,7 +64,7 @@ they stay visible and stay in the same table.
             <td>
               {% comment %}
               Capped, because a controller credential governs a dozen kinds and
-              a dozen chips made one row four hundred pixels tall. The rest
+              a dozen chips would make one row hundreds of pixels tall. The rest
               fold behind the count.
               {% endcomment %}
               {% if connection.abilities %}
@@ -106,15 +97,15 @@ they stay visible and stay in the same table.
               {% else %}{% empty_value %}{% endif %}
             </td>
             {% comment %}
-            Inline and wrapping rather than one line per link: four stacked
-            links made this the tallest cell in the table, and slicing to one
-            hid a machine the connection genuinely reaches.
+            Inline and wrapping rather than one line per link: stacked links make
+            this the tallest cell in the table, and slicing to one would hide a
+            machine the connection genuinely reaches.
             {% endcomment %}
             <td class="optional-col">
               {% comment %}
               One wrapper, for the same reason as the state cell: in the
-              stacked card each link and chip was its own flex item, and a
-              machine's name broke at every hyphen to fit beside the others.
+              stacked card each link and chip would be its own flex item, and a
+              machine's name would break at every hyphen to fit beside the others.
               {% endcomment %}
               <span class="connection-depends">
               {% for link in connection.instance.targets|slice:":3" %}{% entity link|declared_link %}{% if not forloop.last %} · {% endif %}{% endfor %}
@@ -129,13 +120,13 @@ they stay visible and stay in the same table.
             Two answers, not one: where the connection is in its life, and
             whether HQ may do what it is held for. A reachable credential with
             missing scopes and a stale one with proven authority are different
-            situations that a single status folded together.
+            situations that a single status would fold together.
             {% endcomment %}
             <td class="tight-col">
               {% comment %}
               A block of its own rather than lines broken with <br>: the stacked
               layout lays a cell out as a flex row, where a line break is
-              nothing and three phrases ran together off the edge of the phone.
+              nothing and the phrases would run together off the edge of a phone.
               {% endcomment %}
               <span class="connection-standing">
                 <span class="connection-state connection-state-{{ connection.lifecycle }}">{{ connection.lifecycle_label }}</span>

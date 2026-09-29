@@ -11,6 +11,7 @@ from projects.views import PostureView, WatchingRefreshView, WatchingView
 from core.views import (
     ConnectionView,
     AgentAccessView,
+    ThemeView,
     AgentPolicyView,
     DemoModeView,
     PublicAddressView,
@@ -88,6 +89,7 @@ urlpatterns = [
     path("dashboard/contacts/", DashboardContactsView.as_view(), name="dashboard_contacts"),
     path("demo/", DemoModeView.as_view(), name="demo_mode"),
     path("agent-access/", AgentAccessView.as_view(), name="agent_access"),
+    path("theme/", ThemeView.as_view(), name="theme"),
     path("agents/", AgentPolicyView.as_view(), name="agent_policy"),
     path("connection/", ConnectionView.as_view(), name="connection"),
     path(

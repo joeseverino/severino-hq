@@ -1,24 +1,27 @@
 {% comment %}
-One table of services. Rendered twice (once for the favorites, once for
-everything else) so the two lists cannot drift into showing different columns
-or reading a facet differently.
+One table of services, a tbody per group (`groups`: label, rows, reorderable),
+so the favorites and the rest share one set of columns without fixing their
+widths. A group's heading shows only when there is more than one group.
 
 `reorderable` turns on the up/down controls. They are only meaningful inside the
 favorites, where the order is something the operator chose; among the rest,
 alphabetical is the order and there is nothing to move.
 {% endcomment %}
 <div class="table-scroll">
-  <table class="data-table grid-locked service-table">
+  <table class="data-table service-table">
     <thead>
       <tr>
         <th>Service</th>
+        <th>Reach</th>
         {% for id, label in facets %}<th>{{ label }}</th>{% endfor %}
         <th>Runs on</th>
         {% if show_service_projects %}<th>Project</th>{% endif %}
         <th>State</th>
       </tr>
     </thead>
+    {% for group_label, rows, reorderable in groups %}
     <tbody>
+      {% if groups|length > 1 %}<tr class="row-group"><th colspan="{% if show_service_projects %}{{ facets|length|add:5 }}{% else %}{{ facets|length|add:4 }}{% endif %}" scope="rowgroup">{{ group_label }}</th></tr>{% endif %}
       {% for service in rows %}
         <tr>
           <td>
@@ -30,7 +33,6 @@ alphabetical is the order and there is nothing to move.
                 {% post_button "★" pin_url css="pin-toggle" title="Add "|add:service.hostname|add:" to favorites" %}
               {% endif %}
               <strong>{% entity "service"|entity_of:service.hostname %}</strong>
-              {% if service.is_hq %}<span class="pill">HQ</span>{% endif %}
               {% if reorderable %}
                 <span class="pin-move">
                   {% url 'control_plane:service_move' service.hostname as move_url %}
@@ -44,6 +46,9 @@ alphabetical is the order and there is nothing to move.
               {% endif %}
             </div>
           </td>
+          {% with exposure=service.exposure %}
+            <td><span class="exposure exposure-{{ exposure.level }}" title="{{ exposure.sentence }}">{{ exposure.short }}</span></td>
+          {% endwith %}
           {% for facet in service.facets %}
             {% if facet.id != runtime_facet %}
               <td>
@@ -69,11 +74,9 @@ alphabetical is the order and there is nothing to move.
             {% endif %}
           {% endfor %}
           {% comment %}
-          Where it runs, in one column. The runtime facet named the container
-          declaration and the origin named the machine, side by side, in two
-          vocabularies for one fact, and the long resource key was the half
-          that read worst. The origin's own phrasing wins, and the declaration
-          behind it is what the name links to.
+          Where it runs, in one column: the runtime facet and the origin name one
+          fact in two vocabularies. The origin's own phrasing wins, and the
+          declaration behind it is what the name links to.
           {% endcomment %}
           <td>
             {% if service.is_observed and service.path.observed %}
@@ -96,9 +99,12 @@ alphabetical is the order and there is nothing to move.
           {% if show_service_projects %}<td>{% if service.project %}{% entity "project"|entity_of:service.project.slug label=service.project.name %}{% else %}{% empty_value %}{% endif %}</td>{% endif %}
           <td><span class="pill pill-{{ service.status }}"{% if service.health.detail %} title="{{ service.health.detail }}"{% endif %}>{{ service.status_label }}</span></td>
         </tr>
-      {% empty %}
-        <tr><td colspan="{% if show_service_projects %}{{ facets|length|add:4 }}{% else %}{{ facets|length|add:3 }}{% endif %}">{% include "partials/_empty_state.html" with compact=True message=empty_message action_url=start_url action_label="Publish a service" %}</td></tr>
       {% endfor %}
     </tbody>
+    {% empty %}
+    <tbody>
+      <tr><td colspan="{% if show_service_projects %}{{ facets|length|add:5 }}{% else %}{{ facets|length|add:4 }}{% endif %}">{% include "partials/_empty_state.html" with compact=True message=empty_message action_url=start_url action_label="Publish a service" %}</td></tr>
+    </tbody>
+    {% endfor %}
   </table>
 </div>

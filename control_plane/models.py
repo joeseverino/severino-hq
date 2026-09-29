@@ -15,9 +15,7 @@ from core.models import TimestampedModel
 class ManagedResource(TimestampedModel):
     """Desired state HQ authors, and the last thing a controller observed of it.
 
-    There is no field recording who declared this. There was one, distinguishing
-    a resource materialised from the topology document from one entered by hand,
-    and it stopped meaning anything the moment HQ became the only author. A
+    There is no field recording who declared this: HQ is the only author, and a
     column with one reachable value is a question the model appears to answer
     and does not.
     """
@@ -118,7 +116,7 @@ class ProviderConnection(TimestampedModel):
     connection is created. Everything here is downstream of it: the controller
     renders the vault into its own environment, reads back what it was given,
     and reports that. So a page listing connections cannot drift from the vault,
-    because it was never a second copy of it.
+    because it is not a second copy of it.
 
     ``reaches`` is what the credential can act on: the machines behind a
     Portainer, the zones a DNS token may edit. It is why this is worth sweeping
@@ -377,10 +375,9 @@ class OperationRequest(TimestampedModel):
 class ApprovalRequest(TimestampedModel):
     """A change something other than a person asked for, held until one agrees.
 
-    Written after a single service token, held on a laptop, changed the whole
-    estate's access policy twice inside a minute: once to amend the declaration
-    and once to push it, with nothing in between that a human had to see. Both
-    calls were authorized. Authority was never the missing thing: consent was.
+    A service token can hold every capability needed to amend a declaration
+    and push it, with nothing in between that a human has to see. Authority is
+    not the missing thing: consent is.
 
     So this is not a second permission system. The caller already held the
     capability; what it did not hold was a person's agreement, and that is the

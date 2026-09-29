@@ -9,16 +9,13 @@ everything above it is a claim about a moment: a provider the controller could
 not reach still shows its last sweep, and not saying how old it is lets a stale
 list read as current.
 
-Three pages had their own wording for it, and two of them named Cloudflare in
-the markup, which is the one thing a template must not do here, since the
-provider already says what it is called. `snapshot.label` comes from the
-registry, so a provider added later names itself.
+`snapshot.label` comes from the registry, so a provider names itself and no
+template names one.
 
-Listed rather than written out. Eight providers swept together produce eight
-identical clauses of "records, checked three hours ago", and the one that had
-not been swept in a day was a phrase in the middle of a paragraph nobody
-finishes reading. In a grid the counts line up, and the odd one out is the row
-whose age does not match its neighbours.
+Listed rather than written out. Providers swept together produce identical
+clauses, and in prose the stale one is a phrase mid-paragraph. In a grid the
+counts line up, and the odd one out is the row whose age does not match its
+neighbours.
 
 `inline` gives just the age, for a heading's aside that already says what it counts.
 `only_kind` narrows it to one provider, and stays a sentence: one reading needs
@@ -43,8 +40,13 @@ or out of date.
       {% endfor %}
     </p>
   {% else %}
-    <section class="sweep">
-      <h2 class="section-heading">Provider readings</h2>
+    {% comment %}
+    Folded, like every reference section: how old each reading is matters when
+    something looks wrong, not on every visit, and thirty rows of it push the
+    page's own content off a phone.
+    {% endcomment %}
+    <details class="sweep section-fold">
+      <summary><h2>Provider readings <span class="heading-aside">{{ inventory|length }}</span></h2></summary>
       <div class="sweep-grid">
         {% for snapshot in inventory %}
           <div class="sweep-item{% if not snapshot.reachable %} sweep-item-unreachable{% elif snapshot.state == "stale" or snapshot.state == "partial" %} sweep-item-stale{% endif %}">
@@ -61,6 +63,6 @@ or out of date.
           </div>
         {% endfor %}
       </div>
-    </section>
+    </details>
   {% endif %}
 {% endif %}

@@ -3,9 +3,8 @@
 Two steps that must happen together and belong to different owners.
 `inventory` knows how to store a sweep; `zones` knows which of the records in
 it fall inside a domain HQ has been made responsible for. Neither is the right
-place to know about the other, when `inventory` reached up into `zones` for
-the adoption step the two imported each other, which is the kind of knot that
-tightens every time something is added to either side.
+place to know about the other: either reaching into the other makes the two
+import each other.
 
 So the composition lives above both, where it can see them and they cannot see
 it. The transaction is held here, because the guarantee is about the pair:

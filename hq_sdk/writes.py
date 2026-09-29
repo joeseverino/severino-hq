@@ -1,10 +1,10 @@
 """Form views whose write is one application service call.
 
-The list side of a page has been declarative for a while: a view names its
-filters and sorts and ``TableListMixin`` derives the rest. The write side was
-not, so every create, update, delete and command restated the same steps by
-hand, in the host and in every extension, and the same steps could drift once
-per domain.
+The list side of a page is declarative: a view names its filters and sorts
+and ``TableListMixin`` derives the rest. These mixins do the same for the write
+side, so a create, update, delete or command does not restate the same steps
+by hand in the host and in every extension, where they could drift once per
+domain.
 
 Two shapes, because there are two:
 
@@ -12,7 +12,7 @@ Two shapes, because there are two:
     A record with a URL of its own. Build a command from the cleaned data, call
     the service, reload what the service named, announce it, go there. Update
     reloads by the identity the service *returned*, so renaming a record
-    redirects to where it now lives instead of 404ing on where it used to.
+    redirects to its new address instead of 404ing on the old one.
 
 ``CommandFormMixin``
     A command posted from a page that then shows itself again: the shape

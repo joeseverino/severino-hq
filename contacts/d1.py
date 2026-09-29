@@ -224,7 +224,7 @@ def query(sql: str, params: list | None = None) -> list[dict]:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         # An HTTPError is the error response itself, socket included, and
-        # nothing closes it for us: chained below, it would stay open until
+        # nothing closes it: chained below, it would stay open until
         # the D1Error was collected. Read what it says, then let it go.
         with exc:
             detail = exc.read().decode("utf-8", "replace")[:500]

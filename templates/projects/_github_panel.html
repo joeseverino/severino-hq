@@ -76,8 +76,8 @@ The page reads a stored reading; nothing here calls GitHub.
 
 
   {% comment %}
-  Rows that read left to right, the detail beside the name: a table spread
-  four columns across the page and left the middle of every row empty.
+  Rows that read left to right, the detail beside the name: a four-column
+  table leaves the middle of every row empty.
   {% endcomment %}
   {% if repo.pull_requests %}
     <h3 class="section-heading">Open pull requests</h3>
@@ -95,7 +95,7 @@ The page reads a stored reading; nothing here calls GitHub.
 
   {% if repo.runs %}
     <h3 class="section-heading">Workflows</h3>
-    {% comment %}Chips that wrap, not cells: a grid always stranded a last row. Detail on hover.{% endcomment %}
+    {% comment %}Chips that wrap, not cells: a grid strands a last row. Detail on hover.{% endcomment %}
     <p class="workflow-chips">
       {% for run in repo.runs %}
         <a class="workflow-chip{% if run.conclusion == 'success' %} tone-good{% elif run.conclusion == 'failure' or run.conclusion == 'timed_out' %} tone-serious{% elif run.status != 'completed' %} tone-attention{% endif %}" href="{{ run.url }}" rel="noopener" data-tip="{% if run.conclusion %}{{ run.conclusion|capfirst }}{% else %}{{ run.status|capfirst }}{% endif %}&#10;{{ run.branch }} · {{ run.sha|slice:':7' }} · {{ run.created_at|ago_short }}">{% include "partials/_icon.html" with name="check-circle" %}{{ run.name }}<span class="visually-hidden">: {% if run.conclusion %}{{ run.conclusion }}{% else %}{{ run.status }}{% endif %}, {{ run.branch }}, {{ run.created_at|ago_short }}</span></a>

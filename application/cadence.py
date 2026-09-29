@@ -18,7 +18,7 @@ executes: the same split as claim, schedule and report.
 The doorbell is a file HQ touches when it queues something. It carries no
 authority, no credentials and no data: it cannot say what to do, only that
 something changed. A unit on the host watches it and starts the controller,
-which pulls the work through the path it always used. Forged, deleted or
+which pulls the work through its usual path. Forged, deleted or
 replayed, the worst it can cause is a controller run that finds nothing to do.
 """
 

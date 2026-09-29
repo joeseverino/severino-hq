@@ -11,7 +11,7 @@ entry needs interpreting rather than just identifying.
     <li>
       <span class="row-main">
         {% if row.url %}<a href="{{ row.url }}"{% if row.external %} target="_blank" rel="noopener"{% endif %}><strong>{{ row.title }}</strong></a>{% else %}<strong>{{ row.title }}</strong>{% endif %}
-        {% if row.detail %}<span class="muted">· {{ row.detail }}</span>{% endif %}
+        {% if row.detail %}<span class="muted">{{ row.detail }}</span>{% endif %}
         {% if row.badge %}<span class="pill pill-{{ row.status|default:'neutral' }}">{{ row.badge }}</span>{% endif %}
       </span>
       {% if row.meta %}<span class="row-meta">{{ row.meta }}</span>{% endif %}

@@ -99,10 +99,8 @@ def _machines_reached(row, known, located) -> tuple[tuple[str, str], ...]:
     says so: the machines it reports reaching, its own name when that turns out
     to be a machine, and last the address it points at.
 
-    The last is the one this page was missing. A credential that opens a shell
-    on a machine HQ was told about printed the address and nothing else, on the
-    one page whose subject is what HQ can reach, while the machine's own page
-    sat one click away under a name.
+    The address matters because a credential that opens a shell on a known
+    machine should link to that machine's page, not print a bare address.
 
     Silence when none of the three lands, which leaves the endpoint column
     saying exactly what HQ knows.

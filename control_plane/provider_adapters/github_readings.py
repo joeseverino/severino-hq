@@ -9,6 +9,7 @@ call for its repository in a sweep.
 from __future__ import annotations
 
 import base64
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -21,12 +22,14 @@ from ..observations.github import (
     ACCESS,
     IMAGES,
     VARIABLES,
+    WORKFLOW_PINS,
     REPOSITORY_KIND,
     RUNNERS,
 )
 from . import github_app
 from .contracts import PERMISSION_REFUSAL, ProviderError, ProviderRuntime
 from .parts import refuse_part
+from .refusals import not_found
 
 READ = {
     "metadata": "read",
@@ -61,6 +64,7 @@ def _repository(runtime: ProviderRuntime, name: str, ref: str) -> dict[str, Any]
     head = get(f"/commits/{github_app.quote(branch)}") or {}
     sha = str(head.get("sha") or "")
     runs = (get("/actions/runs?per_page=50") or {}).get("workflow_runs") or []
+    workflows = _part(WORKFLOW_PINS, name, ref, lambda: _workflow_uses(runtime, name, branch, get))
     return {
         "connection_ref": ref,
         "repository": name,
@@ -87,7 +91,117 @@ def _repository(runtime: ProviderRuntime, name: str, ref: str) -> dict[str, Any]
         "images": _images(runtime, name, ref),
         "access": _part(ACCESS, name, ref, lambda: _access(repo, get)),
         "variables": _part(VARIABLES, name, ref, lambda: [str(item.get("name")) for item in (get("/actions/variables?per_page=100") or {}).get("variables") or ()]),
+        "pins": None if workflows is None else workflows["pins"],
+        "called_workflows": None if workflows is None else workflows["called"],
     }
+
+
+# A ``uses:`` value: an action or reusable workflow and the ref it is taken at.
+_USES = re.compile(r"""^\s*(?:-\s*)?uses:\s*["']?([^\s"'#]+)""", re.M)
+_COMMIT = re.compile(r"^[0-9a-f]{40}$")
+# A reusable workflow another repository holds: ``owner/repo/.github/workflows/x.yml``.
+_CALLED = re.compile(r"^[^./][^/]*/[^/]+/\.github/workflows/[^/]+\.ya?ml$")
+# Where the files whose ``uses:`` lines run live: each workflow, and each local
+# composite action's own ``action.yml``.
+_WORKFLOWS = ".github/workflows"
+_ACTIONS = ".github/actions"
+_ACTION_FILES = frozenset({"action.yml", "action.yaml"})
+
+
+def _listing(get, path: str, branch: str) -> list[Mapping[str, Any]]:
+    """A directory's entries, or none where the repository has no such directory.
+
+    A 404 is the repository saying the directory is not there, so there is
+    nothing in it to pin; any other failure is a read that failed.
+    """
+
+    try:
+        found = get(f"/contents/{path}?ref={github_app.quote(branch)}")
+    except ProviderError as exc:
+        if not_found(exc):
+            return []
+        raise
+    return [entry for entry in found if isinstance(entry, Mapping)] if isinstance(found, list) else []
+
+
+def _uses_files(get, branch: str) -> list[str]:
+    """Every workflow file, then every local composite action's ``action.yml``."""
+
+    files = [
+        path
+        for entry in _listing(get, _WORKFLOWS, branch)
+        if (path := str(entry.get("path") or "")).endswith((".yml", ".yaml"))
+    ]
+    for action in _listing(get, _ACTIONS, branch):
+        if action.get("type") == "dir":
+            files += [
+                str(entry.get("path") or "")
+                for entry in _listing(get, str(action.get("path") or ""), branch)
+                if entry.get("name") in _ACTION_FILES
+            ]
+    return files
+
+
+def _workflow_uses(runtime: ProviderRuntime, name: str, branch: str, get) -> dict[str, list[Any]]:
+    """Every ``uses:`` line not pinned to a commit, with the commit its ref names,
+    and every workflow called from another repository, pinned or not.
+
+    What a called workflow uses in turn lives in that repository, not this one,
+    so it is named rather than vouched for.
+    """
+
+    seen: dict[tuple[str, str], str] = {}
+    pins = []
+    called: set[str] = set()
+    for path in _uses_files(get, branch):
+        body = get(f"/contents/{path}?ref={github_app.quote(branch)}") or {}
+        text = base64.b64decode(str(body.get("content") or "")).decode("utf-8", "replace")
+        for uses in _USES.findall(text):
+            if uses.startswith(("./", "docker://")) or "@" not in uses:
+                continue
+            action, at = uses.rsplit("@", 1)
+            if _CALLED.match(action):
+                called.add(uses)
+            if not _COMMIT.match(at):
+                sha = _resolved(runtime, name, action, at, seen)
+                pins.append({"path": path, "uses": uses, "action": action, "ref": at, "sha": sha})
+    return {"pins": pins, "called": sorted(called)}
+
+
+def _resolved(
+    runtime: ProviderRuntime, name: str, action: str, at: str, seen: dict[tuple[str, str], str]
+) -> str:
+    """The commit ``action@at`` names, asked at most once per repository."""
+
+    source = "/".join(action.split("/")[:2])
+    if (source, at) not in seen:
+        seen[(source, at)] = _commit_of(runtime, name, source, at)
+    return seen[(source, at)]
+
+
+def _commit_of(runtime: ProviderRuntime, name: str, source: str, at: str) -> str:
+    """The commit a tag or branch of ``source`` names now, or "" if unreadable.
+
+    Resolved once per action and ref in a sweep, under the read-only token
+    scoped to the repository being read: a public action's tags are readable
+    with it, and nothing is asked of any other repository's installation. Only
+    a commit that was read is shared: one repository's token failing to read a
+    ref says nothing about the next one's.
+    """
+
+    def load() -> str:
+        commit = github_app.call(
+            runtime, f"/repos/{source}/commits/{github_app.quote(at)}", repositories=[name], permissions=READ
+        ) or {}
+        sha = str(commit.get("sha") or "")
+        if not _COMMIT.match(sha):
+            raise ProviderError("The ref names no commit.")
+        return sha
+
+    try:
+        return runtime.snapshot_value(("github.commit", source, at), load)
+    except ProviderError:
+        return ""
 
 
 def _part(part, name: str, ref: str, read, empty: Any = None) -> Any:

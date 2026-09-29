@@ -33,9 +33,6 @@ class TopologyView(PageMixin, LoginRequiredMixin, TemplateView):
 
     template_name = "control_plane/topology.html"
     page_title = "Topology"
-    page_lede = (
-        "Relationships between declared resources, observed systems and connections."
-    )
 
     def get_page_actions(self):
         return (

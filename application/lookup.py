@@ -81,9 +81,8 @@ def _flatten(data: Any) -> str:
         if {"priority", "exchange"} <= data.keys():
             return f"{data['priority']} {data['exchange']}".strip()
         # CAA carries one tag per record and the tag name is the key, so the
-        # property is which tag is present rather than a fixed field. Matching
-        # only `issue` left every `issuewild` rendering as raw JSON beside its
-        # readable twin.
+        # property is which tag is present rather than a fixed field. Every
+        # tag is matched, so `issuewild` renders as readably as `issue`.
         for tag in ("issue", "issuewild", "iodef", "contactemail"):
             if tag in data:
                 return f"{data.get('critical', 0)} {tag} \"{data[tag]}\""

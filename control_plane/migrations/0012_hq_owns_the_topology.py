@@ -1,4 +1,4 @@
-"""HQ owns what it used to read out of an authored document.
+"""Turn the authored topology snapshot into declarations HQ owns.
 
 Everything the snapshot was still load-bearing for becomes a declaration HQ
 holds and an operator can edit: the machines it cannot reach and the addresses
@@ -8,8 +8,8 @@ here, to write those -- and then the table goes, because a second copy of an
 answer is how the two of them start to disagree.
 
 A certificate stops being a reference and states its own names and targets. It
-keeps its key, its lineage and its generation: nothing about the certificate
-changed, only where the description of it lives.
+keeps its key, its lineage and its generation: only where the description of it
+lives moves.
 """
 
 from django.db import migrations

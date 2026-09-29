@@ -50,9 +50,8 @@ four domains behind a click and then need a second one to go anywhere.
   template knows there are cards, not what they are made of, so an insight
   added later renders without an edit here.
 
-  The value is the link. Rendered as a value plus a separate "Open it →", every
-  card carried a second line of vague instruction to say what the first line
-  already named.
+  The value is the link, so no card needs a second line of instruction to say
+  what the value already names.
   {% endcomment %}
   {% for insight in zone.cards %}
     <div class="control-metric">
@@ -102,8 +101,8 @@ four domains behind a click and then need a second one to go anywhere.
 
 {% comment %}
 Verification strings and issuance rules, folded away. A domain apex answers
-"where does traffic go" underneath four CAA records and three ownership proofs,
-and sorted with the rest they came first: the least interesting rows in the
+"where does traffic go" underneath CAA records and ownership proofs, and
+sorted with the rest they would come first: the least interesting rows in the
 zone at the top of the page.
 {% endcomment %}
 {% if zone.policy %}

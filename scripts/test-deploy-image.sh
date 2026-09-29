@@ -73,7 +73,7 @@ echo "docker $* DOCKER_CONFIG=${DOCKER_CONFIG:-}" >>"${TEST_LOG}"
 exit 0
 EOF
 
-# The script now runs as root and calls these directly rather than through sudo.
+# The script runs as root and calls these directly rather than through sudo.
 cat >"${bin_dir}/systemctl" <<'EOF'
 #!/bin/sh
 echo "systemctl $*" >>"${TEST_LOG}"

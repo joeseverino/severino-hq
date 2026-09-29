@@ -1,9 +1,9 @@
 // Layout audit: the checks a person should not have to run by eye.
 //
-// Every rule here exists because the same complaint was made more than once
-// about a rendered page: a card with a band of empty space under its last row,
-// a short card beside a tall one leaving a hole, a column seam that moves
-// between bands of the page, a tooltip that never fires. None of it is
+// Each rule catches a readability fault in a rendered page: a card with a
+// band of empty space under its last row, a short card beside a tall one
+// leaving a hole, a column seam that moves between bands of the page, a
+// tooltip that never fires. None of it is
 // reachable from the Django suite, which asserts that data is correct rather
 // than that a page is readable.
 //
@@ -24,8 +24,8 @@ async (page) => {
     };
 
     // A card whose content stops well above its own bottom edge. Either the
-    // card is stretching to a neighbour it should not match, or something was
-    // removed and the padding stayed.
+    // card is stretching to a neighbour it should not match, or padding has
+    // outlived the content it held.
     const CARD_SLACK = 28;
     // How much of a card's slack is owed to the pair it sits in. A stretched
     // pair is equal by construction, so the shorter card's spare height is the
@@ -75,6 +75,10 @@ async (page) => {
     document.querySelectorAll('.two-col, .split').forEach((row) => {
       const kids = [...row.children];
       if (kids.length < 2) return;
+      // Stacked (a pair's one-column layout on a narrow screen), the cards are
+      // not a row, and one being shorter than the other is no hole.
+      const tops = kids.map((k) => round(k.getBoundingClientRect().top));
+      if (Math.max(...tops) - Math.min(...tops) > 2) return;
       const heights = kids.map((k) => round(k.getBoundingClientRect().height));
       const gap = Math.max(...heights) - Math.min(...heights);
       if (gap <= ROW_GAP) return;
@@ -164,13 +168,11 @@ async (page) => {
 
     // A scrollbar nobody asked for. Any box that offers to scroll and has
     // something to scroll is reported, in both axes, with the overflow that
-    // earned it, because the two ways this has gone wrong were invisible to
-    // reading the stylesheet.
+    // earned it, because the causes are invisible to reading the stylesheet.
     //
-    // A drawing given a `min-width` wider than the column it is placed in: the
-    // floor was 480px and a half-width card is 284-446px, so every chart on
-    // the page grew a horizontal scrollbar at the same moment and none of the
-    // breakpoints were watching that band.
+    // A drawing given a `min-width` wider than the column it is placed in
+    // scrolls in every card narrower than that floor, at widths no breakpoint
+    // watches.
     //
     // And `overflow-x: auto` on its own, which is not on its own: the other
     // axis computes from `visible` to `auto`, so one declared scrollbar is two
@@ -194,14 +196,15 @@ async (page) => {
       }
       // A scroller drawn without a scrollbar offers none: a one-row strip of
       // links that pans sideways is a choice, not an accident.
-      if (!axes.length || style.scrollbarWidth === 'none') return;
+      // A text field scrolls what is typed into it; that is what it is for.
+      if (!axes.length || style.scrollbarWidth === 'none' || el.matches('textarea')) return;
       // A box the stylesheet has explicitly capped is one whose author chose
       // to scroll it: a filter menu held to 280px so a long list of options
       // does not run off the page, a wide table held to its card so it scrolls
       // instead of widening the document. The cap is the statement of intent,
       // so it is read from the box rather than kept as a list of class names
       // here: a list would need editing every time a capped box is added,
-      // and the one nobody edited it for would be reported as a fault.
+      // and a box missing from it would be reported as a fault.
       //
       // An accidental scrollbar is exactly the case with no cap: nothing was
       // limiting the box, it simply came out a pixel smaller than its
@@ -227,9 +230,12 @@ async (page) => {
     // button in a form, a summary in a details) because the wrapper stretches
     // and its child does not.
     document.querySelectorAll('.page-actions, .form-actions, .filter-bar').forEach((row) => {
+      // Controls only: a status line at the end of a filter bar is text, and
+      // text is not the height of a button.
+      const control = 'input, select, textarea, button, summary, a.btn';
       const controls = Array.from(row.children)
-        .map((child) => child.querySelector('button, summary, a.btn') || child)
-        .filter((el) => el.getBoundingClientRect().height > 0);
+        .map((child) => (child.matches(control) ? child : child.querySelector(control)))
+        .filter((el) => el && el.getBoundingClientRect().height > 0);
       if (controls.length < 2) return;
       const heights = controls.map((el) => round(el.getBoundingClientRect().height));
       const spread = Math.max(...heights) - Math.min(...heights);
@@ -245,8 +251,7 @@ async (page) => {
     // Content wider than the box holding it, where the box hides the evidence.
     // `overflow: clip` and `hidden` produce no scrollbar, so the last control
     // in a row is simply cut in half and nothing anywhere reports it: the
-    // scrollbar rule above cannot see this, which is exactly how a clipped
-    // action row reached production.
+    // scrollbar rule above cannot see this.
     document.querySelectorAll('main, .page-head, .page-actions, .card').forEach((el) => {
       const style = getComputedStyle(el);
       const hides = ['clip', 'hidden'].includes(style.overflowX);
@@ -280,9 +285,7 @@ async (page) => {
     //
     // Text is not the only thing a cell can hold. The row-selection column is
     // a checkbox under a deliberately blank header, so measured by text alone
-    // it read as dead on every list page in HQ: a rule that is wrong on
-    // pages that are right is worse than no rule, because the next real dead
-    // column arrives in a report nobody trusts. A cell counts as saying
+    // it would read as dead on every list page. A cell counts as saying
     // something if it has text or if it has a control in it.
     document.querySelectorAll('table').forEach((table) => {
       const heads = [...table.querySelectorAll('thead th')].map((th) =>
@@ -322,16 +325,18 @@ async (page) => {
       });
     });
 
-    // A paired row whose two cards end at different points. This is the single
-    // most-repeated complaint about these pages, and it was answered by hand
-    // each time (reordering cards, trimming a table, moving a panel) which
-    // only ever fixed the one session whose data happened to be on screen.
-    // A pair stretches; if these differ, something stopped it stretching.
+    // A paired row whose two cards end at different points. A pair stretches;
+    // if these differ, something stopped it stretching. Checked here because
+    // fixing it by hand only fixes the data currently on screen.
     document.querySelectorAll('.two-col').forEach((row) => {
       const kids = [...row.children].filter(
         (k) => k.getBoundingClientRect().height > 0,
       );
       if (kids.length !== 2) return;
+      // Stacked (the pair's single-column layout on a phone), the two are not
+      // side by side, so there is nothing for them to end together with.
+      const tops = kids.map((k) => round(k.getBoundingClientRect().top));
+      if (Math.abs(tops[0] - tops[1]) > 2) return;
       const heights = kids.map((k) => round(k.getBoundingClientRect().height));
       const gap = Math.max(...heights) - Math.min(...heights);
       if (gap > 2) {
@@ -343,13 +348,11 @@ async (page) => {
     // items, so inline emphasis inside a sentence is promoted to a block and
     // the sentence is rendered as separate boxes with gaps between them.
     //
-    // Detected structurally rather than by guessing at prose: the first
-    // version of this rule looked for sentence punctuation and missed the
-    // defect that prompted it, because the text read "27.06%." and the
-    // pattern wanted letters before the full stop. What actually distinguishes
-    // a sentence from a row of chips is that a sentence interleaves bare text
-    // with elements: a chip row is elements all the way down. That has no
-    // heuristic in it and no false positives on the rows already written.
+    // Detected structurally rather than by guessing at prose: punctuation
+    // is unreliable ("27.06%." ends a sentence with no letter before the full
+    // stop). What distinguishes a sentence from a row of chips is that a
+    // sentence interleaves bare text with elements: a chip row is elements
+    // all the way down.
     document.querySelectorAll('.list-rows .row-main, .list-rows li').forEach((row) => {
       if (getComputedStyle(row).display !== 'flex') return;
       const texts = [...row.childNodes].filter(

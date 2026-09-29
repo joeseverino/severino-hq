@@ -29,6 +29,22 @@ from .names import in_zone
 from .observations.contract import ReadingPart
 
 
+@dataclass(frozen=True)
+class ConnectionKind:
+    """One connection provider: its name on the page, and how its credential is held.
+
+    ``credential`` is ``scoped`` or ``coarse``. The controller reports that a
+    credential reached its endpoint, never what it is allowed to do, so the only
+    honest statement about least privilege is the one the provider's credential
+    model permits: a scoped provider issues narrow tokens whose grants HQ could
+    verify; a coarse one issues a login or an admin token that is the whole
+    account.
+    """
+
+    label: str
+    credential: Literal["scoped", "coarse"]
+
+
 class ProviderModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -232,8 +248,8 @@ class ProviderSpec:
     # Some resources are not complete without material the operator has to
     # supply: an uploaded certificate is only a name and a list of targets
     # until the certificate itself arrives. Declared as a form and a handler so
-    # the same page collects both: asked for separately, creating one produced
-    # an empty declaration and a second page to go and find.
+    # the same page collects both: asked for separately, creating one would
+    # leave an empty declaration and a second page to go and find.
     material_form: str = ""
     material_handler: str = ""
     # Fields that are routine tuning rather than part of the question being
@@ -339,10 +355,7 @@ class ProviderSpec:
     # HQ can express is a setting adoption captures.
     from_record: Callable[[dict[str, Any]], dict[str, Any]] | None = None
     # What this resource actually does, as (label, desired, observed) rows.
-    # A service page showed "Declared" in the largest type on the card while the
-    # row beneath it held `answer: 10.0.0.10`: the least useful fact rendered
-    # loudest, and the useful one not rendered at all. Desired and observed sit
-    # side by side because the interesting case is when they differ, and either
+    # Desired and observed sit side by side because the interesting case is when they differ, and either
     # may be blank: a certificate has no authored expiry, only a found one.
     readout: (
         Callable[[dict[str, Any], dict[str, Any]], tuple[tuple[str, str, str], ...]]
@@ -431,13 +444,8 @@ class ProviderSpec:
     notes: str = ""
     # What the controller may do to this kind, and which of those it may do
     # unprompted. Declared here, beside the provider it is about.
-    #
-    # This lived in `config/controller-capabilities.json`, a hand-kept file that
-    # had to name every provider exactly once or HQ refused to start. So a new
-    # provider was two edits in two languages, and the file could only ever
-    # repeat what the registry already knew. HQ is the source of truth for what
-    # HQ can do; a second copy of that is a thing to keep in sync, not a
-    # contract.
+    # HQ is the source of truth for what HQ can do; a second copy of that
+    # elsewhere is a thing to keep in sync, not a contract.
     actions: Mapping[str, ControllerActionPolicy] = field(default_factory=dict)
     # The parts this kind's sweep reads through a credential other than the one
     # that lists it, or in pieces, and what each needs. A reading declares the

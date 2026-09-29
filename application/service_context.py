@@ -3,9 +3,9 @@
 HQ is two halves. One is densely related: a project links to its content, its
 assets, its expenses and its documents, each of those back again. The other is
 infrastructure, where a connection relates to nothing, an inventory relates to
-nothing, and a declaration relates only to its own operations. Nothing joins the
-halves, so a page about a running service could say what reconciled it and
-nothing about what it *is*.
+nothing, and a declaration relates only to its own operations. No key joins the
+halves, so without this a page about a running service can say what reconciled
+it and nothing about what it *is*.
 
 The join is the name. A project publishes at a hostname, a document names the
 system it describes, an audit entry names the resource it changed. None of that needs a foreign key: every side already carries
@@ -86,6 +86,23 @@ class ServiceSection:
             raise ValueError("ServiceSection id must be a valid page section id.")
         if not self.label.strip():
             raise ValueError("ServiceSection label must not be empty.")
+        # A column no row has anything in is a heading over nothing. Dropped
+        # here, so no section has to check its own; an unknown value ("—") is
+        # something to say and keeps its column.
+        if self.records:
+            keep = tuple(
+                index
+                for index in range(len(self.columns))
+                if any(
+                    index < len(row) and (row[index].text.strip() or row[index].url or row[index].link)
+                    for row in self.records
+                )
+            )
+            if len(keep) < len(self.columns):
+                object.__setattr__(self, "columns", tuple(self.columns[i] for i in keep))
+                object.__setattr__(
+                    self, "records", tuple(tuple(row[i] for i in keep) for row in self.records)
+                )
 
 
 def sections_for(service) -> tuple[ServiceSection, ...]:
@@ -205,7 +222,7 @@ def service_summary(service) -> tuple[SummaryItem, ...]:
     """What it is, where it runs, and whether it is healthy.
 
     Not the path: the path section follows at once and draws it hop by hop,
-    so a one-line copy here only said it twice.
+    so a one-line copy here would say it twice.
     """
 
     what = _what(service)
@@ -224,7 +241,7 @@ def service_summary(service) -> tuple[SummaryItem, ...]:
             # names the machine and the container hop by hop.
             None if service.path.routes else replace(_where(service, service.path), icon="server"),
             # Only when it says something: "declared" is true of nearly every
-            # name on the board, and first on the page it told nobody anything.
+            # name on the board, and first on the page it tells nobody anything.
             SummaryItem("What it is", what, icon="layers") if what else None,
             _certificate(service.path),
             _project(service),

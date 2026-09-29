@@ -1,0 +1,5 @@
+{% comment %}
+One head control, from `action` (application.pages.PageAction). `extra` adds
+classes: the head renders a control twice, beside the title and in the narrow
+head's menu, and this keeps both the same control.
+{% endcomment %}{% if action.method == "post" %}{% with css=action.css|add:" "|add:extra %}{% post_button action.label action.url value=action.value css=css title=action.title disabled=action.disabled %}{% endwith %}{% elif action.disabled %}<span class="{{ action.css }} {{ extra }}" aria-disabled="true"{% if action.title %} title="{{ action.title }}"{% endif %}>{{ action.label }}</span>{% else %}<a class="{{ action.css }} {{ extra }}" href="{{ action.url }}"{% if action.modal %} data-modal-open="{{ action.modal }}"{% endif %}{% if action.modal == "connection" %} data-connection-source="{{ action.url }}"{% endif %}{% if action.title %} title="{{ action.title }}"{% endif %}>{{ action.label }}</a>{% endif %}

@@ -3,17 +3,11 @@
 A lens is a question an operator has to think to ask. A finding is the answer
 arriving without being asked, and that difference is the whole of this module.
 
-The bug it was written for looked like nothing at all. A provider blanked a
-field it declared, so a declaration compared unequal to the world forever, so
-the sweep correctly refused to call it observed, and the resource went on
-reporting the condition its last reconcile wrote. Health said healthy. The
-declared and observed revisions matched, so nothing queued a reconcile. The one
-fact that moved was ``last_observed_at`` falling behind its siblings, and
-nothing read it. Two of the most important hosts in the estate were unverified
-for days and every surface said they were fine.
-
-So the rules here are deliberately not about certificates or proxies. They are
-about the shapes a silence can take: observed later than everything of its own
+A resource can be wrong while every surface reads healthy: its declared and
+observed revisions match, so nothing queues a reconcile, and the only fact that
+moves is ``last_observed_at`` falling behind its siblings. The rules here are
+therefore not about certificates or proxies. They are about the shapes a
+silence can take: observed later than everything of its own
 kind, never observed at all, asked for but never confirmed, reconciled again
 and again against a world that keeps disagreeing. Each is derivable from the
 projection alone (kinds, edges, two revisions, an age, a reason) which is
@@ -50,6 +44,7 @@ from control_plane.providers import PROVIDERS
 from . import (
     certificate_expiry,
     connection_findings,
+    contradiction_findings,
     controller_findings,
     credential_findings,
     dns_findings,
@@ -182,6 +177,7 @@ RULE_MODULES = (
     controller_findings,
     tailnet_findings,
     dns_findings,
+    contradiction_findings,
 )
 RULES: tuple[FindingRule, ...] = tuple(
     rule for module in RULE_MODULES for rule in module.RULES

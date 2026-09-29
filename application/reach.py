@@ -1,13 +1,11 @@
 """Where a service can be reached from, derived rather than declared.
 
-HQ already holds both halves of this sentence and has never said it out loud.
-A DNS record answers with an address; an address belongs to a network; and a
+HQ already holds both halves of this sentence. A DNS record answers with an address; an address belongs to a network; and a
 network is either the tailnet, the house, or the internet. So "who can even
 open a socket to this" is a fact about declarations HQ already reconciles, not
 something anybody has to record.
 
-It matters because the answer is invisible from every page that shows it today.
-A rewrite pointing at a LAN address and one pointing at a tailnet address look
+It matters because the answer is otherwise invisible. A rewrite pointing at a LAN address and one pointing at a tailnet address look
 identical (same provider, same health, same green tick) and differ only in
 who is able to reach the thing on the other side.
 """

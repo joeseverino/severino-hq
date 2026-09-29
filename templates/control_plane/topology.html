@@ -1,11 +1,5 @@
 {% extends "page.html" %}
 {% block page %}
-<nav class="topology-lenses" aria-label="Topology views">
-  <a class="scope-chip{% if not active_lens %} is-active{% endif %}" href="{% url 'control_plane:topology' %}"{% if not active_lens %} aria-current="page"{% endif %}>All</a>
-  {% for lens in topology_lenses %}
-    <a class="scope-chip{% if active_lens.name == lens.name %} is-active{% endif %}" href="?lens={{ lens.name|urlencode }}#map" title="{{ lens.summary }}"{% if active_lens.name == lens.name %} aria-current="page"{% endif %}>{{ lens.label }}</a>
-  {% endfor %}
-</nav>
 
 {% if active_lens %}<p class="topology-lens-note muted">{{ active_lens.summary }}</p>{% endif %}
 
@@ -27,14 +21,20 @@
   </section>
 {% endif %}
 
-<div class="topology-summary" role="group" aria-label="Topology summary">
-  <span><strong>{{ topology.nodes|length|counted:"node" }}</strong></span>
-  <span><strong>{{ topology.edges|length|counted:"relationship" }}</strong></span>
-  {% for group in topology_groups %}<span><strong>{{ group.count }}</strong></span>{% endfor %}
-</div>
-
 <section class="topology-workspace" data-topology data-topology-ledger="topology-relations" data-focus="{{ focus_node }}">
   <div class="topology-toolbar" role="group" aria-label="Topology controls">
+    {% comment %}
+    Which view is the server's question, so it is a form; the rest of this bar
+    filters in place. One bar for both, and its "N of M shown" is the count.
+    {% endcomment %}
+    <form class="topology-view" method="get">
+      <select name="lens" aria-label="View">
+        <option value="">All views</option>
+        {% for lens in topology_lenses %}<option value="{{ lens.name }}"{% if active_lens.name == lens.name %} selected{% endif %}>{{ lens.label }}</option>{% endfor %}
+      </select>
+      <button class="btn" type="submit">Apply</button>
+      {% if active_lens %}<a class="btn ghost" href="{% url 'control_plane:topology' %}">Clear</a>{% endif %}
+    </form>
     <label class="topology-search">
       <span class="visually-hidden">Filter topology</span>
       <input type="search" placeholder="Filter nodes…" data-topology-search autocomplete="off">

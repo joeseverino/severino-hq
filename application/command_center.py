@@ -6,10 +6,9 @@ import re
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
-from django.urls import reverse
-
 from control_plane.names import normalized_hostname
 
+from .action_links import command_url
 from .capabilities import CapabilitySpec
 from .connections import ConnectionAbility, ConnectionSpec
 from .connection_catalog import connection_catalog
@@ -81,7 +80,7 @@ def _match_score(item: DiscoveryItem, query: str) -> int:
 
     terms = _SEARCH_WORD.findall(query.casefold())
     # A controller-qualified connection id is globally unique, but its prefix
-    # is context rather than the connection's own name. Searching `homelab`
+    # is context rather than the connection's own name. Searching `example`
     # should rank `example-npm` above every unrelated credential observed by a
     # controller named `example-host`.
     primary_name = (
@@ -169,9 +168,7 @@ def _command_matches_ability(
 
 
 def _command_item(spec: CapabilitySpec, relation: CommandRelation) -> DiscoveryItem:
-    url = reverse("command", kwargs={"name": spec.name})
-    if relation.kinds:
-        url = f"{url}?{urlencode([('kind', kind) for kind in relation.kinds])}"
+    url = command_url(spec.name, kinds=relation.kinds)
     return DiscoveryItem(
         kind="command",
         name=spec.name,
@@ -450,7 +447,7 @@ def _command_center(
     # Registry discovery is a zero-query application primitive used by CLI,
     # MCP and contract checks. The web palette explicitly opts into cached live
     # instances because operator-entered names and current reachability are the
-    # point of that surface; other adapters keep the original cheap contract.
+    # point of that surface; other adapters keep the cheap contract.
     live_connections = (
         tuple(
             _live_connection_item(group, connection)

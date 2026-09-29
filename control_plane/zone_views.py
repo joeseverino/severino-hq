@@ -60,9 +60,8 @@ from control_plane.names import normalized_hostname
 def _records_lede(zone) -> str:
     """Where this domain's records stand, as a clause beside the heading.
 
-    "0 managed by HQ, 17 not yet" described a backlog that was never work: a
-    declared domain takes on its records with it, so anything left is genuinely
-    new: added at the provider since.
+    Unmanaged records are not a backlog: a declared domain takes on its records
+    with it, so anything left is genuinely new, added at the provider since.
     """
 
     if not zone.managed:

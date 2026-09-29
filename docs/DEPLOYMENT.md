@@ -111,7 +111,7 @@ What kind of thing it is comes from the env prefix: `ADGUARD_*` is AdGuard,
 `PORTAINER_*` is Portainer, unless the item carries a `provider` field, which
 overrides it. That field is what lets two of a kind coexist: `PORTAINER_HOME`
 and `PORTAINER_CLOUD` are both `portainer`, and each resource says which it
-uses. It is optional, so an existing vault keeps working untouched.
+uses. It is optional: without it, the prefix decides.
 
 A connection only observes unless the item carries a `manages` field set to
 `1`. HQ adopts what a sweep finds only through a connection that manages, so a
@@ -213,7 +213,7 @@ adds beside a shipped one is the host's and is not compared.
 The same activation gate performs an authenticated pull of the live
 `example.com` content index before installing and enabling its persistent
 daily timer. Cloudflare Access credentials come from uppercase fields on the
-existing the app-environment item item through the normal app-environment projection;
+app-environment item through the normal app-environment projection;
 there is no second credential registry. A restart cannot lose the schedule:
 systemd owns it, catches up missed runs, and the deployment revalidates the
 pull before declaring the release healthy.
@@ -222,9 +222,9 @@ The controller claims only kind/action pairs a provider marks `apply`. Each
 provider declares what may be done to it, and which of those may run
 unprompted, beside its own definition. Self-contained controller adapters emit
 that definition with their inventory, probe, and handlers; the admitted adapter
-compiler refuses mismatched or duplicate surfaces at startup. Legacy providers
-remain cross-checked against their handler table while they move through that
-same seam. Its persistent systemd
+compiler refuses mismatched or duplicate surfaces at startup. Providers the
+controller core implements directly are cross-checked against their handler
+table. Its persistent systemd
 timer runs after boot and every five minutes. Each run drains infrastructure
 work and derives
 new work from HQ's verified state: it queues
@@ -254,7 +254,7 @@ controller's secret mount (a tmpfs mounted `noswap`, which the scripts check
 with `findmnt` before rendering), refuses an item whose two halves do not
 match, and installs the set with the controller environment as one generation
 under an exclusive lock that readers take shared. It refuses to run while
-private keys remain in the legacy `secrets/ssh/` directory on disk; the
+private keys remain in a `secrets/ssh/` directory on disk; the
 operator removes those by hand. The web
 container, the repository and the operator's workstation never hold them.
 Rotating a key is generating a new item, authorizing its public half on the
@@ -289,9 +289,8 @@ image but does **not** deploy it.
 
 Deployment is the composition workflow's job, and it is the only path to
 production. It waits for the host workflow to finish, rebuilds every admitted
-extension onto the new host image, and deploys that. Two deploy paths existed
-once (the host's and each extension's) and whichever ran last won, so a host
-release silently dropped every extension out of production.
+extension onto the new host image, and deploys that. With one path, a host
+release cannot reach production without its extensions.
 `scripts/deploy-image.sh` stops reconciliation, records the currently running
 image and the compose file it was started with, starts the replacement under the
 compose file copied out of that verified image (so a compose change takes effect
@@ -429,9 +428,7 @@ sets the `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` secrets on this repository, and on
 each extension creates the `admission` environment (main only) with the key and
 sets the client ID, through standard input, never a file or a command line. The
 client ID is a secret too: not because it is sensitive, but because a variable
-is state outside the repository that changes what a build does. The
-personal `EXTENSION_ARTIFACTS_TOKEN` can then be deleted and revoked, once a
-composition has read with the app. Each extension's `admit-plugin.yml` caller
+is state outside the repository that changes what a build does. Each extension's `admit-plugin.yml` caller
 names the environment on its admit job and passes both to the host's action.
 
 A rotation: generate a second key on the app, replace the SSH Key item's key,
@@ -443,10 +440,10 @@ only: the sweep reports each extension's admitted and running commit and the
 composition run that carries it, and writes nothing. Once that matches GitHub,
 set `manages` to `1` and adopt the `github.delivery` record.
 
-> **`hq deploy` is legacy: do not run it.** It predates composition and
-> deploys the *host-only* image, which takes every extension off production
-> until the next composition. To rebuild by hand, run **Compose**; to redeploy
-> or roll back, run **Deploy** with the commit you want.
+> **Do not run `hq deploy`.** It deploys the *host-only* image, which takes
+> every extension off production until the next composition. To rebuild by
+> hand, run **Compose**; to redeploy or roll back, run **Deploy** with the
+> commit you want.
 
 The equivalent **manual** steps, for a standalone or first-time deploy, are:
 
@@ -457,6 +454,81 @@ docker compose run --rm app python manage.py migrate
 docker compose run --rm app python manage.py collectstatic --noinput
 docker compose up -d
 ```
+
+#### Container upgrades
+
+`scripts/upgrade-container.sh` is the program an upgrade plan describes. It
+runs as root for another account, so it trusts nothing that account passes it
+beyond naming the upgrade:
+
+- The stack must be a directory directly under `/opt/apps` (a constant in the
+  helper; through sudo nothing can move it), not a symlink. The directory, its
+  compose file, any override and any `.env` must be owned by root or by the
+  owner of `/opt/apps`, never by the calling account, and writable by no one
+  else. Compose runs with the file set it would use by default (the compose
+  file plus its override) and `-p` named from the directory.
+- `--from` must be the image `docker compose config` resolves for the service
+  and what its one running container runs; more than one container is refused.
+  `--to` must be the same repository, pinned by digest.
+- The data is the running container's writable mounts, read from Docker:
+  volumes, and directories inside the stack. A writable directory mount outside
+  the stack is refused. There is no `--data` argument.
+
+For one compose service, it:
+
+1. Pulls the target by digest.
+2. Stops the service and snapshots its data, each to a temporary file renamed
+   only when whole. A failed snapshot starts the service again unchanged.
+3. Runs the target from the service's own compose definition
+   (`compose run --no-deps`, no network, no published ports) against a copy of
+   the data, until it proves itself. If it does not, the service is started
+   again unchanged.
+4. Pins the digest in the stack's compose override
+   (`docker-compose.override.yml`, or the override the stack already has),
+   keeping every other line of it and a byte-exact copy. The compose file
+   itself is never edited.
+5. Recreates the service and verifies it: running, healthy or with no health
+   check, and not restarted, for a settle window. A restart starts the window
+   again, so a crash loop never verifies.
+6. Otherwise, restores the override and the data and recreates the service.
+
+An error or a signal after the service is stopped puts it back the same way and
+still records a result; a full disk while restoring data is reported as such,
+and the snapshot is kept. It is idempotent by operation id and prints one JSON
+result: exit 0 kept, 3 rolled back, 2 refused or unchanged, 1 failed and not put
+back. It needs Docker Compose 2.24.4 or later. `scripts/test-upgrade-container.sh`
+drills it against a stand-in Docker, on Linux and macOS.
+
+Every deploy syncs it root-owned to `/usr/local/lib/severino-hq/scripts/` on the
+machine HQ runs on, and `scripts/preflight.sh` checks that copy is root's, under
+directories only root can write, and identical to the release. Any other
+machine needs its own copy: the container's upgrade plan gives the steps (this
+build's commit, installed `root:root 0755`, checked against the digest of the
+copy HQ ships).
+
+A machine runs it only through a sudo rule for that one program with only an
+upgrade's arguments, written as a regular expression (sudo 1.9.10 or later; an
+older sudo reads it literally and admits nothing). The plan shows the exact
+rule, and how to check it, for as long as it is missing. HQ does not know which
+account the controller signs in as on a machine, so the rule's step names a
+placeholder and refuses to run until it is set.
+
+The rule is only worth having if that account cannot already reach Docker: an
+account in the `docker` group, or able to write to its socket, is root on that
+machine with or without the helper. Under sudo the helper sets its own `PATH`
+and `HOME` and ignores `DOCKER_CONFIG`, `DOCKER_HOST` and `DOCKER_CONTEXT`, so a
+sudo that keeps the caller's environment still runs root's Docker CLI and
+plugins, never the caller's. It snapshots and restores writable volumes and the
+directories and files the stack mounts from inside its own folder; a service
+writing to anything outside it is refused and upgraded by hand. The pin goes in
+the override Compose loads beside the compose file (`compose.yaml` beside
+`compose.override.yaml`), and any other override name is refused rather than
+written to, since a plain `docker compose up` would never read it.
+
+HQ does not yet queue an
+upgrade to the machine a container runs on, because operations are claimed by
+capability rather than by machine. Until then the helper is run by hand, with
+the plan's values.
 
 ### A.7 Backups
 

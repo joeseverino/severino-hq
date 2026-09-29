@@ -131,11 +131,9 @@ def store_certificate(
             "domains": details["domains"],
         },
     )
-    # What it covers, written where a failed resolution cannot lose it. Held
-    # only on the resolved spec, a certificate whose install target had been
-    # removed would resolve to nothing and so cover nothing, and the names it
-    # answers for would read as uncovered because of a fault somewhere else
-    # entirely. Read from the artifact, so an upload is what keeps it true.
+    # What it covers, written where a failed resolution cannot lose it: a
+    # certificate whose install target is removed still covers its names.
+    # Read from the artifact, so an upload is what keeps it true.
     resource.spec = {**resource.spec, "domains": details["domains"]}
     # New material is new work, even when it covers exactly what the last one
     # did: a renewal is a different certificate at the same names, and the whole

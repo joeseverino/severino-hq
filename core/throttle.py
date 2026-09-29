@@ -8,7 +8,7 @@ Everything else in HQ verifies a signature; this verifies a guess.
 
 Note what is *not* introduced here: a second place that knows about failed
 logins. `user_login_failed` is already recorded to the audit log, because an
-operator has always needed to see attempts against their own account. A
+operator needs to see attempts against their own account. A
 counter table beside it would hold the same fact twice and let the two disagree
 the throttle silent because its rows were pruned, the audit log showing an
 attack the whole time. Deriving the lockout from the audit trail means the

@@ -97,8 +97,8 @@ The host-owned check syncs and lints the package, enforces SDK-only imports,
 runs Django checks, migration drift checks, and plugin tests, then builds the
 wheel and installs it with `--no-deps` into a clean host environment. That last
 step exactly reproduces production's dependency boundary and catches a missing
-host pin before composition. Existing plugin-owned `scripts/check.sh` remains
-a temporary compatibility path while repositories migrate.
+host pin before composition. A caller that passes neither input runs its own
+`scripts/check.sh` instead, with a warning.
 
 ## Cordon admission
 
@@ -171,7 +171,7 @@ The composition workflow is the only path to production. It verifies each
 signature itself, against the identity built from the declared repository and
 workflow, so a plugin cannot widen who may sign for it by editing its own
 repository. Entries are merged into one lock by Cordon's lock tool, which
-already accepts several entries: the host does not reimplement it.
+accepts several entries: the host does not reimplement it.
 `SEVERINO_HQ_PLUGINS` is derived from the merged lock, because the enabled and
 approved inventories must be identical or the host refuses to start.
 
@@ -374,7 +374,9 @@ and two-column layouts use the classes demonstrated by `example_hq_plugin`.
 Plugin templates supply domain content while HQ owns layout behavior, tokens,
 responsive rules, accessibility states, and visual evolution. A new shared
 pattern belongs in HQ first; copying host CSS or markup into every plugin is a
-contract failure.
+contract failure. The rules those classes follow (one frame per thing, tables
+sized to content, one head, menu, disclosure and filter bar) are in
+`docs/DESIGN.md`.
 
 Wrap a `.data-table` in `.table-scroll`; HQ preserves horizontal scrolling and
 keeps its headings visible through long result sets. The enhancement is visual

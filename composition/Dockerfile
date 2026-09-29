@@ -6,7 +6,10 @@
 # lock before invoking this build. The image contains only admitted wheels, and
 # the runtime refuses to boot unless the lock inventory exactly matches the
 # enabled set, so a wheel added here without an approval cannot start.
-ARG HQ_IMAGE
+
+# The host image, by digest: compose.yml passes it after verifying its
+# signature. The default has no shell or users, so a build without it fails.
+ARG HQ_IMAGE=scratch
 # The installer uses the same Python ABI as HQ. uv is pinned to the toolchain
 # version and to the Linux amd64 image digest used by the composition runner.
 FROM ghcr.io/astral-sh/uv:0.12.19@sha256:d46db4c7b7f2e75ff80aeef95da4c2c6ff1ad399c13ab85067db4430b7c3b9c3 AS uv

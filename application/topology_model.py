@@ -63,8 +63,8 @@ class TopologyNode:
     # Fields this declaration asserts that the last observation did not echo
     # back, excluding the ones the provider declared it cannot report. Drift is
     # compared only across fields present in both, so a field the reading omits
-    # is unverified rather than agreed: the difference between "we set this"
-    # and "we checked this".
+    # is unverified rather than agreed: the difference between "set" and
+    # "checked".
     unconfirmed_fields: tuple[str, ...] = ()
     # Facts a sweep reports that no declaration carries, as flat strings. A
     # findings rule derives from this topology and is not allowed a query of its

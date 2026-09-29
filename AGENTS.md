@@ -50,8 +50,8 @@ reason the file exists.
 Local development uses `./scripts/dev.sh`. It collects assets and runs the same
 ASGI/Uvicorn path as production with reload enabled.
 
-`check.sh` runs the suite in parallel, which is why the gate takes ~46s rather
-than ~100s. `core/test_runner.py` is what makes that safe on WAL SQLite: read
+`check.sh` runs the suite in parallel, which roughly halves the gate's time.
+`core/test_runner.py` is what makes that safe on WAL SQLite: read
 it before changing anything about the test database. `CHECK_PARALLEL=1` rules
 parallelism out when a failure looks order- or isolation-dependent.
 
@@ -92,7 +92,7 @@ synthetic `example.*` namespace so the host can demonstrate a contract without
 acquiring a consumer.
 
 Runtime-supplied composition metadata is the only place the real installed set
-meets the host, and two tests keep it that way (`application/test_plugins.py`).
+meets the host, and two tests keep it that way (`application/tests/test_plugins.py`).
 When one of them fails it has found a coupling, not a secret.
 
 Generic integration policy belongs here. Domain meaning belongs in its own
@@ -109,6 +109,26 @@ domain until a genuine shared contract appears.
 | Repeated layout or interaction | shared partial/CSS/JS primitive |
 | Plugin identity or domain semantics | private plugin repository |
 | Cross-plugin compatibility | generic composition check in HQ |
+
+### Adding a provider
+
+A provider emits itself: nothing outside its own modules names it except one
+entry in `ADMITTED` (`control_plane/provider_adapters/__init__.py`). Its adapter
+module declares its kinds, its `ADAPTER` and its `CONNECTIONS`; its readings are
+a module in `control_plane/observations/`, found by discovery. Registries,
+connection labels, credential policy, the controller's dispatch and the
+topology edges its readings declare are all derived from those, and admission
+fails at import on a duplicate or undeclared name.
+`control_plane/provider_adapters/tests/test_admission.py` shows the contract;
+`docs/APPLICATION_ARCHITECTURE.md` has the detail.
+
+### Moving code
+
+Tests live in each package's `tests/` directory. When a definition moves,
+retarget every `mock.patch("module.name")` that named its old home: a patch of
+a name that is no longer looked up there passes silently and patches nothing.
+A check that walks a path (an architecture test, a script's glob) needs the
+same review, and should fail when its path matches nothing rather than pass.
 
 ## Rules that eliminate bug classes
 
@@ -127,12 +147,21 @@ domain until a genuine shared contract appears.
   `PLUGIN_API_VERSION` moves.
 - List views use `TableListMixin`; direct view mutations and MCP model access
   are rejected by architecture tests.
+- A link to a command's form is built by `application.action_links.command_url`
+  and nothing else, so its target is encoded the way the form reads it back.
+  `application/tests/test_remedy_links.py` follows every remedy the findings, the
+  action queue and the pages emit, and fails on one that opens with no target
+  chosen or on the "replaces the whole record" form.
 - Public tests compose synthetic siblings. The assembled private image runs
   all real plugin suites together.
 - A dependency used by a plugin must survive a clean wheel install with
   `--no-deps`; the host-owned plugin check reproduces that production boundary.
 
 ## Frontend quality bar
+
+`docs/DESIGN.md` is the design language: the primitives a page is built from
+and the rules they keep. Read it before adding UI; grow a primitive rather
+than styling a page.
 
 - Server-render useful HTML first; JavaScript progressively enhances working
   links and forms.
@@ -155,7 +184,7 @@ domain until a genuine shared contract appears.
 
 Function complexity is part of the gate. Ruff's C901 fails any function whose
 cyclomatic complexity exceeds 15, and `CognitiveComplexityTests` in
-`application/test_architecture.py` fails any non-test function whose cognitive
+`application/tests/test_architecture.py` fails any non-test function whose cognitive
 complexity exceeds 20. There is no allowance list: a function over either
 limit is split into named steps.
 
@@ -231,7 +260,7 @@ exits 2, never 0.
   gates (no CodeQL alert and every file-based Scorecard check at 10) and the
   browser layout gate, which it always runs.
 - A browser check selects markup only through `SELECTORS` in
-  `core/browser_tests.py`; `core/test_browser_selectors.py` holds every one
+  `core/browser_tests.py`; `core/tests/test_browser_selectors.py` holds every one
   to a template that renders it.
 - The structural bar above did not move the wrong way.
 - Docs change when a supported contract changes.

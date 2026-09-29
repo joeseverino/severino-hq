@@ -161,6 +161,8 @@ class RuntimeRecord(_OnMachine):
     devices: tuple[str, ...] = ()
     mounts: tuple[RuntimeMount, ...] = ()
     port_bindings: tuple[PortBinding, ...] = ()
+    # The ports the image says it listens on ("80/tcp" read as 80).
+    exposed_ports: tuple[int, ...] = ()
     # Bytes and CPUs; zero is no limit.
     memory_limit: int = 0
     cpu_limit: float = 0.0
@@ -241,6 +243,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         describe=_network,
         containers=_users("containers"),
         container_relation="On network",
+        connects=lambda record: str(record.get("name", "")) not in DEFAULT_NETWORKS,
     ),
     ObservationSpec(
         VOLUME_KIND,

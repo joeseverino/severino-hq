@@ -127,7 +127,7 @@
   agent, whether a call is allowed, held for approval, or denied. Rules only
   narrow the identity provider's grant. An explicit rule beats the default, and
   between a surface and an agent rule the stricter wins. With no rules, gated
-  infrastructure changes are held as before, and anything destructive an agent
+  infrastructure changes are held, and anything destructive an agent
   asks for is held too. A rule that allows a would-be-held call is recorded as
   its consent.
 - A held request writes and queues nothing. It is decided on its audit entry
@@ -163,9 +163,8 @@
       `DJANGO_CSRF_COOKIE_SECURE=1`.
 - [ ] `DJANGO_HSTS_SECONDS` is **not** left at `0`. The connection page's
       "There is one way in, and it is encrypted" layer reads the live setting
-      and says so when it is off; a deployment that once set it to zero while
-      TLS was being sorted out will otherwise keep telling browsers that plain
-      HTTP is worth trying, indefinitely.
+      and says so when it is off; left at zero, it keeps telling browsers that
+      plain HTTP is worth trying, indefinitely.
 - [ ] The container runs with `read_only: true`, `cap_drop: ALL`,
       `no-new-privileges`, a pids limit and a memory limit. `/tmp` is the only
       writable path outside the volumes.
@@ -195,7 +194,7 @@
       shared static bearer; without the provider configured, MCP is off.
 - [ ] A destructive capability called by an agent waits for an operator's
       approval unless a rule explicitly allows it for that agent or surface.
-- [ ] The app environment's source of truth is the 1Password the app-environment item
+- [ ] The app environment's source of truth is the 1Password app-environment
       item. Production mounts the rendered file through
       `SEVERINO_APP_ENV_FILE_HOST` and the entrypoint sources it; the on-host
       `.env` contains no secrets (only the two `*_FILE_HOST` paths).
@@ -208,7 +207,7 @@
       that `export` prints, and it appears in no serializer, no API response,
       and not in the reply to the upload that supplied it.
 - [ ] Provider credentials remain outside the web container entirely. The
-      controller report guard still rejects any status carrying a key named
+      controller report guard rejects any status carrying a key named
       `private`, `secret`, `token`, `password`, or `credential`.
 - [ ] The 1Password service account can read only the dedicated production
       vault. Its auth token is stored as a host-bound encrypted systemd

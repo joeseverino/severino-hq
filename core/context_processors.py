@@ -64,9 +64,15 @@ def _asset_version() -> str:
     # Development separates one run from the next and revalidates within a run.
     # Production computes a content fingerprint once, avoiding filesystem reads
     # in every template context.
-    return (
-        _development_asset_version() if settings.DEBUG else _production_asset_version()
-    )
+    #
+    # Keyed on live static serving, not DEBUG: a local server runs with DEBUG
+    # off to match production, and fingerprinting once at start would serve
+    # every later stylesheet edit under a URL the browser already holds as
+    # immutable, so the edit would never show. Live serving
+    # is development by definition (a deployment check refuses it) and sends
+    # no-cache, which is what the per-run token relies on.
+    live = settings.DEBUG or getattr(settings, "STATIC_LIVE", False)
+    return _development_asset_version() if live else _production_asset_version()
 
 
 def site(request):
@@ -102,8 +108,8 @@ def nav(request):
             "label": nav_item.label,
             "url": nav_item.route,
             # The exact route, not its namespace. A section with more than one
-            # entry shares one namespace, so matching on that lit every entry in
-            # the dropdown at once. An item with no namespace (the dashboard,
+            # entry shares one namespace, so matching on that would light every
+            # entry in the dropdown at once. An item with no namespace (the dashboard,
             # which lives at the root) matches on the bare url_name.
             "active": (
                 (not namespace and url_name == nav_item.route)
@@ -168,3 +174,21 @@ def agent_access(request):
     from application.agent_access import agents_paused
 
     return {"agents_paused": SimpleLazyObject(agents_paused)}
+
+
+def appearance(request):
+    """The theme `<html>` is drawn in, and the choices the menu offers.
+
+    Lazy, so a fragment that never draws `<html>` never asks; anybody signed
+    out follows the system without a query.
+    """
+
+    from django.utils.functional import SimpleLazyObject
+
+    from application.appearance import Theme, theme_for
+
+    user = getattr(request, "user", None)
+    return {
+        "THEME": SimpleLazyObject(lambda: theme_for(user)),
+        "THEME_CHOICES": Theme.choices,
+    }

@@ -1,0 +1,912 @@
+"""The connection sweep: what HQ can reach, and everything derived from it.
+
+Two properties hold this together. HQ never stores a credential: only the
+report that one exists and what it answered. And every menu asking "which
+machine" or "which domain" is derived from that report, so an estate grows by
+being given a credential rather than by anything here being edited.
+"""
+
+from __future__ import annotations
+
+from django.contrib.auth import get_user_model
+from django.db import connection
+from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
+from django.urls import reverse
+
+from control_plane.models import ProviderConnection
+from control_plane.providers import PROVIDERS
+
+from ..connections import connection_readings, connections_for, reachable_through
+from ..connection_catalog import CONTROLLER_CONNECTIONS, connection_catalog
+from ..inventory import record_connections
+from control_plane.provider_spec import NameContext
+
+from ..provider_choices import container_stack, zone
+from ..security import cli_principal
+
+
+A_PORTAINER = {
+    "connection_ref": "a-portainer",
+    "provider": "portainer",
+    "endpoint": "https://portainer.example",
+    "reaches": ["a-docker-host", "a-cloud-host"],
+    "ok": True,
+    "probed": True,
+    "detail": "2 of 2 environments reachable.",
+}
+A_DNS_TOKEN = {
+    "connection_ref": "cloudflare-dns",
+    "provider": "cloudflare_dns",
+    "endpoint": "https://api.cloudflare.com/client/v4",
+    "reaches": ["example.com", "example.net"],
+    "ok": True,
+    "probed": True,
+    "detail": "2 zones.",
+}
+
+
+def sweep(*connections, controller_id="a-controller"):
+    return record_connections(
+        list(connections), principal=cli_principal(), controller_id=controller_id
+    )
+
+
+class RecordingTests(TestCase):
+    def test_a_sweep_replaces_the_last_one_for_that_controller(self):
+        """A credential removed from the vault stops being offered.
+
+        Merged instead of replaced, a connection deleted in 1Password would keep
+        appearing in every menu in HQ, which is the one thing a cache of an
+        observation must not do.
+        """
+
+        sweep(A_PORTAINER, A_DNS_TOKEN)
+        sweep(A_PORTAINER)
+
+        self.assertEqual(
+            [row.connection_ref for row in ProviderConnection.objects.all()],
+            ["a-portainer"],
+        )
+
+    def test_one_controller_does_not_erase_another(self):
+        """Two controllers render two vaults, and a ref means what its own says.
+
+        Scoped by controller because the alternative is that whichever swept
+        last deletes the other's connections, which would make a second machine
+        take the first one's menus down every fifteen minutes.
+        """
+
+        sweep(A_PORTAINER, controller_id="a-controller")
+        sweep(A_DNS_TOKEN, controller_id="another-controller")
+
+        self.assertEqual(ProviderConnection.objects.count(), 2)
+
+    def test_an_unreachable_connection_is_kept_and_marked(self):
+        """A broken credential is still the credential the operator has.
+
+        Dropped from the sweep, an expired token reads as "you never set this
+        up", so the page invites adding a second one, and the real problem
+        stays invisible.
+        """
+
+        sweep({**A_DNS_TOKEN, "ok": False, "detail": "Token is not valid."})
+
+        reading = connection_readings()[0]
+        self.assertEqual(reading.status, "unreachable")
+        self.assertEqual(reading.detail, "Token is not valid.")
+
+    def test_an_unprobed_connection_is_not_a_broken_one(self):
+        sweep({**A_PORTAINER, "probed": False, "detail": "No probe."})
+
+        self.assertEqual(connection_readings()[0].status, "unprobed")
+        self.assertEqual(connection_readings()[0].status_label, "Not probed")
+
+    def test_a_connection_without_a_ref_is_skipped_rather_than_stored(self):
+        sweep({"provider": "portainer"}, A_PORTAINER)
+
+        self.assertEqual(ProviderConnection.objects.count(), 1)
+
+    def test_a_credential_bearing_endpoint_is_never_stored(self):
+        with self.assertRaisesRegex(ValueError, "private URL parts"):
+            sweep(
+                A_PORTAINER,
+                {
+                    **A_DNS_TOKEN,
+                    "endpoint": "https://operator:secret@example.test/api",
+                },
+            )
+
+        self.assertEqual(ProviderConnection.objects.count(), 0)
+
+    def test_a_query_string_never_enters_connection_inventory(self):
+        with self.assertRaisesRegex(ValueError, "private URL parts"):
+            sweep(
+                {
+                    **A_DNS_TOKEN,
+                    "endpoint": "https://api.example.test/v1?token=secret",
+                },
+            )
+
+        self.assertEqual(ProviderConnection.objects.count(), 0)
+
+
+class DerivationTests(TestCase):
+    def test_every_provider_names_connections_the_controller_can_report(self):
+        """No provider asks for a kind of connection that cannot exist.
+
+        A typo here is invisible until a form renders an empty menu, at which
+        point it looks like a missing credential rather than a missing letter.
+        """
+
+        named = {
+            provider
+            for spec in PROVIDERS.values()
+            for provider in spec.connection_providers
+        }
+
+        self.assertEqual(
+            named
+            - {
+                "adguard",
+                "npm",
+                "cloudflare_dns",
+                "github_app",
+                "onepassword",
+                "portainer",
+                "ssh",
+                "tailscale",
+            },
+            set(),
+        )
+
+    def test_where_a_stack_can_run_is_what_a_portainer_reaches(self):
+        """A machine is a place to run something because a Portainer holds it.
+
+        Read from the connection rather than from containers found on it, so a
+        machine running nothing is still offered, which is exactly when this
+        form is being filled in.
+        """
+
+        sweep(A_PORTAINER)
+
+        choices = container_stack(NameContext())
+        self.assertEqual(
+            [value for value, _ in choices["host"]],
+            ["a-cloud-host", "a-docker-host"],
+        )
+        self.assertEqual(choices["connection_ref"], (("a-portainer",) * 2,))
+
+    def test_a_machine_behind_two_portainers_is_offered_once(self):
+        sweep(
+            A_PORTAINER,
+            {
+                **A_PORTAINER,
+                "connection_ref": "second-portainer",
+                "reaches": ["a-docker-host"],
+            },
+        )
+
+        self.assertEqual(
+            [name for name, _ in reachable_through("portainer")],
+            ["a-cloud-host", "a-docker-host"],
+        )
+
+    def test_which_domains_can_be_declared_is_what_the_token_may_edit(self):
+        sweep(A_DNS_TOKEN)
+
+        self.assertEqual(
+            zone(NameContext())["connection_ref"], (("cloudflare-dns",) * 2,)
+        )
+
+    def test_the_menu_offers_whatever_providers_the_registry_says_reach_the_kind(self):
+        from dataclasses import replace
+        from unittest import mock
+
+        from control_plane.providers import PROVIDERS
+
+        from control_plane.provider_adapters.cloudflare import ZONE_KIND
+
+        sweep(A_DNS_TOKEN, {**A_PORTAINER, "connection_ref": "another-dns"})
+        widened = replace(PROVIDERS[ZONE_KIND], connection_providers=("cloudflare_dns", "portainer"))
+        with mock.patch.dict(PROVIDERS, {ZONE_KIND: widened}):
+            refs = [ref for ref, _ in zone(NameContext())["connection_ref"]]
+
+        self.assertEqual(refs, ["cloudflare-dns", "another-dns"])
+
+    def test_a_broken_connection_is_offered_last_and_says_so(self):
+        """Still offered, because it is the one that already exists.
+
+        Ordering puts a working credential first; omitting the broken one would
+        make the menu disagree with the page that lists it.
+        """
+
+        sweep(
+            {**A_PORTAINER, "connection_ref": "a-broken-one", "ok": False},
+            A_PORTAINER,
+        )
+
+        refs = [ref for ref, _ in container_stack(NameContext())["connection_ref"]]
+        labels = dict(container_stack(NameContext())["connection_ref"])
+        self.assertEqual(refs, ["a-portainer", "a-broken-one"])
+        self.assertIn("(unreachable)", labels["a-broken-one"])
+
+    def test_menus_are_empty_before_the_first_sweep(self):
+        """And the fields stay typeable. An empty menu is a smaller failure
+        than one that cannot describe what already exists."""
+
+        self.assertEqual(container_stack(NameContext())["host"], ())
+        self.assertEqual(connections_for("portainer"), ())
+
+
+class ConnectionPageTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="operator", password="not-a-real-password"
+        )
+        self.client.force_login(self.user)
+
+    def test_the_page_lists_what_the_controller_reported(self):
+        sweep(A_PORTAINER, A_DNS_TOKEN)
+
+        response = self.client.get(reverse("control_plane:connections"))
+
+        self.assertContains(response, "a-portainer")
+        self.assertContains(response, "a-cloud-host")
+        self.assertContains(response, "Container stack")
+
+    def test_the_controller_observed_family_leads_the_inventory(self):
+        sweep(A_PORTAINER, A_DNS_TOKEN)
+
+        groups = connection_catalog(principal=cli_principal())
+
+        self.assertGreater(len(groups), 1)
+        self.assertEqual(groups[0].spec.name, CONTROLLER_CONNECTIONS)
+        self.assertTrue(groups[0].connections)
+
+    def test_connections_render_as_bounded_rows_not_content_sized_chips(self):
+        sweep(A_PORTAINER)
+
+        response = self.client.get(reverse("control_plane:connections"))
+
+        self.assertContains(response, 'class="connection-endpoint"')
+        self.assertContains(response, 'class="connection-ability-list"')
+        # A probed Portainer holds a whole-account credential: reached, proven,
+        # and so ready: the lifecycle rather than the raw probe result.
+        self.assertContains(response, 'class="connection-state connection-state-ready"')
+        self.assertContains(response, "Authority proven")
+        self.assertNotContains(response, "connection-ability-chip")
+
+    def test_the_page_never_carries_a_secret(self):
+        """It cannot, because nothing here has one, and this is the assertion
+        that keeps it that way if a field is ever added to the report."""
+
+        sweep({**A_PORTAINER, "detail": "2 of 2 environments reachable."})
+
+        response = self.client.get(reverse("control_plane:connections"))
+
+        self.assertNotContains(response, "API_TOKEN")
+        self.assertNotContains(response, "PASSWORD")
+
+    def test_it_says_so_when_nothing_has_swept(self):
+        response = self.client.get(reverse("control_plane:connections"))
+
+        self.assertContains(response, "No controller has reported yet")
+
+    def test_an_unclassified_connection_is_named_rather_than_hidden(self):
+        sweep({**A_PORTAINER, "provider": ""})
+
+        response = self.client.get(reverse("control_plane:connections"))
+
+        self.assertContains(response, "Unclassified connections")
+        self.assertContains(response, "a-portainer")
+
+    def test_the_workspace_query_cost_does_not_grow_with_connections(self):
+        # One constant inventory read derives Tailscale policy and NPM edge proof.
+        # Installed extensions may contribute their own constant connection
+        # reads, so the invariant is growth rather than one host-only absolute.
+        # It never probes a provider and twenty more rows cost no more queries
+        # than one. No connection at all skips the activity read entirely.
+        sweep(A_PORTAINER)
+        with CaptureQueriesContext(connection) as baseline:
+            self.client.get(reverse("control_plane:connections"))
+
+        sweep(
+            *(
+                {
+                    **A_PORTAINER,
+                    "connection_ref": f"portainer-{index}",
+                    "reaches": [f"host-{index}"],
+                }
+                for index in range(20)
+            )
+        )
+        with CaptureQueriesContext(connection) as expanded:
+            self.client.get(reverse("control_plane:connections"))
+
+        self.assertEqual(len(expanded), len(baseline))
+
+
+class OfferTests(TestCase):
+    """What HQ offers for a name, given what it can actually reach.
+
+    An offer that cannot work is worse than no offer. Declaring one is how you
+    find out, and the finding out arrives a minute later in a failed job.
+    """
+
+    def test_a_name_in_no_reachable_zone_is_not_offered_public_dns(self):
+        sweep(A_DNS_TOKEN)
+
+        offers = dict(_certificate_and_dns("probe.invalid")["dns"].declarable)
+
+        self.assertNotIn("cloudflare.dns_record", offers)
+        self.assertIn("adguard.rewrite", offers)
+
+    def test_it_says_why_rather_than_dropping_the_option(self):
+        sweep(A_DNS_TOKEN)
+
+        refused = dict(_certificate_and_dns("probe.invalid")["certificate"].unavailable)
+
+        self.assertIn("TLS certificate", refused)
+        self.assertIn("Upload a certificate instead", refused["TLS certificate"])
+
+    def test_the_option_that_works_is_offered_in_its_place(self):
+        sweep(A_DNS_TOKEN)
+
+        offers = dict(_certificate_and_dns("probe.invalid")["certificate"].declarable)
+
+        self.assertIn("tls.uploaded_certificate", offers)
+
+    def test_a_name_in_a_reachable_zone_keeps_both(self):
+        sweep(A_DNS_TOKEN)
+
+        facets = _certificate_and_dns("probe.example.com")
+
+        self.assertIn("cloudflare.dns_record", dict(facets["dns"].declarable))
+        self.assertIn("tls.certificate", dict(facets["certificate"].declarable))
+
+    def test_nothing_is_refused_before_a_sweep(self):
+        """An empty report means nobody looked, not that nothing is reachable.
+
+        Read as a prohibition, one missed sweep would present as a deliberate
+        restriction on every public name HQ has.
+        """
+
+        facets = _certificate_and_dns("probe.example.com")
+
+        self.assertIn("cloudflare.dns_record", dict(facets["dns"].declarable))
+        self.assertEqual(facets["certificate"].unavailable, ())
+
+
+def _certificate_and_dns(hostname):
+    from ..naming import name_context
+    from ..service_facets import Facet
+
+    context = name_context(hostname)
+    return {
+        facet: Facet(id=facet, label=facet.title(), context=context)
+        for facet in ("dns", "certificate")
+    }
+
+
+class SeedTests(TestCase):
+    """What a form opens already knowing.
+
+    Each of these is on the screen when the question is asked, so the form
+    carries it rather than having it retyped from another card.
+    """
+
+    def setUp(self):
+        from control_plane.models import ManagedResource
+
+        ManagedResource.objects.create(
+            key="a-docker-host",
+            kind="machine",
+            spec={
+                "name": "a-docker-host",
+                "role": "",
+                "addresses": ["10.0.0.9"],
+            },
+        )
+        ManagedResource.objects.create(
+            key="probe-stack",
+            kind="portainer.stack",
+            spec={
+                "connection_ref": "a-portainer",
+                "host": "a-docker-host",
+                "name": "probe",
+                "compose": "services: {}",
+                "environment": [],
+                "hostnames": ["probe.invalid"],
+                "port": 8099,
+            },
+        )
+
+    def test_a_proxy_points_at_what_already_serves_the_name(self):
+        from control_plane.providers import PROVIDERS
+
+        from ..naming import name_context
+
+        seeded = PROVIDERS["npm.proxy_host"].seed(name_context("probe.invalid"))
+
+        self.assertEqual(seeded["forward_port"], 8099)
+
+    def test_it_uses_an_address_the_proxy_can_resolve(self):
+        """Not the machine's name. Nginx has never heard of it,
+        so seeding it puts a plausible value in the box that cannot work."""
+
+        from control_plane.providers import PROVIDERS
+
+        from ..naming import name_context
+
+        seeded = PROVIDERS["npm.proxy_host"].seed(name_context("probe.invalid"))
+
+        self.assertEqual(seeded["forward_host"], "10.0.0.9")
+
+    def test_one_request_resolves_each_resource_once_however_many_names_it_asks(self):
+        """A page asks this once per service; the resources behind it are
+        resolved once for the whole request."""
+
+        from unittest import mock
+
+        from .. import naming
+        from ..infrastructure import resolved_spec
+        from ..projection import projection_scope
+
+        with (
+            mock.patch.object(naming, "resolved_spec", wraps=resolved_spec) as resolve,
+            projection_scope(),
+        ):
+            for name in ("probe.invalid", "other.invalid", "third.invalid"):
+                naming.name_context(name)
+
+        # Only the stack has a provider that serves or covers a name.
+        self.assertEqual(resolve.call_count, 1)
+
+    def test_outside_a_request_nothing_is_kept_between_asks(self):
+        """Per request, never across: a credential replaced between two asks is
+        seen by the second."""
+
+        from unittest import mock
+
+        from .. import naming
+        from ..infrastructure import resolved_spec
+
+        with mock.patch.object(naming, "resolved_spec", wraps=resolved_spec) as resolve:
+            naming.name_context("probe.invalid")
+            naming.name_context("probe.invalid")
+
+        self.assertEqual(resolve.call_count, 2)
+
+    def test_nothing_is_seeded_when_nothing_serves_the_name(self):
+        from control_plane.providers import PROVIDERS
+
+        from ..naming import name_context
+
+        seeded = PROVIDERS["npm.proxy_host"].seed(name_context("nowhere.invalid"))
+
+        self.assertNotIn("forward_host", seeded)
+        self.assertEqual(seeded["domain_names"], ["nowhere.invalid"])
+
+    def test_a_public_record_seeds_the_zone_the_credential_holds(self):
+        """Rather than the last two labels, which is a guess that is wrong for
+        every co.uk and right only by the shape of most names."""
+
+        from control_plane.providers import PROVIDERS
+
+        from ..naming import name_context
+
+        sweep({**A_DNS_TOKEN, "reaches": ["dev.example.com"]})
+        seeded = PROVIDERS["cloudflare.dns_record"].seed(
+            name_context("probe.dev.example.com")
+        )
+
+        self.assertEqual(seeded["zone"], "dev.example.com")
+
+
+class AdoptionSafetyTests(TestCase):
+    """HQ offers to take on a container only when that would not build a second.
+
+    A container started by compose on the machine has no Portainer stack. A
+    declaration built as though it did would ask
+    Portainer to stand up its own copy of something already serving.
+    """
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="operator", password="not-a-real-password"
+        )
+        self.client.force_login(self.user)
+
+    def _service_page(self, portainer_managed):
+        from control_plane.models import ManagedResource, ProviderInventory
+        from django.utils import timezone
+
+        ProviderInventory.objects.update_or_create(
+            kind="portainer.container",
+            defaults={
+                "records": [
+                    {
+                        "name": "probe",
+                        "stack": "probe",
+                        "host": "a-docker-host",
+                        "ports": [8099],
+                        "state": "running",
+                        "portainer_managed": portainer_managed,
+                    }
+                ],
+                "reachable": True,
+                "observed_at": timezone.now(),
+            },
+        )
+        ManagedResource.objects.update_or_create(
+            key="probe-proxy",
+            kind="npm.proxy_host",
+            defaults={
+                "spec": {
+                    "domain_names": ["probe.invalid"],
+                    "forward_scheme": "http",
+                    "forward_host": "10.0.0.9",
+                    "forward_port": 8099,
+                    "certificate_resource": "",
+                    "ssl_forced": True,
+                    "http2": True,
+                    "websocket": True,
+                    "caching_enabled": False,
+                    "block_exploits": True,
+                    "access_list_id": 0,
+                    "advanced_config": "",
+                    "hsts_enabled": True,
+                    "hsts_subdomains": True,
+                    "trust_forwarded_proto": True,
+                    "serving": True,
+                }
+            },
+        )
+        ManagedResource.objects.update_or_create(
+            key="a-docker-host",
+            defaults={
+                "kind": "machine",
+                "spec": {
+                    "name": "a-docker-host",
+                    "role": "",
+                    "addresses": ["10.0.0.9"],
+                },
+            },
+        )
+        return self.client.get(
+            reverse("control_plane:service", kwargs={"hostname": "probe.invalid"})
+        )
+
+    def test_a_container_portainer_did_not_create_cannot_be_redefined(self):
+        response = self._service_page(portainer_managed=False)
+
+        self.assertContains(response, "HQ cannot read it")
+        self.assertNotContains(response, "Manage as container stack")
+
+    def test_one_portainer_created_can_be_redefined(self):
+        response = self._service_page(portainer_managed=True)
+
+        self.assertContains(response, "Manage as container stack")
+
+    def test_either_way_it_can_be_watched(self):
+        """Defining and cycling are different claims.
+
+        Docker will start, stop and restart any container; Portainer will only
+        redefine one it made. Refusing both because it cannot do the second
+        would leave every container running today with no controls at all.
+        """
+
+        for created_by_portainer in (True, False):
+            with self.subTest(portainer_managed=created_by_portainer):
+                response = self._service_page(portainer_managed=created_by_portainer)
+
+                self.assertContains(response, "Watch container")
+
+    def test_watching_it_is_what_puts_the_controls_there(self):
+        """Buttons appear once a declaration exists to hang an operation on.
+
+        Every operation targets a resource, so a container nothing declares has
+        nothing to queue against, which is what adoption is for here, and why
+        it asserts nothing about the container's definition.
+        """
+
+        from control_plane.models import ManagedResource
+
+        self._service_page(portainer_managed=False)
+        ManagedResource.objects.create(
+            key="a-docker-host-probe",
+            kind="portainer.container",
+            spec={
+                "connection_ref": "a-portainer",
+                "host": "a-docker-host",
+                "name": "probe",
+            },
+        )
+
+        response = self.client.get(
+            reverse("control_plane:service", kwargs={"hostname": "probe.invalid"})
+        )
+
+        self.assertContains(response, "Restart")
+        self.assertNotContains(response, "Watch container")
+
+
+class ControllerColumnTests(TestCase):
+    """Whose controller reported a connection is worth saying once there are two.
+
+    With one controller, printing it under every row repeats one machine's name
+    and says nothing.
+    """
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="operator", password="not-a-real-password"
+        )
+        self.client.force_login(self.user)
+
+    def test_one_controller_is_not_named_on_every_row(self):
+        sweep(A_PORTAINER, A_DNS_TOKEN, controller_id="a-controller")
+
+        response = self.client.get(reverse("control_plane:connections"))
+
+        self.assertNotContains(response, "via a-docker-host")
+
+    def test_two_controllers_are_told_apart(self):
+        sweep(A_PORTAINER, controller_id="a-controller")
+        sweep(A_DNS_TOKEN, controller_id="another-controller")
+
+        response = self.client.get(reverse("control_plane:connections"))
+
+        self.assertContains(response, "via a-controller")
+        self.assertContains(response, "via another-controller")
+
+
+class ExpiredCredentialTests(TestCase):
+    """A credential that stopped answering must not read as an answer.
+
+    The two look identical from the zone list (both report none) and taken
+    the same way, a token expiring turns every public name HQ owns into a name
+    it claims no account holds.
+    """
+
+    def test_a_failed_probe_does_not_rule_out_every_public_name(self):
+        from control_plane.providers import PROVIDERS
+
+        from ..naming import name_context
+
+        sweep({**A_DNS_TOKEN, "ok": False, "reaches": [], "detail": "Token expired."})
+        context = name_context("probe.example.com")
+
+        self.assertFalse(context.swept)
+        self.assertEqual(PROVIDERS["cloudflare.dns_record"].applies(context), "")
+        self.assertEqual(PROVIDERS["tls.certificate"].applies(context), "")
+
+    def test_an_unprobed_connection_is_not_an_answer_either(self):
+        from control_plane.providers import PROVIDERS
+
+        from ..naming import name_context
+
+        sweep({**A_DNS_TOKEN, "probed": False, "reaches": []})
+
+        self.assertEqual(
+            PROVIDERS["cloudflare.dns_record"].applies(name_context("a.example.com")),
+            "",
+        )
+
+    def test_a_working_credential_still_rules_out_what_it_cannot_reach(self):
+        """The guard must not swallow the rule it guards."""
+
+        from control_plane.providers import PROVIDERS
+
+        from ..naming import name_context
+
+        sweep(A_DNS_TOKEN)
+
+        self.assertNotEqual(
+            PROVIDERS["cloudflare.dns_record"].applies(name_context("probe.invalid")),
+            "",
+        )
+
+
+class OutwardLinkChoiceTests(TestCase):
+    """Which shortcuts the dashboard shows is a preference, not configuration.
+
+    Everything HQ can reach is offered, and most of it is not what an operator
+    wants a shortcut to. Nothing chosen means everything, because a panel that
+    starts empty teaches nobody that it can be filled.
+    """
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="operator", password="not-a-real-password"
+        )
+        self.client.force_login(self.user)
+        sweep(A_PORTAINER, A_DNS_TOKEN)
+
+    def test_nothing_chosen_shows_everything(self):
+        from ..outward_links import outward_links
+
+        offered, curated = outward_links(self.user)
+
+        self.assertFalse(curated)
+        self.assertTrue(any(item["label"] == "Portainer" for item in offered))
+
+    def test_choosing_narrows_the_panel(self):
+        from ..outward_links import outward_links
+
+        self.client.post(
+            reverse("dashboard_links"), {"href": "https://portainer.example"}
+        )
+        offered, curated = outward_links(self.user)
+
+        self.assertTrue(curated)
+        self.assertEqual(
+            [item["href"] for item in offered], ["https://portainer.example"]
+        )
+
+    def test_choosing_again_replaces_rather_than_adds(self):
+        """A chooser answers with the whole set, so applying it as toggles would
+        depend on what was already stored."""
+
+        from ..outward_links import outward_links
+
+        self.client.post(
+            reverse("dashboard_links"), {"href": "https://portainer.example"}
+        )
+        self.client.post(reverse("dashboard_links"), {"href": "/health/ready/"})
+        offered, _ = outward_links(self.user)
+
+        self.assertEqual([item["href"] for item in offered], ["/health/ready/"])
+
+    def test_something_never_offered_cannot_be_stored(self):
+        """A key arriving in a form post is a request, not an instruction."""
+
+        from ..outward_links import outward_links
+
+        self.client.post(reverse("dashboard_links"), {"href": "https://elsewhere.test"})
+        offered, curated = outward_links(self.user)
+
+        self.assertFalse(curated)
+        self.assertGreater(len(offered), 1)
+
+    def test_the_chooser_offers_exactly_what_the_panel_renders(self):
+        from ..outward_links import link_choices, outward_links
+
+        offered, _ = outward_links(None)
+
+        self.assertEqual(
+            [item["href"] for item in link_choices(self.user)],
+            [item["href"] for item in offered],
+        )
+
+
+class StepFailureRecordingTests(TestCase):
+    """What a pass could not finish, from the controller to the reading."""
+
+    def _connection(self, **overrides):
+        sweep({**A_PORTAINER, **overrides}, controller_id="a-host")
+
+    def test_failures_land_on_the_connection_that_carried_them(self):
+        from application.connections import connection_readings
+        from application.inventory import record_step_failures
+
+        self._connection()
+
+        record_step_failures(
+            [
+                {
+                    "subject": A_PORTAINER["connection_ref"],
+                    "step": "SSH routes for a-portainer",
+                    "reason": "exit 126",
+                }
+            ],
+            principal=cli_principal(),
+            controller_id="a-host",
+        )
+
+        (reading,) = connection_readings()
+        self.assertEqual(
+            reading.failing_steps, (("SSH routes for a-portainer", "exit 126"),)
+        )
+        # The probe still says the credential works, which is the point: these
+        # two facts disagree, and that disagreement is the finding.
+        self.assertTrue(reading.reachable)
+
+    def test_a_pass_that_finished_everything_clears_the_last_one(self):
+        """Only writing failures would leave the last one standing forever."""
+
+        from application.connections import connection_readings
+        from application.inventory import record_step_failures
+
+        self._connection()
+        record_step_failures(
+            [
+                {
+                    "subject": A_PORTAINER["connection_ref"],
+                    "step": "SSH routes for a-portainer",
+                    "reason": "exit 126",
+                }
+            ],
+            principal=cli_principal(),
+            controller_id="a-host",
+        )
+
+        record_step_failures([], principal=cli_principal(), controller_id="a-host")
+
+        self.assertEqual(connection_readings()[0].failing_steps, ())
+
+    def test_a_failure_for_something_this_controller_does_not_carry_is_dropped(self):
+        from application.connections import connection_readings
+        from application.inventory import record_step_failures
+
+        self._connection()
+
+        record_step_failures(
+            [{"subject": "not-a-connection", "step": "a step", "reason": "exit 1"}],
+            principal=cli_principal(),
+            controller_id="a-host",
+        )
+
+        self.assertEqual(connection_readings()[0].failing_steps, ())
+
+
+class DependsOnceTests(TestCase):
+    """A declaration that is the same thing as a target is listed once, by name."""
+
+    def setUp(self):
+        from control_plane.models import ManagedResource
+
+        for name in ("example.com", "example.net"):
+            ManagedResource.objects.create(
+                key=name.replace(".", "-"),
+                kind="cloudflare.zone",
+                spec={"zone": name, "connection_ref": "cloudflare-dns"},
+            )
+        ManagedResource.objects.create(
+            key="www-record",
+            kind="cloudflare.dns_record",
+            spec={
+                "zone": "example.com",
+                "name": "www.example.com",
+                "record_type": "CNAME",
+                "content": "example.com",
+                "connection_ref": "cloudflare-dns",
+            },
+        )
+        sweep(A_DNS_TOKEN)
+
+    def instance(self):
+        group = next(
+            group
+            for group in connection_catalog(principal=cli_principal())
+            if group.spec.name == CONTROLLER_CONNECTIONS
+        )
+        return next(
+            item.instance
+            for item in group.connections
+            if item.instance.label == "cloudflare-dns"
+        )
+
+    def test_a_zone_is_named_once_and_links_to_its_page(self):
+        instance = self.instance()
+
+        self.assertEqual(
+            [(link.label, link.url, link.resource_key) for link in instance.targets],
+            [
+                ("example.com", reverse("zones:detail", kwargs={"zone": "example.com"}), "example-com"),
+                ("example.net", reverse("zones:detail", kwargs={"zone": "example.net"}), "example-net"),
+            ],
+        )
+        self.assertEqual([link.label for link in instance.dependencies], ["www-record"])
+
+    def test_the_page_shows_the_zone_key_nowhere(self):
+        user = get_user_model().objects.create_user(
+            username="operator", password="not-a-real-password"
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("control_plane:connections"))
+
+        self.assertNotContains(response, "<code>example-com</code>")
+        self.assertContains(response, "<code>www-record</code>")

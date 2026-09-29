@@ -24,6 +24,7 @@ from control_plane.models import NotManaged, ProviderConnection, ProviderInvento
 from control_plane.names import normalized_hostname
 from control_plane.providers import PROVIDERS, registry_label, service_facets
 
+from .conditions import stamped
 from .inventory import record_identity, record_token, service_hostnames
 from .security import Principal
 
@@ -188,11 +189,8 @@ class Unmanaged:
     def readout(self) -> tuple[tuple[str, str], ...]:
         """What this record does, described by its own provider.
 
-        The listing template reached into ``spec.answer`` and ``spec.forward_host``
-        directly, which is the one thing nothing outside a provider is allowed to
-        do: an AdGuard record has neither of the fields a proxy host has, and the
-        page failed the moment both kinds appeared on it. The provider already
-        says how to describe itself.
+        Nothing outside a provider reads its spec fields: record kinds differ in
+        shape, so each provider says how to describe itself.
         """
 
         provider = PROVIDERS[self.kind]
@@ -262,10 +260,8 @@ class UnmanagedService:
     """Every unmanaged record sharing one hostname, seen as one thing.
 
     Grouped because a hostname is the unit an operator thinks in, and because
-    the managed table beside this one is already per-hostname. Listed per record
-    instead, one service appeared as two adjacent rows with the same name, and
-    onboarding it took two clicks: the page taught two different shapes for
-    the same idea.
+    the managed table beside this one is already per-hostname: one service is
+    one row and one adoption.
     """
 
     hostname: str
@@ -495,14 +491,14 @@ def _record_as_observed(key: str, found: "Unmanaged") -> None:
     resource.last_observed_at = timezone.now()
     # What was found, which for an adopted resource is what was declared.
     resource.status = dict(found.spec)
-    resource.conditions = [
+    resource.conditions = stamped(resource.conditions, [
         {
             "type": "Ready",
             "status": True,
             "reason": "Adopted",
             "message": "Adopted from what the provider was holding.",
         }
-    ]
+    ])
     resource.save(
         update_fields=[
             "observed_generation",

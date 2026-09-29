@@ -20,10 +20,6 @@ class JobListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     template_name = "jobs/job_list.html"
     paginate_by = 40
     page_title = "Background jobs"
-    page_lede = (
-        "Tasks that run outside a web request. Jobs whose process exited early "
-        "are marked Lost when this page loads."
-    )
     table_search_fields = ("label", "kind", "note")
     table_search_placeholder = "Search jobs and notes…"
     table_columns = (

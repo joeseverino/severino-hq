@@ -240,6 +240,79 @@ def _security_fixes(repo: Repository) -> Runs:
     return ((repo.short, f"{_api(repo, 'PUT', '/vulnerability-alerts')} && {_api(repo, 'PUT', '/automated-security-fixes')}"),)
 
 
+def _literal(text: str) -> str:
+    """``text`` as a literal in a Perl pattern or replacement.
+
+    Every character but a word character is escaped, which also stops ``@``
+    and ``$`` interpolating.
+    """
+
+    return "".join(char if char.isalnum() or char == "_" else f"\\{char}" for char in text)
+
+
+def _pin_edit(pin: dict[str, Any]) -> str:
+    """One Perl substitution: the ``uses:`` line, pinned, with the tag kept as a comment.
+
+    Only a line whose key is ``uses:`` (after indentation and an optional
+    ``- ``) matches, so a commented-out line is never touched. Trailing spaces
+    and a comment already there are replaced; a CRLF ending is kept.
+    """
+
+    pinned = _literal(f"uses: {pin['action']}@{pin['sha']} # {pin['ref']}")
+    return (
+        rf"""s/^([ \t]*(?:-[ \t]+)?)uses:[ \t]*(["']?){_literal(pin['uses'])}\2"""
+        rf"""(?:[ \t]+#[^\r\n]*)?[ \t]*(\r?)$/${{1}}{pinned}${{3}}/;"""
+    )
+
+
+def _pinning(repo: Repository) -> Runs:
+    """Each file's edit, as one command to paste in a checkout, then the setting.
+
+    The commit each tag names now, as the App read it. Perl rather than sed,
+    because ``sed -i`` takes its arguments differently on macOS and on Linux.
+    The setting comes last and only when every line could be resolved and no
+    workflow is called from another repository: requiring pinning before the
+    workflows are pinned stops every run, and it applies as much to what a
+    called workflow uses, which HQ did not read.
+    """
+
+    if pins_unread(repo):
+        # Nothing to pin is not the same as not knowing what to pin.
+        return ()
+    pins = repo.record.get("pins") or []
+    runs: list[tuple[str, str]] = []
+    by_path: dict[str, list[dict[str, Any]]] = {}
+    for pin in pins:
+        by_path.setdefault(str(pin.get("path", "")), []).append(pin)
+    for path, found in sorted(by_path.items()):
+        edits = dict.fromkeys(_pin_edit(pin) for pin in found if pin.get("sha"))
+        if edits:
+            script = shlex.quote(" ".join(edits))
+            runs.append((f"{repo.short}: pin {path}", f"perl -pi -e {script} {shlex.quote(path)}"))
+    if not pins_unresolved(repo) and not calls_workflows(repo):
+        runs.append(
+            (
+                f"{repo.short}: then require pinning",
+                _api(repo, "PUT", "/actions/permissions", "-F enabled=true", "-F sha_pinning_required=true"),
+            )
+        )
+    return tuple(runs)
+
+
+def pins_unread(repo: Repository) -> bool:
+    return repo.record.get("pins") is None
+
+
+def pins_unresolved(repo: Repository) -> tuple[str, ...]:
+    return tuple(sorted({str(pin.get("uses", "")) for pin in repo.record.get("pins") or () if not pin.get("sha")}))
+
+
+def calls_workflows(repo: Repository) -> tuple[str, ...]:
+    """The workflows from other repositories this one calls, as its ``uses:`` lines name them."""
+
+    return tuple(repo.record.get("called_workflows") or ())
+
+
 _ANALYSIS = "security_and_analysis[{}][status]=enabled"
 # The exact commands that meet a check, per repository that misses it.
 COMMANDS: dict[str, Callable[[Repository], Runs]] = {
@@ -265,15 +338,20 @@ COMMANDS: dict[str, Callable[[Repository], Runs]] = {
         f"-f '{_ANALYSIS.format('secret_scanning_push_protection')}'", method="PATCH", path=""
     ),
     "code-scanning": _setting("-f state=configured", method="PATCH", path="/code-scanning/default-setup"),
+    "actions-pinned": _pinning,
 }
 # Why HQ offers no command for a check it cannot safely derive one for.
-REASONS: dict[str, str] = {
-    "actions-pinned": (
-        "HQ's reading of a repository does not include its workflows' uses: lines, so it cannot "
-        "tell whether one calls the host's own reusable workflow or action at a branch, which "
-        "requiring SHA pinning would break. It offers no command until it can read them."
-    ),
-}
+REASONS: dict[str, str] = {}
+# Said beside a pinning plan for a repository whose workflows were not read.
+PINS_UNREAD = (
+    "Its workflows were not read, so HQ cannot say which uses: lines to pin, and requiring "
+    "pinning first would stop every run that uses a tag."
+)
+# Said beside a pinning plan for a repository calling another's workflows.
+PINS_CALLED = (
+    "Requiring pinning also applies to the actions a called workflow uses, which HQ did not "
+    "read, so it is not offered here: check those workflows pin theirs before requiring it for"
+)
 
 
 def help_for(check: _Check, missing: list[Repository]) -> Any:
@@ -283,7 +361,27 @@ def help_for(check: _Check, missing: list[Repository]) -> Any:
     derive = COMMANDS.get(check.id)
     if derive is None:
         return cannot_help(key, REASONS[check.id])
-    return commands(key, tuple(run for repo in missing for run in derive(repo)))
+    return commands(key, tuple(run for repo in missing for run in derive(repo)), reason=_left_out(check, missing))
+
+
+def _left_out(check: _Check, missing: list[Repository]) -> str:
+    """What the commands do not cover, and why: only pinning can leave some out."""
+
+    if check.id != "actions-pinned":
+        return ""
+    unread = [repo.short for repo in missing if pins_unread(repo)]
+    unresolved = [f"{repo.short} ({', '.join(pins_unresolved(repo))})" for repo in missing if pins_unresolved(repo)]
+    called = [f"{repo.short} ({', '.join(calls_workflows(repo))})" for repo in missing if calls_workflows(repo)]
+    parts = []
+    if unread:
+        parts.append(f"{', '.join(unread)}: {PINS_UNREAD}")
+    if unresolved:
+        parts.append(
+            f"Pin these by hand; their tags could not be read, so pinning is not required yet: {'; '.join(unresolved)}."
+        )
+    if called:
+        parts.append(f"{PINS_CALLED} {'; '.join(called)}.")
+    return " ".join(parts)
 
 
 def posture_of(repo: Repository) -> Posture:

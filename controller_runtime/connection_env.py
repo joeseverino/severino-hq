@@ -30,7 +30,7 @@ def connection_provider(connection_ref: str) -> str:
     """What kind of thing one connection reaches.
 
     The env prefix is the answer unless the 1Password item says otherwise, which
-    makes the long-standing convention (`ADGUARD_URL` is AdGuard's URL) the
+    makes the convention (`ADGUARD_URL` is AdGuard's URL) the
     rule rather than a coincidence every provider had to restate. Declaring it
     on the item is what lets two of the same kind coexist: `PORTAINER_HOME` and
     `PORTAINER_CLOUD` are both portainer, and neither has to be named here.

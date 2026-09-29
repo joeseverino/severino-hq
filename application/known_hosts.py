@@ -42,9 +42,8 @@ def registrable(hostname: str) -> str:
     Deliberately not a public-suffix lookup: that needs a list which goes stale,
     and being wrong here costs a slightly odd label on one card.
 
-    An address is returned whole. Taking the last two labels of one produced
-    "100.72" from 198.51.100.72, not a domain, not an address, and not
-    anything a person could act on.
+    An address is returned whole: the last two labels of 198.51.100.72 are
+    "100.72", which is neither a domain nor an address.
     """
 
     candidate = normalized_hostname(hostname)

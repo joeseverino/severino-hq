@@ -61,7 +61,7 @@ class Presence:
     external: bool = False
     # The peering itself, as the machine HQ runs on reports it. This reading is
     # taken from HQ's own daemon, so every device in it is a peer of HQ by
-    # construction, which HQ knew and never said. A key that has completed a
+    # construction. A key that has completed a
     # handshake, over a path that was negotiated, carrying counted bytes, is
     # the difference between a machine HQ has been told about and one it is
     # actually talking to.

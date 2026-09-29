@@ -113,9 +113,8 @@ def content() -> tuple[Insight, ...]:
             url=f"{reverse('content:list')}?status=draft",
         ),
         *_backlog(
-            # Published, as the entry says. Counting drafts here meant every
-            # new draft raised two entries: its own, and this one accusing it
-            # of missing documentation it is far too early to have written.
+            # Published only: a draft already has its own entry and is too
+            # early to be missing documentation.
             count=(
                 ContentItem.objects.filter(status=ContentItem.Status.PUBLISHED)
                 .annotate(doc_count=Count("related_documentation"))

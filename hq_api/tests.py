@@ -275,10 +275,10 @@ class TransportTests(TestCase):
         self.assertEqual(response.json()["error"]["code"], "forbidden")
 
     def test_a_paused_agent_is_refused_on_the_machine_api(self):
-        """The brake /mcp/ has always applied, now on the other door.
+        """The same brake /mcp/ applies, on the other door.
 
         The agents hold these same tokens, so pausing them on one surface
-        alone left every capability one URL away.
+        alone would leave every capability one URL away.
         """
 
         from core.models import AgentAccess

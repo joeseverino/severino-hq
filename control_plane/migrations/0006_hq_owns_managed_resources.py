@@ -1,11 +1,8 @@
-"""HQ became the only author of desired state, so provenance stopped varying.
+"""Drop the provenance column: HQ is the only author of desired state.
 
-Every existing row was materialised from the topology document. Dropping the
-column is what adopts them: nothing is topology-declared any more because
-nothing can be, and the import no longer creates or disables resources.
-
-No data is lost that anything could act on. The column recorded which of two
-authors wrote the row, and there is now one.
+Dropping the column adopts every existing row as HQ's own. No data is lost that
+anything could act on: the column recorded which of two authors wrote the row,
+and there is one.
 """
 
 from django.db import migrations
