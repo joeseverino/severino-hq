@@ -129,6 +129,9 @@ def request_empty_groups_removal(
     policy = ManagedResource.objects.filter(key=current_key, kind=POLICY_KIND).first()
     if policy is None:
         raise NotFoundError(f"No tailnet policy is declared as {current_key!r}.")
+    from .resource_operations import refuse_while_drifted
+
+    refuse_while_drifted(policy)
     try:
         document, summary = policy_without_empty_groups(str(policy.spec.get("document", "")))
     except ValueError as exc:

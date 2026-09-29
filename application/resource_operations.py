@@ -114,6 +114,25 @@ def operation_summary(operation: OperationRequest) -> dict[str, Any]:
     }
 
 
+def refuse_while_drifted(resource: ManagedResource) -> None:
+    """Refuse to amend a declaration the provider no longer matches.
+
+    A remedy that edits a declaration edits HQ's copy, and applying it pushes
+    that whole copy. While the live record differs, whatever changed there
+    would be overwritten along with the one intended change, so the operator
+    decides first: accept what is there, or reconcile it back.
+    """
+
+    if any(
+        condition.get("type") == "Drifted" and condition.get("status") is True
+        for condition in resource.conditions or ()
+    ):
+        raise PolicyError(
+            f"{resource.key} differs from what the provider holds. Accept what is there "
+            "or reconcile it first, so this change is made to what is actually in force."
+        )
+
+
 def _resource_for_operation(key: str) -> ManagedResource:
     try:
         return ManagedResource.objects.select_for_update().get(key=key)
@@ -538,6 +557,7 @@ def request_reach_allow(
     policy = ManagedResource.objects.filter(kind=POLICY_KIND).first()
     if policy is None:
         raise PolicyError("No tailnet policy is declared.")
+    refuse_while_drifted(policy)
 
     document = str(policy.spec.get("document", ""))
     moved: list[str] = []
