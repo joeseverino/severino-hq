@@ -24,6 +24,7 @@ from control_plane.models import NotManaged, ProviderConnection, ProviderInvento
 from control_plane.names import normalized_hostname
 from control_plane.providers import PROVIDERS, registry_label, service_facets
 
+from .conditions import stamped
 from .inventory import record_identity, record_token, service_hostnames
 from .security import Principal
 
@@ -495,14 +496,14 @@ def _record_as_observed(key: str, found: "Unmanaged") -> None:
     resource.last_observed_at = timezone.now()
     # What was found, which for an adopted resource is what was declared.
     resource.status = dict(found.spec)
-    resource.conditions = [
+    resource.conditions = stamped(resource.conditions, [
         {
             "type": "Ready",
             "status": True,
             "reason": "Adopted",
             "message": "Adopted from what the provider was holding.",
         }
-    ]
+    ])
     resource.save(
         update_fields=[
             "observed_generation",

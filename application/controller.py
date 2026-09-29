@@ -17,6 +17,7 @@ from control_plane.providers import enabled_controller_actions
 from control_plane.provider_adapters.tls import CERTIFICATE_KIND
 
 from .adoption import manages_through, observes_only
+from .conditions import stamped
 from .infrastructure import controller_contract, serialize_resource
 from .resource_operations import serialize_operation
 
@@ -434,7 +435,7 @@ def report_operation(
         )
     )
 
-    resource.conditions = report.conditions
+    resource.conditions = stamped(resource.conditions, report.conditions)
     if report.success:
         resource.status = report.status
         resource.last_observed_at = timezone.now()

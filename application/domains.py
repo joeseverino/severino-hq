@@ -271,6 +271,11 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Exposure", "control_plane:exposure", "control_plane", 128,
                 "Infrastructure",
             ),
+            # What changed and when, across every connection: where drift is explained.
+            NavigationItem(
+                "Timeline", "control_plane:timeline", "control_plane", 128,
+                "Infrastructure",
+            ),
         ),
     ),
     DomainDescriptor(

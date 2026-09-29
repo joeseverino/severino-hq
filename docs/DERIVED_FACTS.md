@@ -289,6 +289,25 @@ stays on the exposure page and off the action queue. The page
 exposure, and each open name offers the fix HQ can run: an access list on the
 proxy host it declares.
 
+## Timeline
+
+`application.timeline` lays what each source dates on one line, newest first:
+- What anyone did through HQ, from the audit log.
+- When a reading's records changed between two sweeps. The sweep writes a `Reading`
+  audit event with counts only, comparing each record as its kind's
+  `from_record` would declare it, so a container's uptime is not a change and
+  its image is.
+- The deploys GitHub records.
+- When each container last started, from Docker's inspect.
+
+Every condition a resource reports carries `since`, which is kept while the
+condition holds the same way (`application.conditions`). So a drift keeps the
+moment it was first seen. The topology gives a drifted declaration that moment
+and what happened within six hours of it, and the drift findings show both
+beside the key-level difference. That way "Keep the live version" or "Restore
+HQ's version" is decided next to the deploy, recreate or edit that likely caused
+it. The page is `/infrastructure/timeline/`.
+
 ## Contradictions
 
 Each connection reports alone, and each report can be healthy while together

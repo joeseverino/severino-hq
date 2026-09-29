@@ -35,6 +35,7 @@ from core.models import AuditLog
 
 from control_plane.names import normalized_hostname
 
+from .conditions import stamped
 from .contracts import endpoint_has_private_parts
 from .credential_mint import parse_expiry, store_references
 from .security import Capability, Principal
@@ -104,6 +105,14 @@ def record_inventory(
         seen = {"records": records, "observed_at": observed_at}
         # A refused read refuses every part; only a read that answered has some.
         parts = clean_refused_parts(kind, report.get("refused_parts")) if reached else []
+        # The last records, for a kind whose changes are worth a moment on the
+        # timeline (see ``_record_change``); other kinds pay no query for it.
+        logs_changes = reached and getattr(PROVIDERS.get(kind), "from_record", None) is not None
+        before = (
+            ProviderInventory.objects.filter(kind=kind).values_list("records", flat=True).first()
+            if logs_changes
+            else None
+        )
         row, _ = ProviderInventory.objects.update_or_create(
             kind=kind,
             # An unreachable provider leaves the last sweep's records and the
@@ -129,6 +138,8 @@ def record_inventory(
         )
         stored.append(kind)
         summary[kind] = _summary(row)
+        if before is not None:
+            _record_change(row, before, records, controller_id)
 
     # Adoption is not done here. A record in a domain HQ has been made
     # responsible for is HQ's, but which records those are is `zones`' to say,
@@ -140,6 +151,48 @@ def record_inventory(
         "observed_at": observed_at.isoformat(),
         "kinds": summary,
     }
+
+
+READING_AUDIT_TYPE = "Reading"
+
+
+def _record_change(row: ProviderInventory, before: list[Any], after: list[Any], controller_id: str) -> None:
+    """A reading's records changed between two sweeps: the moment, for the timeline.
+
+    Readings keep only their latest records, so without this a DNS record or a
+    policy edited outside HQ changes nothing anyone can point at in time.
+
+    Compared as what a declaration of each record would hold (the kind's
+    ``from_record``), so a container's "Up 3 days" is not a change and its image
+    is. A kind with no such shape is not logged. Counts only, never the records:
+    a policy document in the log is a second copy of it.
+    """
+
+    provider = PROVIDERS.get(row.kind)
+    if provider is None or provider.from_record is None:
+        return
+
+    def canonical(records: list[Any]) -> set[str]:
+        found = set()
+        for record in records or ():
+            spec = _spec_from_record(row.kind, record)
+            if spec is not None:
+                found.add(json.dumps(spec, sort_keys=True, default=str))
+        return found
+
+    old, new = canonical(before), canonical(after)
+    if old == new:
+        return
+    added, gone = len(new - old), len(old - new)
+    parts = [counted(added, "record new or changed", "records new or changed")] if added else []
+    parts += [counted(gone, "record gone", "records gone")] if gone else []
+    record_event(
+        action=AuditLog.Action.OBSERVED,
+        obj=row,
+        type_label=READING_AUDIT_TYPE,
+        message=f"{registry_label(row.kind)} changed: {', '.join(parts)}",
+        metadata={"kind": row.kind, "controller_id": controller_id, "new": added, "gone": gone},
+    )
 
 
 def _summary(row: ProviderInventory) -> dict[str, Any]:
@@ -197,14 +250,14 @@ def confirm_observed(payload: dict[str, Any]) -> int:
             resource.observed_generation = resource.generation
             resource.last_observed_at = seen
             resource.status = dict(found)
-            resource.conditions = [
+            resource.conditions = stamped(resource.conditions, [
                 {
                     "type": "Ready",
                     "status": True,
                     "reason": "Observed",
                     "message": "The last sweep found this exactly as declared.",
                 }
-            ]
+            ])
             resource.save(
                 update_fields=[
                     "observed_generation",
@@ -361,7 +414,9 @@ def _record_drift(
     # so a false Ready is not the opposite of a true one, it is a condition
     # nothing looks at, and the summary card went on saying "not observed" above
     # a table that described the drift in full.
-    resource.conditions = [
+    # Stamped, so the drift keeps the moment it was first seen however many
+    # sweeps find it again: that is what lets a finding say what happened then.
+    resource.conditions = stamped(resource.conditions, [
         {
             "type": "Drifted",
             "status": True,
@@ -370,7 +425,7 @@ def _record_drift(
             + "; ".join(_difference_phrase(field, asked, live) for field, asked, live in drift)
             + ".",
         }
-    ]
+    ])
     resource.save(update_fields=["conditions"])
 
 

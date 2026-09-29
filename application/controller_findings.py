@@ -272,6 +272,24 @@ def _keep_live(node: TopologyNode) -> Remedy:
     )
 
 
+def drift_evidence(node: TopologyNode) -> tuple[tuple[str, str], ...]:
+    """When the drift was first seen, and what happened near then, from the
+    facts the topology carries (``topology_facts._drift_facts``)."""
+
+    since = fact_values(node, "drift-since")
+    if not since:
+        return ()
+    from .ui import ago_short, moment
+
+    first = moment(since[0])
+    near = fact_values(node, "drift-near")
+    return (
+        ("First seen changed", ago_short(first) if first else since[0]),
+        *(("Near then", item) for item in near),
+        *((("Near then", "Nothing HQ records happened within six hours of it"),) if not near else ()),
+    )
+
+
 def _fault_remedies(node: TopologyNode) -> tuple[Remedy, ...]:
     """Drift has two honest answers, and reconciling alone is the destructive one.
 
@@ -315,6 +333,7 @@ def _reporting_a_fault(estate: FindingEstate) -> tuple[Finding, ...]:
                 ("Detail", node.detail or "none"),
                 ("Declared revision", str(node.declared_revision)),
                 ("Observed revision", str(node.observed_revision)),
+                *drift_evidence(node),
             ),
             remedies=_fault_remedies(node),
         )
@@ -355,6 +374,7 @@ def _reconciled_but_still_wrong(estate: FindingEstate) -> tuple[Finding, ...]:
                 ("Observed revision", str(node.observed_revision)),
                 ("Reason", node.reason or "none"),
                 ("Detail", node.detail or "none"),
+                *drift_evidence(node),
             ),
             # Reconciling again is the one thing already known not to work, so
             # the remedy is the declaration this rule points at: keep what the
