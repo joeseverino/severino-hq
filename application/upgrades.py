@@ -66,6 +66,14 @@ class Plan:
         return not self.blockers
 
     @property
+    def install(self) -> tuple[Step, ...]:
+        """How to give its machine the helper, while that is what stands in the way."""
+
+        if not any(blocker.id == "no-apply-path" for blocker in self.blockers):
+            return ()
+        return install_steps(self.container.machine.name)
+
+    @property
     def stateful(self) -> bool:
         return bool(self.data)
 
@@ -219,8 +227,15 @@ def _blockers(item: Container, standing: Any, introduces) -> tuple[Blocker, ...]
         found.append(Blocker("mounts-unread", "Its mounts have not been read, so its data cannot be found to snapshot."))
     if introduces:
         found.append(Blocker("target-affected", f"{standing.latest} brings a known vulnerability of its own."))
-    # Until a machine carries the upgrade helper, nothing can apply a plan.
-    found.append(Blocker("no-apply-path", f"{item.machine.name} has no upgrade helper installed yet."))
+    # The helper ships with HQ; a machine runs it once its sudo rule is there,
+    # and the queue does not yet send an upgrade to the one machine it concerns.
+    found.append(
+        Blocker(
+            "no-apply-path",
+            f"{item.machine.name} cannot apply it yet: the upgrade helper needs its sudo rule "
+            "there, and HQ does not yet queue upgrades to the machine a container runs on.",
+        )
+    )
     return tuple(found)
 
 
@@ -299,6 +314,26 @@ def readiness_of(item: Container) -> Readiness:
     return Readiness(item, data, verified_by, blockers, not_automatic)
 
 
+# Where each deploy syncs the helper, root-owned (scripts/upgrade-container.sh).
+HELPER = "/usr/local/lib/severino-hq/scripts/upgrade-container.sh"
+SUDOERS = "/etc/sudoers.d/severino-hq-upgrade"
+
+
+def install_steps(machine: str) -> tuple[Step, ...]:
+    """The helper's install on one machine: a sudo rule for it and nothing else."""
+
+    rule = f"CONTROLLER_ACCOUNT ALL=(root) NOPASSWD: {HELPER}"
+    return (
+        Step(
+            "allow",
+            f"On {machine}, let the controller's account run it, and nothing else",
+            f"echo '{rule}' | sudo tee {SUDOERS} >/dev/null && sudo chmod 0440 {SUDOERS} "
+            f"&& sudo visudo -cf {SUDOERS}",
+        ),
+        Step("check", "Check the rule as that account", f"sudo -n -l {HELPER}"),
+    )
+
+
 def _uncheckable(standing: Any) -> tuple[Blocker, ...]:
     """Whether a release of this image could be checked when one lands: its
     publisher lists the packages of what runs now, or it does not."""
@@ -312,8 +347,21 @@ def _uncheckable(standing: Any) -> tuple[Blocker, ...]:
 
 
 def plans() -> list[Plan]:
-    """Every container something newer is published for, least risky first."""
+    """Every container something newer is published for: fixes first, then by
+    exposure, then least risky."""
+
+    from .exposure import LEVELS, exposure_of_container
 
     order = (LOW, MEDIUM, HIGH)
     found = [plan for plan in (plan_for(item) for item in containers()) if plan is not None]
-    return sorted(found, key=lambda plan: (not plan.fixes, order.index(plan.risk), plan.container.address))
+    # What it fixes first, then the most exposed: an advisory the internet can
+    # reach outranks the same one on the tailnet (``application.exposure``).
+    return sorted(
+        found,
+        key=lambda plan: (
+            not plan.fixes,
+            LEVELS.index(exposure_of_container(plan.container).level),
+            order.index(plan.risk),
+            plan.container.address,
+        ),
+    )

@@ -225,3 +225,50 @@ class ReadinessTests(TestCase):
         # Nothing about a target it does not have.
         self.assertFalse(reasons & {"no-target-digest", "not-a-patch", "target-affected"})
         self.assertFalse(found.automatic)
+
+
+class HelperInstallTests(TestCase):
+    def test_while_the_helper_is_what_stands_in_the_way_the_plan_says_how_to_install_it(self):
+        from .upgrades import HELPER, SUDOERS
+
+        estate()
+        published()
+        declare("app")
+
+        plan = next(plan for plan in plans() if plan.container.running.name == "app")
+
+        (allow, check) = plan.install
+        # A rule for the one program, never a broader one.
+        self.assertIn(f"NOPASSWD: {HELPER}'", allow.detail)
+        self.assertIn(f"visudo -cf {SUDOERS}", allow.detail)
+        self.assertEqual(check.detail, f"sudo -n -l {HELPER}")
+
+    def test_the_helper_ships_where_the_install_steps_say(self):
+        from pathlib import Path
+
+        from .upgrades import HELPER
+
+        shipped = Path(__file__).resolve().parent.parent / "scripts" / Path(HELPER).name
+        self.assertTrue(shipped.is_file())
+        self.assertTrue(HELPER.startswith("/usr/local/lib/severino-hq/scripts/"))
+
+
+class ExposureOrderTests(TestCase):
+    def test_what_the_internet_reaches_is_planned_first(self):
+        from unittest import mock
+
+        from .exposure import OPEN, PRIVATE, Exposure, RouteExposure
+
+        estate()
+        published()
+
+        def exposure(item):
+            level = OPEN if item.running.name == "kuma" else PRIVATE
+            return Exposure((RouteExposure(f"{item.running.name}.example.com", level, "", ""),))
+
+        calm = [plan.container.running.name for plan in plans()]
+        with mock.patch("application.exposure.exposure_of_container", side_effect=exposure):
+            ranked = [plan.container.running.name for plan in plans()]
+
+        self.assertEqual(calm[0], "app")  # least risky first, when exposure is equal
+        self.assertEqual(ranked[0], "kuma")  # the open one first, though riskier

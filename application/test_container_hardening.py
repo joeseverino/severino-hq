@@ -279,7 +279,7 @@ class AttentionHelpTests(TestCase):
         item = self.items()["container-advisory:ghcr.io/example/app:v1.2.0"]
 
         self.assertEqual(item.action, "Upgrade to v1.3.0 (clears 1)")
-        self.assertIn("example-box has no upgrade helper installed yet", item.body)
+        self.assertIn("example-box cannot apply it yet: the upgrade helper needs its sudo rule there", item.body)
         self.assertTrue(item.url.endswith("/example-box-app/#upgrade"))
         (action,) = item.actions
         self.assertEqual(action.label, "Upgrade plan for app")

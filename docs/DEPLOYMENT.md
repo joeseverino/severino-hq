@@ -458,6 +458,30 @@ docker compose run --rm app python manage.py collectstatic --noinput
 docker compose up -d
 ```
 
+#### Container upgrades
+
+`scripts/upgrade-container.sh` is the program an upgrade plan describes. Every
+deploy syncs it root-owned to `/usr/local/lib/severino-hq/scripts/`. For one
+compose service, it:
+
+1. Snapshots the service's data.
+2. Pulls the target by digest.
+3. Runs the target beside the live service on an internal network, against a
+   copy of the data, until it proves itself. Nothing on the live service
+   changes before this passes.
+4. Pins the digest in place of the one image line the service runs today.
+5. Recreates the service and verifies it.
+6. Otherwise, rolls back both the compose file and the data.
+
+It is idempotent by operation id and prints one JSON result.
+`scripts/test-upgrade-container.sh` drills it against a stand-in Docker.
+
+A machine runs it only through a sudo rule for that one program. The container's
+upgrade plan shows the exact rule, and how to check it, for as long as it is
+missing. HQ does not yet queue an upgrade to the machine a container runs on,
+because operations are claimed by capability rather than by machine. Until
+then the helper is run by hand, with the plan's values.
+
 ### A.7 Backups
 
 See `docs/BACKUP.md`. The deployment installer enables the committed nightly

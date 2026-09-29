@@ -52,6 +52,10 @@ standard. Each said once; the band above has its version and standing.
       {% else %}
         <p class="muted">Not yet, because:</p>
         <ul>{% for blocker in plan.blockers %}<li>{{ blocker.reason }}</li>{% endfor %}</ul>
+        {% if plan.install %}
+          <p class="muted">Every deploy brings the helper, owned by root. To let this machine run it:</p>
+          <ol>{% for step in plan.install %}<li><strong>{{ step.label }}</strong> <code>{{ step.detail }}</code></li>{% endfor %}</ol>
+        {% endif %}
       {% endif %}
     </div>
   </div>
