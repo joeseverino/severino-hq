@@ -68,6 +68,8 @@ class PlanTests(TestCase):
         self.assertEqual((plan.change, plan.risk, plan.target_digest), (PATCH, LOW, TARGET))
         self.assertEqual([advisory["id"] for advisory in plan.fixes], ["GHSA-high"])
         self.assertEqual(plan.verified_by, ("its health check",))
+        # Nothing was snapshotted, so only the digest comes back, said in the singular.
+        self.assertEqual(plan.steps[-1].detail, "The previous digest is restored if verification fails.")
         # Nothing can apply it until a machine has the helper, and it says so.
         self.assertEqual([blocker.id for blocker in plan.blockers], ["no-apply-path"])
 

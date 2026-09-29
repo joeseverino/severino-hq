@@ -256,7 +256,11 @@ def _steps(item: Container, target: str, digest: str, data, verified_by) -> tupl
         Step(
             "keep-or-roll-back",
             "Keep it, or roll back",
-            "The previous digest" + (" and the snapshot" if data else "") + " are restored if verification fails.",
+            (
+                "The previous digest and the snapshot are restored if verification fails."
+                if data
+                else "The previous digest is restored if verification fails."
+            ),
         ),
     ]
     return tuple(steps)

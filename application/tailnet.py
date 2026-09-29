@@ -342,6 +342,9 @@ class Policy:
     services: tuple[dict, ...] = ()
     app_connectors: tuple[dict, ...] = ()
     ssh_rules: tuple[dict, ...] = ()
+    # Access rules in the older ``acls`` form, which a policy may still use
+    # instead of grants or beside them.
+    acls: tuple[dict, ...] = ()
 
     @property
     def facts(self) -> tuple[tuple[str, str], ...]:
@@ -469,11 +472,13 @@ def policy() -> Policy:
 
     for snapshot in snapshots()[POLICY_KIND]:
         for record in snapshot.records:
+            document = _document(record)
             return Policy(
-                groups=tuple(record.get("groups") or ()),
-                tags=tuple(record.get("tags") or ()),
-                grants=tuple(record.get("grants") or ()),
-                tests=tuple(record.get("tests") or ()),
+                groups=tuple(record.get("groups") or _named(document.get("groups"), "members")),
+                tags=tuple(record.get("tags") or _named(document.get("tagOwners"), "owners")),
+                grants=tuple(record.get("grants") or document.get("grants") or ()),
+                tests=tuple(record.get("tests") or document.get("tests") or ()),
+                acls=tuple(rule for rule in document.get("acls") or () if isinstance(rule, dict)),
                 settings=record.get("settings") or {},
                 hosts=record.get("hosts") or {},
                 dns=record.get("dns") or {},
@@ -483,6 +488,30 @@ def policy() -> Policy:
                 ssh_rules=tuple(record.get("ssh_rules") or ()),
             )
     return Policy()
+
+
+def _document(record) -> dict:
+    """The policy document a reading carries, parsed, or {} when it cannot be.
+
+    The parsed lists in a reading are what the controller chose to extract;
+    the document is the whole policy. A summary built from the lists alone
+    read "0 grants" for a policy written as ``acls``, and for a reading taken
+    before a list was extracted at all.
+    """
+
+    try:
+        parsed = json.loads(str(record.get("document") or "{}"))
+    except ValueError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _named(mapping, field: str) -> tuple[dict, ...]:
+    """``{"group:a": [...]}`` as the reading's ``[{"name", field}]`` rows."""
+
+    if not isinstance(mapping, dict):
+        return ()
+    return tuple({"name": name, field: sorted(values or ())} for name, values in sorted(mapping.items()))
 
 
 def policy_allowing(

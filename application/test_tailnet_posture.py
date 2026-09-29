@@ -241,3 +241,45 @@ class TrustedNetworksWidthTests(TestCase):
 
     def test_an_unknown_never_silences_it(self):
         self.assertFalse(self.admits({}))
+
+
+class PolicyDocumentTests(TestCase):
+    """What the summary counts comes from the whole policy, not only the lists
+    a reading happened to extract."""
+
+    def test_a_policy_written_as_acls_is_not_read_as_empty(self):
+        import json
+
+        from .tailnet import policy as read_policy
+
+        policy(document=json.dumps({
+            "acls": [{"action": "accept", "src": ["group:admins"], "dst": ["tag:server:22"]},
+                     {"action": "accept", "src": ["autogroup:member"], "dst": ["tag:web:443"]}],
+            "groups": {"group:admins": ["someone@example.com"]},
+            "tagOwners": {"tag:server": ["group:admins"], "tag:web": ["group:admins"]},
+        }))
+
+        found = read_policy()
+
+        self.assertEqual(len(found.acls), 2)
+        self.assertEqual([group["name"] for group in found.groups], ["group:admins"])
+        self.assertEqual([tag["name"] for tag in found.tags], ["tag:server", "tag:web"])
+
+    def test_the_lists_a_reading_extracted_win_over_the_document(self):
+        import json
+
+        from .tailnet import policy as read_policy
+
+        policy(groups=[{"name": "group:read", "members": []}],
+               document=json.dumps({"groups": {"group:document": []}}))
+
+        self.assertEqual([group["name"] for group in read_policy().groups], ["group:read"])
+
+    def test_an_unparseable_document_leaves_the_lists_alone(self):
+        from .tailnet import policy as read_policy
+
+        policy(document="{ not json", grants=[{"src": ["*"], "dst": ["*"]}])
+
+        found = read_policy()
+
+        self.assertEqual((len(found.grants), found.acls), (1, ()))
