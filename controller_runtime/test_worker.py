@@ -616,3 +616,19 @@ class ThisRunIsNotTheEstateTests(TestCase):
             ),
             ["a-stray", "a-web"],
         )
+
+
+class SlowSweepTests(TestCase):
+    def test_a_long_sweep_names_its_slowest_readers(self):
+        from controller_runtime import providers
+
+        with self.assertLogs("severino.controller", level="WARNING") as logged:
+            providers._say_if_slow({"example.fast": 1.0, "example.slow": 70.0, "example.middle": 5.0})
+
+        self.assertIn("slowest: example.slow 70s, example.middle 5s, example.fast 1s", logged.output[0])
+
+    def test_a_quick_sweep_says_nothing(self):
+        from controller_runtime import providers
+
+        with self.assertNoLogs("severino.controller", level="WARNING"):
+            providers._say_if_slow({"example.fast": 1.0})
