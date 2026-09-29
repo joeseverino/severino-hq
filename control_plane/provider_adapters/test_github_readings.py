@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from django.test import SimpleTestCase
 
+from controller_runtime import provider_http
+
 from . import github_app, github_readings
 from .contracts import PERMISSION_REFUSAL, ProviderError
 from .parts import part_ledger
@@ -183,3 +185,110 @@ class ImageRefusalTests(SimpleTestCase):
 
         self.assertEqual([image["name"] for image in record["images"]], ["example/alpha"])
         self.assertEqual([item["scope"] for item in refused], ["example/alpha:example/alpha/composition"])
+
+
+FLEET = tuple(f"example/r{index}" for index in range(5))
+
+
+class Sweeping(GitHub):
+    """The same GitHub, installed on five repositories, behind the controller's
+    own per-sweep snapshot rather than a stand-in for it."""
+
+    def snapshot_value(self, key, load):
+        return provider_http.snapshot_value(key, load)
+
+    def request(self, url, *, method="GET", headers=None, payload=None):
+        path = url.removeprefix(github_app.API)
+        if path.startswith("/installation/repositories"):
+            self.calls.append((method, path))
+            return {"repositories": [{"full_name": name} for name in FLEET]}
+        if path.startswith("/repos/") and path.endswith("/installation"):
+            self.calls.append((method, path))
+            return {"id": 7}
+        return super().request(url, method=method, headers=headers, payload=payload)
+
+    def count(self, what):
+        kinds = {
+            "mint": lambda path: path.endswith("/access_tokens"),
+            "lookup": lambda path: path.startswith("/repos/") and path.endswith("/installation"),
+        }
+        return sum(1 for _, path in self.calls if kinds[what](path))
+
+
+class SweepTokenTests(SimpleTestCase):
+    """A token is minted once per scope per sweep, and never broader or older."""
+
+    def sweep(self, hub, *calls):
+        with provider_http.provider_snapshot():
+            for repositories, permissions in calls:
+                github_app.call(hub, "/rate_limit", repositories=repositories, permissions=permissions)
+
+    def test_repeated_calls_of_one_scope_in_a_sweep_mint_once(self):
+        hub = Sweeping()
+        self.sweep(hub, *[([REPO], {"contents": "read"})] * 4)
+
+        self.assertEqual(hub.count("mint"), 1)
+        self.assertEqual(hub.minted, [{"repositories": ["alpha"], "permissions": {"contents": "read"}}])
+        self.assertEqual(sum(1 for _, path in hub.calls if path == "/rate_limit"), 4)
+
+    def test_a_different_scope_gets_its_own_token_never_a_broader_one(self):
+        hub = Sweeping()
+        self.sweep(
+            hub,
+            (["example/alpha"], {"contents": "read"}),
+            (["example/beta"], {"contents": "read"}),
+            (["example/alpha"], {"contents": "read", "checks": "read"}),
+            (["example/alpha", "example/beta"], {"contents": "read"}),
+            (["example/alpha"], {"contents": "read"}),
+        )
+
+        self.assertEqual(
+            hub.minted,
+            [
+                {"repositories": ["alpha"], "permissions": {"contents": "read"}},
+                {"repositories": ["beta"], "permissions": {"contents": "read"}},
+                {"repositories": ["alpha"], "permissions": {"checks": "read", "contents": "read"}},
+                {"repositories": ["alpha", "beta"], "permissions": {"contents": "read"}},
+            ],
+        )
+
+    def test_a_token_is_not_reused_by_the_next_sweep(self):
+        hub = Sweeping()
+        self.sweep(hub, ([REPO], {"contents": "read"}))
+        self.sweep(hub, ([REPO], {"contents": "read"}))
+
+        self.assertEqual(hub.count("mint"), 2)
+
+    def test_outside_a_sweep_every_call_mints(self):
+        hub = Sweeping()
+        for _ in range(3):
+            github_app.call(hub, "/rate_limit", repositories=[REPO], permissions={"contents": "read"})
+
+        self.assertEqual(hub.count("mint"), 3)
+
+    def test_a_sweep_of_five_repositories_mints_one_token_each(self):
+        """The measured cost: one metadata token to list the installation, then
+        one read token per repository, and no per-repository installation
+        lookup, because the listing already said which installation it is."""
+
+        hub = Sweeping()
+        with provider_http.provider_snapshot(), part_ledger():
+            records = github_readings.read_repositories(hub)
+
+        self.assertEqual([record["repository"] for record in records], list(FLEET))
+        self.assertEqual(hub.count("mint"), 1 + len(FLEET))
+        self.assertEqual(hub.count("lookup"), 0)
+        scoped = [grant for grant in hub.minted if "repositories" in grant]
+        self.assertEqual([grant["repositories"] for grant in scoped], [[name.split("/")[1]] for name in FLEET])
+        self.assertTrue(all(grant["permissions"] == github_readings.READ for grant in scoped))
+
+    def test_without_the_snapshot_the_same_reading_mints_per_call(self):
+        """What the snapshot saves, counted against the same reading."""
+
+        hub = Sweeping()
+        with part_ledger():
+            github_readings.read_repositories(hub)
+
+        api = [path for _, path in hub.calls if path.startswith("/repos/") and not path.endswith("/installation")]
+        self.assertEqual(hub.count("mint"), 1 + len(api))
+        self.assertEqual(hub.count("lookup"), len(api))
