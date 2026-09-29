@@ -1393,6 +1393,10 @@ td.row-actions > * + * { margin-left: var(--space-6); }
   padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); font: inherit; font-size: var(--text-sm);
 }
 .filter-bar input[type=search] { flex: 1 1 240px; }
+/* One height for every control in the bar, so a wrapped row still reads as one
+   row of controls rather than a field, two shorter selects and a taller button. */
+.filter-bar > input, .filter-bar > select, .filter-bar > .btn { height: var(--control-size); box-sizing: border-box; }
+.filter-bar > .btn { padding-block: 0; }
 /* One field and its button on a line: the field takes the room. */
 .field-row { display: flex; gap: var(--space-4); align-items: center; margin-top: var(--space-6); }
 .field-row > input { flex: 1; min-width: 0; }
@@ -3553,6 +3557,8 @@ kbd {
 
   .btn, button { padding: var(--space-4) var(--space-7); font-size: var(--text-md); min-height: 38px; }
   .btn.ghost { min-height: 0; }
+  /* A filter bar's fields take the buttons' touch height beside them. */
+  .filter-bar > input, .filter-bar > select { height: 38px; }
   .user-menu > summary { min-height: var(--control-size); }
 
   .data-table th, .data-table td { padding: var(--space-4) var(--space-5); font-size: var(--text-sm); }

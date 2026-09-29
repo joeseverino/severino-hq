@@ -332,6 +332,10 @@ async (page) => {
         (k) => k.getBoundingClientRect().height > 0,
       );
       if (kids.length !== 2) return;
+      // Stacked (the pair's single-column layout on a phone), the two are not
+      // side by side, so there is nothing for them to end together with.
+      const tops = kids.map((k) => round(k.getBoundingClientRect().top));
+      if (Math.abs(tops[0] - tops[1]) > 2) return;
       const heights = kids.map((k) => round(k.getBoundingClientRect().height));
       const gap = Math.max(...heights) - Math.min(...heights);
       if (gap > 2) {
