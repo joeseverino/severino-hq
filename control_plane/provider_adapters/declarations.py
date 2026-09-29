@@ -12,7 +12,14 @@ from typing import Any, Literal
 from django.urls.converters import StringConverter
 from pydantic import Field, field_validator, model_validator
 
-from ..provider_spec import ProviderModel, ProviderSpec, locked, key_from, named_page
+from ..provider_spec import (
+    ConnectionKind,
+    ProviderModel,
+    ProviderSpec,
+    key_from,
+    locked,
+    named_page,
+)
 
 
 NETWORK_KIND = "network"
@@ -530,3 +537,14 @@ DELIVERY_TARGET = ProviderSpec(
 
 # Declarations only: the controller half is still the core's.
 DEFINITIONS = (NETWORK, AUTHORITY, MACHINE, DELIVERY_TARGET)
+
+# The transports HQ's own declarations deliver through: a delivery target is
+# reached over SSH or published into a password manager.
+CONNECTIONS = {
+    # A service account token is issued per vault and per permission, so the
+    # one HQ carries can be write access to a single item's vault and nothing
+    # else. That is the property the publishing adapter is built to deserve
+    # rather than to rely on.
+    "onepassword": ConnectionKind("1Password", "scoped"),
+    "ssh": ConnectionKind("SSH", "coarse"),
+}
