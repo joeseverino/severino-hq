@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 
-from contextlib import suppress
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect
@@ -12,6 +10,7 @@ from django.urls import reverse
 from django.views.generic import TemplateView
 
 from application.pages import PageMixin
+from application.timestamps import moment
 
 
 class ToolsView(PageMixin, LoginRequiredMixin, TemplateView):
@@ -69,9 +68,8 @@ class ToolsView(PageMixin, LoginRequiredMixin, TemplateView):
         # on one page.
         for reading in context["results"].values():
             stamp = reading.get("observed_at") if isinstance(reading, dict) else None
-            if stamp:
-                with suppress(ValueError):
-                    reading["observed_at"] = datetime.fromisoformat(stamp)
+            if (when := moment(stamp, naive="keep")) is not None:
+                reading["observed_at"] = when
         return context
 
     def post(self, request, *args, **kwargs):

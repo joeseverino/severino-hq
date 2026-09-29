@@ -13,6 +13,7 @@ from typing import Any, Callable
 from control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink
+from .timestamps import moment
 from .topology_model import Topology, TopologyNode
 from .workflows import WorkflowPlan
 
@@ -183,9 +184,6 @@ class OperatorStep:
 
 
 def parse_stamp(value: str) -> datetime | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        return None
+    """A fact's or node's stamp, as it was written: naive stays naive."""
+
+    return moment(value, naive="keep")

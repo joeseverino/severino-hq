@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import suppress
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
@@ -25,6 +24,7 @@ from application.topology_lenses import (
 from application.topology_model import RELATIONS, relation_rank, observable
 from application.security import web_principal
 from application.pages import PageAction, PageMixin
+from application.timestamps import moment
 from application.ui import counted
 
 
@@ -262,11 +262,7 @@ class TopologyView(PageMixin, LoginRequiredMixin, TemplateView):
         the reading is a fact about the world, not an invariant of ours.
         """
 
-        if not observed_at:
-            return None
-        with suppress(ValueError):
-            return datetime.fromisoformat(observed_at)
-        return None
+        return moment(observed_at, naive="keep")
 
     @staticmethod
     def _focus_link(node_id: str, lens: str = "") -> str:

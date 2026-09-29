@@ -31,6 +31,7 @@ from control_plane.credential_reads import MINTERS, Minter, observer_permissions
 from control_plane.observations import OBSERVATIONS
 
 from .projection import read_once
+from .timestamps import moment
 
 # How far ahead of expiry a credential is replaced.
 RENEWAL_WINDOW = timedelta(days=30)
@@ -66,11 +67,7 @@ def store_references(raw: Any) -> dict[str, str]:
 def parse_expiry(raw: Any) -> datetime | None:
     """A reported expiry as an aware datetime, or None."""
 
-    try:
-        found = datetime.fromisoformat(str(raw or "").strip())
-    except ValueError:
-        return None
-    return found if timezone.is_aware(found) else None
+    return moment(raw, naive="refuse")
 
 
 @cache

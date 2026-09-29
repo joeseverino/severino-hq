@@ -62,8 +62,6 @@ ISSUING_PROVIDER = CERTIFICATE_KIND
 def _earliest(stamps) -> str:
     """The earliest of several ISO 8601 stamps, or ""."""
 
-    from .ui import moment
-
     found = [(when, stamp) for stamp in stamps if (when := moment(stamp)) is not None]
     return min(found)[1] if found else ""
 
@@ -561,8 +559,6 @@ def registration(zone) -> ZoneInsight | None:
     still says when; whether it renews itself is then unknown, and said so.
     """
 
-    from datetime import datetime, timezone
-
     subject = Subject.of(hostnames=(zone.zone,))
     found: dict[str, object] = {}
     for _snapshot, record in inventory_about(ZONE_KIND, subject):
@@ -572,9 +568,8 @@ def registration(zone) -> ZoneInsight | None:
     expires = "" if part is not None else str(found.get("expires_at", ""))
     if not expires:
         return _public_registration(subject, refused, part.refusal if part is not None else "")
-    try:
-        when = datetime.fromisoformat(expires).replace(tzinfo=timezone.utc)
-    except ValueError:
+    when = moment(expires)
+    if when is None:
         return None
     renews = bool(found.get("auto_renew"))
     days = days_until(when)

@@ -15,6 +15,7 @@ from application.connection_contracts import (
     ConnectionSpec,
 )
 from application.security import Capability
+from application.timestamps import moment
 
 
 class GitHubMetadataError(RuntimeError):
@@ -94,7 +95,7 @@ def fetch_last_push(
     pushed_at = payload.get("pushed_at")
     if not pushed_at:
         return None
-    try:
-        return datetime.fromisoformat(pushed_at.replace("Z", "+00:00"))
-    except (TypeError, ValueError) as exc:
-        raise GitHubMetadataError("GitHub returned an invalid pushed_at timestamp.") from exc
+    pushed = moment(pushed_at, naive="keep")
+    if pushed is None:
+        raise GitHubMetadataError("GitHub returned an invalid pushed_at timestamp.")
+    return pushed
