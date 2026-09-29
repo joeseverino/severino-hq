@@ -19,7 +19,7 @@ from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .action_links import command_url
 from .containers import VULNERABLE, Container, Standing, containers
-from .exposure import LEVELS, UNROUTED, exposure_of_container, status_at, worse
+from .exposure import LEVELS, OPEN, UNKNOWN, UNROUTED, exposure_of_container, status_at, worse
 from .images import version
 from .ui import Insight, counted
 from .workflow_contracts import ActionLink
@@ -38,7 +38,10 @@ def attention() -> tuple[Insight, ...]:
     behind_running: list[Container] = []
     for label, (standing, running) in seen.items():
         if standing.state == VULNERABLE:
-            items.append(_advisory(label, standing, running))
+            # With no release to upgrade to, there is nothing to do about it
+            # unless the internet may reach it: its page still says so.
+            if standing.newer or _reach(running)[0] in (OPEN, UNKNOWN):
+                items.append(_advisory(label, standing, running))
         elif standing.newer:
             behind.append(f"{label} → {standing.latest}")
             behind_running.extend(running)

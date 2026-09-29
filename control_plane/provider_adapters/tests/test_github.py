@@ -231,6 +231,21 @@ class DeliveryTests(SimpleTestCase):
         github.reconcile(again, dict(SPEC))
         self.assertEqual([path for _, path, _ in again.writes()], ["/repos/example/alpha/check-runs/5"])
 
+    def test_a_live_commit_clears_a_not_delivered_check(self):
+        hub = GitHub(checks={RUNNING: {"id": 5, "status": "completed", "conclusion": "failure"}})
+
+        github.reconcile(hub, dict(SPEC))
+
+        patch = hub.writes()[0]
+        self.assertEqual(patch[1], "/repos/example/alpha/check-runs/5")
+        self.assertEqual(patch[2]["conclusion"], "success")
+
+    def test_a_confirmed_commit_is_left_alone(self):
+        hub = GitHub(checks={RUNNING: {"id": 5, "status": "completed", "conclusion": "success"}})
+
+        self.assertFalse(github.reconcile(hub, dict(SPEC)).changed)
+        self.assertEqual(hub.writes(), [])
+
     def test_each_stage_reads_differently_so_each_is_acted_on_once(self):
         stages = {
             github.production(github.delivery(GitHub(admitted=ADMITTED, compose_runs=runs), SPEC))
