@@ -101,6 +101,16 @@ class ContradictionTests(TestCase):
 
         self.assertEqual(titles, ["old.example.com points at edge-1, which serves nothing for it"])
 
+    def test_a_machine_hq_reads_no_containers_on_is_unknown_not_unserved(self):
+        store(
+            "cloudflare.dns_record",
+            record("shop.example.com", "A", "198.51.100.20"),
+            record("old.example.com", "A", "198.51.100.20", proxied=False),
+        )
+        store("portainer.container", {"host": "lab-1", "name": "app", "ports": [8000], "state": "running"})
+
+        self.assertEqual(raised("public-name-served-by-nothing"), ())
+
     def test_a_port_answering_the_internet_with_nothing_in_front(self):
         store(
             "portainer.container",

@@ -66,6 +66,13 @@ SELECTORS = {
     "head_title": ".page-head .page-title-row",
     # Where the contrast check samples text: the page and the header over it.
     "contrast_scope": "main, .site-header",
+    # Filled boxes that are not tiles: controls, tables, code, charts, and
+    # anything floating over the page. A menu and the topology map lay out
+    # away from the box they sit in, so what they hold is not measured.
+    "tile_exempt": (
+        ".btn, .pill, button, input, select, textarea, table, pre, code, svg, canvas,"
+        " dialog, [data-menu]"
+    ),
     # A band's cells. Stats inside a card are the one band laid out with real
     # gaps instead of padded cells, so the KPI band is not listed.
     "band_cell": (
@@ -444,6 +451,54 @@ _UNPADDED_CELLS = "(selector) => {" + _DESCRIBE + """
 }"""
 
 
+# A filled box whose text or buttons touch its edge. The frame rule strips a
+# nested surface's border and padding together; one that keeps its own fill is
+# still a tile, and without padding its content sits on the fill's edge.
+_UNPADDED_TILES = "(exempt) => {" + _DESCRIBE + """
+  // What a disclosure holds is laid out only when it is open.
+  for (const details of document.querySelectorAll('main details:not([data-menu])')) details.open = true;
+  const fill = (el) => {
+    const c = getComputedStyle(el).backgroundColor;
+    return c === 'transparent' || /rgba\\(.*, 0\\)$/.test(c) ? '' : c;
+  };
+  const behind = (el) => {
+    for (let at = el.parentElement; at; at = at.parentElement) {
+      const c = fill(at);
+      if (c) return c;
+    }
+    return '';
+  };
+  const found = [];
+  for (const el of document.querySelectorAll('main *')) {
+    if (el.closest(exempt) || !el.checkVisibility()) continue;
+    const own = fill(el);
+    if (!own || own === behind(el)) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 120 || r.height < 48) continue;
+    const style = getComputedStyle(el);
+    if (parseFloat(style.paddingLeft) >= 4 && parseFloat(style.paddingBottom) >= 4) continue;
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const holder = node.parentElement.getBoundingClientRect();
+      if (!node.textContent.trim() || !node.parentElement.checkVisibility() || holder.width <= 1) continue;
+      const within = node.parentElement;
+      if (within.closest('dialog, [data-menu], .topology-map')) continue;
+      if (within.closest(exempt) && !within.closest('.btn, button')) continue;
+      const box = node.parentElement.closest('.btn, button') || node;
+      let at;
+      if (box === node) { range.selectNodeContents(node); at = range.getBoundingClientRect(); }
+      else at = box.getBoundingClientRect();
+      if (at.width && (at.left - r.left < 4 || r.bottom - at.bottom < 4)) {
+        found.push(`${describe(el)}: ${node.textContent.trim().slice(0, 40)}`);
+        break;
+      }
+    }
+  }
+  return [...new Set(found)].slice(0, 10);
+}"""
+
+
 # A table with one row whose only clipped text is for screen readers, beside
 # a decoration hidden from them, and one row whose value really is cut off.
 _ROW_TOGGLE_PROBE = f"""<!doctype html><html><head>
@@ -750,6 +805,13 @@ class LayoutBrowserTests(SimpleTestCase):
         self.assertEqual(rows["clamped"]["toggles"], 1)
         self.assertTrue(rows["clamped"]["beside_name"])
         self.assertFalse(rows["clamped"]["in_decoration"])
+
+    def test_a_filled_box_keeps_its_padding(self):
+        self.across(
+            lambda _name: self.assertEqual(
+                self.page.evaluate(_UNPADDED_TILES, SELECTORS["tile_exempt"]), []
+            )
+        )
 
     def test_a_band_cell_keeps_its_padding(self):
         def check(_name):
