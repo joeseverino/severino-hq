@@ -10,10 +10,10 @@ from pathlib import Path
 # their supported equivalents from hq_sdk; importing one of these makes a host
 # refactor a coordinated multi-repository migration.
 #
-# Written out by hand, this list drifted: `jobs` was added to the host and never
-# added here, so a plugin importing `jobs.runner` was told the boundary passed.
-# A check that silently stops checking is worse than no check, because the
-# architecture test suite reports it as green.
+# A list written out by hand drifts: a new host app missing from it lets a
+# plugin import that app while the boundary check passes. A check that silently
+# stops checking is worse than no check, because the architecture test suite
+# reports it as green.
 #
 # So the set is *derived* from the host tree and *floored* by this list. Union,
 # never replacement: a new host app is caught the day it appears, and a host

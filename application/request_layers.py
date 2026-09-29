@@ -358,8 +358,7 @@ def _device_layer(device: tailnet.Device | None) -> Layer:
     # not mean the tailnet will carry traffic for it. A device pending approval
     # is listed and admitted to nothing, and under tailnet lock a node whose key
     # no signing node has signed is filtered out by every peer while reporting
-    # itself as healthy. Both are answers to "is this a node", and neither was
-    # being asked.
+    # itself as healthy. Both are checked here, beyond "is this a node".
     if not device.authorized:
         return Layer(
             "device",

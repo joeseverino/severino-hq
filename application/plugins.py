@@ -17,10 +17,10 @@ from .ui import STATUS_VALUES, DomainOverview
 PLUGIN_API_VERSION = 3
 
 # The manifest fields plugin API 1 named runtime providers with; API 2 has the
-# single integration_provider entry point. A wheel that still passes one fails in the manifest constructor, and the constructor names
-# only the first unexpected keyword (whichever the wheel happened to pass
-# first) so the loader has to recognise all of them to report the epoch
-# instead of an unexplained constructor error.
+# single integration_provider entry point. A wheel that passes one fails in
+# the manifest constructor, which names only the first unexpected keyword, so
+# the loader recognises all of them to report the API epoch instead of an
+# unexplained constructor error.
 PLUGIN_API_1_PROVIDER_FIELDS = (
     "attention_provider",
     "capability_provider",

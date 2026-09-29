@@ -175,7 +175,7 @@ class AuditSdkTests(TestCase):
 
 
 class SdkShapeTests(SimpleTestCase):
-    """The committed contract is the surface extensions were built against."""
+    """The committed contract is the surface extensions are built against."""
 
     def test_the_exports_still_have_the_committed_shape(self):
         from hq_sdk.contract import describe, drift, load_committed

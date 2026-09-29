@@ -232,7 +232,7 @@ class ConnectionView:
         """Whether the abilities differ in what proves them.
 
         When they agree, the connection's authority line already says it once,
-        and repeating it under every ability said one thing four times.
+        and repeating it under every ability would say one thing several times.
         """
 
         return len({state.evidence for state in self.abilities}) > 1
@@ -431,9 +431,8 @@ def _connection_view(
     relationship = connection_relationship_link(spec.name, instance.id)
     if relationship is not None:
         actions = (*actions, relationship)
-    # One row action per destination. Four vehicle abilities are performed by
-    # one refresh command, which offered the same URL four times under four
-    # labels.
+    # One row action per destination: abilities performed by one command
+    # share its action.
     seen: set[str] = {action.url for action in actions}
     for state in states:
         if state.action is not None and state.action.url not in seen:

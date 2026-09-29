@@ -19,19 +19,17 @@ Roughly in the order they're most likely to land.
 
 ### Knowledge router: shipped as [`severino-vault-mcp`](https://github.com/joeseverino/severino-vault-mcp)
 
-The highest-leverage v2 idea has since shipped as its own repo: a local stdio
-MCP server that reads the Obsidian vault frontmatter, the docs manifest, and
+Its own repository: a local stdio MCP server that reads the Obsidian vault frontmatter, the docs manifest, and
 HQ's relationship-aware JSON exports, and answers questions like "what runbook
 covers AdGuard?" or "what assets relate to project Y?": behind a sensitivity
-gate that withholds secret-adjacent runbook bodies. HQ supplied the
-prerequisites that made it possible: stable `doc_id`s/slugs, AI-readable
-exports, and the frontmatter schema (`docs_index/schema.json`) the MCP and HQ
-now both validate against. The MCP runs locally on the Mac; git-crypt keys
+gate that withholds secret-adjacent runbook bodies. It builds on HQ's stable
+`doc_id`s/slugs, AI-readable exports, and the frontmatter schema
+(`docs_index/schema.json`) the MCP and HQ both validate against. The MCP runs locally on the Mac; git-crypt keys
 never go on the server.
 
 ### HQ typed control plane: registry-driven execution shipped
 
-HQ now serves a stateless Streamable HTTP MCP endpoint directly over Tailscale.
+HQ serves a stateless Streamable HTTP MCP endpoint directly over Tailscale.
 Its reads and narrow mutations come from the same resource and capability
 registries used by the HTTP API, CLI, and Command Center. The endpoint is
 source-network restricted, Host checked, Origin checked, and bearer

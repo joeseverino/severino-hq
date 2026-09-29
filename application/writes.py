@@ -1,12 +1,12 @@
 """Form views whose write is one application service call.
 
 The read side of a list page is already declarative: a view names its filters
-and sorts and ``TableListMixin`` derives the rest. The write side was not: every
-create, update and delete in every domain restated the same five steps by hand,
-so the same five steps could drift five ways, and a plugin adding a sixth domain
-had nothing to inherit.
+and sorts and ``TableListMixin`` derives the rest. This does the same for the
+write side: create, update and delete share the same five steps, so they are
+declared once rather than restated per domain, and a plugin adding a domain
+inherits them.
 
-The steps never varied. Build a command from the cleaned data, call the service
+The steps do not vary. Build a command from the cleaned data, call the service
 with a web principal, reload the record the service names, say what happened,
 and go to it. What varies is only which service, which record, and what the
 thing is called, so those are what a view declares here.
@@ -191,7 +191,7 @@ class CommandFormMixin:
     have a *command* (adjust a threshold, open a period, correct a recorded
     value) posted from a page that then shows itself again.
 
-    That shape repeated too, and identically: build a command, call the service
+    That shape is shared too: build a command, call the service
     with a web principal, turn the domain's refusal into a form error rather
     than a traceback, say what happened, redirect somewhere fixed. The fourth
     step is the one worth sharing. A service that raises ``ValueError`` for

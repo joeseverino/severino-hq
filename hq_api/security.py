@@ -43,8 +43,8 @@ class ClientReason(Exception):
     happens to hold (a path, a query, a driver's own words) and returning it
     from an API is how internal detail escapes one accident at a time. Static
     analysis reads it as stack-trace exposure for exactly that reason, and is
-    right to: the guarantee cannot be "we only raise these types here", because
-    that is true right up until someone catches a broader one.
+    right to: the guarantee cannot rest on which types are raised here, because
+    one broader catch anywhere ends it.
 
     So the message a client sees is an attribute, set deliberately at the raise
     site. An exception that does not carry one has nothing to say publicly.
@@ -58,7 +58,7 @@ class ClientReason(Exception):
 
 
 class TokenError(ClientReason):
-    """A presented token is absent, malformed, expired, or not addressed to us."""
+    """A presented token is absent, malformed, expired, or not addressed to HQ."""
 
     code = "invalid_token"
 
@@ -136,8 +136,7 @@ def api_principal(claims: dict[str, Any]) -> Principal:
     """A machine client acting with exactly what its token was granted.
 
     Note what this does *not* do: widen. A web operator holds every capability
-    HQ has, and it would have been one line to hand a verified client the same
-    set. The point of routing a Shortcut through an OAuth resource server is
+    HQ has, and handing a verified client the same set would be one line. The point of routing a Shortcut through an OAuth resource server is
     that a credential can run one narrow automation and nothing else,
     granting more here would throw that away and leave only the ceremony.
     """

@@ -92,18 +92,19 @@ Application and MCP files retain their inodes for existing Docker bind mounts.
 Their updates are in place, not a multi-file transaction: an interruption during
 installation can leave mixed or partial files.
 
-The controller launcher currently forwards provider credentials as container
+The controller launcher forwards provider credentials as container
 environment variables. Docker administrators can inspect those values. A
 read-only credential mount would reduce configuration exposure but would not
 protect against Docker administrators or host root.
 
-Remove any legacy `SEVERINO_CONTROLLER_ENV` override before upgrading. The
-controller installer installs and reloads the renderer unit from the root-owned
-image copy before refreshing secrets. Failed activation restores the prior
-renderer unit; deployment rollback restores the prior scripts. After activation,
-the installer removes the old runtime credential before granting the web UID
-doorbell ownership. Retired disk copies and backups require separate cleanup
-and credential rotation.
+The controller refuses a `SEVERINO_CONTROLLER_ENV` override; configure
+`SEVERINO_CONTROLLER_SECRET_DIR` instead. The controller installer installs and
+reloads the renderer unit from the root-owned image copy before refreshing
+secrets. Failed activation restores the prior renderer unit; deployment
+rollback restores the prior scripts. After activation, the installer removes
+any controller credential under `/run/severino-hq` before granting the web UID
+doorbell ownership. Copies on disk or in backups are outside its reach and need
+separate cleanup and credential rotation.
 
 ## Minting observer credentials
 

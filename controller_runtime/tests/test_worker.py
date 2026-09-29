@@ -532,8 +532,8 @@ class WorkerEntryPointTests(TestCase):
 
     def test_apply_is_off_unless_asked_for(self):
         # An applying pass reports its step failures on the way out, whatever
-        # happened in it. Unpatched, that report went over the real bridge
-        # (a manage.py subprocess from inside a unit test) and only passed
+        # happened in it. Unpatched, that report would go over the real bridge
+        # (a manage.py subprocess from inside a unit test) and pass only
         # because the failure is swallowed.
         with (
             mock.patch.object(worker.sys, "argv", ["worker", "--apply"]),

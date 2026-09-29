@@ -209,7 +209,7 @@ def list_tunnels() -> list[dict[str, Any]]:
     """Tunnels, their ingress and their live connections.
 
     Connections come from each tunnel's own endpoint: the list's ``connections``
-    field is removed on 2026-10-05 and is not read.
+    field is deprecated and is not read.
     """
 
     tunnels = []

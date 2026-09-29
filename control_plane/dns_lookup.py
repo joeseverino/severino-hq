@@ -158,8 +158,8 @@ def _get(url: str, *, timeout: int | None = None, accept: str) -> dict:
     a missing parameter as a 400 with prose, a name that does not exist as a
     200 with an empty list, and an address with no PTR record as a 200 carrying
     an error beside a full body: distinctions too inconsistent to hand
-    upward. A caller can act on "no answer"; it could not act on which flavour
-    of no answer this was.
+    upward. A caller can act on "no answer"; it cannot act on which flavour
+    of no answer this is.
     """
 
     seconds = timeout or int(getattr(settings, "SEVERINO_LOOKUP_TIMEOUT_SECONDS", 6))

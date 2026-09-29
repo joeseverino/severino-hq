@@ -11,8 +11,8 @@
           <td>
             <strong>{% entity "resource"|entity_of:resource.key %}</strong>
             {% comment %}
-            Enough to recognise it, not the whole value. A DMARC record ran to
-            three wrapped lines and made every row beside it ragged; the full
+            Enough to recognise it, not the whole value. A DMARC record runs to
+            three wrapped lines and makes every row beside it ragged; the full
             value is one click away on the resource itself.
             {% endcomment %}
             {% if resource.summary %}<br><span class="muted">{{ resource.summary|truncatechars:64 }}</span>{% endif %}

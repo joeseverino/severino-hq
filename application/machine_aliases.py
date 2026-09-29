@@ -103,11 +103,7 @@ def same_machine(
     presence = present or {}
     aliases = _connection_aliases(index, connections)
     # A credential that opens a shell at an address something else already
-    # claims is a second name for that machine, not a second machine. Compared
-    # only against container sweeps before, which is why a declared machine and
-    # the SSH credential reaching it sat side by side as two rows: the
-    # declaration holding the role and the address, the credential holding
-    # everything served from it.
+    # claims is a second name for that machine, not a second machine.
     aliases.update(_located_aliases(index, located))
     # What a controller calls the host it found is not always that host's name
     # Portainer's own environment is called "local", and a controller
@@ -121,7 +117,7 @@ def same_machine(
     # in the declaration and has now been left out of it. A tailnet device is
     # often the same machine under a name somebody typed into that laptop years
     # ago, but its MagicDNS name is a slug, and a slug is what HQ names
-    # machines with. `Sam's MacBook Pro` never matched `sams-laptop`;
+    # machines with. `Sam's MacBook Pro` does not match `sams-laptop`;
     # `sams-laptop.example.ts.net` does.
     #
     # Only where an address did not already answer, so a recorded address still

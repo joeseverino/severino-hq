@@ -71,9 +71,9 @@ class CaddyRouteSweepTests(TestCase):
     """What the edge serves, read out of the config Caddy itself runs on.
 
     The names here answer over TLS from a box HQ sweeps, holds a credential for
-    and installs the certificate on, and every one of their service pages
-    read "nothing supplies this", because the only ingress HQ could describe was
-    a proxy this box does not run.
+    and installs the certificate on. Without this reading their service pages
+    would say "nothing supplies this", because this box runs no other proxy HQ
+    can describe.
     """
 
     def _routes(self, config):
@@ -388,7 +388,7 @@ class CaddyDiscoveryByRoleTests(TestCase):
         )
 
     def test_a_connection_declared_for_something_else_is_never_asked(self):
-        """The failure this removes: shared hosting has no Caddy and no routes.
+        """Shared hosting has no Caddy and no routes.
 
         Asked anyway it refuses, every sweep, forever: a cost paid on a
         machine somebody else runs.

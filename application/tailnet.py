@@ -495,8 +495,8 @@ def _document(record) -> dict:
 
     The parsed lists in a reading are what the controller chose to extract;
     the document is the whole policy. A summary built from the lists alone
-    read "0 grants" for a policy written as ``acls``, and for a reading taken
-    before a list was extracted at all.
+    would read "0 grants" for a policy written as ``acls``, or for a reading
+    whose lists were never extracted.
     """
 
     try:

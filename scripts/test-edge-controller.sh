@@ -77,7 +77,7 @@ refuse "empty input is refused" "${empty_dir}"
 # An expired certificate parses and matches its key, so only the expiry check
 # stands between it and a reload.
 #
-# Backdating a certificate needs `-not_before`, which OpenSSL gained in 3.5.
+# Backdating a certificate needs `-not_before`, which needs OpenSSL 3.5 or later.
 # Where that is unavailable the case is skipped out loud rather than silently:
 # the point of this suite is that a check which cannot run must not look like
 # one that passed.

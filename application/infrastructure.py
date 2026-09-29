@@ -49,9 +49,7 @@ def list_managed_resources(
     *, limit: int = 50, kind: str | None = None, kinds: str | None = None
 ) -> dict[str, Any]:
     """List canonical public infrastructure state without provider credentials."""
-    # The shared bound, not a fourth spelling of it. Written out here with the
-    # ceiling as a literal, this module would have kept its own limit on the day
-    # the shared one moved.
+    # The shared bound, so this module follows it when it moves.
     resources = ManagedResource.objects.all()
     if kind and kinds:
         raise ValueError("Choose either kind or kinds, not both.")
@@ -152,10 +150,8 @@ def resolved_spec(
     nothing. That surfaces as an uncovered name, which is exactly true: HQ
     cannot demonstrate that anything covers it.
 
-    One implementation. The service view and the domain view each had their own,
-    and a projection that resolved a spec differently from the one beside it
-    would disagree about which names a certificate covers, while both claimed
-    to be reading the same declaration.
+    The only implementation: a projection that resolved a spec differently from
+    the one beside it would disagree about which names a certificate covers.
     """
 
     from control_plane.provider_spec import ProviderResolutionContext
@@ -178,11 +174,8 @@ def resolved_spec(
 def suggest_key(kind: str, spec: dict[str, Any]) -> str:
     """A free, readable key for a declaration nobody wanted to name.
 
-    One implementation, because there were three: the create form derived a key
-    one way, adoption another, and the onboarding flow a third. They agreed
-    while every provider had one record per hostname and diverged the moment one
-    did not: the form suggesting a key built from a hostname that a TXT record
-    does not have.
+    The create form, adoption and onboarding all call this, so they suggest the
+    same key even for a provider with several records per hostname.
 
     The provider says what to call its own records. The hostname and facet are
     the fallback, which is what every provider that has exactly one record per
@@ -365,7 +358,7 @@ def _can_change_the_public_internet(kind: str) -> bool:
     mistake is immediately everybody's problem. It is not a reason to refuse
     every resource that happens to be publicly visible: a domain declaration
     records which zones HQ is responsible for and has no reconcile a controller
-    could run: gating it prevented the operator from saying what HQ owns while
+    could run: gating it would stop the operator saying what HQ owns while
     preventing no change to anything.
 
     So the question is not "is this public" but "could the controller act on
@@ -390,10 +383,8 @@ def save_managed_resource(
     rather than authored. It exempts the write from the public-DNS switch
     below, and only that: an adopted record asserts exactly what the provider
     already holds, so reconciling it changes nothing. The switch exists to stop
-    HQ changing public DNS, and refusing to *write down* a record that is
-    already published stopped nothing: it left every public record listed as
-    unadopted, on a deployment that had deliberately said "do not change these"
-    and was then told it could not describe them either.
+    HQ changing public DNS; refusing to *write down* a record that is already
+    published would stop nothing and leave every public record unadopted.
     """
 
     principal.require(Capability.MANAGE_INFRASTRUCTURE)

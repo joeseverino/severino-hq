@@ -288,9 +288,9 @@ def _cloudflare_zone_posture(zone_id: str, zone: str = "") -> dict[str, str]:
     The DNS token cannot: it holds records and nothing else. `cloudflare_api`
     carries the account surface, zone settings included.
 
-    One request per setting: the batch settings endpoint reaches end of life on
-    2027-03-31. A failure here is not a failed sweep: the zone still reports its
-    records, and a setting refused is the zone's refused "posture" part.
+    One request per setting: the batch settings endpoint is deprecated. A
+    failure here is not a failed sweep: the zone still reports its records, and
+    a setting refused is the zone's refused "posture" part.
     """
 
     if not zone_id:

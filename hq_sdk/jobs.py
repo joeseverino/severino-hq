@@ -27,8 +27,8 @@ starting the same import twice.
 the page that lists them: a stale job only blocks the next job of its kind, so
 the moment somebody looks is the moment the answer is needed. It is exported
 because an extension that starts jobs must be able to unblock them: without
-it the only way through was to import the host's `jobs` package directly,
-which is precisely what this facade exists to prevent.
+it the only way through would be importing the host's `jobs` package
+directly, which is precisely what this facade exists to prevent.
 """
 
 from jobs.models import Job

@@ -86,7 +86,7 @@ class MomentTests(SimpleTestCase):
 
 
 class CorrectedCallSiteTests(SimpleTestCase):
-    """The copies whose edge behaviour was a bug, held to the corrected answer."""
+    """Call sites held to the correct answer at their edges."""
 
     def test_a_tailnet_key_at_the_zero_time_has_no_expiry(self):
         from ..tailnet_presence import Presence
@@ -97,7 +97,9 @@ class CorrectedCallSiteTests(SimpleTestCase):
         self.assertEqual(Presence(key_expires=soon).key_expiry_days, 10)
 
     def test_a_registration_expiry_keeps_its_offset(self):
-        """It used to overwrite any offset with UTC, moving the instant."""
+        """An offset is kept, not overwritten with UTC, so the instant does not
+        move.
+        """
 
         from ..expiry import days_until
 

@@ -108,7 +108,7 @@ class OneEdgeBothEndsTests(TestCase):
         with own("192.0.2.44"):
             response = self.client.get(reverse("control_plane:service", args=["hq.example.com"]))
 
-        # Beside the hostname now, with why on hover.
+        # Beside the hostname, with why on hover.
         self.assertContains(response, '<span class="pill" title="HQ&#x27;s own name: changed by deploying HQ">Read-only</span>')
         self.assertContains(response, '<span class="readout-label">Runs on</span>')
         self.assertNotContains(response, "Nothing declared")

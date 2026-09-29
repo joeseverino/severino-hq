@@ -1,9 +1,7 @@
 """Under test, a warning from this codebase is a failure rather than a line.
 
 A warning printed into a green run is read once and then scrolled past, and the
-next one joins it: an unclosed receipt file, an HTTP error response holding its
-socket, a test client on a deprecated path all sat in the output of passing
-runs. So when the suite runs, two kinds are made errors.
+next one joins it. So when the suite runs, two kinds are made errors.
 
 Any warning attributed to one of this repository's own packages, whatever its
 category. Attribution follows the caller a library names with ``stacklevel``,

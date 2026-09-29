@@ -7,8 +7,8 @@ operation HQ asked for and nothing else runs.
     preflight          uapi answers and the SSL module is usable
     sites              every site on this account, and every name it serves
     deploy             install one certificate on several sites (JSON on stdin)
-    deploy:<site>      the same for one site; kept for controllers that
-                       predate `deploy`
+    deploy:<site>      the same for one site, for a controller that does not
+                       send `deploy`
 
 Why sites and not names. cPanel installs a certificate on a *site* (a virtual
 host), and every alias of that site (`www.`, `mail.`, a parked domain)

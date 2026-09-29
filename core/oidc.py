@@ -35,7 +35,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         """A provider that refuses the exchange is a failed sign-in, not a crash.
 
         The library raises out of ``authenticate()`` when the token endpoint
-        answers an error, which Django turned into a 500. And the failure URL
+        answers an error, which Django turns into a 500. And the failure URL
         is the login page, which with single sign-on only goes straight back to
         the provider, so it has to be told why it stopped (``sso_failed``).
         """

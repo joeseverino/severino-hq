@@ -151,23 +151,25 @@ class PluginContractTests(TestCase):
         )
 
     def test_the_host_source_never_names_an_installed_extension(self):
-        """The host must not know which extensions exist. This proves it does not.
+        """The host must not know which extensions exist.
 
-        Imports are checked by `hq_sdk.validation`; this checks the other half.
-        A host that merely *mentions* an extension (in a docstring, a comment,
-        a fixture, a default) has begun to depend on it, and the properties
-        this architecture exists for start to go: install an extension without
-        touching the host, run the host with none, release the two apart.
+        This proves it does not. Imports are checked by `hq_sdk.validation`;
+        this checks the other half. A host that merely *mentions* an extension
+        (in a docstring, a comment, a fixture, a default) has begun to depend on
+        it, and the properties this architecture exists for start to go:
+        install an extension without touching the host, run the host with none,
+        release the two apart.
 
         The names are taken from the runtime composition rather than written
-        down here, since a list of them in the host would itself be the coupling
-        being tested for. So this is quiet on a checkout with no extensions and
-        speaks in the composed image, where the real set exists and where
-        `compose.yml` runs the suite.
+        down here, since a list of them in the host would itself be the
+        coupling being tested for. So this is quiet on a checkout with no
+        extensions and speaks in the composed image, where the real set exists
+        and where `compose.yml` runs the suite.
 
         The tree is walked rather than asked of git: neither `.git` nor git
         itself exists in the runtime image, which is where this has to run.
-        Walking also asks about what shipped, which is the better question.
+        Walking also asks about what is installed, which is the better
+        question.
         """
 
         forbidden: dict[str, str] = {}
@@ -822,7 +824,7 @@ class ComposedPluginTestKitTests(TestCase):
 
         # Asserts the sibling is present, not that it is alone: this suite runs
         # with whatever extension is installed alongside, which is the whole
-        # point of the kit and was the exact assumption it exists to catch.
+        # point of the kit.
         entries = plugin_attention_items()
         alpha = [entry for entry in entries if entry["source"] == "Alpha"]
         self.assertEqual(len(alpha), 1)

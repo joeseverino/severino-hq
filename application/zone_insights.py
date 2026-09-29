@@ -1,9 +1,7 @@
 """What is worth knowing about a domain, contributed one fact at a time.
 
-The zone page began as four cards restating DNS records back at the operator,
-its MX hosts, its SPF string, its DMARC policy, its CAA entries. All true, all
-available in Cloudflare's own dashboard, and none of them a reason to have
-built this.
+Restating DNS records back at the operator (MX hosts, SPF string, DMARC policy,
+CAA entries) says nothing Cloudflare's own dashboard does not.
 
 What HQ can say that Cloudflare cannot is how a domain relates to everything
 *else* HQ holds: which services answer inside it, which managed certificate
@@ -376,9 +374,8 @@ def email(zone) -> ZoneInsight | None:
             note="Next: publish v=spf1 -all and a DMARC p=reject record.",
         )
 
-    # Assembled as whole sentences rather than joined fragments. Built by
-    # capitalising a comma-joined list, this read "Spf, dmarc rejects
-    # forgeries.", which lowercases two acronyms and states nothing clearly.
+    # Assembled as whole sentences rather than joined fragments: capitalising
+    # a comma-joined list lowercases the acronyms and states nothing clearly.
     sentences = []
     if not mail:
         sentences.append("Nothing accepts mail for this domain.")
@@ -425,7 +422,7 @@ def leftover_challenges(zone) -> ZoneInsight | None:
 def _mail_host(mail) -> str:
     """Who actually receives mail for this domain, read off the MX records.
 
-    "2 mail servers" was a true and useless answer: the count of MX records is
+    "2 mail servers" is a true and useless answer: the count of MX records is
     a redundancy detail, and the question is who has the mailbox.
     """
 
@@ -513,7 +510,7 @@ def _posture_facts(zone) -> tuple[str, ...]:
 def posture(zone) -> ZoneInsight | None:
     """How this domain answers over TLS, as Cloudflare currently holds it.
 
-    Stated, never flagged. HQ can read this now: `cloudflare_api` carries the
+    Stated, never flagged. HQ can read this: `cloudflare_api` carries the
     account surface and the sweep collects it, but it holds no declared
     posture to compare against, and a control plane that reports drift from a
     policy nobody wrote is inventing one. The two things here that are wrong by

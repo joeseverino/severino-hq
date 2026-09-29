@@ -135,8 +135,8 @@ class Facet:
         """``(kind, label)`` for each provider that could supply this facet.
 
         Read from the registry rather than listed here, so the offer to add one
-        appears for a provider declared long after this was written. Only kinds
-        that can be seeded from a hostname.
+        covers every registered provider. Only kinds that can be seeded from a
+        hostname.
 
         A certificate is offered too, only for a facet nothing supplies, so a
         name already covered is never invited to grow one of its own. Each
@@ -147,9 +147,8 @@ class Facet:
         return tuple(
             (kind, label)
             for _first, kind, label in sorted(
-                # Only the first letter is lowered. Lowercasing the whole
-                # label turned "Internal DNS record" into "internal dns
-                # record" and shouted at nobody about the acronym.
+                # Only the first letter is lowered, so an acronym in the
+                # label keeps its capitals.
                 (
                     not (public_first and provider.public_effect),
                     kind,

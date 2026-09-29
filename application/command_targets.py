@@ -52,8 +52,8 @@ def capability_target_options(
         return None
 
     query = dict(spec.target_query)
-    # A choice list is the whole catalog or it is a trap: the default page
-    # left every resource past the fiftieth unselectable, in every command.
+    # A choice list is the whole catalog: a default-sized page would leave
+    # every resource past it unselectable.
     if "limit" in resource.list_query_type.model_fields:
         query.setdefault("limit", MAX_PAGE_SIZE)
     kinds_applied = False

@@ -33,14 +33,13 @@ class PortainerContainerSpec(ProviderModel):
     """One container HQ is responsible for keeping up, not for defining.
 
     Deliberately identity and nothing else. A container's definition lives in
-    whatever compose file created it, which HQ has never seen and must not
+    whatever compose file created it, which HQ does not see and must not
     pretend to own: declaring one here says "this is mine to watch and to
     cycle", and reconciliation is locked because there is nothing to converge.
 
-    That is what makes it usable at all. Almost nothing running was created by
-    Portainer, so almost nothing can be declared as a stack; every container can
-    be started, stopped and restarted, because those are Docker's verbs rather
-    than Portainer's.
+    A container Portainer did not create cannot be declared as a stack, but
+    every container can be started, stopped and restarted, because those are
+    Docker's verbs rather than Portainer's.
     """
 
     connection_ref: str = Field(

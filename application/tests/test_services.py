@@ -190,16 +190,13 @@ class ServiceCompositionTests(TestCase):
     def test_disabling_the_ingress_leaves_the_name_still_pointed_somewhere(self):
         """Losing the proxy is not the name forgetting where it was sent.
 
-        A record still names where the name points once the ingress is gone.
-
-        The DNS record was always still there, still reconciled, still pointing
-        this name at a machine HQ knows by name. Reporting nothing was not
-        caution: it was HQ declining to read a declaration it holds. What is
-        true with the proxy disabled is that requests still arrive at app-host
-        and nothing there answers them, and those are two facts rather than the
-        absence of one.
-
-        The facet is what went away, and the test above says so on its own.
+        A record still names where the name points once the ingress is gone:
+        the DNS record is still there, still reconciled, still pointing this
+        name at a machine HQ knows by name. Reporting nothing would be HQ
+        declining to read a declaration it holds. With the proxy disabled,
+        requests still arrive at app-host and nothing there answers them, and
+        those are two facts rather than the absence of one. The facet is what
+        went away, and the test above says so on its own.
         """
 
         self._wire()
@@ -283,12 +280,11 @@ class OriginResolutionTests(TestCase):
         self.assertFalse(origin.external)
 
     def test_an_ingress_outranks_the_record_that_points_at_it(self):
-        """Both name an origin, and they mean different things by it.
-
-        The record says where the name goes, which for a proxied name is the
-        proxy. The proxy says where the request is finally served. Filled in
-        whichever order the rows came back, the record would have described ten
-        proxied names as being served by the proxy box itself.
+        """Both name an origin, and they mean different things by it. The
+        record says where the name goes, which for a proxied name is the proxy.
+        The proxy says where the request is finally served. Filled in whichever
+        order the rows come back, the record would describe proxied names as
+        being served by the proxy box itself.
         """
 
         self._rewrite(answer="10.0.0.9")
@@ -366,10 +362,10 @@ class SurfacesAgreeTests(TestCase):
     """The service page and the machine board must name the same machine.
 
     Both answer "where is this served", from the same declarations, through the
-    same index, and they answer it in two different functions. Every time one
-    of those grew a rule the other did not, a name appeared under one machine on
-    its own page and under another, or none, on the board. The rule they share
-    is now stated once; this is what notices when only one of them reads it.
+    same index, in two different functions. When one grows a rule the other
+    does not, a name appears under one machine on its own page and under
+    another, or none, on the board. The rule they share is stated once; this
+    notices when only one of them reads it.
     """
 
     def setUp(self):
@@ -513,9 +509,8 @@ class WiringFaultTests(TestCase):
 
     def test_declared_but_unobserved_is_not_the_same_word_as_incomplete(self):
         """Fully wired and never verified is what every new service looks like.
-
-        Both are ``attention``, and sharing a label sent an operator looking for
-        a missing declaration on a name that had all three of them.
+        Both are ``attention``, and a shared label would send an operator
+        looking for a missing declaration on a name that has all three of them.
         """
         ManagedResource.objects.create(
             key="app-dns",
@@ -791,10 +786,8 @@ class AliasNavigationTests(TestCase):
 
 
 class OriginNoteTests(TestCase):
-    """Where a name is served is said once, in whichever place says it best.
-
-    It was a fifth card on a four-card row, in the largest type, mostly
-    restating the two cards it sat beside.
+    """Where a name is served is said once, in whichever place says it best,
+    not as a card restating the two cards beside it.
     """
 
     def test_it_is_silent_when_a_facet_already_names_the_container(self):
@@ -872,11 +865,9 @@ class OriginNoteTests(TestCase):
 
 
 class OriginWordingTests(TestCase):
-    """One fact, one phrasing, whichever surface asks for it.
-
-    The board rendered "unknown host" beside a name whose own page said "Served
-    by Cloudflare Pages". Both were reading the same Origin and only one of them
-    had learned about the third case.
+    """One fact, one phrasing, whichever surface asks for it. The board and the
+    name's own page read the same Origin, so they must not say "unknown host"
+    on one and "Served by Cloudflare Pages" on the other.
     """
 
     def test_something_outside_is_named_rather_than_called_unknown(self):
@@ -958,11 +949,9 @@ class ConnectedMachineTests(TestCase):
 
 
 class PortlessOriginTests(TestCase):
-    """An address with no port is all host.
-
-    `rpartition` puts the whole string in its last element when the separator
-    is absent, so a DNS answer naming a machine HQ knows was matched against an
-    empty host and read as somewhere it had never heard of.
+    """An address with no port is all host. `rpartition` puts the whole string
+    in its last element when the separator is absent, so a naive split matches
+    a DNS answer naming a known machine against an empty host.
     """
 
     def test_a_bare_address_matches_the_machine_it_names(self):
@@ -1108,13 +1097,13 @@ class LoopbackOriginTests(TestCase):
 class WwwIsTheSameSiteTests(TestCase):
     """`www.example.com` and `example.com` as two address records are one site.
 
-    A CNAME says "I am that name" and already folded. An address record says
-    only where to go, so the pair read as two services with two certificates
-    and two verdicts about one website.
+    A CNAME says "I am that name" and already folds. An address record says
+    only where to go, so without this the pair reads as two services with two
+    certificates and two verdicts about one website.
 
     Narrow on purpose. Every other subdomain sharing an address is a different
-    service on one host: mail and a quiz on one cPanel are not each other,
-    so the rule is the one prefix that conventionally means the same site.
+    service on one host: mail and a quiz on one cPanel are not each other, so
+    the rule is the one prefix that conventionally means the same site.
     """
 
     def aliases(self, origins, declared=None):

@@ -413,11 +413,10 @@ class ProviderRecordContractTests(TestCase):
     def test_a_listable_provider_can_rebuild_a_spec_from_a_record(self):
         """Anything adoptable must say how to tell one of its records apart.
 
-        This asserted ``hostnames``, which was the same thing while every
-        provider held exactly one record per name. A zone holds several for one
-        name and a domain declares no hostname at all, so the question the test
-        was always asking ("what makes this record itself") is now answered
-        by ``identity``, falling back to the hostnames where they still say it.
+        ``hostnames`` is not enough: a zone holds several records for one name
+        and a domain declares no hostname at all. ``identity`` answers "what
+        makes this record itself", falling back to the hostnames where they say
+        it.
         """
 
         for kind, provider in PROVIDERS.items():
@@ -524,12 +523,11 @@ class AdoptedIsObservedTests(TestCase):
     """Adoption is the one write that starts in sync, so it must say so.
 
     Everything else is born unobserved and waits for a controller to look,
-    correct, because a typed declaration is a claim about a world nobody has
-    checked. An adopted spec was read from the live record moments earlier.
-
-    Left unmarked it stays "never reported" forever: nothing queues a reconcile
-    for a resource that has not drifted, so the first look never comes, and
-    every service assembled from it reads as incomplete while it is running.
+    because a typed declaration is a claim nobody has checked. An adopted spec
+    is read from the live record. Left unmarked it stays "never reported":
+    nothing queues a reconcile for a resource that has not drifted, so the
+    first look never comes and every service assembled from it reads as
+    incomplete while it is running.
     """
 
     def setUp(self):
@@ -618,10 +616,9 @@ class NothingWaitsToBeOptedInTests(TestCase):
 class ASweepConfirmsWhatItFindsTests(TestCase):
     """A sweep is HQ going and looking, so it may write down what it saw.
 
-    Only a reconcile ever did. Nothing queues a reconcile for a resource that
-    has not drifted, so the first look never came and a declaration nothing had
-    touched reported "never reported" forever: with whole services reading as
-    unverified while every part of them was running and had just been seen.
+    Nothing queues a reconcile for a resource that has not drifted, so if only
+    a reconcile recorded an observation, an untouched declaration would read
+    "never reported" indefinitely while every part of its service is running.
     """
 
     def setUp(self):
@@ -948,11 +945,8 @@ class UnobservableFieldTests(TestCase):
                     self.assertIn(field, provider.spec_type.model_fields)
 
     def test_every_adoptable_provider_supplies_a_record_to_check(self):
-        """The guard must cover the registry, not a list kept by hand.
-
-        This began as two kinds in a literal while eight providers could be
-        adopted, so the bug it exists for was unguarded in six of them and
-        nothing said so.
+        """The guard must cover the registry, not a list kept by hand, so every
+        adoptable provider is checked.
         """
         adoptable = {k for k, p in PROVIDERS.items() if p.from_record}
         sampled = {k for k, p in PROVIDERS.items() if p.sample_record}
@@ -976,13 +970,10 @@ class UnobservableFieldTests(TestCase):
         exactly what a field the reading never carries looks like.
 
         Asked behaviourally instead: set the field, sweep the record it was
-        built from, and nothing should be left unconfirmed.
-
-        Booleans are covered as well as strings, and that omission is why this
-        guard was green while a container's ``hidden`` raised a finding on every
-        record that set it. A flag is exactly the kind of field HQ keeps for
-        itself (fold this row away, keep this device on the tailnet) so
-        skipping the type was skipping the likeliest case.
+        built from, and nothing should be left unconfirmed. Booleans are
+        covered as well as strings: a flag is exactly the kind of field HQ
+        keeps for itself (fold this row away, keep this device on the tailnet),
+        so skipping the type would skip the likeliest case.
         """
 
         from ..topology import _unconfirmed
@@ -1110,12 +1101,11 @@ class ObservationIsNotAnEventTests(TestCase):
 
 
 class EveryKindIsWatchedOrSaysWhyNotTests(TestCase):
-    """The collector registry and the provider list were never joined.
+    """Every adoptable kind has a collector that sweeps it.
 
-    One is a dict in the controller, the other is this list of kinds, and
-    nothing compared them, so a kind could be declared and swept by nothing
-    at all, indefinitely, with the only symptom a staleness finding no sweep
-    could ever clear.
+    The collector registry is a dict in the controller and the provider list is
+    a list of kinds. Unjoined, a kind can be declared and swept by nothing,
+    with the only symptom a staleness finding no sweep can clear.
     """
 
     def _collected(self):
@@ -1155,9 +1145,8 @@ class LineEndingsAreNotDriftTests(TestCase):
     """A document saved through a form is the same document the API returns.
 
     HTML submits a textarea as CRLF and every provider returns LF, so the two
-    differ byte for byte while saying exactly the same thing. A tailnet policy
-    sat "drifted" on that for a week, seconds after a reconcile that Tailscale
-    accepted and that HQ recorded as "the policy is as declared".
+    differ byte for byte while saying exactly the same thing. Compared raw, a
+    policy reads as drifted seconds after a reconcile the provider accepted.
     """
 
     DOCUMENT = '{\n  "grants": [],\n  "groups": {}\n}'
@@ -1182,8 +1171,8 @@ class LineEndingsAreNotDriftTests(TestCase):
 
     def test_minified_and_pretty_printed_are_the_same_declaration(self):
         """HQ stores the policy it applied on one line; Tailscale returns it
-        across hundreds. Production sat "Drifted", and then "unobserved for 12
-        days", on nothing but that."""
+        across hundreds. Formatting alone must not read as drift.
+        """
 
         import json
 
@@ -1221,8 +1210,9 @@ class LineEndingsAreNotDriftTests(TestCase):
         self.assertNotEqual(_differences("tailscale.policy", declared, found), ())
 
     def test_a_spec_saved_with_crlf_is_stored_with_one_newline(self):
-        """Fixed on the way in as well, so the stored value is comparable to
-        anything, not only to what this one comparison normalises."""
+        """Normalised on the way in as well, so the stored value is comparable
+        to anything, not only to what this one comparison normalises.
+        """
 
         spec = validate_spec(
             "tailscale.policy",
@@ -1236,14 +1226,12 @@ class LineEndingsAreNotDriftTests(TestCase):
 class NothingIsJudgedAgainstAReadingThatDoesNotExistTests(TestCase):
     """A spec and a reading are two vocabularies, and some never overlap.
 
-    A certificate declares what was asked for (which name, which domains,
-    where to install) and its reading reports what exists: issuer, expiry,
-    the PEM. Compared by field name every declared field is unconfirmed
-    forever, and no sweep or reconcile can clear it. The same was true of a
-    machine, whose only reading is telemetry.
-
-    The test is `from_record`: without one there is no way to turn a reading
-    into a spec, so there is nothing to compare and nothing to report.
+    A certificate declares what was asked for (which name, which domains, where
+    to install) and its reading reports what exists: issuer, expiry, the PEM. A
+    machine's only reading is telemetry. Compared by field name every declared
+    field is unconfirmed forever, and no sweep or reconcile can clear it. The
+    test is `from_record`: without one there is no way to turn a reading into a
+    spec, so there is nothing to compare and nothing to report.
     """
 
     class _Resource:
@@ -1334,8 +1322,8 @@ class ObservationKindTests(TestCase):
 
     The ingest drops any kind this HQ does not know, so that a controller
     running ahead of it cannot take the whole sweep down. A reading with no
-    provider spec looks exactly like that case, and was discarded every sweep
-    while the collector that produced it ran perfectly.
+    provider spec looks exactly like that case, so it must be kept rather than
+    discarded while its collector runs normally.
     """
 
     def test_a_reading_survives_the_sweep_without_being_a_resource(self):
@@ -1399,7 +1387,7 @@ class AcceptObservedTests(TestCase):
             kind="tailscale.device",
             spec={"connection_ref": "", "name": "a-box", "key_expiry_disabled": False},
         )
-        # The provider now says the key never expires: someone changed it there.
+        # The provider says the key never expires: it was changed there.
         store("tailscale.device", {"name": "a-box", "key_expires": "", "tags": []})
 
     def accept(self, principal=None):

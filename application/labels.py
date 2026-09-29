@@ -18,7 +18,7 @@ def lower_first(text: str) -> str:
     """A label as it reads mid-sentence, leaving an acronym alone.
 
     "Proxy host" belongs lowercase after "Add"; "TLS certificate" does not, and
-    lowering its first letter produced "tLS certificate". A word whose second
+    lowering its first letter would produce "tLS certificate". A word whose second
     letter is a capital ("HQ", "TLS", "IPv6") is an acronym and keeps its case.
     """
 

@@ -8,7 +8,7 @@ cd "$repo_root"
 
 # The same developer-local file the gate reads, on the same terms. It is where
 # the extensions are named and where they are found, so a dev server that did
-# not read it served the host alone: every extension page a 404, every
+# not read it would serve the host alone: every extension page a 404, every
 # extension model unimportable, and nothing saying why. Real environment
 # variables still win, and a checkout without the file is unaffected.
 if [ -f .env.dev ]; then

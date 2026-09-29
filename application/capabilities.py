@@ -113,10 +113,8 @@ CORE_CAPABILITY_SPECS = (
         "hq.sync",
         "Atomically synchronize the vault manifest into HQ.",
         "remote_write",
-        # Documentation authority alone. It also required infrastructure
-        # authority while it carried a topology; keeping that would mean an
-        # account allowed to sync docs and nothing else could not, and the only
-        # way to let it would be to hand it the whole control plane.
+        # Documentation authority alone, so an account allowed to sync docs
+        # needs no control-plane authority.
         Capability.SYNC_DOCUMENTATION,
         HQSyncCommand,
         execute_hq_sync,
@@ -608,8 +606,8 @@ CORE_CAPABILITY_SPECS = (
         ),
         label="Renew certificate",
     ),
-    # The first two capabilities that read something HQ does not hold. Both are
-    # `read`, so neither takes an idempotency key and neither writes: asking a
+    # Capabilities that read something HQ does not hold. Both are `read`, so
+    # neither takes an idempotency key and neither writes: asking a
     # registry the same question twice is the same question twice.
     CapabilitySpec(
         "lookup.name",

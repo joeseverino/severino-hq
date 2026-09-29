@@ -11,14 +11,14 @@ def search_lines(value: Any) -> Iterator[str]:
     """One readable line per leaf of a field value, whatever shape it has.
 
     A body is read by the index and by a person: the snippet under a result
-    is cut straight out of it. ``str()`` on a ``JSONField`` served neither: it
-    rendered Python (``{'key_expiry_disabled': False}``), and the punctuation
+    is cut straight out of it. ``str()`` on a ``JSONField`` serves neither: it
+    renders Python (``{'key_expiry_disabled': False}``), and the punctuation
     carrying the meaning is the punctuation the tokenizer discards, so the key
-    and its value were indexed as unrelated words.
+    and its value would be indexed as unrelated words.
 
     Keys stay verbatim; FTS5 already splits ``key_expiry_disabled`` on the
-    underscores. Whitespace inside a value is collapsed, because a field
-    holding a policy document spent the snippet window on escaped newlines.
+    underscores. Whitespace inside a value is collapsed, so a field holding a
+    policy document does not spend the snippet window on escaped newlines.
     """
 
     if isinstance(value, dict):

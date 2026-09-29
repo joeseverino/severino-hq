@@ -480,9 +480,8 @@ def _report(
             answered += 1
         kept[subject] = {**record, "read_at": now.isoformat()}
     # Unreadable only when nothing can be said at all. One subject failing
-    # while others were read before must not discard those readings: storing an
-    # empty report replaced every image's reading whenever the one due image
-    # was the one the registry refused.
+    # while others were read before must not discard those readings: an empty
+    # report would replace every image's stored reading.
     readable = any(not kept[subject].get("unread") for subject in wanted if subject in kept)
     if failures and not answered and not readable:
         return {"ok": False, "records": [], "error": failures[0]}

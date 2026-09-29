@@ -21,8 +21,7 @@ class JobRunnerTests(TransactionTestCase):
 
     A `TestCase` wraps each test in a transaction that the worker thread's own
     connection cannot see, so the job would look like it had never been
-    created. This is the failure that makes people give up on testing threads
-    and assert nothing instead.
+    created.
     """
 
     def wait(self, job, seconds=10):

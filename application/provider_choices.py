@@ -2,10 +2,8 @@
 
 Most spec fields are fully described by their annotation: a port is an integer
 between 1 and 65535, a scheme is one of two strings. Where a certificate
-installs is not. It has to name something that exists, and rendering it from the
-annotation alone produced a blank text box that worked only if the operator
-already knew the exact slug, which meant the certificate form could be filled
-in correctly only by someone who did not need it.
+installs is not. It has to name something that exists, so it is offered as a
+menu of what exists rather than a text box that needs the exact slug.
 
 Kept out of ``control_plane.providers`` because these read the database and that
 module declares rather than queries. Providers point at these by name, the same
@@ -41,25 +39,22 @@ from .connections import connections_for, reachable_through
 def proxy_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """Certificates HQ manages, for a proxy host that needs one bound.
 
-    ``certificate_resource`` names an HQ key, so typing it correctly required
-    knowing what HQ had called something on another page. Blank stays first and
+    ``certificate_resource`` names an HQ key, which an operator should pick
+    rather than type from memory of another page. Blank stays first and
     means "keep whichever certificate the proxy already uses", which is what the
     reconciler does with an empty value.
     """
 
     # Both kinds. A name no public authority will issue for is served by a
-    # certificate HQ was given rather than one it issued, and offering only the
-    # issued ones meant the proxy that needs it could not be pointed at it from
-    # the form at all: on the one flow where an uploaded certificate is the
-    # only possible answer.
+    # certificate HQ was given rather than one it issued, so an uploaded
+    # certificate must be offered for the proxy that needs it.
     managed = ManagedResource.objects.filter(
         kind__in=(CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND), enabled=True
     ).order_by("key")
     covering = set(context.certificates)
-    # The ones that answer for this name first, and marked. With a single
-    # certificate the menu was right by accident; the second one is a coin
-    # flip, and binding a proxy to a certificate that does not cover its names
-    # is a browser warning rather than an error anything reports.
+    # The ones that answer for this name first, and marked: binding a proxy
+    # to a certificate that does not cover its names is a browser warning
+    # rather than an error anything reports.
     options = [
         (resource.key, f"{resource.key} · covers {context.hostname}")
         for resource in managed
@@ -72,8 +67,7 @@ def proxy_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]
     )
     # No blank option here. Whether "leave it as it is" is even a coherent
     # answer depends on whether the thing exists yet, and only the form knows
-    # that: offered on a create page it read as "keep the certificate it
-    # already has" about a proxy host that did not exist.
+    # that: on a create page there is no existing certificate to keep.
     return {"certificate_resource": tuple(options)}
 
 

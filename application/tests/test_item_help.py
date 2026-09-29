@@ -28,7 +28,7 @@ from ..workflow_contracts import ActionLink
 
 ROOT = Path(__file__).parent.resolve().parent.parent
 # Owned by a change in flight elsewhere; each is listed here, by file, until
-# its items carry help, and the test below fails once one no longer needs it.
+# its items carry help, and the test below fails when one no longer needs it.
 PENDING: set[str] = set()
 
 

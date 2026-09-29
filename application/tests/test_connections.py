@@ -392,8 +392,8 @@ def _certificate_and_dns(hostname):
 class SeedTests(TestCase):
     """What a form opens already knowing.
 
-    Each of these was on the screen when the question was asked, and the
-    operator was reading it off one card and typing it into the next.
+    Each of these is on the screen when the question is asked, so the form
+    carries it rather than having it retyped from another card.
     """
 
     def setUp(self):
@@ -507,8 +507,8 @@ class SeedTests(TestCase):
 class AdoptionSafetyTests(TestCase):
     """HQ offers to take on a container only when that would not build a second.
 
-    Everything running today was started by compose on the machine, so Portainer
-    holds no stack for any of it. A declaration built as though it did would ask
+    A container started by compose on the machine has no Portainer stack. A
+    declaration built as though it did would ask
     Portainer to stand up its own copy of something already serving.
     """
 
@@ -635,8 +635,8 @@ class AdoptionSafetyTests(TestCase):
 class ControllerColumnTests(TestCase):
     """Whose controller reported a connection is worth saying once there are two.
 
-    Printed under every row it repeated one machine's name seven times, which on
-    a phone was a third of the page saying nothing.
+    With one controller, printing it under every row repeats one machine's name
+    and says nothing.
     """
 
     def setUp(self):

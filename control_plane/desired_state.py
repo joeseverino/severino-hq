@@ -90,7 +90,7 @@ def advance_dependents(targets: tuple[dict[str, Any], ...]) -> list[str]:
 
     A resource HQ has never fingerprinted is being adopted into the scheme, not
     changed by it. Advancing its generation would queue a reconcile for every
-    existing resource the first time this ran.
+    existing resource.
     """
 
     advanced = []

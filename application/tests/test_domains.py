@@ -98,10 +98,10 @@ class DomainRegistryTests(SimpleTestCase):
     def test_the_registry_is_the_only_list_of_sections(self):
         """No module may keep a second roster of what HQ contains.
 
-        Three parallel lists (a nav tuple, a work-queue list, and a
-        code-to-URL dict) are what the registry replaced. A section present in
-        one and missing from another was a silent hole rather than a failure, so
-        the duplication is worth a test rather than a convention.
+        With parallel lists (a nav tuple, a work-queue list, a code-to-URL
+        dict), a section present in one and missing from another is a silent
+        hole rather than a failure, so the duplication is worth a test rather
+        than a convention.
         """
         source = (
             Path(settings.BASE_DIR) / "core" / "context_processors.py"
@@ -184,9 +184,8 @@ class ComposedQueueTests(TestCase):
     def test_extension_items_share_the_queue_with_host_items(self):
         """An extension on fire has to be visible on the page that lists work.
 
-        Before the registry, the host built its queue from its own models and
-        extensions reported through a channel the dashboard never read, so
-        this page could say "no cleanup items" while a domain was failing.
+        A queue built only from the host's own models would say "no cleanup
+        items" while an extension's domain was failing.
         """
         ContentItem.objects.create(
             title="Half-written", slug="half-written", status=ContentItem.Status.DRAFT

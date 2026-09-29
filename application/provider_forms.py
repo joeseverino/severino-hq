@@ -1,13 +1,9 @@
 """A provider's own model is its form.
 
 ``control_plane.providers`` already declares each provider once, as a pydantic
-model, and three things are derived from that declaration: the JSON Schema the
-API publishes, the contract the controller is handed, and the validation every
-write passes through. The web had a fourth copy of the same knowledge: except
-it did not, because nobody wrote it, which is why infrastructure could be
-created over the API and the MCP but not in HQ.
-
-So the form is derived too. Field types, choices, bounds, defaults and which
+model, and four things are derived from that declaration: the JSON Schema the
+API publishes, the contract the controller is handed, the validation every
+write passes through, and this form. Field types, choices, bounds, defaults and which
 fields are optional all come from the model, and a provider added to that tuple
 gets a working create-and-edit page with nothing written here.
 
@@ -83,9 +79,8 @@ class NameListWidget(forms.Widget):
         """One value, editable unless HQ is the one that found it.
 
         A value carrying a note is a value a sweep reports, so HQ holds it
-        whether or not this field does, and offering to remove it was
-        offering to delete a fact. It read as though the tailnet address of a
-        machine on the tailnet were HQ's to forget.
+        whether or not this field does, and removing it would mean deleting a
+        fact HQ does not own.
 
         Submitted as a hidden input rather than left out, so a save keeps what
         it did not ask about instead of quietly dropping it.
@@ -125,9 +120,8 @@ class NameListWidget(forms.Widget):
         # What HQ found first, what only this field records underneath it. The
         # observed one is the address the machine actually answers at on the
         # network everything reaches it over; the typed ones are the exceptions
-        # nothing reports. Interleaved in whatever order the declaration
-        # happened to store them, a read-only row sat between two inputs and
-        # the blank row for adding one drifted away from the rest.
+        # nothing reports. Sorted so read-only rows never sit between inputs
+        # and the blank row for adding one stays with the rest.
         values = sorted(
             self.format_value(value), key=lambda item: item not in self.notes
         )
@@ -183,22 +177,11 @@ class ResourceIdentityForm(forms.Form):
     generated form that has to remember which of its own fields are not spec.
     """
 
-    # Labelled for what it is. "Name in HQ" sat directly beneath a field called
-    # "Name" and read as a second one, inviting the question of which the
-    # machine is actually called, and the help text answered "the hostname",
-    # which is true of a proxy host and not of a machine, whose identifier comes
-    # from its name. What it really is is the string in this page's address and
-    # in every operation and audit entry, which is why it must not move.
-    # No identifier field. It was an input labelled "Name in HQ" sitting
-    # directly beneath one labelled "Name", so a machine appeared to have two
-    # names and no way to tell which it was actually called, and the honest
-    # answer is neither: it is the string in this page's address and in every
-    # operation and audit entry recorded against the resource.
-    #
-    # Disabling it was not enough. A greyed-out box is still a box, and a form
-    # that shows one is still asking. It is derived from the name when the
-    # resource is created and never asked about again; the readout above the
-    # form is where it is now shown, as the filing it is.
+    # No identifier field. The identifier is the string in this page's address
+    # and in every operation and audit entry recorded against the resource, so
+    # it must not move. It is derived from the name when the resource is
+    # created and never asked about again, not even as a disabled input; the
+    # readout above the form shows it.
     enabled = forms.BooleanField(
         required=False,
         initial=True,
@@ -253,12 +236,11 @@ class ProviderSpecForm(forms.Form):
         """Routine tuning, one disclosure away.
 
         A certificate asks which certificate; how many days before expiry to
-        start renewing is not part of that question. A proxy host had eight such
-        knobs in front of the four that matter.
+        start renewing is not part of that question.
 
         Shown rather than hidden, because a default is only a good answer until
-        the day it is not, and once it is not, the field comes out from behind
-        the disclosure, because it is no longer routine.
+        it is not, and a field that has been set comes out from behind the
+        disclosure.
         """
 
         return [field for field in self if self._is_routine(field)]
@@ -290,12 +272,11 @@ class ProviderSpecForm(forms.Form):
 def identity_fields(kind: str) -> tuple[str, ...]:
     """The spec fields that decide which record this is at the provider.
 
-    A provider matches its own records by hostname, never by HQ's key,
+    A provider matches its own records by hostname, never by HQ's key:
     AdGuard finds the rewrite whose ``domain`` equals the spec's, NPM the host
-    whose ``domain_names`` match. So changing one of these does not rename
-    anything: reconciliation looks for the new name, does not find it, and
-    creates it, leaving the old record in place and serving. Neither provider
-    has a delete path here, so nothing can clean that up afterwards.
+    whose ``domain_names`` match. Changing one renames the record at the
+    provider on the next pass, so the form warns that the old name stops
+    resolving.
 
     Read from ``seed`` rather than declared again, because seed already states
     exactly which fields a hostname decides. Only its keys are used, which is
@@ -398,11 +379,9 @@ def spec_form_class(
 def _optional_inner(annotation: Any) -> Any:
     """``int | None`` is a union, not an int.
 
-    Every optional field before this one happened to be a string, where falling
-    through to a text box was accidentally correct. The first optional integer
-    was rendered as text, and submitting it empty sent "" to a model that would
-    accept an integer or nothing at all, so the field could not be left blank
-    and could not be filled in with anything the model liked either.
+    An optional integer must render as an integer input that submits nothing
+    when blank. Rendered as text, an empty submission sends "", which a model
+    that accepts an integer or None rejects.
     """
 
     if typing.get_origin(annotation) in (typing.Union, types.UnionType):
@@ -434,8 +413,7 @@ def _field_for(field: Any) -> forms.Field:
         options["help_text"] = field.description
     # The model's own title, so a field is labelled by the question it asks
     # rather than by the variable that holds the answer. Django would otherwise
-    # prettify the attribute name, which turned `topology_ref` into
-    # "Topology ref": an accurate name for the field and no help at all.
+    # prettify the attribute name (`topology_ref` as "Topology ref").
     if field.title:
         options["label"] = field.title
 

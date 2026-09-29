@@ -154,7 +154,7 @@ class CloudflareAdapterTests(TestCase):
 
     @mock.patch("controller_runtime.cloudflare_api.cloudflare_request")
     def test_retargeting_a_record_moves_it_rather_than_cloning_it(self, request):
-        """The bug class that made renaming create a second record.
+        """Renaming a record must not create a second one.
 
         Name and value both change at once, so nothing matches by content. The
         record id HQ was last seen holding is the only thing that still

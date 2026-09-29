@@ -46,7 +46,7 @@ class DaysUntilTests(SimpleTestCase):
         self.assertEqual(renewal_opens_at(NOW, 30), NOW - timedelta(days=30))
 
     def test_no_other_module_counts_days_itself(self):
-        """The regression class: a second copy of the arithmetic disagrees by a day."""
+        """A second copy of the arithmetic can disagree by a day, so there is one."""
 
         root = Path(__file__).parent.resolve().parents[1]
         pattern = re.compile(r"(?<!/)/\s*86400|\)\.days\b")

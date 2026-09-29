@@ -733,8 +733,8 @@ class ProviderAdapterTests(TestCase):
     def test_npm_reconcile_no_longer_asserts_hsts_off(self, request):
         """The payload replaces the whole object, so an unsent field is not spared.
 
-        HSTS was pinned False here, which meant enabling it in NPM survived
-        until the next pass and then quietly switched itself back off.
+        A field pinned here (HSTS, say) would survive being enabled in NPM only
+        until the next pass, then quietly switch itself back off.
         """
         request.side_effect = [{"token": "short-lived"}, [], None]
 
@@ -1659,10 +1659,6 @@ class CollectorFailureIsReportedTests(TestCase):
     catches its own error and returns ``[]`` defeats that: the sweep succeeds,
     the kind reads as reachable and empty, and the declaration simply stops
     being confirmed with nothing anywhere saying why.
-
-    ``tailscale.policy`` did this for a week. Every failure on that path
-    raises with its own message and all of them were thrown away, which is why
-    the cause had to be guessed at rather than read.
     """
 
     def test_a_policy_read_that_is_refused_is_reported_not_swallowed(self):
@@ -2045,7 +2041,7 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
     def test_a_missing_attachment_is_replaced_though_every_fact_agrees(self):
         """An item can carry the right facts and not the files they describe.
 
-        Someone deleted one, or a write landed half way. Comparing only the
+        A file can be deleted, or a write can land half way. Comparing only the
         facts would call that current forever.
         """
 

@@ -1,8 +1,7 @@
-"""The first capabilities that read something HQ does not hold.
+"""Capabilities that read something HQ does not hold.
 
 Every test here substitutes the gateways. That is the point of injecting them:
-the suite must never depend on a third party being up, and a lookup tool whose
-tests need the internet is a tool nobody can change on a train.
+the suite must never depend on a third party being up.
 """
 
 from __future__ import annotations
@@ -171,7 +170,7 @@ class AddressLookupTests(TestCase):
 
 
 class ReadCapabilityTests(TestCase):
-    """The `read` effect, exercised for the first time in this codebase."""
+    """The `read` effect."""
 
     def test_both_lookups_are_registered_as_reads(self):
         registry = capability_registry()

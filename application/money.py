@@ -3,16 +3,12 @@
 Rounding is not a formatting preference; it is arithmetic that has to be
 identical everywhere or two surfaces holding the same money disagree by a cent
 and neither is obviously wrong. Python's default is banker's rounding
-(``ROUND_HALF_EVEN``), which is a defensible choice and *not* the one this
-codebase already made: assets and expenses have quantized half-up since they
-were written.
+(``ROUND_HALF_EVEN``); HQ rounds half-up.
 
-So the rule lives here rather than in whichever domain needed it first. It was
-in ``assets.models``, where a second domain could only reach it by importing
-another domain's models, and an extension could not reach it at all: extensions
-import ``hq_sdk`` and nothing else. Re-deriving a one-line quantize looks
-harmless right up to the point where one caller writes ``Decimal("0.01")`` and
-gets the other rounding mode.
+So the rule lives here rather than in any one domain's models, where another
+domain could reach it only by importing those models and an extension (which
+imports ``hq_sdk`` and nothing else) could not reach it at all. A caller that
+re-derives the quantize with ``Decimal("0.01")`` gets the other rounding mode.
 """
 
 from __future__ import annotations

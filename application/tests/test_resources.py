@@ -182,11 +182,10 @@ class ResourceRegistrationTests(SimpleTestCase):
 
 
 class TailnetDeviceKeyTests(TestCase):
-    """A machine and its tailnet device must not compete for one key.
-
-    Both providers keyed on the bare device name, so the second declaration
-    adopted was filed as `<name>-2`: a suffix recording arrival order on an
-    estate where the name is what everything else joins on.
+    """A machine and its tailnet device must not compete for one key. Keyed on
+    the same bare device name, the second declaration adopted would be filed as
+    `<name>-2`: a suffix recording arrival order on an estate where the name is
+    what everything else joins on.
     """
 
     def test_a_tailnet_device_key_says_what_it_is(self):

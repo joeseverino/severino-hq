@@ -5,11 +5,9 @@ that serialize projects, assets, content, expenses and infrastructure, and a
 shared module that reached for any of their models would make importing one of
 them mean importing all of them.
 
-What lives here is the handful of rules that were copied instead. Paging bounds
-had four spellings and the ceiling itself had three definitions plus one inline
-literal, which is how a limit gets raised in one place and quietly not in the
-others. A timestamp had four identical renderers, which is one per surface that
-would have to be found on the day an API is asked for something other than ISO.
+What lives here is the handful of rules every surface shares: paging bounds,
+the page-size ceiling and the timestamp rendering. Each is defined once so a
+change to it reaches every surface.
 """
 
 from __future__ import annotations
@@ -98,10 +96,9 @@ def listing(model, serialize, *, search: tuple[str, ...], status=None, query=Non
             limit: int = 50) -> dict[str, Any]:
     """One list read: an optional status, an optional text match, one page.
 
-    Written out per domain this was four functions differing only in the model,
-    the serializer and which fields a search looks at, and the graph flagged
-    every pair. The fields differ because a person searches an asset by vendor
-    and a project by the technologies it uses; nothing else about the read does.
+    Domains differ only in the model, the serializer and which fields a search
+    looks at: a person searches an asset by vendor and a project by the
+    technologies it uses. Nothing else about the read differs.
     """
 
     qs = model.objects.all()

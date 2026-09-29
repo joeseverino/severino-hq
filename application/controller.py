@@ -36,18 +36,13 @@ class ControllerReport:
 def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any]) -> None:
     """Mark the places a certificate was just verified at as observed.
 
-    A delivery target is the one declaration nothing could ever confirm. No
-    sweep reports one (how a place takes a certificate is not something any
-    provider volunteers, which is exactly why it has to be stated) so
-    ``confirm_observed`` skips it, and "last confirmed" read *never* for as long
-    as the target existed. On a board, permanently unconfirmable and simply
-    unchecked look identical, and every target was being shown as the latter.
-
-    It was never unobserved. Reconciling the certificate opens a connection to
-    each target, asks what it is serving and matches the fingerprint against
-    what HQ issued: a stronger check than any sweep performs. The answer was
-    thrown away because it came back under the certificate's name rather than
-    the target's.
+    No sweep reports a delivery target (how a place takes a certificate is not
+    something any provider volunteers, which is why it has to be stated), so
+    ``confirm_observed`` skips it. Reconciling the certificate is what observes
+    it: it opens a connection to each target, asks what it is serving and
+    matches the fingerprint against what HQ issued, a stronger check than any
+    sweep performs. That answer arrives under the certificate's name, so it is
+    recorded against each target here.
 
     Joined on the connection each consumer names rather than on the consumer
     name itself. That name belongs to the certificate: a target holding a second
@@ -359,10 +354,9 @@ def _next_resolvable(operations, now):
 
     A resource whose spec cannot be resolved is not work waiting to happen; it
     is work that cannot be done, and saying so is the only useful thing left.
-    Raised instead, it rolled back the claim and left the operation at the head
-    of a queue ordered by age, so every poll after it hit the same one and
-    nothing else was ever claimed. A certificate naming a target that has been
-    removed stopped DNS, proxies and renewals, silently, everywhere.
+    Raising would roll back the claim and leave the operation at the head of a
+    queue ordered by age, so every later poll would hit it and nothing behind
+    it would ever be claimed.
     """
 
     for operation in operations:

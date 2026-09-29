@@ -126,7 +126,7 @@ class TailnetSweepTests(TestCase):
 
     def test_offering_to_be_an_exit_node_is_not_being_the_one_in_use(self):
         """Two different questions. `ExitNode` is whether this peer is the exit
-        node the reading machine currently routes through: a fact about our
+        node the reading machine currently routes through: a fact about its
         own preference. `ExitNodeOption` is whether the peer offers to be one.
         A machine page saying "exit node" means the second."""
 
@@ -221,9 +221,8 @@ class TailnetSweepTests(TestCase):
     def test_the_controller_never_holds_the_daemon_socket(self):
         """The local API is read and write, and this only ever needed reading.
 
-        Asserted on the module rather than trusted: the socket was mounted into
-        this container once, and the process that reads it holds every provider
-        credential HQ has.
+        Asserted on the module rather than trusted: the process that would read
+        it holds every provider credential HQ has.
         """
 
         source = _controller_source()

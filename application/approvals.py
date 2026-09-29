@@ -77,7 +77,7 @@ READ_EFFECT = "read"
 DESTRUCTIVE_EFFECT = "destructive"
 DECLARATIONS = "infrastructure.resources"
 
-# Rows written while approvals were infrastructure-only keep the old label.
+# Existing audit rows may carry either label; both are read as approvals.
 AUDIT_LABEL = "Approval"
 AUDIT_LABELS = (AUDIT_LABEL, "Infrastructure approval")
 

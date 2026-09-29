@@ -7,8 +7,8 @@ hyphen, one machine serving a dozen hostnames and running twenty containers, a
 two-word weather condition beside its temperature, a request path with every
 kind of hop, many findings, and long project names.
 
-Each of these once reached production looking wrong while the sparse gate
-passed: a weather condition drawn under the glance controls, a seven-hop path
+Each of these can lay out wrong while the sparse gate passes: a weather
+condition drawn under the glance controls, a seven-hop path
 wrapping names mid-word and clipping its last hop, a machine row as tall as the
 hostnames it serves. Every name is example.*; every address is a documentation
 or shared-address range (192.0.2.0/24, 198.51.100.0/24, 100.64.0.0/10).

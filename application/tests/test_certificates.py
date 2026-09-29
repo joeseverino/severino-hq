@@ -227,9 +227,9 @@ class FailClosedTests(TestCase):
 class CoverageTests(TestCase):
     """A certificate HQ was given covers the names it carries.
 
-    It covered nothing at all, so every private name it answered for read as
-    "no declared certificate covers it": permanently, on the service page and
-    in the attention queue. That is the whole reason this kind exists: for a
+    Otherwise every private name it answers for reads as "no declared
+    certificate covers it": permanently, on the service page and in the
+    attention queue. That is the whole reason this kind exists: for a
     name no public authority will issue for, an internally signed certificate is
     the only possible answer.
     """
@@ -270,8 +270,8 @@ class CoverageTests(TestCase):
     def test_it_covers_them_before_the_controller_has_ever_run(self):
         """HQ read the certificate, so it does not need to be told twice.
 
-        Waiting for the first pass left the name uncovered at the one moment an
-        operator is certain to look: right after uploading a certificate for it.
+        Waiting for the first pass would leave the name uncovered at the one
+        moment an operator is certain to look: right after uploading a certificate for it.
         """
 
         self.upload("grafana.example")
@@ -331,7 +331,7 @@ class CoverageTests(TestCase):
         )
 
     def test_a_proxy_can_be_pointed_at_one_from_the_form(self):
-        """The only possible answer for a private name was not on the menu."""
+        """The only possible answer for a private name is on the menu."""
 
         from control_plane.provider_spec import NameContext
 

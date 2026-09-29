@@ -149,7 +149,7 @@ class AdapterLayerTests(SimpleTestCase):
 class DispatchIsTheRegistriesTests(SimpleTestCase):
     """The dispatch tables are what handlers registered, and nothing else.
 
-    A handler written into a table by hand is the second list this replaced:
+    A handler written into a table by hand is a second list:
     it can name a kind the control plane does not declare, or an action it
     locks, and nothing beside the definition says so.
     """

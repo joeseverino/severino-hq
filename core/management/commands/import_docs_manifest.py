@@ -72,8 +72,8 @@ class Command(BaseCommand):
         )
 
     # Read, run, render: kept apart because they fail differently and change
-    # for different reasons. Interleaved, the two output formats were stated in
-    # two places each and the reporting drowned the control flow.
+    # for different reasons. Interleaved, each output format would be stated in
+    # two places and the reporting would drown the control flow.
 
     def _manifest(self, path: str):
         """The manifest as data, from a file or stdin."""

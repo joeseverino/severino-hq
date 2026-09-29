@@ -200,9 +200,8 @@ class LoginThrottleTests(TestCase):
     def test_the_message_names_no_account(self):
         """Scoped to the message, not the page.
 
-        Asserted against the whole body this was a coin flip: the page carries
-        a random CSRF token, and a token happening to contain the username as a
-        substring failed a test about what the message says. The subject is the
+        Asserted against the whole body this is a coin flip: the page carries
+        a random CSRF token, which can contain the username as a substring. The subject is the
         error text, so that is what is read.
         """
 
@@ -525,9 +524,7 @@ class StaticCachingTests(SimpleTestCase):
         )
 
     def test_serving_live_never_pins_anything(self):
-        """The trap this closes cost an hour to find once.
-
-        The version token hashes the source tree; this mount serves the
+        """The version token hashes the source tree; this mount serves the
         collected one. In development those are only in step just after
         `collectstatic`, so an edit-then-load hands the browser the new URL
         with the old bytes and tells it to keep them forever. Every later

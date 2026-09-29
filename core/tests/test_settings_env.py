@@ -23,13 +23,13 @@ REPO_ROOT = Path(__file__).parent.resolve().parent.parent
 # mounted env file) and inherit the caller's environment to prove it works
 # from a bare process.
 #
-# Left inherited, they made this file fail whenever it was run with extensions
+# Left inherited, they make this file fail whenever it runs with extensions
 # installed, which is precisely the pass that is meant to catch problems before
 # a merge. A subprocess here starts with no DJANGO_DEBUG, so admission switches
 # itself on, looks for the signed lock a composed image would have supplied, and
 # refuses to start: a true statement about a situation none of these tests are
 # describing. It is the failure mode `scripts/check.sh` warns about in its own
-# comments: a host test that quietly assumed nothing was installed.
+# comments: a host test that quietly assumes nothing is installed.
 PLUGIN_ENV = (
     "SEVERINO_HQ_PLUGINS",
     "SEVERINO_HQ_PLUGIN_LOCK",

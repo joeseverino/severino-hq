@@ -1,8 +1,7 @@
 """Collapse ContentItem.Status to draft/published/archived and add Page type.
 
-Old states `idea`, `researching`, `drafting`, `editing` all fold into `draft`.
-The publishing-pipeline kanban was aspirational for solo authoring; the simpler
-model mirrors the vault's `published` boolean directly.
+States `idea`, `researching`, `drafting`, `editing` all fold into `draft`.
+The simpler model mirrors the vault's `published` boolean directly.
 """
 
 from django.db import migrations, models

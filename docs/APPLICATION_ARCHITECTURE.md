@@ -605,7 +605,7 @@ to, a credential and the machine it opens, a service and where it runs) is
 asking the same question. Surfaces differ only in what evidence they hand the
 resolver, never in how it reads one.
 
-Two invariants keep that from re-splitting. **Names and addresses are separate
+Two invariants keep that from splitting. **Names and addresses are separate
 namespaces**, because a machine may legitimately be named like an address while
 another answers at it, and one dictionary silently keeps whichever was written
 last. And **endpoints are parsed in one place**: `core.network.split_host_port`
@@ -614,16 +614,13 @@ every IPv6 form. A rendered label is never a join key; the resolver joins on
 declared addresses, sweep readings and connection endpoints, all of which are
 facts rather than presentation.
 
-**Identity is declared separately from hostnames**, and the distinction is not
-academic. While every provider held exactly one record per name (an AdGuard
-rewrite, an NPM proxy host) "the same hostname" and "the same record" were the
-same statement, and identity was simply the hostname. A DNS zone breaks that: an
-apex routinely carries several TXT records, several CAA records and two MX
-records, all on one name. Identified by hostname they collapse into one, and
-adoption keeps whichever the provider happened to list first. The types that
-carry policy rather than address also declare no hostname at all, so they would
-report as having no identity and stay permanently invisible to the screen built
-to find unmanaged records. A provider that holds more than one record per name
+**Identity is declared separately from hostnames**, because one name can carry
+several records. A DNS zone apex routinely carries several TXT records, several
+CAA records and two MX records, all on one name; identified by hostname they
+would collapse into one, and adoption would keep whichever the provider listed
+first. The types that carry policy rather than address declare no hostname at
+all, so they would report as having no identity and stay invisible to the
+screen built to find unmanaged records. A provider that holds more than one record per name
 therefore says what makes each of them itself, and what it *serves* is answered
 separately: for many record types, nothing.
 
@@ -636,8 +633,8 @@ Three verbs exist beyond reconciliation. **Delete** removes the record at the
 provider and only then lets HQ forget its declaration, because the thing
 described lives elsewhere and dropping the row alone would abandon it. **Rename**
 is possible because the contract carries what the provider was last seen
-holding: without it, a changed hostname created a second record beside the one
-it meant to move. **Adopt** takes a record the provider already holds and writes
+holding: without it, a changed hostname would create a second record beside
+the one it meant to move. **Adopt** takes a record the provider already holds and writes
 its live settings into a new declaration, so the first reconciliation after
 adopting changes nothing.
 
@@ -678,14 +675,13 @@ verification policy travel together. The compiler rejects a contribution whose
 implemented actions or probes disagree with its declaration, and rejects
 duplicate kinds, probes, or dispatch identities before the worker can run.
 Admission remains a closed tuple owned by HQ; this is modular composition, not
-arbitrary runtime registration. AdGuard is the first vertical extraction, and
-Caddy proves the same seam for an SSH-backed provider whose one resource
-resolves into a shared file.
+arbitrary runtime registration. AdGuard is admitted this way, and so is Caddy,
+an SSH-backed provider whose one resource resolves into a shared file.
 
-The kinds the controller core still implements follow the same rule from the
+The kinds the controller core implements directly follow the same rule from the
 other side. Each integration lives in `controller_runtime/` (`tls`,
 `cloudflare`, `portainer`, `tailscale`, `host_readings`), split further by
-concern where it grew (`tls_issuance`, `tls_verification`, `npm_certificates`,
+concern (`tls_issuance`, `tls_verification`, `npm_certificates`,
 `tailnet_api`, `tailnet_policy`, `cloudflare_api`, `cloudflare_account`). A sibling is called as `module.name`, so a
 patch on the owner reaches every caller. Each handler registers itself beside
 its definition: `@lists(kind)` for inventory,
@@ -724,11 +720,11 @@ if they contain secret-bearing keys.
 
 Public DNS is additionally gated by a deployment switch, and the switch governs
 *acting* rather than *being publicly visible*: a declaration whose every
-controller action is locked cannot change anything, so refusing it would have
-prevented an operator recording which domains HQ is responsible for while
+controller action is locked cannot change anything, so refusing it would
+prevent an operator recording which domains HQ is responsible for while
 preventing no change to anything at all.
 
-HQ's existing `CLOUDFLARE_API_TOKEN` is application data-plane access for the
+HQ's `CLOUDFLARE_API_TOKEN` is application data-plane access for the
 D1-backed contact form: it writes submissions and nothing else, and the account
 and database come from the cloudflare_api observer's D1 reading. It is never
 projected into the controller or reused for DNS automation. DNS-01 uses the separate least-privilege

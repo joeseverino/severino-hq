@@ -5,9 +5,8 @@ for assets and expenses enforce it, so every adapter (web, CLI, HTTP API, MCP)
 is held to it; the web forms' ``BusinessUseMixin`` calls the same check so a
 person sees the refusal beside the field rather than after submitting.
 
-The models still clamp on save. That clamp is a last line of defence for a row
-written outside the services, not the rule: before the services enforced the
-range, the API accepted 150 and stored 100 where the browser refused it.
+The models also clamp on save. That clamp is a last line of defence for a row
+written outside the services, not the rule.
 """
 
 from __future__ import annotations

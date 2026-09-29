@@ -2,8 +2,8 @@
 
 A password manager is the first place an operator looks to ask "what is this,
 and when does it run out". For every other credential the answer is already
-there; for a certificate it was only ever in HQ, so the two had to be read side
-by side. This writes HQ's answer onto the item, so one look answers it.
+there; for a certificate it is in HQ. This writes HQ's answer onto the item, so
+one look answers it.
 
 It delivers the certificate too. An item carrying the facts beside material a
 person had placed by hand would be the worst of both: the facts refreshed on
@@ -186,10 +186,9 @@ def _current(
     the operator's own reasons and this adapter is a guest on it.
 
     Each owned field comes back as its stored *type* beside its value, because a
-    field whose value is right and whose type is wrong is still wrong: the expiry
-    written as text before this adapter typed it reads identically and is not a
-    date to anything that asks. Compared on the value alone it would never be
-    corrected.
+    field whose value is right and whose type is wrong is still wrong: an expiry
+    stored as text reads identically and is not a date to anything that asks.
+    Compared on the value alone it would never be corrected.
 
     The tags come back whole rather than filtered, and that is load-bearing.
     ``op item edit --tags`` replaces the list instead of adding to it, so writing

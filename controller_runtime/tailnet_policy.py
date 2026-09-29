@@ -357,8 +357,8 @@ def list_tailnet_policy() -> list[dict[str, Any]]:
     # keeps what the kind last held and carries the reason. Every failure on
     # this path (no credential rendered, a client that is not an OAuth
     # client, a refused read) raises with its own message. Swallowed into an
-    # empty list they all became the same thing: a successful sweep of a
-    # tailnet with no policy, so nothing was unreachable and nothing said why.
+    # empty list they would all read the same: a successful sweep of a
+    # tailnet with no policy, with nothing unreachable and nothing saying why.
     token = tailnet_api.tailnet_token("")
     policy = _tailnet_policy(token)
     parts = tailnet_api.tailnet_parts(

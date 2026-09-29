@@ -326,12 +326,11 @@ class TailnetKeyRenameTests(TestCase):
         self.assertTrue(ManagedResource.objects.filter(key="nameless").exists())
 
     def test_a_display_name_becomes_a_key_a_url_can_carry(self):
-        """The mistake this nearly shipped with.
+        """A renamed key is slugified.
 
-        A device name is a display string ("Sam's MacBook Pro") and a key
-        appears in a URL. Renaming without slugifying turned a working key into
-        one the resource route cannot match, which is worse than the suffix it
-        set out to remove.
+        A device name is a display string and a key appears in a URL. Renaming
+        without slugifying yields a key the resource route cannot match, which
+        is worse than the suffix the rename removes.
         """
 
         import re

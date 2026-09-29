@@ -232,10 +232,9 @@ def _unconfirmed(resource: ManagedResource, provider) -> tuple[str, ...]:
     known gap rather than a silent one. And a field carrying no value is
     excluded because there is nothing there to confirm.
 
-    Without that last clause every DNS record that is not an MX asserted an
-    unconfirmed ``priority``: twenty-eight of them, none clearable, since the
-    provider correctly declines to read a priority back for a type that has
-    none. They buried the findings that were real.
+    Without that last clause every DNS record that is not an MX would assert
+    an unconfirmed ``priority`` that nothing can clear, since the provider
+    correctly declines to read a priority back for a type that has none.
     """
 
     if not resource.last_observed_at or not isinstance(resource.status, dict):
@@ -486,8 +485,8 @@ def _resource_node(resource: ManagedResource) -> TopologyNode:
     """A declaration as a node: its name, its kind's label, its page.
 
     A container is named as itself, with its machine in the subtitle: its
-    key joins the two, and printed as the name it said the machine twice
-    wherever the machine was already the context.
+    key joins the two, and printed as the name it would repeat the machine
+    wherever the machine is already the context.
     """
 
     from control_plane.provider_adapters.portainer import CONTAINER_KIND

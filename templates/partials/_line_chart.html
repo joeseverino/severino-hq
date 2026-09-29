@@ -38,9 +38,8 @@ a zero-based axis would draw every reading as the same height.
         
         {% comment %}
         Invisible targets, drawn last so they sit above every line. A plotted
-        point is three pixels across, which is smaller than a pointer can be
-        aimed: the tooltip worked and could not be reached. The mark carries
-        the tip; the dot only has to be visible.
+        point is three pixels across, smaller than a pointer can be aimed, so
+        the mark carries the tip; the dot only has to be visible.
         {% endcomment %}
         {% for series in chart.series %}{% for point in series.points %}<circle class="chart-hit" cx="{{ point.x }}" cy="{{ point.y }}" r="11" data-tip="{{ point.tooltip }}"></circle>{% endfor %}{% endfor %}
       </svg>

@@ -452,8 +452,8 @@ class MCPBoundaryTests(TestCase):
 class AgentIdentityTests(MCPBoundaryTests):
     """A Pocket ID token names the agent that presented it.
 
-    The legacy bearer names nobody, so every call it made landed in the audit
-    log as one constant actor. These pin the difference, and pin the property
+    A static bearer names nobody, so every call it made would land in the
+    audit log as one constant actor. These pin the difference, and pin the property
     the approval gate depends on.
     """
 
@@ -787,7 +787,7 @@ class TheCallerReachesTheToolTests(TestCase):
         )
 
         # Driven over httpx's own ASGI transport, as the static-asset tests are,
-        # rather than Starlette's TestClient: that one now wants a second HTTP
+        # rather than Starlette's TestClient: that one wants a second HTTP
         # client installed, and a test is no reason to ship one. The session
         # manager is entered first and by hand, which is all an app lifespan
         # does, so its task group still exists before any caller is bound,

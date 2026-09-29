@@ -13,14 +13,13 @@
 {% endif %}
 {% comment %}
 What this one costs, said by the provider. "Are you sure" about a table of
-fields is a question whose honest answer depends entirely on which record it
-is, and the page was asking it without that.
+fields has no honest answer without knowing which record it is.
 {% endcomment %}
 {% if removal_note %}<p class="msg msg-warning">{{ removal_note }}</p>{% endif %}
 {% comment %}
-What this is, then the tuning underneath. Every field at equal weight put
-"Hsts subdomains: No" and "Access list: 0" (defaults nobody chose) among the
-four rows that say what is about to be deleted.
+What this is, then the tuning underneath. At equal weight, defaults nobody
+chose ("Hsts subdomains: No", "Access list: 0") crowd the rows that say what
+is about to be deleted.
 {% endcomment %}
 <dl class="kv compact">
   {% for label, value in spec_rows.primary %}

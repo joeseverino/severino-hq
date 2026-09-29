@@ -5,8 +5,7 @@
 #
 # The vault is the inventory. An item declares what it is: `connection_ref`,
 # `projection`, `env_prefix`, and this reads them, so adding a provider
-# connection is creating an item and touches no file here. The registry holds
-# only the projections: the shapes a connection can take, which are generic.
+# connection is creating an item and touches no file here.
 #
 # The registry holds only the projections: the shapes a connection can take,
 # which are generic. It names no connection, so an item that declares neither a

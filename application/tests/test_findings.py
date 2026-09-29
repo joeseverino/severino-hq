@@ -342,13 +342,11 @@ class FindingsTests(TestCase):
         self.assertNotIn(f"resource:{uncovered.key}", subjects)
 
     def test_a_kind_nothing_ever_reached_is_one_claim_not_one_per_record(self):
-        """The shape that produced 320 findings against the real estate.
+        """A kind with no observation at all is one claim about the kind.
 
-        A kind with no observation at all has no newest to be behind, so the
-        sibling comparison cannot see it, and every record of it is "never
-        observed" on its own. Said once about the kind it is one line; said per
-        record it is a queue nobody reads, which is the original bug wearing a
-        different hat.
+        It has no newest to be behind, so the sibling comparison cannot see it,
+        and every record of it is "never observed" on its own. Said once about
+        the kind it is one line; said per record it is a queue nobody reads.
         """
 
         for index in range(25):
@@ -375,9 +373,8 @@ class FindingsTests(TestCase):
         """The security shape: observed, healthy, and asserting unchecked facts.
 
         Drift is judged only where both sides speak, so a field the reading
-        omits is never compared. On the real estate the two proxy hosts holding
-        the only `block_exploits` were confirming two fields out of seventeen,
-        and nothing said so.
+        omits is never compared. A security setting such as `block_exploits`
+        can sit among the unconfirmed fields, so the gap itself is reported.
         """
 
         partly = self.rewrite("half-checked")
@@ -395,10 +392,9 @@ class FindingsTests(TestCase):
 
     def test_a_field_carrying_no_value_is_not_an_unconfirmed_assertion(self):
         """A spec is a full model dump, so an optional field nobody set is
-        still a key. Reading that as a claim put twenty-eight unclearable
-        findings in front of the real ones on the live estate: every DNS record
-        that was not an MX asserted a ``priority`` the provider correctly
-        declines to read back for a type that has none."""
+        still a key. Read as a claim it is an unclearable finding: every DNS
+        record that is not an MX would assert a ``priority`` the provider
+        correctly declines to read back for a type that has none."""
 
         record = ManagedResource.objects.create(
             key="nothing-asserted",
@@ -475,8 +471,8 @@ class FindingsTests(TestCase):
 
     def test_key_expiry_is_confirmed_by_the_sweep_that_can_see_it(self):
         """The daemon reading holds presence and key expiry: "the two that go
-        wrong quietly", and the record mapping kept only the name, so every
-        device asserted a setting no sweep confirmed."""
+        wrong quietly". The record mapping carries key expiry too, or every
+        device asserts a setting no sweep confirms."""
 
         from control_plane.providers import PROVIDERS
 
@@ -880,7 +876,7 @@ class AutoRepairTests(TestCase):
 
 
 class ReachedButUnmeasuredTests(TestCase):
-    """The first claim neither half of HQ can make on its own.
+    """A claim neither half of HQ can make on its own.
 
     Infrastructure knows what a connection reaches; analytics knows what it
     counts. The finding lives in the gap between them, and the gate is a
@@ -1210,8 +1206,8 @@ class StalenessNeedsSomethingDeclaredTests(TestCase):
 
     A finance feed and a vehicle lookup are written on their own schedule by
     something that is not the sweep. Measured against the sweep interval each
-    was overdue every time it was read, and no sweep or reconcile could settle
-    it, because there was no declaration of that kind to settle.
+    would be overdue every time it is read, and no sweep or reconcile could
+    settle it, because there is no declaration of that kind to settle.
     """
 
     def _raised(self, *, declared):

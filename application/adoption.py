@@ -189,11 +189,8 @@ class Unmanaged:
     def readout(self) -> tuple[tuple[str, str], ...]:
         """What this record does, described by its own provider.
 
-        The listing template reached into ``spec.answer`` and ``spec.forward_host``
-        directly, which is the one thing nothing outside a provider is allowed to
-        do: an AdGuard record has neither of the fields a proxy host has, and the
-        page failed the moment both kinds appeared on it. The provider already
-        says how to describe itself.
+        Nothing outside a provider reads its spec fields: record kinds differ in
+        shape, so each provider says how to describe itself.
         """
 
         provider = PROVIDERS[self.kind]
@@ -263,10 +260,8 @@ class UnmanagedService:
     """Every unmanaged record sharing one hostname, seen as one thing.
 
     Grouped because a hostname is the unit an operator thinks in, and because
-    the managed table beside this one is already per-hostname. Listed per record
-    instead, one service appeared as two adjacent rows with the same name, and
-    onboarding it took two clicks: the page taught two different shapes for
-    the same idea.
+    the managed table beside this one is already per-hostname: one service is
+    one row and one adoption.
     """
 
     hostname: str

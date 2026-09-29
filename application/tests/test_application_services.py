@@ -204,10 +204,8 @@ class CapabilityTests(TestCase):
     def test_syncing_docs_does_not_require_the_whole_control_plane(self):
         """A service account allowed to sync docs and nothing else can.
 
-        It also needed infrastructure authority while the sync carried a
-        topology. The only way to grant that was to hand the same account
-        resource upsert, removal and reconcile: full control-plane write, to
-        run a documentation sync.
+        A documentation sync needs no control-plane write: no resource upsert,
+        removal or reconcile.
         """
 
         docs_only = Principal(

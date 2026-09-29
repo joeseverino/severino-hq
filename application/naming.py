@@ -2,10 +2,9 @@
 
 Every fact here is the output of work done elsewhere: the connection sweep says
 which zones a credential may edit, the service view resolves where a name is
-already served, the certificate registry knows what already covers it. Each was
-reachable and none was reaching the place it was needed, so a form asked for the
-address printed on the card above it, and offered to issue a certificate for a
-name no credential could prove.
+already served, the certificate registry knows what already covers it. This
+brings them to where they are needed, so a form does not ask for an address HQ
+already shows, or offer a certificate for a name no credential can prove.
 
 Kept out of ``control_plane.providers`` because this queries and that module
 declares. Providers say what they would do with each fact; this is the half that
@@ -113,8 +112,7 @@ def _load_reported_zones() -> tuple[tuple[str, ...], bool]:
     """
 
     # Which connections hold public zones is derived from the providers that
-    # say their effect is public. Named directly, this file would carry the one
-    # word ("cloudflare_dns") that the rest of the pass exists to remove.
+    # say their effect is public, so this file names no provider.
     public = {
         provider
         for spec in PROVIDERS.values()

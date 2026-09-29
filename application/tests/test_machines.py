@@ -65,11 +65,10 @@ class MembershipTests(TestCase):
         )
 
     def test_a_zone_a_dns_token_reaches_is_not_a_machine(self):
-        """``reaches`` is polymorphic on purpose.
-
-        A Portainer reports the machines it holds and a DNS token reports the
-        zones it may edit. Read the same way, four domains appeared on this page
-        as though they were servers.
+        """``reaches`` is polymorphic on purpose. A Portainer reports the
+        machines it holds and a DNS token reports the zones it may edit. Read
+        the same way, domains would appear on this page as though they were
+        servers.
         """
 
         a_connection(
@@ -518,11 +517,10 @@ class KeyExpiryTests(TestCase):
 
 
 class OneMachineManyNamesTests(TestCase):
-    """A tailnet calls a machine whatever its owner typed into it years ago.
-
-    That is rarely the name HQ uses, so without a join the board grows a second
-    row for a machine it already had: with the presence on one row and every
-    other fact on the other.
+    """A tailnet calls a machine whatever its owner typed into it. That is
+    rarely the name HQ uses, so without a join the board grows a second row for
+    a machine it already has: with the presence on one row and every other fact
+    on the other.
     """
 
     def setUp(self):
@@ -669,12 +667,10 @@ class WhoeverSweptTests(TestCase):
 
 
 class ReadingThisOnTheMachineTests(TestCase):
-    """The page describing a machine, opened on that machine.
-
-    HQ judged the caller's address for the network gate before any view ran,
-    and every machine carries the addresses it answers at. So the page could
-    always have known, and instead said "this machine" in the third person
-    while somebody looked at their own laptop.
+    """The page describing a machine, opened on that machine. HQ judges the
+    caller's address for the network gate before any view runs, and every
+    machine carries the addresses it answers at, so the page knows when it is
+    being read on the machine it describes.
     """
 
     def setUp(self):
@@ -783,9 +779,8 @@ class ObservedAddressAnnotationTests(TestCase):
     def test_an_observed_address_is_not_offered_for_removal(self):
         """HQ holds it whether or not this field does.
 
-        Offering to remove it was offering to delete a fact, and until the
-        tailnet's addresses reached the index, removing one silently broke the
-        resolution it looked redundant to.
+        Offering to remove it would be offering to delete a fact, and the
+        tailnet's addresses in the index are what resolution relies on.
         """
 
         from application.provider_forms import spec_form_class
@@ -835,12 +830,9 @@ class ObservedAddressAnnotationTests(TestCase):
 
 
 class IdentifierIsFixedTests(TestCase):
-    """The identifier is filing, and a form should not ask about filing.
-
-    It was an input near the bottom of the form, behind the Options disclosure,
-    directly beneath a field called "Name". So the resource appeared to have two
-    names, the fixed one looked like the optional one, and reading it meant
-    opening a drawer.
+    """The identifier is filing, and a form should not ask about filing. Shown
+    as an input beneath a field called "Name", the resource appears to have two
+    names, and the fixed one looks like the optional one.
     """
 
     def setUp(self):

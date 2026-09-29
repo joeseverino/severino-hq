@@ -80,7 +80,7 @@ def _match_score(item: DiscoveryItem, query: str) -> int:
 
     terms = _SEARCH_WORD.findall(query.casefold())
     # A controller-qualified connection id is globally unique, but its prefix
-    # is context rather than the connection's own name. Searching `homelab`
+    # is context rather than the connection's own name. Searching `example`
     # should rank `example-npm` above every unrelated credential observed by a
     # controller named `example-host`.
     primary_name = (
@@ -447,7 +447,7 @@ def _command_center(
     # Registry discovery is a zero-query application primitive used by CLI,
     # MCP and contract checks. The web palette explicitly opts into cached live
     # instances because operator-entered names and current reachability are the
-    # point of that surface; other adapters keep the original cheap contract.
+    # point of that surface; other adapters keep the cheap contract.
     live_connections = (
         tuple(
             _live_connection_item(group, connection)

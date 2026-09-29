@@ -213,7 +213,7 @@ class TableListMixin:
 
         Over the queryset, deliberately, and never over the page. A total that
         silently describes the twenty rows currently visible is worse than no
-        total: it is a number that changes when you paginate and looks like a
+        total: it is a number that changes with the page and looks like a
         fact about the filter.
         """
         if not self.table_totals or queryset is None:

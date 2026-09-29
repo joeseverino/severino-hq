@@ -82,7 +82,7 @@ def release(exc: BaseException) -> None:
     """Close the response a failed request carries, if it carries one.
 
     An ``HTTPError`` is not only an exception: it is the error response,
-    socket included, and nothing closes it on our behalf. Chained into a
+    socket included, and nothing else closes it. Chained into a
     ``ProviderError`` or swallowed into a default, it would hold that socket
     until the garbage collector found it: one per refused call, on a worker
     that makes dozens of them a pass. Every handler that can receive one calls

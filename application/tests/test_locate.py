@@ -2,13 +2,11 @@
 
 Every surface that draws a line between two things HQ knows (a proxy and the
 box it forwards to, a credential and the machine it opens, a service and where
-it runs) is asking one question. It was answered in four places, and the four
-did not agree: one handled loopback, one consulted credentials, one read only
-declarations, one intersected sets of strings. So the same address named a
-machine on one page and nothing on the next.
-
-These are the cases that must come out the same whichever page asks, plus
-the ones the shared parser exists for.
+it runs) is asking one question, so one resolver answers it: loopback,
+credentials, declarations and addresses alike. Otherwise the same address names
+a machine on one page and nothing on the next. These are the cases that must
+come out the same whichever page asks, plus the ones the shared parser exists
+for.
 """
 
 from __future__ import annotations

@@ -31,10 +31,9 @@ from .finding_model import (
 # restart and two is a slow provider.
 #
 # Multiplied against the *slowest* interval HQ is willing to sweep at, not the
-# one currently in force. Reading the live value made this threshold swing with
-# the thing it watches (minutes while somebody was on the page, half a day
-# once nobody was) so it was by turns too tight to trust and too loose to
-# help. A fixed ceiling is at least a number that can be reasoned about.
+# one currently in force: the live interval changes with whether anyone is
+# watching, and a threshold that moves with the thing it measures cannot be
+# reasoned about.
 #
 # It is still a statement about sweeps, not about liveness: nothing here can
 # notice a controller that died between two scheduled sweeps, because the only
@@ -175,10 +174,8 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
             )
         )
     # A kind with no observation at all has no newest to be behind, so the loop
-    # above cannot see it, and left alone it becomes one finding per record.
-    # Against a real estate that was three hundred and twenty claims saying the
-    # same thing once each, which is how a queue stops being read. Said once
-    # about the kind, it is one line and the same information.
+    # above cannot see it. It is claimed once about the kind rather than once
+    # per record, which would bury the queue in copies of one claim.
     for kind_key in sorted(estate.declared_kinds - set(estate.latest_by_kind)):
         if not is_observable(kind_key):
             continue
@@ -312,9 +309,7 @@ def _reporting_a_fault(estate: FindingEstate) -> tuple[Finding, ...]:
 
     `reconciled-but-still-wrong` covers the case where a reconcile has already
     been tried against this exact declaration. This is the rest: a fault the
-    resource is reporting while a change is still outstanding, which nothing
-    else here was watching. A certificate marked expiring reached the queue
-    only through an unrelated staleness rule, so it left with it.
+    resource is reporting while a change is still outstanding.
     """
 
     return tuple(
@@ -442,12 +437,8 @@ def _weakly_verified(estate: FindingEstate) -> tuple[Finding, ...]:
 
     Drift is judged only across fields both sides carry, so a field the reading
     omits is not agreed: it is unjudged. A record can therefore be confirmed,
-    read healthy, and be asserting a control nothing has ever checked.
-
-    That is not a hypothetical: the two proxy hosts that carried this estate's
-    only `block_exploits` were also the two the sweep never confirmed, and what
-    it did confirm about them was two fields out of seventeen. An unverified
-    control is not a control, and staleness alone would not have said so.
+    read healthy, and be asserting a control nothing has ever checked. An
+    unverified control is not a control, and staleness alone does not say so.
     """
 
     return tuple(

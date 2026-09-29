@@ -147,17 +147,15 @@ class ControllerContractCompletenessTests(TestCase):
     """A spec stored before a field existed still reaches the controller whole.
 
     The controller indexes spec fields directly, so a missing key is a crash
-    mid-reconciliation rather than a default. Specs are stored as JSON and were
-    written by older versions of the model, so the only thing standing between
-    an added field and a broken production reconcile is that the contract
-    validates through pydantic on the way out.
+    mid-reconciliation rather than a default. Stored specs may predate a field,
+    so the contract validates through pydantic on the way out to fill it.
     """
 
     def test_a_spec_missing_a_newly_added_field_is_filled_by_the_contract(self):
         resource = ManagedResource.objects.create(
             key="legacy-proxy",
             kind="npm.proxy_host",
-            # Exactly what production held before hsts and serving existed.
+            # A spec written before hsts and serving existed.
             spec={
                 "domain_names": ["app.example.com"],
                 "forward_scheme": "http",
@@ -183,11 +181,9 @@ class ControllerContractCompletenessTests(TestCase):
 class DerivedConsumerTests(TestCase):
     """Who consumes a certificate is derived, not typed into a list.
 
-    The bug this pins: a target carried a hand-written set of names to verify,
-    so a second name served from the same box was a consumer in reality and
-    absent from the certificate. Its own service page showed the certificate
-    correctly the whole time: that side asks what the certificate covers,
-    which is what made two answers to one question so hard to see.
+    A hand-written set of names on a target misses a second name served from
+    the same box, while that name's own service page, which asks what the
+    certificate covers, still shows it: two answers to one question.
     """
 
     def _estate(self):
@@ -473,10 +469,8 @@ class DesiredStateOwnershipTests(TestCase):
 class RegistrySymmetryTests(TestCase):
     """Providers that answer the same question must answer all of it.
 
-    Every bug this class exists to catch had the same shape: two providers
-    supplying one facet, one of them declaring a hook the other did not, and a
-    page reporting HQ's own silence as a fact about the world. Found one at a
-    time from the outside, each looked like its own defect. They were one.
+    Two providers supplying one facet, one declaring a hook the other does not,
+    make a page report HQ's own silence as a fact about the world.
     """
 
     def test_a_provider_that_says_where_a_name_points_says_where_it_is_served(self):
@@ -484,10 +478,9 @@ class RegistrySymmetryTests(TestCase):
 
         A provider that can say which address a name resolves to can say where
         that name is served: the address *is* the answer. Declaring the first
-        and withholding the second is how a live service came to report "nothing
-        supplies this": one DNS provider declared an origin and the other did
-        not, so a name carried by the quiet one had no origin at all, no machine,
-        and no runtime, while the box serving it sat in HQ's own inventory.
+        and withholding the second leaves a name carried by that provider with
+        no origin, no machine and no runtime, reported as "nothing supplies
+        this" while the box serving it is in HQ's own inventory.
         """
 
         from ..providers import PROVIDERS
@@ -734,9 +727,9 @@ class InfrastructureWebTests(TestCase):
 
         self.assertEqual(response.context["provider_machine"]["name"], "example-host")
         self.assertEqual(response.context["origin_machine"].name, "app-server")
-        # Two edges, two sentences. Both said "Runs on" once, which on a
-        # container managed by a Portainer one box over names two machines:
-        # the one the thing runs on, and the one its provider runs on.
+        # Two edges, two sentences. A container managed by a Portainer one box
+        # over names two machines: the one it runs on, and the one its provider
+        # runs on, so one "Runs on" cannot cover both.
         self.assertContains(response, "Managed through")
         self.assertContains(response, "Forwards to")
 
@@ -889,7 +882,7 @@ class OperationPolicyTests(TestCase):
 
     @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
     def test_locked_reconcile_capability_cannot_queue_work(self):
-        """A domain is the locked capability now that DNS records apply.
+        """A domain is the locked capability; its DNS records are what apply.
 
         Declaring one records which zones HQ is responsible for. It carries no
         settings, so there is nothing for a reconcile to converge toward, and
@@ -1025,10 +1018,9 @@ class OperationPolicyTests(TestCase):
 class DeliveryTargetConfirmationTests(TestCase):
     """Verifying a certificate is the only thing that ever sees its targets.
 
-    Nothing sweeps a delivery target, so its "last confirmed" said *never* for
-    as long as it existed, while every reconcile was opening a connection to
-    it, reading back what it served and matching the fingerprint. The evidence
-    was arriving under the certificate's name and being dropped.
+    Nothing sweeps a delivery target, but every reconcile opens a connection to
+    it, reads back what it serves and matches the fingerprint. That evidence
+    confirms the target, or its "last confirmed" says *never* forever.
     """
 
     def _report(self, consumers):
@@ -1119,7 +1111,7 @@ class InfrastructureViewsTests(TestCase):
         # A kind a sweep actually visits. The certificate in `setUp` is not
         # one: nothing collects certificates, so measuring them against the
         # sweep interval says only that they are not swept, which this rule
-        # no longer claims.
+        # does not claim.
         ManagedResource.objects.create(
             key="unswept-rewrite",
             kind="adguard.rewrite",
@@ -1371,9 +1363,8 @@ class QueueHeadTests(TestCase):
     """One resource HQ cannot describe must not stop every other one.
 
     The queue is ordered by age and a claim is atomic, so an operation whose
-    contract could not be built rolled the claim back and stayed exactly where
-    it was. Every poll after it hit the same one, and nothing else (no DNS, no
-    proxy hosts, no renewals) was ever claimed again.
+    contract cannot be built and whose claim rolls back stays at the head: every
+    later poll hits it, and nothing else is ever claimed.
     """
 
     def setUp(self):
@@ -1462,11 +1453,9 @@ class QueueHeadTests(TestCase):
 class ReadoutsSayNothingBlankTests(TestCase):
     """A readout row must be able to hold a value.
 
-    Two of these shipped and neither was noticed from the code: a zone printed
-    a record count and an MX, SPF, DMARC and CAA summary from five `status`
-    keys nothing has ever written, and a container printed a state from a key a
-    sweep does not store. Ten container pages and four domain pages, every one
-    of them an em dash under a label promising an observation.
+    A row reading a `status` key nothing writes is an em dash on every page of
+    its kind, under a label promising an observation, and nothing in the code
+    shows it.
 
     Blank on the resource in front of you is normal: a certificate that has
     not been reconciled yet has no expiry. Blank on *every* resource of a kind,
@@ -1510,13 +1499,11 @@ class ReadoutsSayNothingBlankTests(TestCase):
         for absent in ("Records", "Mail (MX)", "SPF", "DMARC"):
             self.assertNotIn(absent, labels)
 
-    # No generic "every row can hold a value" test here. Fed a synthetic status
-    # that answers every key, four rows that are populated in production came
-    # back blank: a certificate's consumers and the tailnet policy's grants,
-    # groups and tests all read lists, and a fixture cannot fake a list without
-    # knowing its shape. The sound version of this check needs the real estate,
-    # so it is an audit run against it rather than a test that would cry wolf
-    # on every future provider that reads a collection.
+    # No generic "every row can hold a value" test here. Rows that read lists
+    # (a certificate's consumers, the tailnet policy's grants, groups and tests)
+    # stay blank under a synthetic status, because a fixture cannot fake a list
+    # without knowing its shape. That check needs real readings, so it is an
+    # audit rather than a test.
 
 
 class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):

@@ -1,17 +1,8 @@
 """Which machine an address belongs to, answered in one place.
 
-Four surfaces asked this question and four answered it differently. A proxy's
-forwarding address resolved against declarations and connections; the machine
-board resolved the same address against containers and connections but not
-loopback; a form resolved it against declarations alone; the connection panel
-intersected address sets. So one address named a machine on one page, named a
-different machine on the next, and named nothing on the third, and each
-answer was defensible in isolation, which is what made the disagreement so hard
-to see.
-
-The disagreement is not a rendering problem. Every one of those surfaces is
-asking "what is at this address", and there is exactly one true answer for a
-given set of evidence. So the answer is computed once, here, and the surfaces
+A proxy's forwarding address, the machine board, a form and the connection
+panel all ask "what is at this address", and there is exactly one true answer
+for a given set of evidence. So the answer is computed once, here, and the surfaces
 differ only in what evidence they hand it.
 
 Two rules make that safe.
@@ -25,9 +16,8 @@ shadow the other, and a caller says which kind of thing it is holding.
 
 **One parser.** ``https://host/``, ``host:port``, ``[::1]:8000`` and a bare
 IPv6 address are all endpoints, and reading them with ``rpartition(":")``
-(which five call sites did) splits ``2001:db8::1`` into ``2001:db8:`` and
-``1``. The one place that has always got this right is ``core.network``, which
-does it for the trusted-proxy gate; this reads endpoints through it.
+splits ``2001:db8::1`` into ``2001:db8:`` and ``1``. ``core.network`` parses
+them correctly for the trusted-proxy gate; this reads endpoints through it.
 """
 
 from __future__ import annotations
@@ -95,8 +85,7 @@ def points_at_host(endpoint: Any) -> bool:
 
     The distinction is what tells a connection that opens a shell somewhere
     (which *is* a machine) from a connection that talks to a service running
-    on one. Written out longhand at five call sites, it was five chances to
-    write it slightly differently.
+    on one. Stated once so every caller draws it the same way.
     """
 
     text = str(endpoint or "").strip()
@@ -146,7 +135,7 @@ class Machines:
         An origin is genuinely either: a stack declares the machine it runs on
         by name, and a proxy forwards to an address. So both namespaces are
         consulted: the name first, because a name is HQ's own vocabulary and
-        an exact hit in it was somebody's deliberate act, while an address hit
+        an exact hit in it is somebody's deliberate act, while an address hit
         is an inference from a declaration made elsewhere.
 
         Empty when neither knows it, which is the honest answer and the one
@@ -328,8 +317,7 @@ def names_by_connection() -> dict[str, tuple[str, ...]]:
     The join everything below it already had the halves of: a sweep says which
     names answer at which address, a credential says which address it opens, and
     this index says which of those addresses are the same machine. Nothing new is
-    recorded: the fact was derivable from three things HQ reconciles, and was
-    being typed into a list by hand instead.
+    recorded: the fact is derived from three things HQ reconciles.
 
     Both sides are placed through the one index rather than compared as strings,
     so a machine reached at one of its addresses and named at another is still
@@ -358,8 +346,7 @@ def names_by_connection() -> dict[str, tuple[str, ...]]:
         that a proxy forwarding somewhere HQ holds a credential for stops
         reading as an unknown host, which is right there and circular here.
         Resolved that way, a connection reached by name and the names answering
-        at that host's address were two different machines, and nothing was ever
-        derived for it.
+        at that host's address would be two different machines.
 
         An address the index cannot name still places: it stands in for itself,
         the same way it does on the other side of this join. Returning the name

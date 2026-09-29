@@ -1,10 +1,8 @@
 """One parser for a timestamp someone else wrote, with its edges stated.
 
 HQ reads instants from providers, from its own serialized projections and from
-stored records. Parsing them was written about twenty times, and the copies
-agreed on the common case and disagreed at the edges, silently. Those edges
-are parameters here, so a caller states which answer it needs rather than
-inheriting whichever one its copy happened to have:
+stored records. Callers agree on the common case and differ at the edges, so
+those edges are parameters here and a caller states which answer it needs:
 
 - **Naive input.** ``naive="utc"`` reads a stamp without an offset as UTC,
   which is what every provider that omits it means. ``"keep"`` returns it

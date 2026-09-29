@@ -344,7 +344,7 @@ class PipelineReportTests(SimpleTestCase):
 
         workflows = Path(__file__).parent.resolve().parents[2] / ".github" / "workflows"
         # workflow_run fires for any run of the workflow it watches, a pull
-        # request's included, which once started a deploy of the wrong commit.
+        # request's included, so it can start a deploy of the wrong commit.
         self.assertEqual([path.name for path in workflows.glob("*.yml") if "workflow_run:" in path.read_text()], [])
         self.assertIn('gh workflow run compose.yml', self.read(".github", "workflows", "ci.yml"))
         self.assertIn('-f commit="$COMMIT"', self.read(".github", "workflows", "ci.yml"))

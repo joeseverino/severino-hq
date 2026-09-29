@@ -1,12 +1,11 @@
 """Public DNS: identity, the shape of each record type, and the zone view.
 
 The property under test throughout is that a zone holds many records for one
-name. Every provider before this one held exactly one, so "the same hostname"
-and "the same record" meant the same thing everywhere, and a zone apex with
-three TXT records, four CAA records and two MX records is the case that makes
-them different. Getting that wrong does not fail loudly: adoption silently keeps
-one record of nine, and a reconciliation edits whichever the provider happened
-to return first.
+name, so "the same hostname" and "the same record" are different things: a zone
+apex with three TXT records, four CAA records and two MX records is the case
+that separates them. Getting that wrong does not fail loudly: adoption silently
+keeps one record of nine, and a reconciliation edits whichever the provider
+happened to return first.
 """
 
 from __future__ import annotations
@@ -377,10 +376,10 @@ class PublicDNSPolicyTests(TestCase):
 
     @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=False)
     def test_a_domain_can_be_declared_while_changing_dns_is_switched_off(self):
-        # A domain declaration records what HQ is responsible for. Its reconcile
-        # is locked, so there is nothing for the switch to protect against, and
-        # refusing it stopped an operator saying what HQ owns while preventing
-        # no change to anything.
+        # A domain declaration records what HQ is responsible for. Its
+        # reconcile is locked, so there is nothing for the switch to protect
+        # against, and refusing it would stop an operator saying what HQ owns
+        # while preventing no change to anything.
         self._save(ZONE_KIND, {"zone": "example.com", "connection_ref": "cf"}, "d")
         self.assertTrue(ManagedResource.objects.filter(key="d").exists())
 
@@ -450,18 +449,20 @@ class ProviderSurfaceTests(TestCase):
         self.assertEqual(PROVIDERS[ZONE_KIND].created_from, "")
 
     def test_a_locked_kind_does_not_promise_to_apply_anything(self):
-        """The form told every operator their resource would be applied.
+        """A locked kind's form does not promise that the resource will be
+        applied.
 
-        True of most kinds and false of any whose actions are locked, which is
-        exactly the case where knowing that saving changes nothing matters most.
-        The capability registry already said so; the page just was not asking.
+        That promise is true of most kinds and false of any whose actions are
+        locked, which is exactly the case where knowing that saving changes
+        nothing matters most. The capability registry already says so, and the
+        page asks it.
         """
 
         from control_plane.resource_form_views import _apply_note
 
-        # Asserted on the promise, not on the sentence explaining its absence.
-        # Pinning the wording meant a reason that had gone stale could only be
-        # corrected by editing a test that was never about the reason.
+        # Asserted on the promise, not on the sentence explaining its absence,
+        # so the reason can be reworded without editing a test that is not
+        # about it.
         self.assertNotIn("Applies at the provider", _apply_note(ZONE_KIND))
         self.assertIn("no settings to reconcile", _apply_note(ZONE_KIND))
         self.assertIn("Applies at the provider", _apply_note(RECORD_KIND))
@@ -593,10 +594,9 @@ class ZoneInsightTests(TestCase):
         self.assertIn("letsencrypt.org", card.detail)
 
     def test_email_names_who_receives_the_mail(self):
-        """"2 mail servers" was true and useless.
-
-        The count of MX records is a redundancy detail; the question is who has
-        the mailbox, and the records already say: both point at example.net.
+        """"2 mail servers" is true and useless. The count of MX records is a
+        redundancy detail; the question is who has the mailbox, and the records
+        already say: both point at example.net.
         """
 
         sweep(records=APEX + [
@@ -758,11 +758,10 @@ class ServicesInsightTests(TestCase):
 
 @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
 class SelfClosingAdoptionTests(TestCase):
-    """"Not adopted yet" is not a state anyone should have to clear.
-
-    Declaring a domain is the decision, and it is made once. Asking again per
-    record put a question on the page whose answer was always yes, and reported
-    outstanding work nobody intended to do.
+    """"Not adopted yet" is not a state anyone should have to clear. Declaring
+    a domain is the decision, and it is made once. Asking again per record puts
+    a question on the page whose answer is always yes, and reports outstanding
+    work nobody intends to do.
     """
 
     def setUp(self):
@@ -826,12 +825,10 @@ class SelfClosingAdoptionTests(TestCase):
 
     @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=False)
     def test_records_are_adopted_even_where_changing_public_dns_is_off(self):
-        """The switch stops HQ changing public DNS, not describing it.
-
-        Adoption copies what the provider already publishes, so reconciling the
-        result changes nothing. Refusing it left every public record listed as
-        unadopted on a deployment that had said "do not change these" and was
-        then told it could not write them down either.
+        """The switch stops HQ changing public DNS, not describing it. Adoption
+        copies what the provider already publishes, so reconciling the result
+        changes nothing. Refusing it would leave every public record listed as
+        unadopted on a deployment that only asked not to change them.
         """
 
         self._declare_domain()
@@ -924,10 +921,9 @@ class UnrepresentableRecordTests(TestCase):
     """Cloudflare holds record types HQ's model does not describe.
 
     SRV, NS, PTR, SVCB and more. HQ deliberately models the six it can act on,
-    and the rest still exist in the zone. What must not happen is a sweep that
-    fails because of one of them: recording what a provider holds cannot depend
-    on being able to declare all of it, and adoption now runs inside that same
-    sweep.
+    and the rest still exist in the zone. A sweep must not fail because of one
+    of them: recording what a provider holds cannot depend on being able to
+    declare all of it, and adoption runs inside that same sweep.
     """
 
     def setUp(self):
@@ -1011,8 +1007,8 @@ class StopManagingDomainTests(TestCase):
     Removal assumes a declaration describes something HQ made at a provider,
     correctly for a rewrite, a proxy host and a DNS record: forgetting the row
     alone would abandon them. HQ did not create the zone, and deleting it would
-    be absurd, so removal was refused outright, and there was no way to stop
-    managing a domain at all.
+    be absurd, so stopping management forgets the declaration and leaves the
+    zone alone.
     """
 
     def setUp(self):
@@ -1097,8 +1093,8 @@ class DomainPageCostTests(TestCase):
 
     A domain view is built from three reads (the declarations, the last sweep,
     and the unmanaged diff between them) and then sliced. Anything that scales
-    with the number of records means a per-row query hiding in a property, which
-    is invisible until a zone has two hundred records in it.
+    with the number of records means a per-row query hiding in a property,
+    which is invisible until a zone is large.
     """
 
     def setUp(self):
@@ -1146,8 +1142,9 @@ class DomainPageCostTests(TestCase):
         )
 
     def test_the_catalogue_is_built_once_per_request(self):
-        """Built to find one domain and again for the switcher, the page paid
-        twice for two identical answers."""
+        """The catalogue is built once, not once to find the domain and again
+        for the switcher.
+        """
 
         self.assertLessEqual(
             self._queries(10),
@@ -1157,12 +1154,11 @@ class DomainPageCostTests(TestCase):
 
 
 class ResourceDetailIsProviderDeclaredTests(TestCase):
-    """Every kind gets a detail card, including ones added after this page.
-
-    It carried a hand-written card per kind, reaching into ``spec.forward_host``
-    and ``spec.answer``: the one thing nothing outside a provider may do. A
-    provider added later got no card, because writing one was a step nobody was
-    reminded to take.
+    """Every kind gets a detail card, including ones added after this page. The
+    card is generic, because reaching into a provider's spec fields
+    (``spec.forward_host``, ``spec.answer``) is the one thing nothing outside a
+    provider may do, and a hand-written card per kind leaves new providers
+    without one.
     """
 
     def setUp(self):
@@ -1257,8 +1253,9 @@ class ResourcePageAfterWalkthroughTests(TestCase):
         )
 
     def test_a_resource_names_the_hostname_it_serves(self):
-        """It identified a record by the key HQ invented and nothing else, so
-        the hostname appeared only inside a collapsed disclosure."""
+        """A record is identified by the hostname it serves, not only by the
+        key HQ invented.
+        """
 
         response = self.client.get(
             reverse("control_plane:detail", kwargs={"key": "private-proxy"})
@@ -1347,8 +1344,9 @@ class PublishAServiceTests(TestCase):
         self.assertContains(response, "hostname=new.example.com")
 
     def test_nothing_declared_is_not_reported_as_healthy(self):
-        """A service with no parts read "Wired": the most confident statement
-        on a page about something that did not exist."""
+        """A service with no parts does not read "Wired": that would be the
+        most confident statement on a page about something that does not exist.
+        """
 
         service = service_or_prospect("new.example.com")
 
@@ -1513,10 +1511,9 @@ class CertificateEditFormTests(TestCase):
 
 
 class WhatCountsAsAServiceTests(TestCase):
-    """A hostname is not a service just because a record type says so.
-
-    Two ways the board filled up with rows that were not services, both of them
-    modelling errors rather than bad data.
+    """A hostname is not a service just because a record type says so. Two
+    modelling errors, rather than bad data, can fill the board with rows that
+    are not services.
     """
 
     def _record(self, key, name, rtype, content):
@@ -1531,11 +1528,10 @@ class WhatCountsAsAServiceTests(TestCase):
 
     def test_an_underscore_label_is_never_a_service(self):
         """RFC 8552 reserves them for metadata about a domain, not hosts in it.
-
-        The record type could not tell: TXT was excluded because it carries
-        policy, which caught _dmarc and missed sig1._domainkey: a DKIM
-        delegation published as a CNAME, so the type said "an address, and
-        therefore a service" while the name says it is a signing key.
+        The record type cannot tell: excluding TXT because it carries policy
+        covers _dmarc and misses sig1._domainkey, a DKIM delegation published
+        as a CNAME, where the type says "an address, and therefore a service"
+        while the name says it is a signing key.
         """
 
         self._record("dkim", "sig1._domainkey.example.com", "CNAME",
@@ -1547,8 +1543,9 @@ class WhatCountsAsAServiceTests(TestCase):
         self.assertEqual(names, {"example.com"})
 
     def test_a_cname_to_another_service_is_an_alias_of_it(self):
-        """One site, not two. Listed separately, www appeared on the board with
-        its own health, its own certificate and its own "not routed"."""
+        """One site, not two. Listed separately, www would appear on the board
+        with its own health, its own certificate and its own "not routed".
+        """
 
         self._record("site", "example.com", "CNAME", "example.pages.dev")
         self._record("www", "www.example.com", "CNAME", "example.com")
@@ -1609,11 +1606,10 @@ class KnownHostTests(TestCase):
 class AliasRecordPlacementTests(TestCase):
     """Where an alias's own declaration belongs.
 
-    Twice wrong before it was right. Dropped, the CNAME that makes www work
-    appeared on no service page at all: a real resource, still reconciled,
-    invisible. Merged into the target's facets, the two CNAMEs read as two
-    records competing for one name: HQ raised "only one of them can be the
-    answer" and called a working site Incomplete.
+    Dropped, the CNAME that makes www work appears on no service page at all: a
+    real resource, still reconciled, invisible. Merged into the target's
+    facets, the two CNAMEs read as two records competing for one name, and HQ
+    calls a working site Incomplete.
     """
 
     def _record(self, key, name, content):
@@ -1691,10 +1687,9 @@ class ExternallyAnsweredFacetTests(TestCase):
         )
 
         # A working arrangement, not a gap, and said once. Every facet that
-        # routes takes this branch, so a sentence in the card is printed once
-        # per card: Runtime and Ingress sat side by side reading the same line,
-        # with the origin note under them saying it a third time.
-        # Not needed is not missing: no gap is listed for the routing part.
+        # routes takes this branch, so a sentence in the card would be printed
+        # once per card, and again in the origin note. Not needed is not
+        # missing: no gap is listed for the routing part.
         self.assertNotIn("proxy", [facet.id for facet in response.context["missing_facets"]])
         self.assertLessEqual(response.content.count(b"Served by"), 1)
         # Asserted on the facet rather than on the page, because the
@@ -1844,10 +1839,9 @@ class PendingRemovalTests(TestCase):
 
 
 class ProxyDecisionTests(TestCase):
-    """Whether Cloudflare answers for a name is a question, not a knob.
-
-    Folded into Options with the TTL, the decision that determines whether the
-    address is published at all was made silently by a default.
+    """Whether Cloudflare answers for a name is a question, not a knob. Folded
+    into Options with the TTL, the decision that determines whether the address
+    is published at all would be made silently by a default.
     """
 
     def test_it_is_asked_rather_than_folded_away(self):
@@ -2010,10 +2004,9 @@ class RecordedResponsibilityTests(TestCase):
 
 
 class PendingIsNotAFaultTests(TestCase):
-    """A resource HQ has already asked about is not one to ask an operator about.
-
-    Adopting eight names put sixteen declarations in the queue at once, each
-    reading as a failure while the controller was on its way to them.
+    """A resource HQ has already asked about is not one to ask an operator
+    about. Adopting several names queues their declarations at once, and none
+    should read as a failure while the controller is on its way to them.
     """
 
     def _resource(self, **fields):
@@ -2040,7 +2033,8 @@ class PendingIsNotAFaultTests(TestCase):
 
     def test_one_the_controller_reached_and_said_nothing_about_still_does(self):
         """The rule must not swallow a resource that was applied and reported
-        nothing, which is the case the message was written for."""
+        nothing, which is the case the message is for.
+        """
 
         from application.attention import infrastructure
 

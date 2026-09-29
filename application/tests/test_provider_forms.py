@@ -258,10 +258,9 @@ class ResourceFormViewTests(TestCase):
         self.assertFalse(ManagedResource.objects.exists())
 
     def test_a_taken_name_is_worked_around_rather_than_refused(self):
-        """The name is HQ's own bookkeeping, so a clash is not the operator's problem.
-
-        Refused, this stopped a create to demand a different value for a field
-        that had not been shown and does not matter.
+        """The name is HQ's own bookkeeping, so a clash is not the operator's
+        problem. A create never stops to demand a different value for a field
+        that is not shown and does not matter.
         """
         ManagedResource.objects.create(
             key="app-example-com-dns", kind="adguard.rewrite", spec=REWRITE
