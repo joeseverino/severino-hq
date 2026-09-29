@@ -16,9 +16,9 @@
 #   PY=/path/to/python scripts/ci-local.sh
 #   SEVERINO_CI_PYTHONS="/a/bin/python /b/bin/python" scripts/ci-local.sh
 #
-# CI runs a 3.12/3.13/3.14 matrix. Interpreters are named by path rather than
+# CI runs a 3.13/3.14 matrix. Interpreters are named by path rather than
 # by version because each needs the pinned requirements installed; a bare
-# `python3.12` from PATH has no Django, and would report a failure that says
+# `python3.13` from PATH has no Django, and would report a failure that says
 # more about this machine than about the change.
 set -uo pipefail
 
@@ -209,6 +209,9 @@ fi
 step "container"
 if docker info >/dev/null 2>&1; then
   run "docker build" docker build -q -t severino-hq:ci-local .
+  run "image: Python 3.14, no package managers" docker run --rm --entrypoint python \
+    severino-hq:ci-local -c \
+    "import importlib.util, shutil, sys; sys.exit(0 if sys.version_info[:2] == (3, 14) and importlib.util.find_spec('pip') is None and shutil.which('pip') is None and shutil.which('uv') is None else 1)"
   run "image: manage.py check" docker run --rm --entrypoint python \
     --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
     --env DJANGO_ALLOWED_HOSTS=localhost severino-hq:ci-local manage.py check

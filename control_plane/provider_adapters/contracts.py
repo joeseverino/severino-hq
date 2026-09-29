@@ -125,14 +125,18 @@ class ProviderError(RuntimeError):
 def failure_of(exc: BaseException) -> str:
     """Which of ``FAILURES`` an exception from a provider read names, or "".
 
-    A ``ProviderError`` carries its own. An HTTP 401 refuses the credential and
-    a 403 one permission; any other failure to connect is the network.
+    A ``ProviderError`` carries its own, or else is what it was raised from: "did
+    not answer" wrapping a timeout is the network, and saying nothing would let
+    a caller mistake it for a fault in the code. An HTTP 401 refuses the
+    credential and a 403 one permission; any other failure to connect is the
+    network.
     """
 
     import urllib.error
 
     if isinstance(exc, ProviderError):
-        return exc.failure
+        cause = exc.__cause__
+        return exc.failure or (failure_of(cause) if cause is not None else "")
     if isinstance(exc, urllib.error.HTTPError):
         return {401: CREDENTIAL_REFUSAL, 403: PERMISSION_REFUSAL}.get(exc.code, "")
     if isinstance(exc, (urllib.error.URLError, TimeoutError, ConnectionError)):

@@ -117,6 +117,17 @@ set -- run --rm --network host --user 10001:10001 --cap-drop ALL \
     --env HQ_ACME_DIR=/var/lib/severino-hq/acme \
     --env "HQ_CONTROLLER_IMAGE=${image}" \
     --env "SEVERINO_HQ_SOURCE_REPOSITORY=${source_repository}"
+# The doorbells, so a sweep that finds an image HQ has not read rings the
+# registry read on the host instead of waiting for the daily floor. The same
+# directory the web container rings (SEVERINO_REGISTRY_DOORBELL in
+# docker-compose.yml): owned by the web UID and holding doorbells only, never a
+# credential (install-controller.sh). A directory, not the file, because a
+# ring is an atomic replace beside it.
+if [ -d /run/severino-hq ]; then
+    set -- "$@" \
+        --mount "type=bind,source=/run/severino-hq,target=/run/severino-hq-doorbells" \
+        --env SEVERINO_REGISTRY_DOORBELL=/run/severino-hq-doorbells/registry-doorbell
+fi
 if [ -s "${ca_file}" ]; then
     set -- "$@" \
         --mount "type=bind,source=${ca_file},target=/run/secrets/severino_controller_ca.pem,readonly" \

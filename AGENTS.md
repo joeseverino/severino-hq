@@ -18,7 +18,7 @@ pipeline accept them?": ruff and mypy at the pinned versions, the shell gates, t
 Django deployment check, `pip-audit`, the image build, and the suite *inside*
 that image, which is where composition runs it. It prints what it could not
 run rather than implying full coverage. Point it at every interpreter that has
-the requirements installed, because CI runs a 3.12/3.13/3.14 matrix and a
+the requirements installed, because CI runs a 3.13/3.14 matrix and a
 version-specific failure is otherwise found by pushing:
 
 ```sh

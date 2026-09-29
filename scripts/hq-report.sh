@@ -31,17 +31,24 @@ case "${RESULT:?}" in
     title="Not deployed: cancelled"
     summary="The deploy was cancelled. Production still runs the previous image." ;;
   *)
-    # Not approved, or it failed: the deploy job's log says which, and the
-    # catalog says what that means.
-    job="$(gh api "repos/${repo}/actions/runs/${THIS_RUN}/jobs?per_page=100" \
-      --jq '[.jobs[] | select(.name == "Deploy")] | first | .id // empty')"
-    logs=""
-    [ -n "${job}" ] && logs="$(gh api "repos/${repo}/actions/jobs/${job}/logs" 2>/dev/null || true)"
-    if [ -z "${logs}" ]; then
+    # Not approved, or approved and failed. GitHub records which: asked, not
+    # inferred from a log that may simply not be downloadable yet.
+    approved="$(gh api "repos/${repo}/actions/runs/${THIS_RUN}/approvals" \
+      --jq 'map(select(.state == "approved")) | length' 2>/dev/null || echo 0)"
+    if [ "${approved:-0}" = "0" ]; then
       conclusion=neutral
       title="Not deployed: not approved"
       summary="The deploy did not run. Production still runs the previous image. Run Deploy again to deploy this commit."
     else
+      # A finished job's log can take a few seconds to be served.
+      job="$(gh api "repos/${repo}/actions/runs/${THIS_RUN}/jobs?per_page=100" \
+        --jq '[.jobs[] | select(.name == "Deploy")] | first | .id // empty')"
+      logs=""
+      for _ in 1 2 3 4 5 6; do
+        [ -n "${job}" ] && logs="$(gh api "repos/${repo}/actions/jobs/${job}/logs" 2>/dev/null || true)"
+        [ -n "${logs}" ] && break
+        sleep 5
+      done
       diagnosis="$(printf '%s' "${logs}" | python3 scripts/diagnose.py)"
       conclusion=failure
       title="Not deployed: $(printf '%s' "${diagnosis}" | jq -r .title)"

@@ -827,14 +827,16 @@ def attention() -> tuple[Insight, ...]:
         if standing.state == VULNERABLE:
             fixed = _fixed_in(standing)
             known = len(standing.advisories) or len(standing.urgent)
+            # One upgrade however many advisories; none yet if no release fixes them.
+            waiting = not standing.newer
             items.append(
                 Insight(
-                    status="serious" if standing.serious else "attention",
+                    status="serious" if standing.serious and not waiting else "attention",
                     eyebrow="Containers",
                     key=f"container-advisory:{standing.image.name}:{standing.tag}",
-                    title=f"{label} has {standing.summary}",
+                    title=f"{label} has {standing.summary}" + ("; no release fixes it yet" if waiting else ""),
                     value=str(known),
-                    magnitude=known,
+                    magnitude=1,
                     body=f"Worst: {standing.worst}. Runs as {where}.{f' Fixed in {fixed}.' if fixed else ''}",
                     action="Open containers",
                     url=reverse("control_plane:containers"),
