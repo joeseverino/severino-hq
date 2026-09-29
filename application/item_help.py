@@ -19,10 +19,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from typing import Any
-from urllib.parse import urlencode
 
-from django.urls import NoReverseMatch, reverse
-
+from .action_links import command_url
 from .finding_model import Finding
 from .workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, WorkflowStep
 from .workflows import claim_identity
@@ -78,12 +76,9 @@ def remedy_link(capability: str, label: str, target: str = "", *, url: str = "")
     """
 
     if not url:
-        try:
-            url = reverse("command", kwargs={"name": capability})
-        except NoReverseMatch:
+        url = command_url(capability, target)
+        if not url:
             return None
-        if target:
-            url = f"{url}?{urlencode({'target': target})}"
     return ActionLink(REMEDY, label, "remote_write", url, capability=capability, target=target, recommended=True)
 
 

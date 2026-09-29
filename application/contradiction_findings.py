@@ -22,11 +22,11 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Mapping
 from typing import Any
-from urllib.parse import urlencode
 
 from control_plane.names import normalized_hostname
 from control_plane.providers import PROVIDERS
 
+from .action_links import command_url
 from .exposure import public_name
 from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, Remedy, fact_values
 
@@ -37,14 +37,12 @@ UPDATE_CAPABILITY = "infrastructure.resource.update"
 
 
 def _update(key: str, label: str) -> Remedy:
-    from django.urls import reverse
-
     return Remedy(
         capability=UPDATE_CAPABILITY,
         target=key,
         label=label,
         effect="",
-        url=f"{reverse('command', kwargs={'name': UPDATE_CAPABILITY})}?{urlencode({'target': key})}",
+        url=command_url(UPDATE_CAPABILITY, key),
     )
 
 

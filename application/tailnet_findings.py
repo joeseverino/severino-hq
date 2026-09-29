@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from urllib.parse import urlencode
-
 from control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
 
 from . import trusted_networks
+from .action_links import command_url
 from .finding_model import (
     OperatorStep,
     Finding,
@@ -126,8 +125,6 @@ def _policy_remedy(estate: FindingEstate, capability: str, label: str) -> tuple[
     through the gated policy kind, so a person still consents.
     """
 
-    from django.urls import NoReverseMatch, reverse
-
     policy = next(
         (
             node
@@ -138,9 +135,8 @@ def _policy_remedy(estate: FindingEstate, capability: str, label: str) -> tuple[
     )
     if policy is None:
         return ()
-    try:
-        url = reverse("command", kwargs={"name": capability})
-    except NoReverseMatch:
+    url = command_url(capability, policy.label) if policy is not None else ""
+    if not url:
         return ()
     return (
         Remedy(
@@ -148,7 +144,7 @@ def _policy_remedy(estate: FindingEstate, capability: str, label: str) -> tuple[
             target=policy.label,
             label=label,
             effect="",
-            url=f"{url}?{urlencode({'target': policy.label})}",
+            url=url,
         ),
     )
 

@@ -1042,6 +1042,28 @@ class OnePrimitiveTests(SimpleTestCase):
         ]
         self.assertEqual(found, [])
 
+    def test_a_command_is_linked_through_command_url(self):
+        """One builder, so a target is always encoded the way the form reads
+        it: a hand-built ``?target=`` opened a form with nothing chosen."""
+
+        import re
+
+        inline = re.compile(r"""reverse\(\s*["']command["']""")
+        scanned = list(self.sources("application", "control_plane", "core", "hq_api", "hq_mcp"))
+        found = [
+            relative
+            for relative, text in scanned
+            if relative != "application/action_links.py" and inline.search(text)
+        ]
+        self.assertIn("application/action_links.py", {relative for relative, _ in scanned})
+        self.assertEqual(found, [])
+        templates = [
+            path.relative_to(self.ROOT).as_posix()
+            for path in sorted((self.ROOT / "templates").rglob("*.html"))
+            if re.search(r"""\{%\s*url\s+["']command["']""", path.read_text(encoding="utf-8"))
+        ]
+        self.assertEqual(templates, [])
+
     def test_zone_membership_is_asked_of_in_zone(self):
         import re
 

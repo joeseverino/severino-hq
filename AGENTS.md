@@ -147,6 +147,11 @@ same review, and should fail when its path matches nothing rather than pass.
   `PLUGIN_API_VERSION` moves.
 - List views use `TableListMixin`; direct view mutations and MCP model access
   are rejected by architecture tests.
+- A link to a command's form is built by `application.action_links.command_url`
+  and nothing else, so its target is encoded the way the form reads it back.
+  `application/test_remedy_links.py` follows every remedy the findings, the
+  action queue and the pages emit, and fails on one that opens with no target
+  chosen or on the "replaces the whole record" form.
 - Public tests compose synthetic siblings. The assembled private image runs
   all real plugin suites together.
 - A dependency used by a plugin must survive a clean wheel install with

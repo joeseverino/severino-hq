@@ -6,10 +6,9 @@ import re
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
-from django.urls import reverse
-
 from control_plane.names import normalized_hostname
 
+from .action_links import command_url
 from .capabilities import CapabilitySpec
 from .connections import ConnectionAbility, ConnectionSpec
 from .connection_catalog import connection_catalog
@@ -169,9 +168,7 @@ def _command_matches_ability(
 
 
 def _command_item(spec: CapabilitySpec, relation: CommandRelation) -> DiscoveryItem:
-    url = reverse("command", kwargs={"name": spec.name})
-    if relation.kinds:
-        url = f"{url}?{urlencode([('kind', kind) for kind in relation.kinds])}"
+    url = command_url(spec.name, kinds=relation.kinds)
     return DiscoveryItem(
         kind="command",
         name=spec.name,

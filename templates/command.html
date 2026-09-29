@@ -95,6 +95,13 @@
       </div>
     {% endif %}
 
+    {% if unoffered_target %}
+      <div class="notice notice-attention">
+        <strong>{{ unoffered_target }} is not a target here</strong>
+        <p>The link asked for it, but this command does not act on it or you cannot read it. Choose a target below.</p>
+      </div>
+    {% endif %}
+
     <form method="post" class="stack-form command-form" data-command-form{% if hydrates_target %} data-command-hydrate-target{% endif %} data-submit-busy data-submit-label="Running…">
       {% csrf_token %}
       {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}

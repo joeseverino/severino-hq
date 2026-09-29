@@ -13,6 +13,7 @@ from django.urls import reverse
 from django.views import View
 from django.views.generic import DetailView, ListView
 
+from application.action_links import command_url
 from application.infrastructure import (
     PolicyError,
     declared_machines,
@@ -412,11 +413,7 @@ class InfrastructureDetailView(PageMixin, LoginRequiredMixin, DetailView):
                 PageAction(
                     "Keep the live version",
                     returning_to(
-                        reverse(
-                            "command",
-                            kwargs={"name": "infrastructure.resource.accept_observed"},
-                        )
-                        + f"?target={key}",
+                        command_url("infrastructure.resource.accept_observed", key),
                         self.request.get_full_path(),
                     ),
                     primary=True,

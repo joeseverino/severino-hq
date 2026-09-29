@@ -17,6 +17,7 @@ from django.urls import reverse
 
 from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
+from .action_links import command_url
 from .containers import VULNERABLE, Container, Standing, containers
 from .exposure import LEVELS, UNROUTED, exposure_of_container, status_at, worse
 from .images import version
@@ -219,7 +220,7 @@ def socket_holder_link(item: Container) -> ActionLink:
         "mark-socket-holder",
         f"Mark {item.running.name} as holding the socket (a socket proxy or management agent)",
         "remote_write",
-        f"{reverse('command', kwargs={'name': UPDATE_CAPABILITY})}?target={key}",
+        command_url(UPDATE_CAPABILITY, key),
         capability=UPDATE_CAPABILITY,
         target=key,
         reason="Set holds_docker_socket on its declaration; the socket stays listed, never an action item.",

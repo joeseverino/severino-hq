@@ -25,6 +25,7 @@ from .connection_catalog import ConnectionGroup, connection_catalog
 from .action_links import (
     ActionLink as TopologyAction,
     capability_action_link,
+    command_url,
     connection_action_links,
     topology_url,
 )
@@ -110,8 +111,7 @@ def _resource_actions(
                 "keep_live",
                 "Keep the live version",
                 "remote_write",
-                f"{reverse('command', kwargs={'name': 'infrastructure.resource.accept_observed'})}"
-                f"?target={key}",
+                command_url("infrastructure.resource.accept_observed", key),
                 capability="infrastructure.resource.accept_observed",
                 target=key,
             )

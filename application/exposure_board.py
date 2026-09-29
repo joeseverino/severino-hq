@@ -10,12 +10,9 @@ image has.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from urllib.parse import urlencode
-
-from django.urls import reverse
-
 from control_plane.providers import PROVIDERS
 
+from .action_links import command_url
 from .container_attention import UPDATE_CAPABILITY
 from .entity_links import entity_link
 from .exposure import LABELS, LEVELS, OPEN, exposure_of_name, status_rank
@@ -40,13 +37,12 @@ def gate_links(service) -> tuple[ActionLink, ...]:
             provider = PROVIDERS.get(claim.kind)
             if provider is None or provider.ingress_policy is None:
                 continue
-            query = urlencode({"target": claim.resource_key})
             found.append(
                 ActionLink(
                     "gate",
                     f"Put an access list in front of {claim.resource_key}",
                     "remote_write",
-                    f"{reverse('command', kwargs={'name': UPDATE_CAPABILITY})}?{query}",
+                    command_url(UPDATE_CAPABILITY, claim.resource_key),
                     capability=UPDATE_CAPABILITY,
                     target=claim.resource_key,
                     reason="Set its access list, so the proxy admits only whom the list allows.",
