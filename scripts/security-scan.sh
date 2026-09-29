@@ -97,7 +97,7 @@ for gate in $gates; do
             --show-details --format json --output "$work/scorecard.json" \
             2>"$work/scorecard.log" \
             || { cat "$work/scorecard.log" >&2; exit 1; }
-        "$python" scripts/scorecard_report.py "$work/scorecard.json" "$src"
+        "$python" scripts/scorecard_report.py "$work/scorecard.json"
         echo "[security] Scorecard clean"
         ;;
     esac

@@ -232,6 +232,9 @@
   /* Two spacing steps, and only two. `--layout-gap` separates siblings inside a
      grid; `--stack-gap` separates stacked page sections. */
   --layout-gap: var(--space-8);
+  /* How much of an identifier a table cell shows before cutting it; the row
+     expander shows the rest. */
+  --identifier-max: 32ch;
   /* Track floors for a band of a fixed number of cells, so it lays out as a
      whole number of even rows at any width: 4, 2 or 1 columns (never 3+1),
      or 3 or 1. Read where they are used, so 100% is that grid's width.
@@ -1409,6 +1412,8 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 /* One height for every control in the bar, so a wrapped row still reads as one
    row of controls rather than a field, two shorter selects and a taller button. */
 .filter-bar > input, .filter-bar > select, .filter-bar > .btn { height: var(--control-size); box-sizing: border-box; }
+/* A select is as wide as its longest option unless told otherwise. */
+.filter-bar > select { max-width: 100%; min-width: 0; }
 .filter-bar > .btn { padding-block: 0; }
 /* One field and its button on a line: the field takes the room. */
 .field-row { display: flex; gap: var(--space-4); align-items: center; margin-top: var(--space-6); }
@@ -1580,7 +1585,9 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    so "hq-proxy" is never "hq-" over "proxy"; the column widens instead, and a
    table too wide for its box scrolls in it. One longer than any column can
    hold is cut with an ellipsis, which the row's expander lifts. */
-.data-table td code { white-space: nowrap; overflow-wrap: normal; display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+/* An identifier never breaks and never sets the table's width: past
+   --identifier-max it is cut, and the row expander shows it whole. */
+.data-table td code { white-space: nowrap; overflow-wrap: normal; display: inline-block; max-width: min(100%, var(--identifier-max)); overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 .icon-link {
   display: inline-flex;
   align-items: center;
@@ -4219,7 +4226,7 @@ textarea.code {
 /* A hostname is one token: where the table sizes to its content, it scrolls
    rather than breaking it. A locked grid cannot grow a column, so there the
    name breaks like every other cell rather than running under the next one. */
-.service-name strong { white-space: nowrap; }
+.service-name strong { white-space: nowrap; min-width: 0; max-width: var(--identifier-max); overflow: hidden; text-overflow: ellipsis; }
 .service-name > form { display: inline-flex; }
 .pin-toggle {
   background: none; border: 0; box-shadow: none; padding: 0 var(--space-1); cursor: pointer;
