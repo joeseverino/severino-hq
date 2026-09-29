@@ -259,13 +259,15 @@ def read_image(name: str, references: tuple[str, ...]) -> dict[str, Any]:
     running tag and the newest tag of the same shape: what an upgrade would pin."""
 
     from .images import ImageRef, newer, version
-    from .oci_registry import RegistryReadError, digest_of, labels, tags
+    from .oci_registry import RegistryPrivate, RegistryReadError, digest_of, labels, tags
 
     images = [image for image in (ImageRef.parse(reference) for reference in references) if image is not None]
     if not images:
         raise LookupNotFound(f"{name} names no image.")
     try:
         listed = [tag for tag in tags(images[0]) if version(tag) and not tag.startswith("sha256-")]
+    except RegistryPrivate as exc:
+        raise LookupNotFound(str(exc)) from exc
     except RegistryReadError as exc:
         raise LookupUnavailable(str(exc)) from exc
     try:
@@ -302,13 +304,15 @@ def read_digest(key: str) -> dict[str, Any]:
 
     from .attestations import reduce
     from .images import ImageRef
-    from .oci_registry import RegistryReadError, attestations
+    from .oci_registry import RegistryPrivate, RegistryReadError, attestations
 
     image = ImageRef.parse(key)
     if image is None or not image.digest:
         raise LookupNotFound(f"{key} names no digest.")
     try:
         attached = attestations(image, image.digest)
+    except RegistryPrivate as exc:
+        raise LookupNotFound(str(exc)) from exc
     except RegistryReadError as exc:
         raise LookupUnavailable(str(exc)) from exc
     return {"digest": key, "image": image.name, "platform_digest": attached["platform_digest"], **reduce(attached["statements"])}
@@ -475,7 +479,12 @@ def _report(
         else:
             answered += 1
         kept[subject] = {**record, "read_at": now.isoformat()}
-    if failures and not answered:
+    # Unreadable only when nothing can be said at all. One subject failing
+    # while others were read before must not discard those readings: storing an
+    # empty report replaced every image's reading whenever the one due image
+    # was the one the registry refused.
+    readable = any(not kept[subject].get("unread") for subject in wanted if subject in kept)
+    if failures and not answered and not readable:
         return {"ok": False, "records": [], "error": failures[0]}
     return {"ok": True, "records": [kept[subject] for subject in wanted if subject in kept]}
 

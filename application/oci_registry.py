@@ -44,6 +44,12 @@ class RegistryReadError(Exception):
     """The registry could not be read, in words a person can act on."""
 
 
+class RegistryPrivate(RegistryReadError):
+    """The registry will not hand an anonymous reader this image: an answer
+    about the image, not an outage, so it is kept as the image's reading
+    rather than retried as a failure."""
+
+
 def _public_host(host: str) -> bool:
     """Whether every address ``host`` resolves to is on the public internet."""
 
@@ -269,7 +275,7 @@ def _anonymous_token(challenge: str, image: ImageRef) -> str:
         body, _headers = _request(url, "")
     except urllib.error.HTTPError as exc:
         exc.close()
-        raise RegistryReadError(
+        raise RegistryPrivate(
             f"{image.name}: the registry refused an anonymous read (HTTP {exc.code}); the image may be private."
         ) from exc
     token = str(body.get("token") or body.get("access_token") or "")
