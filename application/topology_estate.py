@@ -15,9 +15,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from itertools import combinations
 from typing import Any
 
 
+from control_plane.observations import OBSERVATIONS
 from control_plane.providers import PROVIDERS
 
 
@@ -91,6 +93,7 @@ def add_estate(
     _fold(nodes, edges, estate)
     _hosted(nodes, edges, resources, estate)
     _reading_edges(nodes, edges, estate)
+    _connects_edges(nodes, edges, estate)
     _derived_from_readings(nodes, edges, resources, estate)
     _observed(nodes, edges, estate)
     return dict(estate.subjects)
@@ -443,6 +446,34 @@ def _holders(provider, record, by_ref, by_provider) -> list[str]:
         for name in provider.connection_providers
         for node_id in by_provider.get(name, [])
     ]
+
+
+def _connects_edges(nodes, edges, estate: _Estate) -> None:
+    """Declared containers a connecting record names together talk to each other.
+
+    Any reading whose spec says it ``connects`` draws them: a Docker network
+    today, whatever groups containers tomorrow.
+    """
+
+    declared = {
+        key: node_id
+        for node_id, subject in estate.subjects.items()
+        if node_id in nodes
+        for key in subject.containers
+    }
+    if not declared:
+        return
+    for spec in OBSERVATIONS.values():
+        if spec.connects is None:
+            continue
+        for _snapshot, record in inventory_records(spec.kind):
+            if not spec.connects(record):
+                continue
+            members = sorted({declared[key] for key in spec.containers(record) if key in declared})
+            detail = f"{spec.label} {spec.title(record)}".strip()
+            for one, other in combinations(members, 2):
+                relation = replace(edge_between(one, other, "talks_to"), detail=detail)
+                edges[relation.id] = relation
 
 
 def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
