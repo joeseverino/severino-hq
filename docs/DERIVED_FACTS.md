@@ -303,6 +303,7 @@ reads the walked paths and stored readings for these, polling nothing:
 | `split-horizon-disagrees` | The public and internal records end on different machines | Repoint the declared rewrite |
 | `published-port-unfronted` | A container port answers the internet and no route leads to it | The compose change on its page |
 | `tag-granted-to-nobody` | A grant names a tag no read device carries | Edit the declared tailnet policy |
+| `served-certificate-not-held` | The controller found a consumer serving a certificate other than the one HQ installed | Install it again (reconcile) |
 
 A machine where a container publishes 80 or 443 itself is never called
 unserved, since HQ cannot enumerate what it answers for. Removal is

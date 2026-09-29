@@ -311,12 +311,69 @@ def _unfronted_ports() -> tuple[Finding, ...]:
     return tuple(found)
 
 
+# ----- A host serving a certificate other than the one HQ installed ---------
+
+
+def _served_not_held() -> tuple[Finding, ...]:
+    """A consumer the controller found serving a different certificate.
+
+    The controller compares what each consumer serves with the fingerprint it
+    installed; HQ holds and renews one certificate while the host hands out
+    another, so a renewal changes nothing a browser sees.
+    """
+
+    from .infrastructure import enabled_resources
+
+    found = []
+    for resource in enabled_resources():
+        consumers = (resource.status or {}).get("consumers") or []
+        wrong = [
+            item for item in consumers
+            if isinstance(item, dict) and item.get("matches_expected") is False
+        ]
+        if not wrong:
+            continue
+        names = ", ".join(
+            str(item.get("domain") or item.get("consumer") or "") for item in wrong
+        )
+        found.append(
+            Finding(
+                rule="served-certificate-not-held",
+                subject=f"resource:{resource.key}",
+                title=f"{names} serves a certificate other than {resource.key}",
+                severity="serious",
+                explanation=(
+                    f"HQ holds and renews {resource.key}, and the controller found "
+                    f"{names} serving a different certificate. A renewal changes "
+                    "nothing a visitor sees until the host serves the one HQ installs."
+                ),
+                evidence=tuple(
+                    (
+                        str(item.get("consumer") or item.get("domain") or ""),
+                        f"serves {str(item.get('fingerprint_sha256', ''))[:12]}…",
+                    )
+                    for item in wrong
+                ),
+                remedies=(
+                    Remedy(
+                        capability="infrastructure.reconcile",
+                        target=resource.key,
+                        label=f"Install {resource.key} again",
+                        effect="",
+                    ),
+                ),
+            )
+        )
+    return tuple(found)
+
+
 _DETECTORS = (
     _answered_by_nothing,
     _routed_to_stopped,
     _gates_guarding_nothing,
     _split_horizon,
     _unfronted_ports,
+    _served_not_held,
 )
 
 
@@ -386,6 +443,14 @@ def _raised(rule: str):
 
 
 RULES: tuple[FindingRule, ...] = (
+    FindingRule(
+        "served-certificate-not-held",
+        "A host serving a certificate HQ does not hold",
+        "serious",
+        _raised("served-certificate-not-held"),
+        operator_action="Install the certificate HQ holds again, or point the host at it.",
+        no_help_reason="HQ installs its certificate; it cannot tell why the host serves another.",
+    ),
     FindingRule(
         "public-name-served-by-nothing",
         "A public name nothing at its address serves",

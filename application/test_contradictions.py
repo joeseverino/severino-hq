@@ -118,6 +118,30 @@ class ContradictionTests(TestCase):
         self.assertIn("stray on edge-1 answers the internet on port 9000", finding.title)
 
 
+class ServedCertificateTests(TestCase):
+    def test_a_host_serving_another_certificate_offers_the_reinstall(self):
+        from .test_paths import declare_certificate
+
+        declare_certificate(matches=False)
+
+        (finding,) = raised("served-certificate-not-held")
+
+        self.assertEqual(finding.subject, "resource:example-wildcard")
+        self.assertIn("app.example.com serves a certificate other than example-wildcard", finding.title)
+        # The node's own reconcile action supplies the link where it is enabled.
+        self.assertEqual(
+            [(remedy.capability, remedy.target) for remedy in finding.remedies],
+            [("infrastructure.reconcile", "example-wildcard")],
+        )
+
+    def test_a_host_serving_the_held_certificate_is_quiet(self):
+        from .test_paths import declare_certificate
+
+        declare_certificate(matches=True)
+
+        self.assertEqual(raised("served-certificate-not-held"), ())
+
+
 class UnwornTagTests(TestCase):
     def test_a_tag_no_device_wears_is_named_and_ports_are_not_part_of_it(self):
         ProviderInventory.objects.create(
