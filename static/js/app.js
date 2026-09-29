@@ -1496,3 +1496,23 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
     map?.scrollTo({ top: 0, behavior: "auto" });
   }
 });
+
+// A block meant to be pasted somewhere else: its button copies it. Shown only
+// where the browser allows writing the clipboard; the block itself is plain
+// selectable text either way.
+document.addEventListener("DOMContentLoaded", () => {
+  if (!navigator.clipboard) return;
+  document.querySelectorAll("[data-copy-target]").forEach((button) => {
+    const source = document.getElementById(button.dataset.copyTarget);
+    if (!source) return;
+    button.hidden = false;
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(source.textContent);
+        button.textContent = "Copied";
+      } catch {
+        button.textContent = "Select it to copy";
+      }
+    });
+  });
+});

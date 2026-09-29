@@ -82,20 +82,21 @@ def _socket_held(container: Any) -> bool | None:
         return None
     if _no_socket([mount for mount in mounts if mount.get("type") == "bind"]):
         return True
-    from .containers import socket_holders
-
-    return (container.machine.name, container.running.name) in socket_holders()
+    return holds_socket(container)
 
 
 def _no_socket(binds) -> bool:
     return not any(mount.get("source") in DOCKER_SOCKETS for mount in binds)
 
 
-def _no_writable_system_path(binds, docker_held: bool = False) -> bool:
-    return not any(
-        system_path(source) and not mount.get("read_only")
+def writable_system_binds(binds, docker_held: bool = False) -> tuple[Mapping[str, Any], ...]:
+    """The bind mounts that let it write a system path."""
+
+    return tuple(
+        mount
         for mount in binds
         if (source := str(mount.get("source", ""))) not in DOCKER_SOCKETS
+        and system_path(source) and not mount.get("read_only")
         # Docker's own data is no more than its socket already reaches, for a
         # container declared to hold the socket (a management agent reads
         # volumes there). Any other system path still counts.
@@ -103,14 +104,20 @@ def _no_writable_system_path(binds, docker_held: bool = False) -> bool:
     )
 
 
+def holds_socket(container: Any) -> bool:
+    """Whether its declaration says holding the Docker socket is its job."""
+
+    from .containers import socket_holders
+
+    return (container.machine.name, container.running.name) in socket_holders()
+
+
 def _system_path_kept(container: Any) -> bool | None:
     mounts = container.mounts
     if mounts is None:
         return None
-    from .containers import socket_holders
-
-    held = (container.machine.name, container.running.name) in socket_holders()
-    return _no_writable_system_path([mount for mount in mounts if mount.get("type") == "bind"], held)
+    binds = [mount for mount in mounts if mount.get("type") == "bind"]
+    return not writable_system_binds(binds, holds_socket(container))
 
 
 def _confined(runtime: Mapping[str, Any]) -> bool:

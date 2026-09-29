@@ -61,6 +61,7 @@ FRONTEND = "example-web-frontend-with-a-deliberately-long-name"
 HOSTNAMES = 12
 CONTAINERS = 20
 FINDINGS = 10
+PORTAINER = "an-example-portainer-connection-with-a-long-name"
 
 
 def _hostname(index):
@@ -202,9 +203,11 @@ def _containers():
         {
             "name": FRONTEND,
             "host": MACHINE,
+            "stack": FRONTEND,
             "image": "registry.example.com/example/a-web-frontend-image-with-a-long-name:2026.09.28",
             "state": "running",
             "ports": [8080],
+            "connection_ref": PORTAINER,
         }
     ] + [
         {
@@ -220,6 +223,55 @@ def _containers():
         kind=CONTAINER_KIND,
         defaults={"records": records, "reachable": True, "observed_at": timezone.now()},
     )
+    _hardening()
+
+
+def _hardening():
+    """The frontend, watched, failing every check a compose file can meet: its
+    page carries the whole compose change, and the action items a button each."""
+
+    ManagedResource.objects.create(
+        key="dense-frontend",
+        kind=CONTAINER_KIND,
+        spec={"connection_ref": PORTAINER, "host": MACHINE, "name": FRONTEND},
+    )
+    source = "/opt/example-applications/a-web-frontend-with-a-long-name/configuration"
+    for kind, record in (
+        (
+            "portainer.runtime",
+            {
+                "connection_ref": PORTAINER,
+                "host": MACHINE,
+                "container": FRONTEND,
+                "service": "a-web-frontend-service-with-a-deliberately-long-name",
+                "privileged": True,
+                "pid_mode": "host",
+                "cap_add": ["SYS_ADMIN", "NET_BIND_SERVICE"],
+                "security_opt": ["seccomp=unconfined"],
+                "port_bindings": [{"container_port": "8080/tcp", "host_ip": "0.0.0.0", "host_port": "8080"}],
+                "mounts": [
+                    {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True},
+                    {"type": "bind", "source": "/etc/example-configuration-directory", "destination": "/host-etc", "read_only": False},
+                    {"type": "bind", "source": source, "destination": "/srv/configuration", "read_only": False},
+                ],
+            },
+        ),
+        (
+            "portainer.compose_project",
+            {
+                "connection_ref": PORTAINER,
+                "host": MACHINE,
+                "name": FRONTEND,
+                "config_files": [
+                    "/opt/example-applications/a-web-frontend-with-a-long-name/docker-compose.production.yml"
+                ],
+            },
+        ),
+    ):
+        ProviderInventory.objects.update_or_create(
+            kind=kind,
+            defaults={"records": [record], "reachable": True, "observed_at": timezone.now()},
+        )
 
 
 def _glance():
@@ -286,7 +338,7 @@ def build_dense_estate():
     record_connections(
         [
             {
-                "connection_ref": "an-example-portainer-connection-with-a-long-name",
+                "connection_ref": PORTAINER,
                 "provider": "portainer",
                 "endpoint": "https://a-portainer-endpoint-with-a-long-name.example.com",
                 "reaches": [MACHINE, EDGE_MACHINE],
@@ -324,6 +376,10 @@ DENSE_PAGES = {
         ExitStack,
     ),
     "dense/containers": (lambda: reverse("control_plane:containers"), ExitStack),
+    "dense/container": (
+        lambda: reverse("control_plane:detail", kwargs={"key": "dense-frontend"}),
+        ExitStack,
+    ),
     "dense/services": (lambda: reverse("control_plane:services"), ExitStack),
     "dense/findings": (lambda: reverse("control_plane:findings"), ExitStack),
     "dense/action-items": (lambda: reverse("action_items"), ExitStack),
