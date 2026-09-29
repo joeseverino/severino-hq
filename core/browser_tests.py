@@ -67,12 +67,18 @@ SELECTORS = {
     # Where the contrast check samples text: the page and the header over it.
     "contrast_scope": "main, .site-header",
     # Filled boxes that are not tiles: controls, tables, code, charts, and
-    # anything floating over the page. A menu and the topology map lay out
-    # away from the box they sit in, so what they hold is not measured.
+    # anything floating over the page.
     "tile_exempt": (
         ".btn, .pill, button, input, select, textarea, table, pre, code, svg, canvas,"
         " dialog, [data-menu]"
     ),
+    # A control inside a tile is measured by its own box, not its text.
+    "tile_control": ".btn, button",
+    # A menu and the topology map lay out away from the box they sit in, so
+    # what they hold is not measured against it.
+    "tile_detached": "dialog, [data-menu], .topology-map",
+    # A disclosure in the page, which the tile check opens to lay out.
+    "disclosure": "main details:not([data-menu])",
     # A band's cells. Stats inside a card are the one band laid out with real
     # gaps instead of padded cells, so the KPI band is not listed.
     "band_cell": (
@@ -454,9 +460,9 @@ _UNPADDED_CELLS = "(selector) => {" + _DESCRIBE + """
 # A filled box whose text or buttons touch its edge. The frame rule strips a
 # nested surface's border and padding together; one that keeps its own fill is
 # still a tile, and without padding its content sits on the fill's edge.
-_UNPADDED_TILES = "(exempt) => {" + _DESCRIBE + """
+_UNPADDED_TILES = "([exempt, control, detached, disclosure]) => {" + _DESCRIBE + """
   // What a disclosure holds is laid out only when it is open.
-  for (const details of document.querySelectorAll('main details:not([data-menu])')) details.open = true;
+  for (const details of document.querySelectorAll(disclosure)) details.open = true;
   const fill = (el) => {
     const c = getComputedStyle(el).backgroundColor;
     return c === 'transparent' || /rgba\\(.*, 0\\)$/.test(c) ? '' : c;
@@ -483,9 +489,9 @@ _UNPADDED_TILES = "(exempt) => {" + _DESCRIBE + """
       const holder = node.parentElement.getBoundingClientRect();
       if (!node.textContent.trim() || !node.parentElement.checkVisibility() || holder.width <= 1) continue;
       const within = node.parentElement;
-      if (within.closest('dialog, [data-menu], .topology-map')) continue;
-      if (within.closest(exempt) && !within.closest('.btn, button')) continue;
-      const box = node.parentElement.closest('.btn, button') || node;
+      if (within.closest(detached)) continue;
+      if (within.closest(exempt) && !within.closest(control)) continue;
+      const box = node.parentElement.closest(control) || node;
       let at;
       if (box === node) { range.selectNodeContents(node); at = range.getBoundingClientRect(); }
       else at = box.getBoundingClientRect();
@@ -809,7 +815,10 @@ class LayoutBrowserTests(SimpleTestCase):
     def test_a_filled_box_keeps_its_padding(self):
         self.across(
             lambda _name: self.assertEqual(
-                self.page.evaluate(_UNPADDED_TILES, SELECTORS["tile_exempt"]), []
+                self.page.evaluate(
+                    _UNPADDED_TILES,
+                    [SELECTORS["tile_exempt"], SELECTORS["tile_control"], SELECTORS["tile_detached"], SELECTORS["disclosure"]],
+                ), []
             )
         )
 
