@@ -306,7 +306,7 @@ jobs:
       fail-fast: false
       matrix:
         # Checks holds this to scripts/toolchain.env: a matrix cannot read it.
-        python: ["3.12", "3.13", "3.14"]
+        python: ["3.13", "3.14"]
     env:
       DJANGO_DEBUG: "1"
       DJANGO_SECRET_KEY: ci-only-secret-key-not-for-production
@@ -455,6 +455,12 @@ jobs:
             --build-arg "HQ_REVISION=$HEAD_SHA" \
             -t "$image" .
           echo "image=$image" >> "$GITHUB_OUTPUT"
+      - name: It runs Python 3.14 without package managers
+        env:
+          IMAGE: ${{ steps.build.outputs.image }}
+        run: |
+          docker run --rm --entrypoint python "$IMAGE" -c \
+            "import importlib.util, shutil, sys; sys.exit(0 if sys.version_info[:2] == (3, 14) and importlib.util.find_spec('pip') is None and shutil.which('pip') is None and shutil.which('uv') is None else 1)"
       - name: It comes up healthy
         env:
           IMAGE: ${{ steps.build.outputs.image }}

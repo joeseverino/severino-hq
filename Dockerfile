@@ -2,7 +2,7 @@
 # Multi-stage: build wheel deps, then a slim runtime as a non-root user.
 
 # Both stages pin the base by digest; Dependabot bumps it on these lines.
-FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS build
+FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS build
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_ROOT_USER_ACTION=ignore
@@ -14,12 +14,18 @@ COPY requirements.txt .
 RUN pip install --require-hashes --prefix=/install -r requirements.txt
 
 
-FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS runtime
+FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS runtime
 
 # Non-root user. UID/GID 10001 to be predictable in volume permissions.
 # `apt-get upgrade` applies Debian security fixes published after the base
 # image was last rebuilt; the image scan fails on any fixed HIGH/CRITICAL.
-RUN groupadd --system --gid 10001 severino \
+#
+# No package manager at runtime. Dependencies come from the build stage, and
+# the composition installs extension wheels in a stage of its own
+# (composition/Dockerfile), so pip here would only be code nothing runs:
+# its vendored libraries still count against the image in a scan.
+RUN python -m pip uninstall --yes pip \
+    && groupadd --system --gid 10001 severino \
     && useradd  --system --uid 10001 --gid severino \
                 --home /app --shell /usr/sbin/nologin severino \
     && apt-get update && apt-get upgrade -y \
@@ -31,7 +37,6 @@ RUN groupadd --system --gid 10001 severino \
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONHASHSEED=random \
-    PIP_NO_CACHE_DIR=1 \
     DJANGO_SETTINGS_MODULE=config.settings \
     SEVERINO_DATABASE_PATH=/data/severino.sqlite3 \
     SEVERINO_MEDIA_ROOT=/media \

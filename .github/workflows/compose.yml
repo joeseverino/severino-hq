@@ -111,7 +111,7 @@ jobs:
           jq -r '.extensions | length as $n | "composing \($n) extension(s)"' composition-set.json
 
       - name: Mask the extension names for the rest of the job
-        # Later steps shell out to gh, pip, and Django, and those echo
+        # Later steps shell out to gh, uv, and Django, and those echo
         # repository names, wheel filenames, app labels and (when a test fails)
         # table and column names. This repository is public and so are its
         # logs. Masking once here covers every later step, including output
@@ -541,9 +541,9 @@ jobs:
 
       - name: Build coordinated extension branches
         # Branch code is unreviewed, and this job holds a registry credential
-        # and an OIDC identity. So it builds inside the verified host image,
+        # and an OIDC identity. So it builds in a throwaway Python installer
         # with no token, credential file or docker socket, from a copy with no
-        # .git.
+        # .git. This is the same Python ABI as the verified host image.
         if: github.event_name == 'pull_request' && steps.coordinated.outputs.found == 'true'
         env:
           GH_TOKEN: ${{ steps.reader.outputs.token }}
@@ -552,6 +552,9 @@ jobs:
           set -euo pipefail
           mkdir -p candidate-wheels candidates
           chmod 0777 candidate-wheels
+          docker build -f composition/Dockerfile --target installer-base \
+            --build-arg HQ_IMAGE="$HQ_IMAGE" \
+            -t "severino-hq-installer:$GITHUB_SHA" .
           while IFS='=' read -r repo sha; do
             [ -n "$repo" ] || continue
             dir="candidates/$(basename "$repo")"
@@ -559,10 +562,11 @@ jobs:
             git -C "$dir" checkout --quiet --detach "$sha"
             rm -rf "$dir/.git"
             chmod -R a+rwX "$dir"
-            docker run --rm --network bridge --user 10001:10001 --env HOME=/tmp \
+            docker run --rm --network bridge --user 10001:10001 \
+              --env HOME=/tmp --env UV_PYTHON_DOWNLOADS=never \
               --volume "$PWD/$dir:/src" --volume "$PWD/candidate-wheels:/out" \
-              --entrypoint python "$HQ_IMAGE" \
-              -m pip wheel --no-deps --no-cache-dir --wheel-dir /out /src
+              --entrypoint uv "severino-hq-installer:$GITHUB_SHA" \
+              build --python /usr/local/bin/python --no-cache --wheel --out-dir /out /src
           done < coordinated.txt
 
       - name: Stage the candidate
@@ -582,23 +586,33 @@ jobs:
           HQ_IMAGE: ${{ steps.host.outputs.image }}
           DIGESTS: ${{ steps.candidate.outputs.digests }}
           REFERENCES: ${{ steps.candidate.outputs.references }}
+          INSTALLER_IMAGE: severino-hq-installer:${{ github.sha }}
         run: |
           set -euo pipefail
           docker build -f - -t "severino-hq-candidate:$GITHUB_SHA" \
             --build-arg HQ_IMAGE="$HQ_IMAGE" \
+            --build-arg INSTALLER_IMAGE="$INSTALLER_IMAGE" \
             --build-arg PLUGIN_WHEEL_DIGESTS="$DIGESTS" \
             --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="$REFERENCES" . <<'DOCKERFILE'
           ARG HQ_IMAGE
-          FROM ${HQ_IMAGE}
+          ARG INSTALLER_IMAGE
+          FROM ${INSTALLER_IMAGE} AS installer
           ARG PLUGIN_WHEEL_DIGESTS
-          ARG SEVERINO_HQ_PLUGIN_REFERENCES
-          USER root
           COPY build/candidate/*.whl /tmp/plugin/
           RUN set -eu; \
-              printf '%s\n' "${PLUGIN_WHEEL_DIGESTS}" | awk 'NF { print "/tmp/plugin/" $2 " --hash=sha256:" $1 }' \
-                > /tmp/plugin/requirements.txt; \
-              pip install --no-cache-dir --no-deps --require-hashes -r /tmp/plugin/requirements.txt; \
-              rm -rf /tmp/plugin
+              printf '%s\n' "${PLUGIN_WHEEL_DIGESTS}" | awk 'NF { \
+                  if (NF != 2 || length($1) != 64 || $1 !~ /^[0-9a-f]+$/) exit 1; \
+                  print "/tmp/plugin/" $2 " --hash=sha256:" $1 }' > /tmp/plugin/requirements.txt; \
+              expected=$(grep -c . /tmp/plugin/requirements.txt); \
+              found=$(find /tmp/plugin -maxdepth 1 -type f -name '*.whl' | wc -l); \
+              test "$expected" -eq "$found"; \
+              uv pip install --python /usr/local/bin/python --prefix /install \
+                --no-cache --no-deps --require-hashes -r /tmp/plugin/requirements.txt
+          FROM ${HQ_IMAGE} AS runtime
+          ARG SEVERINO_HQ_PLUGIN_REFERENCES
+          USER root
+          COPY --from=installer /install /usr/local
+          RUN ! command -v pip && ! python -c 'import pip'
           ENV SEVERINO_HQ_PLUGINS=${SEVERINO_HQ_PLUGIN_REFERENCES} \
               SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION=0
           USER severino

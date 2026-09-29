@@ -933,7 +933,7 @@ class AssertionPrecisionTests(SimpleTestCase):
         for path in sorted(root.rglob("test*.py")) + sorted(root.rglob("tests.py")):
             # Any virtualenv in the tree, whatever it happens to be called, and
             # anything installed into one. Matching the single literal ".venv"
-            # missed a sibling `.venv312` holding the 3.12 half of the CI matrix,
+            # missed a sibling `.venv312` holding an older interpreter,
             # and this test then reported Django's own `testcases.py` as three
             # offenders: a failure about the machine rather than the change.
             if any(

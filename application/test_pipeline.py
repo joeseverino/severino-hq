@@ -112,16 +112,12 @@ class CoordinatedBranchTests(SimpleTestCase):
         build = self.steps[named(self.steps, "Build coordinated extension branches")]
         run = build.split("run: |", 1)[1]
         self.assertIn('rm -rf "$dir/.git"', run)
-        self.assertIn('--entrypoint python "$HQ_IMAGE"', run)
+        self.assertIn('docker build -f composition/Dockerfile --target installer-base', run)
+        self.assertIn('--entrypoint uv "severino-hq-installer:$GITHUB_SHA"', run)
+        self.assertIn('build --python /usr/local/bin/python --no-cache --wheel', run)
         self.assertNotIn("--env GH_TOKEN", run)
         self.assertNotIn("docker.sock", run)
-        for builder in ("uv build", "pip wheel"):
-            with self.subTest(builder=builder):
-                outside = [
-                    line for line in run.splitlines()
-                    if builder in line and "-m pip wheel" not in line
-                ]
-                self.assertEqual(outside, [], "a build runs on the runner, beside its credentials")
+        self.assertNotIn("pip wheel", run)
 
     def test_the_admitted_build_is_skipped_for_a_coordinated_change(self):
         for name in ("Merge locks and stage the build context", "Build composed image"):

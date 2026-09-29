@@ -309,6 +309,11 @@ docker compose run --rm app python manage.py createsuperuser
 docker compose up -d
 ```
 
+The host and composed images run Python 3.14. The host installs its locked
+dependencies in a build stage; composition installs hash-verified extension
+wheels in a separate installer stage. Neither production image contains pip or
+uv.
+
 The container uses host networking and binds Uvicorn to port `8000`. Host
 networking is required so `/mcp/` sees the real Tailscale peer address rather
 than Docker's bridge gateway. A co-located reverse proxy should forward the
