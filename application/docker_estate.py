@@ -315,6 +315,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Adopt it if you started it; otherwise remove it on its machine with docker rm -f and the container's name."
         ),
+        no_help_reason=(
+            "HQ adopts a container but never removes one it did not start; removal runs on the machine."
+        ),
     ),
     FindingRule(
         "container-image-behind",
@@ -324,6 +327,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Recreate the container from its compose project so it runs the image its tag names now."
         ),
+        no_help_reason=(
+            "HQ has no shell on the machine, so recreating the compose service runs there, not here."
+        ),
     ),
     FindingRule(
         "container-image-untagged",
@@ -332,6 +338,9 @@ RULES: tuple[FindingRule, ...] = (
         lambda estate: built_findings(images_untagged(estate)),
         operator_action=(
             "Pin a tag for the image in the container's compose file and recreate it."
+        ),
+        no_help_reason=(
+            "Which tag to pin is a choice in the compose file, which HQ reads but does not write."
         ),
     ),
 )

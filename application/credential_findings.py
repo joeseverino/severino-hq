@@ -229,6 +229,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Mint a credential with the missing permissions using the command on the connection's row, then request a fresh sweep."
         ),
+        no_help_reason=(
+            "Only the provider mints a credential, and HQ never holds the authority to mint its own."
+        ),
     ),
     FindingRule(
         "credential-expiring",
@@ -237,6 +240,9 @@ RULES: tuple[FindingRule, ...] = (
         lambda estate: built_findings(expiring(estate)),
         operator_action=(
             "Mint a replacement using the command on the connection's row before it expires, then request a fresh sweep."
+        ),
+        no_help_reason=(
+            "Only the provider mints a credential, and HQ never holds the authority to mint its own."
         ),
     ),
 )

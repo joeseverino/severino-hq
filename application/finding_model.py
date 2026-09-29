@@ -59,6 +59,9 @@ class Finding:
     workflow: WorkflowPlan | None = None
     # Commands an operator runs on their own machine; HQ never runs them.
     steps: tuple[OperatorStep, ...] = ()
+    # Why HQ can neither run a remedy nor name the exact command for this one.
+    # Derivation fills it from the rule when the finding carries neither.
+    no_help_reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -78,11 +81,19 @@ class FindingRule:
     # a finding either offers an operation through the gated queue or says
     # exactly what to do. A finding may state a more specific one.
     operator_action: str
+    # Why HQ cannot resolve a finding of this rule itself: shown whenever one
+    # carries no remedy and no exact command. Required, so no finding reaches
+    # an operator as bare prose (application.item_help).
+    no_help_reason: str = ""
     subsumes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.operator_action.strip():
             raise ValueError(f"Finding rule {self.name!r} must say how it is resolved.")
+        if not self.no_help_reason.strip():
+            raise ValueError(
+                f"Finding rule {self.name!r} must say why HQ cannot resolve it itself."
+            )
 
 
 @dataclass(frozen=True)

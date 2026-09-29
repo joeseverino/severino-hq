@@ -196,6 +196,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Close each port at the machine's firewall so it answers only on the tailnet, then request a fresh sweep."
         ),
+        no_help_reason=(
+            "HQ probes the machine from outside but has no write access to its firewall, and which ports close is yours to decide."
+        ),
     ),
     FindingRule(
         "perimeter-unchecked",
@@ -204,6 +207,9 @@ RULES: tuple[FindingRule, ...] = (
         _perimeter_unchecked,
         operator_action=(
             "Make the machine's perimeter reading report its public addresses and published ports, then request a fresh sweep."
+        ),
+        no_help_reason=(
+            "The perimeter reading runs on the machine, and HQ cannot change what that command reports."
         ),
     ),
     FindingRule(
@@ -214,6 +220,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Start the firewall unit on the machine (systemctl start with the unit's name) and check it stays active."
         ),
+        no_help_reason=(
+            "The reading reports the unit's state but not its name, and HQ has no shell on the machine to start it."
+        ),
     ),
     FindingRule(
         "reached-but-unmeasured",
@@ -222,6 +231,9 @@ RULES: tuple[FindingRule, ...] = (
         _reached_but_unmeasured,
         operator_action=(
             "Add the hostname to the analytics source that measures its neighbours."
+        ),
+        no_help_reason=(
+            "HQ reads the analytics source but no capability adds a name to it."
         ),
     ),
 )

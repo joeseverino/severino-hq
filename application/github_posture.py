@@ -12,6 +12,8 @@ here asks GitHub anything, and a check HQ cannot read says so.
 
 from __future__ import annotations
 
+import json
+import shlex
 from datetime import timedelta
 from typing import Any, Callable
 
@@ -20,6 +22,7 @@ from django.utils import timezone
 
 from .github_estate import Repository, repositories
 from .github_estate import attention as repository_attention
+from .item_help import cannot_help, commands
 from .standards import UNMET, Posture, measure
 from .standards import Check as _Check
 from .ui import Insight, counted, moment
@@ -57,16 +60,14 @@ def _keys_read_only(repo: Repository) -> bool | None:
     return None if access is None else all(key["read_only"] for key in access["deploy_keys"])
 
 
+def _idle(key: dict[str, Any]) -> bool:
+    seen = moment(key.get("last_used") or key.get("created_at") or "")
+    return seen is not None and seen < timezone.now() - timedelta(days=KEY_IDLE_DAYS)
+
+
 def _keys_in_use(repo: Repository) -> bool | None:
     access = _access(repo)
-    if access is None:
-        return None
-    cutoff = timezone.now() - timedelta(days=KEY_IDLE_DAYS)
-    for key in access["deploy_keys"]:
-        seen = moment(key.get("last_used") or key.get("created_at") or "")
-        if seen is not None and seen < cutoff:
-            return False
-    return True
+    return None if access is None else not any(_idle(key) for key in access["deploy_keys"])
 
 
 def _setting(name: str, expected: Any) -> Callable[[Repository], bool | None]:
@@ -120,13 +121,13 @@ STANDARD: tuple[Check, ...] = (
           "Turn off approving pull requests in the Actions settings."),
     Check("actions-pinned", "Actions must be pinned to a commit", BOTH, _setting("pinning_required", True),
           "A tag can be moved to different code; a commit cannot.",
-          "Require actions to be pinned to a full-length commit SHA in the Actions settings."),
+          "Pin every action its workflows use to a commit, then require pinning in the Actions settings."),
     Check("security-fixes", "Dependabot opens security fixes", BOTH, _setting("security_fixes", True),
           "A known-vulnerable dependency waits for you to notice it.",
           "Turn on Dependabot security updates."),
     Check("no-variables", "No Actions variables", BOTH, _no_variables,
           "A variable is state outside the repository that changes what a build does.",
-          "Move it into the workflow, or delete it."),
+          "Move it into the workflow or a secret, or delete it."),
     Check("pull-request-required", "Changes arrive by pull request", PUBLIC, _rule("pull_request"),
           "A direct push to the default branch skips every check.",
           "Require a pull request in the default branch's ruleset."),
@@ -148,6 +149,143 @@ STANDARD: tuple[Check, ...] = (
 )
 
 
+# The secrets the host's own wiring sets (scripts/wire-github-app.py). A
+# variable by one of these names is one of them kept in the wrong place.
+WIRED_SECRETS = frozenset({"HQ_APP_KEY", "HQ_APP_CLIENT_ID"})
+
+Runs = tuple[tuple[str, str], ...]
+
+
+def _api(repo: Repository, method: str, path: str, *fields: str) -> str:
+    return " ".join((f"gh api -X {method} repos/{repo.name}{path}", *fields)).rstrip()
+
+
+def _others(repo: Repository) -> Runs:
+    owner = repo.name.split("/", 1)[0].lower()
+    return tuple(
+        (f"{repo.short}: remove {item['login']}", _api(repo, "DELETE", f"/collaborators/{item['login']}"))
+        for item in (_access(repo) or {}).get("collaborators", ())
+        if item["login"].lower() != owner
+    )
+
+
+def _delete_key(repo: Repository, title: str) -> str:
+    """Deletes a deploy key by its title: the reading names a key, not its ID."""
+
+    found = shlex.quote(f".[] | select(.title == {json.dumps(title)}) | .id")
+    return _api(repo, "DELETE", f"/keys/$(gh api repos/{repo.name}/keys --jq {found})")
+
+
+def _writable_keys(repo: Repository) -> Runs:
+    return tuple(
+        (
+            f"{repo.short}: delete the writable key {key['title']}, then add its public key back "
+            f"with gh repo deploy-key add -R {repo.name}, which is read-only unless told otherwise",
+            _delete_key(repo, key["title"]),
+        )
+        for key in (_access(repo) or {}).get("deploy_keys", ())
+        if not key["read_only"]
+    )
+
+
+def _idle_keys(repo: Repository) -> Runs:
+    return tuple(
+        (f"{repo.short}: delete the unused key {key['title']}", _delete_key(repo, key["title"]))
+        for key in (_access(repo) or {}).get("deploy_keys", ())
+        if _idle(key)
+    )
+
+
+def _variables(repo: Repository) -> Runs:
+    """Each variable's commands. One the host's wiring declares as a secret moves
+    into a secret first, and goes only once the workflows read the secret."""
+
+    runs: list[tuple[str, str]] = []
+    for name in repo.record.get("variables") or ():
+        delete = f"gh variable delete {name} -R {repo.name}"
+        if name not in WIRED_SECRETS:
+            runs.append((f"{repo.short}: delete {name}", delete))
+            continue
+        runs += [
+            (
+                f"{repo.short}: 1. copy {name} into a secret of the same name",
+                f'gh secret set {name} -R {repo.name} --body "$(gh variable get {name} -R {repo.name})"',
+            ),
+            (f"{repo.short}: 2. only after its workflows read secrets.{name}, delete the variable", delete),
+        ]
+    return tuple(runs)
+
+
+def _setting(*fields: str, method: str = "PUT", path: str) -> Callable[[Repository], Runs]:
+    return lambda repo: ((repo.short, _api(repo, method, path, *fields)),)
+
+
+def _ruleset(name: str, rule: dict[str, Any]) -> Callable[[Repository], Runs]:
+    """A ruleset on the default branch holding one rule."""
+
+    body = json.dumps(
+        {
+            "name": name,
+            "target": "branch",
+            "enforcement": "active",
+            "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
+            "rules": [rule],
+        },
+        separators=(",", ":"),
+    )
+    return lambda repo: ((repo.short, f"{_api(repo, 'POST', '/rulesets', '--input -')} <<< {shlex.quote(body)}"),)
+
+
+def _security_fixes(repo: Repository) -> Runs:
+    return ((repo.short, f"{_api(repo, 'PUT', '/vulnerability-alerts')} && {_api(repo, 'PUT', '/automated-security-fixes')}"),)
+
+
+_ANALYSIS = "security_and_analysis[{}][status]=enabled"
+# The exact commands that meet a check, per repository that misses it.
+COMMANDS: dict[str, Callable[[Repository], Runs]] = {
+    "only-you": _others,
+    "keys-read-only": _writable_keys,
+    "keys-in-use": _idle_keys,
+    "token-read-only": _setting("-f default_workflow_permissions=read", path="/actions/permissions/workflow"),
+    "token-no-approvals": _setting("-F can_approve_pull_request_reviews=false", path="/actions/permissions/workflow"),
+    "security-fixes": _security_fixes,
+    "no-variables": _variables,
+    "pull-request-required": _ruleset(
+        "Require a pull request",
+        {"type": "pull_request", "parameters": {
+            "required_approving_review_count": 0, "dismiss_stale_reviews_on_push": False,
+            "require_code_owner_review": False, "require_last_push_approval": False,
+            "required_review_thread_resolution": False,
+        }},
+    ),
+    "force-push-blocked": _ruleset("Block force pushes", {"type": "non_fast_forward"}),
+    "deletion-blocked": _ruleset("Block deletion", {"type": "deletion"}),
+    "secret-scanning": _setting(f"-f '{_ANALYSIS.format('secret_scanning')}'", method="PATCH", path=""),
+    "push-protection": _setting(
+        f"-f '{_ANALYSIS.format('secret_scanning_push_protection')}'", method="PATCH", path=""
+    ),
+    "code-scanning": _setting("-f state=configured", method="PATCH", path="/code-scanning/default-setup"),
+}
+# Why HQ offers no command for a check it cannot safely derive one for.
+REASONS: dict[str, str] = {
+    "actions-pinned": (
+        "HQ's reading of a repository does not include its workflows' uses: lines, so it cannot "
+        "tell whether one calls the host's own reusable workflow or action at a branch, which "
+        "requiring SHA pinning would break. It offers no command until it can read them."
+    ),
+}
+
+
+def help_for(check: _Check, missing: list[Repository]) -> Any:
+    """The item's workflow: each repository's exact commands, or why there are none."""
+
+    key = f"github-posture:{check.id}"
+    derive = COMMANDS.get(check.id)
+    if derive is None:
+        return cannot_help(key, REASONS[check.id])
+    return commands(key, tuple(run for repo in missing for run in derive(repo)))
+
+
 def posture_of(repo: Repository) -> Posture:
     return measure(repo, STANDARD)
 
@@ -163,7 +301,8 @@ def attention() -> tuple[Insight, ...]:
     found = postures()
     items = []
     for check in STANDARD:
-        missing = [item.subject.short for item in found if item.state_of(check.id) == UNMET]
+        unmet = [item.subject for item in found if item.state_of(check.id) == UNMET]
+        missing = [repo.short for repo in unmet]
         if not missing:
             continue
         items.append(
@@ -178,6 +317,7 @@ def attention() -> tuple[Insight, ...]:
                 body=f"{', '.join(missing)}. {check.fix}",
                 action="Open posture",
                 url=reverse("posture"),
+                workflow=help_for(check, unmet),
             )
         )
     return tuple(items)

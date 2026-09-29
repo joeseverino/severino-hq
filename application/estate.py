@@ -24,6 +24,7 @@ from control_plane.provider_spec import expiry_phrase
 
 from .entity_links import entity_link
 from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
+from .item_help import cannot_help, remedy_link
 from .projection import read_once
 from .timestamps import moment
 from .ui import Insight, Kpi, ago, counted
@@ -411,6 +412,11 @@ def _offline(estate: Estate) -> tuple[Insight, ...]:
                 action="Open machine",
                 url=machine.url,
                 subject=subject_link("machine", machine.name),
+                workflow=cannot_help(
+                    f"estate-offline:{machine.name}",
+                    "HQ has no power or console access to a machine, so it is brought back "
+                    "where it runs.",
+                ),
             )
         )
     return tuple(items)
@@ -430,6 +436,10 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
                 "renewal did not run."
             )
             action = "Open certificate"
+            renew = remedy_link("certificate.renew", "Renew certificate", expiry.resource_key)
+            offered: dict[str, Any] = {"actions": (renew,)} if renew else {
+                "workflow": cannot_help(key, "The renewal command is not mounted on this HQ.")
+            }
         else:
             key = f"estate-certificate:{expiry.source}:{expiry.subject}"
             body = (
@@ -438,6 +448,13 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
                 "settings."
             )
             action = "Open"
+            offered = {
+                "workflow": cannot_help(
+                    key,
+                    f"The {expiry.source} provider holds and renews it; HQ only reads it and "
+                    "cannot change its settings.",
+                )
+            }
         items.append(
             Insight(
                 status="serious" if days <= CERTIFICATE_SERIOUS_DAYS else "attention",
@@ -453,6 +470,7 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
                 action=action,
                 url=expiry.url,
                 subject=expiry.link,
+                **offered,
             )
         )
     return tuple(items)
