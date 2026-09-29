@@ -85,7 +85,9 @@ class ReadStateTests(TestCase):
         mark(self.user, [ITEM["key"]], read=True, current=[ITEM, OTHER])
 
         self.assertEqual(unread_count([ITEM, OTHER], self.user), 1)
-        self.assertEqual(unread_count([ITEM, OTHER], self.someone), 3)
+        # Two items, whatever each carries: ITEM stands for two things, and
+        # says so on itself.
+        self.assertEqual(unread_count([ITEM, OTHER], self.someone), 2)
 
     def test_a_reworded_item_stays_read_and_a_new_revision_does_not(self):
         mark(self.user, [ITEM["key"]], read=True, current=[ITEM])
@@ -122,7 +124,7 @@ class ReadStateTests(TestCase):
         mark(self.user, [ITEM["key"]], read=True, current=[ITEM])
         mark(self.user, [ITEM["key"]], read=False, current=[ITEM])
 
-        self.assertEqual(unread_count([ITEM], self.user), 2)
+        self.assertEqual(unread_count([ITEM], self.user), 1)
 
 
 class PageTests(TestCase):
@@ -167,7 +169,7 @@ class PageTests(TestCase):
         self.assertEqual(unread_count([ITEM, OTHER], self.user), 1)
 
         self.client.post(reverse("action_items_mark_unread"), {"key": ITEM["key"]})
-        self.assertEqual(unread_count([ITEM, OTHER], self.user), 3)
+        self.assertEqual(unread_count([ITEM, OTHER], self.user), 2)
 
     def test_mark_all_read_is_a_head_action_that_keeps_the_filter(self):
         page = self.client.get(reverse("action_items"), {"q": "gadget"})

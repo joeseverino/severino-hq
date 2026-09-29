@@ -124,7 +124,8 @@ def _operating_snapshot(principal) -> dict[str, Any]:
         # asks for the dashboard once rather than assembling it from two calls.
         "cards": list(domain_dashboard_cards()),
         "priority": priority,
-        "priority_count": sum(item["count"] for item in priority),
+        # Items, not the numbers they carry: each item shows its own.
+        "priority_count": len(priority),
         "priority_group_count": len(priority),
         "active_projects": sections.recent_active_projects(),
         "draft_content": sections.recent_draft_content(),

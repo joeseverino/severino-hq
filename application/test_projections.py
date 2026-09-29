@@ -457,10 +457,8 @@ class DashboardProjectionTests(TestCase):
         # a reading, and it rides on the projects card instead.
         self.assertNotIn("hq.projects", items)
         self.assertEqual(snapshot["kpis"]["projects_needing_output"], 1)
-        self.assertEqual(
-            snapshot["priority_count"],
-            sum(item["count"] for item in snapshot["priority"]),
-        )
+        # Items, not the numbers they carry.
+        self.assertEqual(snapshot["priority_count"], len(snapshot["priority"]))
 
     def test_expense_kpis_respect_fiscal_year_start(self):
         today = timezone.localdate()

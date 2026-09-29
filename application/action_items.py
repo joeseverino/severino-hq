@@ -45,7 +45,14 @@ def with_read_state(items: list[dict[str, Any]], user) -> list[dict[str, Any]]:
 
 
 def unread_count(items: list[dict[str, Any]], user) -> int:
-    return sum(item["count"] for item in with_read_state(items, user) if not item["read"])
+    """How many items are unread: items, not the numbers they carry.
+
+    An item's ``count`` is what it stands for (four containers failing one
+    check) and is shown on the item. Summed into the badge, one quiet item
+    about four containers read as four things to do.
+    """
+
+    return sum(1 for item in with_read_state(items, user) if not item["read"])
 
 
 def mark(user, keys, *, read: bool, current: list[dict[str, Any]]) -> None:
