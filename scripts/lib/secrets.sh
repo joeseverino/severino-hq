@@ -61,11 +61,35 @@ secrets_stage() {
     trap 'exit 1' HUP INT TERM
 }
 
+# A regular file with one name, not a link, owned by <uid>: the only kind of
+# destination root writes into in place, or reads a secret back from.
+secrets_trusted_file() {
+    [ -f "$1" ] && [ ! -L "$1" ] || return 1
+    [ "$(stat -c '%u %h' "$1")" = "$2 1" ]
+}
+
+# A directory, not a link, that only <uid> (root by default) can enter.
+secrets_private_dir() {
+    [ -d "$1" ] && [ ! -L "$1" ] || return 1
+    [ "$(stat -c '%u %a' "$1")" = "${2:-0} 700" ]
+}
+
 # Preserve existing inodes for Docker file bind mounts. Copying is not atomic.
 # shellcheck disable=SC2034
 secrets_install_if_changed() {
     installed_change=0
     _src="$1"; _dst="$2"; _uid="$3"; _gid="$4"; _mode="${5:-400}"
+
+    # The destination may sit under a directory another account can replace.
+    # Anything already at its name that is not a file of the target's own
+    # (a link to a system file, a file someone kept open, a hard link) is
+    # refused rather than written through, followed or re-owned.
+    if [ -e "${_dst}" ] || [ -L "${_dst}" ]; then
+        secrets_trusted_file "${_dst}" "${_uid}" || {
+            echo "Refusing to write ${_dst}: it is not a file only uid ${_uid} owns." >&2
+            exit 1
+        }
+    fi
 
     chown "${_uid}:${_gid}" "${_src}"
     chmod "${_mode}" "${_src}"
