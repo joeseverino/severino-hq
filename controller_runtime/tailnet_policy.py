@@ -185,13 +185,20 @@ def _write_tailnet_policy(token: str, document: dict[str, Any]) -> None:
         raise ProviderError("Tailscale did not answer the policy write.") from exc
 
 
+def _applied(document: dict[str, Any]) -> dict[str, Any]:
+    """What a reconcile saw as live, in the shape a sweep records it, so the
+    document it confirms is not left unconfirmed until the next sweep."""
+
+    return {"applied": True, "document": json.dumps(document, indent=2, sort_keys=True)}
+
+
 def _current_policy(document: dict[str, Any]) -> ProviderResult:
     """The live policy already is the declared one; Ready only if it is tested."""
 
     tested = bool(document.get("tests"))
     return ProviderResult(
         changed=False,
-        status={"applied": True},
+        status=_applied(document),
         conditions=[
             provider_http.condition("Ready", True, "Reconciled", "The policy is as declared.")
             if tested
@@ -257,7 +264,7 @@ def reconcile_tailnet_policy(
     _write_tailnet_policy(token, document)
     return ProviderResult(
         changed=True,
-        status={"applied": True},
+        status=_applied(_tailnet_policy(token)),
         conditions=[
             provider_http.condition("Ready", True, "Reconciled", "The policy is as declared.")
         ],
