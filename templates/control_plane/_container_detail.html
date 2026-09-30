@@ -94,7 +94,7 @@ standard. Each said once; the band above has its version and standing.
         <small>{% for what in readiness.verified_by|slice:"1:" %}{{ what|capfirst }}{% if not forloop.last %} · {% endif %}{% empty %}{% if not readiness.verified_by %}Add a health check, and it can be.{% endif %}{% endfor %}</small>
       </div>
     </div>
-    <div class="band-fact{% if readiness.data %} tone-attention{% endif %}">
+    <div class="band-fact">
       <span class="band-icon">{% include "partials/_icon.html" with name="layers" %}</span>
       <div>
         <span class="band-label">Its data</span>
@@ -102,7 +102,7 @@ standard. Each said once; the band above has its version and standing.
         <small>{% for mount in readiness.data %}<code>{{ mount.source }}</code>{% if not forloop.last %}, {% endif %}{% empty %}Nothing to restore on a rollback.{% endfor %}</small>
       </div>
     </div>
-    <div class="band-fact tone-attention">
+    <div class="band-fact{% if readiness.automatic %} tone-good{% endif %}">
       <span class="band-icon">{% include "partials/_icon.html" with name="deploy" %}</span>
       <div>
         <span class="band-label">On its own</span>
@@ -131,7 +131,7 @@ standard. Each said once; the band above has its version and standing.
 
 {% with posture=item.posture %}
 <section id="how-it-runs" class="page-section" data-page-section>
-  <h2>How it runs <span class="heading-aside">{% if posture.measured %}{{ posture.met }} of {{ posture.measured }} met{% endif %}</span></h2>
+  <h2>How it runs <span class="heading-aside">{% if posture.measured %}{{ posture.met }} of {{ posture.measured }} met{% if posture.intended %}, {{ posture.intended|length }} by design{% endif %}{% endif %}</span></h2>
   {% include "partials/_standard_gaps.html" with posture=posture %}
   {% with patch=item.hardening %}{% if patch.any %}
   <div id="hardening" class="hardening-patch boxed-facts">

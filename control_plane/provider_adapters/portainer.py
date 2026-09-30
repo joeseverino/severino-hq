@@ -69,6 +69,15 @@ class PortainerContainerSpec(ProviderModel):
         ),
     )
     holds_docker_socket: bool = Field(default=False, title="Holds the Docker socket", description="Its job is Docker: a socket proxy or an agent. The socket and Docker's data stay listed, never an action item.")
+    by_design: dict[str, str] = Field(
+        default_factory=dict,
+        title="Checks its job requires",
+        description=(
+            "A check of the container standard it fails on purpose, by id, each "
+            "with why: DNS on the host network, a proxy that binds 443 as root. "
+            "HQ shows it with the reason and never as a gap."
+        ),
+    )
     hidden: bool = Field(
         default=False,
         title="Collapse on machine page",
@@ -94,6 +103,18 @@ class PortainerContainerSpec(ProviderModel):
             "does not say. HQ reads its releases and advisories."
         ),
     )
+
+    @field_validator("by_design")
+    @classmethod
+    def _known_checks_with_reasons(cls, value: dict[str, str]) -> dict[str, str]:
+        from application.container_standard import CHECK_IDS
+
+        unknown = sorted(set(value) - CHECK_IDS)
+        if unknown:
+            raise ValueError(f"Not a check of the container standard: {', '.join(unknown)}.")
+        if any(not str(reason).strip() for reason in value.values()):
+            raise ValueError("Each check needs the reason its job requires it.")
+        return {check: str(reason).strip() for check, reason in value.items()}
 
     @field_validator("serves_ports")
     @classmethod
@@ -331,14 +352,14 @@ CONTAINER = ProviderSpec(
     # Ports are behind the disclosure because the answer is usually none:
     # Docker reports them, and only a container sharing the machine's
     # network has to be told.
-    advanced_fields=("hidden", "on_demand", "holds_docker_socket", "serves_ports", "source"),
+    advanced_fields=("hidden", "on_demand", "holds_docker_socket", "by_design", "serves_ports", "source"),
     # So a sweep can never confirm it: the field exists for the case Docker
     # publishes nothing.
     #
     # ``hidden`` is HQ's own bookkeeping (whether the machine page folds the
     # row away); Portainer and Docker have nowhere to keep it. ``source``
     # is the operator's word for an image that names no repository.
-    unobservable_fields=("serves_ports", "hidden", "on_demand", "holds_docker_socket", "source"),
+    unobservable_fields=("serves_ports", "hidden", "on_demand", "holds_docker_socket", "by_design", "source"),
     declaration_only=True,
     choices="application.provider_choices:container_stack",
 )

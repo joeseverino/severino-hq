@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.test import TestCase
 
 from ..containers import containers
-from ..standards import MET, UNAVAILABLE, UNMET
+from ..standards import INTENDED, MET, UNAVAILABLE, UNMET
 from .test_containers import HIGH, estate, inventory
 
 
@@ -46,6 +46,37 @@ class StandardTests(TestCase):
             "not-privileged", "no-docker-socket", "own-process-namespace", "confined",
             "no-system-path-writable", "no-powerful-capability",
         })
+
+    def test_a_check_declared_by_design_is_shown_with_its_reason_and_never_a_gap(self):
+        from control_plane.models import ManagedResource
+
+        ManagedResource.objects.create(
+            key="example-box-web", kind="portainer.container",
+            spec={"connection_ref": "example-portainer", "host": "example-box", "name": "web",
+                  "by_design": {"own-network": "It answers DNS on the host's port 53."}},
+        )
+
+        found = self.posture(**{**KEPT, "network_mode": "host", "user": "root"})
+
+        self.assertEqual(found.state_of("own-network"), INTENDED)
+        (intended,) = found.intended
+        self.assertEqual(intended.reason, "It answers DNS on the host's port 53.")
+        # What it did not declare is still a gap.
+        self.assertEqual([result.check.id for result in found.unmet], ["not-root"])
+
+    def test_by_design_names_real_checks_and_says_why(self):
+        from pydantic import ValidationError
+
+        from control_plane.provider_adapters.portainer import PortainerContainerSpec
+
+        base = {"connection_ref": "example-portainer", "host": "example-box", "name": "web"}
+        with self.assertRaises(ValidationError):
+            PortainerContainerSpec(**base, by_design={"not-a-check": "because"})
+        with self.assertRaises(ValidationError):
+            PortainerContainerSpec(**base, by_design={"own-network": "  "})
+        self.assertEqual(
+            PortainerContainerSpec(**base, by_design={"own-network": " DNS "}).by_design, {"own-network": "DNS"}
+        )
 
     def test_a_container_declared_to_hold_the_socket_is_not_flagged_for_it(self):
         from control_plane.models import ManagedResource

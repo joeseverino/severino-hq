@@ -178,4 +178,9 @@ STANDARD: tuple[Check, ...] = (
 
 
 def posture_of(container: Any) -> Posture:
-    return measure(container, STANDARD)
+    from .containers import by_design
+
+    return measure(container, STANDARD, by_design().get((container.machine.name, container.running.name)))
+
+
+CHECK_IDS = frozenset(check.id for check in STANDARD)

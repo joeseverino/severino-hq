@@ -4806,6 +4806,9 @@ form[data-clean] .save-bar { display: none; }
   .posture-gaps li + li, .posture-repos li + li { border-top: 1px solid var(--line-2); }
   .posture-gaps li { align-items: flex-start; border-left: 3px solid var(--tone-caution-line); }
   .posture-gaps li.is-serious { border-left-color: var(--danger); }
+  /* Failed on purpose, with the reason: a fact, not a gap. */
+  .posture-gaps li.is-intended { border-left-color: var(--line); }
+  .posture-gaps li.is-intended .posture-gap-icon { color: var(--muted); }
   .posture-gap-icon { color: var(--tone-caution-ink); font-size: var(--text-lg); line-height: 1; }
   .posture-gaps li.is-serious .posture-gap-icon { color: var(--danger); }
   /* Never wider than the row beside its icon, so the icon keeps its line. */

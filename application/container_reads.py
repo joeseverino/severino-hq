@@ -54,6 +54,10 @@ def _posture(posture: Any) -> dict[str, Any]:
              "why": result.check.why, "fix": result.check.fix}
             for result in posture.unmet
         ],
+        "by_design": [
+            {"id": result.check.id, "label": result.check.label, "reason": result.reason}
+            for result in posture.intended
+        ],
     }
 
 

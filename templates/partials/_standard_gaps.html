@@ -1,8 +1,9 @@
 {% comment %}
-The checks a standard's subject does not meet, serious first. `posture` is
-application.standards.Posture; what it meets is its heading's count.
+The checks a standard's subject does not meet, serious first, then the ones it
+fails by design with why. `posture` is application.standards.Posture; what it
+meets is its heading's count.
 {% endcomment %}
-{% if posture.unmet %}
+{% if posture.unmet or posture.intended %}
   <ul class="posture-gaps">
     {% for result in posture.unmet %}{% if result.check.serious %}
       <li class="is-serious">
@@ -16,5 +17,11 @@ application.standards.Posture; what it meets is its heading's count.
         <div class="posture-gap-body"><strong>{{ result.check.label }}</strong><p>{{ result.check.why }} <span class="muted">{{ result.check.fix }}</span></p></div>
       </li>
     {% endif %}{% endfor %}
+    {% for result in posture.intended %}
+      <li class="is-intended">
+        <span class="posture-gap-icon">{% include "partials/_icon.html" with name="check-circle" %}</span>
+        <div class="posture-gap-body"><strong>{{ result.check.label }}: by design</strong><p>{{ result.reason }}</p></div>
+      </li>
+    {% endfor %}
   </ul>
 {% endif %}
