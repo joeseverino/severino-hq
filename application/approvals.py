@@ -75,6 +75,19 @@ MAX_PENDING_PER_ACTOR = 10
 # than exempted by omission.
 READ_EFFECT = "read"
 DESTRUCTIVE_EFFECT = "destructive"
+# Payload fields that turn a write into deleting whatever it does not name: an
+# orphan prune removes every record the manifest leaves out, restricted ones
+# included. Such a call is held like a destructive capability, whatever the
+# capability's own effect says.
+DELETING_FLAGS = ("prune_orphans",)
+
+
+def deletes(spec, payload: Any) -> bool:
+    """Whether this call removes records: by its effect, or by what it asks for."""
+
+    if spec.effect == DESTRUCTIVE_EFFECT:
+        return True
+    return isinstance(payload, dict) and any(payload.get(flag) is True for flag in DELETING_FLAGS)
 DECLARATIONS = "infrastructure.resources"
 
 # Existing audit rows may carry either label; both are read as approvals.

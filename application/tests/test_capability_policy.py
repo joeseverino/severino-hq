@@ -51,6 +51,28 @@ class DefaultTests(PolicyTestCase):
 
         self.assertEqual(result["status"], "awaiting_approval")
 
+    def test_an_agents_orphan_prune_waits_like_a_delete(self):
+        """A sync that prunes deletes every record the manifest leaves out,
+        so an agent's is held, though the capability itself only writes."""
+
+        from docs_index.models import DocumentationRecord
+
+        DocumentationRecord.objects.create(doc_id="example-kept", title="Kept", obsidian_path="Kept.md")
+        syncer = agent(capabilities=frozenset({
+            Capability.READ, Capability.SYNC_DOCUMENTATION, Capability.PRUNE_DOCUMENTATION,
+        }))
+
+        pruning = execute_capability(
+            "documentation.sync",
+            {"manifest": [], "prune_orphans": True, "confirm_prune": True},
+            principal=syncer,
+        )
+        plain = execute_capability("documentation.sync", {"manifest": []}, principal=syncer)
+
+        self.assertEqual(pruning["status"], "awaiting_approval")
+        self.assertTrue(DocumentationRecord.objects.filter(doc_id="example-kept").exists())
+        self.assertTrue(plain["ok"])
+
     def test_an_ordinary_write_still_runs(self):
         result = execute_capability("project.create", {"name": "Runs"}, principal=agent())
 

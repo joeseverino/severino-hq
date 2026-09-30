@@ -25,6 +25,7 @@ from core.models import AgentIdentity, AuditLog
 
 from .approvals import (
     DESTRUCTIVE_EFFECT,
+    deletes,
     READ_EFFECT,
     held_by_default,
     may_be_held_by_default,
@@ -63,7 +64,7 @@ def decide(spec, principal: Principal, payload, target) -> Decision:
         return Decision(Rule.ALLOW, "operator", default)
     if principal.interface not in SURFACES:
         return Decision(default, "default", default)
-    if spec.effect == DESTRUCTIVE_EFFECT:
+    if deletes(spec, payload):
         default = Rule.APPROVE
 
     rules = dict(
