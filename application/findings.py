@@ -198,12 +198,10 @@ def finding_steps(finding: Finding) -> tuple[OperatorStep, ...]:
 
 
 def finding_layout(finding: Finding) -> WorkflowLayout:
-    """How a card shows a finding's actions: its plan's, or, for a finding built
-    without one, its own investigations and offers as links."""
+    """How a card shows a finding's actions: its plan's remedy and check, and
+    its own investigations and offers as links."""
 
-    if finding.workflow is not None:
-        return workflow_layout(finding.workflow)
-    return WorkflowLayout(impact=finding.investigations, related=finding.offers)
+    return workflow_layout(finding.workflow, investigations=finding.investigations, offers=finding.offers)
 
 
 def finding_rules() -> tuple[FindingRule, ...]:
@@ -297,8 +295,6 @@ def _resolved(
         rule=finding.rule,
         subject=finding.subject,
         scope=finding.scope,
-        investigations=investigations,
-        offers=offers,
         remedies=remedy_actions,
         verification=verification,
     )

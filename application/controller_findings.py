@@ -445,15 +445,12 @@ def _weakly_verified(estate: FindingEstate) -> tuple[Finding, ...]:
         Finding(
             rule="weakly-verified",
             subject=node.id,
-            title=(
-                f"{node.label} has "
-                f"{counted(len(node.unconfirmed_fields), 'unconfirmed field', 'unconfirmed fields')}"
-            ),
+            title=f"{node.label}: {', '.join(node.unconfirmed_fields)} not confirmed",
             severity="attention",
             explanation=(
-                "The last sweep confirmed this record but not these fields, so "
-                "their values are unchecked. Make the provider report them, or "
-                "declare that it cannot."
+                f"HQ declares {', '.join(node.unconfirmed_fields)} for {node.label}, and the "
+                "last reading did not report it, so whether it holds is unknown. "
+                "Reconciling applies it and reads it back."
             ),
             evidence=(
                 ("Unconfirmed", ", ".join(node.unconfirmed_fields)),

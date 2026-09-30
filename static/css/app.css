@@ -4854,10 +4854,11 @@ form[data-clean] .save-bar { display: none; }
   .gh-stats dd a { color: inherit; }
   .gh-stats dd a:hover { color: var(--accent-2); }
 
-  /* Who can reach a name, in one word: only the internet-facing and the unknown
-     draw the eye; everything private reads as settled. */
+  /* Who can reach a name, in one word. Internet-facing is stated plainly,
+     since a public site is meant to be; only what HQ could not read is a
+     warning. Exposure raises urgency where it matters, on the finding. */
   .exposure { font-size: var(--text-sm); white-space: nowrap; color: var(--muted); }
-  .exposure-open { color: var(--danger); font-weight: 600; }
+  .exposure-open { color: var(--ink); font-weight: 600; }
   .exposure-unknown { color: var(--warn); }
   .path-reach { margin: 0 0 var(--space-4); }
 

@@ -15,7 +15,7 @@ A "run" step's summary is a command the operator runs (application.item_help).
           <span class="resolution-workflow-number">{{ forloop.counter }}</span>
           <div>
             <strong>{{ step.label }}</strong>
-            {% if step.phase == "run" %}<pre class="operator-command"><code>{{ step.summary }}</code></pre>{% else %}<p>{{ step.summary }}</p>{% endif %}
+            {% if step.phase == "run" %}<pre class="operator-command"><code>{{ step.summary }}</code></pre>{% elif step.summary %}<p>{{ step.summary }}</p>{% endif %}
           </div>
         </div>
         {% if step.actions %}

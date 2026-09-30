@@ -25,11 +25,9 @@ class DashboardQueueTests(TestCase):
             rule="changed",
             subject="account:one",
             scope="",
-            investigations=(
-                ActionLink("inspect", "Inspect evidence", "read", "/example/evidence/"),
+            remedies=(
+                ActionLink("remedy", "Inspect evidence", "read", "/example/evidence/", recommended=True),
             ),
-            offers=(),
-            remedies=(),
             verification=ActionLink(
                 "verify", "Recheck facts", "write", "/dashboard/glance/", method="POST"
             ),
