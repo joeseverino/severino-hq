@@ -24,6 +24,7 @@ from core.audit import record_event
 from core.models import AgentIdentity, AuditLog
 
 from .approvals import (
+    AGENT_SURFACES,
     DESTRUCTIVE_EFFECT,
     deletes,
     READ_EFFECT,
@@ -32,7 +33,7 @@ from .approvals import (
 )
 from .security import AuthorizationError, Principal, is_interactive, mcp_principal
 
-SURFACES = ("mcp", "api")
+SURFACES = AGENT_SURFACES
 AUDIT_LABEL = "Capability policy"
 
 Rule = CapabilityRule.Rule

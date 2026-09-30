@@ -98,6 +98,22 @@ class DestructiveDefaultTests(PolicyTestCase):
         approve(held["approval"]["id"], principal=self.operator)
         self.assertFalse(Project.objects.filter(pk=project.pk).exists())
 
+    def test_pausing_agents_also_stops_what_one_is_waiting_on(self):
+        from ..agent_access import set_agents_paused
+        from ..approvals import ApprovalError
+
+        project = Project.objects.create(name="Kept")
+        held = self.delete(agent(capabilities=DELETES), project.slug)
+
+        set_agents_paused(True, principal=self.operator, user=self.user)
+        with self.assertRaisesMessage(ApprovalError, "Agents are paused"):
+            approve(held["approval"]["id"], principal=self.operator)
+        self.assertTrue(Project.objects.filter(pk=project.pk).exists())
+
+        set_agents_paused(False, principal=self.operator, user=self.user)
+        approve(held["approval"]["id"], principal=self.operator)
+        self.assertFalse(Project.objects.filter(pk=project.pk).exists())
+
     def test_an_explicit_allow_for_one_agent_lifts_it_for_that_agent_alone(self):
         self.rule(Scope.AGENT, "trusted-agent", "project.delete", Rule.ALLOW)
         first = Project.objects.create(name="First")

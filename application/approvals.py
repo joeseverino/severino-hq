@@ -477,6 +477,23 @@ def _require_person(principal: Principal, held: ApprovalRequest) -> None:
         raise AuthorizationError("A request cannot be approved by whoever asked for it.")
 
 
+# The surfaces an agent reaches HQ through; what one of them asked for is an
+# agent's request, and pausing agents pauses it too.
+AGENT_SURFACES = ("mcp", "api")
+
+
+def _require_agents_running(held) -> None:
+    """Pausing agents stops what they already asked for, not only what they ask next."""
+
+    from .agent_access import agents_paused
+
+    if held.requested_interface in AGENT_SURFACES and agents_paused():
+        raise ApprovalError(
+            "Agents are paused, and an agent asked for this. Resume agents to "
+            "approve it, or decline it."
+        )
+
+
 def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
     """Agree to a held change and run exactly the call that was held.
 
@@ -503,6 +520,7 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
             "request cannot be applied."
         )
     _require_person(principal, held)
+    _require_agents_running(held)
     # The approver has to be allowed to do the thing themselves. Otherwise this
     # page would be a way to run a capability the clicker does not hold.
     authorize_capability(spec, principal)
