@@ -25,6 +25,7 @@ from ..plugins import (
     plugin_capabilities,
     plugin_health,
     plugin_token_authenticated_prefixes,
+    plugin_urlpatterns,
 )
 from ..domains import domain_navigation
 from ..pages import page_context
@@ -526,7 +527,7 @@ class PluginContractTests(TestCase):
                 with env, importer, self.assertRaisesRegex(
                     ImproperlyConfigured, "exempt from sign-in"
                 ):
-                    installed_plugins()
+                    plugin_urlpatterns()
 
     def test_route_configuration_is_atomic(self):
         env, importer = self.load(replace(VALID, url_prefix="notes/"))

@@ -184,12 +184,6 @@ def _validate_mount(manifest: PluginManifest) -> None:
         raise ImproperlyConfigured(
             f"Plugin {manifest.id!r} has invalid url_prefix {manifest.url_prefix!r}."
         )
-    if manifest.url_prefix and _exempt_from_sign_in(manifest.url_prefix):
-        raise ImproperlyConfigured(
-            f"Plugin {manifest.id!r} url_prefix {manifest.url_prefix!r} falls under "
-            "a path exempt from sign-in. Declare token_authenticated_routes for a "
-            "route that carries its own authentication instead."
-        )
     if manifest.urlconf and not PYTHON_PATH.fullmatch(manifest.urlconf):
         raise ImproperlyConfigured(
             f"Plugin {manifest.id!r} has invalid urlconf {manifest.urlconf!r}."
@@ -201,11 +195,21 @@ def _validate_mount(manifest: PluginManifest) -> None:
             )
 
 
-def _exempt_from_sign_in(url_prefix: str) -> bool:
-    """Whether the host's own sign-in exemptions would cover this mount."""
+def _refuse_sign_in_exempt_mount(plugin: PluginManifest) -> None:
+    """A mount the host's own sign-in exemptions would cover fails at startup.
 
-    mounted = "/" + url_prefix
-    return any(mounted.startswith(prefix) for prefix in settings.LOGIN_EXEMPT_PATH_PREFIXES)
+    Checked when the URLs are built rather than with the rest of the manifest:
+    the manifests are read while settings are still loading, and the
+    exemptions are a setting.
+    """
+
+    mounted = "/" + plugin.url_prefix
+    if any(mounted.startswith(prefix) for prefix in settings.LOGIN_EXEMPT_PATH_PREFIXES):
+        raise ImproperlyConfigured(
+            f"Plugin {plugin.id!r} url_prefix {plugin.url_prefix!r} falls under "
+            "a path exempt from sign-in. Declare token_authenticated_routes for a "
+            "route that carries its own authentication instead."
+        )
 
 
 def _validate_providers(manifest: PluginManifest) -> None:
@@ -385,11 +389,10 @@ def installed_plugin_apps() -> list[str]:
 
 
 def plugin_urlpatterns() -> list[URLResolver]:
-    return [
-        path(plugin.url_prefix, include(plugin.urlconf))
-        for plugin in installed_plugins()
-        if plugin.urlconf
-    ]
+    mounted = [plugin for plugin in installed_plugins() if plugin.urlconf]
+    for plugin in mounted:
+        _refuse_sign_in_exempt_mount(plugin)
+    return [path(plugin.url_prefix, include(plugin.urlconf)) for plugin in mounted]
 
 
 def plugin_token_authenticated_prefixes() -> tuple[str, ...]:
