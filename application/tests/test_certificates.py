@@ -14,7 +14,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from control_plane.models import CertificateMaterial, ManagedResource
 from core import secrets
@@ -345,3 +345,18 @@ class CoverageTests(TestCase):
         )
 
         self.assertIn("example-wildcard", offered)
+
+
+class UploadFormTests(SimpleTestCase):
+    def test_a_form_shown_again_never_carries_the_submitted_key(self):
+        from ..provider_forms import CertificateUploadForm
+
+        form = CertificateUploadForm(data={
+            "fullchain": "-----BEGIN CERTIFICATE-----\nexample\n-----END CERTIFICATE-----",
+            "private_key": "-----BEGIN PRIVATE KEY-----\nexample-secret-material\n-----END PRIVATE KEY-----",
+        })
+
+        rendered = str(form["private_key"])
+
+        self.assertNotIn("example-secret-material", rendered)
+        self.assertIn("<textarea", rendered)

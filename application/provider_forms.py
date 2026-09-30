@@ -503,6 +503,17 @@ def _reported(exc: Exception) -> tuple[tuple[str, str], ...]:
     return tuple(reported) or (("", str(exc)),)
 
 
+class SecretTextarea(forms.Textarea):
+    """A textarea that never renders a value back, like a password input.
+
+    A form re-shown after an error would otherwise put the submitted key back
+    into the page: into its HTML, the browser's cache and its history.
+    """
+
+    def format_value(self, value):
+        return None
+
+
 class CertificateUploadForm(forms.Form):
     """The two files ``cert-gen`` produced, pasted in.
 
@@ -518,7 +529,7 @@ class CertificateUploadForm(forms.Form):
     )
     private_key = forms.CharField(
         label="Private key",
-        widget=forms.Textarea(attrs={"rows": 8, "spellcheck": "false"}),
+        widget=SecretTextarea(attrs={"rows": 8, "spellcheck": "false", "autocomplete": "off"}),
         help_text=(
             "The contents of the .key file. Encrypted before it is stored, and "
             "never shown again or returned by any API."
