@@ -57,7 +57,8 @@ class Extension:
     admitted_at: str = ""
     # The newest Compose or Deploy run that started after the admission.
     run: Mapping[str, Any] | None = None
-    # HQ's check run on the running commit, when one is still open.
+    # HQ's check run on the running commit, when it does not yet say so: still
+    # open, or closed as not delivered by a sweep that ran before the new image.
     unreported: Mapping[str, Any] | None = None
 
     @property
@@ -181,7 +182,7 @@ def delivery(runtime: ProviderRuntime, spec: Mapping[str, Any]) -> tuple[Extensi
             )
             continue
         check = _check_run(runtime, extension.repository, extension.running)
-        unreported = check if check and check.get("status") != "completed" else None
+        unreported = check if check and check.get("conclusion") != "success" else None
         settled.append(replace(extension, admitted=admitted, unreported=unreported))
     return tuple(settled)
 

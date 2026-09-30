@@ -332,7 +332,7 @@ reads the walked paths and stored readings for these, polling nothing:
 
 | Rule | Two sides that disagree | Fix HQ offers |
 | --- | --- | --- |
-| `public-name-served-by-nothing` | Public DNS sends a name to a machine; every proxy and container reading for that machine was read, and none serves it | Repoint the declared record; removal stays on its page |
+| `public-name-served-by-nothing` | Public DNS sends a name to a machine whose containers HQ reads; no proxy answers for it and no container there answers on a web port. A machine HQ reads no containers on is unknown, not unserved | Repoint the declared record; removal stays on its page |
 | `route-to-stopped-container` | A route ends at a container Docker reports not running | Repoint the declared proxy; `docker start` as a step |
 | `gate-guards-nothing` | A gate (`restricts`) names a host no DNS record answers | The provider console step |
 | `split-horizon-disagrees` | The public and internal records end on different machines | Repoint the declared rewrite |

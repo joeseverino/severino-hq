@@ -80,19 +80,23 @@ def _answered_by_nothing() -> tuple[Finding, ...]:
     from .exposure import FRONT_DOOR_PORTS, listening_ports
     from .paths import path_to, routed_names
 
-    # A machine where a container answers on a web port serves names HQ cannot
-    # enumerate, so nothing there is called unserved. On the host's network a
-    # proxy publishes nothing, so what it listens on is what its image exposes.
-    serving = {
-        item.machine.name for item in containers() if FRONT_DOOR_PORTS & set(listening_ports(item))
-    }
+    # Only a machine whose containers HQ reads can be said to serve nothing:
+    # elsewhere (shared hosting, a bare server) what answers is unknown. A
+    # machine where a container answers on a web port serves names HQ cannot
+    # enumerate, so nothing there is called unserved either. On the host's
+    # network a proxy publishes nothing, so what it listens on is what its
+    # image exposes.
+    read = containers()
+    known = {item.machine.name for item in read}
+    serving = {item.machine.name for item in read if FRONT_DOOR_PORTS & set(listening_ports(item))}
     found = []
     for name in routed_names():
         for route in path_to(name).routes:
             last = route.hops[-1] if route.hops else None
             if (
                 not public_name(route) or last is None or last.step != "machine"
-                or last.unread or route.unread or last.name in serving
+                or last.unread or route.unread or last.name not in known
+                or last.name in serving
             ):
                 continue
             dns_kinds = [kind for kind, provider in PROVIDERS.items() if provider.public_effect]
@@ -104,10 +108,10 @@ def _answered_by_nothing() -> tuple[Finding, ...]:
                     title=f"{name} points at {last.name}, which serves nothing for it",
                     severity="attention",
                     explanation=(
-                        f"Public DNS sends {name} to {last.name}, and every proxy and container "
-                        f"reading HQ holds for {last.name} was read: none of them answers for "
-                        "this name. Either the record is left over from something removed, or "
-                        "the route that should serve it is missing."
+                        f"Public DNS sends {name} to {last.name}. No proxy HQ reads answers for "
+                        f"this name, and no container on {last.name} answers on a web port. "
+                        "Either the record is left over from something removed, or the route "
+                        "that should serve it is missing."
                     ),
                     evidence=(("Name", name), ("Route", route.line), ("Machine", last.name)),
                     remedies=tuple(_update(key, f"Repoint {key}") for key in keys),

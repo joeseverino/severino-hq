@@ -11,7 +11,8 @@ from control_plane.models import ManagedResource
 
 from ..containers import attention, containers
 from .test_container_standard import KEPT, runtime
-from .test_containers import HIGH, estate, inventory
+from ..exposure import OPEN, PRIVATE
+from .test_containers import HIGH, estate, exposed, inventory
 
 SOCKET = {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True}
 
@@ -292,6 +293,14 @@ class AttentionHelpTests(TestCase):
         self.assertIn("HQ does not watch this container", item.body)
         (action,) = item.actions
         self.assertEqual((action.label, action.method), ("Adopt app to plan its upgrade", "POST"))
+
+    def test_a_private_advisory_no_release_fixes_is_not_an_action_item(self):
+        estate(advisories=[HIGH], app_tags=("v1.2.0",))
+
+        with exposed(PRIVATE):
+            self.assertNotIn("container-advisory:ghcr.io/example/app:v1.2.0", self.items())
+        with exposed(OPEN):
+            self.assertIn("container-advisory:ghcr.io/example/app:v1.2.0", self.items())
 
     def test_an_advisory_no_release_fixes_keeps_saying_so(self):
         estate(advisories=[HIGH], app_tags=("v1.2.0",))

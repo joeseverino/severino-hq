@@ -1877,7 +1877,8 @@ a.kpi:hover { background: var(--surface-2); }
    track and the steps that exist share the row. The minimum is real because
    auto-fit cannot count tracks against a flexible one. */
 .resolution-workflow ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); margin: var(--space-5) 0 0; padding: 0; list-style: none; counter-reset: none; }
-.resolution-workflow li { min-width: 0; padding: var(--surface-inset, var(--space-5)); background: var(--surface-2); }
+/* A step keeps its fill inside a card, so it keeps its padding too. */
+.resolution-workflow li { min-width: 0; padding: var(--space-5); background: var(--surface-2); }
 .resolution-workflow li.is-recommended { border-color: color-mix(in srgb, var(--accent) 45%, var(--line-2)); background: color-mix(in srgb, var(--accent) 5%, var(--surface-2)); }
 .resolution-workflow li.is-after_action { border-style: dashed; }
 .resolution-workflow-step { display: flex; align-items: flex-start; gap: var(--space-4); }
