@@ -61,7 +61,7 @@ if [ "$1" = "compose" ]; then
         [ "${previous}" = "-f" ] && file="${argument}"
         previous="${argument}"
     done
-    echo "docker $* image=${SEVERINO_IMAGE:-} DOCKER_CONFIG=${DOCKER_CONFIG:-} compose=$(cat "${file}")" >>"${TEST_LOG}"
+    echo "docker $* image=${SEVERINO_IMAGE:-} DOCKER_CONFIG=${DOCKER_CONFIG:-} app_env=${SEVERINO_APP_ENV_FILE_HOST:-} ca=${SEVERINO_CONTROLLER_CA_FILE_HOST:-} compose=$(cat "${file}")" >>"${TEST_LOG}"
     for argument do
         if [ "${argument}" = pull ] && [ "${TEST_PULL_FAIL:-0}" -eq 1 ]; then
             exit 1
@@ -169,6 +169,8 @@ deploy() {
         SEVERINO_HQ_RUN_DIR="${run_dir}" \
         SEVERINO_HQ_VERIFIER_DIR="${verifier_dir}" \
         SEVERINO_HQ_IMAGE_PREFIX="${test_prefix}" \
+        SEVERINO_HQ_ROOT_UID="${TEST_OWNER_UID:-0}" \
+        SEVERINO_HQ_WEB_UID="${TEST_OWNER_UID:-10001}" \
         TEST_VERIFY_FAIL="${TEST_VERIFY_FAIL:-0}" \
         TEST_IMAGE_COMPOSE="${image_compose}" \
         TEST_IMAGE_SYNC="${image_sync}" \
@@ -401,5 +403,47 @@ if grep -rl "secret-token-value" "${run_dir}" 2>/dev/null | grep -q .; then
     echo "The credential outlived the deploy." >&2
     exit 1
 fi
+
+# The checkout's .env cannot choose what the web container binds: a secrets
+# file of the deploy account's, or a certificate authority from anywhere.
+refuses_env() {
+    printf '%s\n' "$1" >"${app_dir}/.env"
+    : >"${log_file}"
+    if TEST_OWNER_UID="$(id -u)" deploy 0 2>/dev/null; then
+        echo "Expected the .env line '$1' to be refused." >&2
+        exit 1
+    fi
+    if [ -s "${log_file}" ]; then
+        echo "A refused .env reached docker: $1" >&2
+        exit 1
+    fi
+}
+mkdir -p "${app_dir}/secrets"
+chmod 700 "${app_dir}/secrets"
+printf 'SECRET=rendered\n' >"${app_dir}/secrets/severino_hq_env"
+refuses_env "SEVERINO_APP_ENV_FILE_HOST=${work_dir}/elsewhere.env"
+refuses_env "SEVERINO_CONTROLLER_RUN_DIR=/home"
+refuses_env "SEVERINO_CONTROLLER_CA_FILE_HOST=${work_dir}/ca.pem"
+refuses_env "SEVERINO_CONTROLLER_CA_FILE_HOST=/usr/local/share/ca-certificates/../../../../etc/shadow"
+# The right path, in a directory others can enter, or as a link: refused too.
+chmod 755 "${app_dir}/secrets"
+refuses_env "SEVERINO_APP_ENV_FILE_HOST=${app_dir}/secrets/severino_hq_env"
+chmod 700 "${app_dir}/secrets"
+mv "${app_dir}/secrets/severino_hq_env" "${work_dir}/planted.env"
+ln -s "${work_dir}/planted.env" "${app_dir}/secrets/severino_hq_env"
+refuses_env "SEVERINO_APP_ENV_FILE_HOST=${app_dir}/secrets/severino_hq_env"
+rm "${app_dir}/secrets/severino_hq_env"
+mv "${work_dir}/planted.env" "${app_dir}/secrets/severino_hq_env"
+
+# The rendered file in its root-only directory is what compose is handed.
+printf 'SEVERINO_APP_ENV_FILE_HOST="%s"\nSEVERINO_CONTROLLER_CA_FILE_HOST=/usr/local/share/ca-certificates/example.crt\n' \
+    "${app_dir}/secrets/severino_hq_env" >"${app_dir}/.env"
+: >"${log_file}"
+# Whether the rest of the run succeeds is the other cases' business: what
+# matters is what compose was started with.
+TEST_OWNER_UID="$(id -u)" deploy 0 >/dev/null 2>&1 || true
+grep " up -d " "${log_file}" | grep -q "app_env=${app_dir}/secrets/severino_hq_env ca=/usr/local/share/ca-certificates/example.crt " \
+    || { echo "compose was not handed the checked paths." >&2; exit 1; }
+rm -f "${app_dir}/.env"
 
 echo "deploy-image rollback, compose and input-guard tests passed"

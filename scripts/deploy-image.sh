@@ -45,6 +45,49 @@ case "${image}" in
         ;;
 esac
 
+# The host paths the web container binds decide what it loads as its secrets
+# and trusts as a certificate authority, and compose would read them from the
+# checkout's .env, which the deploy account writes. Each is checked here against
+# what it may be and exported, which compose prefers over the file: the rendered
+# environment in the root-only secrets directory, the controller's run
+# directory, a certificate in the system's own store.
+readonly root_uid="${SEVERINO_HQ_ROOT_UID:-0}"
+readonly web_uid="${SEVERINO_HQ_WEB_UID:-10001}"
+env_value() {
+    [ -f "${app_dir}/.env" ] || return 0
+    sed -n "s/^${1}=//p" "${app_dir}/.env" | tail -n 1 | sed "s/^[\"']//; s/[\"']\$//"
+}
+refuse_mount() { echo "Refusing to deploy: $1" >&2; exit 1; }
+app_env_host="$(env_value SEVERINO_APP_ENV_FILE_HOST)"
+case "${app_env_host}" in
+    "" | /dev/null) app_env_host=/dev/null ;;
+    "${app_dir}/secrets/severino_hq_env")
+        [ "$(stat -c '%u %a' "${app_dir}/secrets" 2>/dev/null)" = "${root_uid} 700" ] \
+            || refuse_mount "${app_dir}/secrets is not a directory only root can enter."
+        if [ ! -f "${app_env_host}" ] || [ -L "${app_env_host}" ] \
+            || [ "$(stat -c '%u %h' "${app_env_host}")" != "${web_uid} 1" ]; then
+            refuse_mount "${app_env_host} is not the file refresh-secrets.sh renders."
+        fi
+        ;;
+    *) refuse_mount "SEVERINO_APP_ENV_FILE_HOST must be ${app_dir}/secrets/severino_hq_env." ;;
+esac
+controller_run_host="$(env_value SEVERINO_CONTROLLER_RUN_DIR)"
+case "${controller_run_host}" in
+    "" | /run/severino-hq) controller_run_host=/run/severino-hq ;;
+    *) refuse_mount "SEVERINO_CONTROLLER_RUN_DIR must be /run/severino-hq." ;;
+esac
+controller_ca_host="$(env_value SEVERINO_CONTROLLER_CA_FILE_HOST)"
+case "${controller_ca_host}" in
+    "" | /dev/null) controller_ca_host=/dev/null ;;
+    *..*) refuse_mount "SEVERINO_CONTROLLER_CA_FILE_HOST may not climb out of the certificate store." ;;
+    /usr/local/share/ca-certificates/*.crt | /usr/local/share/ca-certificates/*.pem) ;;
+    *) refuse_mount "SEVERINO_CONTROLLER_CA_FILE_HOST must be a certificate under /usr/local/share/ca-certificates." ;;
+esac
+SEVERINO_APP_ENV_FILE_HOST="${app_env_host}"
+SEVERINO_CONTROLLER_RUN_DIR="${controller_run_host}"
+SEVERINO_CONTROLLER_CA_FILE_HOST="${controller_ca_host}"
+export SEVERINO_APP_ENV_FILE_HOST SEVERINO_CONTROLLER_RUN_DIR SEVERINO_CONTROLLER_CA_FILE_HOST
+
 # The registry credential arrives on stdin as two lines, username then token,
 # never as arguments or environment: arguments are readable in the process table
 # while the command runs, and passing environment through sudo would need a

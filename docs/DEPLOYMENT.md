@@ -672,6 +672,15 @@ host's public homelab root certificate. Compose mounts it read-only; provider
 requests retain normal public trust and add this CA instead of disabling TLS
 verification.
 
+The deploy checks the three host paths the web container binds before compose
+reads them. The checkout's `.env` is writable by the deploy account, so none of
+them is taken on trust:
+- `SEVERINO_APP_ENV_FILE_HOST` must be `secrets/severino_hq_env` in the
+  application directory, in a directory only root can enter.
+- `SEVERINO_CONTROLLER_RUN_DIR` must be `/run/severino-hq`.
+- `SEVERINO_CONTROLLER_CA_FILE_HOST` must be a certificate under
+  `/usr/local/share/ca-certificates/`.
+
 ```bash
 # From the VPS / homelab host (NOT the public internet)
 curl -I http://127.0.0.1:8000/accounts/login/
