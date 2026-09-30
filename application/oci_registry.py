@@ -17,14 +17,13 @@ from __future__ import annotations
 
 import json
 import re
-import socket
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any
 
 from .images import DOCKER_HUB, ImageRef
-from .reach import is_public
+from .reach import public_host
 
 TIMEOUT_SECONDS = 10
 # Docker Hub serves its registry API from a different host than its name.
@@ -50,14 +49,8 @@ class RegistryPrivate(RegistryReadError):
     rather than retried as a failure."""
 
 
-def _public_host(host: str) -> bool:
-    """Whether every address ``host`` resolves to is on the public internet."""
-
-    try:
-        found = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
-    except (OSError, UnicodeError):
-        return False
-    return bool(found) and all(is_public(str(item[4][0])) for item in found)
+# Named here so a test can stand in for resolution at the one place it is asked.
+_public_host = public_host
 
 
 def _checked(url: str) -> str:

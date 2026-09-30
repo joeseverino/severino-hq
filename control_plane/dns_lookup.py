@@ -29,6 +29,7 @@ from application.connection_contracts import (
     ConnectionInstance,
     ConnectionSpec,
 )
+from application.reach import public_host
 from application.security import Capability
 from core.errors import UpstreamUnavailable
 
@@ -129,8 +130,13 @@ class _HTTPSOnlyRedirects(urllib.request.HTTPRedirectHandler):
     """
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        if urlsplit(newurl).scheme != "https":
+        target = urlsplit(newurl)
+        if target.scheme != "https":
             raise LookupUnavailable("A registry redirected away from HTTPS.")
+        # A registry is on the public internet. A redirect to anything else is
+        # a request HQ would make on the registry's behalf, from inside.
+        if not target.hostname or not public_host(target.hostname):
+            raise LookupUnavailable("A registry redirected to an address that is not public.")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 

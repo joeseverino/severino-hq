@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from ipaddress import IPv6Network, ip_address, ip_network
 from pathlib import Path
+import socket
 
 # Tailscale hands out addresses from the carrier-grade NAT range and one IPv6
 # ULA prefix. Nothing else on a normal network uses either, so an address in
@@ -55,6 +56,16 @@ def is_public(address: str) -> bool:
     if not found.is_global and not any(found in network for network in _DOCUMENTATION_RANGES):
         return False
     return network_of(str(found)) == "public" and not is_documentation(str(found))
+
+
+def public_host(host: str) -> bool:
+    """Whether every address ``host`` resolves to is on the public internet."""
+
+    try:
+        found = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+    except (OSError, UnicodeError):
+        return False
+    return bool(found) and all(is_public(str(item[4][0])) for item in found)
 
 
 def public_label(address: str) -> str:
