@@ -40,6 +40,15 @@ HEADERS_READ = {
     "Cookie": "Carries the session. Its contents are never shown, here or anywhere.",
 }
 REDACTED = {"Cookie", "Authorization", "X-Csrftoken", "Proxy-Authorization"}
+# A proxy or an identity-aware gateway in front of HQ can add credentials of
+# its own, under names nobody listed here. A name that says what it carries is
+# enough to hide it.
+_CREDENTIAL_WORDS = ("auth", "token", "secret", "key", "jwt", "assertion", "session", "cookie", "password")
+
+
+def is_redacted(name: str) -> bool:
+    lowered = name.lower()
+    return name in REDACTED or any(word in lowered for word in _CREDENTIAL_WORDS)
 # Headers deliberately not believed, and the reason. Without these the page
 # lists a header carrying the correct answer as merely ignored, which reads as
 # an oversight rather than as the safer of two choices.
@@ -79,7 +88,7 @@ def headers_of(request) -> tuple[Header, ...]:
             name = key[5:].replace("_", "-").title()
         else:
             continue
-        redacted = name in REDACTED
+        redacted = is_redacted(name)
         found.append(
             Header(
                 name=name,
