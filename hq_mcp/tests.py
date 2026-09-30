@@ -104,6 +104,17 @@ class ServiceTests(TestCase):
             result["relationships"]["documentation"], ["rb-hq-mcp"]
         )
 
+    def test_a_caller_that_may_read_nothing_is_answered_by_no_read_tool(self):
+        from application.security import AuthorizationError
+
+        from .identity import reset_principal, set_principal
+
+        bound = set_principal(Principal("example-writer", "mcp", frozenset({Capability.WRITE_PROJECTS})))
+        self.addCleanup(reset_principal, bound)
+        for tool in (services.audit_registry, services.documentation_status, services.system_health):
+            with self.subTest(tool=tool.__name__), self.assertRaises(AuthorizationError):
+                tool()
+
     def test_documentation_status_excludes_sensitive_and_restricted_records(self):
         DocumentationRecord.objects.create(
             doc_id="rb-safe",
