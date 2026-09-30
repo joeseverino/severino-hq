@@ -500,6 +500,19 @@ class PluginContractTests(TestCase):
         ):
             installed_plugins()
 
+    def test_a_url_prefix_under_a_sign_in_exempt_path_fails_at_startup(self):
+        """Mounted there, every route of the plugin would skip the sign-in."""
+
+        for prefix in ("api/notes/", "static/notes/", "health/notes/", "accounts/loginpage/"):
+            with self.subTest(prefix=prefix):
+                env, importer = self.load(
+                    replace(VALID, url_prefix=prefix, urlconf="example.urls")
+                )
+                with env, importer, self.assertRaisesRegex(
+                    ImproperlyConfigured, "exempt from sign-in"
+                ):
+                    installed_plugins()
+
     def test_route_configuration_is_atomic(self):
         env, importer = self.load(replace(VALID, url_prefix="notes/"))
         with env, importer, self.assertRaises(ImproperlyConfigured):

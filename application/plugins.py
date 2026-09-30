@@ -9,6 +9,7 @@ import os
 import re
 from typing import Any, Callable, Iterable
 
+from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.urls import URLResolver, include, path, reverse
 
@@ -183,6 +184,12 @@ def _validate_mount(manifest: PluginManifest) -> None:
         raise ImproperlyConfigured(
             f"Plugin {manifest.id!r} has invalid url_prefix {manifest.url_prefix!r}."
         )
+    if manifest.url_prefix and _exempt_from_sign_in(manifest.url_prefix):
+        raise ImproperlyConfigured(
+            f"Plugin {manifest.id!r} url_prefix {manifest.url_prefix!r} falls under "
+            "a path exempt from sign-in. Declare token_authenticated_routes for a "
+            "route that carries its own authentication instead."
+        )
     if manifest.urlconf and not PYTHON_PATH.fullmatch(manifest.urlconf):
         raise ImproperlyConfigured(
             f"Plugin {manifest.id!r} has invalid urlconf {manifest.urlconf!r}."
@@ -192,6 +199,13 @@ def _validate_mount(manifest: PluginManifest) -> None:
             raise ImproperlyConfigured(
                 f"Plugin {manifest.id!r} has invalid Django app {app!r}."
             )
+
+
+def _exempt_from_sign_in(url_prefix: str) -> bool:
+    """Whether the host's own sign-in exemptions would cover this mount."""
+
+    mounted = "/" + url_prefix
+    return any(mounted.startswith(prefix) for prefix in settings.LOGIN_EXEMPT_PATH_PREFIXES)
 
 
 def _validate_providers(manifest: PluginManifest) -> None:
