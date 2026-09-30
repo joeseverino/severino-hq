@@ -349,6 +349,7 @@ jobs:
         id: fingerprint
         env:
           FORCE: ${{ github.event_name != 'workflow_dispatch' || inputs.force }}
+          HOST_IMAGE: ${{ steps.host.outputs.image }}
         run: |
           set -euo pipefail
           # What a composition IS: this host image, these admitted wheels, this
@@ -359,7 +360,7 @@ jobs:
           # is almost always "nothing", and an idle tick that downloads and
           # verifies is a chance to fail at something nobody is waiting for.
           fingerprint=$(printf '%s\n%s\n%s\n' \
-            "${{ steps.host.outputs.image }}" \
+            "$HOST_IMAGE" \
             "$(sha256sum admissions.txt | cut -d' ' -f1)" \
             "$(openssl dgst -sha256 policy/plugin-admission-v1.json | awk '{print $NF}')" \
             | sha256sum | cut -c1-32)
@@ -393,12 +394,14 @@ jobs:
         # even when the inputs match, because a hand-run rebuild asking for
         # exactly that is the one case where "nothing changed" is not an answer.
         if: steps.fingerprint.outputs.build == 'false'
+        env:
+          FINGERPRINT: ${{ steps.fingerprint.outputs.fingerprint }}
         run: |
           {
             echo "### Composition already current"
             echo
             echo "Host image, extension wheels and admission policy are unchanged"
-            echo "since \`fp-${{ steps.fingerprint.outputs.fingerprint }}\` was published."
+            echo "since \`fp-$FINGERPRINT\` was published."
             echo "Nothing was built and nothing was deployed."
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -497,6 +500,16 @@ jobs:
             if [ -z "$statement" ] || [ -z "$bundle" ] || [ -z "$wheel" ]; then
               echo "::error::$repo is missing its admission statement, bundle or wheel"; exit 1
             fi
+            # These paths become words of the next step's command line, so each
+            # is held to a wheel's own name (PEP 427): nothing a shell reads.
+            for path in "$statement" "$bundle" "$wheel"; do
+              if [[ ! "$path" =~ ^[A-Za-z0-9._/+-]+$ ]]; then
+                echo "::error::$repo ships an artifact whose name is not a plain file name"; exit 1
+              fi
+            done
+            if [[ ! "$(basename "$wheel")" =~ ^[A-Za-z0-9_.]+-[A-Za-z0-9_.+]+(-[0-9][A-Za-z0-9_.]*)?-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+\.whl$ ]]; then
+              echo "::error::$repo ships a wheel whose name is not a wheel's"; exit 1
+            fi
             entry="$dir/verified-entry.json"
             node cordon/admission/verify.mjs \
               --statement "$statement" \
@@ -521,7 +534,13 @@ jobs:
           (steps.fingerprint.outputs.build == 'true')
         env:
           CORDON_LOCK: ./cordon/admission/lock.mjs
-        run: python scripts/compose-plugins.py ${{ steps.collect.outputs.args }} --out build/composition
+          ARGS: ${{ steps.collect.outputs.args }}
+        # ARGS is words by construction (the collect step admits only plain
+        # file names), so it is split here on purpose and never globbed.
+        run: |
+          set -f
+          # shellcheck disable=SC2086
+          python scripts/compose-plugins.py $ARGS --out build/composition
 
       - name: Build composed image
         # Skipped by an admission's dispatch that found nothing to do, and by a
@@ -531,13 +550,17 @@ jobs:
           (steps.fingerprint.outputs.build == 'true')
         env:
           HQ_IMAGE: ${{ steps.host.outputs.image }}
+          WHEEL_DIGESTS: ${{ steps.compose.outputs.digests }}
+          POLICY_SHA256: ${{ steps.compose.outputs.policy_sha256 }}
+          PLUGIN_REFERENCES: ${{ steps.compose.outputs.references }}
+          HOST_SHA: ${{ steps.host.outputs.sha }}
         run: |
           docker build -f composition/Dockerfile \
             --build-arg HQ_IMAGE="$HQ_IMAGE" \
-            --build-arg PLUGIN_WHEEL_DIGESTS="${{ steps.compose.outputs.digests }}" \
-            --build-arg PLUGIN_POLICY_SHA256="${{ steps.compose.outputs.policy_sha256 }}" \
-            --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="${{ steps.compose.outputs.references }}" \
-            -t ghcr.io/${{ github.repository }}/composition:${{ steps.host.outputs.sha }} .
+            --build-arg PLUGIN_WHEEL_DIGESTS="$WHEEL_DIGESTS" \
+            --build-arg PLUGIN_POLICY_SHA256="$POLICY_SHA256" \
+            --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="$PLUGIN_REFERENCES" \
+            -t "ghcr.io/${{ github.repository }}/composition:$HOST_SHA" .
 
       - name: Build coordinated extension branches
         # Branch code is unreviewed, and this job holds a registry credential
@@ -676,14 +699,17 @@ jobs:
           env.IS_RELEASE == 'true' &&
           (steps.fingerprint.outputs.build == 'true')
         id: publish
+        env:
+          HOST_SHA: ${{ steps.host.outputs.sha }}
+          FINGERPRINT_TAG: ${{ steps.fingerprint.outputs.tag }}
         run: |
-          image=ghcr.io/${{ github.repository }}/composition:${{ steps.host.outputs.sha }}
+          image="ghcr.io/${{ github.repository }}/composition:$HOST_SHA"
           docker push "$image"
           # The fingerprint tag is what the next admission's dispatch reads to decide
           # there is nothing to do. Pushed after the image itself, so a failed
           # push never leaves a claim that this composition was published.
-          docker tag "$image" "${{ steps.fingerprint.outputs.tag }}"
-          docker push "${{ steps.fingerprint.outputs.tag }}"
+          docker tag "$image" "$FINGERPRINT_TAG"
+          docker push "$FINGERPRINT_TAG"
           digest=$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' | tr -d '"')
           echo "image=${image%:*}@$digest" >> "$GITHUB_OUTPUT"
 

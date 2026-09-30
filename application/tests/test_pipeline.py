@@ -291,3 +291,48 @@ class ComposeCandidateTests(SimpleTestCase):
                 "--candidate", "--entry", str(self.root / "entry.json"),
                 "--wheel", str(wheel), "--out", str(self.root / "out"),
             ])
+
+
+class ScriptInputTests(SimpleTestCase):
+    """What a script is handed arrives as data, never as its text."""
+
+    def run_blocks(self):
+        for workflow in sorted(WORKFLOWS.glob("*.yml")):
+            lines = workflow.read_text().splitlines()
+            index = 0
+            while index < len(lines):
+                match = re.match(r"^(\s*)(?:- )?run:\s*(.*)$", lines[index])
+                if not match:
+                    index += 1
+                    continue
+                indent, block = len(match.group(1)), [match.group(2)]
+                index += 1
+                while index < len(lines) and (
+                    not lines[index].strip() or len(lines[index]) - len(lines[index].lstrip()) > indent
+                ):
+                    block.append(lines[index])
+                    index += 1
+                yield workflow.name, "\n".join(block)
+
+    def test_no_script_interpolates_a_step_output_or_the_event(self):
+        """A step output can carry a file name an extension chose, and the event
+        a title anyone can type. Interpolated, either is script text; through
+        env it stays a value. GitHub's own fixed fields stay allowed."""
+
+        blocks = list(self.run_blocks())
+        self.assertGreater(len(blocks), 20)
+        for name, block in blocks:
+            for expression in re.findall(r"\$\{\{\s*([^}]*?)\s*\}\}", block):
+                with self.subTest(workflow=name, expression=expression):
+                    self.assertFalse(
+                        re.match(r"(steps|needs|inputs)\.|github\.event\.|github\.head_ref", expression),
+                        f"{name} interpolates {expression} into a script; pass it through env",
+                    )
+
+    def test_an_extension_artifact_must_be_named_like_a_wheel_before_it_is_used(self):
+        compose = (WORKFLOWS / "compose.yml").read_text()
+        collect = compose.index('wheel=$(find "$dir" -name')
+        check = compose.index("ships a wheel whose name is not a wheel's")
+        use = compose.index('--artifact "$wheel"')
+        self.assertLess(collect, check)
+        self.assertLess(check, use)
