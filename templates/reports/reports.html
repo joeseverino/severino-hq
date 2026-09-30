@@ -17,35 +17,35 @@
   <div class="kpi"><span class="label">Docs needing review</span><span class="value">{{ docs_needing_review_count }}</span></div>
 </section>
 
+{% comment %}
+A year with no expenses is said by the count above; its breakdowns do not draw.
+{% endcomment %}
+{% if expenses_by_category %}
 <div class="two-col">
   <section>
     <h2>Expenses by category, {{ year }}</h2>
-    {% if expenses_by_category %}
-      <div class="table-scroll">
-      <table class="data-table">
-        <thead><tr><th>Category</th><th>Total</th><th>Deductible</th></tr></thead>
-        <tbody>
-          {% for row in expenses_by_category %}
-            <tr><td>{{ row.category }}</td><td>${{ row.total|floatformat:2|intcomma }}</td><td>${{ row.deductible|floatformat:2|intcomma }}</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      </div>
-    {% else %}<p class="muted">No expenses this year.</p>{% endif %}
+    <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Category</th><th>Total</th><th>Deductible</th></tr></thead>
+      <tbody>
+        {% for row in expenses_by_category %}
+          <tr><td>{{ row.category }}</td><td>${{ row.total|floatformat:2|intcomma }}</td><td>${{ row.deductible|floatformat:2|intcomma }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
   </section>
 
   <section>
     <h2>Largest expenses, {{ year }}</h2>
-    {% if largest_expenses %}
-      <ul class="list-rows">
-        {% for e in largest_expenses %}
-          <li><span class="row-main"><a href="{{ e.get_absolute_url }}">{{ e.vendor }} · {{ e.item }}</a></span><span class="row-meta">{{ e.date }} · {{ e.get_category_display }} · <strong>${{ e.total_cost|floatformat:2|intcomma }}</strong></span></li>
-        {% endfor %}
-      </ul>
-    {% else %}<p class="muted">None.</p>{% endif %}
+    <ul class="list-rows">
+      {% for e in largest_expenses %}
+        <li><span class="row-main"><a href="{{ e.get_absolute_url }}">{{ e.vendor }} · {{ e.item }}</a></span><span class="row-meta">{{ e.date }} · {{ e.get_category_display }} · <strong>${{ e.total_cost|floatformat:2|intcomma }}</strong></span></li>
+      {% endfor %}
+    </ul>
   </section>
-
 </div>
+{% endif %}
 
 {% comment %}
 Two small readings share a row: the status counts are a line or two each, and
@@ -62,16 +62,16 @@ as two cards of their own they would be mostly empty card.
     {% else %}<p class="muted">No content or projects yet.</p>{% endif %}
   </section>
 
+  {% if docs_needing_review %}
   <section>
     <h2>Docs needing review</h2>
-    {% if docs_needing_review %}
-      <ul class="list-rows">
-        {% for d in docs_needing_review %}
-          <li><span class="row-main"><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} · {{ d.title }}</a></span><span class="row-meta">last reviewed {{ d.last_reviewed|default:"never" }}</span></li>
-        {% endfor %}
-      </ul>
-    {% else %}<p class="muted">No docs need review.</p>{% endif %}
+    <ul class="list-rows">
+      {% for d in docs_needing_review %}
+        <li><span class="row-main"><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} · {{ d.title }}</a></span><span class="row-meta">last reviewed {{ d.last_reviewed|default:"never" }}</span></li>
+      {% endfor %}
+    </ul>
   </section>
+  {% endif %}
 </div>
 
 <section>
