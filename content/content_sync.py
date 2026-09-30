@@ -50,6 +50,9 @@ class _SameOriginRedirects(urllib.request.HTTPRedirectHandler):
 
 
 _OPENER = urllib.request.build_opener(_SameOriginRedirects)
+# An index of links is kilobytes. Read no further than this, so a site that
+# answers with something else cannot make the fetch hold it all in memory.
+MAX_INDEX_BYTES = 4 * 1024 * 1024
 
 
 def fetch_content_index(url: str | None = None, timeout: int = 10) -> dict:
@@ -72,7 +75,10 @@ def fetch_content_index(url: str | None = None, timeout: int = 10) -> dict:
     request = urllib.request.Request(url, headers=headers)
     try:
         with _OPENER.open(request, timeout=timeout) as response:
-            return json.loads(response.read().decode())
+            raw = response.read(MAX_INDEX_BYTES + 1)
+            if len(raw) > MAX_INDEX_BYTES:
+                raise ContentSyncError("Content index is larger than an index can be.")
+            return json.loads(raw.decode())
     except urllib.error.HTTPError as exc:
         # An HTTPError is the error response itself, socket included. Chained
         # below it would stay open until the ContentSyncError was collected.

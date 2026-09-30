@@ -419,6 +419,32 @@ class _AuthedTestCase(TestCase):
         assert self.client.login(username="tester", password="strongtestpass-1234")
 
 
+class ManifestUploadTests(_AuthedTestCase):
+    def upload(self, content):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        return self.client.post(
+            "/docs/import/",
+            {"manifest_file": SimpleUploadedFile("manifest.json", content, "application/json")},
+        )
+
+    def test_a_file_that_is_not_utf8_is_refused_with_a_reason(self):
+        response = self.upload(b"\xff\xfe[]")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "not UTF-8")
+
+    def test_an_oversized_manifest_is_refused_before_it_is_read(self):
+        from docs_index.forms import MAX_MANIFEST_BYTES
+
+        with patch("docs_index.forms.MAX_MANIFEST_BYTES", 8):
+            response = self.upload(b"[" + b" " * 16 + b"]")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "A manifest is at most")
+        self.assertGreater(MAX_MANIFEST_BYTES, 8)
+
+
 class NavigationSmokeTests(_AuthedTestCase):
     URLS = [
         "/",

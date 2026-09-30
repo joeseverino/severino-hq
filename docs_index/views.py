@@ -234,6 +234,9 @@ class ManifestImportView(LoginRequiredMixin, View):
         try:
             raw = form.cleaned_data["manifest_file"].read()
             data = json.loads(raw.decode("utf-8"))
+        except UnicodeDecodeError:
+            messages.error(request, "Invalid JSON: the file is not UTF-8 text.")
+            return self.render_form(request, form)
         except json.JSONDecodeError as exc:
             messages.error(request, f"Invalid JSON: {exc}")
             return self.render_form(request, form)

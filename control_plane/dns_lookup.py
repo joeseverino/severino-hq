@@ -141,6 +141,8 @@ class _HTTPSOnlyRedirects(urllib.request.HTTPRedirectHandler):
 
 
 _opener = urllib.request.build_opener(_HTTPSOnlyRedirects)
+# An RDAP or DNS answer is kilobytes; anything past this is not one.
+MAX_ANSWER_BYTES = 1024 * 1024
 
 
 def _base(name: str) -> str:
@@ -155,6 +157,15 @@ def _base(name: str) -> str:
     if parsed.scheme != "https" or not parsed.hostname:
         raise LookupUnavailable("That lookup provider is not configured.")
     return f"https://{parsed.netloc}"
+
+
+def _answer(response) -> object:
+    if response.status != 200:
+        raise LookupUnavailable("The registry answered unexpectedly.")
+    raw = response.read(MAX_ANSWER_BYTES + 1)
+    if len(raw) > MAX_ANSWER_BYTES:
+        raise LookupUnavailable("The registry answered with more than an answer.")
+    return json.loads(raw.decode("utf-8"))
 
 
 def _get(url: str, *, timeout: int | None = None, accept: str) -> dict:
@@ -174,9 +185,7 @@ def _get(url: str, *, timeout: int | None = None, accept: str) -> dict:
     )
     try:
         with _opener.open(request, timeout=seconds) as response:
-            if response.status != 200:
-                raise LookupUnavailable("The registry answered unexpectedly.")
-            payload = json.loads(response.read().decode("utf-8"))
+            payload = _answer(response)
     except LookupUnavailable:
         raise
     except HTTPError as exc:

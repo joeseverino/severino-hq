@@ -36,6 +36,10 @@ class DocumentationRecordForm(forms.ModelForm):
         }
 
 
+# Several thousand doc records are a few megabytes.
+MAX_MANIFEST_BYTES = 10 * 1024 * 1024
+
+
 class ManifestImportForm(forms.Form):
     manifest_file = forms.FileField(
         label="Manifest JSON",
@@ -53,3 +57,11 @@ class ManifestImportForm(forms.Form):
         initial=True,
         label="Update existing records (match on doc_id)",
     )
+
+    def clean_manifest_file(self):
+        manifest = self.cleaned_data["manifest_file"]
+        if manifest.size > MAX_MANIFEST_BYTES:
+            raise forms.ValidationError(
+                f"A manifest is at most {MAX_MANIFEST_BYTES // (1024 * 1024)} MB."
+            )
+        return manifest

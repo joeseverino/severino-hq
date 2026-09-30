@@ -162,6 +162,26 @@ class ContentSyncTests(TestCase):
 
         self.assertEqual(seen, [])
 
+    def test_an_index_larger_than_an_index_is_refused_unread(self):
+        class Response:
+            requested = None
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self, limit=-1):
+                Response.requested = limit
+                return b" " * (limit if limit > 0 else 64 * 1024 * 1024)
+
+        with patch("content.content_sync._OPENER.open", return_value=Response()):
+            with self.assertRaisesMessage(ContentSyncError, "larger than an index"):
+                fetch_content_index("https://example.test/content-index.json")
+
+        self.assertGreater(Response.requested, 0)
+
     def test_missing_items_list_raises(self):
         with self.assertRaises(ContentSyncError):
             sync_content_index(payload={"nope": True})
@@ -178,7 +198,7 @@ class ContentSyncTests(TestCase):
             def __exit__(self, *_args):
                 return False
 
-            def read(self):
+            def read(self, *_limit):
                 return json.dumps(_payload()).encode()
 
         with patch("content.content_sync._OPENER.open", return_value=Response()) as open_url:
