@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 from control_plane.provider_adapters.contracts import ProviderError
@@ -194,6 +195,10 @@ def ssh_connection_refs() -> tuple[str, ...]:
     )
 
 
+SSH_HOST = re.compile(r"[A-Za-z0-9][A-Za-z0-9.:-]*")
+SSH_USER = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]{0,31}")
+
+
 def ssh_target(connection_ref: str) -> dict[str, Any]:
     """The endpoint for an SSH connection, from the rendered environment."""
 
@@ -203,9 +208,17 @@ def ssh_target(connection_ref: str) -> dict[str, Any]:
     port = provider_http.required(prefix, "PORT")
     if not port.isdigit() or not 1 <= int(port) <= 65535:
         raise ProviderError(f"The port configured for {connection_ref} is not a port number.")
+    host = provider_http.required(prefix, "HOST")
+    user = provider_http.required(prefix, "USER")
+    # Both become ssh's destination argument, where a leading dash is an option
+    # (ProxyCommand runs a command) and an @ or a space moves the boundary.
+    if not SSH_HOST.fullmatch(host):
+        raise ProviderError(f"The host configured for {connection_ref} is not a host name or address.")
+    if not SSH_USER.fullmatch(user):
+        raise ProviderError(f"The user configured for {connection_ref} is not a login name.")
     return {
-        "host": provider_http.required(prefix, "HOST"),
+        "host": host,
         "port": int(port),
-        "user": provider_http.required(prefix, "USER"),
+        "user": user,
         "host_key": provider_http.required(prefix, "HOST_KEY"),
     }
