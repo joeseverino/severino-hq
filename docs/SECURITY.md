@@ -125,7 +125,8 @@
   on every request to `/mcp/` and to the machine API (`/api/`), and fails
   closed. Both surfaces accept the same Pocket ID tokens, so a brake on one
   alone would leave a paused agent a URL away from its capabilities. A paused
-  agent's held requests cannot be approved until agents resume.
+  agent's held requests cannot be approved, and work it queued is not handed
+  to the controller, until agents resume.
 - Capability policy at `/agents/` sets, per capability and per surface or
   agent, whether a call is allowed, held for approval, or denied. Rules only
   narrow the identity provider's grant. An explicit rule beats the default, and

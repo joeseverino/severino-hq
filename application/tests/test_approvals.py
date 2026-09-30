@@ -389,6 +389,27 @@ class DecisionTests(TestCase):
         )
         self.assertEqual(claimed["operation"]["id"], str(operation.id))
 
+    def test_pausing_agents_holds_the_work_an_agent_queued(self):
+        from django.contrib.auth import get_user_model
+
+        from application.agent_access import set_agents_paused
+
+        operator = an_operator()
+        person = get_user_model().objects.get(username=operator.actor)
+        approve(str(self.held().id), principal=operator)
+        operation = OperationRequest.objects.get()
+        claim = lambda: claim_next_operation(  # noqa: E731
+            "controller-example", capabilities=((GATED_KIND, "reconcile"),)
+        )
+
+        set_agents_paused(True, principal=operator, user=person)
+        self.assertIsNone(claim()["operation"])
+        operation.refresh_from_db()
+        self.assertEqual(operation.state, OperationRequest.State.QUEUED)
+
+        set_agents_paused(False, principal=operator, user=person)
+        self.assertEqual(claim()["operation"]["id"], str(operation.id))
+
     def test_approving_an_amendment_applies_exactly_the_document_held(self):
         wanted = policy_document("group:elsewhere")
         held = self.held(
