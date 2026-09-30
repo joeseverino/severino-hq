@@ -99,16 +99,35 @@ class ApprovalError(ValueError):
     """A decision could not be taken, and this says what a person should know."""
 
 
-class TooManyPendingApprovals(ApprovalError):
-    """One actor is holding more outstanding requests than it may.
+class RefusedHold(ApprovalError):
+    """A call that had to wait for a person and could not be made to.
 
     `reason` is written for the caller, so an adapter returns it rather than
-    the exception's string form.
+    the exception's string form, under `code`.
     """
+
+    code = "refused_hold"
 
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
         self.reason = reason
+
+
+class TooManyPendingApprovals(RefusedHold):
+    """One actor is holding more outstanding requests than it may."""
+
+    code = "too_many_pending_approvals"
+
+
+class UnreadableSubject(RefusedHold):
+    """A call a person must approve is about something HQ cannot show them.
+
+    Refused rather than run: with no subject there is nothing to approve and no
+    baseline to hold the approval to, and running it would turn "must wait for a
+    person" into "runs whenever the read comes back empty".
+    """
+
+    code = "approval_subject_unreadable"
 
 
 @dataclass(frozen=True)
@@ -289,7 +308,11 @@ def hold_for_approval(
         return None
     subject = approval_subject(spec, payload, target)
     if subject is None:
-        return None
+        raise UnreadableSubject(
+            f"{spec.name} needs a person to approve it, and what it would change "
+            "could not be read, so there is nothing to show them. Check the "
+            "target and ask again."
+        )
     digest = fingerprint(spec.name, target, payload, subject.baseline)
     existing = ApprovalRequest.objects.filter(
         capability=spec.name,

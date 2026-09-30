@@ -58,7 +58,7 @@ from .resource_operations import (
     request_reconcile,
     request_removal,
 )
-from .approvals import TooManyPendingApprovals, hold_for_approval
+from .approvals import RefusedHold, hold_for_approval
 from .capability_policy import Rule, decide
 from .denials import record_denial
 from .integration_specs import TARGET_KINDS, CapabilitySpec, command_schema
@@ -737,18 +737,18 @@ def execute_capability(
         return _error("invalid_input", f"{name} requires a {spec.target_kind} target.")
     except _UnknownFields as exc:
         return _invalid(pydantic_refusal(name, exc.errors))
-    except TooManyPendingApprovals as exc:
-        # Said in full, unlike the generic failure below. This is the one refusal
-        # whose remedy is neither a retry nor a fix to the request: somebody has
-        # to answer what is already waiting, and a caller cannot work that out
-        # from "could not be executed".
+    except RefusedHold as exc:
+        # Said in full, unlike the generic failure below. The remedy is neither
+        # a retry nor a fix to the request (somebody has to answer what is
+        # already waiting, or what the call is about has to be readable) and a
+        # caller cannot work that out from "could not be executed".
         record_denial(
             interface=principal.interface,
             actor=principal.actor,
             capability=name,
-            reason="too_many_pending_approvals",
+            reason=exc.code,
         )
-        return _error("too_many_pending_approvals", exc.reason)
+        return _error(exc.code, exc.reason)
     except AuthorizationError as exc:
         # The one refusal point for every adapter.
         record_denial(

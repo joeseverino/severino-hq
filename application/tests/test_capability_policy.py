@@ -114,6 +114,21 @@ class DestructiveDefaultTests(PolicyTestCase):
         approve(held["approval"]["id"], principal=self.operator)
         self.assertFalse(Project.objects.filter(pk=project.pk).exists())
 
+    def test_a_held_call_whose_subject_cannot_be_read_is_refused_not_run(self):
+        """Nothing to show a person means nothing to approve, not no approval."""
+
+        from unittest import mock
+
+        from ..resources import ResourceNotFound
+
+        project = Project.objects.create(name="Unseen")
+        with mock.patch("application.resources.get_resource", side_effect=ResourceNotFound("x")):
+            result = self.delete(agent(capabilities=DELETES), project.slug)
+
+        self.assertEqual(result["error"]["code"], "approval_subject_unreadable")
+        self.assertTrue(Project.objects.filter(pk=project.pk).exists())
+        self.assertFalse(ApprovalRequest.objects.exists())
+
     def test_an_explicit_allow_for_one_agent_lifts_it_for_that_agent_alone(self):
         self.rule(Scope.AGENT, "trusted-agent", "project.delete", Rule.ALLOW)
         first = Project.objects.create(name="First")
