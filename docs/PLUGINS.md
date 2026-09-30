@@ -49,6 +49,11 @@ Set `SEVERINO_HQ_PLUGINS=example_notes.plugin:plugin`, install the package in
 the deployment image, and run its migrations. `python manage.py plugins` emits
 the effective, machine-readable inventory and validates compatibility.
 
+Capabilities a manifest declares are the plugin's own: naming one of the host's
+fails at startup, and so does a `url_prefix` under a path the host exempts from
+sign-in. A route that authenticates its own requests is listed in
+`token_authenticated_routes`.
+
 ## The golden path
 
 A plugin imports host behavior only through `hq_sdk`. Its repository owns the

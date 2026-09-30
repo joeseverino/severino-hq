@@ -268,6 +268,15 @@ def _validate_capabilities(manifest: PluginManifest) -> None:
             raise ImproperlyConfigured(
                 f"Plugin {manifest.id!r} declares invalid capability {capability!r}."
             )
+    from .security import Capability
+
+    host = {str(capability) for capability in Capability}
+    claimed = sorted(set(declared_capabilities) & host)
+    if claimed:
+        raise ImproperlyConfigured(
+            f"Plugin {manifest.id!r} declares the host capability "
+            f"{', '.join(claimed)}. A plugin grants only capabilities of its own."
+        )
     for label, capabilities in (
         ("operator", manifest.operator_capabilities),
         ("mcp_read", manifest.mcp_read_capabilities),

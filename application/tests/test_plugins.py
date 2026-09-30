@@ -265,6 +265,21 @@ class PluginContractTests(TestCase):
         ):
             installed_plugins()
 
+    def test_a_plugin_cannot_declare_a_host_capability(self):
+        """Listed under mcp_read, a host write would reach read-only agents."""
+
+        env, importer = self.load(
+            replace(
+                VALID,
+                operator_capabilities=("notes.read", "manage_infrastructure"),
+                mcp_read_capabilities=("manage_infrastructure",),
+            )
+        )
+        with env, importer, self.assertRaisesRegex(
+            ImproperlyConfigured, "host capability"
+        ):
+            installed_plugins()
+
     def test_duplicate_ids_fail_closed(self):
         clear_plugin_composition_cache()
         with (
