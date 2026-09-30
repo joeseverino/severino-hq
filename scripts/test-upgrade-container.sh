@@ -14,7 +14,9 @@ umask 022
 
 script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 readonly script_dir
-fixture="$(mktemp -d)"
+# Its physical path: the helper refuses a data path reached through a symlink,
+# and on a Mac the temp directory itself sits behind one (/var -> /private/var).
+fixture="$(cd "$(mktemp -d)" && pwd -P)"
 readonly fixture
 trap 'rm -rf "${fixture}"' EXIT HUP INT TERM
 real_tar="$(command -v tar)"
@@ -96,6 +98,12 @@ if [ "$1" = compose ]; then
                     echo "overwritten" >"${FIXTURE}/volumes/app_data/state"
                     echo "overwritten" >"${FIXTURE}/stacks/app/app.conf"
                 }
+                # Something else writing in the stack swaps a data path for a
+                # link to a file outside it, between the check and the rollback.
+                if [ -n "${STUB_SWAP_ON_UP:-}" ]; then
+                    rm -f "${FIXTURE}/stacks/app/app.conf"
+                    ln -s "${STUB_SWAP_ON_UP}" "${FIXTURE}/stacks/app/app.conf"
+                fi
             else
                 [ -z "${STUB_ROLLBACK_UP_FAIL:-}" ] || exit 1
             fi
@@ -318,6 +326,16 @@ with STUB_TERM_ON_UP=1 STUB_LIVE=unhealthy -- >"${fixture}/out" 2>/dev/null || c
 cmp -s "${fixture}/override.before" "${override}" || fail "a run stopped after the pin kept the pin"
 untouched "a stopped run"
 has 'stopped part way' "${fixture}/state/op-1/result.json" || fail "a stopped run recorded no result"
+
+# A data path swapped for a link after it was checked is not restored through:
+# the rollback fails loudly and the file outside the stack is untouched.
+reset
+echo "outside" >"${fixture}/outside.conf"
+code=0
+with STUB_LIVE=unhealthy "STUB_SWAP_ON_UP=${fixture}/outside.conf" -- >"${fixture}/out" || code=$?
+[ "${code}" = 1 ] || fail "a rollback through a swapped link exited ${code}, not 1"
+[ "$(cat "${fixture}/outside.conf")" = outside ] || fail "the rollback wrote through a link out of the stack"
+has 'could not be restored' "${fixture}/out" || fail "a swapped data path was not reported"
 
 # A rollback that fails is reported as a failure, a full disk as such.
 reset

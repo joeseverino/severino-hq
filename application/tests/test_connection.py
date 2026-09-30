@@ -730,6 +730,18 @@ class HeaderTests(TestCase):
 
         self.assertNotIn("a-real-token", found["Authorization"].value)
 
+    def test_a_credential_a_gateway_adds_is_never_printed(self):
+        found = self.headers(
+            HTTP_CF_ACCESS_JWT_ASSERTION="gateway-jwt",
+            HTTP_X_API_KEY="gateway-key",
+            HTTP_X_AUTH_REQUEST_ACCESS_TOKEN="gateway-token",
+        )
+
+        for name in ("Cf-Access-Jwt-Assertion", "X-Api-Key", "X-Auth-Request-Access-Token"):
+            with self.subTest(name=name):
+                self.assertTrue(found[name].redacted)
+                self.assertNotIn("gateway", found[name].value)
+
     def test_headers_hq_acts_on_come_first(self):
         found = headers_of(
             RequestFactory().get(

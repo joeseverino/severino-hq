@@ -309,6 +309,7 @@ class OIDCBackendTests(TestCase):
             self.assertTrue(
                 backend.verify_claims(
                     {
+                        "sub": "subject-1",
                         "preferred_username": "joe",
                         "groups": ["admins"],
                     }
@@ -320,10 +321,54 @@ class OIDCBackendTests(TestCase):
         backend = HQOIDCAuthenticationBackend()
 
         users = backend.filter_users_by_claims(
-            {"preferred_username": "joe", "groups": ["admins"]}
+            {"sub": "subject-1", "preferred_username": "joe", "groups": ["admins"]}
         )
 
         self.assertEqual(list(users), [user])
+
+    @override_settings(OIDC_ISSUER="https://id.example.test")
+    def test_a_signed_in_subject_keeps_its_account_whatever_it_is_renamed_to(self):
+        """Once bound, a name or address that moves to another person moves nothing."""
+
+        first = User.objects.create_user(username="joe", email="joe@example.com")
+        other = User.objects.create_user(username="sam", email="sam@example.com")
+        backend = HQOIDCAuthenticationBackend()
+        backend.request = type("Request", (), {"session": {}})()
+        with patch(
+            "mozilla_django_oidc.auth.OIDCAuthenticationBackend.get_or_create_user",
+            return_value=first,
+        ):
+            backend.get_or_create_user("a", "i", {"sub": "subject-1", "preferred_username": "joe"})
+
+        renamed = backend.filter_users_by_claims({"sub": "subject-1", "preferred_username": "sam"})
+        impostor = backend.filter_users_by_claims(
+            {"sub": "subject-2", "preferred_username": "joe", "email": "joe@example.com",
+             "email_verified": True}
+        )
+
+        self.assertEqual(list(renamed), [first])
+        self.assertEqual(list(impostor), [])
+        self.assertEqual(list(backend.filter_users_by_claims(
+            {"sub": "subject-2", "preferred_username": "sam"}
+        )), [other])
+
+    def test_an_unverified_address_does_not_find_an_account(self):
+        User.objects.create_user(username="joe", email="joe@example.com")
+        backend = HQOIDCAuthenticationBackend()
+
+        users = backend.filter_users_by_claims(
+            {"sub": "subject-9", "preferred_username": "other", "email": "joe@example.com"}
+        )
+
+        self.assertEqual(list(users), [])
+
+    def test_a_token_without_a_subject_is_not_a_sign_in(self):
+        backend = HQOIDCAuthenticationBackend()
+
+        with override_settings(SEVERINO_OIDC_ALLOWED_GROUPS={"admins"}):
+            self.assertFalse(
+                backend.verify_claims({"preferred_username": "joe", "groups": ["admins"]})
+            )
 
     def test_allows_user_by_allowed_email(self):
         backend = HQOIDCAuthenticationBackend()
@@ -335,6 +380,7 @@ class OIDCBackendTests(TestCase):
             self.assertTrue(
                 backend.verify_claims(
                     {
+                        "sub": "subject-1",
                         "email": "joe@example.com",
                         "email_verified": True,
                         "groups": [],
@@ -352,6 +398,7 @@ class OIDCBackendTests(TestCase):
             with self.assertRaises(PermissionDenied):
                 backend.verify_claims(
                     {
+                        "sub": "subject-1",
                         "preferred_username": "joe",
                         "groups": ["admins"],
                     }
@@ -370,6 +417,32 @@ class _AuthedTestCase(TestCase):
     def setUp(self):
         self.client = Client()
         assert self.client.login(username="tester", password="strongtestpass-1234")
+
+
+class ManifestUploadTests(_AuthedTestCase):
+    def upload(self, content):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        return self.client.post(
+            "/docs/import/",
+            {"manifest_file": SimpleUploadedFile("manifest.json", content, "application/json")},
+        )
+
+    def test_a_file_that_is_not_utf8_is_refused_with_a_reason(self):
+        response = self.upload(b"\xff\xfe[]")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "not UTF-8")
+
+    def test_an_oversized_manifest_is_refused_before_it_is_read(self):
+        from docs_index.forms import MAX_MANIFEST_BYTES
+
+        with patch("docs_index.forms.MAX_MANIFEST_BYTES", 8):
+            response = self.upload(b"[" + b" " * 16 + b"]")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "A manifest is at most")
+        self.assertGreater(MAX_MANIFEST_BYTES, 8)
 
 
 class NavigationSmokeTests(_AuthedTestCase):

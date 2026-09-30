@@ -152,6 +152,9 @@ same review, and should fail when its path matches nothing rather than pass.
   `application/tests/test_remedy_links.py` follows every remedy the findings, the
   action queue and the pages emit, and fails on one that opens with no target
   chosen or on the "replaces the whole record" form.
+- An href built from data HQ did not write (a reading, an attestation, a
+  manifest, the public contact form) passes through `web_url`, in Python or as
+  the template filter, so it is an http(s) address or no link at all.
 - Public tests compose synthetic siblings. The assembled private image runs
   all real plugin suites together.
 - A dependency used by a plugin must survive a clean wheel install with

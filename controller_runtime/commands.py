@@ -170,6 +170,7 @@ def run_ssh(connection_ref: str, operation: str, payload: bytes | None = None) -
         str(ssh_dir / connection_ref),
         "-p",
         str(transport["port"]),
+        "--",
         f"{transport['user']}@{transport['host']}",
         operation,
     ]

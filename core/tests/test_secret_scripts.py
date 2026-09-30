@@ -42,9 +42,20 @@ class SecretScriptTests(unittest.TestCase):
         }
         self.env.pop("SEVERINO_CONTROLLER_ENV", None)
         # Simulate Linux ownership and mount metadata; use real file modes.
+        # A file outside the private runtime directory stands in for one the
+        # script chowned to the controller account, as it would be on Linux.
         self.stub("stat", f'''exec '{sys.executable}' -c '
 import os, sys
-print("0:" + oct(os.stat(sys.argv[-1]).st_mode & 0o777)[2:])
+path, fmt = sys.argv[-1], sys.argv[-2]
+st = os.stat(path)
+mode = oct(st.st_mode & 0o777)[2:]
+uid = "0" if path.startswith(os.environ["SEVERINO_CONTROLLER_SECRET_DIR"]) else "10001"
+if fmt == "%u %h":
+    print(uid, st.st_nlink)
+elif fmt == "%u %a":
+    print(uid, mode)
+else:
+    print("0:" + mode)
 ' "$@"
 ''')
         self.stub("findmnt", '''

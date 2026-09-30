@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from pydantic import Field
@@ -181,12 +182,35 @@ def inventory(runtime: ProviderRuntime) -> list[dict[str, Any]]:
     return found
 
 
+# What may reach the Caddyfile from a declaration. The file is text, so a value
+# carrying a newline or a brace would become directives of its own (a second
+# site, a file server, an import), and the typed route would be arbitrary edge
+# configuration. Each is one token: a hostname (a wildcard allowed), an upstream
+# as host:port or scheme://host:port, a plain absolute directory.
+_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+DOMAIN = rf"^(?:\*\.)?{_LABEL}(?:\.{_LABEL})*\.?$"
+UPSTREAM = r"^(?:(?:https?|h2c)://)?[A-Za-z0-9](?:[A-Za-z0-9._-]*|\[[0-9A-Fa-f:.]+\])(?::[0-9]{1,5})?$"
+DIRECTORY = r"^(?:/[A-Za-z0-9._-]+)+/?$"
+
+
+def _token(value: str, pattern: str, what: str) -> str:
+    if not re.fullmatch(pattern, value):
+        raise ProviderError(f"A Caddy route's {what} is not one plain value: {value!r}.")
+    return value
+
+
 def _route_block(spec: dict[str, Any], certificate_directory: str) -> str:
-    lines = [f"{spec['domain']} {{"]
+    # Checked again here, not only by the models: this is the line that writes
+    # the file, and nothing may reach it that the models would refuse.
+    domain = _token(str(spec["domain"]), DOMAIN, "hostname")
+    upstream = _token(str(spec["upstream"]), UPSTREAM, "upstream")
+    if certificate_directory:
+        _token(certificate_directory, DIRECTORY, "certificate directory")
+    lines = [f"{domain} {{"]
     if certificate_directory:
         directory = certificate_directory.rstrip("/")
         lines.append(f"\ttls {directory}/fullchain.pem {directory}/privkey.pem")
-    lines.append(f"\treverse_proxy {spec['upstream']}")
+    lines.append(f"\treverse_proxy {upstream}")
     lines.append("}")
     return "\n".join(lines)
 
@@ -279,12 +303,14 @@ class CaddyRouteSpec(ProviderModel):
     domain: str = Field(
         min_length=1,
         max_length=253,
+        pattern=DOMAIN,
         title="Hostname",
         description="The name this route answers for.",
     )
     upstream: str = Field(
         default="",
         max_length=253,
+        pattern=rf"^(?:|{UPSTREAM[1:-1]})$",
         title="Hands off to",
         description=(
             "Where Caddy sends the request, usually a container and port."
@@ -292,11 +318,11 @@ class CaddyRouteSpec(ProviderModel):
     )
 
 class CaddyRouteInFile(ProviderModel):
-    domain: str = Field(min_length=1, max_length=253)
-    upstream: str = Field(min_length=1, max_length=253)
+    domain: str = Field(min_length=1, max_length=253, pattern=DOMAIN)
+    upstream: str = Field(min_length=1, max_length=253, pattern=UPSTREAM)
 
 class ResolvedCaddyRouteSpec(CaddyRouteSpec):
-    certificate_directory: str = Field(default="", max_length=500)
+    certificate_directory: str = Field(default="", max_length=500, pattern=rf"^(?:|{DIRECTORY[1:-1]})$")
     routes: list[CaddyRouteInFile] = Field(default_factory=list)
 
 def _identity(spec: dict[str, Any]) -> tuple[str, ...]:

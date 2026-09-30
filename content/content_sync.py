@@ -32,6 +32,29 @@ def _parse_date(value):
     return when.date() if when is not None else None
 
 
+class _SameOriginRedirects(urllib.request.HTTPRedirectHandler):
+    """Follow a redirect only within the origin that was asked.
+
+    The request carries an Access service token as headers, and urllib copies
+    a request's headers onto the redirect it follows, wherever that points. A
+    redirect to another origin, or down to http, is refused instead.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        asked, told = urlsplit(req.full_url), urlsplit(newurl)
+        if (told.scheme, told.netloc) != (asked.scheme, asked.netloc):
+            raise urllib.error.HTTPError(
+                newurl, code, "Redirect to another origin refused", headers, fp
+            )
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_OPENER = urllib.request.build_opener(_SameOriginRedirects)
+# An index of links is kilobytes. Read no further than this, so a site that
+# answers with something else cannot make the fetch hold it all in memory.
+MAX_INDEX_BYTES = 4 * 1024 * 1024
+
+
 def fetch_content_index(url: str | None = None, timeout: int = 10) -> dict:
     """GET the content index with the Cloudflare Access service-token headers."""
     url = url or settings.CONTENT_INDEX_URL
@@ -51,8 +74,11 @@ def fetch_content_index(url: str | None = None, timeout: int = 10) -> dict:
         headers["CF-Access-Client-Secret"] = client_secret
     request = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read().decode())
+        with _OPENER.open(request, timeout=timeout) as response:
+            raw = response.read(MAX_INDEX_BYTES + 1)
+            if len(raw) > MAX_INDEX_BYTES:
+                raise ContentSyncError("Content index is larger than an index can be.")
+            return json.loads(raw.decode())
     except urllib.error.HTTPError as exc:
         # An HTTPError is the error response itself, socket included. Chained
         # below it would stay open until the ContentSyncError was collected.

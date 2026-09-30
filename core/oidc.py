@@ -86,8 +86,9 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         user = super().get_or_create_user(access_token, id_token, payload)
         if user is None:
             return None
-        from application.linked_accounts import record_claimed_accounts
+        from application.linked_accounts import bind_sign_in, record_claimed_accounts
 
+        bind_sign_in(user, self._subject_key(payload))
         record_claimed_accounts(user, payload)
         session = getattr(getattr(self, "request", None), "session", None)
         if session is not None:
@@ -102,6 +103,8 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         preferred_username = claims.get("preferred_username", "").strip()
         email = claims.get("email", "").strip().lower()
         if not preferred_username and not email:
+            return False
+        if not self._subject_key(claims):
             return False
 
         allowed_emails = settings.SEVERINO_OIDC_ALLOWED_EMAILS
@@ -120,16 +123,46 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
             "SEVERINO_OIDC_ALLOWED_EMAILS or SEVERINO_OIDC_ALLOWED_GROUPS must be set."
         )
 
+    @staticmethod
+    def _subject_key(claims) -> str:
+        from application.linked_accounts import sign_in_subject
+
+        subject = claims.get("sub")
+        if not isinstance(subject, str) or not subject.strip():
+            return ""
+        return sign_in_subject(getattr(settings, "OIDC_ISSUER", ""), subject.strip())
+
     def filter_users_by_claims(self, claims):
+        """The user this subject signed in as before; else one not yet bound.
+
+        A name or an address is something a person can change, so it only
+        introduces a subject to an account nobody has signed in to by subject
+        yet, and an address only when the provider verified it. After that the
+        subject alone decides, so renaming someone does not hand them another
+        person's account.
+        """
+
+        from application.linked_accounts import SIGN_IN
+
+        key = self._subject_key(claims)
+        if not key:
+            return self.UserModel.objects.none()
+        bound = self.UserModel.objects.filter(
+            linked_accounts__provider=SIGN_IN, linked_accounts__login=key
+        )
+        if bound.exists():
+            return bound
+        unbound = self.UserModel.objects.exclude(linked_accounts__provider=SIGN_IN)
+
         preferred_username = claims.get("preferred_username", "").strip()
         if preferred_username:
-            users = self.UserModel.objects.filter(username__iexact=preferred_username)
+            users = unbound.filter(username__iexact=preferred_username)
             if users.exists():
                 return users
 
         email = claims.get("email", "").strip().lower()
-        if email:
-            users = self.UserModel.objects.filter(email__iexact=email)
+        if email and claims.get("email_verified") is True:
+            users = unbound.filter(email__iexact=email)
             if users.exists():
                 return users
 

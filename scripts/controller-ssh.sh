@@ -50,6 +50,15 @@ for required in host port user; do
     fi
 done
 
+# The destination argument: a leading dash would be an ssh option, an @ or a
+# space would move where the user ends and the host begins.
+case "${user}" in
+    -* | *[!A-Za-z0-9_.-]*) echo "${prefix}_USER is not a login name." >&2; exit 1 ;;
+esac
+case "${host}" in
+    -* | *[!A-Za-z0-9.:-]*) echo "${prefix}_HOST is not a host name or address." >&2; exit 1 ;;
+esac
+
 # Allowlisted by operation, not by host. What this constrains is which command
 # may be run on the far end; which hosts exist is decided by which credentials
 # the controller was given.
@@ -73,5 +82,6 @@ exec ssh \
     -o ConnectTimeout=10 \
     -i "${ssh_dir}/${connection_ref}" \
     -p "${port}" \
+    -- \
     "${user}@${host}" \
     "${remote_command}"

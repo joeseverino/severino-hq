@@ -203,6 +203,25 @@ class AcmeOwnershipTests(TestCase):
         run.assert_not_called()
 
 
+class PrivateWriteTests(TestCase):
+    def test_a_credential_is_private_from_creation_and_never_written_through_a_link(self):
+        with tempfile.TemporaryDirectory() as directory:
+            elsewhere = Path(directory, "elsewhere")
+            elsewhere.write_text("kept")
+            credentials = Path(directory, "cloudflare.ini")
+            credentials.symlink_to(elsewhere)
+            previous = os.umask(0)
+            try:
+                tls_issuance._write_private(credentials, "secret\n")
+            finally:
+                os.umask(previous)
+
+            self.assertEqual(elsewhere.read_text(), "kept")
+            self.assertFalse(credentials.is_symlink())
+            self.assertEqual(credentials.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(credentials.read_text(), "secret\n")
+
+
 class TlsReadingTests(TestCase):
     """Every consumer's outcome lands in one reading, pinned field by field."""
 

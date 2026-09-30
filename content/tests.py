@@ -123,6 +123,65 @@ class ContentSyncTests(TestCase):
         self.assertIsNone(stats["project"])
         self.assertFalse(ContentItem.objects.filter(related_projects__isnull=False).exists())
 
+    @override_settings(
+        CF_ACCESS_CLIENT_ID="client-id",
+        CF_ACCESS_CLIENT_SECRET="client-secret",
+    )
+    def test_the_access_token_never_follows_a_redirect_to_another_origin(self):
+        import threading
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+
+        seen = []
+
+        class Elsewhere(BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen.append(dict(self.headers))
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"{}")
+
+            def log_message(self, *_args):
+                pass
+
+        elsewhere = HTTPServer(("127.0.0.1", 0), Elsewhere)
+
+        class Index(Elsewhere):
+            def do_GET(self):
+                self.send_response(302)
+                self.send_header("Location", f"http://127.0.0.1:{elsewhere.server_port}/steal")
+                self.end_headers()
+
+        index = HTTPServer(("127.0.0.1", 0), Index)
+        for server in (index, elsewhere):
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            self.addCleanup(server.server_close)
+            self.addCleanup(server.shutdown)
+
+        with self.assertRaises(ContentSyncError):
+            fetch_content_index(f"http://127.0.0.1:{index.server_port}/content-index.json")
+
+        self.assertEqual(seen, [])
+
+    def test_an_index_larger_than_an_index_is_refused_unread(self):
+        class Response:
+            requested = None
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self, limit=-1):
+                Response.requested = limit
+                return b" " * (limit if limit > 0 else 64 * 1024 * 1024)
+
+        with patch("content.content_sync._OPENER.open", return_value=Response()):
+            with self.assertRaisesMessage(ContentSyncError, "larger than an index"):
+                fetch_content_index("https://example.test/content-index.json")
+
+        self.assertGreater(Response.requested, 0)
+
     def test_missing_items_list_raises(self):
         with self.assertRaises(ContentSyncError):
             sync_content_index(payload={"nope": True})
@@ -139,10 +198,10 @@ class ContentSyncTests(TestCase):
             def __exit__(self, *_args):
                 return False
 
-            def read(self):
+            def read(self, *_limit):
                 return json.dumps(_payload()).encode()
 
-        with patch("urllib.request.urlopen", return_value=Response()) as open_url:
+        with patch("content.content_sync._OPENER.open", return_value=Response()) as open_url:
             payload = fetch_content_index("https://example.test/content-index.json")
 
         request = open_url.call_args.args[0]

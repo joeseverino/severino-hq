@@ -16,6 +16,7 @@ from application.capabilities import (
     execute_capability as execute_application_capability,
 )
 from hq_mcp.identity import current_principal
+from application.security import Capability
 from application.findings import findings as application_findings
 from application.topology import topology as application_topology
 from application.registry import audit_registry as audit_application_registry
@@ -134,9 +135,17 @@ def get_resource(name: str, identifier: str | int) -> dict[str, Any]:
         raise NotFoundError(exc.reason) from exc
 
 
+def _reader() -> None:
+    """The caller may read HQ: what every read tool without a resource of its
+    own asks, so no tool answers a token that holds nothing to read."""
+
+    current_principal().require(Capability.READ)
+
+
 def audit_registry() -> dict[str, Any]:
     """Report Project and Asset rows with no documentation references."""
 
+    _reader()
     return audit_application_registry()
 
 
@@ -212,6 +221,7 @@ def list_receipts(*, unmatched_only: bool = False, limit: int = 50) -> dict[str,
 
 def documentation_status() -> dict[str, Any]:
     """Summarize AI-safe documentation pointers; sensitive records are excluded."""
+    _reader()
     return read_models.documentation_status()
 
 
@@ -222,6 +232,7 @@ def recent_activity(*, limit: int = 25) -> dict[str, Any]:
 
 def system_health() -> dict[str, Any]:
     """Check database access and return non-sensitive record counts."""
+    _reader()
     return read_models.system_health()
 
 

@@ -267,3 +267,26 @@ class AddressCacheTests(TestCase):
 
         self.assertEqual(self.calls, [])
         self.assertEqual(again["allocation"], {})
+
+
+class RegistryRedirectTests(SimpleTestCase):
+    """A registry's redirect is followed only to HTTPS on the public internet."""
+
+    def follow(self, url):
+        import urllib.request
+        from unittest import mock
+
+        from control_plane.dns_lookup import _HTTPSOnlyRedirects
+
+        request = urllib.request.Request("https://rdap.example.test/ip/192.0.2.1")
+        with mock.patch("control_plane.dns_lookup.public_host", side_effect=lambda host: host == "rdap.example.org"):
+            return _HTTPSOnlyRedirects().redirect_request(request, None, 302, "Found", {}, url)
+
+    def test_a_public_registry_is_followed(self):
+        self.assertEqual(self.follow("https://rdap.example.org/ip/192.0.2.1").full_url,
+                         "https://rdap.example.org/ip/192.0.2.1")
+
+    def test_an_inside_address_is_not(self):
+        for url in ("https://10.0.0.1/admin", "https://inside.example.test/latest"):
+            with self.subTest(url=url), self.assertRaisesMessage(LookupUnavailable, "not public"):
+                self.follow(url)

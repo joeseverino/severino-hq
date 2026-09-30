@@ -29,7 +29,7 @@
     <dt>Browser</dt><dd>{{ submission.browser|or_empty }}</dd>
     <dt>Device</dt><dd>{{ submission.device|or_empty }}</dd>
     <dt>Country</dt><dd>{{ submission.country|or_empty }}</dd>
-    {% if submission.source_url %}<dt>Source URL</dt><dd><a href="{{ submission.source_url }}">{{ submission.source_url }}</a></dd>{% endif %}
+    {% if submission.source_url %}<dt>Source URL</dt><dd>{% if submission.source_url|web_url %}<a href="{{ submission.source_url|web_url }}" rel="noopener noreferrer">{{ submission.source_url }}</a>{% else %}{{ submission.source_url }}{% endif %}</dd>{% endif %}
     <dt>User agent</dt><dd class="muted">{{ submission.user_agent|or_empty }}</dd>
   </dl>
 </section>

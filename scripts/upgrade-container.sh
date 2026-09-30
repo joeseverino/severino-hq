@@ -293,6 +293,17 @@ data_path() { # data_path <kind> <ref>
     esac
 }
 
+# Whether a path resolves to itself: no symlink anywhere along it, so what root
+# is about to read or replace is the path that was checked, not one another
+# writer in the stack swapped in since. Asked when the mounts are read and
+# again right before each snapshot and each restore.
+unmoved() { # unmoved <path>
+    case "$1" in /*/ | "" | /) return 1 ;; esac
+    parent="${1%/*}"
+    real="$(CDPATH='' cd -P -- "${parent:-/}" 2>/dev/null && pwd -P)" || return 1
+    [ "${real%/}/${1##*/}" = "$1" ] && [ ! -L "$1" ]
+}
+
 # The container's writable mounts as data lines: volumes, and directories and
 # files inside the stack. A socket is a channel, not data. Anything writable
 # outside the stack is refused: nothing here may snapshot or restore it.
@@ -310,7 +321,7 @@ read_data() { # read_data <container>
                 ;;
             bind)
                 matches "${source}" '^/[A-Za-z0-9_./@+-]*$' || { step check false "a mount has an unreadable source"; return 1; }
-                [ ! -L "${source}" ] || { step check false "a mount at ${destination} is a symlink"; return 1; }
+                unmoved "${source}" || { step check false "a mount at ${destination} is reached through a symlink"; return 1; }
                 if [ -f "${source}" ]; then
                     shape="file"
                 elif [ -d "${source}" ]; then
@@ -338,6 +349,10 @@ restore_data() {
         case "${target}" in
             "" | /) step restore false "data-${index} has no mountpoint"; return 1 ;;
         esac
+        if [ "${kind}" != volume ] && ! unmoved "${target}"; then
+            step restore false "data-${index} could not be restored: its path now leads through a symlink; its snapshot is kept in the state directory"
+            return 1
+        fi
         if [ "${kind}" = file ]; then
             put_back() { cp -p "${state}/data-${index}.file" "${target}"; }
         else
@@ -482,6 +497,7 @@ while read -r index kind ref _destination <&3; do
         take() { tar -C "${source_path}" -czf "${state}/data-${index}.part" .; }
     fi
     if [ -z "${source_path}" ] || [ "${source_path}" = / ] \
+        || { [ "${kind}" != volume ] && ! unmoved "${source_path}"; } \
         || ! take 2>/dev/null \
         || ! mv "${state}/data-${index}.part" "${state}/data-${index}.${suffix}"; then
         rm -f "${state}/data-${index}.part"

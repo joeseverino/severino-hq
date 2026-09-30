@@ -54,7 +54,7 @@ would be a page about anybody.
     {% if profile.since %}<div><dt>On GitHub since</dt><dd>{{ profile.since|date:"F Y" }}</dd></div>{% endif %}
     {% if profile.company %}<div><dt>Company</dt><dd>{{ profile.company }}</dd></div>{% endif %}
     {% if profile.location %}<div><dt>Location</dt><dd>{{ profile.location }}</dd></div>{% endif %}
-    {% if profile.website %}<div><dt>Website</dt><dd><a class="external-link" href="{{ profile.website }}" rel="noopener">{{ profile.website|cut:"https://" }}</a></dd></div>{% endif %}
+    {% if profile.website|web_url %}<div><dt>Website</dt><dd><a class="external-link" href="{{ profile.website|web_url }}" rel="noopener">{{ profile.website|cut:"https://" }}</a></dd></div>{% endif %}
     {% if profile.social %}<div><dt>X</dt><dd>@{{ profile.social }}</dd></div>{% endif %}
     <div><dt>Open to work</dt><dd>{% if profile.hireable %}Yes, on the profile{% else %}Not shown{% endif %}</dd></div>
     {% if profile.public_gists %}<div><dt>Public gists</dt><dd>{{ profile.public_gists }}</dd></div>{% endif %}

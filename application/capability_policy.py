@@ -24,14 +24,16 @@ from core.audit import record_event
 from core.models import AgentIdentity, AuditLog
 
 from .approvals import (
+    AGENT_SURFACES,
     DESTRUCTIVE_EFFECT,
+    deletes,
     READ_EFFECT,
     held_by_default,
     may_be_held_by_default,
 )
 from .security import AuthorizationError, Principal, is_interactive, mcp_principal
 
-SURFACES = ("mcp", "api")
+SURFACES = AGENT_SURFACES
 AUDIT_LABEL = "Capability policy"
 
 Rule = CapabilityRule.Rule
@@ -63,7 +65,7 @@ def decide(spec, principal: Principal, payload, target) -> Decision:
         return Decision(Rule.ALLOW, "operator", default)
     if principal.interface not in SURFACES:
         return Decision(default, "default", default)
-    if spec.effect == DESTRUCTIVE_EFFECT:
+    if deletes(spec, payload):
         default = Rule.APPROVE
 
     rules = dict(

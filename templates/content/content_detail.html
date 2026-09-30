@@ -4,7 +4,7 @@
   <dt>Slug</dt><dd><code>{{ item.slug }}</code></dd>
   {% if item.topic %}<dt>Description</dt><dd>{{ item.topic }}</dd>{% endif %}
   {% if item.tag_list %}<dt>Tags</dt><dd>{% for t in item.tag_list %}<span class="tag">{{ t }}</span>{% endfor %}</dd>{% endif %}
-  {% if item.published_url %}<dt>Published URL</dt><dd><a href="{{ item.published_url }}" rel="noopener noreferrer">{{ item.published_url }}</a></dd>{% endif %}
+  {% if item.published_url %}<dt>Published URL</dt><dd>{% if item.published_url|web_url %}<a href="{{ item.published_url|web_url }}" rel="noopener noreferrer">{{ item.published_url }}</a>{% else %}{{ item.published_url }}{% endif %}</dd>{% endif %}
   {% if item.wordpress_post_id %}<dt>WordPress</dt><dd>post #{{ item.wordpress_post_id }}{% if item.wordpress_slug %} (<code>{{ item.wordpress_slug }}</code>){% endif %}</dd>{% endif %}
   {% if item.published_at %}<dt>Published at</dt><dd>{{ item.published_at }}</dd>{% endif %}
   <dt>Created</dt><dd class="muted">{{ item.created_at }}</dd>

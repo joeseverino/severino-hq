@@ -16,6 +16,8 @@ from control_plane.models import ManagedResource, OperationRequest
 from control_plane.providers import enabled_controller_actions
 from control_plane.provider_adapters.tls import CERTIFICATE_KIND
 
+from .agent_access import agents_paused
+from .approvals import AGENT_SURFACES
 from .adoption import manages_through, observes_only
 from .conditions import stamped
 from .infrastructure import controller_contract, serialize_resource
@@ -322,6 +324,10 @@ def claim_next_operation(
         .filter(state=OperationRequest.State.QUEUED)
         .order_by("created_at")
     )
+    if agents_paused():
+        # The switch stops what an agent already asked for, not only what it
+        # asks next. Left queued, so turning agents back on resumes it.
+        operations = operations.exclude(requested_interface__in=AGENT_SURFACES)
     operations = _compatible_operations(operations, capabilities)
     operation, contract = _next_resolvable(operations, now)
     if operation is None:

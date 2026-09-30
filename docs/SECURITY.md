@@ -105,9 +105,11 @@
 - Password validators require min length 12 and reject common/numeric-only
   passwords.
 - Optional Pocket ID / OIDC SSO is supported. HQ authorizes membership in
-  `SEVERINO_OIDC_ALLOWED_GROUPS` and links the identity to a Django user by
-  `preferred_username`. Email matching remains an optional fallback; password
-  login remains available as the break-glass path.
+  `SEVERINO_OIDC_ALLOWED_GROUPS` and binds the identity to a Django user by
+  the token's issuer and `sub`. `preferred_username`, or a verified email, only
+  introduces a subject to an account no subject is bound to yet; after the
+  first sign-in the subject alone decides. Password login remains available as
+  the break-glass path.
 - The `/mcp/` Streamable HTTP endpoint is a separate security boundary:
   it accepts only a direct socket peer in Tailscale's IPv4/IPv6 ranges, checks
   an explicit Host allowlist, and rejects browser Origins unless allowlisted.
@@ -122,7 +124,9 @@
 - An operator can pause every agent from the menu. The switch is global, read
   on every request to `/mcp/` and to the machine API (`/api/`), and fails
   closed. Both surfaces accept the same Pocket ID tokens, so a brake on one
-  alone would leave a paused agent a URL away from its capabilities.
+  alone would leave a paused agent a URL away from its capabilities. A paused
+  agent's held requests cannot be approved, and work it queued is not handed
+  to the controller, until agents resume.
 - Capability policy at `/agents/` sets, per capability and per surface or
   agent, whether a call is allowed, held for approval, or denied. Rules only
   narrow the identity provider's grant. An explicit rule beats the default, and

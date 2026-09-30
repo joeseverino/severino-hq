@@ -137,6 +137,19 @@ def _foreign_acme_entry(acme_dir: Path) -> str:
     return ""
 
 
+def _write_private(path: Path, text: str) -> None:
+    """Write a credential readable by this account alone from its first byte.
+
+    A new file, never whatever already has the name: a link left there is
+    removed rather than written through.
+    """
+
+    path.unlink(missing_ok=True)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, "w") as handle:
+        handle.write(text)
+
+
 def issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
     acme_dir = Path(provider_http.required("HQ", "ACME_DIR"))
     if not acme_dir.is_dir() or not os.access(acme_dir, os.W_OK):
@@ -149,8 +162,9 @@ def issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
         )
     commands.run_command(["certbot", "--version"], step="certbot preflight")
     credentials = acme_dir / "cloudflare.ini"
-    credentials.write_text("dns_cloudflare_api_token = " + cloudflare_api.cloudflare_token() + "\n")
-    credentials.chmod(0o600)
+    _write_private(
+        credentials, "dns_cloudflare_api_token = " + cloudflare_api.cloudflare_token() + "\n"
+    )
     command = [
         "certbot",
         "certonly",

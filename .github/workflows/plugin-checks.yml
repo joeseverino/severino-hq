@@ -158,10 +158,14 @@ jobs:
       # broken extension. Said at the failure, where it is read.
       - name: Explain a failure against a stale host pin
         if: failure() && steps.pin.outputs.behind != '0'
+        env:
+          BEHIND: ${{ steps.pin.outputs.behind }}
+          PINNED: ${{ steps.pin.outputs.pinned }}
+          CURRENT: ${{ steps.pin.outputs.current }}
         run: |
-          echo "::error title=Host pin is ${{ steps.pin.outputs.behind }} commits behind::\
-          These checks ran against host ${{ steps.pin.outputs.pinned }}, not the \
-          branch head (${{ steps.pin.outputs.current }}). An ImportError or \
+          echo "::error title=Host pin is $BEHIND commits behind::\
+          These checks ran against host $PINNED, not the \
+          branch head ($CURRENT). An ImportError or \
           ModuleNotFoundError for something the host has since gained is this, \
           not a fault in this repository. Re-run against the default hq-ref \
           before debugging further."

@@ -24,6 +24,15 @@ if [ ! -s "${app_env}" ]; then
     echo "Controller application environment is missing." >&2
     exit 1
 fi
+# The environment sits in the application checkout, which another account can
+# write. Only what refresh-secrets.sh rendered is handed to the controller: a
+# root-only directory holding a file of the web user's own.
+# shellcheck source=scripts/lib/secrets.sh
+. "${script_dir}/lib/secrets.sh"
+if ! secrets_private_dir "${app_dir}/secrets" || ! secrets_trusted_file "${app_env}" 10001; then
+    echo "Refusing the application environment: ${app_dir}/secrets must be root's alone, holding a file owned by 10001." >&2
+    exit 1
+fi
 
 install -d -o root -g root -m 0700 "${acme_dir}"
 # The whole tree, every run, and not only the directory. Certbot saves a renewal

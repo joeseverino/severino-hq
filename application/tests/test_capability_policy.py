@@ -51,6 +51,28 @@ class DefaultTests(PolicyTestCase):
 
         self.assertEqual(result["status"], "awaiting_approval")
 
+    def test_an_agents_orphan_prune_waits_like_a_delete(self):
+        """A sync that prunes deletes every record the manifest leaves out,
+        so an agent's is held, though the capability itself only writes."""
+
+        from docs_index.models import DocumentationRecord
+
+        DocumentationRecord.objects.create(doc_id="example-kept", title="Kept", obsidian_path="Kept.md")
+        syncer = agent(capabilities=frozenset({
+            Capability.READ, Capability.SYNC_DOCUMENTATION, Capability.PRUNE_DOCUMENTATION,
+        }))
+
+        pruning = execute_capability(
+            "documentation.sync",
+            {"manifest": [], "prune_orphans": True, "confirm_prune": True},
+            principal=syncer,
+        )
+        plain = execute_capability("documentation.sync", {"manifest": []}, principal=syncer)
+
+        self.assertEqual(pruning["status"], "awaiting_approval")
+        self.assertTrue(DocumentationRecord.objects.filter(doc_id="example-kept").exists())
+        self.assertTrue(plain["ok"])
+
     def test_an_ordinary_write_still_runs(self):
         result = execute_capability("project.create", {"name": "Runs"}, principal=agent())
 
@@ -75,6 +97,37 @@ class DestructiveDefaultTests(PolicyTestCase):
         self.assertTrue(Project.objects.filter(pk=project.pk).exists())
         approve(held["approval"]["id"], principal=self.operator)
         self.assertFalse(Project.objects.filter(pk=project.pk).exists())
+
+    def test_pausing_agents_also_stops_what_one_is_waiting_on(self):
+        from ..agent_access import set_agents_paused
+        from ..approvals import ApprovalError
+
+        project = Project.objects.create(name="Kept")
+        held = self.delete(agent(capabilities=DELETES), project.slug)
+
+        set_agents_paused(True, principal=self.operator, user=self.user)
+        with self.assertRaisesMessage(ApprovalError, "Agents are paused"):
+            approve(held["approval"]["id"], principal=self.operator)
+        self.assertTrue(Project.objects.filter(pk=project.pk).exists())
+
+        set_agents_paused(False, principal=self.operator, user=self.user)
+        approve(held["approval"]["id"], principal=self.operator)
+        self.assertFalse(Project.objects.filter(pk=project.pk).exists())
+
+    def test_a_held_call_whose_subject_cannot_be_read_is_refused_not_run(self):
+        """Nothing to show a person means nothing to approve, not no approval."""
+
+        from unittest import mock
+
+        from ..resources import ResourceNotFound
+
+        project = Project.objects.create(name="Unseen")
+        with mock.patch("application.resources.get_resource", side_effect=ResourceNotFound("x")):
+            result = self.delete(agent(capabilities=DELETES), project.slug)
+
+        self.assertEqual(result["error"]["code"], "approval_subject_unreadable")
+        self.assertTrue(Project.objects.filter(pk=project.pk).exists())
+        self.assertFalse(ApprovalRequest.objects.exists())
 
     def test_an_explicit_allow_for_one_agent_lifts_it_for_that_agent_alone(self):
         self.rule(Scope.AGENT, "trusted-agent", "project.delete", Rule.ALLOW)

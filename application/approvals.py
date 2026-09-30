@@ -75,6 +75,19 @@ MAX_PENDING_PER_ACTOR = 10
 # than exempted by omission.
 READ_EFFECT = "read"
 DESTRUCTIVE_EFFECT = "destructive"
+# Payload fields that turn a write into deleting whatever it does not name: an
+# orphan prune removes every record the manifest leaves out, restricted ones
+# included. Such a call is held like a destructive capability, whatever the
+# capability's own effect says.
+DELETING_FLAGS = ("prune_orphans",)
+
+
+def deletes(spec, payload: Any) -> bool:
+    """Whether this call removes records: by its effect, or by what it asks for."""
+
+    if spec.effect == DESTRUCTIVE_EFFECT:
+        return True
+    return isinstance(payload, dict) and any(payload.get(flag) is True for flag in DELETING_FLAGS)
 DECLARATIONS = "infrastructure.resources"
 
 # Existing audit rows may carry either label; both are read as approvals.
@@ -86,16 +99,35 @@ class ApprovalError(ValueError):
     """A decision could not be taken, and this says what a person should know."""
 
 
-class TooManyPendingApprovals(ApprovalError):
-    """One actor is holding more outstanding requests than it may.
+class RefusedHold(ApprovalError):
+    """A call that had to wait for a person and could not be made to.
 
     `reason` is written for the caller, so an adapter returns it rather than
-    the exception's string form.
+    the exception's string form, under `code`.
     """
+
+    code = "refused_hold"
 
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
         self.reason = reason
+
+
+class TooManyPendingApprovals(RefusedHold):
+    """One actor is holding more outstanding requests than it may."""
+
+    code = "too_many_pending_approvals"
+
+
+class UnreadableSubject(RefusedHold):
+    """A call a person must approve is about something HQ cannot show them.
+
+    Refused rather than run: with no subject there is nothing to approve and no
+    baseline to hold the approval to, and running it would turn "must wait for a
+    person" into "runs whenever the read comes back empty".
+    """
+
+    code = "approval_subject_unreadable"
 
 
 @dataclass(frozen=True)
@@ -276,7 +308,11 @@ def hold_for_approval(
         return None
     subject = approval_subject(spec, payload, target)
     if subject is None:
-        return None
+        raise UnreadableSubject(
+            f"{spec.name} needs a person to approve it, and what it would change "
+            "could not be read, so there is nothing to show them. Check the "
+            "target and ask again."
+        )
     digest = fingerprint(spec.name, target, payload, subject.baseline)
     existing = ApprovalRequest.objects.filter(
         capability=spec.name,
@@ -464,6 +500,23 @@ def _require_person(principal: Principal, held: ApprovalRequest) -> None:
         raise AuthorizationError("A request cannot be approved by whoever asked for it.")
 
 
+# The surfaces an agent reaches HQ through; what one of them asked for is an
+# agent's request, and pausing agents pauses it too.
+AGENT_SURFACES = ("mcp", "api")
+
+
+def _require_agents_running(held) -> None:
+    """Pausing agents stops what they already asked for, not only what they ask next."""
+
+    from .agent_access import agents_paused
+
+    if held.requested_interface in AGENT_SURFACES and agents_paused():
+        raise ApprovalError(
+            "Agents are paused, and an agent asked for this. Resume agents to "
+            "approve it, or decline it."
+        )
+
+
 def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
     """Agree to a held change and run exactly the call that was held.
 
@@ -490,6 +543,7 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
             "request cannot be applied."
         )
     _require_person(principal, held)
+    _require_agents_running(held)
     # The approver has to be allowed to do the thing themselves. Otherwise this
     # page would be a way to run a capability the clicker does not hold.
     authorize_capability(spec, principal)
