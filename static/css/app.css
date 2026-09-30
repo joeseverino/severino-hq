@@ -1325,8 +1325,10 @@ td.row-actions > * + * { margin-left: var(--space-6); }
   display: flex;
   flex-wrap: wrap;
   margin: 0 0 var(--stack-gap);
+  /* Each fact's share before it grows: a variant sets a step instead. */
+  --band-cell: 220px;
 }
-:is(.service-band, .fact-band) > * { flex: 1 1 var(--band-cell, 220px); }
+:is(.service-band, .fact-band) > * { flex: 1 1 var(--band-cell); }
 .band-fact { display: flex; gap: var(--space-6); align-items: flex-start; min-width: 0; padding: var(--space-8) var(--space-9); }
 .band-icon {
   display: grid; place-items: center; flex: none;
