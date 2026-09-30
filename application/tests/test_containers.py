@@ -204,6 +204,20 @@ class PageTests(TestCase):
         self.assertContains(response, "GHSA-high")
         self.assertEqual((response.context["pinned"], response.context["matched"]), (2, 1))
 
+    def test_a_version_nothing_can_fix_and_nothing_public_reaches_does_not_need_you(self):
+        estate(advisories=[HIGH], app_tags=("v1.2.0",))
+
+        with exposed(PRIVATE):
+            response = self.client.get(reverse("control_plane:containers"))
+
+        needs = [group["standing"].label for group in response.context["needs"]]
+        self.assertNotIn("ghcr.io/example/app:v1.2.0", needs)
+        # Still counted where the page says what is known.
+        self.assertEqual(response.context["vulnerable"], 1)
+        with exposed(OPEN):
+            response = self.client.get(reverse("control_plane:containers"))
+        self.assertIn("ghcr.io/example/app:v1.2.0", [group["standing"].label for group in response.context["needs"]])
+
     def test_nothing_is_called_current_before_a_registry_answers(self):
         inventory("portainer.container", [running("web", "example/web:1.0.0")])
 

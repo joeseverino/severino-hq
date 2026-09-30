@@ -151,7 +151,7 @@ class PageTests(TestCase):
 
         self.assertEqual(
             [resolve.__name__ for resolve in SECTIONS],
-            ["_access", "_activity", "_traffic"],
+            ["_access", "_activity"],
         )
 
     def test_service_section_ids_share_the_page_navigation_contract(self):
@@ -181,26 +181,28 @@ class TrafficSectionTests(TestCase):
         )
         return site
 
+    def traffic(self):
+        from ..service_context import service_summary
+
+        return next((item for item in service_summary(a_service()) if item.label.startswith("Traffic")), None)
+
     def test_a_measured_host_gets_its_traffic_without_a_foreign_key(self):
         self._measure("probe.example.com")
-        section = next(s for s in sections_for(a_service()) if s.id == "traffic")
-        self.assertEqual(section.records[0][0].text, "120")
-        self.assertEqual(section.records[0][1].text, "90")
-        self.assertEqual(section.records[0][2].text, "Counted")
+        found = self.traffic()
+        self.assertEqual((found.value, found.detail), ("120 pageviews", "90 visits · counted"))
 
-    def test_a_host_nothing_measures_renders_no_band(self):
-        # Not an empty table: that would read as a dead site rather than an
+    def test_a_host_nothing_measures_says_nothing(self):
+        # Not "0 pageviews": that would read as a dead site rather than an
         # unmeasured one, and those are opposite conclusions.
-        self.assertFalse([s for s in sections_for(a_service()) if s.id == "traffic"])
+        self.assertIsNone(self.traffic())
 
     def test_sampling_is_carried_rather_than_presented_as_a_count(self):
         self._measure("probe.example.com", sample_interval=10)
-        section = next(s for s in sections_for(a_service()) if s.id == "traffic")
-        self.assertEqual(section.records[0][2].text, "Sampled 1 in 10")
+        self.assertEqual(self.traffic().detail, "90 visits · sampled 1 in 10")
 
     def test_another_hosts_traffic_is_not_borrowed(self):
         self._measure("someone-else.example.com", pageviews=9999)
-        self.assertFalse([s for s in sections_for(a_service()) if s.id == "traffic"])
+        self.assertIsNone(self.traffic())
 
     def test_the_host_join_is_case_and_trailing_dot_insensitive(self):
         # Ingest stores it normalised; the lookup is what must tolerate mess.

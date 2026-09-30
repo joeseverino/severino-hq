@@ -31,7 +31,7 @@ from control_plane.names import normalized_hostname
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import EntityLink, entity_link, kind_label
 from .published_sites import projects_by_hostname
-from .ui import MISSING, PAGE_SECTION_ID, ago
+from .ui import MISSING, PAGE_SECTION_ID, ago, counted
 
 
 @dataclass(frozen=True)
@@ -159,18 +159,16 @@ def _activity(service, project) -> ServiceSection | None:
     )
 
 
-def _traffic(service, project) -> ServiceSection | None:
+def _traffic(service) -> "SummaryItem | None":
     """What this host actually served, for the hosts something measures.
 
-    The join is the name, like every other section here: analytics stores a
-    reading against a hostname and a service *is* a hostname, so neither side
-    needs a key to the other. A service nothing measures returns None and the
-    band does not render: an empty traffic table would imply the site is dead
-    rather than unmeasured, which are opposite conclusions.
+    The join is the name, like every other fact here: analytics stores a
+    reading against a hostname and a service *is* a hostname. A service nothing
+    measures has no traffic fact at all: "0 pageviews" would read as a dead
+    site rather than an unmeasured one, which are opposite conclusions.
 
-    Sampling is carried rather than hidden. A figure extrapolated from one
-    beacon in ten is the best number available and still not a count, so the
-    page says which it is instead of quietly presenting an estimate as fact.
+    Sampling is carried rather than hidden: a figure extrapolated from one
+    beacon in ten is the best number available and still not a count.
     """
 
     hostname = getattr(service, "hostname", "") or ""
@@ -182,21 +180,12 @@ def _traffic(service, project) -> ServiceSection | None:
     if not measured:
         return None
     interval = measured.get("sample_interval") or 1
-    return ServiceSection(
-        id="traffic",
-        label=f"Traffic · {HOST_TRAFFIC_DAYS} days",
-        columns=("Pageviews", "Visits", "Basis"),
-        records=(
-            (
-                Cell(f"{measured['pageviews']:,}"),
-                Cell(f"{measured['visits']:,}"),
-                Cell(
-                    "Counted" if interval <= 1 else f"Sampled 1 in {interval}",
-                    muted=interval > 1,
-                ),
-            ),
-        ),
-        actions=(("Open analytics", reverse("analytics:overview")),),
+    basis = "counted" if interval <= 1 else f"sampled 1 in {interval}"
+    return SummaryItem(
+        f"Traffic · {HOST_TRAFFIC_DAYS} days",
+        counted(measured["pageviews"], "pageview"),
+        detail=f"{counted(measured['visits'], 'visit')} · {basis}",
+        icon="eye",
     )
 
 
@@ -245,6 +234,7 @@ def service_summary(service) -> tuple[SummaryItem, ...]:
             SummaryItem("What it is", what, icon="layers") if what else None,
             _certificate(service.path),
             _project(service),
+            _traffic(service),
         )
         if item is not None
     )
@@ -549,7 +539,6 @@ def _access(service, project) -> ServiceSection | None:
 SECTIONS: tuple[Callable[[object, object], ServiceSection | None], ...] = (
     _access,
     _activity,
-    _traffic,
 )
 
 

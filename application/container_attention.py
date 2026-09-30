@@ -38,9 +38,7 @@ def attention() -> tuple[Insight, ...]:
     behind_running: list[Container] = []
     for label, (standing, running) in seen.items():
         if standing.state == VULNERABLE:
-            # With no release to upgrade to, there is nothing to do about it
-            # unless the internet may reach it: its page still says so.
-            if standing.newer or _reach(running)[0] in (OPEN, UNKNOWN):
+            if needs_you(standing, running):
                 items.append(_advisory(label, standing, running))
         elif standing.newer:
             behind.append(f"{label} → {standing.latest}")
@@ -63,6 +61,14 @@ def attention() -> tuple[Insight, ...]:
             )
         )
     return tuple(items)
+
+
+def needs_you(standing: Standing, running: list[Container]) -> bool:
+    """Whether a version asks something of you: a newer release to move to, or,
+    with none, the internet may reach it. Otherwise its page says what is
+    known and there is nothing to do yet."""
+
+    return bool(standing.newer) or _reach(running)[0] in (OPEN, UNKNOWN)
 
 
 def _not_yet(running: list[Container]) -> str:

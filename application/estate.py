@@ -118,21 +118,14 @@ class Estate:
 
     @property
     def offline(self) -> tuple[Any, ...]:
-        # Only what the estate depends on: a personal device away is not down.
-        return tuple(
-            item for item in self.machines
-            if item.state[0] == "offline" and not (item.presence is not None and item.presence.personal)
-        )
+        # A personal device that is off reads as away, never offline.
+        return tuple(item for item in self.machines if item.state[0] == "offline")
 
     @property
     def watched(self) -> tuple[Any, ...]:
         # What "online" is out of: a machine no connection reaches (an offline
         # CA, a printer) and a personal device that is away are not missing.
-        return tuple(
-            item for item in self.machines
-            if item.state[1] != "unprobed"
-            and not (item.presence is not None and item.presence.personal and not item.presence.online)
-        )
+        return tuple(item for item in self.machines if item.state[1] != "unprobed")
 
     @property
     def empty(self) -> bool:

@@ -42,10 +42,8 @@ readings. The path is the next section, drawn once.
 {% for route, parts in route_parts %}
   {% if routes|length > 1 %}<h3 class="section-heading">Via {{ route.via_phrase }}</h3>{% endif %}
   {% include "control_plane/_path_hops.html" with route=route label="Path via "|add:route.via %}
-  <details class="control-diagnostics">
-    <summary>Every part</summary>
-    {% include "control_plane/_service_parts.html" %}
-  </details>
+  <h3 class="section-heading">Every part</h3>
+  {% include "control_plane/_service_parts.html" %}
 {% empty %}
   {% if declared_parts %}{% with parts=declared_parts %}{% include "control_plane/_service_parts.html" %}{% endwith %}{% endif %}
   <p class="muted">{% for gap in service.path.gaps %}{{ gap|capfirst }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>

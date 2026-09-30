@@ -878,7 +878,7 @@ class OneStateTests(TestCase):
         self.client.force_login(self.user)
         a_connection("example-tailnet", "tailscale")
 
-    def device(self, *, online):
+    def device(self, *, online, tags=("tag:server",)):
         ProviderInventory.objects.update_or_create(
             kind="tailscale.device",
             defaults={
@@ -888,11 +888,17 @@ class OneStateTests(TestCase):
                         "online": online,
                         "addresses": ["100.64.0.7"],
                         "connection_ref": "example-tailnet",
+                        "tags": list(tags),
                     }
                 ],
                 "observed_at": timezone.now(),
             },
         )
+
+    def test_a_personal_device_that_is_off_is_away_not_down(self):
+        self.device(online=False, tags=())
+
+        self.assertEqual(machine("example-host").state, ("away", "unprobed"))
 
     def test_an_offline_device_reads_as_offline_only(self):
         self.device(online=False)

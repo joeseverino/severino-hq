@@ -158,7 +158,10 @@ class Machine:
         """
 
         if self.presence is not None:
-            return ("online", "reachable") if self.presence.online else ("offline", "unreachable")
+            if self.presence.online:
+                return ("online", "reachable")
+            # A laptop or phone that is off is away, not down.
+            return ("away", "unprobed") if self.presence.personal else ("offline", "unreachable")
         if self.reached_by:
             return ("online", "reachable") if self.reachable else ("not answering", "unreachable")
         return ("no credential", "unprobed")

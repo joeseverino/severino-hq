@@ -825,12 +825,11 @@ class WatchedTests(TestCase):
         def machine(state, presence=None):
             return Row(state=state, presence=presence)
 
-        away = Row(personal=True, online=False)
         estate = Estate(machines=(
             machine(("online", "reachable")),
             machine(("not answering", "unreachable")),
-            machine(("offline", "unreachable"), Row(personal=False, online=False)),
-            machine(("offline", "unreachable"), away),
+            machine(("offline", "unreachable")),
+            machine(("away", "unprobed")),
             machine(("no credential", "unprobed")),
         ))
 
