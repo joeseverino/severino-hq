@@ -65,13 +65,14 @@ secrets_stage() {
 # destination root writes into in place, or reads a secret back from.
 secrets_trusted_file() {
     [ -f "$1" ] && [ ! -L "$1" ] || return 1
-    [ "$(stat -c '%u %h' "$1")" = "$2 1" ]
+    # GNU stat on the hosts, BSD stat on a Mac running the drills.
+    [ "$(stat -c '%u %h' "$1" 2>/dev/null || stat -f '%u %l' "$1")" = "$2 1" ]
 }
 
 # A directory, not a link, that only <uid> (root by default) can enter.
 secrets_private_dir() {
     [ -d "$1" ] && [ ! -L "$1" ] || return 1
-    [ "$(stat -c '%u %a' "$1")" = "${2:-0} 700" ]
+    [ "$(stat -c '%u %a' "$1" 2>/dev/null || stat -f '%u %Lp' "$1")" = "${2:-0} 700" ]
 }
 
 # Preserve existing inodes for Docker file bind mounts. Copying is not atomic.

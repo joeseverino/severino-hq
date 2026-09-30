@@ -14,7 +14,9 @@ umask 022
 
 script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 readonly script_dir
-fixture="$(mktemp -d)"
+# Its physical path: the helper refuses a data path reached through a symlink,
+# and on a Mac the temp directory itself sits behind one (/var -> /private/var).
+fixture="$(cd "$(mktemp -d)" && pwd -P)"
 readonly fixture
 trap 'rm -rf "${fixture}"' EXIT HUP INT TERM
 real_tar="$(command -v tar)"

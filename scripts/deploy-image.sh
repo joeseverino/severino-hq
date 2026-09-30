@@ -58,14 +58,17 @@ env_value() {
     sed -n "s/^${1}=//p" "${app_dir}/.env" | tail -n 1 | sed "s/^[\"']//; s/[\"']\$//"
 }
 refuse_mount() { echo "Refusing to deploy: $1" >&2; exit 1; }
+# GNU stat on the hosts, BSD stat on a Mac running the drill.
+owner_links() { stat -c '%u %h' "$1" 2>/dev/null || stat -f '%u %l' "$1"; }
+owner_mode() { stat -c '%u %a' "$1" 2>/dev/null || stat -f '%u %Lp' "$1"; }
 app_env_host="$(env_value SEVERINO_APP_ENV_FILE_HOST)"
 case "${app_env_host}" in
     "" | /dev/null) app_env_host=/dev/null ;;
     "${app_dir}/secrets/severino_hq_env")
-        [ "$(stat -c '%u %a' "${app_dir}/secrets" 2>/dev/null)" = "${root_uid} 700" ] \
+        [ "$(owner_mode "${app_dir}/secrets")" = "${root_uid} 700" ] \
             || refuse_mount "${app_dir}/secrets is not a directory only root can enter."
         if [ ! -f "${app_env_host}" ] || [ -L "${app_env_host}" ] \
-            || [ "$(stat -c '%u %h' "${app_env_host}")" != "${web_uid} 1" ]; then
+            || [ "$(owner_links "${app_env_host}")" != "${web_uid} 1" ]; then
             refuse_mount "${app_env_host} is not the file refresh-secrets.sh renders."
         fi
         ;;

@@ -27,11 +27,13 @@ install_as() {
 # A fresh destination is created, and an own file is rewritten in place.
 render one
 install_as "${fixture}/env" || fail "a fresh destination was refused"
-inode="$(stat -c %i "${fixture}/env")"
+# GNU stat on the hosts, BSD stat on a Mac.
+inode_of() { stat -c %i "$1" 2>/dev/null || stat -f %i "$1"; }
+inode="$(inode_of "${fixture}/env")"
 render two
 install_as "${fixture}/env" || fail "an own file was refused"
 [ "$(cat "${fixture}/env")" = "SECRET=two" ] || fail "an own file was not rewritten"
-[ "$(stat -c %i "${fixture}/env")" = "${inode}" ] || fail "an own file lost its inode (the bind mount would keep the old one)"
+[ "$(inode_of "${fixture}/env")" = "${inode}" ] || fail "an own file lost its inode (the bind mount would keep the old one)"
 
 # A link planted at the name: not followed.
 echo "system" >"${fixture}/system-file"
