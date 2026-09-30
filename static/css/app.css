@@ -1319,10 +1319,14 @@ td.row-actions > * + * { margin-left: var(--space-6); }
    icon tile, then its label over its value; hairlines divide them. Health's
    tile takes its tone, so the state reads before the word does. */
 .service-band, .fact-band {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  /* A wrapping row, not a grid: its facts share the width however many there
+     are, and a note under them takes a line of its own. A grid would keep an
+     empty column for each track a spanning note reaches. */
+  display: flex;
+  flex-wrap: wrap;
   margin: 0 0 var(--stack-gap);
 }
+:is(.service-band, .fact-band) > * { flex: 1 1 var(--band-cell, 220px); }
 .band-fact { display: flex; gap: var(--space-6); align-items: flex-start; min-width: 0; padding: var(--space-8) var(--space-9); }
 .band-icon {
   display: grid; place-items: center; flex: none;
@@ -1338,7 +1342,7 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .page-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 .page-title-row > h1 { margin: 0; }
 .heading-aside { color: var(--muted); font-size: var(--text-md); font-weight: 500; letter-spacing: 0; }
-.band-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); padding: var(--space-5) var(--space-9); border-top: 1px solid var(--line-2); color: var(--muted); font-size: var(--text-sm); }
+.band-meta { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); padding: var(--space-5) var(--space-9); border-top: 1px solid var(--line-2); color: var(--muted); font-size: var(--text-sm); }
 /* The origin reads under the facet row rather than as a fifth card in it: four
    is what a name needs to answer, and a fifth would wrap the row. */
 .control-origin { margin: calc(var(--space-3) * -1) 0 22px; color: var(--muted); font-size: var(--text-sm); line-height: 1.5; }
@@ -4703,11 +4707,10 @@ form[data-clean] .save-bar { display: none; }
   .gh-identity { flex: 1 1 260px; min-width: 0; }
   .gh-identity p { margin: 0; }
   .gh-name { font-size: var(--text-xl); font-weight: 650; }
-  /* Four facts, four columns: an auto-fitting grid would grow an empty fifth
-     track once the settings row below spans every column. */
-  .fact-band { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-4-2-1), 1fr)); }
+  /* Four to a row, then two, then one: never three over one. */
+  .fact-band { --band-cell: var(--tracks-4-2-1); }
   /* The band's lower half: the same repository's settings, under a hairline. */
-  .github-facts { grid-column: 1 / -1; display: grid; gap: var(--space-4); margin: 0; padding: var(--space-7) var(--space-9); border-top: 1px solid var(--line-2); font-size: var(--text-sm); }
+  .github-facts { flex-basis: 100%; display: grid; gap: var(--space-4); margin: 0; padding: var(--space-7) var(--space-9); border-top: 1px solid var(--line-2); font-size: var(--text-sm); }
   .github-facts > div { display: grid; grid-template-columns: minmax(0, clamp(7rem, 30%, 160px)) minmax(0, 1fr); gap: var(--space-6); }
   .github-facts dt { color: var(--muted); }
   .github-facts dd { margin: 0; }
@@ -4760,7 +4763,7 @@ form[data-clean] .save-bar { display: none; }
   /* A container's upgrade: four facts, then its steps beside what stands in the way. */
   .upgrade-band { margin-bottom: var(--space-6); }
   /* Three facts across the band's full width, not three narrow tiles and a gap. */
-  .fact-band.readiness-band { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-3-1), 1fr)); }
+  .fact-band.readiness-band { --band-cell: var(--tracks-3-1); }
   /* align-content: start, or the grid spreads the steps to the height of the
      column beside it. */
   .upgrade-steps { margin: 0; padding-left: var(--space-10); display: grid; gap: var(--space-2); align-content: start; font-size: var(--text-sm); }
