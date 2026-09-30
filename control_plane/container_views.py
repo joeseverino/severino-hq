@@ -45,14 +45,15 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
 
 
 class ContainerListView(PageMixin, LoginRequiredMixin, TemplateView):
-    """Led by what needs you: a version with a known vulnerability, then an image
-    with a newer release, each once however many containers run it. Then every
-    container, one row each."""
+    """Led by what needs you (``needs_you``): a version with a known
+    vulnerability or a newer release, each once however many containers run
+    it. Then every container, one row each."""
 
     template_name = "control_plane/container_list.html"
     page_title = "Containers"
 
     def get_context_data(self, **kwargs):
+        from application.container_attention import needs_you
         from application.containers import BEHIND, CURRENT, VULNERABLE, containers
         from application.upgrades import plan_for
 
@@ -67,7 +68,7 @@ class ContainerListView(PageMixin, LoginRequiredMixin, TemplateView):
         read = [item.standing.read_at for item in found if item.standing.read_at]
         context.update(
             containers=found,
-            needs=list(groups.values()),
+            needs=[group for group in groups.values() if needs_you(group["standing"], group["containers"])],
             machines=len({item.machine.name for item in found}),
             vulnerable=sum(1 for group in groups.values() if group["standing"].state == VULNERABLE),
             behind=sum(1 for group in groups.values() if group["standing"].state == BEHIND),
