@@ -359,6 +359,13 @@ class Standing:
         return CURRENT
 
     @property
+    def newest(self) -> bool:
+        """Its registry was read and publishes nothing newer of this kind,
+        whatever else is known about it."""
+
+        return not self.newer and not self.unread and bool(version(self.tag)) and self.read_at is not None
+
+    @property
     def worst(self) -> str:
         levels = [str(item.get("severity", "")) for item in (*self.advisories[:1], *self.urgent[:1])]
         return ranked([{"severity": level} for level in levels])[0]["severity"] if levels else ""

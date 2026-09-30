@@ -118,16 +118,7 @@ standard. Each said once; the band above has its version and standing.
 {% with chain=item.supply_chain standing=item.standing %}
 <section id="supply-chain" class="page-section" data-page-section>
   <h2>Where it came from <span class="heading-aside">{% if chain.measured %}{{ chain.met }} of {{ chain.measured }} met{% endif %}</span></h2>
-  <div class="conn-decision">
-    <ol>
-      {% for result in chain.results %}
-        <li><span class="conn-decision-step conn-decision-step-{% if result.state == 'met' %}holds{% elif result.state == 'unmet' and result.check.serious %}does-not{% elif result.state == 'unmet' %}gap{% else %}unknown{% endif %}" tabindex="0" data-tip="{{ result.check.why }}{% if result.state == 'unmet' %} {{ result.check.fix }}{% elif result.state == 'unavailable' %} Not read yet.{% endif %}">
-          <span class="conn-tick" aria-hidden="true">{% if result.state == 'met' %}&check;{% elif result.state == 'unmet' %}&times;{% else %}?{% endif %}</span>
-          <span>{{ result.check.label }}</span>
-        </span></li>
-      {% endfor %}
-    </ol>
-  </div>
+  {% include "partials/_standard_gaps.html" with posture=chain %}
   <dl class="github-facts container-facts boxed-facts">
     <div><dt>Built from</dt><dd>{% if standing.source %}<a class="external-link" href="{{ standing.source }}" rel="noopener">{{ standing.upstream }}</a> <span class="muted">{{ standing.source_known_by }}</span>{% elif edit_url %}<a href="{{ edit_url }}">Name its repository</a> <span class="muted">· the image does not say</span>{% else %}<span class="muted">The image does not say.</span>{% endif %}</dd></div>
     {% if standing.commit_url or standing.provenance.builder or standing.built_on %}<div><dt>Built</dt><dd>{% if standing.commit_url %}<span class="muted">at</span> <a class="external-link" href="{{ standing.commit_url }}" rel="noopener"><code>{{ standing.provenance.revision|slice:":7" }}</code></a> {% endif %}{% if standing.provenance.builder %}<span class="muted">by</span> <a class="external-link" href="{{ standing.provenance.builder }}" rel="noopener">a workflow run</a> {% endif %}{% if standing.built_on %}<span class="muted">on</span> {% for base in standing.built_on %}<code>{{ base }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</dd></div>{% endif %}
@@ -140,23 +131,8 @@ standard. Each said once; the band above has its version and standing.
 
 {% with posture=item.posture %}
 <section id="how-it-runs" class="page-section" data-page-section>
-  <h2>How it runs <span class="heading-aside">{% if posture.measured %}{{ posture.met }} of {{ posture.measured }} met so far{% endif %}</span></h2>
-  {% if posture.unmet %}
-    <ul class="posture-gaps">
-      {% for result in posture.unmet %}{% if result.check.serious %}
-        <li class="is-serious">
-          <span class="posture-gap-icon">{% include "partials/_icon.html" with name="x-circle" %}</span>
-          <div class="posture-gap-body"><strong>{{ result.check.label }}</strong><p>{{ result.check.why }} <span class="muted">{{ result.check.fix }}</span></p></div>
-        </li>
-      {% endif %}{% endfor %}
-      {% for result in posture.unmet %}{% if not result.check.serious %}
-        <li>
-          <span class="posture-gap-icon">{% include "partials/_icon.html" with name="x-circle" %}</span>
-          <div class="posture-gap-body"><strong>{{ result.check.label }}</strong><p>{{ result.check.why }} <span class="muted">{{ result.check.fix }}</span></p></div>
-        </li>
-      {% endif %}{% endfor %}
-    </ul>
-  {% endif %}
+  <h2>How it runs <span class="heading-aside">{% if posture.measured %}{{ posture.met }} of {{ posture.measured }} met{% endif %}</span></h2>
+  {% include "partials/_standard_gaps.html" with posture=posture %}
   {% with patch=item.hardening %}{% if patch.any %}
   <div id="hardening" class="hardening-patch boxed-facts">
     {% if patch.yaml %}

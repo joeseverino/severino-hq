@@ -3964,9 +3964,6 @@ textarea.code {
 .conn-decision-step-does-not .conn-tick { background: var(--tone-tint); color: var(--danger); }
 .conn-decision-step-unknown { border-color: color-mix(in srgb, var(--warn) 38%, var(--line)); background: color-mix(in srgb, var(--tone-tint) 45%, var(--surface)); }
 .conn-decision-step-unknown .conn-tick { background: var(--tone-tint); color: var(--warn); }
-/* Not met, and not reach: a gap to close, not an exposure. */
-.conn-decision-step-gap { border-color: color-mix(in srgb, var(--warn) 38%, var(--line)); background: color-mix(in srgb, var(--tone-tint) 45%, var(--surface)); }
-.conn-decision-step-gap .conn-tick { background: var(--tone-tint); color: var(--warn); }
 .conn-related {
   display: flex;
   align-items: center;
