@@ -125,6 +125,16 @@ class Estate:
         )
 
     @property
+    def watched(self) -> tuple[Any, ...]:
+        # What "online" is out of: a machine no connection reaches (an offline
+        # CA, a printer) and a personal device that is away are not missing.
+        return tuple(
+            item for item in self.machines
+            if item.state[1] != "unprobed"
+            and not (item.presence is not None and item.presence.personal and not item.presence.online)
+        )
+
+    @property
     def empty(self) -> bool:
         return not (self.machines or self.services or self.domains or self.connections)
 
@@ -281,7 +291,7 @@ def cards() -> tuple[dict[str, Any], ...]:
             "detail": (
                 f"{len(estate.offline)} offline"
                 if estate.offline
-                else f"of {len(estate.machines)}"
+                else f"of {len(estate.watched)}"
             ),
             **({"status": "attention"} if estate.offline else {}),
         },

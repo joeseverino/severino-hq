@@ -25,7 +25,7 @@ from core.models import AuditLog
 
 from ..attention import infrastructure, tailnet
 from ..command_center import command_center
-from ..estate import attention as estate_attention, cards, estate_reading
+from ..estate import Estate, attention as estate_attention, cards, estate_reading
 from ..glance import dashboard_panels
 from ..inventory_testing import store
 from ..machines import machine, machine_catalog
@@ -816,3 +816,22 @@ class EstateQueryBudgetTests(TestCase):
             without = self.snapshot_queries()
 
         self.assertLessEqual(with_estate - without, 1)
+
+
+class WatchedTests(TestCase):
+    def test_online_is_out_of_what_hq_watches(self):
+        from types import SimpleNamespace as Row
+
+        def machine(state, presence=None):
+            return Row(state=state, presence=presence)
+
+        away = Row(personal=True, online=False)
+        estate = Estate(machines=(
+            machine(("online", "reachable")),
+            machine(("not answering", "unreachable")),
+            machine(("offline", "unreachable"), Row(personal=False, online=False)),
+            machine(("offline", "unreachable"), away),
+            machine(("no credential", "unprobed")),
+        ))
+
+        self.assertEqual(len(estate.watched), 3)
