@@ -511,6 +511,12 @@ jobs:
               echo "::error::$repo ships a wheel whose name is not a wheel's"; exit 1
             fi
             entry="$dir/verified-entry.json"
+            # cordon names the field that differs but not the values; say both,
+            # so a policy mismatch shows which side moved.
+            signed_policy=$(jq -r '.policy.sha256' "$statement")
+            if [ "$signed_policy" != "$policy_sha" ]; then
+              echo "::error::$repo was admitted under policy $signed_policy; this composition's policy is $policy_sha"; exit 1
+            fi
             node cordon/admission/verify.mjs \
               --statement "$statement" \
               --bundle "$bundle" \
