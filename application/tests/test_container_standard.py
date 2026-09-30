@@ -196,3 +196,19 @@ class AttentionTests(TestCase):
         self.assertIn("container-posture:not-privileged", keys)
         self.assertEqual(keys["container-posture:not-privileged"].magnitude, 2)
         self.assertNotIn("container-posture:not-root", keys)
+
+
+class HealthCheckedTests(TestCase):
+    def check(self, runtime, *, check=None, serves=()):
+        from types import SimpleNamespace as Row
+
+        from ..container_standard import _health_checked
+
+        return _health_checked(Row(runtime=runtime, running=Row(check=check), serves=serves))
+
+    def test_its_own_health_check_or_a_name_hq_requests_says_whether_it_works(self):
+        self.assertTrue(self.check({"healthcheck": True}))
+        # An image with no shell cannot run a check; a name HQ requests still says.
+        self.assertTrue(self.check({}, serves=("admin.example.com",)))
+        self.assertFalse(self.check({}))
+        self.assertIsNone(self.check(None))
