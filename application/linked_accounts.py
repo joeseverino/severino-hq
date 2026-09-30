@@ -7,6 +7,7 @@ behind it (a sweep of what they star) knows whose account to read.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any, Mapping
 
@@ -17,6 +18,10 @@ from core.audit import record_event
 from core.models import AuditLog, LinkedAccount
 
 GITHUB = "github"
+# The identity provider's own subject for the person: the one claim that names
+# them and never changes. Kept as a digest of issuer and subject, which fits the
+# column whatever length the provider's subjects are.
+SIGN_IN = "oidc"
 AUDIT_LABEL = "Linked account"
 
 # GitHub's own rule for a login: letters, digits and single hyphens, neither
@@ -77,3 +82,16 @@ def linked_login(user, provider: str) -> str:
 
     found = LinkedAccount.objects.filter(user=user, provider=provider).values_list("login", flat=True).first()
     return found or ""
+
+
+def sign_in_subject(issuer: str, subject: str) -> str:
+    """The key a sign-in binds a user to: this issuer's name for this person."""
+
+    return hashlib.sha256(f"{issuer}\0{subject}".encode()).hexdigest()
+
+
+def bind_sign_in(user, key: str) -> None:
+    """Hold ``user`` to the subject that signed in as them, from now on."""
+
+    if getattr(user, "pk", None) is not None and key:
+        _record(user, SIGN_IN, key)

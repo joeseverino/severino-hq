@@ -105,9 +105,11 @@
 - Password validators require min length 12 and reject common/numeric-only
   passwords.
 - Optional Pocket ID / OIDC SSO is supported. HQ authorizes membership in
-  `SEVERINO_OIDC_ALLOWED_GROUPS` and links the identity to a Django user by
-  `preferred_username`. Email matching remains an optional fallback; password
-  login remains available as the break-glass path.
+  `SEVERINO_OIDC_ALLOWED_GROUPS` and binds the identity to a Django user by
+  the token's issuer and `sub`. `preferred_username`, or a verified email, only
+  introduces a subject to an account no subject is bound to yet; after the
+  first sign-in the subject alone decides. Password login remains available as
+  the break-glass path.
 - The `/mcp/` Streamable HTTP endpoint is a separate security boundary:
   it accepts only a direct socket peer in Tailscale's IPv4/IPv6 ranges, checks
   an explicit Host allowlist, and rejects browser Origins unless allowlisted.
