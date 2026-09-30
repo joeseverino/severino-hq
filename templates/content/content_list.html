@@ -8,8 +8,8 @@
   <td class="muted">{{ row.published_at|or_empty }}</td>
   <td class="muted">{{ row.updated_at }}</td>
   <td class="actions-col">
-    {% if row.published_url %}
-      <a class="icon-link" href="{{ row.published_url }}" target="_blank" rel="noopener noreferrer" title="Open published page" aria-label="Open published page">↗</a>
+    {% if row.published_url|web_url %}
+      <a class="icon-link" href="{{ row.published_url|web_url }}" target="_blank" rel="noopener noreferrer" title="Open published page" aria-label="Open published page">↗</a>
     {% else %}
       {% empty_value %}
     {% endif %}

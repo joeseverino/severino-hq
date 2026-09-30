@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 from django.urls import reverse
 
@@ -103,6 +104,19 @@ def kind_label(kind: str) -> str:
     return registry_label(kind)
 
 
+def web_url(value: Any) -> str:
+    """``value`` when it is an http(s) URL naming a host, else "".
+
+    What an href may be when someone else wrote it: a reading, an attestation,
+    a manifest, a form on the public site. A ``javascript:`` or ``data:`` link
+    on an operator's page is a phishing line at best, so it is not one.
+    """
+
+    text = str(value or "").strip()
+    parts = urlsplit(text)
+    return text if parts.scheme in ("http", "https") and parts.hostname else ""
+
+
 def entity_link(
     kind: str,
     identity: str,
@@ -129,7 +143,7 @@ def entity_link(
     spec = OBSERVATIONS.get(kind)
     if spec is not None:
         record = record or {}
-        url = spec.console(record) if record else ""
+        url = web_url(spec.console(record)) if record else ""
         return EntityLink(
             label=label or spec.title(record) or identity or spec.label,
             url=url,
@@ -148,7 +162,7 @@ def entity_link(
                 kind=kind,
                 kind_label=kind_label(kind),
             )
-        url = provider.console(record) if provider.console else ""
+        url = web_url(provider.console(record)) if provider.console else ""
         return EntityLink(
             label=label or identity,
             url=url,
@@ -166,10 +180,13 @@ def declared_link(label: str, url: str = "", kind: str = "target") -> EntityLink
     """
 
     url = str(url or "")
+    # A page in HQ stays as it is; anything else must be a web address.
+    internal = url.startswith("/") and not url.startswith("//")
+    url = url if internal else web_url(url)
     return EntityLink(
         label=label,
         url=url,
-        external=url.startswith(("http://", "https://")),
+        external=bool(url) and not internal,
         kind=kind,
         kind_label=kind_label(kind),
     )

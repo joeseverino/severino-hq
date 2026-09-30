@@ -7,6 +7,7 @@ from django.utils import timezone
 from django.utils.formats import date_format
 from django.utils.html import format_html
 
+from application.entity_links import web_url as _web_url
 from application.timestamps import moment
 from application.ui import MISSING, ago as _ago, counted as _counted, elapsed as _elapsed
 
@@ -194,3 +195,11 @@ def readout(value):
     if " " not in text.strip() and _IDENTIFIER.search(text):
         return format_html("<code>{}</code>", text)
     return text
+
+
+@register.filter
+def web_url(value):
+    """An href from data someone else wrote: http(s) or nothing."""
+
+    return _web_url(value)
+

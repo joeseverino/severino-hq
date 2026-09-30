@@ -4,7 +4,7 @@
   {% if record.system_service %}<dt>System / service</dt><dd>{{ record.system_service }}</dd>{% endif %}
   {% if record.obsidian_path %}<dt>Obsidian path</dt><dd><code>{{ record.obsidian_path }}</code></dd>{% endif %}
   {% if record.github_path %}<dt>GitHub path</dt><dd><code>{{ record.github_path }}</code></dd>{% endif %}
-  {% if record.external_url %}<dt>External URL</dt><dd><a href="{{ record.external_url }}" rel="noopener noreferrer">{{ record.external_url }}</a></dd>{% endif %}
+  {% if record.external_url %}<dt>External URL</dt><dd>{% if record.external_url|web_url %}<a href="{{ record.external_url|web_url }}" rel="noopener noreferrer">{{ record.external_url }}</a>{% else %}{{ record.external_url }}{% endif %}</dd>{% endif %}
   <dt>Last reviewed</dt><dd>{{ record.last_reviewed|default:"never" }}</dd>
   <dt>Safe for AI export</dt><dd>{% if record.is_safe_for_ai_export %}Yes (public / internal){% else %}<strong>No</strong> (sensitive or restricted){% endif %}</dd>
 </dl>
