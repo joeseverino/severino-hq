@@ -35,46 +35,24 @@ def claim_resolution_plan(
     rule: str,
     subject: str,
     scope: str,
-    investigations: tuple[ActionLink, ...],
-    offers: tuple[ActionLink, ...],
     remedies: tuple[ActionLink, ...],
     verification: ActionLink | None,
 ) -> WorkflowPlan | None:
-    """Derive an honest resolution loop without inventing an execution path."""
+    """The steps that resolve a claim: a remedy, then the check that confirms
+    it. Where to look is the claim's own links, not a step. A fix made by hand
+    still has its check."""
 
-    inspect_actions = _dedupe(investigations)
-    act_actions = _dedupe((*remedies, *offers))
-    if not inspect_actions and not act_actions:
+    act_actions = _dedupe(remedies)
+    if not act_actions and verification is None:
         return None
-
-    steps = []
-    if inspect_actions:
-        steps.append(
-            WorkflowStep(
-                "understand",
-                "Check the impact",
-                "See what depends on it before changing anything.",
-                "available",
-                inspect_actions,
-            )
-        )
-    if act_actions:
-        steps.append(
-            WorkflowStep(
-                "act",
-                "Fix it",
-                "Run one of these actions.",
-                "recommended" if remedies else "available",
-                act_actions,
-            )
-        )
+    steps = [WorkflowStep("act", "Fix it", "", "recommended", act_actions)] if act_actions else []
     if verification is not None:
         steps.append(
             WorkflowStep(
                 "verify",
                 "Confirm the fix",
-                f"{verification.label}. It is resolved when this finding is gone.",
-                "after_action" if remedies else "available",
+                "It is resolved when this finding is gone.",
+                "after_action" if act_actions else "available",
                 (verification,),
             )
         )
@@ -100,8 +78,8 @@ def serialize_workflow(plan: WorkflowPlan | None):
 
 @dataclass(frozen=True)
 class WorkflowLayout:
-    """A plan as a card shows it: the gated remedies lead as the fix, and the
-    rest is one line of links."""
+    """A claim as a card shows it: the remedies lead as the fix, and where to
+    look and how to confirm are one line of links."""
 
     fix: tuple[ActionLink, ...] = ()
     impact: tuple[ActionLink, ...] = ()
@@ -113,17 +91,25 @@ class WorkflowLayout:
         return bool(self.impact or self.related or self.confirm)
 
 
-def workflow_layout(plan: WorkflowPlan | None) -> WorkflowLayout:
-    """Split a plan's actions by what they are: the recommended remedies, what
-    to check first, other places to look, and how to confirm."""
+def workflow_layout(
+    plan: WorkflowPlan | None,
+    *,
+    investigations: tuple[ActionLink, ...] = (),
+    offers: tuple[ActionLink, ...] = (),
+) -> WorkflowLayout:
+    """A plan's remedies and confirmation, beside the claim's own links: what
+    it affects and the pages it concerns, each named once."""
 
-    if plan is None:
-        return WorkflowLayout()
-    phases = {step.phase: step.actions for step in plan.steps}
-    act = phases.get("act", ())
+    phases = {step.phase: step.actions for step in plan.steps} if plan is not None else {}
+    seen: set[str] = set()
+    related = []
+    for action in _dedupe(offers):
+        if action.label not in seen:
+            seen.add(action.label)
+            related.append(action)
     return WorkflowLayout(
-        fix=tuple(action for action in act if action.recommended),
-        impact=phases.get("understand", ()),
-        related=tuple(action for action in act if not action.recommended),
+        fix=phases.get("act", ()),
+        impact=_dedupe(investigations),
+        related=tuple(related),
         confirm=phases.get("verify", ()),
     )

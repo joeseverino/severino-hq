@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.test import TestCase
 
 from ..containers import containers
-from ..standards import MET, UNAVAILABLE, UNMET
+from ..standards import INTENDED, MET, UNAVAILABLE, UNMET
 from .test_containers import HIGH, estate, inventory
 
 
@@ -46,6 +46,37 @@ class StandardTests(TestCase):
             "not-privileged", "no-docker-socket", "own-process-namespace", "confined",
             "no-system-path-writable", "no-powerful-capability",
         })
+
+    def test_a_check_declared_by_design_is_shown_with_its_reason_and_never_a_gap(self):
+        from control_plane.models import ManagedResource
+
+        ManagedResource.objects.create(
+            key="example-box-web", kind="portainer.container",
+            spec={"connection_ref": "example-portainer", "host": "example-box", "name": "web",
+                  "by_design": {"own-network": "It answers DNS on the host's port 53."}},
+        )
+
+        found = self.posture(**{**KEPT, "network_mode": "host", "user": "root"})
+
+        self.assertEqual(found.state_of("own-network"), INTENDED)
+        (intended,) = found.intended
+        self.assertEqual(intended.reason, "It answers DNS on the host's port 53.")
+        # What it did not declare is still a gap.
+        self.assertEqual([result.check.id for result in found.unmet], ["not-root"])
+
+    def test_by_design_names_real_checks_and_says_why(self):
+        from pydantic import ValidationError
+
+        from control_plane.provider_adapters.portainer import PortainerContainerSpec
+
+        base = {"connection_ref": "example-portainer", "host": "example-box", "name": "web"}
+        with self.assertRaises(ValidationError):
+            PortainerContainerSpec(**base, by_design={"not-a-check": "because"})
+        with self.assertRaises(ValidationError):
+            PortainerContainerSpec(**base, by_design={"own-network": "  "})
+        self.assertEqual(
+            PortainerContainerSpec(**base, by_design={"own-network": " DNS "}).by_design, {"own-network": "DNS"}
+        )
 
     def test_a_container_declared_to_hold_the_socket_is_not_flagged_for_it(self):
         from control_plane.models import ManagedResource
@@ -165,3 +196,19 @@ class AttentionTests(TestCase):
         self.assertIn("container-posture:not-privileged", keys)
         self.assertEqual(keys["container-posture:not-privileged"].magnitude, 2)
         self.assertNotIn("container-posture:not-root", keys)
+
+
+class HealthCheckedTests(TestCase):
+    def check(self, runtime, *, check=None, serves=()):
+        from types import SimpleNamespace as Row
+
+        from ..container_standard import _health_checked
+
+        return _health_checked(Row(runtime=runtime, running=Row(check=check), serves=serves))
+
+    def test_its_own_health_check_or_a_name_hq_requests_says_whether_it_works(self):
+        self.assertTrue(self.check({"healthcheck": True}))
+        # An image with no shell cannot run a check; a name HQ requests still says.
+        self.assertTrue(self.check({}, serves=("admin.example.com",)))
+        self.assertFalse(self.check({}))
+        self.assertIsNone(self.check(None))

@@ -650,11 +650,19 @@ class TailnetPolicyWriteTests(TestCase):
         "tests": [{"src": "a-laptop", "accept": ["a-server:443"]}],
     }
 
+    @staticmethod
+    def parsed(document):
+        try:
+            return json.loads(document)
+        except ValueError:
+            return None
+
     def reconcile(self, document, script=(), *, live=None, apply=True):
         urlopen = _Scripted(script)
         with (
             mock.patch.object(tailnet_api, "tailnet_token", return_value="t"),
-            mock.patch.object(tailnet_policy, "_tailnet_policy", return_value=live),
+            # Read before the write, and back after it.
+            mock.patch.object(tailnet_policy, "_tailnet_policy", side_effect=[live, self.parsed(document)]),
             mock.patch.object(urllib.request, "urlopen", urlopen),
         ):
             result = tailnet_policy.reconcile_tailnet_policy(
@@ -678,7 +686,7 @@ class TailnetPolicyWriteTests(TestCase):
         result, sent = self.reconcile(json.dumps(self.TESTED), live=self.TESTED)
 
         self.assertFalse(result.changed)
-        self.assertEqual(result.status, {"applied": True})
+        self.assertEqual(json.loads(result.status["document"]), self.TESTED)
         self.assertEqual(
             [(c["type"], c["status"], c["reason"]) for c in result.conditions],
             [("Ready", True, "Reconciled")],
@@ -702,7 +710,8 @@ class TailnetPolicyWriteTests(TestCase):
         )
 
         self.assertTrue(result.changed)
-        self.assertEqual(result.status, {"applied": True})
+        # What was read back, so the write confirms the document it made.
+        self.assertEqual(json.loads(result.status["document"]), self.WANTED)
         self.assertEqual(result.message, "Tailnet policy applied after its own tests passed.")
         self.assertEqual(
             [request.full_url.rsplit("/", 1)[-1] for request in sent],

@@ -220,6 +220,22 @@ def socket_holders() -> frozenset[tuple[str, str]]:
     return read_once("containers.socket_holders", load)
 
 
+def by_design() -> dict[tuple[str, str], dict[str, str]]:
+    """``(machine, container)`` to the checks its declaration says its job
+    requires it to fail, each with why."""
+
+    from .infrastructure import enabled_resources
+
+    def load() -> dict[tuple[str, str], dict[str, str]]:
+        return {
+            (str(resource.spec.get("host", "")), str(resource.spec.get("name", ""))): dict(resource.spec["by_design"])
+            for resource in enabled_resources()
+            if resource.kind == CONTAINER_KIND and resource.spec.get("by_design")
+        }
+
+    return read_once("containers.by_design", load)
+
+
 def container_watchers() -> dict[tuple[str, str], tuple[str, bool]]:
     """Which declaration watches which container, and whether it is folded away.
 
@@ -357,6 +373,13 @@ class Standing:
         if self.unread or not version(self.tag) or self.read_at is None:
             return UNKNOWN
         return CURRENT
+
+    @property
+    def newest(self) -> bool:
+        """Its registry was read and publishes nothing newer of this kind,
+        whatever else is known about it."""
+
+        return not self.newer and not self.unread and bool(version(self.tag)) and self.read_at is not None
 
     @property
     def worst(self) -> str:

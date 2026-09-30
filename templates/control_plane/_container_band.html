@@ -49,7 +49,7 @@ of its repository instead: the production deploy, and the repository's alerts.
         {% if standing.newer %}
           <strong>{% if standing.release %}<a class="external-link" href="{{ standing.release.url }}" rel="noopener"><code>{{ standing.latest }}</code> is out</a>{% else %}<code>{{ standing.latest }}</code> is out{% endif %}</strong>
           <small>{{ standing.newer|length|counted:"newer release,newer releases" }}{% if standing.release.published %}, the newest {{ standing.release.published|ago_short }}{% endif %}</small>
-        {% elif standing.state == "current" %}
+        {% elif standing.state == "current" or standing.newest %}
           <strong>Newest release</strong>
           <small>Nothing newer of this kind is published.</small>
         {% else %}

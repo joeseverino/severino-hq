@@ -246,7 +246,7 @@ class FindingsTests(TestCase):
         )
         self.assertEqual(
             [step.phase for step in general[0].workflow.steps],
-            ["understand", "act", "verify"],
+            ["act", "verify"],
         )
         self.assertEqual(general[0].workflow.outcome.kind, "claim_absent")
         self.assertEqual([item.scope for item in raw], ["example.a", "example.b"])
@@ -387,8 +387,8 @@ class FindingsTests(TestCase):
         self.assertEqual(dict(found[0].evidence)["Unconfirmed"], "answer")
         # `field(s)` is what a claim looks like when it does not know how
         # many there are. This one does.
-        self.assertTrue(found[0].title.endswith("1 unconfirmed field"))
-        self.assertNotIn("(s)", found[0].title)
+        # It names the field, so the reader knows what is unknown.
+        self.assertTrue(found[0].title.endswith(": answer not confirmed"))
 
     def test_a_field_carrying_no_value_is_not_an_unconfirmed_assertion(self):
         """A spec is a full model dump, so an optional field nobody set is

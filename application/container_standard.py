@@ -128,6 +128,16 @@ def _no_powerful_capability(runtime: Mapping[str, Any]) -> bool:
     return not (set(runtime.get("cap_add") or ()) & POWERFUL_CAPABILITIES)
 
 
+def _health_checked(container: Any) -> bool | None:
+    """Its own health check, or a name it serves that HQ requests: either
+    says whether it works. An image with no shell cannot run the first."""
+
+    runtime = _runtime(container)
+    if runtime is None:
+        return None
+    return bool(runtime.get("healthcheck")) or bool(container.running.check) or bool(container.serves)
+
+
 def _bound_to_an_address(runtime: Mapping[str, Any]) -> bool:
     return not any(binding.get("host_ip", "") in _ANY_ADDRESS for binding in runtime.get("port_bindings") or ())
 
@@ -171,11 +181,16 @@ STANDARD: tuple[Check, ...] = (
     Check("memory-limited", "Memory limited", _on(lambda runtime: bool(runtime.get("memory_limit"))),
           "Without a limit, one runaway container can take the machine's memory from every other.",
           "Set a memory limit in the compose file."),
-    Check("health-checked", "Declares a health check", _on(lambda runtime: bool(runtime.get("healthcheck"))),
-          "Without one, only that it is running can be known, and an upgrade cannot be verified by it.",
-          "Add a health check to the compose file."),
+    Check("health-checked", "Its health is checked", _health_checked,
+          "Without a check, only that it is running can be known, and an upgrade cannot be verified by it.",
+          "Add a health check to the compose file, or serve it under a name HQ requests."),
 )
 
 
 def posture_of(container: Any) -> Posture:
-    return measure(container, STANDARD)
+    from .containers import by_design
+
+    return measure(container, STANDARD, by_design().get((container.machine.name, container.running.name)))
+
+
+CHECK_IDS = frozenset(check.id for check in STANDARD)
