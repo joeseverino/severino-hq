@@ -349,7 +349,11 @@ def build_dense_estate():
             {
                 "connection_ref": "an-example-proxy-connection-with-a-long-name",
                 "provider": "npm",
-                "endpoint": "https://a-proxy-manager-endpoint-with-a-long-name.example.com",
+                # As long as a real API path runs: an account, a resource, an id.
+                "endpoint": (
+                    "https://a-proxy-manager-endpoint-with-a-long-name.example.com/client/v4/accounts/"
+                    "0123456789abcdef0123456789abcdef/databases/01234567-89ab-cdef-0123-456789abcdef"
+                ),
                 "reaches": [EDGE_MACHINE],
                 "ok": True,
                 "probed": True,

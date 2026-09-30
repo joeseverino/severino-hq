@@ -1580,14 +1580,13 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    than a row without. */
 .data-table td .pill { vertical-align: top; line-height: 1.4; }
 
-/* Columns size to what they hold: a table has no fixed widths to fall out of
-   step with its content. An identifier in a cell never breaks across lines,
-   so "hq-proxy" is never "hq-" over "proxy"; the column widens instead, and a
-   table too wide for its box scrolls in it. One longer than any column can
-   hold is cut with an ellipsis, which the row's expander lifts. */
-/* An identifier never breaks and never sets the table's width: past
-   --identifier-max it is cut, and the row expander shows it whole. */
-.data-table td code { white-space: nowrap; overflow-wrap: normal; display: inline-block; max-width: min(100%, var(--identifier-max)); overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+/* Columns size to what they hold, and a table too wide for its box scrolls in
+   it. An identifier in a cell never breaks across lines ("hq-proxy" is never
+   "hq-" over "proxy") and never takes more than --identifier-max: past it, it
+   is cut, and the row expander shows it whole. The cap is a length, not a
+   percentage, because a percentage counts for nothing while the columns are
+   sized, and one long URL would then take the width every other column needs. */
+.data-table td code { white-space: nowrap; overflow-wrap: normal; display: inline-block; max-width: var(--identifier-max); overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 .icon-link {
   display: inline-flex;
   align-items: center;
@@ -3054,12 +3053,9 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-ability-list small.connection-evidence-unknown { color: var(--muted); font-weight: 600; }
 /* Lifecycle, authority and the reading's age, one under the other, in the
    table and in the stacked card alike. */
-.connection-standing { display: grid; gap: var(--space-1); justify-items: start; min-width: 0; }
-/* Each fact under the lifecycle word is one line, cut at the column's edge:
-   left to run on, it runs under the next column; left to wrap, a column this
-   narrow stands four short facts eight lines tall. The title on each carries
-   the whole line. */
-.connection-standing > :not(.connection-state) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Wide enough to read a fact whole, as a length so the table counts it while
+   sizing columns; each fact wraps inside it rather than being cut. */
+.connection-standing { display: grid; gap: var(--space-1); justify-items: start; min-width: 18ch; }
 .connection-standing .muted { font-size: var(--text-2xs); }
 .connection-last-activity { font-size: var(--text-2xs); }
 .connection-authority { color: var(--muted); font-size: var(--text-2xs); }

@@ -238,6 +238,26 @@ _CELLS = "() => {" + _DESCRIBE + """
   return [...new Set(found)].slice(0, 10);
 }"""
 
+# A plain word split across lines inside a table cell: its column was given
+# less than the word, because another column's content took the width.
+_BROKEN_WORDS = "() => {" + _DESCRIBE + """
+  const found = [];
+  const range = document.createRange();
+  for (const cell of document.querySelectorAll('main td')) {
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.parentElement.checkVisibility()) continue;
+      for (const match of node.textContent.matchAll(/[A-Za-z]{4,}/g)) {
+        range.setStart(node, match.index);
+        range.setEnd(node, match.index + match[0].length);
+        const lines = new Set([...range.getClientRects()].filter((r) => r.width).map((r) => Math.round(r.top)));
+        if (lines.size > 1) found.push(`${describe(cell)} breaks "${match[0]}"`);
+      }
+    }
+  }
+  return [...new Set(found)].slice(0, 10);
+}"""
+
 _TABLES = "() => {" + _DESCRIBE + """
   const width = document.documentElement.clientWidth;
   const found = [];
@@ -821,6 +841,9 @@ class LayoutBrowserTests(SimpleTestCase):
                 ), []
             )
         )
+
+    def test_no_column_is_narrower_than_its_words(self):
+        self.across(lambda _name: self.assertEqual(self.page.evaluate(_BROKEN_WORDS), []))
 
     def test_a_band_cell_keeps_its_padding(self):
         def check(_name):
