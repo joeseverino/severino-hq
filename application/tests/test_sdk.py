@@ -59,6 +59,17 @@ class SdkContractTests(SimpleTestCase):
                 ["invalid.py:1: application.capabilities", "invalid.py:2: core.audit"],
             )
 
+    def test_a_relative_import_is_the_plugins_own_whatever_it_is_called(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "plugin.py").write_text(
+                "from .calendars import sources\n"
+                "from ..core import helpers\n"
+                "from calendars.models import Entry\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(unsupported_hq_imports(root), ["plugin.py:3: calendars.models"])
+
     def test_the_import_boundary_reads_every_form_and_every_file(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)

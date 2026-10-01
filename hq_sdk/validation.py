@@ -71,7 +71,10 @@ def _imported_modules(node: ast.Import | ast.ImportFrom) -> tuple[str, ...]:
     """The absolute module names one import statement names."""
 
     if isinstance(node, ast.ImportFrom):
-        return (node.module,) if node.module else ()
+        # A relative import names the plugin's own package, never the host's,
+        # however its module is spelled: `from .calendars import x` is the
+        # plugin's own calendars.
+        return (node.module,) if node.module and not node.level else ()
     return tuple(alias.name for alias in node.names)
 
 
