@@ -264,6 +264,10 @@ class ProviderSpec:
     # within the minute. The page that takes the edit is the only place that
     # can say so beforehand, and a provider is the only thing that knows.
     change_effects: tuple[tuple[str, str], ...] = ()
+    # What a person approving a change to this kind must be told about the
+    # declaration it would write: a sentence per thing in it that reaches
+    # further than the kind's name suggests. Shown on the approval card.
+    review_warnings: Callable[[dict[str, Any]], tuple[str, ...]] | None = None
     # Fields that are optional to the model but unanswerable-by-default when
     # the record does not exist yet. An NPM proxy keeps whatever certificate it
     # already has when this is blank, which is a sensible default for an edit

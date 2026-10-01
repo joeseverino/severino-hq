@@ -14,6 +14,12 @@
     {% if entry.held.decision_note %}<p class="approval-reason">{{ entry.held.decision_note }}</p>{% endif %}
   </header>
 
+  {% if entry.warnings %}
+    <div class="notice notice-attention">
+      <strong>What this reaches</strong>
+      <ul>{% for warning in entry.warnings %}<li>{{ warning }}</li>{% endfor %}</ul>
+    </div>
+  {% endif %}
   <h3 class="approval-label">{{ entry.preview.label }}</h3>
   {% if entry.preview.rows %}
     <div class="table-scroll">

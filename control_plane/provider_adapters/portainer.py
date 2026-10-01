@@ -6,6 +6,7 @@ core's; what is declared about them, and the readings, are here.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from pydantic import Field, field_validator
@@ -276,6 +277,27 @@ def _container_removal_note(spec: dict[str, Any]) -> str:
     )
 
 
+# Lines in a compose file that give a container its host: each is root on the
+# machine in all but name. A scan of lines rather than a parse, because it only
+# tells the person approving where to look; the hold is the control.
+_ROOT_EQUIVALENT = (
+    (re.compile(r"^\s*privileged:\s*true\b", re.M), "runs a container privileged"),
+    (re.compile(r"/var/run/docker\.sock|/run/docker\.sock"), "mounts the Docker socket"),
+    (re.compile(r"^\s*network_mode:\s*[\"']?host\b", re.M), "uses the host's network"),
+    (re.compile(r"^\s*pid:\s*[\"']?host\b", re.M), "sees every process on the host"),
+    (re.compile(r"^\s*cap_add:", re.M), "adds kernel capabilities"),
+    (re.compile(r"^\s*devices:", re.M), "passes host devices through"),
+    (re.compile(r"^\s*-\s*[\"']?/(?::|\s|[\"']|$)", re.M), "mounts the host's root filesystem"),
+)
+
+
+def _stack_warnings(spec: dict[str, Any]) -> tuple[str, ...]:
+    compose = str(spec.get("compose") or "")
+    found = [what for pattern, what in _ROOT_EQUIVALENT if pattern.search(compose)]
+    host = spec.get("host") or "its machine"
+    return tuple(f"It {what} on {host}." for what in found)
+
+
 STACK = ProviderSpec(
     CONTAINER_STACK_KIND,
     "A set of containers on one machine. HQ creates it in Portainer if "
@@ -314,6 +336,11 @@ STACK = ProviderSpec(
     unobserved_reason=(
         "Observed through its containers, which the sweep reads."
     ),
+    # A compose file can mount the host's root, its Docker socket or its
+    # network, which is root on that machine. A credential is not enough to
+    # change one: a person reads what it reaches first.
+    requires_approval=True,
+    review_warnings=_stack_warnings,
 )
 
 CONTAINER = ProviderSpec(
