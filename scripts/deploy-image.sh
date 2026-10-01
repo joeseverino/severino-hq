@@ -46,13 +46,17 @@ case "${image}" in
 esac
 
 # The host paths the web container binds decide what it loads as its secrets
-# and trusts as a certificate authority, and compose would read them from the
-# checkout's .env, which the deploy account writes. Each is checked here against
-# what it may be and exported, which compose prefers over the file: the rendered
-# environment in the root-only secrets directory, the controller's run
-# directory, a certificate in the system's own store.
+# and trusts as a certificate authority. Compose would read them from the
+# checkout's .env, which the deploy account writes, so none is taken from there
+# as given. The secrets environment is the file refresh-secrets.sh renders on
+# the root-only tmpfs; the others are checked against what they may be. Each
+# is exported, which compose prefers over the file.
 readonly root_uid="${SEVERINO_HQ_ROOT_UID:-0}"
 readonly web_uid="${SEVERINO_HQ_WEB_UID:-10001}"
+readonly web_secret_dir="${SEVERINO_HQ_WEB_SECRET_DIR:-/run/severino-hq-secrets/web}"
+# The checkout's copy of the environment, bound only while no tmpfs copy
+# exists. The deploy that binds the tmpfs copy removes it.
+readonly checkout_env="${app_dir}/secrets/severino_hq_env"
 env_value() {
     [ -f "${app_dir}/.env" ] || return 0
     sed -n "s/^${1}=//p" "${app_dir}/.env" | tail -n 1 | sed "s/^[\"']//; s/[\"']\$//"
@@ -61,19 +65,25 @@ refuse_mount() { echo "Refusing to deploy: $1" >&2; exit 1; }
 # GNU stat on the hosts, BSD stat on a Mac running the drill.
 owner_links() { stat -c '%u %h' "$1" 2>/dev/null || stat -f '%u %l' "$1"; }
 owner_mode() { stat -c '%u %a' "$1" 2>/dev/null || stat -f '%u %Lp' "$1"; }
-app_env_host="$(env_value SEVERINO_APP_ENV_FILE_HOST)"
-case "${app_env_host}" in
-    "" | /dev/null) app_env_host=/dev/null ;;
-    "${app_dir}/secrets/severino_hq_env")
-        [ "$(owner_mode "${app_dir}/secrets")" = "${root_uid} 700" ] \
-            || refuse_mount "${app_dir}/secrets is not a directory only root can enter."
-        if [ ! -f "${app_env_host}" ] || [ -L "${app_env_host}" ] \
-            || [ "$(owner_links "${app_env_host}")" != "${web_uid} 1" ]; then
-            refuse_mount "${app_env_host} is not the file refresh-secrets.sh renders."
-        fi
-        ;;
-    *) refuse_mount "SEVERINO_APP_ENV_FILE_HOST must be ${app_dir}/secrets/severino_hq_env." ;;
-esac
+# A rendered environment: one regular file owned by the web user, with no
+# other name, in a directory only root can enter.
+rendered_env() {
+    [ "$(owner_mode "$1")" = "${root_uid} 700" ] \
+        || refuse_mount "$1 is not a directory only root can enter."
+    if [ ! -f "$1/severino_hq_env" ] || [ -L "$1/severino_hq_env" ] \
+        || [ "$(owner_links "$1/severino_hq_env")" != "${web_uid} 1" ]; then
+        refuse_mount "$1/severino_hq_env is not the file refresh-secrets.sh renders."
+    fi
+}
+if [ -e "${web_secret_dir}/severino_hq_env" ] || [ -L "${web_secret_dir}/severino_hq_env" ]; then
+    rendered_env "${web_secret_dir}"
+    app_env_host="${web_secret_dir}/severino_hq_env"
+elif [ -e "${checkout_env}" ] || [ -L "${checkout_env}" ]; then
+    rendered_env "${app_dir}/secrets"
+    app_env_host="${checkout_env}"
+else
+    app_env_host=/dev/null
+fi
 controller_run_host="$(env_value SEVERINO_CONTROLLER_RUN_DIR)"
 case "${controller_run_host}" in
     "" | /run/severino-hq) controller_run_host=/run/severino-hq ;;
@@ -314,6 +324,11 @@ for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
             && SEVERINO_HQ_INSTALLER_SYNCED=1 sh "${lib_dir}/scripts/install-controller.sh"; then
             rm -rf "${controller_backup}"
             controller_backup=""
+            # The running container binds the tmpfs copy, so the one on the
+            # checkout's disk has no reader.
+            if [ "${app_env_host}" != "${checkout_env}" ]; then
+                rm -f "${checkout_env}"
+            fi
             echo "Deployed healthy image ${image} with an active controller."
             exit 0
         fi

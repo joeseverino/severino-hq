@@ -210,6 +210,40 @@ def _provider_request(
     return request
 
 
+# The most any provider answer may be. A real one is a page of records; a
+# provider (or anything answering in its place) cannot make the controller hold
+# more than this in memory.
+MAX_RESPONSE_BYTES = 32 * 1024 * 1024
+
+
+class _BoundedResponse:
+    """A provider response whose body cannot be read past MAX_RESPONSE_BYTES."""
+
+    def __init__(self, response: Any) -> None:
+        self._response = response
+        self._read = 0
+
+    def read(self, amount: int | None = None) -> bytes:
+        left = MAX_RESPONSE_BYTES - self._read
+        chunk = self._response.read(left + 1 if amount is None or amount > left else amount)
+        self._read += len(chunk)
+        if self._read > MAX_RESPONSE_BYTES:
+            raise ProviderError(
+                f"The provider answered with more than {MAX_RESPONSE_BYTES // (1024 * 1024)} MB."
+            )
+        return chunk
+
+    def __enter__(self) -> "_BoundedResponse":
+        self._response = self._response.__enter__()
+        return self
+
+    def __exit__(self, *exc: Any) -> Any:
+        return self._response.__exit__(*exc)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._response, name)
+
+
 def open_url(
     url: str,
     *,
@@ -221,13 +255,16 @@ def open_url(
     """The one way the controller sends a provider request.
 
     Credentials ride only as unredirected headers, a redirect off the request's
-    origin is refused, and TLS is verified with ``tls_context()``. Returns the
-    open response; ``urllib.error`` exceptions propagate to the caller.
+    origin is refused, TLS is verified with ``tls_context()``, and the answer
+    cannot be read past ``MAX_RESPONSE_BYTES``. Returns the open response;
+    ``urllib.error`` exceptions propagate to the caller.
     """
 
     request = _provider_request(url, data=data, headers=headers or {}, method=method)
-    return urllib.request.urlopen(  # noqa: S310 - URLs are deployment config.
-        request, timeout=timeout, context=tls_context()
+    return _BoundedResponse(
+        urllib.request.urlopen(  # noqa: S310 - URLs are deployment config.
+            request, timeout=timeout, context=tls_context()
+        )
     )
 
 

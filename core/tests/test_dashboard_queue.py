@@ -4,6 +4,7 @@ import json
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from application.ui import DomainOverview
 from django.test import TestCase
 
 from application.dashboard import work_queue
@@ -113,16 +114,34 @@ class DashboardQueueTests(TestCase):
             self.assertEqual(response.status_code, 302)
             self.assertIn("/accounts/login/", response.url)
 
-    def test_contributor_visuals_are_visible_and_calendars_have_distinct_ids(self):
+    def test_an_empty_month_takes_no_space(self):
+        # Nothing contributes, the calendar's sources included, so the month is
+        # empty whatever is installed.
+        with patch(
+            "core.dashboard_views.dashboard_highlights",
+            return_value={"highlights": [], "compact": []},
+        ), patch("application.calendar.calendar_sources", return_value=()):
+            response = self.client.get("/")
+        self.assertNotContains(response, 'id="dashboard-calendar"')
+        self.assertNotContains(response, 'class="dashboard-patterns"')
+
+    def test_each_domain_leads_with_its_chart_and_the_month_is_composed_once(self):
+        from django.utils import timezone
+
+        from calendars.models import Entry
+
+        Entry.objects.create(title="Example visit", starts_on=timezone.localdate())
         highlights = [
             {
                 "id": f"example.section{number}",
                 "label": f"Example {number}",
-                "overview": {
-                    "url": "/example/",
-                    "charts": [{"title": "Example movement", "empty": True}],
-                    "calendars": [{"title": "Example activity", "weeks": []}],
-                },
+                "overview": DomainOverview(
+                    "Example",
+                    "/example/",
+                    (),
+                    charts=({"title": "Example movement", "empty": True},),
+                    calendars=({"title": "Example activity", "weeks": []},),
+                ),
             }
             for number in (1, 2)
         ]
@@ -132,10 +151,9 @@ class DashboardQueueTests(TestCase):
         ):
             response = self.client.get("/")
         self.assertContains(response, "Example movement", count=2)
-        self.assertContains(response, 'class="dashboard-patterns"', count=2)
+        self.assertContains(response, 'class="dashboard-patterns"', count=1)
         self.assertNotContains(response, '<details class="highlight-patterns">')
         self.assertNotContains(response, 'aria-label="Across HQ"')
-        for number in (1, 2):
-            self.assertContains(
-                response, f'id="dashboard-calendar-example.section{number}"', count=1
-            )
+        # A domain's own calendar stays on its pages; the dashboard shows the composed month.
+        self.assertNotContains(response, "Example activity")
+        self.assertContains(response, 'id="dashboard-calendar"', count=1)

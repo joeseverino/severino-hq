@@ -685,6 +685,7 @@ jobs:
           image-ref: ${{ steps.coordinated.outputs.found == 'true' && format('severino-hq-candidate:{0}', github.sha) || format('ghcr.io/{0}/composition:{1}', github.repository, steps.host.outputs.sha) }}
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          trivyignores: .trivyignore
           exit-code: "1"
 
       - name: Authenticate to GHCR

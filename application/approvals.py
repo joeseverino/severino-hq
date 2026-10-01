@@ -839,6 +839,7 @@ def review(held: ApprovalRequest) -> dict[str, Any]:
         "held": held,
         "title": capability_title(held.capability),
         "preview": preview(held),
+        "warnings": _warnings(held),
         "resource_url": (
             entity_link("resource", held.resource_key).url
             if held.resource_kind
@@ -846,6 +847,16 @@ def review(held: ApprovalRequest) -> dict[str, Any]:
             else ""
         ),
     }
+
+
+def _warnings(held: ApprovalRequest) -> tuple[str, ...]:
+    """What the declaration this request would write reaches, said plainly."""
+
+    provider = PROVIDERS.get(held.resource_kind)
+    requested = held.payload.get("spec")
+    if provider is None or provider.review_warnings is None or not isinstance(requested, dict):
+        return ()
+    return provider.review_warnings(requested)
 
 
 def for_audit_event(event) -> ApprovalRequest | None:

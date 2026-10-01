@@ -22,6 +22,7 @@ def integration():
         dashboard=dashboard_cards,
         overview=domain_overview,
         attention=attention_items,
+        calendars=calendar_sources,
         health=ready,
     )
 
@@ -394,6 +395,55 @@ Dense pages expose their information architecture with
 `data-page-section` on each section. HQ then owns compact horizontal overflow,
 sticky positioning, scroll-aware current state, and fragment history. Labels
 may change; section IDs are durable links.
+
+## Calendar sources
+
+Every domain can put what it holds on HQ's calendar. `calendars` returns
+`hq_sdk.calendar.CalendarSource` values; each names a stream of dated things
+the domain already holds and answers `events(first, last)` with every
+`CalendarEvent` touching those days. The calendar composes every domain's
+sources, stores none of them, and shows each in the operator's list of
+calendars, checked or unchecked by their own choice.
+
+```python
+from hq_sdk.calendar import CalendarEvent, CalendarSource
+
+
+def calendar_sources():
+    return (
+        CalendarSource(
+            id="notes.reviews",
+            label="Note reviews",
+            events=reviews_between,
+        ),
+    )
+
+
+def reviews_between(first, last):
+    for note in Note.objects.filter(review_on__range=(first, last)):
+        yield CalendarEvent(f"note:{note.pk}", f"Review {note.title}", note.review_on, url=note.get_absolute_url())
+```
+
+A source keeps four rules:
+
+- **Derive, never copy.** Read what the domain holds; the calendar is a view,
+  not a store. An event links to the record it came from.
+- **One pass per window.** `events` is called once per view; a query per day
+  is a bug. Hold it with a query-count test over a short and a long window.
+- **Say only what is true.** An event's `state` (`done`, `planned`, `missed`)
+  is a claim; a day the domain cannot speak for emits nothing.
+- **Mind the noise.** History (what happened, rather than what is coming)
+  starts unchecked (`shown=False`); a dot (`mark=True`) is for what is many a
+  day and read by colour.
+
+`ends` is exclusive, as in iCalendar: an all-day event over the 3rd to the 5th
+ends on the 6th. A timed event's `starts` is an aware datetime. `slot` keeps a
+colour the domain's charts already use; otherwise the calendar deals one.
+
+The calendar page is the host's. An extension may place a host page in its
+own navigation group by naming its route, `NavigationItem("Calendar",
+"calendar:month", "calendar", 11, "Notes")`; where none does, the host lists it
+in its own place.
 
 ## Routes that authenticate themselves
 

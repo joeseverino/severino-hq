@@ -631,7 +631,29 @@ const hqBindDashboardGlance = (root) => {
     const currentPanels = current.querySelector(".glance-panels");
     const nextPanels = next.querySelector(".glance-panels");
     if (!currentPanels || !nextPanels) return current;
-    currentPanels.replaceWith(nextPanels);
+    // Only a panel that changed is swapped, so a poll that finds nothing new
+    // leaves the page exactly as it was, and an open popover stays open.
+    const shown = new Map(
+      [...currentPanels.querySelectorAll("[data-panel]")].map((panel) => [panel.dataset.panel, panel]),
+    );
+    const order = (panels) => [...panels.querySelectorAll("[data-panel]")].map((panel) => panel.dataset.panel).join();
+    const markup = (panel) => {
+      const copy = panel.cloneNode(true);
+      copy.removeAttribute("open");
+      return copy.outerHTML;
+    };
+    nextPanels.querySelectorAll("[data-panel]").forEach((panel) => {
+      const was = shown.get(panel.dataset.panel);
+      if (was) panel.open = was.open;
+    });
+    if (order(currentPanels) !== order(nextPanels)) {
+      currentPanels.replaceWith(nextPanels);
+      return current;
+    }
+    nextPanels.querySelectorAll("[data-panel]").forEach((panel) => {
+      const was = shown.get(panel.dataset.panel);
+      if (markup(was) !== markup(panel)) was.replaceWith(panel);
+    });
     return current;
   };
 
@@ -802,44 +824,106 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   });
 })();
 
-// Calendar paging without a page load. The links work on their own: this
-// only replaces the card in place so the rest of the page, and the scroll
-// position, stay where they were.
+// Calendar paging without a page load. The links and forms work on their own:
+// this only replaces the calendar in place so the rest of the page, the scroll
+// position and the keyboard focus stay where they were. A card swaps itself;
+// the calendar page swaps its whole region, so the month, the day and the
+// list of calendars always agree.
 (() => {
-  const swap = async (link) => {
-    const card = link.closest(".calendar-card");
-    if (!card || !card.id) return false;
-    // X-Fragment lets the view skip everything it would otherwise rebuild to
-    // redraw one grid, and return the card on its own.
-    const response = await hqFetch(link.href, {
+  const region = (element) => element.closest("[data-calendar], .calendar-card");
+
+  const swap = async (element, url, init = {}) => {
+    const current = region(element);
+    if (!current || !current.id) return false;
+    // X-Fragment asks the view for the card alone, without building the rest
+    // of the page.
+    const response = await hqFetch(url, {
       credentials: "same-origin",
       headers: { "X-Fragment": "calendar" },
+      ...init,
     });
     if (!response.ok) return false;
     const parsed = hqParseDocument(await response.text());
-    const next = parsed.getElementById(card.id);
+    const next = parsed.getElementById(current.id);
     if (!next) return false;
-    card.replaceWith(next);
+    const focused = document.activeElement;
+    const key = focused && current.contains(focused)
+      ? focused.getAttribute("href") || focused.closest("form")?.getAttribute("action")
+      : null;
+    current.replaceWith(next);
     // replaceState, not pushState: paging months is not a place worth putting
     // between the operator and the Back button.
-    history.replaceState(null, "", link.href);
+    history.replaceState(null, "", response.redirected ? response.url : url);
+    if (key) {
+      next.querySelector(`[href="${CSS.escape(key)}"], form[action="${CSS.escape(key)}"] button`)?.focus();
+    }
     return true;
   };
 
+  const fallback = (url) => {
+    window.location.href = url;
+  };
+
   document.addEventListener("click", (event) => {
-    const link = event.target.closest(".calendar-nav a");
+    const link = event.target.closest(".calendar-nav a, [data-calendar] a[href]");
     if (!link || event.metaKey || event.ctrlKey || event.shiftKey) return;
+    // Within the calendar, only what opens the calendar again opens in place:
+    // a record's own page is a page.
+    if (link.closest("[data-calendar]") && new URL(link.href).pathname !== window.location.pathname) return;
     event.preventDefault();
     // Any failure falls through to the ordinary navigation the link already is.
-    swap(link)
+    swap(link, link.href)
       .then((done) => {
-        if (!done) window.location.href = link.href;
+        if (!done) fallback(link.href);
       })
-      .catch(() => {
-        window.location.href = link.href;
-      });
+      .catch(() => fallback(link.href));
+  });
+
+  // Checking a calendar: the form posts, the server redirects back to the
+  // month, and that page is what replaces this one.
+  document.addEventListener("submit", (event) => {
+    const form = event.target.closest("[data-calendar] form[data-calendar-source]");
+    if (!form) return;
+    event.preventDefault();
+    swap(form, form.action, { method: "POST", body: new FormData(form) })
+      .then((done) => {
+        if (!done) form.submit();
+      })
+      .catch(() => form.submit());
   });
 })();
+
+// A field shown only when another field's value calls for it:
+// data-when="repeat" for any value, data-when="repeat=weekly|daily" for those.
+// Without this script every field shows, which is still a working form.
+const hqBindWhen = (root) => {
+  root.querySelectorAll("[data-when]").forEach((field) => {
+    const [name, wanted] = field.dataset.when.split("=");
+    const control = field.closest("form")?.elements.namedItem(name);
+    if (!control || field.dataset.whenBound) return;
+    field.dataset.whenBound = "true";
+    const update = () => {
+      field.hidden = wanted === undefined ? !control.value : !wanted.split("|").includes(control.value);
+    };
+    control.addEventListener("change", update);
+    update();
+  });
+};
+hqBindWhen(document);
+
+// A key that works a control: any link or button carrying data-hotkey, while
+// nothing is being typed. The control stays the source of truth, so a key
+// does exactly what clicking it would.
+document.addEventListener("keydown", (event) => {
+  if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
+  if (event.target.closest("input, textarea, select, [contenteditable], dialog[open]")) return;
+  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  // A control may answer several keys: data-hotkey="ArrowRight j n".
+  const control = document.querySelector(`[data-hotkey~="${CSS.escape(key)}"]`);
+  if (!control) return;
+  event.preventDefault();
+  control.click();
+});
 
 // Job progress. A job runs off the request thread, so the page that started
 // it has to ask how it is going.

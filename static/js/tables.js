@@ -70,7 +70,9 @@
   };
 
   const rowSaysMore = (row) =>
-    [...row.querySelectorAll(":is(td, th) *")].some(isCut) || row.querySelectorAll(":is(td, th) details").length >= 2;
+    row.querySelector(":is(td, th) .row-more") !== null
+    || [...row.querySelectorAll(":is(td, th) *")].some(isCut)
+    || row.querySelectorAll(":is(td, th) details").length >= 2;
 
   // The row's first cell, header or data: the toggle sits beside what names
   // the row, not in whichever column happens to be the first <td>.
@@ -96,9 +98,16 @@
         button.className = "row-expand";
         button.setAttribute("aria-expanded", "false");
         button.setAttribute("aria-label", "Show all of this row");
-        const mark = document.createElement("span");
+        // The nav's caret, pointing right until the row is open.
+        const svg = "http://www.w3.org/2000/svg";
+        const mark = document.createElementNS(svg, "svg");
+        mark.setAttribute("viewBox", "0 0 6 10");
+        mark.setAttribute("width", "7");
+        mark.setAttribute("height", "11");
         mark.setAttribute("aria-hidden", "true");
-        mark.textContent = "▸";
+        const path = document.createElementNS(svg, "path");
+        path.setAttribute("d", "M1 1l4 4-4 4");
+        mark.append(path);
         button.append(mark);
         cell.prepend(button);
       } else if (!expandable && toggle) {

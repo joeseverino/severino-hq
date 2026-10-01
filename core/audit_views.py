@@ -59,7 +59,31 @@ class AuditLogListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
                 object_type__in=AUDIT_LABELS,
                 object_id__in=awaiting_ids(),
             )
+        day = self._day()
+        if day is not None:
+            qs = qs.filter(created_at__date=day)
         return self.apply_table_query(qs)
+
+    def _day_bounds(self) -> dict:
+        from datetime import datetime, time, timedelta
+
+        from django.utils import timezone
+
+        day = self._day()
+        if day is None:
+            return {}
+        start = datetime.combine(day, time.min, tzinfo=timezone.get_current_timezone())
+        return {"since": start, "until": start + timedelta(days=1)}
+
+    def _day(self):
+        """``?on=YYYY-MM-DD``: one day's history, as the calendar opens it."""
+
+        from datetime import date
+
+        try:
+            return date.fromisoformat(self.request.GET.get("on", ""))
+        except ValueError:
+            return None
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -111,6 +135,11 @@ class AuditLogListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
         if page_obj.has_previous():
             before = self.object_list[page_obj.start_index() - 2 : page_obj.start_index() - 1]
             span["until"] = next(iter(before.values_list("created_at", flat=True)), None)
+        # Within the page's stretch and the chosen day both.
+        day = self._day_bounds()
+        if day:
+            span["since"] = max(filter(None, (span.get("since"), day["since"])))
+            span["until"] = min(filter(None, (span.get("until"), day["until"])))
         return span
 
     def _awaiting(self) -> bool:

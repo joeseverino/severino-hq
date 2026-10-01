@@ -35,13 +35,13 @@ they stay visible and stay in the same table.
               <strong>{% entity "connection"|entity_of:connection.instance.label %}</strong>
               {% if connection.instance.endpoint %}<br><code class="connection-endpoint" title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint }}</code>{% endif %}
               {% comment %}Where a group starts: every row under it shares this, and repeating it on each says nothing new.{% endcomment %}
-              {% ifchanged group.spec.label group.spec.secret_store %}<br><span class="connection-row-meta">
+              {% ifchanged group.spec.label group.spec.secret_store %}<span class="connection-row-meta">
                 {% if group.spec.label != connection.instance.label %}{{ group.spec.label }} · {% endif %}{% if group.spec.secret_store %}Secret store: {{ group.spec.secret_store }}{% else %}No credential needed{% endif %}
                 {% if group.spec.documentation_url %} · <a href="{{ group.spec.documentation_url }}">Docs</a>{% endif %}
                 {% if group.spec.management_route %} · <a href="{% url group.spec.management_route %}">Manage</a>{% endif %}
               </span>{% endifchanged %}
-              {% if row.reach.summary %}<br><span class="connection-row-meta connection-reach">{{ row.reach.label }}{% if row.reach.peering %} · {{ row.reach.peering }}{% endif %}{% if row.reach.machine %} · on {% entity row.reach.machine %}{% endif %}</span>{% endif %}
-              {% if connection.instance.facts %}<br><span class="muted">{% for fact in connection.instance.facts %}{% if fact.label == "Controller" %}via {{ fact.value }}{% else %}{{ fact.label }}: {{ fact.value }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</span>{% endif %}
+              {% if row.reach.summary %}<span class="connection-row-meta connection-reach">{{ row.reach.label }}{% if row.reach.peering %} · {{ row.reach.peering }}{% endif %}{% if row.reach.machine %} · on {% entity row.reach.machine %}{% endif %}</span>{% endif %}
+              {% if connection.instance.facts %}<span class="connection-row-meta">{% for fact in connection.instance.facts %}{% if fact.label == "Controller" %}via {{ fact.value }}{% else %}{{ fact.label }}: {{ fact.value }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</span>{% endif %}
               {% with sight=row.sight %}
               {% if sight.credential_refusal %}<p class="connection-sight-refusal">{{ sight.label }} refused this credential: {{ sight.credential_refusal }}</p>{% endif %}
               {% if sight.sights %}
@@ -49,10 +49,9 @@ they stay visible and stay in the same table.
               {% endif %}
               {% endwith %}
               {% if row.more_scope %}
-                <details class="connection-more-scope">
-                  <summary>Would also see {{ row.more_scope|length }} more</summary>
+                <div class="connection-more-scope row-more">
                   <ul>{% for line in row.more_scope %}<li>{{ line }}</li>{% endfor %}</ul>
-                </details>
+                </div>
               {% endif %}
               {% if row.fix %}{% include "control_plane/_credential_fix.html" with fix=row.fix %}{% endif %}
             </td>
@@ -64,8 +63,8 @@ they stay visible and stay in the same table.
             <td>
               {% comment %}
               Capped, because a controller credential governs a dozen kinds and
-              a dozen chips would make one row hundreds of pixels tall. The rest
-              fold behind the count.
+              a dozen would make one row hundreds of pixels tall. The rest show
+              when the row is expanded, the one disclosure a row has.
               {% endcomment %}
               {% if connection.abilities %}
                 <ul class="connection-ability-list">
@@ -85,14 +84,12 @@ they stay visible and stay in the same table.
                   {% endfor %}
                 </ul>
                 {% if connection.abilities|length > 3 %}
-                  <details class="connection-ability-more">
-                    <summary>+{{ connection.abilities|length|add:"-3" }} more</summary>
-                    <ul class="connection-ability-list">
-                      {% for state in connection.abilities|slice:"3:" %}
-                        <li{% if not state.available %} class="is-unavailable"{% endif %}{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}><span>{{ state.ability.label }}</span></li>
-                      {% endfor %}
-                    </ul>
-                  </details>
+                  <span class="connection-ability-more row-less">+{{ connection.abilities|length|add:"-3" }} more</span>
+                  <ul class="connection-ability-list row-more">
+                    {% for state in connection.abilities|slice:"3:" %}
+                      <li{% if not state.available %} class="is-unavailable"{% endif %}{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}><span>{{ state.ability.label }}</span></li>
+                    {% endfor %}
+                  </ul>
                 {% endif %}
               {% else %}{% empty_value %}{% endif %}
             </td>
@@ -109,10 +106,10 @@ they stay visible and stay in the same table.
               {% endcomment %}
               <span class="connection-depends">
               {% for link in connection.instance.targets|slice:":3" %}{% entity link|declared_link %}{% if not forloop.last %} · {% endif %}{% endfor %}
-              {% if connection.instance.targets|length > 3 %} <span class="muted">+{{ connection.instance.targets|length|add:"-3" }}</span>{% endif %}
+              {% if connection.instance.targets|length > 3 %} <span class="muted row-less">+{{ connection.instance.targets|length|add:"-3" }}</span><span class="row-more"> · {% for link in connection.instance.targets|slice:"3:" %}{% entity link|declared_link %}{% if not forloop.last %} · {% endif %}{% endfor %}</span>{% endif %}
               {% if connection.instance.targets and connection.instance.dependencies %}<br>{% endif %}
               {% for link in connection.instance.dependencies|slice:":3" %}{% entity link|declared_link code=True %}{% if not forloop.last %} · {% endif %}{% endfor %}
-              {% if connection.instance.dependencies|length > 3 %} <span class="muted">+{{ connection.instance.dependencies|length|add:"-3" }}</span>{% endif %}
+              {% if connection.instance.dependencies|length > 3 %} <span class="muted row-less">+{{ connection.instance.dependencies|length|add:"-3" }}</span><span class="row-more"> · {% for link in connection.instance.dependencies|slice:"3:" %}{% entity link|declared_link code=True %}{% if not forloop.last %} · {% endif %}{% endfor %}</span>{% endif %}
               {% if not connection.instance.targets and not connection.instance.dependencies %}{% empty_value %}{% endif %}
               </span>
             </td>
@@ -133,7 +130,7 @@ they stay visible and stay in the same table.
                 <span class="connection-authority connection-authority-{{ connection.authority }}" title="{% for state in connection.abilities %}{{ state.ability.label }}: {{ state.evidence_label }}{% if not forloop.last %} · {% endif %}{% endfor %}">{{ connection.authority_label }}</span>
                 {% if connection.instance.status_label|lower != connection.lifecycle_label|lower or connection.instance.observed_at %}<span class="muted" title="{% if connection.instance.status_label|lower != connection.lifecycle_label|lower %}{{ connection.instance.status_label }}{% if connection.instance.observed_at %} · {% endif %}{% endif %}{% if connection.instance.observed_at %}reported {{ connection.instance.observed_at|ago_short }}{% endif %}">{% if connection.instance.status_label|lower != connection.lifecycle_label|lower %}{{ connection.instance.status_label }}{% if connection.instance.observed_at %} · {% endif %}{% endif %}{% if connection.instance.observed_at %}reported {{ connection.instance.observed_at|ago_short }}{% endif %}</span>{% endif %}
                 {% with event=row.last_event %}
-                {% if event %}<a class="connection-last-activity" href="{% url 'core:audit_detail' event.pk %}" title="Last activity: {{ event.summary }} · {{ event.created_at|ago }}">{{ event.summary }} · {{ event.created_at|ago }}</a>{% endif %}
+                {% if event %}<a class="connection-last-activity" href="{% url 'core:audit_detail' event.pk %}" title="Last activity: {{ event.summary }} · {{ event.created_at|ago }}"><span>{{ event.summary }}</span><span>{{ event.created_at|ago }}</span></a>{% endif %}
                 {% endwith %}
                 {% if row.read_requested_at %}<span class="muted">Read asked {{ row.read_requested_at|ago }}</span>{% endif %}
               </span>

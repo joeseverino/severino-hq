@@ -67,7 +67,7 @@ class ConnectionEventTests(TestCase):
         changes = AuditLog.objects.filter(
             connection="example-dns", action=AuditLog.Action.SETTINGS_CHANGED
         )
-        self.assertEqual([event.summary for event in changes], ["Manages"])
+        self.assertEqual([event.summary for event in changes], ["Allowed to manage its records"])
 
     def test_a_carried_connection_was_not_asked_and_writes_nothing(self):
         record_connections(

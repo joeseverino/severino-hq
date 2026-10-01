@@ -357,6 +357,7 @@ INSTALLED_APPS = [
     "search_index",
     "hq_api",
     "jobs",
+    "calendars",
 ] + installed_plugin_apps()
 
 MIDDLEWARE = [
@@ -595,7 +596,7 @@ SEVERINO_OIDC_ENABLED = env_bool("SEVERINO_OIDC_ENABLED")
 if SEVERINO_OIDC_ENABLED:
     MIDDLEWARE.insert(
         MIDDLEWARE.index("django.contrib.auth.middleware.AuthenticationMiddleware") + 1,
-        "mozilla_django_oidc.middleware.SessionRefresh",
+        "core.oidc.HQSessionRefresh",
     )
 OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS = env_int("SEVERINO_OIDC_RENEW_SECONDS", 15 * 60)
 
@@ -693,20 +694,17 @@ SEVERINO_MCP_ALLOWED_ORIGINS = env_list("SEVERINO_MCP_ALLOWED_ORIGINS")
 # before it is trusted acting. Even on, it only ever queues: the controller
 # still pulls and claims, so no provider credential nears the web process.
 SEVERINO_FINDINGS_AUTO_REMEDY = env_bool("SEVERINO_FINDINGS_AUTO_REMEDY", False)
+# What an agent may do beyond reading, one switch each, all off by default: a
+# deployment decides each on its own. Why each stands apart is beside its grant
+# in application.security.mcp_principal.
 SEVERINO_MCP_ENABLE_WRITES = env_bool("SEVERINO_MCP_ENABLE_WRITES", False)
-# Mirroring the vault documentation index is gated separately from the broad
-# write flag: it is the one write wanted routinely, and bundled, enabling `hq sync`
-# would also grant write access to expenses, receipts, projects, assets and
-# content.
 SEVERINO_MCP_ENABLE_DOC_SYNC = env_bool("SEVERINO_MCP_ENABLE_DOC_SYNC", False)
 SEVERINO_MCP_ENABLE_PRUNE = env_bool("SEVERINO_MCP_ENABLE_PRUNE", False)
 SEVERINO_MCP_ENABLE_DELETES = env_bool("SEVERINO_MCP_ENABLE_DELETES", False)
-SEVERINO_MCP_ENABLE_INFRASTRUCTURE = env_bool(
-    "SEVERINO_MCP_ENABLE_INFRASTRUCTURE", False
-)
-# Requesting a certificate is an outward action with a real-world effect, so
-# it is gated on its own rather than riding along with declaring topology.
+SEVERINO_MCP_ENABLE_INFRASTRUCTURE = env_bool("SEVERINO_MCP_ENABLE_INFRASTRUCTURE", False)
 SEVERINO_MCP_ENABLE_CERT_RENEWAL = env_bool("SEVERINO_MCP_ENABLE_CERT_RENEWAL", False)
+SEVERINO_MCP_ENABLE_LOOKUP = env_bool("SEVERINO_MCP_ENABLE_LOOKUP", False)
+SEVERINO_MCP_ENABLE_CALENDAR = env_bool("SEVERINO_MCP_ENABLE_CALENDAR", False)
 # How long a change held for a person's approval stands before it lapses. A day:
 # the person it waits for sleeps, and a request still clickable a month later is
 # a change nobody is looking at any more being applied on an old decision.
@@ -873,10 +871,6 @@ SEVERINO_LOOKUP_TIMEOUT_SECONDS = env_int("SEVERINO_LOOKUP_TIMEOUT_SECONDS", 6)
 # from anyone's copy of them. `rdap.org` is the bootstrap service: it redirects
 # to whichever regional registry actually holds the block.
 SEVERINO_RDAP_ENDPOINT = os.environ.get("SEVERINO_RDAP_ENDPOINT", "https://rdap.org")
-# Whether the machine account may spend an external lookup. Off by default, in
-# the same family as every other MCP switch: an unattended caller reaching a
-# third party is a decision a deployment makes, not a default.
-SEVERINO_MCP_ENABLE_LOOKUP = env_bool("SEVERINO_MCP_ENABLE_LOOKUP", False)
 
 CLOUDFLARE_D1_DATABASE_NAME = os.environ.get("CLOUDFLARE_D1_DATABASE_NAME", "")
 CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")

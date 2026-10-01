@@ -5,8 +5,10 @@ from unittest.mock import patch
 
 from django.db import connection
 from django.template.loader import render_to_string
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
+from django.urls import reverse
 from django.utils import timezone
 
 from control_plane.models import (
@@ -35,26 +37,33 @@ from ..security import cli_principal
 
 
 class DashboardGlanceTests(TestCase):
-    def test_compact_meters_require_a_finite_bounded_percentage(self):
-        for value, expected in (
-            ("0%", 0),
-            ("12.5%", 12.5),
-            ("100%", 100),
-            ("101%", None),
-            ("-1%", None),
-            ("NaN%", None),
-            ("inf%", None),
-            ("unknown%", None),
-            ("579 MB", None),
-        ):
-            with self.subTest(value=value):
-                metric = {"label": "Container CPU", "value": value, "detail": "Scope"}
-                reading = _glance_reading(metric, panel_specs()[0])
-                self.assertEqual(reading["percent"], expected)
-                self.assertEqual(reading["short_label"], "CPU")
-                self.assertEqual(reading["label"], "Container CPU")
-                self.assertEqual(reading["detail"], "Scope")
-                self.assertNotIn("percent", metric)
+    def test_a_stored_label_is_shown_under_its_display_label(self):
+        metric = {"label": "Container CPU", "value": "12%", "detail": "Scope"}
+        reading = _glance_reading(metric, panel_specs()[0])
+        self.assertEqual(reading["label"], "CPU")
+        self.assertEqual(reading["detail"], "Scope")
+        self.assertEqual(metric["label"], "Container CPU")
+
+    def test_the_head_leads_with_containers_and_says_the_share_under_it(self):
+        readings.record(
+            readings.machine_telemetry(self.machine.key),
+            {
+                "summary": "8 cores · 16 GB memory",
+                "metrics": [
+                    {"label": "Containers", "value": "12", "detail": "running"},
+                    {"label": "CPU", "value": "1%", "detail": "of 8 cores"},
+                    {"label": "Memory", "value": "4%", "detail": "583 MB of 16 GB"},
+                ],
+            },
+        )
+        html = render_to_string(
+            "core/_dashboard_glance.html", {"dashboard_panels": dashboard_panels()}
+        )
+        self.assertIn("<strong>12</strong> containers", html)
+        self.assertIn(">CPU 1%</span>", html)
+        self.assertIn(">Memory 4%</span>", html)
+        self.assertIn("583 MB of 16 GB", html)
+        self.assertIn("8 cores · 16 GB memory", html)
 
     def test_compact_summary_preserves_full_readings_in_native_details(self):
         readings.record(
@@ -70,11 +79,10 @@ class DashboardGlanceTests(TestCase):
         html = render_to_string(
             "core/_dashboard_glance.html", {"dashboard_panels": dashboard_panels()}
         )
-        self.assertIn('<details class="glance-panel', html)
-        self.assertIn('<meter min="0" max="100" value="12.0" aria-label="CPU">', html)
+        self.assertIn('class="glance-panel', html)
+        self.assertIn("<strong>12%</strong> CPU", html)
         self.assertIn("Storage</dt>", html)
         self.assertIn("3 GB</dd>", html)
-        self.assertNotIn('<meter min="0" max="100" value="579', html)
 
     def setUp(self):
         self.machine = ManagedResource.objects.create(
@@ -332,7 +340,7 @@ class DashboardGlanceTests(TestCase):
         )
 
         # The reading stays up while it is replaced, marked as refreshing.
-        self.assertIn('title="Refreshing"', html)
+        self.assertIn('<span class="glance-freshness">\n              Refreshing', html)
         self.assertNotIn("Out of date", html)
         self.assertIn("4%", html)
         machine = next(panel for panel in panels if panel["id"] == self.machine_request_id)
@@ -481,12 +489,40 @@ class GlanceRenderingTests(TestCase):
             observed_at=timezone.now(),
         )
 
+    def test_the_weather_icon_follows_the_forecast_words(self):
+        from application.glance import condition_icon
+
+        for words, icon in (
+            ("Chance Rain Showers", "rain"),
+            ("Partly Cloudy", "weather"),
+            ("Mostly Cloudy", "cloud"),
+            ("Sunny", "sun"),
+            ("Mostly Clear", "moon"),
+            ("Haze", "weather"),
+        ):
+            with self.subTest(words=words):
+                self.assertEqual(condition_icon(words, "weather"), icon)
+
+    def test_a_forecast_hour_holds_only_what_the_dashboard_shows(self):
+        from application.glance import _clean_panel
+
+        cleaned = _clean_panel(
+            {"status": "good", "hours": [{"time": "4 PM", "temperature": "84°"}]}
+        )
+        self.assertEqual(
+            cleaned["hours"],
+            [{"time": "4 PM", "temperature": "84°", "forecast": "", "precipitation": ""}],
+        )
+        with self.assertRaises(ValueError):
+            _clean_panel({"status": "good", "hours": [{"time": "4 PM", "script": "x"}]})
+
     def test_icon_labels_and_alert_come_from_the_panel_spec(self):
         panels = {panel["id"]: panel for panel in dashboard_panels()}
         weather = panels["weather"]
         machine = panels[f"machine-{self.machine.pk}"]
 
-        self.assertEqual((weather["icon"], weather["head_labels"]), ("weather", False))
+        # "Clear" is the Weather Service's word for a clear night.
+        self.assertEqual((weather["icon"], weather["head_labels"]), ("moon", False))
         self.assertEqual((machine["icon"], machine["head_labels"]), ("server", True))
         self.assertEqual(machine["label"], "Example lab")
         self.assertEqual(
@@ -502,8 +538,37 @@ class GlanceRenderingTests(TestCase):
             "core/_dashboard_glance.html", {"dashboard_panels": [weather]}
         )
         self.assertIn('<span class="glance-alert">2 alerts</span>', html)
-        self.assertIn('<span class="visually-hidden">Conditions</span>', html)
+        self.assertIn('<span class="glance-lead" title="Conditions">', html)
         self.assertEqual(html.count("Conditions</dt>"), 1)
+
+    def test_weather_leads_with_the_temperature_and_names_what_is_coming(self):
+        WeatherObservation.objects.filter(point="0.0000,0.0000").update(
+            payload={
+                "summary": "Example Town, EX",
+                "metrics": [
+                    {"label": "Now", "value": "Mostly Cloudy"},
+                    {"label": "Temperature", "value": "83°F"},
+                    {"label": "Range", "value": "71–86°", "detail": "next 12 hours"},
+                    {"label": "Rain", "value": "4 PM · 60%", "detail": "Showers"},
+                    {"label": "Alerts", "value": "Heat Advisory", "detail": "Until 8 PM"},
+                ],
+                "hours": [
+                    {"time": "4 PM", "temperature": "84°", "forecast": "Showers", "precipitation": "60%"},
+                    {"time": "5 PM", "temperature": "82°", "forecast": "Cloudy", "precipitation": "0%"},
+                ],
+            }
+        )
+        weather = next(p for p in dashboard_panels() if p["id"] == "weather")
+        html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": [weather]})
+
+        self.assertIn("<strong>83°F</strong>", html)
+        self.assertIn('<span class="glance-alert">Heat Advisory</span>', html)
+        self.assertIn(">Mostly Cloudy</span>", html)
+        self.assertIn(">4 PM · 60%</span>", html)
+        self.assertIn(">71–86°</span>", html)
+        self.assertIn("Example Town, EX", html)
+        self.assertIn('<small class="is-wet">60%</small>', html)
+        self.assertIn("<small>0%</small>", html)
 
     def test_a_zero_alert_count_is_dropped_by_the_spec_alert_metric(self):
         WeatherObservation.objects.filter(point="0.0000,0.0000").update(
@@ -521,12 +586,26 @@ class GlanceRenderingTests(TestCase):
 
         self.assertEqual((panel["label"], panel["empty"]), (spec.label, spec.empty))
 
-    def test_the_settings_placeholder_is_not_a_coordinate(self):
+    def test_the_settings_page_holds_the_form_and_its_placeholder_is_not_a_coordinate(self):
+        self.client.force_login(get_user_model().objects.create_user("glance-settings"))
+        response = self.client.get(reverse("dashboard_glance_settings"))
+        self.assertContains(response, 'placeholder="latitude, longitude"')
+        self.assertContains(response, 'name="infrastructure_label"')
+
+    def test_weather_waits_on_a_machine_a_controller_reaches(self):
+        DashboardRefreshRequest.objects.create(panel_id="weather", requested_at=timezone.now())
+        with patch("application.glance._machine_routes", return_value={}):
+            weather = next(p for p in dashboard_panels() if p["id"] == "weather")
+        self.assertEqual((weather["refreshable"], weather["refreshing"]), (False, False))
+
+    def test_the_strip_has_no_controls_of_its_own(self):
         html = render_to_string(
             "core/_dashboard_glance.html",
-            {"dashboard_panels": (), "dashboard_glance_settings": DashboardConfiguration()},
+            {"dashboard_panels": dashboard_panels(), "dashboard_can_refresh": True},
         )
-        self.assertIn('placeholder="latitude, longitude"', html)
+        self.assertIn('form="glance-refresh">Refresh now</button>', html)
+        self.assertIn('<form id="glance-refresh"', html)
+        self.assertNotIn("<details class=\"glance-settings", html)
 
     def test_machine_routes_read_the_catalogue_once_per_projection(self):
         from ..projection import projection_scope
@@ -611,7 +690,8 @@ class GlanceEndpointTests(TestCase):
             list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)),
             [f"machine-{self.machine.pk}"],
         )
-        self.assertContains(response, 'title="Refreshing"', status_code=202)
+        self.assertContains(response, 'class="glance-freshness"', status_code=202)
+        self.assertContains(response, "Refreshing", status_code=202)
         doorbell.assert_called_once()
 
     def test_a_stale_post_with_nothing_stale_requests_nothing(self):

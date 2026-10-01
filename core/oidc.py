@@ -10,6 +10,7 @@ import logging
 
 import requests
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
+from mozilla_django_oidc.middleware import SessionRefresh
 
 logger = logging.getLogger("severino.auth")
 
@@ -211,3 +212,41 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
             candidate = f"{base[:140]}-{suffix}"
             suffix += 1
         return candidate
+
+
+class HQSessionRefresh(SessionRefresh):
+    """Renews an aging session, and returns the operator to the page they were on.
+
+    The provider sends a renewed session back to the address of the request
+    that asked for renewal. For a background request (a poll, a deferred panel)
+    that address is a JSON endpoint or a probe, so the operator would land on
+    it. A background request names the page it serves in its Referer; renewal
+    returns there, or to the dashboard when there is no same-site page.
+    """
+
+    # Probes answer without a session, so renewing one through them means nothing.
+    PROBES = ("health_live", "health_ready")
+
+    def __init__(self, get_response):
+        super().__init__(get_response)
+        self.OIDC_EXEMPT_URLS = [*self.OIDC_EXEMPT_URLS, *self.PROBES]
+
+    def process_request(self, request):
+        response = super().process_request(request)
+        if response is not None and request.headers.get("x-requested-with") == "XMLHttpRequest":
+            request.session["oidc_login_next"] = _page_behind(request)
+        return response
+
+
+def _page_behind(request) -> str:
+    from urllib.parse import urlsplit
+
+    from django.utils.http import url_has_allowed_host_and_scheme
+
+    referer = request.headers.get("referer", "")
+    if url_has_allowed_host_and_scheme(
+        referer, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        parts = urlsplit(referer)
+        return parts.path + (f"?{parts.query}" if parts.query else "")
+    return "/"

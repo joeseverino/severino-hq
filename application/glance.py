@@ -108,6 +108,14 @@ class DashboardPanelSpec:
     alert_metric: str = ""
     labels: tuple[tuple[str, str], ...] = ()
     short_labels: tuple[tuple[str, str], ...] = ()
+    # The reading the head leads with, then the ones in the line under it, by
+    # display label. The first lead the reading holds is the one shown.
+    lead: tuple[str, ...] = ()
+    caption: tuple[str, ...] = ()
+    # Where the whole story is: (label, url), both built by HQ.
+    link: tuple[str, str] | None = None
+    # The reading whose words choose the panel's icon, by display label.
+    icon_from: str = ""
 
 
 def dashboard_configuration() -> DashboardConfiguration:
@@ -116,9 +124,37 @@ def dashboard_configuration() -> DashboardConfiguration:
     )
 
 
+# The words a forecast uses, most telling first, and the mark each earns. The
+# Weather Service says "Clear" at night and "Sunny" by day.
+_CONDITION_ICONS = (
+    (("rain", "shower", "thunder", "drizzle", "storm"), "rain"),
+    (("partly",), "weather"),
+    (("cloud", "overcast", "fog", "snow"), "cloud"),
+    (("sunny",), "sun"),
+    (("clear",), "moon"),
+)
+
+
+def condition_icon(words: str, fallback: str) -> str:
+    """The icon a forecast's words call for, or ``fallback``."""
+
+    words = words.casefold()
+    return next(
+        (icon for keys, icon in _CONDITION_ICONS if any(key in words for key in keys)),
+        fallback,
+    )
+
+
+def _forecast_url(point: str) -> str:
+    latitude, longitude = point.split(",")
+    return f"https://forecast.weather.gov/MapClick.php?lat={latitude}&lon={longitude}"
+
+
 def panel_specs(
     configuration: DashboardConfiguration | None = None,
 ) -> tuple[DashboardPanelSpec, ...]:
+    from django.urls import reverse
+
     configuration = configuration or dashboard_configuration()
     specs = [
         DashboardPanelSpec(
@@ -126,11 +162,11 @@ def panel_specs(
             configuration.infrastructure_label,
             "Choose “Show on dashboard” in a machine's settings.",
             icon="server",
-            short_labels=(
-                ("Container CPU", "CPU"),
-                ("Container memory", "Memory"),
-                ("Docker storage", "Storage"),
-            ),
+            labels=(("Container CPU", "CPU"), ("Container memory", "Memory")),
+            short_labels=(("Containers", "containers"), ("Docker storage", "Storage")),
+            lead=("Containers", "CPU"),
+            caption=("CPU", "Memory"),
+            link=("Containers", reverse("control_plane:containers")),
         )
     ]
     if configuration.weather_point:
@@ -143,6 +179,10 @@ def panel_specs(
                 head_labels=False,
                 alert_metric="Alerts",
                 labels=(("Now", "Conditions"),),
+                lead=("Temperature",),
+                caption=("Conditions", "Rain", "Range"),
+                link=("Forecast at weather.gov", _forecast_url(configuration.weather_point)),
+                icon_from="Conditions",
             )
         )
     return tuple(specs)
@@ -281,20 +321,53 @@ def _panel(
                 and str(metric.get("value", "")).strip() == "0"
             )
         ]
+    shown = tuple(_glance_reading(metric, spec) for metric in payload.get("metrics", []))
     return {
         "id": spec.id,
         "label": spec.label,
         "empty": spec.empty,
-        "icon": spec.icon,
+        "icon": condition_icon(
+            next((str(r["value"]) for r in shown if r["label"] == spec.icon_from), ""), spec.icon
+        )
+        if spec.icon_from
+        else spec.icon,
         "head_labels": spec.head_labels,
+        "link": {"label": spec.link[0], "url": spec.link[1]} if spec.link else None,
         "payload": payload,
         "observed_at": observed_at,
         "refreshing": refreshing,
         "refreshable": refreshable,
-        "readings": tuple(
-            _glance_reading(metric, spec) for metric in payload.get("metrics", [])
-        ),
+        "readings": shown,
+        **_head(shown, spec),
     }
+
+
+def _head(shown: tuple[dict[str, Any], ...], spec: DashboardPanelSpec) -> dict[str, Any]:
+    """The reading a panel leads with, the line under it, and its alert."""
+
+    readings_shown = tuple(reading for reading in shown if not reading["alert"])
+    by_label = {reading["label"]: reading for reading in readings_shown}
+    lead = next(
+        (by_label[label] for label in spec.lead if label in by_label),
+        readings_shown[0] if readings_shown else None,
+    )
+    alert = next((reading for reading in shown if reading["alert"]), None)
+    return {
+        "lead": lead,
+        "caption": tuple(
+            by_label[label]
+            for label in spec.caption
+            if label in by_label and by_label[label] is not lead
+        ),
+        "alert": _alert_text(alert) if alert else "",
+    }
+
+
+def _alert_text(alert: dict[str, Any]) -> str:
+    """The alert by name, or a count when the reading holds only a number."""
+
+    value = str(alert["value"])
+    return f"{value} {'alert' if value == '1' else 'alerts'}" if value.isdigit() else value
 
 
 def dashboard_panels(
@@ -337,7 +410,8 @@ def dashboard_panels(
                 spec,
                 payload=getattr(reading, "value", None) or {},
                 observed_at=getattr(reading, "observed_at", None),
-                refreshing=panel_id in pending,
+                # A request nothing can answer is not a refresh in progress.
+                refreshing=panel_id in pending and resource.pk in routes,
                 refreshable=resource.pk in routes,
             )
         )
@@ -357,8 +431,10 @@ def dashboard_panels(
                 specs["weather"],
                 payload=weather.payload if weather else {},
                 observed_at=weather.observed_at if weather else None,
-                refreshing="weather" in pending,
-                refreshable=bool(machine_resources),
+                refreshing="weather" in pending and bool(routes),
+                # Weather rides with a machine's refresh, so it can be asked
+                # for only when a controller reaches one of them.
+                refreshable=bool(routes),
             )
         )
     now = timezone.now()
@@ -398,27 +474,16 @@ def _with_freshness(panel: dict[str, Any], found) -> dict[str, Any]:
 def _glance_reading(
     metric: dict[str, str], spec: DashboardPanelSpec
 ) -> dict[str, Any]:
-    """Display labels and bounded meters without altering the stored observation."""
+    """Display labels without altering the stored observation."""
 
     reported = metric.get("label", "")
     label = dict(spec.labels).get(reported, reported)
     short_label = dict(spec.short_labels).get(reported, label)
-    value = str(metric.get("value", ""))
-    percent = None
-    if value.endswith("%"):
-        try:
-            parsed = float(value[:-1])
-        except ValueError:
-            pass
-        else:
-            if 0 <= parsed <= 100:
-                percent = parsed
     return {
         **metric,
         "label": label,
         "short_label": short_label,
         "alert": bool(spec.alert_metric) and reported == spec.alert_metric,
-        "percent": percent,
     }
 
 
@@ -540,6 +605,17 @@ def _clean_metric(metric: Any) -> dict[str, str]:
     return {"label": label, "value": value, "detail": detail}
 
 
+_HOUR_FIELDS = ("time", "temperature", "forecast", "precipitation")
+
+
+def _clean_hour(hour: Any) -> dict[str, str]:
+    """One forecast hour, holding only the four fields the dashboard shows."""
+
+    if not isinstance(hour, dict) or set(hour) - set(_HOUR_FIELDS):
+        raise ValueError("A forecast hour holds only time, temperature, forecast and precipitation.")
+    return {field: str(hour.get(field, "")).strip()[:40] for field in _HOUR_FIELDS}
+
+
 def _refresh_is_pending(panel_id: str) -> bool:
     pending = DashboardRefreshRequest.objects.filter(completed_at__isnull=True)
     lookup = {"panel_id__startswith": "machine-"} if panel_id == "infrastructure" else {"panel_id": panel_id}
@@ -636,8 +712,11 @@ def _clean_panel(item: dict[str, Any]) -> dict[str, Any]:
     cleaned = {
         "status": status,
         "summary": str(item.get("summary", "")).strip()[:200],
-        "metrics": [_clean_metric(metric) for metric in item.get("metrics", [])][:6],
+        "metrics": [_clean_metric(metric) for metric in item.get("metrics", [])][:8],
     }
+    hours = [_clean_hour(hour) for hour in item.get("hours") or []][:12]
+    if hours:
+        cleaned["hours"] = hours
     # The type of error, and nothing else a controller might say about it.
     failed = re.sub(r"[^A-Za-z0-9_]", "", str(item.get("refresh_failed") or ""))[:60]
     if failed:

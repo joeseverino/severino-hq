@@ -33,7 +33,7 @@ can be linked to directly and works without JavaScript.
     {% endif %}
     {% if calendar.kept %}<span class="count">{{ calendar.kept }} planned days kept</span>{% endif %}
   </div>
-  {% comment %}data-chart opts into the shared tooltip listener, already gated to pointer devices.{% endcomment %}
+  {% comment %}A chart for the layout audit: each day's tip repeats what its hidden text already says.{% endcomment %}
   <table class="activity-calendar" data-chart>
     <caption class="visually-hidden">{{ calendar.title }}{% if calendar.period_label %}, {{ calendar.period_label }}{% endif %}. {{ calendar.description }}</caption>
     <thead>

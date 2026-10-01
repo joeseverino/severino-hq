@@ -502,8 +502,8 @@ class CredentialSightPageTests(TestCase):
         # Each row's "Can see" block alone: its abilities name the same kinds.
         rows = {
             chunk.split('"', 1)[0]: "".join(
-                block.split("</details>", 1)[0]
-                for block in chunk.split('<details class="connection-sight">')[1:]
+                block.split("</ul>", 1)[0]
+                for block in chunk.split('<div class="connection-sight">')[1:]
             )
             for chunk in response.content.decode().split('<tr id="')[1:]
         }

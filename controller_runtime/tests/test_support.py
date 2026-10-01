@@ -67,8 +67,8 @@ class _Answer:
     def __init__(self, payload):
         self._payload = json.dumps(payload).encode()
 
-    def read(self):
-        return self._payload
+    def read(self, amount=-1):
+        return self._payload if amount is None or amount < 0 else self._payload[:amount]
 
     def __enter__(self):
         return self
@@ -91,8 +91,8 @@ class _Page:
     def geturl(self):
         return self._landed
 
-    def read(self):
-        return self._body
+    def read(self, amount=-1):
+        return self._body if amount is None or amount < 0 else self._body[:amount]
 
     def __enter__(self):
         return self
@@ -179,3 +179,4 @@ AN_OBSERVATION = {
         }
     ],
 }
+

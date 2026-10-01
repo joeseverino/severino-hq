@@ -68,6 +68,9 @@ class PluginIntegration:
     attention: Callable[[], Iterable[Any]] | None = None
     search: Callable[[], Iterable[Any]] | None = None
     health: Callable[[], bool] | None = None
+    # Calendar sources: each a ``CalendarSource`` naming what the domain
+    # already knows the date of.
+    calendars: Callable[[], Iterable[Any]] | None = None
 
 
 @dataclass(frozen=True)
@@ -434,6 +437,7 @@ def installed_integrations() -> tuple[tuple[PluginManifest, PluginIntegration], 
                 "attention",
                 "search",
                 "health",
+                "calendars",
             )
             if (value := getattr(integration, field)) is not None
             and not callable(value)

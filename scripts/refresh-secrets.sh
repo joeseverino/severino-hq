@@ -1,9 +1,10 @@
 #!/bin/sh
 # Refresh Severino HQ secrets from 1Password without exposing them:
-#   - the full app environment  -> secrets/severino_hq_env
-#   - controller providers      -> private tmpfs directory
-# All are root-rendered. Web secrets become container-owned read-only mounts;
-# controller secrets remain root-owned and never enter the web container.
+#   - the full app environment  -> web/ on the private tmpfs
+#   - controller providers      -> the private tmpfs itself
+# All are root-rendered onto memory that never pages to disk. The web
+# environment becomes a container-owned read-only mount; controller secrets
+# remain root-owned and never enter the web container.
 
 set -eu
 
@@ -15,7 +16,9 @@ readonly script_dir
 readonly secret_dir="${SEVERINO_HQ_SECRET_DIR:-/opt/apps/severino-hq/secrets}"
 # Nothing accepts an MCP token file, so none is kept.
 readonly mcp_token_file="${secret_dir}/severino_mcp_token"
-readonly env_target="${secret_dir}/severino_hq_env"
+# The checkout's copy of the environment. Kept current only while a container
+# binds it; the deploy that replaces that container removes it.
+readonly checkout_env="${secret_dir}/severino_hq_env"
 # Controller identities live on the tmpfs mount, never on this disk.
 readonly legacy_ssh_dir="${secret_dir}/ssh"
 # shellcheck source=scripts/lib/controller-env.sh
@@ -23,12 +26,15 @@ readonly legacy_ssh_dir="${secret_dir}/ssh"
 
 # shellcheck source=scripts/lib/secrets.sh
 . "${script_dir}/lib/secrets.sh"
+readonly web_secret_dir="${SEVERINO_HQ_WEB_SECRET_DIR:-${controller_runtime_dir}/web}"
+readonly env_target="${web_secret_dir}/severino_hq_env"
 
 umask 077
 install -d -m 700 -o root -g root "${secret_dir}"
 [ ! -L "${controller_runtime_dir}" ] || { echo "Refusing a symlinked secret directory." >&2; exit 1; }
 install -d -m 700 -o root -g root "${controller_runtime_dir}"
 controller_require_directory
+install -d -m 700 -o root -g root "${web_secret_dir}"
 secrets_lock "${secret_dir}"
 # Private keys on disk outlive every rotation. Removing them is the operator's
 # decision; refusing keeps the refresh from reporting a clean state meanwhile.
@@ -186,8 +192,15 @@ done <"${staging}/signing.tsv"
 # Retrieval and validation complete before any live file is modified. Existing
 # bind mounts require in-place updates; this is not a multi-file transaction.
 rm -f "${mcp_token_file}"
+checkout_changed=0
+if [ -e "${checkout_env}" ] || [ -L "${checkout_env}" ]; then
+    cp "${staging}/app" "${staging}/app.checkout"
+    secrets_install_if_changed "${staging}/app.checkout" "${checkout_env}" 10001 10001
+    checkout_changed="${installed_change}"
+fi
 secrets_install_if_changed "${staging}/app" "${env_target}" 10001 10001
 web_changed="${installed_change}"
+[ "${checkout_changed}" -eq 0 ] || web_changed=1
 # The controller environment and its identities change as one generation:
 # readers hold the shared lock while they read either.
 controller_ssh_lock exclusive

@@ -10,7 +10,7 @@ controller sweeps.
 from __future__ import annotations
 
 from contextlib import ExitStack, contextmanager
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -171,6 +171,7 @@ def build_estate():
             "observed_at": timezone.now(),
         },
     )
+    _calendar()
     return user
 
 
@@ -308,6 +309,9 @@ def _dashboard(populated):
                 return_value=(_LINKS if populated else [], None),
             )
         )
+        if not populated:
+            # Nothing contributes, the calendar's sources included.
+            stack.enter_context(mock.patch("application.calendar.calendar_sources", return_value=()))
         yield
 
 
@@ -321,6 +325,33 @@ _THROUGH_THE_PROXY = {
     "HTTP_X_FORWARDED_PROTO": "https",
     "HTTP_X_FORWARDED_SCHEME": "https",
 }
+
+def _calendar():
+    """A full month: a trip over a weekend, a timed visit with a
+    long name and a place, a day too busy for its cell, and a weekly class."""
+
+    from calendars.models import Entry
+
+    today = timezone.localdate()
+    sunday = today - timedelta(days=(today.weekday() + 1) % 7)
+    Entry.objects.create(title="Example trip to a city with a long name", starts_on=sunday - timedelta(days=2), ends_on=sunday + timedelta(days=1))
+    Entry.objects.create(
+        title="Example appointment with a long descriptive title",
+        starts_on=today,
+        starts_at=time(15),
+        ends_at=time(16),
+        location="An example clinic on a long street name",
+    )
+    for index in range(5):
+        Entry.objects.create(title=f"Example errand {index}", starts_on=today + timedelta(days=1))
+    Entry.objects.create(title="Example class", starts_on=today, repeat="weekly", weekdays="0,2", starts_at=time(18))
+
+
+def _calendar_day() -> str:
+    from calendars.models import Entry
+
+    return Entry.objects.get(starts_at=time(15)).get_absolute_url()
+
 
 # name -> (url, context manager for what no view reads from the database[,
 # the request's own fields])
@@ -355,6 +386,9 @@ PAGES = {
     "resource-kinds": (lambda: reverse("control_plane:create"), ExitStack),
     # A form laid out as a grid of fields, with a textarea taking the row.
     "project-form": (lambda: reverse("projects:create"), ExitStack),
+    "calendar": (lambda: reverse("calendar:month"), ExitStack),
+    # A day open beside the month, with an entry open in it.
+    "calendar-day": (_calendar_day, ExitStack),
 }
 
 

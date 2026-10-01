@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from django.db import transaction
 
 from assets.models import Asset
+from calendars.models import Entry
 from content.models import ContentItem
 from core.audit import operation_context
 from docs_index.models import DocumentationRecord
@@ -157,4 +158,19 @@ def delete_receipt(command, *, principal, current_id, expected_updated_at=None):
         type_name="receipt",
         expected_updated_at=expected_updated_at,
         after_commit=_receipt_cleanup,
+    )
+
+
+def delete_calendar_entry(command, *, principal, current_key, expected_updated_at=None):
+    target = str(current_key)
+    return _delete(
+        Entry,
+        lookup={"uid": target},
+        target=target,
+        command=command,
+        principal=principal,
+        capability=Capability.DELETE_CALENDAR,
+        operation="calendar.entry.delete",
+        type_name="calendar entry",
+        expected_updated_at=expected_updated_at,
     )

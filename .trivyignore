@@ -1,0 +1,10 @@
+# libexpat1 in Debian bookworm: the tracker names 2.5.0-1+deb12u4 as the fix,
+# but bookworm-security still serves deb12u3, so no build can install it.
+# Each entry expires on its own; the image's `apt-get upgrade` installs the
+# fix once Debian publishes it.
+CVE-2024-28757 exp:2026-10-07
+CVE-2025-59375 exp:2026-10-07
+CVE-2026-25210 exp:2026-10-07
+CVE-2026-45186 exp:2026-10-07
+CVE-2026-66046 exp:2026-10-07
+CVE-2026-93990 exp:2026-10-07
