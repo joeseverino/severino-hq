@@ -1,9 +1,9 @@
 {% extends "page.html" %}
 {% block page %}
 {% comment %}
-One calendar for every source. Every control is a link or a form, so the page
-works without JavaScript; calendar.js only makes paging, checking a source and
-opening a day happen in place. The ids are what it swaps.
+Every control is a link or a form, so the page works without JavaScript;
+app.js only makes paging, checking a source and opening a day happen in
+place. The ids are what it swaps.
 {% endcomment %}
 <div class="split calendar-layout" id="calendar" data-calendar>
   <section class="card calendar-month" id="calendar-month" aria-labelledby="calendar-period">

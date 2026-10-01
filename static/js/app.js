@@ -835,8 +835,8 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   const swap = async (element, url, init = {}) => {
     const current = region(element);
     if (!current || !current.id) return false;
-    // X-Fragment lets a view skip what it would otherwise rebuild to redraw
-    // one grid, and return the card on its own.
+    // X-Fragment asks the view for the card alone, without building the rest
+    // of the page.
     const response = await hqFetch(url, {
       credentials: "same-origin",
       headers: { "X-Fragment": "calendar" },

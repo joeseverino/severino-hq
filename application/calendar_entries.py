@@ -1,7 +1,7 @@
 """My Calendar: the operator's own entries, and which sources they have checked.
 
-Web, API and MCP all write through these commands, so an entry Claude adds is
-the same audited write as one added on the page.
+Web, API and MCP all write through these commands, so an entry an agent adds
+is the same audited write as one added on the page.
 """
 
 from __future__ import annotations

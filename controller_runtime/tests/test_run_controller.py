@@ -1,4 +1,4 @@
-"""The flags the controller container runs with, held so none silently goes."""
+"""The isolation flags the controller container runs with."""
 
 from __future__ import annotations
 

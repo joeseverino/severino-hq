@@ -37,7 +37,7 @@ from ..security import cli_principal
 
 
 class DashboardGlanceTests(TestCase):
-    def test_a_reading_from_before_the_rename_is_shown_under_its_new_label(self):
+    def test_a_stored_label_is_shown_under_its_display_label(self):
         metric = {"label": "Container CPU", "value": "12%", "detail": "Scope"}
         reading = _glance_reading(metric, panel_specs()[0])
         self.assertEqual(reading["label"], "CPU")

@@ -1,4 +1,4 @@
-"""One calendar for everything HQ knows the date of.
+"""The calendar: every dated thing HQ holds, composed into one view.
 
 Every domain, host section or extension alike, declares *sources* through
 ``PluginIntegration.calendars``. A source names a stream of dated things the
@@ -15,7 +15,7 @@ calendar list instead of taking the page down with it.
 Three shapes cover everything a source emits:
 
 - a **mark**: a dot on its day, read by colour. Many fit one day.
-- an **item**: a line with a title (a dentist appointment, an expiry).
+- an **item**: a line with a title (an appointment, an expiry).
 - a **span**: an item over several days (a certificate's renewal window:
   opens, then expires).
   Spans keep a lane across the week so a bar lines up from cell to cell.
@@ -404,8 +404,8 @@ def calendar_month(
     today = today or timezone.localdate()
     first, last = _grid(month)
     groups, placed = gather(first, last, choices)
-    # The order every good month view packs in: earlier first, then longer,
-    # then all-day before timed, so long bars claim the top lanes.
+    # Earlier first, then longer, then all-day before timed, so long bars
+    # claim the top lanes.
     shown = sorted(
         (item for item in placed if item.source.shown),
         key=lambda item: (

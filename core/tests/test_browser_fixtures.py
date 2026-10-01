@@ -327,7 +327,7 @@ _THROUGH_THE_PROXY = {
 }
 
 def _calendar():
-    """A month as it is lived: a trip over a week's end, a timed visit with a
+    """A full month: a trip over a weekend, a timed visit with a
     long name and a place, a day too busy for its cell, and a weekly class."""
 
     from calendars.models import Entry

@@ -115,8 +115,8 @@ class DashboardQueueTests(TestCase):
             self.assertIn("/accounts/login/", response.url)
 
     def test_an_empty_month_takes_no_space(self):
-        # Nothing contributes, the calendar's sources included: an installed
-        # extension's planned days would otherwise fill the month.
+        # Nothing contributes, the calendar's sources included, so the month is
+        # empty whatever is installed.
         with patch(
             "core.dashboard_views.dashboard_highlights",
             return_value={"highlights": [], "compact": []},
@@ -154,6 +154,6 @@ class DashboardQueueTests(TestCase):
         self.assertContains(response, 'class="dashboard-patterns"', count=1)
         self.assertNotContains(response, '<details class="highlight-patterns">')
         self.assertNotContains(response, 'aria-label="Across HQ"')
-        # A domain's own calendar is read on its own pages; here, one month of all.
+        # A domain's own calendar stays on its pages; the dashboard shows the composed month.
         self.assertNotContains(response, "Example activity")
         self.assertContains(response, 'id="dashboard-calendar"', count=1)

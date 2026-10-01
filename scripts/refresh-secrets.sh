@@ -16,9 +16,8 @@ readonly script_dir
 readonly secret_dir="${SEVERINO_HQ_SECRET_DIR:-/opt/apps/severino-hq/secrets}"
 # Nothing accepts an MCP token file, so none is kept.
 readonly mcp_token_file="${secret_dir}/severino_mcp_token"
-# Where the environment was rendered before it moved off the checkout. Kept
-# current only while a container still binds it; the deploy that replaces that
-# container removes it.
+# The checkout's copy of the environment. Kept current only while a container
+# binds it; the deploy that replaces that container removes it.
 readonly checkout_env="${secret_dir}/severino_hq_env"
 # Controller identities live on the tmpfs mount, never on this disk.
 readonly legacy_ssh_dir="${secret_dir}/ssh"

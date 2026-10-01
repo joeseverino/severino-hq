@@ -364,7 +364,7 @@ def _head(shown: tuple[dict[str, Any], ...], spec: DashboardPanelSpec) -> dict[s
 
 
 def _alert_text(alert: dict[str, Any]) -> str:
-    """The alert by name; a reading from before names were kept is a count."""
+    """The alert by name, or a count when the reading holds only a number."""
 
     value = str(alert["value"])
     return f"{value} {'alert' if value == '1' else 'alerts'}" if value.isdigit() else value

@@ -396,9 +396,9 @@ Dense pages expose their information architecture with
 sticky positioning, scroll-aware current state, and fragment history. Labels
 may change; section IDs are durable links.
 
-## One calendar
+## Calendar sources
 
-HQ has one calendar, and every domain feeds it. `calendars` returns
+Every domain can put what it holds on HQ's calendar. `calendars` returns
 `hq_sdk.calendar.CalendarSource` values; each names a stream of dated things
 the domain already holds and answers `events(first, last)` with every
 `CalendarEvent` touching those days. The calendar composes every domain's

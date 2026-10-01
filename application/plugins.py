@@ -68,8 +68,8 @@ class PluginIntegration:
     attention: Callable[[], Iterable[Any]] | None = None
     search: Callable[[], Iterable[Any]] | None = None
     health: Callable[[], bool] | None = None
-    # Sources for the one calendar: each a ``CalendarSource`` naming what the
-    # domain already knows the date of.
+    # Calendar sources: each a ``CalendarSource`` naming what the domain
+    # already knows the date of.
     calendars: Callable[[], Iterable[Any]] | None = None
 
 

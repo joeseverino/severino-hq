@@ -1,4 +1,4 @@
-"""The one calendar: its contract, its month, My Calendar and where it is listed."""
+"""The calendar: its contract, its month, My Calendar and where it is listed."""
 
 from __future__ import annotations
 
@@ -136,7 +136,7 @@ class MonthTests(TestCase):
 
     def test_a_busy_day_folds_and_marks_stay_dots(self):
         items = [CalendarEvent(f"i{n}", f"Item {n}", TODAY) for n in range(5)]
-        marks = [CalendarEvent(f"m{n}", "Run", TODAY, mark=True, state="done") for n in range(3)]
+        marks = [CalendarEvent(f"m{n}", "Mark", TODAY, mark=True, state="done") for n in range(3)]
         with _with(_domain([_source("example.busy", [*items, *marks])])):
             cell = next(
                 cell
@@ -324,7 +324,7 @@ class PageTests(TestCase):
         panel = opened.content.decode().split('<section class="card day-panel"', 1)[1].split("</section>", 1)[0]
         listed = panel.split("</article>", 1)[1]
         self.assertNotIn("Dentist", listed)
-        # Its old address opens the same place.
+        # The entry's own route redirects to it beside its day.
         self.assertRedirects(
             self.client.get(reverse("calendar:entry", args=[entry.uid])),
             entry.get_absolute_url(),
@@ -336,7 +336,7 @@ class PageTests(TestCase):
         cannot step a bar down where the dot is."""
 
         _entry(title="Trip", starts_on=timezone.localdate(), ends_on=timezone.localdate() + timedelta(days=2))
-        mark = CalendarEvent("run", "Run", timezone.localdate(), mark=True, state="done")
+        mark = CalendarEvent("mark", "Mark", timezone.localdate(), mark=True, state="done")
         with _with(_domain([_source("example.marks", [mark])])):
             body = self.client.get(reverse("calendar:month")).content.decode()
         cell = body[body.rindex("<td", 0, body.index('class="month-mark')):]
@@ -361,9 +361,9 @@ class PageTests(TestCase):
     def test_the_form_writes_through_the_command(self):
         response = self.client.post(
             reverse("calendar:entry_new"),
-            {"title": "Oil change", "starts_on": "2026-10-17", "repeat": "", "interval": 1},
+            {"title": "Haircut", "starts_on": "2026-10-17", "repeat": "", "interval": 1},
         )
-        entry = Entry.objects.get(title="Oil change")
+        entry = Entry.objects.get(title="Haircut")
         self.assertRedirects(response, entry.get_absolute_url(), fetch_redirect_response=False)
         response = self.client.post(
             reverse("calendar:entry_new"),

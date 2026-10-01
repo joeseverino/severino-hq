@@ -466,7 +466,7 @@ chmod 700 "${app_dir}/secrets"
 printf 'SECRET=rendered\n' >"${app_dir}/secrets/severino_hq_env"
 deploy_bound "${app_dir}/secrets/severino_hq_env"
 # Once the tmpfs copy exists, a healthy deploy binds it and removes the
-# checkout's, which no container reads any more.
+# checkout's, which no container reads.
 mv "${work_dir}/planted.env" "${web_secret_dir}/severino_hq_env"
 : >"${log_file}"
 TEST_CONTROLLER_FAIL=0

@@ -1,4 +1,4 @@
-"""The calendar contract: what a domain puts on HQ's one calendar.
+"""The calendar contract: what a domain puts on HQ's calendar.
 
 A domain returns ``CalendarSource`` values from ``PluginIntegration.calendars``.
 Each source answers what falls between two days, from what the domain already
