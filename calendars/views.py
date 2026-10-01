@@ -180,9 +180,6 @@ class EntryWrite:
     identity_attr = "uid"
     identity_kwarg = "current_key"
 
-    def current_identity(self):
-        return str(self.get_object().uid)
-
 
 class EntryDetailView(LoginRequiredMixin, RedirectView):
     """An entry's own address opens it on the calendar."""

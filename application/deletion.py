@@ -162,10 +162,11 @@ def delete_receipt(command, *, principal, current_id, expected_updated_at=None):
 
 
 def delete_calendar_entry(command, *, principal, current_key, expected_updated_at=None):
+    target = str(current_key)
     return _delete(
         Entry,
-        lookup={"uid": current_key},
-        target=current_key,
+        lookup={"uid": target},
+        target=target,
         command=command,
         principal=principal,
         capability=Capability.DELETE_CALENDAR,

@@ -697,19 +697,14 @@ SEVERINO_FINDINGS_AUTO_REMEDY = env_bool("SEVERINO_FINDINGS_AUTO_REMEDY", False)
 # What an agent may do beyond reading, one switch each, all off by default: a
 # deployment decides each on its own. Why each stands apart is beside its grant
 # in application.security.mcp_principal.
-(
-    SEVERINO_MCP_ENABLE_WRITES,
-    SEVERINO_MCP_ENABLE_DOC_SYNC,
-    SEVERINO_MCP_ENABLE_PRUNE,
-    SEVERINO_MCP_ENABLE_DELETES,
-    SEVERINO_MCP_ENABLE_INFRASTRUCTURE,
-    SEVERINO_MCP_ENABLE_CERT_RENEWAL,
-    SEVERINO_MCP_ENABLE_LOOKUP,
-    SEVERINO_MCP_ENABLE_CALENDAR,
-) = (
-    env_bool(f"SEVERINO_MCP_ENABLE_{name}", False)
-    for name in ("WRITES", "DOC_SYNC", "PRUNE", "DELETES", "INFRASTRUCTURE", "CERT_RENEWAL", "LOOKUP", "CALENDAR")
-)
+SEVERINO_MCP_ENABLE_WRITES = env_bool("SEVERINO_MCP_ENABLE_WRITES", False)
+SEVERINO_MCP_ENABLE_DOC_SYNC = env_bool("SEVERINO_MCP_ENABLE_DOC_SYNC", False)
+SEVERINO_MCP_ENABLE_PRUNE = env_bool("SEVERINO_MCP_ENABLE_PRUNE", False)
+SEVERINO_MCP_ENABLE_DELETES = env_bool("SEVERINO_MCP_ENABLE_DELETES", False)
+SEVERINO_MCP_ENABLE_INFRASTRUCTURE = env_bool("SEVERINO_MCP_ENABLE_INFRASTRUCTURE", False)
+SEVERINO_MCP_ENABLE_CERT_RENEWAL = env_bool("SEVERINO_MCP_ENABLE_CERT_RENEWAL", False)
+SEVERINO_MCP_ENABLE_LOOKUP = env_bool("SEVERINO_MCP_ENABLE_LOOKUP", False)
+SEVERINO_MCP_ENABLE_CALENDAR = env_bool("SEVERINO_MCP_ENABLE_CALENDAR", False)
 # How long a change held for a person's approval stands before it lapses. A day:
 # the person it waits for sleeps, and a request still clickable a month later is
 # a change nobody is looking at any more being applied on an old decision.
