@@ -112,6 +112,7 @@ urlpatterns = [
         DashboardGlanceSettingsView.as_view(),
         name="dashboard_glance_settings",
     ),
+    path("calendar/", include("calendars.urls")),
     path("search/", SearchView.as_view(), name="search"),
     path("commands/<str:name>/", CommandView.as_view(), name="command"),
     path("projects/", include("projects.urls")),
@@ -141,3 +142,5 @@ if settings.SEVERINO_DEBUG_TOOLBAR:
     from debug_toolbar.toolbar import debug_toolbar_urls
 
     urlpatterns.extend(debug_toolbar_urls())
+
+handler500 = "core.error_views.server_error"
