@@ -12,6 +12,7 @@ readonly work_dir
 trap 'rm -rf "${work_dir}"' EXIT HUP INT TERM
 readonly bin_dir="${work_dir}/bin"
 readonly app_dir="${work_dir}/app"
+readonly web_secret_dir="${work_dir}/tmpfs/web"
 readonly lib_dir="${work_dir}/lib"
 readonly log_file="${work_dir}/calls.log"
 readonly run_dir="${work_dir}/run"
@@ -171,6 +172,7 @@ deploy() {
         SEVERINO_HQ_IMAGE_PREFIX="${test_prefix}" \
         SEVERINO_HQ_ROOT_UID="${TEST_OWNER_UID:-0}" \
         SEVERINO_HQ_WEB_UID="${TEST_OWNER_UID:-10001}" \
+        SEVERINO_HQ_WEB_SECRET_DIR="${web_secret_dir}" \
         TEST_VERIFY_FAIL="${TEST_VERIFY_FAIL:-0}" \
         TEST_IMAGE_COMPOSE="${image_compose}" \
         TEST_IMAGE_SYNC="${image_sync}" \
@@ -404,8 +406,8 @@ if grep -rl "secret-token-value" "${run_dir}" 2>/dev/null | grep -q .; then
     exit 1
 fi
 
-# The checkout's .env cannot choose what the web container binds: a secrets
-# file of the deploy account's, or a certificate authority from anywhere.
+# The checkout's .env cannot choose what the web container binds: a run
+# directory of its own, or a certificate authority from anywhere.
 refuses_env() {
     printf '%s\n' "$1" >"${app_dir}/.env"
     : >"${log_file}"
@@ -418,32 +420,65 @@ refuses_env() {
         exit 1
     fi
 }
-mkdir -p "${app_dir}/secrets"
-chmod 700 "${app_dir}/secrets"
-printf 'SECRET=rendered\n' >"${app_dir}/secrets/severino_hq_env"
-refuses_env "SEVERINO_APP_ENV_FILE_HOST=${work_dir}/elsewhere.env"
 refuses_env "SEVERINO_CONTROLLER_RUN_DIR=/home"
 refuses_env "SEVERINO_CONTROLLER_CA_FILE_HOST=${work_dir}/ca.pem"
 refuses_env "SEVERINO_CONTROLLER_CA_FILE_HOST=/usr/local/share/ca-certificates/../../../../etc/shadow"
-# The right path, in a directory others can enter, or as a link: refused too.
-chmod 755 "${app_dir}/secrets"
-refuses_env "SEVERINO_APP_ENV_FILE_HOST=${app_dir}/secrets/severino_hq_env"
-chmod 700 "${app_dir}/secrets"
-mv "${app_dir}/secrets/severino_hq_env" "${work_dir}/planted.env"
-ln -s "${work_dir}/planted.env" "${app_dir}/secrets/severino_hq_env"
-refuses_env "SEVERINO_APP_ENV_FILE_HOST=${app_dir}/secrets/severino_hq_env"
-rm "${app_dir}/secrets/severino_hq_env"
-mv "${work_dir}/planted.env" "${app_dir}/secrets/severino_hq_env"
 
-# The rendered file in its root-only directory is what compose is handed.
-printf 'SEVERINO_APP_ENV_FILE_HOST="%s"\nSEVERINO_CONTROLLER_CA_FILE_HOST=/usr/local/share/ca-certificates/example.crt\n' \
-    "${app_dir}/secrets/severino_hq_env" >"${app_dir}/.env"
-: >"${log_file}"
-# Whether the rest of the run succeeds is the other cases' business: what
-# matters is what compose was started with.
-TEST_OWNER_UID="$(id -u)" deploy 0 >/dev/null 2>&1 || true
-grep " up -d " "${log_file}" | grep -q "app_env=${app_dir}/secrets/severino_hq_env ca=/usr/local/share/ca-certificates/example.crt " \
-    || { echo "compose was not handed the checked paths." >&2; exit 1; }
+# What compose bound as the web environment, on the last deploy.
+bound_env() { grep " up -d " "${log_file}" | tail -n 1 | sed -n 's/.*app_env=\([^ ]*\) .*/\1/p'; }
+deploy_bound() { # deploy_bound <expected app_env>
+    : >"${log_file}"
+    TEST_OWNER_UID="$(id -u)" deploy 0 >/dev/null 2>&1 || true
+    [ "$(bound_env)" = "$1" ] || { echo "compose bound '$(bound_env)', not '$1'." >&2; exit 1; }
+}
+
+# The secrets environment is never named by .env: with nothing rendered,
+# compose binds nothing, whatever the file says.
+printf 'SEVERINO_APP_ENV_FILE_HOST=/etc/shadow\n' >"${app_dir}/.env"
+deploy_bound /dev/null
 rm -f "${app_dir}/.env"
+
+# The rendered file on the tmpfs, in a directory only root enters, is bound.
+mkdir -p "${web_secret_dir}"
+chmod 700 "${web_secret_dir}"
+printf 'SECRET=rendered\n' >"${web_secret_dir}/severino_hq_env"
+deploy_bound "${web_secret_dir}/severino_hq_env"
+# In a directory others can enter, or as a link, it is refused before docker.
+chmod 755 "${web_secret_dir}"
+: >"${log_file}"
+if TEST_OWNER_UID="$(id -u)" deploy 0 2>/dev/null || [ -s "${log_file}" ]; then
+    echo "An enterable secrets directory was bound." >&2
+    exit 1
+fi
+chmod 700 "${web_secret_dir}"
+mv "${web_secret_dir}/severino_hq_env" "${work_dir}/planted.env"
+ln -s "${work_dir}/planted.env" "${web_secret_dir}/severino_hq_env"
+: >"${log_file}"
+if TEST_OWNER_UID="$(id -u)" deploy 0 2>/dev/null || [ -s "${log_file}" ]; then
+    echo "A linked secrets file was bound." >&2
+    exit 1
+fi
+rm "${web_secret_dir}/severino_hq_env"
+
+# Before the tmpfs copy exists, the checkout's is bound, with the same checks.
+mkdir -p "${app_dir}/secrets"
+chmod 700 "${app_dir}/secrets"
+printf 'SECRET=rendered\n' >"${app_dir}/secrets/severino_hq_env"
+deploy_bound "${app_dir}/secrets/severino_hq_env"
+# Once the tmpfs copy exists, a healthy deploy binds it and removes the
+# checkout's, which no container reads any more.
+mv "${work_dir}/planted.env" "${web_secret_dir}/severino_hq_env"
+: >"${log_file}"
+TEST_CONTROLLER_FAIL=0
+export TEST_CONTROLLER_FAIL
+if ! TEST_OWNER_UID="$(id -u)" deploy 0 >/dev/null 2>&1; then
+    echo "Expected the deploy that moves the environment to succeed." >&2
+    exit 1
+fi
+unset TEST_CONTROLLER_FAIL
+[ "$(bound_env)" = "${web_secret_dir}/severino_hq_env" ] \
+    || { echo "The moved environment was not bound." >&2; exit 1; }
+[ ! -e "${app_dir}/secrets/severino_hq_env" ] \
+    || { echo "The checkout's environment outlived the move." >&2; exit 1; }
 
 echo "deploy-image rollback, compose and input-guard tests passed"

@@ -49,7 +49,10 @@ import os, sys
 path, fmt = sys.argv[-1], sys.argv[-2]
 st = os.stat(path)
 mode = oct(st.st_mode & 0o777)[2:]
-uid = "0" if path.startswith(os.environ["SEVERINO_CONTROLLER_SECRET_DIR"]) else "10001"
+runtime = os.environ["SEVERINO_CONTROLLER_SECRET_DIR"]
+# The web environment on the tmpfs belongs to the web user, all else there to root.
+web_file = path.startswith(os.path.join(runtime, "web") + os.sep) and os.path.isfile(path)
+uid = "0" if path.startswith(runtime) and not web_file else "10001"
 if fmt == "%u %h":
     print(uid, st.st_nlink)
 elif fmt == "%u %a":
@@ -151,7 +154,8 @@ esac
         (self.root / "app.json").write_text(json.dumps({"fields": [
             {"label": f"EXAMPLE_{index}", "value": "value"} for index in range(15)
         ]}))
-        self.stub("install", "exit 0\n")
+        # Directories are made, as install -d does; ownership is the stat stub's.
+        self.stub("install", 'case " $* " in *" -d "*) for last; do :; done; mkdir -p "$last"; chmod 700 "$last" ;; esac\nexit 0\n')
         self.stub("flock", "exit 0\n")
         self.stub("chown", "exit 0\n")
         self.stub("docker", "exit 1\n")
@@ -393,7 +397,8 @@ esac
     def test_disk_backed_runtime_is_rejected_before_fetching_secrets(self):
         self.env["TEST_FILESYSTEM"] = "ext4"
         self.env["SEVERINO_HQ_SECRET_DIR"] = str(self.root / "secrets")
-        self.stub("install", "exit 0\n")
+        # Directories are made, as install -d does; ownership is the stat stub's.
+        self.stub("install", 'case " $* " in *" -d "*) for last; do :; done; mkdir -p "$last"; chmod 700 "$last" ;; esac\nexit 0\n')
         self.stub("op", 'touch "$FIXTURES/op-called"; exit 1\n')
         result = self.run_script("refresh-secrets.sh")
         self.assertNotEqual(result.returncode, 0)

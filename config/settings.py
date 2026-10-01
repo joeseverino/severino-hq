@@ -597,8 +597,6 @@ if SEVERINO_OIDC_ENABLED:
         MIDDLEWARE.index("django.contrib.auth.middleware.AuthenticationMiddleware") + 1,
         "core.oidc.HQSessionRefresh",
     )
-# Probes answer without a session, so renewing one through them means nothing.
-OIDC_EXEMPT_URLS = ["health_live", "health_ready"]
 OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS = env_int("SEVERINO_OIDC_RENEW_SECONDS", 15 * 60)
 
 # The password form exists only where SSO does not.

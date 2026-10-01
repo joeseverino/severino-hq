@@ -675,8 +675,11 @@ verification.
 The deploy checks the three host paths the web container binds before compose
 reads them. The checkout's `.env` is writable by the deploy account, so none of
 them is taken on trust:
-- `SEVERINO_APP_ENV_FILE_HOST` must be `secrets/severino_hq_env` in the
-  application directory, in a directory only root can enter.
+- The app environment is not read from `.env` at all. `refresh-secrets.sh`
+  renders it to `/run/severino-hq-secrets/web/severino_hq_env`, on the noswap
+  tmpfs, in a directory only root can enter, as a single-link regular file
+  owned by the web user. The deploy binds that file and nothing else; a copy
+  left in the checkout's `secrets/` is removed once a deploy is healthy.
 - `SEVERINO_CONTROLLER_RUN_DIR` must be `/run/severino-hq`.
 - `SEVERINO_CONTROLLER_CA_FILE_HOST` must be a certificate under
   `/usr/local/share/ca-certificates/`.

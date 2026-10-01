@@ -46,3 +46,7 @@ class RenewalTests(SimpleTestCase):
 
     def test_a_page_the_operator_opened_returns_to_itself(self):
         self.assertEqual(self.renew("/projects/?q=hq", background=False), "/projects/?q=hq")
+
+    def test_the_probes_never_renew(self):
+        exempt = HQSessionRefresh(lambda request: HttpResponse()).exempt_urls
+        self.assertLessEqual({"/health/live/", "/health/ready/"}, exempt)

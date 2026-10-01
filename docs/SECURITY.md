@@ -199,9 +199,10 @@
 - [ ] A destructive capability called by an agent waits for an operator's
       approval unless a rule explicitly allows it for that agent or surface.
 - [ ] The app environment's source of truth is the 1Password app-environment
-      item. Production mounts the rendered file through
-      `SEVERINO_APP_ENV_FILE_HOST` and the entrypoint sources it; the on-host
-      `.env` contains no secrets (only the two `*_FILE_HOST` paths).
+      item. It is rendered to the root-only noswap tmpfs at
+      `/run/severino-hq-secrets/web/`, never to the runner-writable checkout,
+      and the entrypoint sources it; the on-host `.env` contains no secrets
+      and cannot redirect the bind.
 - [ ] HQ stores exactly one class of secret: a certificate an operator generated
       themselves and asked HQ to install. It is sealed with
       `SEVERINO_SECRET_STORE_KEY`, which lives on the env item and not in the

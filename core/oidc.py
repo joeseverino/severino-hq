@@ -224,6 +224,13 @@ class HQSessionRefresh(SessionRefresh):
     returns there, or to the dashboard when there is no same-site page.
     """
 
+    # Probes answer without a session, so renewing one through them means nothing.
+    PROBES = ("health_live", "health_ready")
+
+    def __init__(self, get_response):
+        super().__init__(get_response)
+        self.OIDC_EXEMPT_URLS = [*self.OIDC_EXEMPT_URLS, *self.PROBES]
+
     def process_request(self, request):
         response = super().process_request(request)
         if response is not None and request.headers.get("x-requested-with") == "XMLHttpRequest":
