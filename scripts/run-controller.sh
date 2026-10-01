@@ -116,6 +116,7 @@ set -- run --rm --network host --user 10001:10001 --cap-drop ALL \
     --label "severino-hq.run=${run_nonce}" \
     --env "HQ_CONTROLLER_RUN=${run_nonce}" \
     --security-opt no-new-privileges:true \
+    --tmpfs /tmp:size=64m,noexec,nosuid,nodev \
     --entrypoint python \
     --mount "type=volume,source=${data_volume},target=/data" \
     --mount "type=bind,source=${runtime_app_env},target=/run/secrets/severino_hq_env,readonly" \
