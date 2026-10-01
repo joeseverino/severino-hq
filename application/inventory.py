@@ -609,7 +609,7 @@ def _record_manages(row: ProviderConnection) -> None:
         action=AuditLog.Action.SETTINGS_CHANGED,
         obj=row,
         type_label=CONNECTION_AUDIT_TYPE,
-        message="Manages" if row.manages else "Observes only",
+        message="Allowed to manage its records" if row.manages else "Set to observe only",
         metadata={"controller_id": row.controller_id, "provider": row.provider},
         connection=row.connection_ref,
     )

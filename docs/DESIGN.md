@@ -46,6 +46,9 @@ page crawl, which fails any `.data-table` outside `.table-scroll`.
 ellipsis, a list folded behind "+5 more") is fine; a dead end is not.
 `tables.js` measures each row and gives any row with cut-off content one toggle
 that lifts every clamp and opens every fold in it. Nothing per table.
+That toggle is the row's only disclosure: what a row holds back is marked
+`.row-more` (hidden until the row is expanded) and its collapsed hint
+`.row-less`, never a `<details>` inside a cell. The gate fails a row with both.
 
 **One band.** A row of facts, readings or choices is a band: one surface,
 cells divided by hairlines each cell draws itself, so a wrapped row keeps its

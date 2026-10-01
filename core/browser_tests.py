@@ -238,6 +238,40 @@ _CELLS = "() => {" + _DESCRIBE + """
   return [...new Set(found)].slice(0, 10);
 }"""
 
+# A link that sits above or below the words it continues: an inline line in a
+# smaller size than its cell aligns a clamped link to the cell's taller line.
+_RAISED_LINKS = "() => {" + _DESCRIBE + """
+  const found = [];
+  const rects = (node) => {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    return [...range.getClientRects()].filter((r) => r.width);
+  };
+  for (const link of document.querySelectorAll('main td [data-entity]')) {
+    if (!link.checkVisibility() || !link.firstChild) continue;
+    const before = link.previousSibling;
+    if (!before || before.nodeType !== Node.TEXT_NODE || !before.textContent.trim()) continue;
+    const words = rects(before).at(-1);
+    const linked = rects(link.firstChild)[0];
+    if (!words || !linked) continue;
+    // Wrapped onto a line of its own: nothing beside it to sit off.
+    if (linked.top >= words.bottom || linked.bottom <= words.top) continue;
+    if (Math.abs(words.bottom - linked.bottom) > 1.5) {
+      found.push(`${describe(link)} sits ${Math.round(words.bottom - linked.bottom)}px off the words before it`);
+    }
+  }
+  return [...new Set(found)].slice(0, 10);
+}"""
+
+# A row has one disclosure. The row toggle shows what a row holds back; a
+# dropdown inside the row beside it is a second, smaller way to do the same.
+_NESTED_DISCLOSURES = "() => {" + _DESCRIBE + """
+  return [...document.querySelectorAll('main table > tbody > tr')]
+    .filter((row) => row.querySelector('button[aria-expanded]') && row.querySelector(':is(td, th) details'))
+    .map((row) => `${describe(row)} has a row toggle and a dropdown`)
+    .slice(0, 10);
+}"""
+
 # A plain word split across lines inside a table cell: its column was given
 # less than the word, because another column's content took the width.
 _BROKEN_WORDS = "() => {" + _DESCRIBE + """
@@ -844,6 +878,12 @@ class LayoutBrowserTests(SimpleTestCase):
 
     def test_no_column_is_narrower_than_its_words(self):
         self.across(lambda _name: self.assertEqual(self.page.evaluate(_BROKEN_WORDS), []))
+
+    def test_a_link_sits_on_the_line_it_continues(self):
+        self.across(lambda _name: self.assertEqual(self.page.evaluate(_RAISED_LINKS), []))
+
+    def test_a_row_has_one_disclosure(self):
+        self.across(lambda _name: self.assertEqual(self.page.evaluate(_NESTED_DISCLOSURES), []))
 
     def test_a_band_cell_keeps_its_padding(self):
         def check(_name):

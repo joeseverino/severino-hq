@@ -27,6 +27,7 @@ from application import readings
 from application.inventory import record_connections
 from application.security import cli_principal
 from application.services import CONTAINER_KIND
+from core.models import AuditLog
 from control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
@@ -359,9 +360,39 @@ def build_dense_estate():
                 "probed": True,
                 "detail": f"{HOSTNAMES + 4} proxy hosts.",
             },
+            {
+                # On a catalogued machine: the row says which, as a link in
+                # the smaller line under the endpoint.
+                "connection_ref": "an-example-dns-server-connection",
+                "provider": "adguard",
+                "endpoint": f"http://{ADDRESS}:3001",
+                "reaches": [MACHINE],
+                "ok": True,
+                "probed": True,
+                "detail": "1 server.",
+            },
+            {
+                # Several abilities beside a crowded Depends cell: the row that
+                # squeezes the abilities column until its words break.
+                "connection_ref": "an-example-dns-connection-with-a-long-name",
+                "provider": "cloudflare_dns",
+                "endpoint": "https://api.example.com/client/v4/accounts/0123456789abcdef0123456789abcdef",
+                "reaches": [f"an-example-zone-{index}.example.com" for index in range(4)],
+                "ok": True,
+                "probed": True,
+                "detail": "4 zones.",
+            },
         ],
         principal=cli_principal(),
         controller_id="example-controller",
+    )
+    # The last thing a connection did names a resource as long as a real
+    # container's: a stack prefix, a service and a replica.
+    AuditLog.objects.create(
+        action=AuditLog.Action.UPDATED,
+        object_type="container",
+        object_repr="an-example-edge-machine-agent-stack-an-example-agent-service-1",
+        connection=PORTAINER,
     )
     return user
 

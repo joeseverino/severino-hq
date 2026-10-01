@@ -2831,7 +2831,9 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-summary strong { color: var(--ink); }
 .connection-summary .is-attention strong { color: var(--attn); }
 .connection-inspect { margin-left: auto; }
-.connection-row-meta { color: var(--muted); font-size: var(--text-2xs); }
+/* A line of its own size: inline after a <br>, its links would align to the
+   cell's larger line and sit above the words beside them. */
+.connection-row-meta { display: block; color: var(--muted); font-size: var(--text-2xs); }
 /* Its own section under the table, not a second compartment of a card around it. */
 .connection-available { margin-top: var(--space-10); }
 .connection-available h2 { margin: 0 0 var(--space-4); }
@@ -2839,8 +2841,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-available li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); font-size: var(--text-sm); }
 .connection-sight,
 .connection-more-scope { margin-top: var(--space-2); }
-.connection-sight > summary,
-.connection-more-scope > summary { cursor: pointer; font-size: var(--text-xs); color: var(--muted); }
+.connection-sight-tally { display: block; font-size: var(--text-xs); color: var(--muted); }
 .connection-sight ul,
 .connection-more-scope ul { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 .connection-sight li,
@@ -2852,7 +2853,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-sight-refusal { margin: var(--space-2) 0 0; font-size: var(--text-xs); }
 .connection-sight-partial .connection-sight-state { color: var(--warn); }
 .connection-credential-fix { margin-top: var(--space-2); font-size: var(--text-xs); }
-.connection-credential-fix > summary { cursor: pointer; color: var(--warn); }
+.connection-credential-fix-headline { display: block; color: var(--warn); }
 .operator-step { margin-top: var(--space-2); }
 .operator-step p { margin: var(--space-1) 0 0; }
 /* A command wraps rather than scrolling: selecting it copies it whole. */
@@ -3033,7 +3034,10 @@ a.discovery-link:hover strong { color: var(--accent); }
 /* Here the name is one line, like the endpoint under it: the name leads five
    more facts in the same cell. */
 .connection-table td > strong > [data-entity] { display: -webkit-inline-box; overflow: hidden; -webkit-line-clamp: 1; line-clamp: 1; }
-.connection-ability-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+/* An ability line's text track is minmax(0, 1fr), which reports no width of
+   its own to the table: without a length here the column is squeezed until
+   its words break, and the spare width goes to the columns with sentences. */
+.connection-ability-list { display: grid; gap: var(--space-2); min-width: 20ch; margin: 0; padding: 0; list-style: none; }
 .connection-ability-list li {
   display: grid;
   grid-template-columns: 5px minmax(0, 1fr);
@@ -3063,13 +3067,16 @@ a.discovery-link:hover strong { color: var(--accent); }
    sizing columns; each fact wraps inside it rather than being cut. */
 .connection-standing { display: grid; gap: var(--space-1); justify-items: start; min-width: 18ch; }
 .connection-standing .muted { font-size: var(--text-2xs); }
-.connection-last-activity { font-size: var(--text-2xs); }
+/* What was done names a resource, which can be any length: it holds one
+   line within the standing's width and its age keeps a line of its own, so a
+   long container name never sets the column. The title carries it whole. */
+.connection-last-activity { display: grid; max-width: 26ch; font-size: var(--text-2xs); }
+.connection-last-activity > span:first-child { overflow: hidden; text-overflow: ellipsis; }
 .connection-authority { color: var(--muted); font-size: var(--text-2xs); }
 .connection-authority-proven { color: var(--muted); }
 .connection-authority-missing { color: var(--danger); }
 .connection-ability-more { display: block; margin-top: var(--space-2); font-size: var(--text-3xs); color: var(--muted); }
-.connection-ability-more > summary { cursor: pointer; }
-.connection-ability-more .connection-ability-list { margin-top: var(--space-2); }
+.connection-ability-list + .connection-ability-list { margin-top: var(--space-2); }
 .connection-state {
   display: inline-flex;
   align-items: center;
@@ -4967,18 +4974,23 @@ form[data-clean] .save-bar { display: none; }
     .page-head .page-actions { flex-wrap: nowrap; }
   }
 
-  /* The row toggle tables.js adds where a row says more than it shows. Quiet
-     until wanted: a small mark before the first value, turned when open. */
+  /* The row toggle tables.js adds where a row says more than it shows: the
+     one disclosure a row has, so it is sized to be found and hit, and turns
+     when open. */
   .row-expand {
-    min-height: 0; padding: 0 var(--space-2) 0 0; margin: 0;
-    border: 0; background: none; box-shadow: none;
-    color: var(--muted-2); font-size: var(--text-xs); line-height: 1; cursor: pointer;
-    vertical-align: baseline;
+    display: inline-grid; place-items: center;
+    width: 1.5rem; height: 1.5rem; min-height: 0; padding: 0; margin: 0 var(--space-2) 0 calc(-1 * var(--space-2));
+    border: 0; border-radius: var(--radius-sm); background: none; box-shadow: none;
+    color: var(--muted); font-size: var(--text-sm); line-height: 1; cursor: pointer;
+    vertical-align: middle;
   }
-  .row-expand:hover { border: 0; background: none; color: var(--ink); }
-  .row-expand > span { display: inline-block; transition: transform .12s ease; }
-  .row-expand[aria-expanded="true"] > span { transform: rotate(90deg); }
-  @media (prefers-reduced-motion: reduce) { .row-expand > span { transition: none; } }
+  .row-expand:hover { border: 0; background: var(--line-2); color: var(--ink); }
+  /* What a row holds back until it is expanded, and the hint it replaces. */
+  .data-table tr:not(.is-expanded) .row-more,
+  .data-table tr.is-expanded .row-less { display: none; }
+  .row-expand > svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .12s ease; }
+  .row-expand[aria-expanded="true"] > svg { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { .row-expand > svg { transition: none; } }
   /* Every clamp in the row lifted at once. The rules it lifts are scattered and
      each is specific to its column, so this one outranks them on purpose: an
      expanded row shows everything, whatever clamped it. */
