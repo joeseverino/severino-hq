@@ -443,6 +443,10 @@ jobs:
         run: |
           set -euo pipefail
           image="ghcr.io/${{ github.repository }}:sha-${HEAD_SHA::12}"
+          # The security archive's release date keys the layer that applies
+          # Debian's fixes, so a cached layer is reused until Debian publishes.
+          security_release="$(curl -fsSL https://deb.debian.org/debian-security/dists/bookworm-security/InRelease | sed -n 's/^Date: //p')"
+          test -n "$security_release"
           # The source label is the standard OCI one: GHCR links the package to
           # this repository by it, and the controller reads which repository
           # delivers it from the image it runs.
@@ -453,6 +457,7 @@ jobs:
             --label "org.opencontainers.image.revision=$HEAD_SHA" \
             --build-arg "HQ_SOURCE=https://github.com/${{ github.repository }}" \
             --build-arg "HQ_REVISION=$HEAD_SHA" \
+            --build-arg "DEBIAN_SECURITY_RELEASE=$security_release" \
             -t "$image" .
           echo "image=$image" >> "$GITHUB_OUTPUT"
       - name: It runs Python 3.14 without package managers

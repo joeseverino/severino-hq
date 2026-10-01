@@ -19,6 +19,9 @@ FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de
 # Non-root user. UID/GID 10001 to be predictable in volume permissions.
 # `apt-get upgrade` applies Debian security fixes published after the base
 # image was last rebuilt; the image scan fails on any fixed HIGH/CRITICAL.
+# The security archive's release date keys this layer, so a build cache
+# reuses it only until Debian publishes a fix.
+ARG DEBIAN_SECURITY_RELEASE=
 #
 # No package manager at runtime. Dependencies come from the build stage, and
 # the composition installs extension wheels in a stage of its own
