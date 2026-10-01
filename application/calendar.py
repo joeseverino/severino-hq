@@ -2,8 +2,8 @@
 
 Every domain, host section or extension alike, declares *sources* through
 ``PluginIntegration.calendars``. A source names a stream of dated things the
-domain already holds (a certificate's expiry, a renewal's act-by date, a
-workout) and answers one question: what falls between two days. The calendar
+domain already holds (a certificate's expiry, a domain's registration, a
+deploy) and answers one question: what falls between two days. The calendar
 stores nothing a source can derive. What it owns is what only it knows: the
 operator's own entries (``calendars.models.Entry``, the "My Calendar" source)
 and which sources each operator has unchecked.
@@ -14,9 +14,10 @@ calendar list instead of taking the page down with it.
 
 Three shapes cover everything a source emits:
 
-- a **mark**: a dot on its day, read by colour (a workout). Many fit one day.
+- a **mark**: a dot on its day, read by colour. Many fit one day.
 - an **item**: a line with a title (a dentist appointment, an expiry).
-- a **span**: an item over several days (a renewal window: opens, then due).
+- a **span**: an item over several days (a certificate's renewal window:
+  opens, then expires).
   Spans keep a lane across the week so a bar lines up from cell to cell.
 """
 
@@ -38,7 +39,7 @@ logger = logging.getLogger("severino.calendar")
 # "planned" is a commitment not yet due, "missed" one whose day has passed,
 # "done" one kept. Blank is a plain fact with no plan behind it.
 EVENT_STATES = frozenset({"", "done", "planned", "missed"})
-# Dotted and lower-case, so a source id reads as whose it is ("fitness.running")
+# Dotted and lower-case, so a source id reads as whose it is ("example.sessions")
 # and can sit in a URL or a preference row unescaped.
 SOURCE_ID = re.compile(r"^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$")
 # Chart series the palette has. A source asking for one keeps the colour its
@@ -65,7 +66,7 @@ class CalendarEvent:
     url: str = ""
     state: str = ""
     # A dot on its day rather than a line: for what is many a day and read by
-    # colour, like workouts.
+    # colour.
     mark: bool = False
 
     def __post_init__(self) -> None:
@@ -309,8 +310,8 @@ def _slots(sources: Iterable[CalendarSource]) -> dict[str, int]:
     """
 
     sources = tuple(sources)
-    # A colour a domain asks for is its identity (a training chart's running
-    # blue): never dealt to another source while any other colour remains.
+    # A colour a domain asks for is its identity (the colour its own charts
+    # use): never dealt to another source while any other colour remains.
     asked = {source.slot for source in sources if source.slot}
     taken = [source.slot for source in sources if source.slot]
     dealt = {source.id: source.slot for source in sources if source.slot}

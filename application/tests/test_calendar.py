@@ -89,7 +89,7 @@ class ContractTests(SimpleTestCase):
         self.assertEqual(CalendarEvent("a", "x", TODAY, url="javascript:alert(1)").url, "")
 
     def test_a_source_names_whose_it_is(self):
-        for bad in ("calendar", "Fitness.Running", "fitness.", "fitness running"):
+        for bad in ("calendar", "Example.Sessions", "example.", "example sessions"):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 CalendarSource(id=bad, label="x", events=lambda first, last: ())
         with self.assertRaises(ValueError):
@@ -300,10 +300,10 @@ class PlacementTests(SimpleTestCase):
             routes = [(item.route, item.group) for item in domain_navigation()]
         self.assertIn(("calendar:month", ""), routes)
 
-        placed = _domain([], navigation=(NavigationItem("Calendar", "calendar:month", "calendar", 10, "Life"),))
+        placed = _domain([], navigation=(NavigationItem("Calendar", "calendar:month", "calendar", 10, "Example"),))
         with _with(placed):
             calendar = [item for item in domain_navigation() if item.route == "calendar:month"]
-        self.assertEqual([(item.group, item.order) for item in calendar], [("Life", 10)])
+        self.assertEqual([(item.group, item.order) for item in calendar], [("Example", 10)])
 
 
 class PageTests(TestCase):
