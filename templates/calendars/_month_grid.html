@@ -1,0 +1,44 @@
+{% comment %}
+One month of every checked source: the calendar page's grid, and the
+dashboard's. `calendar` is application.calendar.CalendarMonth; `selected` the
+open day, if any. Its links open the calendar, wherever the grid is shown.
+{% endcomment %}
+<table class="month-grid">
+  <caption class="visually-hidden">{{ calendar.month|date:"F Y" }}</caption>
+  <thead>
+    <tr>
+      {% for cell in calendar.weeks.0 %}<th scope="col"><span aria-hidden="true">{{ cell.day|date:"D" }}</span><span class="visually-hidden">{{ cell.day|date:"l" }}</span></th>{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for week in calendar.weeks %}
+      <tr>
+        {% for cell in week %}
+          <td class="month-day{% if not cell.in_month %} is-outside{% endif %}{% if cell.today %} is-today{% endif %}{% if cell.past %} is-past{% endif %}{% if cell.weekend %} is-weekend{% endif %}{% if cell.day == selected %} is-selected{% endif %}">
+            <div class="month-day-head">
+              <a class="month-date" href="{{ cell.url }}"{% if cell.today %} aria-current="date"{% endif %}>
+                <span aria-hidden="true">{% if cell.day.day == 1 %}<span class="month-of">{{ cell.day|date:"M" }} </span>{% endif %}{{ cell.day|date:"j" }}</span>
+                <span class="visually-hidden">{{ cell.day|date:"l, F j" }}{% if cell.count %}, {{ cell.count|counted:"event" }}{% endif %}</span>
+              </a>
+              {% for placed in cell.marks %}<a class="month-mark series-{{ placed.source.slot }}{% if placed.event.state %} is-{{ placed.event.state }}{% endif %}" href="{{ placed.event.url|default:cell.url }}" data-tip="{{ placed.event.title }}{% if placed.event.detail %} · {{ placed.event.detail }}{% endif %}"><span class="visually-hidden">{{ placed.source.label }}: {{ placed.event.title }}{% if placed.event.state %} ({{ placed.event.state }}){% endif %}</span></a>{% endfor %}
+              {% comment %}Where the grid is compact, a line is its dot here, beside the others.{% endcomment %}
+              {% for placed in cell.items %}<a class="month-mark month-item-dot series-{{ placed.source.slot }}{% if placed.event.state %} is-{{ placed.event.state }}{% endif %}" href="{{ placed.event.url|default:cell.url }}" data-tip="{% if placed.event.time_label %}{{ placed.event.time_label }} {% endif %}{{ placed.event.title }}{% if placed.event.detail %} · {{ placed.event.detail }}{% endif %}"><span class="visually-hidden">{{ placed.source.label }}: {% if placed.event.time_label %}{{ placed.event.time_label }} {% endif %}{{ placed.event.title }}</span></a>{% endfor %}
+            </div>
+            {% for piece in cell.lanes %}
+              {% if piece %}
+                <a class="month-span series-{{ piece.placed.source.slot }}{% if piece.starts_here %} is-start{% endif %}{% if piece.ends_here %} is-end{% endif %}" href="{{ piece.placed.event.url|default:cell.url }}" data-tip="{{ piece.placed.event.title }}{% if piece.placed.event.detail %} · {{ piece.placed.event.detail }}{% endif %}">{% if piece.titled %}{{ piece.placed.event.title }}{% else %}<span class="visually-hidden">{{ piece.placed.event.title }}</span>{% endif %}</a>
+              {% else %}
+                <span class="month-span is-gap" aria-hidden="true"></span>
+              {% endif %}
+            {% endfor %}
+            {% for placed in cell.items %}
+              {% comment %}Timed: a dot, its time, its title. All day: a filled block.{% endcomment %}
+              <a class="month-item series-{{ placed.source.slot }}{% if not placed.event.timed %} is-all-day{% endif %}{% if placed.event.state %} is-{{ placed.event.state }}{% endif %}" href="{{ placed.event.url|default:cell.url }}" data-tip="{% if placed.event.time_label %}{{ placed.event.time_label }} {% endif %}{{ placed.event.title }}{% if placed.event.detail %} · {{ placed.event.detail }}{% endif %}">{% if placed.event.time_label %}<time>{{ placed.event.time_label }}</time>{% endif %}<span>{{ placed.event.title }}</span></a>
+            {% endfor %}
+            {% if cell.more %}<a class="month-more" href="{{ cell.url }}">{{ cell.more }} more</a>{% endif %}
+          </td>
+        {% endfor %}
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>

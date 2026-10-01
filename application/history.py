@@ -195,16 +195,20 @@ def _joins(run: Entry, line: Entry) -> bool:
     return _key(previous) == _key(event) and previous.created_at - event.created_at <= GROUP_GAP
 
 
-def _recorded(since: datetime, until: datetime) -> list[Moment]:
+def changes(since: datetime, until: datetime):
+    """The audit rows that changed something, as the history counts them."""
+
     from core.models import AuditLog
 
-    events = (
+    return (
         AuditLog.objects.filter(created_at__gte=since, created_at__lte=until)
         .annotate(source=source_of_event())
         .filter(Q(action__in=_CHANGES) | Q(source=OUTSIDE_HQ))
-        .select_related("user")
-        .order_by("-created_at")[:500]
     )
+
+
+def _recorded(since: datetime, until: datetime) -> list[Moment]:
+    events = changes(since, until).select_related("user").order_by("-created_at")[:500]
     return [
         Moment(event.created_at, "Reading", event.message)
         if event.source == OUTSIDE_HQ

@@ -1,0 +1,75 @@
+{% extends "page.html" %}
+{% block page %}
+{% comment %}
+One calendar for every source. Every control is a link or a form, so the page
+works without JavaScript; calendar.js only makes paging, checking a source and
+opening a day happen in place. The ids are what it swaps.
+{% endcomment %}
+<div class="split calendar-layout" id="calendar" data-calendar>
+  <section class="card calendar-month" id="calendar-month" aria-labelledby="calendar-period">
+    <div class="section-head">
+      <h2 id="calendar-period">{{ calendar.month|date:"F Y" }}</h2>
+      <nav class="calendar-nav" aria-label="Change month">
+        <a href="{{ previous_url }}" rel="prev" aria-label="Previous month" data-hotkey="ArrowLeft k p">&lsaquo;</a>
+        <a class="calendar-now" href="{{ today_url }}" data-hotkey="t"{% if calendar.is_current %} aria-current="date"{% endif %}>Today</a>
+        <a href="{{ next_url }}" rel="next" aria-label="Next month" data-hotkey="ArrowRight j n">&rsaquo;</a>
+      </nav>
+    </div>
+    {% include "calendars/_month_grid.html" %}
+  </section>
+
+  <aside class="calendar-aside">
+    {% if day %}
+      <section class="card day-panel" id="day-panel" aria-labelledby="day-panel-title">
+        <div class="section-head">
+          <h2 id="day-panel-title">{% if day.day == day.today %}Today{% else %}{{ day.day|date:"l" }}{% endif %} <span class="muted">{{ day.day|date:"M j" }}</span></h2>
+          <nav class="calendar-nav" aria-label="Change day">
+            <a href="?month={{ day.previous|date:'Y-m' }}&amp;day={{ day.previous|date:'Y-m-d' }}" rel="prev" aria-label="Previous day">&lsaquo;</a>
+            <a href="?month={{ day.next|date:'Y-m' }}&amp;day={{ day.next|date:'Y-m-d' }}" rel="next" aria-label="Next day">&rsaquo;</a>
+            <a href="?month={{ calendar.month|date:'Y-m' }}" aria-label="Close this day" data-hotkey="Escape">&times;</a>
+          </nav>
+        </div>
+        {% if entry %}
+          <article class="day-panel-entry" aria-label="{{ entry.object.title }}">
+            <h3>{{ entry.object.title }}</h3>
+            <p class="day-panel-when">{{ entry.when }}</p>
+            {% if entry.object.location or entry.repeat %}<p class="muted">{% if entry.object.location %}{{ entry.object.location }}{% endif %}{% if entry.object.location and entry.repeat %} · {% endif %}{{ entry.repeat }}</p>{% endif %}
+            {% if entry.next %}<p class="muted">Next {% for when, url in entry.next %}<a href="{{ url }}">{{ when|date:"M j" }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+            {% if entry.object.notes %}<p>{{ entry.object.notes|linebreaksbr }}</p>{% endif %}
+            <p class="page-actions">{% for action in entry.actions %}{% include "partials/_page_action.html" %}{% endfor %}</p>
+          </article>
+        {% endif %}
+        {% for source, rows in day_groups %}
+          <h3 class="day-panel-source"><i class="calendar-swatch series-{{ source.slot }}" aria-hidden="true"></i>{{ source.label }}</h3>
+          {% include "partials/_record_list.html" with rows=rows label=source.label %}
+        {% empty %}
+          {% if not entry %}<p class="muted">Nothing on this day.</p>{% endif %}
+        {% endfor %}
+        <p><a href="{{ new_entry_url }}?on={{ day.day|date:'Y-m-d' }}" data-hotkey="c">Add to My Calendar</a></p>
+      </section>
+    {% endif %}
+
+    <section class="card calendar-sources" id="calendar-sources" aria-label="Calendars">
+      {% for group, sources in calendar.groups %}
+        <h3>{{ group }}</h3>
+        <ul>
+          {% for source in sources %}
+            <li>
+              <form method="post" action="{% url 'calendar:source' source.id %}" data-calendar-source>
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ here }}">
+                <input type="hidden" name="shown" value="{% if source.shown %}0{% else %}1{% endif %}">
+                <button type="submit" class="calendar-source series-{{ source.slot }}" aria-pressed="{% if source.shown %}true{% else %}false{% endif %}" title="{{ source.description }}">
+                  <i class="calendar-check" aria-hidden="true"></i>
+                  <span>{{ source.label }}</span>
+                  {% if source.failure %}<small class="calendar-source-failure">{{ source.failure }}</small>{% endif %}
+                </button>
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endfor %}
+    </section>
+  </aside>
+</div>
+{% endblock %}

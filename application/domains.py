@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import cache
-from typing import Any, Callable, Iterable
+from typing import Any, Callable
 
 from django.utils.module_loading import import_string
 
@@ -117,6 +117,17 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(NavigationItem("Dashboard", "dashboard", "", 0, ""),),
         integration=PluginIntegration(
             connections=_provider("application.glance:connection_specs")
+        ),
+    ),
+    DomainDescriptor(
+        id="hq.calendar",
+        label="Calendar",
+        # Beside the dashboard until an extension places it in a group of its
+        # own: the calendar is the host's, wherever it is listed.
+        navigation=(NavigationItem("Calendar", "calendar:month", "calendar", 1, ""),),
+        integration=PluginIntegration(
+            capabilities=_provider("application.calendar_specs:capabilities"),
+            resources=_provider("application.calendar_specs:resources"),
         ),
     ),
     DomainDescriptor(
@@ -304,6 +315,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             attention=_provider("application.estate:attention"),
             dashboard=_provider("application.estate:cards"),
             overview=_provider("application.estate:overview"),
+            calendars=_provider("application.calendar_sources:estate_sources"),
         ),
     ),
     DomainDescriptor(
@@ -413,6 +425,15 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         ),
     ),
     DomainDescriptor(
+        id="hq.history",
+        label="History",
+        # No page of its own: what happened is read on the calendar, a day at
+        # a time, and in full on the audit log.
+        integration=PluginIntegration(
+            calendars=_provider("application.calendar_sources:history_sources")
+        ),
+    ),
+    DomainDescriptor(
         id="hq.agents",
         label="Agents",
         navigation=(
@@ -467,20 +488,20 @@ def all_domains() -> tuple[Domain, ...]:
     )
 
 
-def host_connection_specs() -> tuple[Any, ...]:
-    """Connection declarations emitted by the host gateways that own them.
+def host_specs(kind: str) -> tuple[Any, ...]:
+    """What the host's domains declare of one kind: connections, capabilities, resources.
 
     Extensions cross a separate admission boundary and continue through the
     plugin registry. Host domains use the same late-bound provider shape, so a
-    new gateway is registered once beside its domain instead of being copied
-    into the Connections workspace, Command Center, API, MCP, and topology.
+    command, a readable resource or a gateway is registered once beside its
+    domain instead of being copied into a central list that every domain grows.
     """
 
     return tuple(
         spec
         for domain in host_domains()
-        if domain.integration.connections is not None
-        for spec in domain.integration.connections()
+        if (provider := getattr(domain.integration, kind)) is not None
+        for spec in provider()
     )
 
 
@@ -493,10 +514,33 @@ def domain_navigation() -> tuple[NavigationItem, ...]:
     installed.
     """
 
-    items: Iterable[NavigationItem] = (
-        item for domain in all_domains() for item in domain.navigation
-    )
-    return tuple(sorted(items, key=lambda item: (item.order, item.label)))
+    domains = all_domains()
+    # An extension may place a host page in its own group by naming its route.
+    # Where one does, the host's own entry for that page steps aside; where
+    # none does, the page stays where the host puts it.
+    placed = {
+        item.route
+        for domain in domains
+        if domain.origin == "extension"
+        for item in domain.navigation
+    }
+    items: list[NavigationItem] = []
+    seen: set[str] = set()
+    for item in sorted(
+        (
+            item
+            for domain in domains
+            for item in domain.navigation
+            if not (domain.origin == "host" and item.route in placed)
+        ),
+        key=lambda item: (item.order, item.label),
+    ):
+        # Two extensions placing the one page: the first in order keeps it.
+        if item.route in seen:
+            continue
+        seen.add(item.route)
+        items.append(item)
+    return tuple(items)
 
 
 def domain_attention_items() -> tuple[dict[str, Any], ...]:

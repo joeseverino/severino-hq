@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -12,6 +12,8 @@ from django.utils import formats, timezone
 from django.views.generic import TemplateView, View
 
 from application import action_items as read_state
+from application.calendar import calendar_month, month_of
+from application.calendar_entries import calendar_choices
 from application.outward_links import link_choices, outward_links
 from application.dashboard import dashboard_highlights, operating_snapshot
 from application.glance import (
@@ -123,7 +125,17 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             for item in snapshot["recent_published"]
         ]
 
+        today = timezone.localdate()
+        month = month_of(self.request.GET.get("month"), today)
         ctx.update(
+            calendar=calendar_month(
+                month, choices=calendar_choices(self.request.user), today=today
+            ),
+            calendar_paging={
+                "previous": f"?month={(month - timedelta(days=1)):%Y-%m}",
+                "next": f"?month={(month + timedelta(days=32)):%Y-%m}",
+                "today": "?",
+            },
             greeting=greeting,
             content_rows=content_rows,
             published_rows=published_rows,
@@ -137,6 +149,13 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             show_action_count=True,
             dashboard_cards=highlights["compact"],
             dashboard_highlights=highlights["highlights"],
+            # Each domain's leading chart; its own calendar is read on its pages.
+            dashboard_charts=[
+                chart
+                for section in highlights["highlights"]
+                if section["overview"] is not None
+                for chart in section["overview"].charts[:1]
+            ],
             **glance,
         )
         return ctx

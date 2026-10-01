@@ -33,6 +33,10 @@ class Capability(StrEnum):
     WRITE_ASSETS = "write_assets"
     WRITE_CONTENT = "write_content"
     WRITE_EXPENSES = "write_expenses"
+    # The operator's own calendar: appointments, visits, plans. Personal, so
+    # an agent reads and writes it only on its own switch.
+    READ_CALENDAR = "read_calendar"
+    WRITE_CALENDAR = "write_calendar"
     WRITE_RECEIPTS = "write_receipts"
     MANAGE_CONTACTS = "manage_contacts"
     SYNC_DOCUMENTATION = "sync_documentation"
@@ -42,6 +46,7 @@ class Capability(StrEnum):
     DELETE_ASSETS = "delete_assets"
     DELETE_CONTENT = "delete_content"
     DELETE_EXPENSES = "delete_expenses"
+    DELETE_CALENDAR = "delete_calendar"
     DELETE_DOCUMENTATION = "delete_documentation"
     DELETE_RECEIPTS = "delete_receipts"
     MANAGE_INFRASTRUCTURE = "manage_infrastructure"
@@ -198,6 +203,11 @@ def mcp_principal() -> Principal:
             }
         )
         capabilities.update(plugin_capabilities("mcp_write"))
+    # The calendar is personal, so it is neither in READ nor in the broad
+    # writes: "put this on my calendar" is its own decision, and granting it
+    # grants nothing else.
+    if getattr(settings, "SEVERINO_MCP_ENABLE_CALENDAR", False):
+        capabilities.update({Capability.READ_CALENDAR, Capability.WRITE_CALENDAR})
     if getattr(settings, "SEVERINO_MCP_ENABLE_PRUNE", False):
         capabilities.add(Capability.PRUNE_DOCUMENTATION)
     if getattr(
@@ -213,6 +223,8 @@ def mcp_principal() -> Principal:
                 Capability.DELETE_RECEIPTS,
             }
         )
+        if getattr(settings, "SEVERINO_MCP_ENABLE_CALENDAR", False):
+            capabilities.add(Capability.DELETE_CALENDAR)
     # Topology sync needs to declare infrastructure; it never needs to ask a
     # certificate authority for anything, so enabling `hq sync` does not grant
     # the service account certificate renewal.

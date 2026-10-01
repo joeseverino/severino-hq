@@ -161,6 +161,65 @@
         ]
       }
     },
+    "calendar": {
+      "CalendarEvent": {
+        "bases": [],
+        "constructor": [
+          "id",
+          "title",
+          "starts",
+          "ends=",
+          "detail=",
+          "url=",
+          "state=",
+          "mark="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "covers": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "day"
+            ]
+          },
+          "days": {
+            "kind": "property"
+          },
+          "first_day": {
+            "kind": "property"
+          },
+          "last_day": {
+            "kind": "property"
+          },
+          "span": {
+            "kind": "property"
+          },
+          "time_label": {
+            "kind": "property"
+          },
+          "timed": {
+            "kind": "property"
+          }
+        }
+      },
+      "CalendarSource": {
+        "bases": [],
+        "constructor": [
+          "id",
+          "label",
+          "events",
+          "description=",
+          "url=",
+          "shown=",
+          "slot="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      }
+    },
     "capabilities": {
       "AuthorizationError": {
         "bases": [
@@ -183,6 +242,8 @@
           "WRITE_ASSETS",
           "WRITE_CONTENT",
           "WRITE_EXPENSES",
+          "READ_CALENDAR",
+          "WRITE_CALENDAR",
           "WRITE_RECEIPTS",
           "MANAGE_CONTACTS",
           "SYNC_DOCUMENTATION",
@@ -192,6 +253,7 @@
           "DELETE_ASSETS",
           "DELETE_CONTENT",
           "DELETE_EXPENSES",
+          "DELETE_CALENDAR",
           "DELETE_DOCUMENTATION",
           "DELETE_RECEIPTS",
           "MANAGE_INFRASTRUCTURE",
@@ -662,7 +724,8 @@
           "overview=",
           "attention=",
           "search=",
-          "health="
+          "health=",
+          "calendars="
         ],
         "fields": [],
         "kind": "dataclass",

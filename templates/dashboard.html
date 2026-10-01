@@ -34,14 +34,28 @@ here names one.
   {% endfor %}
 </section>{% endif %}
 
-{% for section in dashboard_highlights %}
-  {% if section.overview.charts or section.overview.calendars %}
-    <section class="dashboard-patterns" aria-label="{{ section.label }} trends">
-      {% for chart in section.overview.charts|slice:":1" %}{% include "partials/_stacked_bar_chart.html" with chart=chart %}{% endfor %}
-      {% for calendar in section.overview.calendars|slice:":1" %}{% include "partials/_activity_calendar.html" with calendar=calendar calendar_id="dashboard-calendar-"|add:section.id %}{% endfor %}
-    </section>
+{% comment %}
+Each domain's leading chart, then the one calendar every domain feeds: a
+domain's own calendar is read on its own pages, and here once, composed.
+{% endcomment %}
+{% if dashboard_charts or not calendar.empty %}
+<section class="dashboard-patterns" aria-label="Trends and the month">
+  {% for chart in dashboard_charts %}{% include "partials/_stacked_bar_chart.html" with chart=chart %}{% endfor %}
+  {% if not calendar.empty %}
+  <section class="card calendar-month is-compact" id="dashboard-calendar" data-calendar aria-labelledby="dashboard-calendar-title">
+    <div class="section-head">
+      <h2 id="dashboard-calendar-title"><a href="{% url 'calendar:month' %}?month={{ calendar.month|date:'Y-m' }}">{{ calendar.month|date:"F Y" }}</a></h2>
+      <nav class="calendar-nav" aria-label="Change month">
+        <a href="{{ calendar_paging.previous }}" rel="prev" aria-label="Previous month">&lsaquo;</a>
+        {% if not calendar.is_current %}<a class="calendar-now" href="{{ calendar_paging.today }}">Today</a>{% endif %}
+        <a href="{{ calendar_paging.next }}" rel="next" aria-label="Next month">&rsaquo;</a>
+      </nav>
+    </div>
+    {% include "calendars/_month_grid.html" %}
+  </section>
   {% endif %}
-{% endfor %}
+</section>
+{% endif %}
 
 <div class="dash-row">
   <section class="card">

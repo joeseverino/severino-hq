@@ -1,0 +1,20 @@
+{% extends "page.html" %}
+{% block page %}
+<form method="post" class="form">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
+  {% for field in form %}
+    {% if field.name == "interval" or field.name == "repeat_until" %}
+      <div data-when="repeat">{% include "partials/_form_field.html" %}</div>
+    {% elif field.name == "weekdays" %}
+      <div data-when="repeat=weekly">{% include "partials/_form_field.html" %}</div>
+    {% else %}
+      {% include "partials/_form_field.html" %}
+    {% endif %}
+  {% endfor %}
+  <div class="form-actions">
+    <button type="submit" class="primary">{% if form.instance.pk %}Save changes{% else %}Add to calendar{% endif %}</button>
+    <a class="btn" href="{% if form.instance.pk %}{{ form.instance.get_absolute_url }}{% else %}{% url 'calendar:month' %}{% endif %}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

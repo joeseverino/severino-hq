@@ -202,6 +202,14 @@
   --series-3: light-dark(#1baf7a, #42c992);
   --series-4: light-dark(#eda100, #f0b93e);
   --series-5: light-dark(#e87ba4, #f098bc);
+  /* The calendar draws more sources than a chart draws series. */
+  --series-6: light-dark(#7b5cc4, #a68ef0);
+  --series-7: light-dark(#4f6b8f, #93acd0);
+  --series-8: light-dark(#a0603a, #d39470);
+  --series-9: light-dark(#2f8f8a, #6cc9c2);
+  --series-10: light-dark(#8a8f2f, #c2c76c);
+  /* A calendar source's colour, set by its series class; the accent until then. */
+  --source: var(--accent);
   --radius: 8px;
   --radius-sm: 5px;
   /* Every square control in the header bar (the collapsed search button and
@@ -485,7 +493,7 @@ pre ::selection { color: var(--code-ink); }
 
 /* Every form control looks like HQ's wherever it sits, not only inside .field.
    Components still override this; it is the floor. */
-input:where([type=text], [type=url], [type=number], [type=password], [type=email], [type=date], [type=search], [type=file], :not([type])),
+input:where([type=text], [type=url], [type=number], [type=password], [type=email], [type=date], [type=time], [type=datetime-local], [type=search], [type=file], :not([type])),
 select,
 textarea {
   padding: var(--space-3) var(--space-5);
@@ -1974,8 +1982,11 @@ a.kpi:hover { background: var(--surface-2); }
 .dashboard-counts .kpi .label { font-size: var(--text-xs); text-transform: none; letter-spacing: 0; }
 .dashboard-counts .kpi .muted { font-size: var(--text-2xs); }
 .dashboard-patterns > .card { min-width: 0; margin: 0; padding: var(--space-6); }
-.dashboard-patterns .bar-chart { height: 150px; }
 .dashboard-patterns .chart-card figcaption p { min-height: 0; }
+/* A pair ends together, so a chart's data opens inside its card rather than
+   growing it and stretching the card beside it: a pane of its own height. */
+.dashboard-patterns .chart-data > .table-scroll { max-height: 12rem; overflow: auto; }
+.dashboard-patterns .chart-data .data-table thead th { position: sticky; inset-block-start: 0; z-index: 1; background: var(--surface-2); }
 .dashboard-patterns .chart-legend { margin-top: var(--space-3); }
 .dashboard-patterns .calendar-day { height: 24px; padding: var(--space-1); border-radius: 5px; vertical-align: middle; }
 .dashboard-patterns .calendar-date { display: inline-block; }
@@ -2048,6 +2059,177 @@ a.kpi:hover { background: var(--surface-2); }
   min-width: 0;
 }
 .col-stack > * { margin: 0; }
+
+/* The calendar. A source's colour is one custom property, so a dot, a line, a
+   bar and a swatch all read it the same way. */
+.series-1 { --source: var(--series-1); }
+.series-2 { --source: var(--series-2); }
+.series-3 { --source: var(--series-3); }
+.series-4 { --source: var(--series-4); }
+.series-5 { --source: var(--series-5); }
+.series-6 { --source: var(--series-6); }
+.series-7 { --source: var(--series-7); }
+.series-8 { --source: var(--series-8); }
+.series-9 { --source: var(--series-9); }
+.series-10 { --source: var(--series-10); }
+/* The month takes the room; the list of calendars is as wide as its names and
+   never grows, wrapping under the month where both do not fit. */
+.calendar-layout > :first-child { flex: 999 1 36rem; }
+.calendar-layout > .calendar-aside { flex: 1 1 15rem; }
+.calendar-month { container: month / inline-size; padding: var(--space-6) var(--space-6) var(--space-4); }
+.calendar-month .section-head { align-items: center; margin-bottom: var(--space-5); }
+.calendar-month .section-head h2 a { color: inherit; text-decoration: none; }
+.calendar-month .section-head h2 a:hover { color: var(--accent); }
+/* Seven equal columns: the one fixed grid here, because weeks must line up. */
+.month-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.month-grid th { padding: 0 0 var(--space-3); color: var(--muted); font-size: var(--text-2xs); font-weight: 600; text-align: left; text-transform: uppercase; letter-spacing: .04em; }
+.month-day {
+  height: 6.5rem;
+  padding: var(--space-2);
+  overflow: hidden;
+  border-top: 1px solid var(--line-2);
+  vertical-align: top;
+}
+.month-day + .month-day { border-left: 1px solid var(--line-2); }
+.month-day.is-weekend { background: color-mix(in srgb, var(--bg-tint) 45%, transparent); }
+.month-day.is-outside .month-date { color: var(--muted-2); }
+.month-day.is-past :is(.month-span, .month-item, .month-mark) { opacity: .62; }
+.month-day.is-selected { box-shadow: inset 0 0 0 2px var(--accent); }
+/* The date and the day's marks share one row, so marks take no height of
+   their own and the bars under them stay level across the week. */
+.month-day-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin-bottom: var(--space-1); }
+.month-date {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  margin-right: var(--space-1);
+  padding: 0 var(--space-2);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+.month-date:hover { background: var(--bg-tint); }
+.month-day.is-today .month-date { background: var(--accent); color: var(--surface); }
+/* A mark is a dot in its source's colour: filled once done, a ring while
+   planned, a ring struck through once missed. Shape carries the state, so the
+   source's colour stays the only colour. */
+.month-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--source); }
+.month-item-dot { display: none; }
+.month-mark.is-planned { background: transparent; box-shadow: inset 0 0 0 1.5px var(--source); }
+.month-mark.is-missed {
+  background: linear-gradient(135deg, transparent 44%, var(--source) 44% 56%, transparent 56%);
+  box-shadow: inset 0 0 0 1.5px var(--source);
+  opacity: .6;
+}
+/* A span is one bar across its days: rounded only where it starts and ends,
+   titled where it starts or where a week begins. A gap holds the lane open. */
+.month-span {
+  display: block;
+  height: 1.25rem;
+  margin: 0 calc(-1 * var(--space-2)) var(--space-1);
+  padding: 0 var(--space-3);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--source) 18%, var(--surface));
+  color: var(--ink);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  line-height: 1.25rem;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.month-span.is-start { margin-left: 0; border-left: 3px solid var(--source); border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.month-span.is-end { margin-right: 0; border-top-right-radius: var(--radius-sm); border-bottom-right-radius: var(--radius-sm); }
+.month-span.is-gap { visibility: hidden; }
+.month-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--text-2xs);
+  line-height: 1.25rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.month-item > span { overflow: hidden; text-overflow: ellipsis; }
+.month-item::before { content: ""; flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--source); transform: translateY(-1px); }
+.month-item.is-planned::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--source); }
+.month-item time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.month-item:hover > span { color: var(--accent); }
+/* All day: a filled block in its colour, as a one-day bar. */
+.month-item.is-all-day { padding: 0 var(--space-3); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--source) 18%, var(--surface)); font-weight: 600; }
+.month-item.is-all-day::before { content: none; }
+.month-more { display: block; color: var(--muted); font-size: var(--text-3xs); font-weight: 600; text-decoration: none; }
+.month-more:hover { color: var(--accent); }
+/* The aside: the chosen day over the list of calendars. Built from the
+   shared head, record rows and facts; only a source's swatch is the calendar's. */
+/* Beside the month it keeps its basis: the month's grow outweighs it a
+   thousand to one. Wrapped under the month it is alone on its line and takes
+   the width, its day and its list of calendars side by side. */
+.calendar-aside { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); align-items: start; gap: var(--layout-gap); }
+.day-panel, .calendar-sources { padding: var(--space-5); }
+.day-panel .section-head { margin-bottom: var(--space-4); }
+.day-panel-entry { margin-bottom: var(--space-5); padding-bottom: var(--space-5); border-bottom: 1px solid var(--line-2); }
+.day-panel-entry h3 { margin: 0 0 var(--space-2); }
+.day-panel-entry p { margin: 0 0 var(--space-2); font-size: var(--text-sm); }
+.day-panel-entry .page-actions { margin: var(--space-4) 0 0; }
+.day-panel-source, .calendar-sources h3 { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-4) 0 var(--space-2); color: var(--muted); font-size: var(--text-2xs); font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+.calendar-sources h3:first-child { margin-top: 0; }
+.calendar-swatch { width: 8px; height: 8px; border-radius: 2px; background: var(--source); }
+.calendar-sources ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.calendar-sources form { margin: 0; }
+/* A source is a toggle: the whole row is the button, its box filled in its colour when checked. */
+.calendar-source {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  box-shadow: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.calendar-source:hover { background: var(--bg-tint); border: 0; }
+.calendar-source > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-source small { color: var(--muted-2); font-size: var(--text-2xs); font-variant-numeric: tabular-nums; }
+.calendar-source .calendar-source-failure { color: var(--warn); }
+.calendar-check { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1.5px var(--source); }
+.calendar-source[aria-pressed="true"] .calendar-check { background: var(--source); }
+.calendar-source[aria-pressed="false"] > span { color: var(--muted); }
+/* Compact, as the dashboard shows it: where things are, not what. Bars are
+   slivers and lines fold away; the day opens the calendar for the rest. */
+.calendar-month.is-compact .month-day { height: 2.5rem; padding: var(--space-1); }
+.calendar-month.is-compact :is(.month-item, .month-more) { display: none; }
+.calendar-month.is-compact .month-item-dot { display: inline-block; }
+/* A bar reaches across its cell's padding to meet the next, and no further. */
+.calendar-month.is-compact .month-span { height: 4px; margin: 0 calc(-1 * var(--space-1)) var(--space-1); padding: 0; background: var(--source); font-size: 0; }
+.calendar-month.is-compact .month-span.is-end { margin-right: 0; }
+.calendar-month.is-compact .month-span.is-start { margin-left: 0; border-left: 0; }
+.calendar-month.is-compact .month-date { min-width: 1.4rem; height: 1.4rem; font-size: var(--text-2xs); }
+.calendar-month.is-compact .month-mark { width: 6px; height: 6px; }
+/* A phone shows where things are, not what: dots and slivers, and the day
+   panel under the month says the rest. */
+@container month (max-width: 34rem) {
+  .month-day { height: 3.25rem; }
+  :is(.month-item, .month-more) { display: none; }
+  .month-item-dot { display: inline-block; }
+  .month-span { height: 4px; padding: 0; background: var(--source); font-size: 0; }
+  .month-date { min-width: 1.4rem; height: 1.4rem; }
+  .month-of { display: none; }
+}
 
 /* Week plan: the recurring shape of a week, in the calendar's own columns. */
 .week-plan-card { margin: 0; }
@@ -2291,6 +2473,11 @@ a.kpi:hover { background: var(--surface-2); }
 .field label { display: block; font-weight: 600; margin-bottom: var(--space-2); font-size: var(--text-sm); }
 .field input, .field select, .field textarea { width: 100%; }
 .field textarea { resize: vertical; min-height: 80px; }
+/* A field that is the form's subject (a title, a note) takes the whole row. */
+.form .field.is-wide { grid-column: 1 / -1; }
+/* A field shown only when another's value calls for it (app.js). The wrapper
+   adds no box, so the fields inside keep their place in the grid. */
+.form [data-when]:not([hidden]) { display: contents; }
 .field .help { color: var(--muted); font-size: var(--text-xs); margin: var(--space-2) 0 0; }
 .field .check-row {
   display: flex;

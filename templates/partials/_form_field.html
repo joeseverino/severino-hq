@@ -3,7 +3,7 @@
 A field that causes something states it here, from the provider's own
 declaration. Nothing in this template knows which fields those are.
 {% endcomment %}
-<div class="field{% if field.errors %} has-errors{% endif %}"{% if field.field.change_effect %} data-change-effect="{{ field.field.change_effect }}"{% endif %}>
+<div class="field{% if field.errors %} has-errors{% endif %}{% if field.field.wide %} is-wide{% endif %}"{% if field.field.change_effect %} data-change-effect="{{ field.field.change_effect }}"{% endif %}>
   <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
   {{ field }}
   {% if field.help_text %}<p class="help">{{ field.help_text|safe }}</p>{% endif %}
