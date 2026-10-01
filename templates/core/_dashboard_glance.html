@@ -1,73 +1,70 @@
 
 <section class="dashboard-glance" data-dashboard-glance data-source="{% url 'dashboard_glance' %}">
-  <div class="glance-controls">
-    <details class="glance-settings" data-menu>
-      <summary aria-label="Dashboard settings">
-        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h10m4 0h2M4 17h2m4 0h10M14 4v6M8 14v6"/></svg>
-      </summary>
-      <form method="post" action="{% url 'dashboard_glance_settings' %}">
-        {% csrf_token %}
-        <label>
-          Homelab label
-          <input name="infrastructure_label" maxlength="40" value="{{ dashboard_glance_settings.infrastructure_label }}">
-        </label>
-        <label>
-          Weather location
-          <input name="weather_point" maxlength="64" placeholder="latitude, longitude" value="{{ dashboard_glance_settings.weather_point }}">
-          <span>Latitude, longitude. Longitudes west of Greenwich are negative. Leave blank to hide.</span>
-        </label>
-        <label>
-          Weather label
-          <input name="weather_label" maxlength="40" value="{{ dashboard_glance_settings.weather_label }}">
-        </label>
-        <button class="btn primary" type="submit">Save</button>
-      </form>
-    </details>
-    <form method="post" action="{% url 'dashboard_glance' %}" data-dashboard-glance-refresh>
-      {% csrf_token %}
-      <button class="glance-refresh" type="submit" aria-label="Refresh at-a-glance information"{% if not dashboard_can_refresh %} disabled{% endif %}>
-        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
-      </button>
-    </form>
-  </div>
+  {% comment %}
+  The strip refreshes itself when a reading is due; asking by hand is in each
+  panel's popover, and posts through this one form.
+  {% endcomment %}
+  <form id="glance-refresh" method="post" action="{% url 'dashboard_glance' %}" data-dashboard-glance-refresh hidden>{% csrf_token %}</form>
   <div class="glance-panels">
     {% for panel in dashboard_panels %}
-      <details class="glance-panel status-{{ panel.payload.status|default:'neutral' }}{% if panel.due %} is-due{% endif %}{% if panel.outdated %} is-outdated{% endif %}" data-menu{% if panel.refreshing %} data-refreshing{% endif %}>
+      <details data-panel="{{ panel.id }}" class="glance-panel status-{{ panel.payload.status|default:'neutral' }}{% if panel.due %} is-due{% endif %}{% if panel.outdated %} is-outdated{% endif %}" data-menu{% if panel.refreshing %} data-refreshing{% endif %}>
         <summary class="glance-panel-head">
           <span class="glance-symbol">{% include "partials/_icon.html" with name=panel.icon %}</span>
-          <span class="glance-readings">
-            {% for metric in panel.readings|slice:":2" %}
-              <span class="glance-reading" title="{{ metric.label }}{% if metric.detail %} · {{ metric.detail }}{% endif %}">
-                <span class="{% if panel.head_labels %}glance-reading-label{% else %}visually-hidden{% endif %}">{{ metric.short_label }}</span>
-                <strong>{{ metric.value }}</strong>
-                {% if metric.percent != None %}<meter min="0" max="100" value="{{ metric.percent }}" aria-label="{{ metric.label }}">{{ metric.value }}</meter>{% endif %}
-              </span>
-            {% endfor %}
-            {% for metric in panel.readings %}{% if metric.alert %}<span class="glance-alert">{{ metric.value|counted:"alert" }}</span>{% endif %}{% endfor %}
-          </span>
-          <span class="glance-freshness">
-            {% if panel.refreshing %}{% firstof "Refreshing" as state %}{% elif panel.outdated %}{% firstof "Out of date" as state %}{% else %}{% firstof "Current" as state %}{% endif %}
-            <i class="glance-dot" title="{{ state }}"></i><span class="visually-hidden">{{ state }}.</span>
-            <span class="glance-name">{{ panel.label }}</span>
-            <span class="glance-age">{% if panel.observed_at %}· {% if panel.outdated %}as of {% endif %}<time datetime="{{ panel.observed_at|date:'c' }}" title="{{ panel.observed_at }}">{{ panel.observed_at|ago }}</time>{% elif not panel.refreshing %}· No reading yet{% endif %}</span>
-          </span>
+          {% if panel.lead %}
+            <span class="glance-lead" title="{{ panel.lead.label }}{% if panel.lead.detail %} · {{ panel.lead.detail }}{% endif %}"><strong>{{ panel.lead.value }}</strong>{% if panel.head_labels %} {{ panel.lead.short_label }}{% endif %}</span>
+            <span class="glance-caption">
+              {% if panel.alert %}<span class="glance-alert">{{ panel.alert }}</span>{% endif %}
+              {% for metric in panel.caption %}<span title="{{ metric.label }}{% if metric.detail %} · {{ metric.detail }}{% endif %}">{% if panel.head_labels %}{{ metric.short_label }} {% endif %}{{ metric.value }}</span>{% endfor %}
+            </span>
+          {% else %}
+            <span class="glance-lead glance-lead-empty">{{ panel.label }}</span>
+            <span class="glance-caption">{% if panel.refreshing %}Refreshing…{% else %}No reading yet{% endif %}</span>
+          {% endif %}
+          {% comment %}Said only when it is news: a current reading needs no age.{% endcomment %}
+          {% if panel.refreshing or panel.outdated or panel.payload.refresh_failed %}
+            <span class="glance-freshness">
+              {% if panel.refreshing %}Refreshing{% elif panel.payload.refresh_failed %}Refresh failed{% elif panel.observed_at %}Out of date · as of <time datetime="{{ panel.observed_at|date:'c' }}" title="{{ panel.observed_at }}">{{ panel.observed_at|ago }}</time>{% else %}Out of date{% endif %}
+            </span>
+          {% endif %}
         </summary>
         <div class="glance-expanded">
-        {% if panel.payload.summary %}<p class="glance-summary">{{ panel.payload.summary }}</p>{% endif %}
-        {% if panel.payload.refresh_failed and panel.payload.metrics %}<p class="glance-freshness">The last refresh failed ({{ panel.payload.refresh_failed }}); this is the reading from {% if panel.observed_at %}{{ panel.observed_at|ago }}{% else %}before it{% endif %}.</p>{% endif %}
-        {% if not panel.observed_at and panel.payload.metrics %}<p class="glance-freshness">Observation time unavailable{% if panel.refreshing %} · Refreshing…{% endif %}</p>{% endif %}
-        {% if panel.payload.metrics %}
-          <dl class="glance-metrics">
-            {% for metric in panel.readings %}
-              <div title="{{ metric.detail }}">
-                <dt>{{ metric.label }}</dt>
-                <dd>{{ metric.value }}</dd>
-              </div>
-            {% endfor %}
-          </dl>
-        {% else %}
-          <p>{% if panel.refreshing %}Refreshing…{% elif panel.payload.summary %}{{ panel.payload.summary }}{% else %}{{ panel.empty }}{% endif %}</p>
-        {% endif %}
+          <header class="glance-expanded-head">
+            <strong>{{ panel.label }}</strong>
+            {% if panel.payload.summary %}<span>{{ panel.payload.summary }}</span>{% endif %}
+            {% if panel.observed_at %}<time datetime="{{ panel.observed_at|date:'c' }}" title="{{ panel.observed_at }}">Read {{ panel.observed_at|ago }}</time>{% endif %}
+          </header>
+          {% if panel.payload.refresh_failed and panel.payload.metrics %}<p class="glance-note">The last refresh failed ({{ panel.payload.refresh_failed }}); this is the reading from {% if panel.observed_at %}{{ panel.observed_at|ago }}{% else %}before it{% endif %}.</p>{% endif %}
+          {% if panel.payload.metrics %}
+            <dl class="glance-metrics">
+              {% for metric in panel.readings %}
+                <div>
+                  <dt>{{ metric.label }}</dt>
+                  <dd>{{ metric.value }}</dd>
+                  {% if metric.detail %}<dd class="glance-metric-detail">{{ metric.detail }}</dd>{% endif %}
+                </div>
+              {% endfor %}
+            </dl>
+          {% else %}
+            <p class="glance-note">{% if panel.refreshing %}Refreshing…{% elif panel.payload.summary %}{{ panel.payload.summary }}{% else %}{{ panel.empty }}{% endif %}</p>
+          {% endif %}
+          {% if panel.payload.hours %}
+            <ol class="glance-hours" aria-label="The hours ahead">
+              {% for hour in panel.payload.hours %}
+                <li title="{{ hour.forecast }}">
+                  <span>{{ hour.time }}</span>
+                  <strong>{{ hour.temperature }}</strong>
+                  <small{% if hour.precipitation != "0%" %} class="is-wet"{% endif %}>{{ hour.precipitation }}</small>
+                </li>
+              {% endfor %}
+            </ol>
+          {% endif %}
+          <footer class="glance-expanded-foot">
+            {% if panel.link %}<a href="{{ panel.link.url }}">{{ panel.link.label }} →</a>{% endif %}
+            <span>
+              {% if dashboard_can_refresh %}<button class="glance-refresh" type="submit" form="glance-refresh">Refresh now</button>{% endif %}
+              <a href="{% url 'dashboard_glance_settings' %}">Settings</a>
+            </span>
+          </footer>
         </div>
       </details>
     {% endfor %}

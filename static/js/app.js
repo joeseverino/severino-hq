@@ -631,7 +631,29 @@ const hqBindDashboardGlance = (root) => {
     const currentPanels = current.querySelector(".glance-panels");
     const nextPanels = next.querySelector(".glance-panels");
     if (!currentPanels || !nextPanels) return current;
-    currentPanels.replaceWith(nextPanels);
+    // Only a panel that changed is swapped, so a poll that finds nothing new
+    // leaves the page exactly as it was, and an open popover stays open.
+    const shown = new Map(
+      [...currentPanels.querySelectorAll("[data-panel]")].map((panel) => [panel.dataset.panel, panel]),
+    );
+    const order = (panels) => [...panels.querySelectorAll("[data-panel]")].map((panel) => panel.dataset.panel).join();
+    const markup = (panel) => {
+      const copy = panel.cloneNode(true);
+      copy.removeAttribute("open");
+      return copy.outerHTML;
+    };
+    nextPanels.querySelectorAll("[data-panel]").forEach((panel) => {
+      const was = shown.get(panel.dataset.panel);
+      if (was) panel.open = was.open;
+    });
+    if (order(currentPanels) !== order(nextPanels)) {
+      currentPanels.replaceWith(nextPanels);
+      return current;
+    }
+    nextPanels.querySelectorAll("[data-panel]").forEach((panel) => {
+      const was = shown.get(panel.dataset.panel);
+      if (markup(was) !== markup(panel)) was.replaceWith(panel);
+    });
     return current;
   };
 

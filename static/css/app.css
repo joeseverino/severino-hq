@@ -619,18 +619,16 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    controls beside it different heights. */
 .page-head .page-actions { margin-left: auto; display: flex; gap: var(--space-4); flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
 .page-head .page-actions > * { white-space: nowrap; }
-/* One strip: each panel is a segment, the controls are its last segment. A
-   panel opens in place into a popover; the strip itself never changes height. */
+/* Ambient readings beside the greeting: no frame of their own, each panel a
+   number worth reading at a distance and one quiet line under it, divided by
+   hairlines. A panel opens in place into a popover; the strip never changes
+   height. */
 .dashboard-glance {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   margin-left: auto;
   min-width: 0;
   max-width: 100%;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
 }
 .page-head:has(.dashboard-glance) { align-items: center; }
 .glance-panels { display: flex; min-width: 0; }
@@ -638,99 +636,54 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .glance-panel + .glance-panel { border-left: 1px solid var(--line-2); }
 .glance-panel-head {
   display: grid;
-  grid-template-columns: 18px minmax(0, auto);
+  grid-template-columns: 22px minmax(0, auto);
   align-items: center;
-  gap: 1px var(--space-5);
-  height: 100%;
-  padding: var(--space-4) var(--space-7);
+  gap: 0 var(--space-5);
+  padding: var(--space-3) var(--space-7);
   cursor: pointer;
   list-style: none;
-  border-radius: calc(var(--radius) - 1px);
+  border-radius: var(--radius);
 }
 .glance-panel-head:hover, .glance-panel[open] > .glance-panel-head { background: var(--surface-2); }
 .glance-panel-head::-webkit-details-marker { display: none; }
 .glance-panel-head::marker { content: ""; }
 .glance-panel-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.glance-symbol { grid-row: 1 / span 2; color: var(--muted); }
-.glance-symbol .icon { width: 18px; height: 18px; }
-/* A panel's name gives way before the strip does, so a long name cannot run
-   past its segment and under the one beside it. */
-.glance-name { min-width: 0; overflow: hidden; color: var(--muted); font-weight: 600; text-overflow: ellipsis; }
-.glance-readings { display: flex; align-items: baseline; gap: var(--space-5); min-width: 0; white-space: nowrap; }
-.glance-reading { display: inline-flex; align-items: baseline; gap: var(--space-2); font-size: var(--text-xs); }
-.glance-reading strong { color: var(--ink); font-size: var(--text-sm); font-weight: 650; font-variant-numeric: tabular-nums; }
-.glance-reading-label { color: var(--muted); font-size: var(--text-2xs); }
-.glance-reading meter { display: none; }
-.glance-alert { color: var(--attn); font-size: var(--text-2xs); }
-.glance-freshness { grid-column: 2; display: flex; min-width: 0; align-items: center; gap: var(--space-2); color: var(--muted-2); font-size: var(--text-3xs); white-space: nowrap; }
-.glance-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ok); }
-.glance-panel.is-outdated .glance-dot { background: var(--warn); }
-.glance-panel.is-outdated .glance-reading strong, .glance-panel.is-outdated .glance-reading-label { color: var(--muted-2); }
-.glance-panel.is-outdated .glance-age { color: var(--warn); }
-.glance-panel[data-refreshing] .glance-dot { background: var(--muted-2); animation: glance-pulse 1.2s ease-in-out infinite; }
-.glance-expanded { position: absolute; top: calc(100% + 6px); right: 0; z-index: 5; width: min(320px, calc(100vw - 32px)); padding: var(--space-6); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow); }
-.glance-summary { color: var(--muted); font-size: var(--text-xs); }
-.glance-expanded > p { margin: 0 0 var(--space-3); color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
+.glance-symbol { grid-row: 1 / span 3; align-self: center; color: var(--muted-2); }
+.glance-symbol .icon { width: 22px; height: 22px; }
+.glance-lead { color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
+.glance-lead strong { color: var(--ink); font-size: var(--text-4xl); font-weight: 650; line-height: 1.15; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.glance-lead-empty { color: var(--muted); font-size: var(--text-sm); font-weight: 600; }
+/* One line, its parts divided by a middle dot the browser draws, so a part
+   that is absent leaves no stray separator. */
+.glance-caption { display: flex; min-width: 0; gap: var(--space-2); color: var(--muted); font-size: var(--text-2xs); white-space: nowrap; }
+.glance-caption > span + span::before { content: "·"; margin-right: var(--space-2); color: var(--muted-2); }
+.glance-alert { color: var(--attn); font-weight: 650; }
+.glance-freshness { color: var(--warn); font-size: var(--text-3xs); white-space: nowrap; }
+.glance-panel[data-refreshing] .glance-freshness { color: var(--muted-2); }
+.glance-panel.is-outdated .glance-lead strong { color: var(--muted); }
+.glance-expanded { position: absolute; top: calc(100% + 6px); right: 0; z-index: 5; display: grid; gap: var(--space-6); width: min(340px, calc(100vw - 32px)); padding: var(--space-6) var(--space-7); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.glance-expanded-head { display: grid; gap: 1px; font-size: var(--text-xs); color: var(--muted); }
+.glance-expanded-head strong { color: var(--ink); font-size: var(--text-sm); }
+.glance-expanded-head time { color: var(--muted-2); font-size: var(--text-3xs); }
+.glance-note { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
 .glance-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5) var(--space-7); margin: 0; }
 .glance-metrics > div { display: grid; gap: 1px; min-width: 0; }
 .glance-metrics dt { color: var(--muted); font-size: var(--text-3xs); font-weight: 500; white-space: nowrap; }
 .glance-metrics dd { margin: 0; overflow: hidden; color: var(--ink); font-size: var(--text-sm); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-.glance-panel.status-serious .glance-dot { background: var(--danger); }
-.glance-controls {
-  order: 2;
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: 0 var(--space-3);
-  border-left: 1px solid var(--line-2);
-}
-.glance-controls > form { margin: 0; }
-.glance-settings { position: relative; }
-.glance-settings > summary,
-.glance-refresh {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  place-items: center;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: none;
-  box-shadow: none;
-  color: var(--muted);
-  cursor: pointer;
-  appearance: none;
-}
-.glance-settings > summary { list-style: none; }
-.glance-settings > summary::-webkit-details-marker { display: none; }
-.glance-settings > summary::marker { content: ""; }
-.glance-settings > summary svg,
-.glance-refresh svg { display: block; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.glance-refresh:hover, .glance-settings > summary:hover, .glance-settings[open] > summary { background: var(--bg-tint); color: var(--ink); }
-.glance-refresh:disabled { opacity: .4; cursor: default; background: none; }
-.glance-refresh:focus-visible, .glance-settings > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.glance-settings > form {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 6;
-  display: grid;
-  gap: var(--space-5);
-  width: 280px;
-  padding: var(--space-7);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
-.glance-settings label { display: grid; gap: var(--space-2); color: var(--ink-2); font-size: var(--text-2xs); font-weight: 600; }
-.glance-settings input { width: 100%; padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-sm); font: inherit; font-size: var(--text-xs); }
-.glance-settings label span { color: var(--muted); font-size: var(--text-3xs); font-weight: 400; }
-.glance-settings .btn { justify-self: end; }
-.dashboard-glance.is-loading .glance-refresh { pointer-events: none; }
-.dashboard-glance.is-loading .glance-refresh svg { transform-origin: 50% 50%; animation: glance-spin 800ms linear infinite; }
-@keyframes glance-spin { to { transform: rotate(360deg); } }
-@keyframes glance-pulse { 50% { opacity: .35; } }
+.glance-metrics dd.glance-metric-detail { color: var(--muted); font-size: var(--text-3xs); font-weight: 400; }
+/* The hours ahead, one column each, scrolling sideways in the popover. */
+.glance-hours { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(2.6rem, 1fr); margin: 0; padding: var(--space-4) 0 0; overflow-x: auto; overflow-y: hidden; list-style: none; border-top: 1px solid var(--line-2); }
+.glance-hours li { display: grid; justify-items: center; gap: 1px; font-size: var(--text-3xs); color: var(--muted); }
+.glance-hours strong { color: var(--ink); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.glance-hours small { color: var(--muted-2); }
+.glance-hours small.is-wet { color: var(--accent); font-weight: 600; }
+.glance-link { justify-self: start; font-size: var(--text-xs); }
+.glance-expanded-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line-2); font-size: var(--text-xs); }
+.glance-expanded-foot > span { display: flex; gap: var(--space-5); margin-left: auto; }
+/* A link in look: the panel's one action besides going somewhere. */
+.glance-refresh { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; color: var(--accent); font: inherit; cursor: pointer; }
+.glance-refresh:hover { border: 0; background: none; text-decoration: underline; }
+.dashboard-glance.is-loading .glance-refresh { pointer-events: none; opacity: .5; }
 
 /* A page declares its sections; the shell owns how they are traversed. Like
    the global navigation this is one row at every width, horizontally
@@ -2285,28 +2238,17 @@ a.kpi:hover { background: var(--surface-2); }
   .glance-panel { flex: 1; }
   /* Popovers hang from the strip's right edge, which is the page's, rather
      than from a segment that may sit anywhere along it. */
-  .glance-panel, .glance-settings { position: static; }
-  .glance-expanded, .glance-settings > form { right: 0; width: min(320px, 100%); }
+  .glance-panel { position: static; }
+  .glance-expanded { right: 0; width: min(340px, 100%); }
 }
 
 @media (max-width: 640px) {
   .glance-panel-head { padding-inline: var(--space-5); column-gap: var(--space-3); }
-  .glance-reading-label, .glance-age { display: none; }
-  /* A phone has room for the readings or for two buttons side by side, not
-     both: the buttons stack, and a reading that still does not fit is cut at
-     the segment's edge rather than drawn under its neighbour. */
-  .glance-controls { flex-direction: column; justify-content: center; gap: 0; padding: 0 var(--space-1); }
-  .glance-settings > summary, .glance-refresh { width: 26px; height: 22px; }
-  .glance-readings { gap: var(--space-3); overflow: hidden; }
-  /* Three panels do not fit one phone row with their readings: they wrap to
-     two rows rather than cut a reading off at the segment's edge. */
+  /* Panels wrap to two rows rather than cut a reading off; the line under a
+     lead gives way at its end, never the lead. */
   .glance-panels { flex-wrap: wrap; }
   .glance-panel { flex: 1 1 9rem; }
-  /* The first reading gives way ("Partly S…"), never the last: a
-     temperature or a memory figure is the number the strip exists for. */
-  .glance-reading { flex-shrink: 0; }
-  .glance-reading:first-child { flex-shrink: 1; min-width: 0; }
-  .glance-reading:first-child strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .glance-caption { overflow: hidden; text-overflow: ellipsis; }
   .user-menu .user-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 

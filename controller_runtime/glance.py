@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from application.labels import human_bytes as _human_bytes
+from application.timestamps import moment
 from application.ui import MISSING
 from control_plane.providers import controller_id
 from control_plane.provider_adapters.contracts import ProviderError
@@ -163,30 +164,128 @@ def _portainer_glance() -> dict[str, Any]:
                 {
                     "key": machine_key,
                     "status": "good",
-                    "summary": f"{running} containers running",
-                    "metrics": [
-                        {
-                            "label": "Container CPU",
-                            "value": f"{cpu_percent:.0f}%",
-                            "detail": f"{cores} cores",
-                        },
-                        {
-                            "label": "Container memory",
-                            "value": _human_bytes(memory_used),
-                            "detail": f"of {_human_bytes(memory_total)} available",
-                        },
-                        {
-                            "label": "Docker storage",
-                            "value": _human_bytes(storage_used),
-                            "detail": "layers, volumes, and build cache",
-                        },
-                    ],
+                    "summary": f"{cores} cores · {_human_bytes(memory_total)} memory",
+                    "metrics": _container_metrics(
+                        running, cpu_percent, cores, memory_used, memory_total, storage_used
+                    ),
                 }
             )
     return {
         "panel_id": "infrastructure",
         "machines": machines,
     }
+
+
+def _container_metrics(
+    running: int,
+    cpu_percent: float,
+    cores: int,
+    memory_used: int,
+    memory_total: int,
+    storage_used: int,
+) -> list[dict[str, str]]:
+    """What the containers take of their machine.
+
+    Docker states a container's CPU as a share of one core, so the sum across
+    containers is divided by the cores to say how much of the machine they use;
+    memory is a share of the machine's memory, with the amounts beside it.
+    """
+
+    machine_cpu = cpu_percent / cores if cores else cpu_percent
+    memory_share = memory_used / memory_total * 100 if memory_total else 0
+    return [
+        {"label": "Containers", "value": str(running), "detail": "running"},
+        {"label": "CPU", "value": f"{machine_cpu:.0f}%", "detail": f"of {cores} cores"},
+        {
+            "label": "Memory",
+            "value": f"{memory_share:.0f}%",
+            "detail": f"{_human_bytes(memory_used)} of {_human_bytes(memory_total)}",
+        },
+        {
+            "label": "Docker storage",
+            "value": _human_bytes(storage_used),
+            "detail": "layers, volumes and build cache",
+        },
+    ]
+
+
+# Hours of the forecast the dashboard looks ahead, and the chance of rain
+# worth naming.
+_LOOKAHEAD_HOURS = 12
+_RAIN_CHANCE = 30
+
+
+def _hour(period: dict[str, Any]) -> str:
+    """``4 PM`` for a period's start, in the point's own time."""
+
+    start = moment(period.get("startTime"), naive="keep")
+    if start is None:
+        return ""
+    return f"{start.hour % 12 or 12} {'AM' if start.hour < 12 else 'PM'}"
+
+
+def _chance(period: dict[str, Any]) -> int:
+    value = (period.get("probabilityOfPrecipitation") or {}).get("value")
+    return int(value) if isinstance(value, (int, float)) else 0
+
+
+def _ahead(periods: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """The next hours, as the dashboard lists them."""
+
+    return [
+        {
+            "time": _hour(period),
+            "temperature": f"{period.get('temperature', MISSING)}°",
+            "forecast": str(period.get("shortForecast") or ""),
+            "precipitation": f"{_chance(period)}%",
+        }
+        for period in periods
+    ]
+
+
+def _outlook(periods: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """The range ahead and when rain next comes, from the hourly periods."""
+
+    temperatures = [
+        period["temperature"]
+        for period in periods
+        if isinstance(period.get("temperature"), (int, float))
+    ]
+    found = []
+    if temperatures:
+        found.append(
+            {
+                "label": "Range",
+                "value": f"{min(temperatures)}–{max(temperatures)}°",
+                "detail": f"next {len(periods)} hours",
+            }
+        )
+    rain = next((period for period in periods if _chance(period) >= _RAIN_CHANCE), None)
+    if rain is not None:
+        found.append(
+            {
+                "label": "Rain",
+                "value": f"{'Now' if rain is periods[0] else _hour(rain)} · {_chance(rain)}%",
+                "detail": str(rain.get("shortForecast") or ""),
+            }
+        )
+    return found
+
+
+def _alert(features: list[Any]) -> list[dict[str, str]]:
+    """The active alert by name, with how many more there are."""
+
+    if not features:
+        return []
+    first = (features[0] or {}).get("properties") or {}
+    more = f" +{len(features) - 1}" if len(features) > 1 else ""
+    return [
+        {
+            "label": "Alerts",
+            "value": f"{first.get('event') or 'Weather alert'}{more}",
+            "detail": str(first.get("headline") or ""),
+        }
+    ]
 
 
 def _nws_glance(point: str) -> dict[str, Any]:
@@ -215,7 +314,11 @@ def _nws_glance(point: str) -> dict[str, Any]:
     hourly = (
         provider_http.request_json(str(properties.get("forecastHourly") or ""), headers=headers) or {}
     )
-    periods = (hourly.get("properties") or {}).get("periods") or []
+    periods = [
+        period
+        for period in (hourly.get("properties") or {}).get("periods") or []
+        if isinstance(period, dict)
+    ][:_LOOKAHEAD_HOURS]
     current = periods[0] if periods else {}
     alerts = (
         provider_http.request_json(
@@ -241,26 +344,21 @@ def _nws_glance(point: str) -> dict[str, Any]:
             "value": f"{current.get('temperature', MISSING)}°{current.get('temperatureUnit', 'F')}",
             "detail": str(current.get("windChill") or ""),
         },
+        *_outlook(periods),
         {
             "label": "Wind",
             "value": f"{current.get('windDirection', '')} {current.get('windSpeed', MISSING)}".strip(),
             "detail": "NWS hourly forecast",
         },
+        *_alert(active),
     ]
-    if active:
-        metrics.append(
-            {
-                "label": "Alerts",
-                "value": str(len(active)),
-                "detail": "active for this point",
-            }
-        )
     return {
         "panel_id": "weather",
         "point": f"{latitude:.4f},{longitude:.4f}",
         "status": status,
         "summary": location or "National Weather Service",
         "metrics": metrics,
+        "hours": _ahead(periods),
     }
 
 

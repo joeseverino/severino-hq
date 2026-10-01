@@ -236,12 +236,12 @@ class ActivityActorTests(TestCase):
 
 
 class GlanceSettingsLinkTests(TestCase):
-    def test_following_the_settings_link_lands_on_the_dashboard(self):
+    def test_following_the_settings_link_opens_the_settings(self):
         self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
 
         response = self.client.get(reverse("dashboard_glance_settings"))
 
-        self.assertRedirects(response, reverse("dashboard"), fetch_redirect_response=False)
+        self.assertContains(response, 'name="weather_point"')
 
 
 class ReadableValueTests(TestCase):

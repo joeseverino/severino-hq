@@ -177,8 +177,14 @@ class DashboardGlanceView(LoginRequiredMixin, View):
 
 class DashboardGlanceSettingsView(LoginRequiredMixin, View):
     def get(self, request):
-        # The settings are a panel on the dashboard; this address only saves them.
-        return redirect("dashboard")
+        return render(
+            request,
+            "core/dashboard_glance_settings.html",
+            {
+                **page_context("Dashboard settings", trail=(("Dashboard", reverse("dashboard")),)),
+                "settings": dashboard_configuration(),
+            },
+        )
 
     def post(self, request):
         try:
