@@ -75,8 +75,7 @@ if [ -z "${failed}" ]; then
   summary="Every gate passed."
 else
   # The logs of what failed, read only to be matched against the catalog.
-  # A log that cannot be read is said, by status alone, so the diagnosis that
-  # follows is not mistaken for one made from the log.
+  # A log that cannot be read is reported by the API's status line alone.
   logs="$(printf '%s\n' "${failed}" | while IFS=$'\t' read -r id name _result; do
     [ "${id}" != 0 ] || continue
     if ! scripts/job-log.sh "${id}" 2>"${RUNNER_TEMP:-/tmp}/log-error"; then

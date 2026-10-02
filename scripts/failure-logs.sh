@@ -22,7 +22,7 @@ download="$(mktemp -d)"
 trap 'rm -rf "$download"' EXIT
 gh run download "$run" --name failure-logs --dir "$download"
 
-# Read before decrypting, so an unanswered unlock is said as that.
+# Read first, so a 1Password unlock that times out is reported as one.
 case "$identity" in
   op://*) key="$(op read "$identity")" || { echo "1Password did not release the identity; approve the unlock and run again." >&2; exit 1; } ;;
   *) key="$(cat "$identity")" ;;
