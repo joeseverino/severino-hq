@@ -45,7 +45,7 @@ case "${RESULT:?}" in
         --jq '[.jobs[] | select(.name == "Deploy")] | first | .id // empty')"
       logs=""
       for _ in 1 2 3 4 5 6; do
-        [ -n "${job}" ] && logs="$(gh api "repos/${repo}/actions/jobs/${job}/logs" 2>/dev/null || true)"
+        [ -n "${job}" ] && logs="$(scripts/job-log.sh "${job}" 2>/dev/null || true)"
         [ -n "${logs}" ] && break
         sleep 5
       done

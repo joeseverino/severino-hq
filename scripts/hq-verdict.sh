@@ -79,7 +79,7 @@ else
   # follows is not mistaken for one made from the log.
   logs="$(printf '%s\n' "${failed}" | while IFS=$'\t' read -r id name _result; do
     [ "${id}" != 0 ] || continue
-    if ! gh api "repos/${repo}/actions/jobs/${id}/logs" 2>"${RUNNER_TEMP:-/tmp}/log-error"; then
+    if ! scripts/job-log.sh "${id}" 2>"${RUNNER_TEMP:-/tmp}/log-error"; then
       echo "::warning title=Log not read::${name}: $(head -n 1 "${RUNNER_TEMP:-/tmp}/log-error")" >&2
     fi
   done)"
