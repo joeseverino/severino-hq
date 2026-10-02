@@ -108,6 +108,9 @@ class PromotionTests(SimpleTestCase):
                     self.assertIn("if: env.PROVEN == ''", step)
         promote = image[named(image, "Promote the image its pull request proved")]
         self.assertIn("if: env.PROVEN != ''", promote)
+        # imagetools create re-wraps the manifest under a new, unsigned digest.
+        self.assertIn('scripts/retag.sh "$PROVEN"', promote)
+        self.assertNotIn("imagetools create", self.jobs["image"])
         sign = image[named(image, "Sign")]
         self.assertNotIn("if:", sign)
         self.assertIn("steps.promote.outputs.digest", sign)

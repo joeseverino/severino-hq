@@ -593,13 +593,15 @@ jobs:
       # Signed by digest, not by tag: a tag is a pointer somebody can move, and
       # a signature over a pointer proves nothing about what it points at now.
       - name: Promote the image its pull request proved
+        # The same manifest under this commit's tag, so the tag names the
+        # digest that is signed (scripts/retag.sh).
         id: promote
         if: env.PROVEN != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          image="ghcr.io/${{ github.repository }}"
-          docker buildx imagetools create \
-            -t "$image:sha-${HEAD_SHA::12}" -t "$image:latest" "$PROVEN"
+          scripts/retag.sh "$PROVEN" "sha-${HEAD_SHA::12}" latest
           echo "digest=$PROVEN" >> "$GITHUB_OUTPUT"
       - name: Sign
         # On a promotion too: Compose deploys only an image signed by this
