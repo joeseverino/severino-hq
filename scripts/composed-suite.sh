@@ -25,7 +25,7 @@ docker run --rm --entrypoint python \
   --env SEVERINO_LOG_LEVEL=WARNING \
   "$image" manage.py test --verbosity 1 --parallel auto >"$output" 2>&1 || status=$?
 
-grep -E '^(Ran [0-9]+ tests? in|OK|FAILED)' "$output" || true
+grep -E '^(Ran [0-9]+ tests? in|OK|FAILED)' "$output" | sed 's/^/composed suite: /' || true
 [ "$status" -eq 0 ] && exit 0
 
 extension=0

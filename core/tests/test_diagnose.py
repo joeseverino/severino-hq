@@ -61,6 +61,12 @@ class DiagnoseTests(SimpleTestCase):
                 self.assertEqual(found["id"], expected)
                 self.assertIn("scripts/failure-logs.sh", found["fix"])
 
+    def test_a_failing_host_test_is_not_blamed_on_the_composition(self):
+        found = _diagnose().diagnose("2026-10-02T00:12:32.36Z FAILED (failures=1, skipped=2)")
+        self.assertEqual(found["id"], "host-tests")
+        composed = _diagnose().diagnose("2026-10-02T00:12:32.36Z composed suite: FAILED (failures=1)")
+        self.assertEqual(composed["id"], "composition-tests")
+
     def test_it_never_repeats_the_log(self):
         secret = "private-extension-name"
         found = _diagnose().diagnose(f"{secret}: denied: permission_denied: write_package")

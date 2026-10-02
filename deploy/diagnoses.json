@@ -76,9 +76,15 @@
     },
     {
       "id": "composition-tests",
-      "match": "(::error title=Composed suite::|FAILED \\((failures|errors)=)",
+      "match": "(::error title=Composed suite::|composed suite: FAILED \\()",
       "title": "The composed application failed its tests",
       "fix": "The suite failed inside the composed image. A failing host test is named in the log; an extension's are only counted, and their output is in the run's sealed failure logs (scripts/failure-logs.sh RUN_ID). The fix belongs in the host or that extension."
+    },
+    {
+      "id": "host-tests",
+      "match": "(^|Z )FAILED \\((failures|errors)=",
+      "title": "A test failed",
+      "fix": "The host's suite failed; the failing test is named in the Tests job's log above its traceback. Run it with `python manage.py test <id>`, fix it, and push again."
     },
     {
       "id": "unsigned-composition",

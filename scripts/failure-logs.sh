@@ -22,11 +22,13 @@ download="$(mktemp -d)"
 trap 'rm -rf "$download"' EXIT
 gh run download "$run" --name failure-logs --dir "$download"
 
+# Read before decrypting, so an unanswered unlock is said as that.
 case "$identity" in
-  op://*) key() { op read "$identity"; } ;;
-  *) key() { cat "$identity"; } ;;
+  op://*) key="$(op read "$identity")" || { echo "1Password did not release the identity; approve the unlock and run again." >&2; exit 1; } ;;
+  *) key="$(cat "$identity")" ;;
 esac
 mkdir -p "$dir"
-age --decrypt --identity <(key) "$download/failure-logs.tar.age" | tar -xzf - -C "$dir"
+age --decrypt --identity <(printf '%s\n' "$key") "$download/failure-logs.tar.age" | tar -xzf - -C "$dir"
+unset key
 echo "$dir"
 find "$dir" -type f | sed "s|^$dir/|  |"
