@@ -146,6 +146,14 @@ class PublicLogTests(SimpleTestCase):
         self.assertLess(named(self.steps, "Seal the withheld output"),
                         named(self.steps, "Upload the sealed output"))
 
+    def test_wheel_digests_reach_the_build_as_a_file_not_an_argument(self):
+        # The build log prints each RUN with its build arguments expanded.
+        for path in (WORKFLOWS / "compose.yml", ROOT / "composition" / "Dockerfile"):
+            with self.subTest(path=path.name):
+                self.assertNotIn("PLUGIN_WHEEL_DIGESTS", path.read_text())
+        self.assertIn("build/composition/digests /tmp/plugin/",
+                      (ROOT / "composition" / "Dockerfile").read_text())
+
     def test_sealed_logs_are_encrypted_to_a_post_quantum_key(self):
         pins = (ROOT / "scripts" / "toolchain.env").read_text()
         self.assertRegex(pins, r"(?m)^FAILURE_LOG_RECIPIENT=age1pq1[0-9a-z]+$")

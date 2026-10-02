@@ -18,19 +18,19 @@ COPY --from=uv /uv /usr/local/bin/uv
 
 FROM installer-base AS installer
 
-# "<sha256>  <filename>" lines, one per admitted wheel.
-ARG PLUGIN_WHEEL_DIGESTS
-
-COPY build/composition/*.whl /tmp/plugin/
+# The wheels, and "<sha256>  <filename>" lines, one per admitted wheel. A
+# file, not a build argument: the build log prints each RUN with its arguments
+# expanded, and the log is public.
+COPY build/composition/*.whl build/composition/digests /tmp/plugin/
 
 # Each wheel installs from a hashed requirements file built from the digests
 # its admission recorded, so uv refuses a wheel that differs. A wheel present
 # in the build context but absent from the digest list fails the count check
 # rather than being installed unverified.
 RUN set -eu; \
-    printf '%s\n' "${PLUGIN_WHEEL_DIGESTS}" | awk 'NF { \
+    awk 'NF { \
         if (NF != 2 || length($1) != 64 || $1 !~ /^[0-9a-f]+$/) exit 1; \
-        print "/tmp/plugin/" $2 " --hash=sha256:" $1 }' > /tmp/plugin/requirements.txt; \
+        print "/tmp/plugin/" $2 " --hash=sha256:" $1 }' /tmp/plugin/digests > /tmp/plugin/requirements.txt; \
     expected=$(grep -c . /tmp/plugin/requirements.txt); \
     found=$(find /tmp/plugin -maxdepth 1 -type f -name '*.whl' | wc -l); \
     test "$expected" -eq "$found"; \

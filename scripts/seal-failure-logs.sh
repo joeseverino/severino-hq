@@ -10,7 +10,7 @@ dir="${1:?usage: seal-failure-logs.sh DIR OUT}"
 out="${2:?usage: seal-failure-logs.sh DIR OUT}"
 . ./scripts/toolchain.env
 
-if [ -z "$(find "$dir" -type f -print -quit 2>/dev/null)" ]; then
+if [ -z "$(find "$dir" -type f -size +0 -print -quit 2>/dev/null)" ]; then
   echo "nothing withheld from this run's log"
   exit 0
 fi
@@ -26,5 +26,7 @@ if ! command -v age >/dev/null; then
   PATH="$tools:$PATH"
 fi
 
-tar -czf - -C "$dir" . | age --encrypt --recipient "$FAILURE_LOG_RECIPIENT" --output "$out"
-echo "sealed $(find "$dir" -type f | wc -l | tr -d ' ') withheld log(s)"
+(cd "$dir" && find . -type f -size +0 -print0) \
+  | tar -czf - -C "$dir" --null -T - \
+  | age --encrypt --recipient "$FAILURE_LOG_RECIPIENT" --output "$out"
+echo "sealed $(find "$dir" -type f -size +0 | wc -l | tr -d ' ') withheld log(s)"

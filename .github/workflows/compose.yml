@@ -578,7 +578,6 @@ jobs:
           staged=build/composition
           docker build -f composition/Dockerfile \
             --build-arg HQ_IMAGE="$HQ_IMAGE" \
-            --build-arg PLUGIN_WHEEL_DIGESTS="$(cat "$staged/digests")" \
             --build-arg PLUGIN_POLICY_SHA256="$(cat "$staged/policy-sha256")" \
             --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="$(cat "$staged/references")" \
             --build-arg HQ_REVISION="$HOST_SHA" \
@@ -640,17 +639,15 @@ jobs:
           docker build -f - -t "severino-hq-candidate:$GITHUB_SHA" \
             --build-arg HQ_IMAGE="$HQ_IMAGE" \
             --build-arg INSTALLER_IMAGE="$INSTALLER_IMAGE" \
-            --build-arg PLUGIN_WHEEL_DIGESTS="$(cat "$staged/digests")" \
             --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="$(cat "$staged/references")" . <<'DOCKERFILE'
           ARG HQ_IMAGE
           ARG INSTALLER_IMAGE
           FROM ${INSTALLER_IMAGE} AS installer
-          ARG PLUGIN_WHEEL_DIGESTS
-          COPY build/candidate/*.whl /tmp/plugin/
+          COPY build/candidate/*.whl build/candidate/digests /tmp/plugin/
           RUN set -eu; \
-              printf '%s\n' "${PLUGIN_WHEEL_DIGESTS}" | awk 'NF { \
+              awk 'NF { \
                   if (NF != 2 || length($1) != 64 || $1 !~ /^[0-9a-f]+$/) exit 1; \
-                  print "/tmp/plugin/" $2 " --hash=sha256:" $1 }' > /tmp/plugin/requirements.txt; \
+                  print "/tmp/plugin/" $2 " --hash=sha256:" $1 }' /tmp/plugin/digests > /tmp/plugin/requirements.txt; \
               expected=$(grep -c . /tmp/plugin/requirements.txt); \
               found=$(find /tmp/plugin -maxdepth 1 -type f -name '*.whl' | wc -l); \
               test "$expected" -eq "$found"; \
