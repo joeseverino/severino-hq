@@ -34,7 +34,7 @@
     },
     {
       "id": "host-unsigned",
-      "match": "(Host image is not signed|Host image never appeared|Host build (failure|cancelled|timed_out))",
+      "match": "(No signature by this\\s+repository's ci workflow|was not published\\s+within|so there is no host image)",
       "title": "There was no signed host image to compose onto",
       "fix": "The HQ run for this commit did not publish a signed host image. Fix that run's failing job; the composition follows it."
     },
@@ -46,15 +46,45 @@
     },
     {
       "id": "vulnerable-image",
-      "match": "Total: [1-9][0-9]* \\(",
+      "match": "(Total: [1-9][0-9]* \\(|(HIGH|CRITICAL) CVE-[0-9]+-[0-9]+ in )",
       "title": "The image has a fixable serious vulnerability",
-      "fix": "A HIGH or CRITICAL vulnerability with a published fix is in the image. Update the package or base image it names in the scan step, then re-run."
+      "fix": "A HIGH or CRITICAL vulnerability with a published fix is in the image. Update the package or base image the scan's error names, then re-run."
+    },
+    {
+      "id": "composition-refused",
+      "match": "The admitted set does not compose",
+      "title": "The admitted extensions do not compose",
+      "fix": "Cordon or the host refused the admitted set as one composition: a wheel that is not its admitted artifact, a duplicate, or mixed admission policies. The reason is in the run's sealed failure logs (scripts/failure-logs.sh RUN_ID)."
+    },
+    {
+      "id": "composition-did-not-run",
+      "match": "The composed suite did not run",
+      "title": "The composed application did not start",
+      "fix": "The composed image raised before its suite ran, usually settings or an extension that does not load against this host. The exception's type is in the log, the rest in the run's sealed failure logs (scripts/failure-logs.sh RUN_ID)."
+    },
+    {
+      "id": "candidate-build",
+      "match": "A coordinated branch did not build",
+      "title": "A coordinated extension branch did not build",
+      "fix": "The branch named for this pull request did not build a wheel. Its build output is in the run's sealed failure logs (scripts/failure-logs.sh RUN_ID); fix it in that branch and push again."
+    },
+    {
+      "id": "image-unhealthy",
+      "match": "The container did not report healthy within",
+      "title": "The image did not come up healthy",
+      "fix": "The container never reported healthy within 90 seconds of booting as production does. For the host image its log follows the error; for the composed image it is in the run's sealed failure logs (scripts/failure-logs.sh RUN_ID)."
+    },
+    {
+      "id": "host-tests",
+      "match": "(^|Z )FAILED \\((failures|errors)=",
+      "title": "A test failed",
+      "fix": "The host's suite failed; the failing test is named in the Tests job's log above its traceback. Run it with `python manage.py test <id>`, fix it, and push again."
     },
     {
       "id": "composition-tests",
-      "match": "FAILED \\((failures|errors)=",
+      "match": "(composed suite: FAILED \\(|extension test\\(s\\) failed)",
       "title": "The composed application failed its tests",
-      "fix": "The suite failed inside the composed image. Its test output is in the failing step; the fix belongs in the host or the extension it names."
+      "fix": "The suite failed inside the composed image. A failing host test is named in the log; an extension's are only counted, and their output is in the run's sealed failure logs (scripts/failure-logs.sh RUN_ID). The fix belongs in the host or that extension."
     },
     {
       "id": "unsigned-composition",
@@ -72,7 +102,7 @@
       "id": "unhealthy",
       "match": "(New image did not become healthy|Application replacement failed|Controller activation failed)",
       "title": "The new version did not come up healthy, and was rolled back",
-      "fix": "Production still runs the previous image. The health failure is in the deploy step's log and in HQ's own logs; fix it and merge again."
+      "fix": "Production still runs the previous image. What the deploy, sync or installer printed is in the private logs on the deploy host (/var/log/severino-hq), and the application's in HQ's own; fix it and merge again."
     },
     {
       "id": "disk",

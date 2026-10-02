@@ -6,7 +6,6 @@ from contextlib import redirect_stderr, redirect_stdout
 import importlib.util
 import io
 import json
-import os
 from pathlib import Path
 import re
 import tempfile
@@ -68,14 +67,108 @@ def named(steps_: list[str], name: str) -> int:
 
 
 class DeployCheckoutOwnershipTests(SimpleTestCase):
-    def test_the_deploy_refuses_a_foreign_owned_checkout_before_it_pulls(self):
+    def test_a_checkout_git_cannot_pull_warns_and_never_holds_the_release(self):
         deploy = steps(jobs((WORKFLOWS / "deploy.yml").read_text())["deploy"])
-        refuse = named(deploy, "Refuse a checkout the runner cannot pull")
-        pull = named(deploy, "Sync deploy checkout")
-        self.assertLess(refuse, pull)
-        self.assertIn("pull --ff-only", deploy[pull])
-        self.assertIn('! -user "$runner"', deploy[refuse])
-        self.assertIn("sudo chown -R", deploy[refuse])
+        sync = deploy[named(deploy, "Sync the deploy checkout")]
+        self.assertIn("set -uo pipefail", sync)
+        self.assertIn('! -user "$(id -un)"', sync)
+        self.assertIn("elif ! git -C", sync)
+        self.assertNotIn("::error", sync)
+        self.assertLess(
+            named(deploy, "Sync the deploy checkout"),
+            named(deploy, "Deploy exact image with health rollback"),
+        )
+
+
+class PromotionTests(SimpleTestCase):
+    """A push to main stands on its pull request's run only with proof."""
+
+    def setUp(self):
+        self.jobs = jobs((WORKFLOWS / "ci.yml").read_text())
+
+    def test_proof_is_sought_on_a_push_and_its_failure_runs_every_gate(self):
+        proven = self.jobs["proven"]
+        self.assertIn("if: github.event_name == 'push'", proven)
+        self.assertIn("continue-on-error: true", proven)
+        self.assertIn("scripts/proven-on-pr.sh", proven)
+
+    def test_every_gate_runs_unless_the_tree_was_proven(self):
+        for job in ("checks", "tests", "browser"):
+            with self.subTest(job=job):
+                self.assertIn(
+                    "if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}", self.jobs[job]
+                )
+
+    def test_a_promoted_image_is_never_built_scanned_or_pushed_again_but_is_signed(self):
+        image = steps(self.jobs["image"])
+        for step in image:
+            first = step.splitlines()[0]
+            with self.subTest(step=first):
+                if any(word in step for word in ("buildx build", "trivy-action", "docker push")):
+                    self.assertIn("if: env.PROVEN == ''", step)
+        promote = image[named(image, "Promote the image its pull request proved")]
+        self.assertIn("if: env.PROVEN != ''", promote)
+        sign = image[named(image, "Sign")]
+        self.assertNotIn("if:", sign)
+        self.assertIn("steps.promote.outputs.digest", sign)
+
+    def test_the_image_records_the_tree_it_was_built_from(self):
+        self.assertIn('--label "dev.severino.hq.tree=$(git rev-parse \'HEAD^{tree}\')"',
+                      self.jobs["image"])
+
+
+class PublicLogTests(SimpleTestCase):
+    """What a composed build prints is safe to publish in a public log."""
+
+    def setUp(self):
+        self.steps = steps(jobs((WORKFLOWS / "compose.yml").read_text())["compose"])
+
+    def test_the_composed_suite_prints_through_the_filter(self):
+        suite = self.steps[named(self.steps, "Verify the composition as one application")]
+        self.assertIn('scripts/composed-suite.sh "$IMAGE"', suite)
+        self.assertNotIn("manage.py test", suite)
+
+    def test_the_scan_writes_a_file_not_the_package_table(self):
+        scan = self.steps[named(self.steps, "Scan composed image")]
+        self.assertIn("format: json", scan)
+        self.assertIn("output: trivy-composed.json", scan)
+
+    def test_a_coordinated_build_keeps_its_output_off_the_log(self):
+        build = self.steps[named(self.steps, "Build coordinated extension branches")]
+        self.assertIn('> "$WITHHELD_DIR/candidate-build-', build)
+
+    def test_withheld_output_leaves_the_runner_only_sealed(self):
+        uploads = [step for step in self.steps if "actions/upload-artifact@" in step]
+        self.assertEqual(len(uploads), 1)
+        self.assertIn("path: failure-logs.tar.age", uploads[0])
+        seal = self.steps[named(self.steps, "Seal the withheld output")]
+        self.assertIn('scripts/seal-failure-logs.sh "$WITHHELD_DIR" failure-logs.tar.age', seal)
+        self.assertLess(named(self.steps, "Seal the withheld output"),
+                        named(self.steps, "Upload the sealed output"))
+
+    def test_wheel_digests_reach_the_build_as_a_file_not_an_argument(self):
+        # The build log prints each RUN with its build arguments expanded.
+        for path in (WORKFLOWS / "compose.yml", ROOT / "composition" / "Dockerfile"):
+            with self.subTest(path=path.name):
+                self.assertNotIn("PLUGIN_WHEEL_DIGESTS", path.read_text())
+        self.assertIn("build/composition/digests /tmp/plugin/",
+                      (ROOT / "composition" / "Dockerfile").read_text())
+
+    def test_sealed_logs_are_encrypted_to_a_post_quantum_key(self):
+        pins = (ROOT / "scripts" / "toolchain.env").read_text()
+        self.assertRegex(pins, r"(?m)^FAILURE_LOG_RECIPIENT=age1pq1[0-9a-z]+$")
+
+    def test_extension_build_arguments_never_pass_through_a_step_env(self):
+        for step in self.steps:
+            with self.subTest(step=step.splitlines()[0]):
+                for name in ("DIGESTS", "REFERENCES", "ARGS"):
+                    self.assertNotRegex(step, rf"\n\s+\w*{name}: \$\{{\{{")
+
+    def test_every_spelling_of_an_extension_is_masked_in_every_case(self):
+        mask = self.steps[named(self.steps, "Mask the extension names for the rest of the job")]
+        for spelling in ("${spelling}", "${spelling^}", "${spelling^^}"):
+            with self.subTest(spelling=spelling):
+                self.assertIn(f"::add-mask::{spelling}", mask)
 
 
 class CoordinatedBranchTests(SimpleTestCase):
@@ -177,16 +270,17 @@ class ComposeCandidateTests(SimpleTestCase):
         path.write_bytes(name.encode())
         return path
 
-    def run_main(self, *argv: str) -> tuple[int, str]:
-        output = self.root / "github-output"
-        output.write_text("")
-        with (
-            patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)}),
-            redirect_stdout(io.StringIO()),
-            redirect_stderr(io.StringIO()),
-        ):
+    def run_main(self, *argv: str) -> tuple[int, dict[str, str]]:
+        """The exit code and the build arguments written beside the wheels."""
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             code = self.module.main(list(argv))
-        return code, output.read_text()
+        out = Path(argv[argv.index("--out") + 1])
+        written = {
+            name: (out / name).read_text()
+            for name in ("references", "digests", "policy-sha256")
+            if (out / name).exists()
+        }
+        return code, written
 
     def cordon(self, plugins: list[dict]) -> None:
         """A stand-in for Cordon's lock tool that merges into ``plugins``."""
@@ -219,8 +313,8 @@ class ComposeCandidateTests(SimpleTestCase):
         self.assertEqual(code, 0)
         self.assertEqual(json.loads((out / "plugin-lock.json").read_text())["plugins"][0]
                          ["distribution"], "example-alpha")
-        self.assertIn("references=example_alpha.plugin:plugin\n", output)
-        self.assertIn(f"policy_sha256={'a' * 64}\n", output)
+        self.assertEqual(output["references"], "example_alpha.plugin:plugin\n")
+        self.assertEqual(output["policy-sha256"], f"{'a' * 64}\n")
 
     def test_an_admitted_composition_refuses_what_its_lock_does_not_approve(self):
         alpha = self.wheel("example_alpha-2.0-py3-none-any.whl")
@@ -236,7 +330,7 @@ class ComposeCandidateTests(SimpleTestCase):
                     "--entry", self.entry(), "--wheel", str(alpha), "--out", str(self.root / "out")
                 )
                 self.assertEqual(code, 1)
-                self.assertEqual(output, "")
+                self.assertEqual(output, {})
         self.cordon([self.admitted(alpha), self.admitted(beta, policy="b" * 64)])
         code, _ = self.run_main(
             "--entry", self.entry(), "--wheel", str(alpha),
@@ -254,7 +348,7 @@ class ComposeCandidateTests(SimpleTestCase):
                 "--entry", self.entry(), "--wheel", str(alpha), "--out", str(self.root / "out")
             )
         self.assertEqual(code, 1)
-        self.assertEqual(output, "")
+        self.assertEqual(output, {})
 
     def test_a_candidate_stages_wheels_with_no_lock(self):
         out = self.root / "out"
@@ -270,10 +364,10 @@ class ComposeCandidateTests(SimpleTestCase):
         self.assertEqual(sorted(path.name for path in out.glob("*.whl")),
                          [alpha.name, beta.name])
         self.assertIn(
-            "references=example_alpha.plugin:plugin,example_beta.plugin:plugin\n", output
+            "example_alpha.plugin:plugin,example_beta.plugin:plugin\n", output["references"]
         )
-        self.assertIn(f"{self.module.sha256(alpha)}  {alpha.name}", output)
-        self.assertNotIn("policy_sha256", output)
+        self.assertIn(f"{self.module.sha256(alpha)}  {alpha.name}", output["digests"])
+        self.assertNotIn("policy-sha256", output)
 
     def test_a_distribution_twice_is_refused(self):
         first = self.wheel("example_alpha-1.0-py3-none-any.whl")
@@ -336,3 +430,86 @@ class ScriptInputTests(SimpleTestCase):
         use = compose.index('--artifact "$wheel"')
         self.assertLess(collect, check)
         self.assertLess(check, use)
+
+
+def plugin_identity():
+    spec = importlib.util.spec_from_file_location(
+        "plugin_identity", ROOT / "scripts" / "plugin-identity.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class PluginIdentityTests(SimpleTestCase):
+    """An extension's identity is read from its package, and only from there."""
+
+    def package(self, manifest: str, name: str = "example-alpha") -> Path:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        (root / "pyproject.toml").write_text(f'[project]\nname = "{name}"\nversion = "1.0"\n')
+        source = root / "src" / "example_alpha"
+        source.mkdir(parents=True)
+        (source / "plugin.py").write_text(manifest)
+        return root
+
+    def manifest(self, **fields: str) -> str:
+        declared = {
+            "id": '"example.alpha"',
+            "distribution": '"example-alpha"',
+            "django_apps": '("example_alpha",)',
+        } | fields
+        body = ", ".join(f"{key}={value}" for key, value in declared.items())
+        return f"from hq_sdk.plugin import PluginManifest\nplugin = PluginManifest({body})\n"
+
+    def test_the_package_declares_everything_admission_needs(self):
+        found = plugin_identity().identity(self.package(self.manifest()))
+        self.assertEqual(found, {
+            "distribution": "example-alpha",
+            "plugin-id": "example.alpha",
+            "plugin-reference": "example_alpha.plugin:plugin",
+            "django-app": "example_alpha",
+        })
+
+    def test_a_package_that_disagrees_with_itself_is_refused(self):
+        cases = {
+            "distribution": self.manifest(distribution='"example-beta"'),
+            "django_apps": self.manifest(django_apps='("other",)'),
+            "a literal": self.manifest(id="IDENTIFIER"),
+            "no module-level": "plugin = make()\n",
+        }
+        for reason, manifest in cases.items():
+            with self.subTest(reason=reason), self.assertRaises(SystemExit) as refused:
+                plugin_identity().identity(self.package(manifest))
+            self.assertIn(reason, str(refused.exception))
+
+    def test_a_manifest_away_from_its_package_is_refused(self):
+        with self.assertRaises(SystemExit) as refused:
+            plugin_identity().identity(self.package(self.manifest(), name="example-gamma"))
+        self.assertIn("src/example_gamma/plugin.py", str(refused.exception))
+
+
+class ExtensionCallerTests(SimpleTestCase):
+    """An extension's caller names nothing about the extension."""
+
+    def test_the_reusable_checks_and_admission_take_no_identity(self):
+        checks = (WORKFLOWS / "plugin-checks.yml").read_text()
+        admit = (ROOT / ".github" / "actions" / "admit-plugin" / "action.yml").read_text()
+        for name in ("plugin-reference:", "django-app:", "plugin-id:", "distribution:"):
+            with self.subTest(name=name):
+                self.assertNotIn(f"\n  {name}", admit.split("\nruns:")[0])
+                self.assertNotIn(f"\n      {name}", checks.split("\npermissions:")[0])
+        self.assertIn("check-plugin.sh --plugin-root .", checks)
+        self.assertIn("scripts/plugin-identity.py", admit)
+
+
+class ActionPinTests(SimpleTestCase):
+    def test_every_action_has_one_version_across_workflows_and_composite_actions(self):
+        files = [*WORKFLOWS.glob("*.yml"), *(ROOT / ".github" / "actions").glob("*/action.yml")]
+        pins: dict[str, set[str]] = {}
+        for path in files:
+            for action, sha in re.findall(r"uses: ([\w./-]+)@([0-9a-f]{40})", path.read_text()):
+                pins.setdefault(action, set()).add(sha)
+        self.assertGreater(len(pins), 5)
+        self.assertEqual({action: shas for action, shas in pins.items() if len(shas) > 1}, {})

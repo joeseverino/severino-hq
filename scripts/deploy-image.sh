@@ -19,6 +19,7 @@ readonly lib_dir="${SEVERINO_HQ_LIB_DIR:-/usr/local/lib/severino-hq}"
 readonly sync_program="${SEVERINO_HQ_SBIN_DIR:-/usr/local/sbin}/severino-hq-sync-scripts"
 readonly controller_timer="severino-hq-controller.timer"
 readonly content_timer="severino-hq-content-sync.timer"
+readonly log_dir="${SEVERINO_HQ_LOG_DIR:-/var/log/severino-hq}"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "deploy-image.sh must run as root." >&2
@@ -191,11 +192,30 @@ else
     echo "warning: ${lib_dir}/docker-compose.yml is absent; using the checkout copy." >&2
 fi
 
+# Compose, the sync program and the installer can name ports, volumes and host
+# paths, and this script's output is a public Actions log. Their output goes to
+# a root-only log on the host; the log shows only whether each one passed.
+# run-private.sh is staged beside the compose files, because the sync replaces
+# the tree it is read from while it runs.
+private() {
+    label="$1"
+    name="$2"
+    shift 2
+    install -d -o root -g root -m 0700 "${log_dir}"
+    if [ -x "${compose_stage}/run-private.sh" ]; then
+        "${compose_stage}/run-private.sh" "${label}" "${log_dir}/${name}.log" "$@"
+    else
+        "$@"
+    fi
+}
 # --project-directory keeps volume names and relative paths resolving exactly as
 # they did when compose was invoked from the checkout, so moving only the file
 # changes nothing about what the deployment means.
-compose() {
-    docker compose \
+private_compose() {
+    label="$1"
+    name="$2"
+    shift 2
+    private "${label}" "${name}" docker compose \
         -f "${compose_file}" \
         --env-file "${app_dir}/.env" \
         --project-directory "${app_dir}" \
@@ -218,8 +238,8 @@ fi
 # be pruned, so it remains the rollback target while stale releases are removed.
 # Doing this only after deployment is too late when the filesystem is already
 # too full for Docker or the runner to make progress.
-docker image prune -af
-docker builder prune -af
+docker image prune -af >/dev/null
+docker builder prune -af >/dev/null
 available_kb="$(df -Pk / | awk 'NR == 2 {print $4}')"
 if [ "${available_kb}" -lt 524288 ]; then
     echo "Deployment requires at least 512 MiB of free root-disk space." >&2
@@ -261,7 +281,7 @@ rollback() {
     fi
     echo "Restoring previous image ${previous_image}." >&2
     compose_file="${previous_compose}"
-    SEVERINO_IMAGE="${previous_image}" compose up -d --no-build app
+    SEVERINO_IMAGE="${previous_image}" private_compose "Restore" restore up -d --no-build app
     restore_root_tree
     restore_timers
     echo "Previous image and prior controller timer state restored." >&2
@@ -273,8 +293,11 @@ compose_stage="$(mktemp -d "${SEVERINO_HQ_RUN_DIR:-/run}/severino-hq-compose.XXX
 chmod 0700 "${compose_stage}"
 readonly previous_compose="${compose_stage}/previous.yml"
 cp -p "${compose_file}" "${previous_compose}"
+if [ -x "${lib_dir}/scripts/run-private.sh" ]; then
+    cp -p "${lib_dir}/scripts/run-private.sh" "${compose_stage}/run-private.sh"
+fi
 
-if ! SEVERINO_IMAGE="${image}" compose pull app; then
+if ! SEVERINO_IMAGE="${image}" private_compose "Image pull" pull pull app; then
     echo "Image pull failed; restoring prior controller timer state." >&2
     restore_timers
     exit 1
@@ -297,7 +320,7 @@ docker rm -f "${compose_cid}" >/dev/null
 compose_cid=""
 compose_file="${compose_stage}/next.yml"
 
-if ! SEVERINO_IMAGE="${image}" compose up -d --no-build app; then
+if ! SEVERINO_IMAGE="${image}" private_compose "Replace" replace up -d --no-build app; then
     echo "Application replacement failed." >&2
     rollback
     exit 1
@@ -319,9 +342,10 @@ for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
         # The release installs itself: the image's own sync program refreshes
         # the root tree from the image now running and is installed as the
         # host's, and the installer that runs is the one it just synced.
-        if sh "${compose_stage}/sync" \
-            && install -o root -g root -m 0755 "${compose_stage}/sync" "${sync_program}" \
-            && SEVERINO_HQ_INSTALLER_SYNCED=1 sh "${lib_dir}/scripts/install-controller.sh"; then
+        # shellcheck disable=SC2016  # expanded by the inner sh, from its arguments
+        if private "Release install" release-install sh -c \
+            'sh "$1" && install -o root -g root -m 0755 "$1" "$2" && SEVERINO_HQ_INSTALLER_SYNCED=1 sh "$3"' \
+            release-install "${compose_stage}/sync" "${sync_program}" "${lib_dir}/scripts/install-controller.sh"; then
             rm -rf "${controller_backup}"
             controller_backup=""
             # The running container binds the tmpfs copy, so the one on the
@@ -346,10 +370,7 @@ echo "New image did not become healthy." >&2
 # Application logs can contain runtime inventory even when they contain no
 # credential. Preserve the failure evidence on the host without publishing it
 # through the self-hosted Actions runner.
-install -d -o root -g root -m 0700 /var/log/severino-hq
-"${lib_dir}/scripts/run-private.sh" \
-    "Application failure diagnostics" \
-    /var/log/severino-hq/application-failure.log \
+private "Application failure diagnostics" application-failure \
     docker logs --tail 50 severino-hq || true
 rollback
 exit 1

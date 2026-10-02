@@ -47,6 +47,37 @@ class DiagnoseTests(SimpleTestCase):
         self.assertEqual(found["id"], "unknown")
         self.assertIn("deploy/diagnoses.json", found["fix"])
 
+    def test_a_failure_whose_output_is_withheld_says_where_it_is_sealed(self):
+        # As GitHub prints them: a title is not in the log, only the message.
+        cases = {
+            "##[error]2 extension test(s) failed; the full output is sealed": "composition-tests",
+            "##[error]The composed suite did not run: ImproperlyConfigured; the full": "composition-did-not-run",
+            "##[error]The admitted set does not compose. The reason is sealed.": "composition-refused",
+            "##[error]A coordinated branch did not build; its output is sealed.": "candidate-build",
+            "##[error]The container did not report healthy within 90 seconds.": "image-unhealthy",
+        }
+        for line, expected in cases.items():
+            with self.subTest(expected=expected):
+                found = _diagnose().diagnose(f"2026-10-02T00:12:32.36Z {line}")
+                self.assertEqual(found["id"], expected)
+                self.assertIn("scripts/failure-logs.sh", found["fix"])
+
+    def test_a_message_in_an_echoed_script_is_not_a_failure(self):
+        log = (
+            "2026-10-02T00:01:00.1Z ##[group]Run set -euo pipefail\n"
+            '2026-10-02T00:01:00.2Z echo "::error::COMPOSITION_EXTENSIONS must be set"\n'
+            "2026-10-02T00:01:00.3Z env:\n"
+            "2026-10-02T00:01:00.4Z ##[endgroup]\n"
+            "2026-10-02T00:02:00.0Z FAILED (failures=1)\n"
+        )
+        self.assertEqual(_diagnose().diagnose(log)["id"], "host-tests")
+
+    def test_a_failing_host_test_is_not_blamed_on_the_composition(self):
+        found = _diagnose().diagnose("2026-10-02T00:12:32.36Z FAILED (failures=1, skipped=2)")
+        self.assertEqual(found["id"], "host-tests")
+        composed = _diagnose().diagnose("2026-10-02T00:12:32.36Z composed suite: FAILED (failures=1)")
+        self.assertEqual(composed["id"], "composition-tests")
+
     def test_it_never_repeats_the_log(self):
         secret = "private-extension-name"
         found = _diagnose().diagnose(f"{secret}: denied: permission_denied: write_package")

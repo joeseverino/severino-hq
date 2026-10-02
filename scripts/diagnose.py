@@ -29,9 +29,15 @@ def diagnoses() -> list[dict[str, Any]]:
     return json.loads(CATALOG.read_text())["diagnoses"]
 
 
+# GitHub echoes each step's script and environment between these markers, so
+# every message a step can print is in its log whether or not it ran.
+ECHOED = re.compile(r"^[^\n]*##\[group\]Run .*?^[^\n]*##\[endgroup\][^\n]*$", re.M | re.S)
+
+
 def diagnose(log: str) -> dict[str, str]:
+    printed = ECHOED.sub("", log)
     for entry in diagnoses():
-        if re.search(entry["match"], log):
+        if re.search(entry["match"], printed):
             return {key: entry[key] for key in ("id", "title", "fix")}
     return dict(UNKNOWN)
 

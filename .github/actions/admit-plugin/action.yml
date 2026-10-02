@@ -21,15 +21,10 @@ description: >-
 #
 # Everything that does not sign lives in ../../workflows/plugin-checks.yml.
 
+# The plugin id and distribution are read from the package
+# (scripts/plugin-identity.py), never passed: a caller that repeats them can
+# drift from what the wheel declares.
 inputs:
-  plugin-id:
-    description: Plugin identifier declared in the manifest, e.g. example.alpha.
-    required: true
-  distribution:
-    description: >-
-      Installable distribution name. Also names the retained run artifact, and
-      must equal the manifest's declared distribution.
-    required: true
   workflow-path:
     description: >-
       Path of the CALLING workflow file inside the calling repository. This is
@@ -86,18 +81,34 @@ runs:
         ref: ${{ steps.host.outputs.sha }}
         path: host
 
+    - name: Read the extension's identity from its package
+      id: identity
+      shell: bash
+      run: python3 host/scripts/plugin-identity.py . | tee -a "$GITHUB_OUTPUT"
+
+    - name: Read the host's toolchain pins
+      id: pins
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd host
+        . ./scripts/toolchain.env
+        # shellcheck disable=SC2086  # the version list is meant to split
+        echo "python=$(printf '%s\n' $PYTHON_VERSIONS | tail -1)" >> "$GITHUB_OUTPUT"
+        echo "cordon-commit=$CORDON_COMMIT" >> "$GITHUB_OUTPUT"
+
     - name: Check out exact Cordon verifier
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         repository: joeseverino/cordon
-        ref: a5f2f2d2c11e33abe1be6ab04e5961f3c2f4a739
+        ref: ${{ steps.pins.outputs.cordon-commit }}
         path: cordon
 
     - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
       with:
-        python-version: "3.14"
+        python-version: ${{ steps.pins.outputs.python }}
 
-    - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+    - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
 
     - name: Build the immutable wheel
       shell: bash
@@ -119,11 +130,14 @@ runs:
         output-file: wheel.spdx.json
         upload-artifact: false
 
-    - name: Scan wheel
+    - name: Scan the wheel's dependencies
+      # Trivy cannot read inside a .whl, and a wheel's metadata names its
+      # dependencies without versions, so the lock it was built from is what is
+      # scanned: every package it installs, by exact version.
       uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
       with:
         scan-type: fs
-        scan-ref: dist
+        scan-ref: uv.lock
         severity: HIGH,CRITICAL
         ignore-unfixed: true
         exit-code: "1"
@@ -157,8 +171,8 @@ runs:
       # the script, so a manifest value can never become shell syntax.
       env:
         POLICY_PATH: host/policy/plugin-admission-v1.json
-        PLUGIN_ID: ${{ inputs.plugin-id }}
-        DISTRIBUTION: ${{ inputs.distribution }}
+        PLUGIN_ID: ${{ steps.identity.outputs.plugin-id }}
+        DISTRIBUTION: ${{ steps.identity.outputs.distribution }}
         WORKFLOW_PATH: ${{ inputs.workflow-path }}
         HOST_ID: severino-hq
         PLUGIN_API_VERSION: ${{ steps.api.outputs.version }}
@@ -182,14 +196,10 @@ runs:
           --dependency-lock uv.lock > admission.json
         cosign sign-blob --yes --bundle admission.sigstore.json admission.json
 
-    - name: Install pinned Cordon dependencies
-      shell: bash
-      run: npm ci --prefix cordon --ignore-scripts
-
     - name: Retain private provenance
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: ${{ inputs.distribution }}-admission-${{ github.sha }}
+        name: ${{ steps.identity.outputs.distribution }}-admission-${{ github.sha }}
         path: |
           admission.json
           admission.sigstore.json

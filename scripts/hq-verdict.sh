@@ -22,10 +22,12 @@ readonly repo="${GITHUB_REPOSITORY:?}"
 readonly wait_seconds="${VERDICT_WAIT_SECONDS:-2400}"
 
 # The gates of this run: every job Ready needs, by the name GitHub shows.
+# "Proven on its pull request" runs on pushes to main only, so a pull request
+# never has it.
 # One line per job: id, name, result, seconds, page, workflow.
 readonly job_line='"\(.id)\t\(.name)\t\(.conclusion // "pending")\t\(if .started_at and .completed_at then ((.completed_at | fromdate) - (.started_at | fromdate)) else "" end)\t\(.html_url)"'
 rows="$(gh api "repos/${repo}/actions/runs/${THIS_RUN}/jobs?per_page=100" \
-  --jq ".jobs[] | select(.name != \"Ready\") | ${job_line} + \"\\tCI\"")"
+  --jq ".jobs[] | select(.name != \"Ready\" and .name != \"Proven on its pull request\") | ${job_line} + \"\\tCI\"")"
 
 # The same commit's other workflows, once each has finished: Compose, which builds
 # HQ from it (only when the pull request is composed), and CodeQL.
@@ -73,8 +75,12 @@ if [ -z "${failed}" ]; then
   summary="Every gate passed."
 else
   # The logs of what failed, read only to be matched against the catalog.
-  logs="$(printf '%s\n' "${failed}" | while IFS=$'\t' read -r id _name _result; do
-    [ "${id}" != 0 ] && gh api "repos/${repo}/actions/jobs/${id}/logs" 2>/dev/null || true
+  # A log that cannot be read is reported by the API's status line alone.
+  logs="$(printf '%s\n' "${failed}" | while IFS=$'\t' read -r id name _result; do
+    [ "${id}" != 0 ] || continue
+    if ! scripts/job-log.sh "${id}" 2>"${RUNNER_TEMP:-/tmp}/log-error"; then
+      echo "::warning title=Log not read::${name}: $(head -n 1 "${RUNNER_TEMP:-/tmp}/log-error")" >&2
+    fi
   done)"
   diagnosis="$(printf '%s' "${logs}" | python3 scripts/diagnose.py)"
   names="$(printf '%s\n' "${failed}" | cut -f2 | paste -sd',' - | sed 's/,/, /g')"

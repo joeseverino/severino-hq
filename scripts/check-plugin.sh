@@ -1,34 +1,29 @@
 #!/bin/sh
 # One local and CI contract check for every trusted HQ plugin.
+#   check-plugin.sh [--plugin-root PATH]     # default: the current directory
+# The plugin reference and Django app are read from the package
+# (scripts/plugin-identity.py), where they are declared once.
 set -eu
 unset CDPATH
 
 usage() {
-    echo "usage: $0 --plugin-root PATH --plugin-reference MODULE:ATTRIBUTE --django-app APP" >&2
+    echo "usage: $0 [--plugin-root PATH]" >&2
     exit 2
 }
 
-plugin_root=
-plugin_reference=
-django_app=
+plugin_root=.
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --plugin-root) [ "$#" -ge 2 ] || usage; plugin_root=$2; shift 2 ;;
-        --plugin-reference) [ "$#" -ge 2 ] || usage; plugin_reference=$2; shift 2 ;;
-        --django-app) [ "$#" -ge 2 ] || usage; django_app=$2; shift 2 ;;
         *) usage ;;
     esac
 done
-if [ -z "$plugin_root" ] || [ -z "$plugin_reference" ] || [ -z "$django_app" ]; then
-    usage
-fi
 
 hq_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 plugin_root=$(cd -- "$plugin_root" && pwd)
-if [ ! -f "$plugin_root/pyproject.toml" ] || [ ! -d "$plugin_root/src/$django_app" ]; then
-    echo "Plugin root must contain pyproject.toml and src/$django_app." >&2
-    exit 2
-fi
+identity=$(python3 "$hq_root/scripts/plugin-identity.py" "$plugin_root")
+plugin_reference=$(printf '%s\n' "$identity" | sed -n 's/^plugin-reference=//p')
+django_app=$(printf '%s\n' "$identity" | sed -n 's/^django-app=//p')
 
 env_path=${UV_PROJECT_ENVIRONMENT:-.venv}
 case "$env_path" in

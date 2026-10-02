@@ -45,8 +45,27 @@ updates:
         update-types:
           - "version-update:semver-major"
 
+  # The composed image pins its own base and uv by digest.
+  - package-ecosystem: "docker"
+    directory: "/composition"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "docker"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+
+  # The composite actions pin their own steps, so they are watched with the
+  # workflows that call them.
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: "monthly"
     open-pull-requests-limit: 3

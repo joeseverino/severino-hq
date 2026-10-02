@@ -29,10 +29,6 @@ import shutil
 import subprocess
 import sys
 
-# Run as a file, so the repository root is not on the path by itself.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from application.ui import counted  # noqa: E402
-
 CORDON_LOCK = os.environ.get("CORDON_LOCK", "cordon-admission-lock")
 HOST = "severino-hq"
 
@@ -64,13 +60,19 @@ def stage(wheels: list[Path], out: Path) -> list[str]:
     return [f"{sha256(wheel)}  {wheel.name}" for wheel in wheels]
 
 
-def emit(references: str, digests: list[str], policy_sha256: str | None = None) -> None:
-    if output := os.environ.get("GITHUB_OUTPUT"):
-        with open(output, "a", encoding="utf-8") as handle:
-            handle.write(f"references={references}\n")
-            if policy_sha256:
-                handle.write(f"policy_sha256={policy_sha256}\n")
-            handle.write("digests<<EOF\n" + "\n".join(digests) + "\nEOF\n")
+def emit(out: Path, references: str, digests: list[str], policy_sha256: str | None = None) -> None:
+    """Write the build arguments beside the wheels, not to step outputs.
+
+    A step's env block is printed in its public log, and these name every
+    extension, its version and its digest.
+    """
+    (out / "references").write_text(references + "\n")
+    (out / "digests").write_text("\n".join(digests) + "\n")
+    policy = out / "policy-sha256"
+    if policy_sha256:
+        policy.write_text(policy_sha256 + "\n")
+    elif policy.exists():
+        policy.unlink()
 
 
 def compose_admitted(entries: list[Path], wheels: list[Path], out: Path) -> int:
@@ -110,8 +112,8 @@ def compose_admitted(entries: list[Path], wheels: list[Path], out: Path) -> int:
 
     # Derived from the lock, never configured separately.
     references = ",".join(reference_of(entry["distribution"]) for entry in lock["plugins"])
-    print(f"composed {counted(len(lock['plugins']), 'plugin')}: {references}")
-    emit(references, digests, policies.pop())
+    emit(out, references, digests, policies.pop())
+    print("composition staged")
     return 0
 
 
@@ -125,8 +127,8 @@ def compose_candidate(wheels: list[Path], out: Path) -> int:
         (out / "plugin-lock.json").unlink()
     digests = stage(wheels, out)
     references = ",".join(reference_of(distribution) for distribution in distributions)
-    print(f"candidate {counted(len(wheels), 'plugin')}: {references}")
-    emit(references, digests)
+    emit(out, references, digests)
+    print("candidate staged")
     return 0
 
 

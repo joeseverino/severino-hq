@@ -152,7 +152,9 @@ readonly image_compose="${work_dir}/image-compose.yml"
 printf 'next compose\n' >"${image_compose}"
 cat >"${lib_dir}/scripts/run-private.sh" <<'EOF'
 #!/bin/sh
-exit 0
+echo "private $1" >>"${TEST_LOG}"
+shift 2
+exec "$@"
 EOF
 
 chmod +x "${bin_dir}/docker" "${bin_dir}/systemctl" "${bin_dir}/id" \
@@ -168,6 +170,7 @@ deploy() {
         SEVERINO_HQ_LIB_DIR="${lib_dir}" \
         SEVERINO_HQ_SBIN_DIR="${sbin_dir}" \
         SEVERINO_HQ_RUN_DIR="${run_dir}" \
+        SEVERINO_HQ_LOG_DIR="${work_dir}/log" \
         SEVERINO_HQ_VERIFIER_DIR="${verifier_dir}" \
         SEVERINO_HQ_IMAGE_PREFIX="${test_prefix}" \
         SEVERINO_HQ_ROOT_UID="${TEST_OWNER_UID:-0}" \
@@ -305,6 +308,12 @@ if [ "$(grep -c " up -d " "${log_file}")" -ne 1 ]; then
     exit 1
 fi
 grep -qx 'next compose' "${lib_dir}/docker-compose.yml"
+# Compose, the sync and the installer write to the host's private log, never to
+# the public Actions log.
+for step in "Image pull" "Replace" "Release install"; do
+    grep -qx "private ${step}" "${log_file}" || {
+        echo "${step} did not go through the private log." >&2; exit 1; }
+done
 printf 'previous compose\n' >"${lib_dir}/docker-compose.yml"
 printf 'previous scripts\n' >"${lib_dir}/version"
 previous_installer

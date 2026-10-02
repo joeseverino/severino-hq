@@ -68,7 +68,7 @@ run() { # run <label> <command...>
   rm -f /tmp/ci-local.$$
 }
 
-# ---------------------------------------------------------------- lint job
+# ---------------------------------------------------------------- checks
 step "lint"
 if command -v ruff >/dev/null; then
   pinned ruff "$RUFF_VERSION" "ruff --version | awk '{print \$2}'"
@@ -101,7 +101,7 @@ for suite in $SHELL_SUITES; do
   run "$suite" "$suite"
 done
 
-# The same badge/matrix agreement CI enforces in its lint job.
+# The same badge/matrix agreement CI's Checks job enforces.
 # shellcheck disable=SC2086
 expected_pythons="$(printf '%s\n' $PYTHON_VERSIONS | paste -sd'|' -)"
 claimed_pythons="$(sed -nE 's/.*badge\/python-(.*)-blue.*/\1/p' README.md | head -1 | sed 's/%20%7C%20/|/g')"
@@ -111,7 +111,7 @@ else
   bad "README python badge says '$claimed_pythons'; the matrix runs '$expected_pythons'"
 fi
 
-# ---------------------------------------------------------------- test job
+# ---------------------------------------------------------------- tests
 # The badge quotes the oldest interpreter's coverage, so it is compared on that
 # run and reported as not run only when no interpreter here is that version.
 badge_python="${PYTHON_VERSIONS%% *}"
@@ -168,7 +168,7 @@ else
     "$PY" manage.py test core.browser_tests --noinput --parallel 1
 fi
 
-# ------------------------------------------------------------ security job
+# ------------------------------------------------------------ security
 step "security"
 run "manage.py check --deploy --fail-level WARNING" env \
   DJANGO_DEBUG=0 \
