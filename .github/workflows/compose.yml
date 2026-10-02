@@ -613,7 +613,7 @@ jobs:
               --entrypoint uv "severino-hq-installer:$GITHUB_SHA" \
               build --python /usr/local/bin/python --no-cache --wheel --out-dir /out /src \
               > "$WITHHELD_DIR/candidate-build-$(basename "$repo").log" 2>&1; then
-              echo "::error title=Coordinated branch did not build::Its output is in this run's sealed failure logs."
+              echo "::error title=Coordinated branch did not build::A coordinated branch did not build; its output is in this run's sealed failure logs."
               exit 1
             fi
           done < coordinated.txt
@@ -708,7 +708,7 @@ jobs:
         if: failure() && steps.scan.outcome == 'failure'
         run: |
           jq -r '.Results[]?.Vulnerabilities[]?
-            | "::error title=\(.Severity) \(.VulnerabilityID)::\(.PkgName) \(.InstalledVersion), fixed in \(.FixedVersion)"' \
+            | "::error title=\(.Severity) \(.VulnerabilityID)::\(.Severity) \(.VulnerabilityID) in \(.PkgName) \(.InstalledVersion), fixed in \(.FixedVersion)"' \
             trivy-composed.json | sort -u
 
       # A pull request has already had the only thing it was here for: the

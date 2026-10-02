@@ -43,6 +43,6 @@ fi
 if ! grep -qE '^Ran [0-9]+ tests? in' "$output"; then
   # Only the exception's type: its message can name an extension's app or model.
   raised="$(grep -E '^[A-Za-z_.]+(Error|Exception|Configured)\b' "$output" | tail -1 | cut -d: -f1 || true)"
-  echo "::error title=Composed suite did not run::${raised:-The image did not start the suite}; ${full}."
+  echo "::error title=Composed suite did not run::The composed suite did not run: ${raised:-the image did not start it}; ${full}."
 fi
 exit "$status"

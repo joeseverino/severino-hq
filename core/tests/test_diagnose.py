@@ -48,18 +48,29 @@ class DiagnoseTests(SimpleTestCase):
         self.assertIn("deploy/diagnoses.json", found["fix"])
 
     def test_a_failure_whose_output_is_withheld_says_where_it_is_sealed(self):
+        # As GitHub prints them: a title is not in the log, only the message.
         cases = {
-            "::error title=Composed suite::2 extension test(s) failed": "composition-tests",
-            "::error title=Composed suite did not run::ImproperlyConfigured": "composition-did-not-run",
-            "::error title=Composition refused::The admitted set does not compose.": "composition-refused",
-            "::error title=Coordinated branch did not build::": "candidate-build",
-            "::error title=Image not healthy::": "image-unhealthy",
+            "##[error]2 extension test(s) failed; the full output is sealed": "composition-tests",
+            "##[error]The composed suite did not run: ImproperlyConfigured; the full": "composition-did-not-run",
+            "##[error]The admitted set does not compose. The reason is sealed.": "composition-refused",
+            "##[error]A coordinated branch did not build; its output is sealed.": "candidate-build",
+            "##[error]The container did not report healthy within 90 seconds.": "image-unhealthy",
         }
-        for log, expected in cases.items():
+        for line, expected in cases.items():
             with self.subTest(expected=expected):
-                found = _diagnose().diagnose(log)
+                found = _diagnose().diagnose(f"2026-10-02T00:12:32.36Z {line}")
                 self.assertEqual(found["id"], expected)
                 self.assertIn("scripts/failure-logs.sh", found["fix"])
+
+    def test_a_message_in_an_echoed_script_is_not_a_failure(self):
+        log = (
+            "2026-10-02T00:01:00.1Z ##[group]Run set -euo pipefail\n"
+            '2026-10-02T00:01:00.2Z echo "::error::COMPOSITION_EXTENSIONS must be set"\n'
+            "2026-10-02T00:01:00.3Z env:\n"
+            "2026-10-02T00:01:00.4Z ##[endgroup]\n"
+            "2026-10-02T00:02:00.0Z FAILED (failures=1)\n"
+        )
+        self.assertEqual(_diagnose().diagnose(log)["id"], "host-tests")
 
     def test_a_failing_host_test_is_not_blamed_on_the_composition(self):
         found = _diagnose().diagnose("2026-10-02T00:12:32.36Z FAILED (failures=1, skipped=2)")
