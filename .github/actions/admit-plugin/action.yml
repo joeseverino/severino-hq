@@ -21,15 +21,10 @@ description: >-
 #
 # Everything that does not sign lives in ../../workflows/plugin-checks.yml.
 
+# The plugin id and distribution are read from the package
+# (scripts/plugin-identity.py), never passed: a caller that repeats them can
+# drift from what the wheel declares.
 inputs:
-  plugin-id:
-    description: Plugin identifier declared in the manifest, e.g. example.alpha.
-    required: true
-  distribution:
-    description: >-
-      Installable distribution name. Also names the retained run artifact, and
-      must equal the manifest's declared distribution.
-    required: true
   workflow-path:
     description: >-
       Path of the CALLING workflow file inside the calling repository. This is
@@ -86,6 +81,11 @@ runs:
         ref: ${{ steps.host.outputs.sha }}
         path: host
 
+    - name: Read the extension's identity from its package
+      id: identity
+      shell: bash
+      run: python3 host/scripts/plugin-identity.py . | tee -a "$GITHUB_OUTPUT"
+
     - name: Read the host's toolchain pins
       id: pins
       shell: bash
@@ -108,7 +108,7 @@ runs:
       with:
         python-version: ${{ steps.pins.outputs.python }}
 
-    - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+    - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
 
     - name: Build the immutable wheel
       shell: bash
@@ -171,8 +171,8 @@ runs:
       # the script, so a manifest value can never become shell syntax.
       env:
         POLICY_PATH: host/policy/plugin-admission-v1.json
-        PLUGIN_ID: ${{ inputs.plugin-id }}
-        DISTRIBUTION: ${{ inputs.distribution }}
+        PLUGIN_ID: ${{ steps.identity.outputs.plugin-id }}
+        DISTRIBUTION: ${{ steps.identity.outputs.distribution }}
         WORKFLOW_PATH: ${{ inputs.workflow-path }}
         HOST_ID: severino-hq
         PLUGIN_API_VERSION: ${{ steps.api.outputs.version }}
@@ -199,7 +199,7 @@ runs:
     - name: Retain private provenance
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: ${{ inputs.distribution }}-admission-${{ github.sha }}
+        name: ${{ steps.identity.outputs.distribution }}-admission-${{ github.sha }}
         path: |
           admission.json
           admission.sigstore.json

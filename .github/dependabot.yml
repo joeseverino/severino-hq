@@ -60,8 +60,12 @@ updates:
         update-types:
           - "version-update:semver-major"
 
+  # The composite actions pin their own steps, so they are watched with the
+  # workflows that call them.
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: "monthly"
     open-pull-requests-limit: 3

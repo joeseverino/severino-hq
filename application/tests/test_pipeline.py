@@ -430,3 +430,86 @@ class ScriptInputTests(SimpleTestCase):
         use = compose.index('--artifact "$wheel"')
         self.assertLess(collect, check)
         self.assertLess(check, use)
+
+
+def plugin_identity():
+    spec = importlib.util.spec_from_file_location(
+        "plugin_identity", ROOT / "scripts" / "plugin-identity.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class PluginIdentityTests(SimpleTestCase):
+    """An extension's identity is read from its package, and only from there."""
+
+    def package(self, manifest: str, name: str = "example-alpha") -> Path:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        (root / "pyproject.toml").write_text(f'[project]\nname = "{name}"\nversion = "1.0"\n')
+        source = root / "src" / "example_alpha"
+        source.mkdir(parents=True)
+        (source / "plugin.py").write_text(manifest)
+        return root
+
+    def manifest(self, **fields: str) -> str:
+        declared = {
+            "id": '"example.alpha"',
+            "distribution": '"example-alpha"',
+            "django_apps": '("example_alpha",)',
+        } | fields
+        body = ", ".join(f"{key}={value}" for key, value in declared.items())
+        return f"from hq_sdk.plugin import PluginManifest\nplugin = PluginManifest({body})\n"
+
+    def test_the_package_declares_everything_admission_needs(self):
+        found = plugin_identity().identity(self.package(self.manifest()))
+        self.assertEqual(found, {
+            "distribution": "example-alpha",
+            "plugin-id": "example.alpha",
+            "plugin-reference": "example_alpha.plugin:plugin",
+            "django-app": "example_alpha",
+        })
+
+    def test_a_package_that_disagrees_with_itself_is_refused(self):
+        cases = {
+            "distribution": self.manifest(distribution='"example-beta"'),
+            "django_apps": self.manifest(django_apps='("other",)'),
+            "a literal": self.manifest(id="IDENTIFIER"),
+            "no module-level": "plugin = make()\n",
+        }
+        for reason, manifest in cases.items():
+            with self.subTest(reason=reason), self.assertRaises(SystemExit) as refused:
+                plugin_identity().identity(self.package(manifest))
+            self.assertIn(reason, str(refused.exception))
+
+    def test_a_manifest_away_from_its_package_is_refused(self):
+        with self.assertRaises(SystemExit) as refused:
+            plugin_identity().identity(self.package(self.manifest(), name="example-gamma"))
+        self.assertIn("src/example_gamma/plugin.py", str(refused.exception))
+
+
+class ExtensionCallerTests(SimpleTestCase):
+    """An extension's caller names nothing about the extension."""
+
+    def test_the_reusable_checks_and_admission_take_no_identity(self):
+        checks = (WORKFLOWS / "plugin-checks.yml").read_text()
+        admit = (ROOT / ".github" / "actions" / "admit-plugin" / "action.yml").read_text()
+        for name in ("plugin-reference:", "django-app:", "plugin-id:", "distribution:"):
+            with self.subTest(name=name):
+                self.assertNotIn(f"\n  {name}", admit.split("\nruns:")[0])
+                self.assertNotIn(f"\n      {name}", checks.split("\npermissions:")[0])
+        self.assertIn("check-plugin.sh --plugin-root .", checks)
+        self.assertIn("scripts/plugin-identity.py", admit)
+
+
+class ActionPinTests(SimpleTestCase):
+    def test_every_action_has_one_version_across_workflows_and_composite_actions(self):
+        files = [*WORKFLOWS.glob("*.yml"), *(ROOT / ".github" / "actions").glob("*/action.yml")]
+        pins: dict[str, set[str]] = {}
+        for path in files:
+            for action, sha in re.findall(r"uses: ([\w./-]+)@([0-9a-f]{40})", path.read_text()):
+                pins.setdefault(action, set()).add(sha)
+        self.assertGreater(len(pins), 5)
+        self.assertEqual({action: shas for action, shas in pins.items() if len(shas) > 1}, {})

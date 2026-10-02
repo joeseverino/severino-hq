@@ -91,20 +91,44 @@ views use `@capability_required(...)`. Bulk work uses `audit_operation` plus
 `record_operation`, so adapter and actor attribution are consistent without a
 domain-owned wrapper.
 
-Private repositories call the reusable `plugin-checks.yml` workflow with only:
+A private repository's `.github/workflows/admit-plugin.yml` is the same in
+every extension, because it names nothing about the extension:
 
 ```yaml
-with:
-  plugin-reference: example_notes.plugin:plugin
-  django-app: example_notes
+jobs:
+  checks:
+    uses: OWNER/severino-hq/.github/workflows/plugin-checks.yml@main
+  admit:
+    name: Admit
+    if: github.event_name != 'pull_request'
+    needs: checks
+    runs-on: ubuntu-24.04
+    environment: admission
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: OWNER/severino-hq/.github/actions/admit-plugin@main
+        with:
+          app-client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.HQ_APP_KEY }}
 ```
 
-The host-owned check syncs and lints the package, enforces SDK-only imports,
-runs Django checks, migration drift checks, and plugin tests, then builds the
-wheel and installs it with `--no-deps` into a clean host environment. That last
-step exactly reproduces production's dependency boundary and catches a missing
-host pin before composition. A caller that passes neither input runs its own
-`scripts/check.sh` instead, with a warning.
+The extension's identity is declared once, by the package:
+`scripts/plugin-identity.py` reads the distribution from `pyproject.toml` and
+the plugin id and Django app from the `plugin = PluginManifest(...)` in
+`src/<package>/plugin.py`, where `<package>` is the distribution with
+underscores. It fails when the two disagree, before anything is built or signed.
+
+The same check runs locally from an extension's checkout, with nothing to
+pass: `../severino-hq/scripts/check-plugin.sh`. It syncs and lints the package,
+enforces SDK-only imports, runs Django checks, migration drift checks, and
+plugin tests, then builds the wheel and installs it with `--no-deps` into a
+clean host environment. That last step reproduces production's dependency
+boundary and catches a missing host pin before composition. In CI it runs
+against host `main`, or against the host branch named like the extension's
+branch when one exists, so a coordinated change is checked against its other
+half.
 
 ## Cordon admission
 
