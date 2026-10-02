@@ -406,14 +406,14 @@ machine and no extension is named in this repository.
 #### Checked once
 
 A pull request runs every gate, composes HQ with its extensions and runs the
-composed suite. When it merges, the push to `main` asks **Proven**
+composed suite. When it merges, the push to `main` asks **Proven on its pull request**
 (`scripts/proven-on-pr.sh`) whether that run already covered it: the merged
 pull request's last CI run passed, its image carries a `dev.severino.hq.tree`
 label equal to the pushed commit's tree, and it is signed by that pull
 request's own CI run. With all three, Checks, Tests and Browser are skipped,
 Image promotes that image by digest to the commit's tag and signs it as `main`,
 and Ready starts Compose. The workflow that built the image is part of the
-compared tree, so what ran is what merged. Short of all three, or if Proven
+compared tree, so what ran is what merged. Short of all three, or if that job
 errs, every gate runs as on the pull request. Compose stamps the released
 commit into the composition (`SEVERINO_HQ_REVISION`), so production reports
 the commit it runs whichever build produced the host image.

@@ -28,7 +28,7 @@ jobs:
   # promotes the pull request's image instead of building another. Anything
   # less than proof (scripts/proven-on-pr.sh) and every gate runs.
   proven:
-    name: Proven
+    name: Proven on its pull request
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 5

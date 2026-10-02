@@ -22,11 +22,12 @@ readonly repo="${GITHUB_REPOSITORY:?}"
 readonly wait_seconds="${VERDICT_WAIT_SECONDS:-2400}"
 
 # The gates of this run: every job Ready needs, by the name GitHub shows.
-# Proven runs on pushes to main only, so a pull request never has it.
+# "Proven on its pull request" runs on pushes to main only, so a pull request
+# never has it.
 # One line per job: id, name, result, seconds, page, workflow.
 readonly job_line='"\(.id)\t\(.name)\t\(.conclusion // "pending")\t\(if .started_at and .completed_at then ((.completed_at | fromdate) - (.started_at | fromdate)) else "" end)\t\(.html_url)"'
 rows="$(gh api "repos/${repo}/actions/runs/${THIS_RUN}/jobs?per_page=100" \
-  --jq ".jobs[] | select(.name != \"Ready\" and .name != \"Proven\") | ${job_line} + \"\\tCI\"")"
+  --jq ".jobs[] | select(.name != \"Ready\" and .name != \"Proven on its pull request\") | ${job_line} + \"\\tCI\"")"
 
 # The same commit's other workflows, once each has finished: Compose, which builds
 # HQ from it (only when the pull request is composed), and CodeQL.

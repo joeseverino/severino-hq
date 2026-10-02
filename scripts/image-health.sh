@@ -29,19 +29,22 @@ docker run --detach --name "$name" \
   --health-interval 2s --health-timeout 3s --health-retries 5 --health-start-period 1s \
   "${env_args[@]}" "$image" >/dev/null
 
-for _ in $(seq 1 45); do
-  case "$(docker inspect --format '{{.State.Health.Status}}' "$name")" in
-    healthy) echo "the image came up healthy"; exit 0 ;;
-    unhealthy) break ;;
+# Unhealthy is not final: boot migrates first, and Docker reports healthy again
+# once a later check passes. Only the deadline, or a container that exited, ends it.
+deadline=$((SECONDS + 90))
+while [ "$SECONDS" -lt "$deadline" ]; do
+  case "$(docker inspect --format '{{.State.Status}} {{.State.Health.Status}}' "$name")" in
+    *" healthy") echo "the image came up healthy in ${SECONDS}s"; exit 0 ;;
+    exited*|dead*) break ;;
   esac
   sleep 2
 done
 if [ -n "${WITHHELD_DIR:-}" ]; then
   mkdir -p "$WITHHELD_DIR"
   docker logs --tail 200 "$name" >"$WITHHELD_DIR/image-health.log" 2>&1
-  echo "::error title=Image not healthy::The container did not report healthy within 90 seconds. Its log is in this run's sealed failure logs."
+  echo "::error title=Image not healthy::The container did not report healthy within 90 seconds, or exited. Its log is in this run's sealed failure logs."
 else
-  echo "::error title=Image not healthy::The container did not report healthy within 90 seconds."
+  echo "::error title=Image not healthy::The container did not report healthy within 90 seconds, or exited."
   docker logs --tail 40 "$name" 2>&1
 fi
 exit 1
