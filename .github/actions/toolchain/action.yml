@@ -33,6 +33,15 @@ outputs:
   actionlint-version:
     description: The actionlint the gate runs.
     value: ${{ steps.read.outputs.actionlint-version }}
+  shellcheck-sha256:
+    description: SHA-256 of the shellcheck release archive.
+    value: ${{ steps.read.outputs.shellcheck-sha256 }}
+  actionlint-sha256:
+    description: SHA-256 of the actionlint release archive.
+    value: ${{ steps.read.outputs.actionlint-sha256 }}
+  cordon-commit:
+    description: The Cordon commit admission is signed and verified with.
+    value: ${{ steps.read.outputs.cordon-commit }}
 
 runs:
   using: composite
@@ -51,6 +60,9 @@ runs:
           echo "shellcheck-version=$SHELLCHECK_VERSION"
           echo "coverage-floor=$COVERAGE_FLOOR"
           echo "actionlint-version=$ACTIONLINT_VERSION"
+          echo "shellcheck-sha256=$SHELLCHECK_SHA256"
+          echo "actionlint-sha256=$ACTIONLINT_SHA256"
+          echo "cordon-commit=$CORDON_COMMIT"
         } >> "$GITHUB_OUTPUT"
 
     - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0

@@ -34,7 +34,7 @@ RUN set -eu; \
     expected=$(grep -c . /tmp/plugin/requirements.txt); \
     found=$(find /tmp/plugin -maxdepth 1 -type f -name '*.whl' | wc -l); \
     test "$expected" -eq "$found"; \
-    uv pip install --python /usr/local/bin/python --prefix /install \
+    uv pip install --quiet --python /usr/local/bin/python --prefix /install \
       --no-cache --no-deps --require-hashes -r /tmp/plugin/requirements.txt
 
 FROM ${HQ_IMAGE}
@@ -42,6 +42,11 @@ FROM ${HQ_IMAGE}
 # the approved set must be identical or the host will not start.
 ARG PLUGIN_POLICY_SHA256
 ARG SEVERINO_HQ_PLUGIN_REFERENCES
+# The commit on main this composition releases. The host image may have been
+# built for the pull request that proved the same tree, so the release's own
+# commit is stated here rather than inherited.
+ARG HQ_REVISION
+LABEL org.opencontainers.image.revision=${HQ_REVISION}
 USER root
 COPY --from=installer /install /usr/local
 COPY --chown=severino:severino build/composition/plugin-lock.json /opt/severino/plugin-lock.json
@@ -52,5 +57,6 @@ RUN test -s /opt/severino/plugin-lock.json \
 ENV SEVERINO_HQ_PLUGINS=${SEVERINO_HQ_PLUGIN_REFERENCES} \
     SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION=1 \
     SEVERINO_HQ_PLUGIN_LOCK=/opt/severino/plugin-lock.json \
-    SEVERINO_HQ_PLUGIN_POLICY_SHA256=${PLUGIN_POLICY_SHA256}
+    SEVERINO_HQ_PLUGIN_POLICY_SHA256=${PLUGIN_POLICY_SHA256} \
+    SEVERINO_HQ_REVISION=${HQ_REVISION}
 USER severino

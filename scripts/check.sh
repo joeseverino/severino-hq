@@ -134,16 +134,17 @@ else
     echo "[check] actionlint unavailable; CI will run workflow validation"
 fi
 
-# The same two lists CI's lint job uses, from the same file, so this gate covers
+# The same two lists CI's Checks job uses, from the same file, so this gate covers
 # what that job covers.
 . ./scripts/toolchain.env
 
 echo "[check] Shell syntax"
 # shellcheck disable=SC2086  # both lists are meant to split
 set -- $SHELL_SOURCES
+# Each parsed by the shell its first line names.
 for shell_source; do
-    case "$shell_source" in
-        *backup.sh | *ci-local.sh | *hq-*.sh) bash -n "$shell_source" ;;
+    case "$(head -n 1 "$shell_source")" in
+        *bash*) bash -n "$shell_source" ;;
         *) sh -n "$shell_source" ;;
     esac
 done

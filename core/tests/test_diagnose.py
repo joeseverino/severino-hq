@@ -47,6 +47,20 @@ class DiagnoseTests(SimpleTestCase):
         self.assertEqual(found["id"], "unknown")
         self.assertIn("deploy/diagnoses.json", found["fix"])
 
+    def test_a_failure_whose_output_is_withheld_says_where_it_is_sealed(self):
+        cases = {
+            "::error title=Composed suite::2 extension test(s) failed": "composition-tests",
+            "::error title=Composed suite did not run::ImproperlyConfigured": "composition-did-not-run",
+            "::error title=Composition refused::The admitted set does not compose.": "composition-refused",
+            "::error title=Coordinated branch did not build::": "candidate-build",
+            "::error title=Image not healthy::": "image-unhealthy",
+        }
+        for log, expected in cases.items():
+            with self.subTest(expected=expected):
+                found = _diagnose().diagnose(log)
+                self.assertEqual(found["id"], expected)
+                self.assertIn("scripts/failure-logs.sh", found["fix"])
+
     def test_it_never_repeats_the_log(self):
         secret = "private-extension-name"
         found = _diagnose().diagnose(f"{secret}: denied: permission_denied: write_package")

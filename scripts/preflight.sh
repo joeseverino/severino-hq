@@ -68,7 +68,9 @@ else
 fi
 
 # Every check GitHub runs on HEAD, once each has finished. None started yet
-# is waiting, not passing; a check that did not succeed is a failure.
+# is waiting, not passing; a check that did not succeed is a failure. The
+# Production check is excluded: it reports the release, which waits for an
+# approval this gate comes before, and the build it follows is a check here.
 github_gates() {
     sha="$(git rev-parse HEAD)"
     if [ -z "$(git branch -r --contains "${sha}" 2>/dev/null)" ]; then
@@ -79,7 +81,8 @@ github_gates() {
     deadline=$(( $(date +%s) + ${PREFLIGHT_REMOTE_TIMEOUT:-3600} ))
     while :; do
         checks="$(command gh api "repos/${repository}/commits/${sha}/check-runs?per_page=100" \
-            --jq '.check_runs[] | "\(.status) \(.conclusion // "-") \(.name)"')"
+            --jq '.check_runs[] | select(.name != "Severino HQ · Production")
+                | "\(.status) \(.conclusion // "-") \(.name)"')"
         if [ -n "${checks}" ] && ! printf '%s\n' "${checks}" | grep -qv '^completed '; then
             break
         fi

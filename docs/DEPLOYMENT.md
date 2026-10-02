@@ -366,7 +366,7 @@ mistaken for another's:
 
 | Workflow | On | Does |
 |---|---|---|
-| **CI** (`ci.yml`) | every pull request and push to `main` | Checks, Tests, Browser and Image (build, prove healthy, scan, publish and sign the host image), and **Ready**, which writes HQ's review |
+| **CI** (`ci.yml`) | every pull request and push to `main` | Checks, Tests, Browser and Image (build, prove healthy, scan, publish and sign the host image), and **Ready**, which writes HQ's review. A push whose tree its pull request already proved is promoted, not checked twice (below) |
 | **CodeQL** (`codeql.yml`) | every pull request and push to `main`, and weekly | GitHub's code scanning; the ruleset holds a merge while it has an alert |
 | **Compose** (`compose.yml`) | a pull request (to verify it); started with a commit by CI once a push to `main` passes, by an extension's admission, or by hand | the host plus every admitted extension, verified as one application; on `main`, published and signed |
 | **Deploy** (`deploy.yml`) | started with a commit by Compose once it has published HQ, or by hand to redeploy or roll back | waits for approval in `production`, then deploys on the self-hosted runner with health rollback |
@@ -402,6 +402,49 @@ words, never a line of the log. The first time a failure needs investigating,
 add it there, and it is named, with its fix, every time after. What any of
 these checks says is public: the commit, the stage, the image and the run. No
 machine and no extension is named in this repository.
+
+#### Checked once
+
+A pull request runs every gate, composes HQ with its extensions and runs the
+composed suite. When it merges, the push to `main` asks **Proven**
+(`scripts/proven-on-pr.sh`) whether that run already covered it: the merged
+pull request's last CI run passed, its image carries a `dev.severino.hq.tree`
+label equal to the pushed commit's tree, and it is signed by that pull
+request's own CI run. With all three, Checks, Tests and Browser are skipped,
+Image promotes that image by digest to the commit's tag and signs it as `main`,
+and Ready starts Compose. The workflow that built the image is part of the
+compared tree, so what ran is what merged. Short of all three, or if Proven
+errs, every gate runs as on the pull request. Compose stamps the released
+commit into the composition (`SEVERINO_HQ_REVISION`), so production reports
+the commit it runs whichever build produced the host image.
+
+#### When a run fails
+
+Every log here is public, so each failure is reported at two levels:
+
+| Where | Says | Holds |
+| --- | --- | --- |
+| the run's log and HQ's check | the failed step, its diagnosis and fix, failing host test ids, counts | nothing that names an extension or the deploy host |
+| the sealed failure logs | everything the log withheld: the composed suite's full output, a refused composition's reason, a coordinated branch's build, a composed container's log | readable only by the operator |
+| the deploy host, `/var/log/severino-hq/` | compose, sync, installer and failed-health output, root-only | the host's own detail |
+
+Compose writes what it withholds to `WITHHELD_DIR`, and on failure
+`scripts/seal-failure-logs.sh` encrypts it with [age](https://age-encryption.org)
+to the public key `FAILURE_LOG_RECIPIENT` in `scripts/toolchain.env` and
+uploads it as the run's `failure-logs` artifact. Anyone can download it; only
+the matching identity opens it:
+
+```bash
+scripts/failure-logs.sh RUN_ID   # identity from SEVERINO_FAILURE_LOG_IDENTITY
+```
+
+The identity lives in a password manager and is read at use. To rotate it,
+generate a pair with `age-keygen -pq`, store the identity, replace the recipient in
+`toolchain.env`; runs sealed before then need the old identity.
+
+Extension values never pass through a step's `env:` block, which the log
+prints: they move between steps as files. Every spelling of an extension's
+name is masked as a backstop, not as the design.
 
 #### Continuous delivery through HQ's GitHub App
 

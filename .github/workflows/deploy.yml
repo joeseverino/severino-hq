@@ -28,10 +28,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: deploy-production
-  cancel-in-progress: false
-
 jobs:
   resolve:
     name: Resolve
@@ -104,6 +100,11 @@ jobs:
     runs-on: [self-hosted, severino-hq]
     timeout-minutes: 30
     environment: production
+    # One deploy at a time. Held by this job, not the workflow, so Resolve and
+    # Report never wait behind a release that is waiting for approval.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: read
@@ -130,8 +131,8 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Verify the image was composed by Compose
-        # The last point at which anything can be checked: everything upstream
-        # happens on GitHub's runners, and this is the host about to run it.
+        # On the host, before anything privileged: deploy-image.sh verifies
+        # again as root, and this answers first with a clear message.
         #
         # Verified against the identity of Compose in this repository, so
         # a digest pushed to the composition name by any other means (another
@@ -150,22 +151,19 @@ jobs:
               "^https://github\.com/${REPOSITORY}/\.github/workflows/compose\.yml@refs/heads/main$" \
             "$IMAGE" > /dev/null
           echo "composition signature verified"
-      - name: Refuse a checkout the runner cannot pull
-        # The pull below runs as this account, so everything under the
-        # checkout's .git must be its own. severino-hq-check-scripts asks the
-        # same question daily (scripts/lib/checkout.sh).
+      - name: Sync the deploy checkout
+        # The deploy runs from the verified image and the root-owned scripts,
+        # not from this checkout, so a checkout git cannot pull is a warning to
+        # fix, not a reason to hold a verified release. severino-hq-check-scripts
+        # asks the same ownership question daily (scripts/lib/checkout.sh).
         run: |
-          set -euo pipefail
+          set -uo pipefail
           checkout=/opt/apps/severino-hq
-          runner="$(id -un)"
-          foreign="$(find "$checkout/.git" ! -user "$runner" -print)"
-          if [ -n "$foreign" ]; then
-            count="$(printf '%s\n' "$foreign" | wc -l | tr -d ' ')"
-            echo "::error title=Checkout not owned by the runner::$count path(s) under $checkout/.git are not owned by $runner, so git pull fails. Fix on the host: sudo chown -R $runner: $checkout/.git </dev/null"
-            exit 1
+          if [ -n "$(find "$checkout/.git" ! -user "$(id -un)" -print -quit)" ]; then
+            echo "::warning title=Checkout not synced::Part of the checkout's .git is not owned by the runner. Fix on the host: sudo chown -R \"\$(id -un)\": $checkout/.git"
+          elif ! git -C "$checkout" pull --ff-only --quiet; then
+            echo "::warning title=Checkout not synced::git pull --ff-only failed; the deploy continues from the verified image."
           fi
-      - name: Sync deploy checkout
-        run: git -C /opt/apps/severino-hq pull --ff-only
       - name: Deploy exact image with health rollback
         # Same deploy path and rollback as a host release: it pulls, recreates,
         # waits for health, activates the controller, and restores the previous

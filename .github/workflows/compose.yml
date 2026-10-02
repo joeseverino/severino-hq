@@ -58,8 +58,10 @@ env:
   # there. Decided once, because the publish step and the dispatch of Deploy
   # must agree about it.
   IS_RELEASE: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
-  CORDON_COMMIT: a5f2f2d2c11e33abe1be6ab04e5961f3c2f4a739
   PYTHONUNBUFFERED: "1"
+  # What a failure withholds from the public log: sealed for the operator by
+  # the last steps. Outside the workspace, so no build context can include it.
+  WITHHELD_DIR: /tmp/severino-hq-withheld
 
 jobs:
   compose:
@@ -89,6 +91,13 @@ jobs:
       - name: Check out host
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Read the toolchain pins
+        id: pins
+        run: |
+          set -euo pipefail
+          . ./scripts/toolchain.env
+          echo "cordon-commit=$CORDON_COMMIT" >> "$GITHUB_OUTPUT"
+
       - name: Read the composition set
         # A secret, and never interpolated into the script body. Actions
         # expands `${{ … }}` into the text of the step it echoes, and masks only
@@ -108,7 +117,6 @@ jobs:
           if ! jq -e '.extensions | length > 0' composition-set.json >/dev/null 2>&1; then
             echo "::error::COMPOSITION_EXTENSIONS must list at least one extension"; exit 1
           fi
-          jq -r '.extensions | length as $n | "composing \($n) extension(s)"' composition-set.json
 
       - name: Mask the extension names for the rest of the job
         # Later steps shell out to gh, uv, and Django, and those echo
@@ -119,7 +127,8 @@ jobs:
         #
         # Every spelling, because the same extension appears as a repository
         # path, a bare name, a Python package, a table prefix and the path it
-        # mounts at. A URL is none of the other four, so it needs its own.
+        # mounts at. A URL is none of the other four, so it needs its own. Each
+        # in lower, Title and UPPER case, as a page title or constant spells it.
         run: |
           set -euo pipefail
           jq -r '
@@ -130,16 +139,15 @@ jobs:
           ' composition-set.json \
             | tr -d '\r' | sed '/^$/d' | sort -u \
             | while read -r name; do
-                echo "::add-mask::${name}"
-                echo "::add-mask::${name//-/_}"
-                echo "::add-mask::${name//_/-}"
+                for spelling in "$name" "${name//-/_}" "${name//_/-}"; do
+                  echo "::add-mask::${spelling}"
+                  echo "::add-mask::${spelling^}"
+                  echo "::add-mask::${spelling^^}"
+                done
               done
 
       - name: Authenticate to GHCR
-        # Before the two steps that ask the registry a question, not before the
-        # one that pushes: resolving the host image and checking whether this
-        # composition was already published are both reads, and both happen on
-        # every tick including the ones that build nothing.
+        # Once, for every registry read and the push at the end.
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
@@ -181,12 +189,9 @@ jobs:
             if [ "$attempt" -eq 1 ]; then
               echo "waiting for the host image $image to be published..."
             fi
-            # Every two minutes, ask whether there is still a build to wait for.
-            # A host build that already failed will never publish, so waiting
-            # the full twenty minutes reports a timeout instead of the failure
-            # that caused it, and holds this branch's composition slot while
-            # the corrected commit queues behind it.
-            if [ $((attempt % 24)) -eq 0 ]; then
+            # Every 30 seconds, ask whether there is still a build to wait for:
+            # a host build that failed will never publish.
+            if [ $((attempt % 6)) -eq 0 ]; then
               # The Image job, not the run: CI's Ready waits for this
               # composition, so the run as a whole cannot conclude first.
               ci_run=$(gh api \
@@ -200,9 +205,17 @@ jobs:
               fi
               case "$host_ci" in
                 failure|cancelled|timed_out|skipped)
-                  echo "::error title=Host build $host_ci::The host build for \
-          ${ref:0:12} concluded '$host_ci', so $image will never be published. \
-          Fix the host build; the composition has nothing to compose onto."
+                  step=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ci_run/jobs?per_page=100" \
+                    --jq '[.jobs[] | select(.name == "Image") | .steps[] | select(.conclusion == "failure") | .name] | first // ""' \
+                    2>/dev/null || true)
+                  echo "::error title=Host image $host_ci${step:+ at $step}::CI's Image job for \
+          ${ref:0:12} concluded '$host_ci'${step:+ in step \"$step\"}, so there is no host image \
+          to compose onto. Fix that, and this composition runs with it."
+                  {
+                    echo "### No host image to compose onto"
+                    echo
+                    echo "CI's **Image** job for \`${ref:0:12}\` ${host_ci}${step:+ at **${step}**}."
+                  } >> "$GITHUB_STEP_SUMMARY"
                   exit 1
                   ;;
               esac
@@ -356,9 +369,8 @@ jobs:
           # policy. Two runs agreeing on all three produce the same image, so
           # there is nothing to build and nothing to deploy.
           #
-          # Asked before anything is downloaded or verified, because the answer
-          # is almost always "nothing", and an idle tick that downloads and
-          # verifies is a chance to fail at something nobody is waiting for.
+          # Asked before anything is downloaded or verified: an admission of an
+          # unchanged set builds nothing.
           fingerprint=$(printf '%s\n%s\n%s\n' \
             "$HOST_IMAGE" \
             "$(sha256sum admissions.txt | cut -d' ' -f1)" \
@@ -451,7 +463,7 @@ jobs:
           steps.fingerprint.outputs.build == 'true'
         with:
           repository: joeseverino/cordon
-          ref: ${{ env.CORDON_COMMIT }}
+          ref: ${{ steps.pins.outputs.cordon-commit }}
           path: cordon
 
       - name: Install pinned Cordon dependencies
@@ -460,7 +472,6 @@ jobs:
         run: npm ci --prefix cordon --ignore-scripts
 
       - name: Verify every admission against the declared signer
-        id: collect
         if: >-
           steps.fingerprint.outputs.build == 'true'
         # The host verifies each signature itself rather than trusting an entry
@@ -531,22 +542,28 @@ jobs:
             args="$args --entry $entry --wheel $wheel"
             if [ "$CANDIDATE" = true ]; then cp "$wheel" candidate-wheels/; fi
           done
-          echo "args=$args" >> "$GITHUB_OUTPUT"
+          mkdir -p build
+          printf '%s\n' "$args" > build/compose-args
 
       - name: Merge locks and stage the build context
-        id: compose
         if: >-
           steps.coordinated.outputs.found != 'true' &&
           (steps.fingerprint.outputs.build == 'true')
+        # Every value that names an extension passes between steps as a file:
+        # a step's env block is printed in its public log.
         env:
           CORDON_LOCK: ./cordon/admission/lock.mjs
-          ARGS: ${{ steps.collect.outputs.args }}
-        # ARGS is words by construction (the collect step admits only plain
-        # file names), so it is split here on purpose and never globbed.
+        # The arguments are words by construction (the collect step admits only
+        # plain file names), so they are split here on purpose and never globbed.
         run: |
           set -f
-          # shellcheck disable=SC2086
-          python scripts/compose-plugins.py $ARGS --out build/composition
+          mkdir -p "$WITHHELD_DIR"
+          # shellcheck disable=SC2046
+          if ! python scripts/compose-plugins.py $(cat build/compose-args) --out build/composition \
+            2> "$WITHHELD_DIR/compose-plugins.log"; then
+            echo "::error title=Composition refused::The admitted set does not compose. The reason is in this run's sealed failure logs."
+            exit 1
+          fi
 
       - name: Build composed image
         # Skipped by an admission's dispatch that found nothing to do, and by a
@@ -556,16 +573,15 @@ jobs:
           (steps.fingerprint.outputs.build == 'true')
         env:
           HQ_IMAGE: ${{ steps.host.outputs.image }}
-          WHEEL_DIGESTS: ${{ steps.compose.outputs.digests }}
-          POLICY_SHA256: ${{ steps.compose.outputs.policy_sha256 }}
-          PLUGIN_REFERENCES: ${{ steps.compose.outputs.references }}
           HOST_SHA: ${{ steps.host.outputs.sha }}
         run: |
+          staged=build/composition
           docker build -f composition/Dockerfile \
             --build-arg HQ_IMAGE="$HQ_IMAGE" \
-            --build-arg PLUGIN_WHEEL_DIGESTS="$WHEEL_DIGESTS" \
-            --build-arg PLUGIN_POLICY_SHA256="$POLICY_SHA256" \
-            --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="$PLUGIN_REFERENCES" \
+            --build-arg PLUGIN_WHEEL_DIGESTS="$(cat "$staged/digests")" \
+            --build-arg PLUGIN_POLICY_SHA256="$(cat "$staged/policy-sha256")" \
+            --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="$(cat "$staged/references")" \
+            --build-arg HQ_REVISION="$HOST_SHA" \
             -t "ghcr.io/${{ github.repository }}/composition:$HOST_SHA" .
 
       - name: Build coordinated extension branches
@@ -579,7 +595,7 @@ jobs:
           HQ_IMAGE: ${{ steps.host.outputs.image }}
         run: |
           set -euo pipefail
-          mkdir -p candidate-wheels candidates
+          mkdir -p candidate-wheels candidates "$WITHHELD_DIR"
           chmod 0777 candidate-wheels
           docker build -f composition/Dockerfile --target installer-base \
             --build-arg HQ_IMAGE="$HQ_IMAGE" \
@@ -591,15 +607,19 @@ jobs:
             git -C "$dir" checkout --quiet --detach "$sha"
             rm -rf "$dir/.git"
             chmod -R a+rwX "$dir"
-            docker run --rm --network bridge --user 10001:10001 \
+            # The build lists every module and template it copies: withheld.
+            if ! docker run --rm --network bridge --user 10001:10001 \
               --env HOME=/tmp --env UV_PYTHON_DOWNLOADS=never \
               --volume "$PWD/$dir:/src" --volume "$PWD/candidate-wheels:/out" \
               --entrypoint uv "severino-hq-installer:$GITHUB_SHA" \
-              build --python /usr/local/bin/python --no-cache --wheel --out-dir /out /src
+              build --python /usr/local/bin/python --no-cache --wheel --out-dir /out /src \
+              > "$WITHHELD_DIR/candidate-build-$(basename "$repo").log" 2>&1; then
+              echo "::error title=Coordinated branch did not build::Its output is in this run's sealed failure logs."
+              exit 1
+            fi
           done < coordinated.txt
 
       - name: Stage the candidate
-        id: candidate
         if: github.event_name == 'pull_request' && steps.coordinated.outputs.found == 'true'
         run: |
           set -euo pipefail
@@ -613,16 +633,15 @@ jobs:
         if: github.event_name == 'pull_request' && steps.coordinated.outputs.found == 'true'
         env:
           HQ_IMAGE: ${{ steps.host.outputs.image }}
-          DIGESTS: ${{ steps.candidate.outputs.digests }}
-          REFERENCES: ${{ steps.candidate.outputs.references }}
           INSTALLER_IMAGE: severino-hq-installer:${{ github.sha }}
         run: |
           set -euo pipefail
+          staged=build/candidate
           docker build -f - -t "severino-hq-candidate:$GITHUB_SHA" \
             --build-arg HQ_IMAGE="$HQ_IMAGE" \
             --build-arg INSTALLER_IMAGE="$INSTALLER_IMAGE" \
-            --build-arg PLUGIN_WHEEL_DIGESTS="$DIGESTS" \
-            --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="$REFERENCES" . <<'DOCKERFILE'
+            --build-arg PLUGIN_WHEEL_DIGESTS="$(cat "$staged/digests")" \
+            --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="$(cat "$staged/references")" . <<'DOCKERFILE'
           ARG HQ_IMAGE
           ARG INSTALLER_IMAGE
           FROM ${INSTALLER_IMAGE} AS installer
@@ -635,7 +654,7 @@ jobs:
               expected=$(grep -c . /tmp/plugin/requirements.txt); \
               found=$(find /tmp/plugin -maxdepth 1 -type f -name '*.whl' | wc -l); \
               test "$expected" -eq "$found"; \
-              uv pip install --python /usr/local/bin/python --prefix /install \
+              uv pip install --quiet --python /usr/local/bin/python --prefix /install \
                 --no-cache --no-deps --require-hashes -r /tmp/plugin/requirements.txt
           FROM ${HQ_IMAGE} AS runtime
           ARG SEVERINO_HQ_PLUGIN_REFERENCES
@@ -657,27 +676,26 @@ jobs:
         # host-owned dependencies, or a test that wrongly assumes its plugin is
         # the only contributor to a global surface.
         #
-        # Log level raised for the run. At INFO the application writes a line
-        # per request, which a suite exercising every composed page turns into
-        # a list of everything the composition serves. Masking is the backstop.
-        # Failures are unaffected: the test runner reports those itself.
+        # The log gets totals and failing host test ids only: an extension's
+        # tests name its models, routes and fixtures (scripts/composed-suite.sh).
         env:
           IMAGE: ${{ steps.coordinated.outputs.found == 'true' && format('severino-hq-candidate:{0}', github.sha) || format('ghcr.io/{0}/composition:{1}', github.repository, steps.host.outputs.sha) }}
-        run: |
-          image="$IMAGE"
-          docker run --rm --entrypoint python \
-            --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
-            --env DJANGO_ALLOWED_HOSTS=localhost \
-            --env SEVERINO_LOG_LEVEL=WARNING \
-            "$image" manage.py check
-          docker run --rm --entrypoint python \
-            --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
-            --env DJANGO_ALLOWED_HOSTS=localhost \
-            --env SEVERINO_LOG_LEVEL=WARNING \
-            "$image" manage.py test --verbosity 1 --parallel auto
+        run: scripts/composed-suite.sh "$IMAGE"
+
+      - name: The composed image comes up healthy
+        # As production boots it, before anything is published: the suite above
+        # runs the code, this runs the container.
+        if: >-
+          steps.fingerprint.outputs.build == 'true'
+        env:
+          IMAGE: ${{ steps.coordinated.outputs.found == 'true' && format('severino-hq-candidate:{0}', github.sha) || format('ghcr.io/{0}/composition:{1}', github.repository, steps.host.outputs.sha) }}
+        run: scripts/image-health.sh "$IMAGE"
 
       - name: Scan composed image
         # Skipped only by an admission's dispatch that found nothing to do.
+        # JSON to a file rather than the table: the table lists every package,
+        # extensions included, and wraps a long name past its mask.
+        id: scan
         if: >-
           steps.fingerprint.outputs.build == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -685,18 +703,16 @@ jobs:
           image-ref: ${{ steps.coordinated.outputs.found == 'true' && format('severino-hq-candidate:{0}', github.sha) || format('ghcr.io/{0}/composition:{1}', github.repository, steps.host.outputs.sha) }}
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          trivyignores: .trivyignore
+          format: json
+          output: trivy-composed.json
           exit-code: "1"
 
-      - name: Authenticate to GHCR
-        if: >-
-          env.IS_RELEASE == 'true' &&
-          (steps.fingerprint.outputs.build == 'true')
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Name what the scan found
+        if: failure() && steps.scan.outcome == 'failure'
+        run: |
+          jq -r '.Results[]?.Vulnerabilities[]?
+            | "::error title=\(.Severity) \(.VulnerabilityID)::\(.PkgName) \(.InstalledVersion), fixed in \(.FixedVersion)"' \
+            trivy-composed.json | sort -u
 
       # A pull request has already had the only thing it was here for: the
       # image was built and its suite was run inside it. Publishing is what
@@ -747,13 +763,50 @@ jobs:
           gh workflow run deploy.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f commit="$COMMIT" -f compose_run="$THIS_RUN"
 
+      - name: Seal the withheld output
+        id: seal
+        if: failure()
+        run: |
+          set -euo pipefail
+          scripts/seal-failure-logs.sh "$WITHHELD_DIR" failure-logs.tar.age
+          if [ -f failure-logs.tar.age ]; then echo "sealed=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Upload the sealed output
+        if: failure() && steps.seal.outputs.sealed == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: failure-logs
+          path: failure-logs.tar.age
+          retention-days: 14
+
+      - name: Name the step that failed
+        id: failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SEALED: ${{ steps.seal.outputs.sealed }}
+        run: |
+          set -euo pipefail
+          step="$(scripts/failed-step.sh "Build HQ" 2>/dev/null | head -1 || true)"
+          echo "step=${step:-a step}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Not built: ${step:-a step} failed"
+            echo
+            echo "Nothing was published; production still runs the previous image."
+            if [ "$SEALED" = true ]; then
+              echo
+              echo "Withheld output, for the operator: \`scripts/failure-logs.sh ${GITHUB_RUN_ID}\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Say on the commit that HQ could not be built
         if: failure() && steps.production.outputs.token != ''
         env:
           GH_TOKEN: ${{ steps.production.outputs.token }}
           HEAD_SHA: ${{ steps.host.outputs.sha }}
+          FAILED_STEP: ${{ steps.failed.outputs.step }}
           CHECK_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: >-
-          scripts/hq-check.sh "Severino HQ · Production" "$HEAD_SHA" completed "Not deployed: HQ could not be built"
-          "A step of the build failed, so nothing was published and production still runs the previous image. Open the run for the step that failed."
+          scripts/hq-check.sh "Severino HQ · Production" "$HEAD_SHA" completed "Not deployed: ${FAILED_STEP} failed"
+          "Nothing was published, so production still runs the previous image."
           failure

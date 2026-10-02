@@ -45,6 +45,21 @@ updates:
         update-types:
           - "version-update:semver-major"
 
+  # The composed image pins its own base and uv by digest.
+  - package-ecosystem: "docker"
+    directory: "/composition"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "docker"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

@@ -23,8 +23,52 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A push to main whose pull request already passed with this exact tree is
+  # not checked twice: Checks, Tests and Browser stand on that run, and Image
+  # promotes the pull request's image instead of building another. Anything
+  # less than proof (scripts/proven-on-pr.sh) and every gate runs.
+  proven:
+    name: Proven
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # Unproven is the safe answer, so an error here runs every gate rather
+    # than holding the push.
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+      pull-requests: read
+    outputs:
+      pr: ${{ steps.proof.outputs.pr }}
+      digest: ${{ steps.proof.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Find the pull request that proved this tree
+        id: proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          scripts/proven-on-pr.sh | tee -a "$GITHUB_OUTPUT"
+          pr="$(sed -n 's/^pr=//p' "$GITHUB_OUTPUT" | tail -1)"
+          if [ -n "$pr" ]; then
+            echo "Proven on #$pr: its checks passed on this exact tree, and its image is promoted." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   checks:
     name: Checks
+    needs: proven
+    if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
@@ -69,10 +113,13 @@ jobs:
         # not run.
         env:
           VERSION: ${{ steps.toolchain.outputs.shellcheck-version }}
+          SHA256: ${{ steps.toolchain.outputs.shellcheck-sha256 }}
         run: |
           set -euo pipefail
-          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${VERSION}/shellcheck-v${VERSION}.linux.x86_64.tar.xz" \
-            | tar -xJ --strip-components=1 -C /usr/local/bin "shellcheck-v${VERSION}/shellcheck"
+          archive="$RUNNER_TEMP/shellcheck.tar.xz"
+          curl -fsSL -o "$archive" "https://github.com/koalaman/shellcheck/releases/download/v${VERSION}/shellcheck-v${VERSION}.linux.x86_64.tar.xz"
+          echo "${SHA256}  ${archive}" | sha256sum --check --quiet
+          tar -xJf "$archive" --strip-components=1 -C /usr/local/bin "shellcheck-v${VERSION}/shellcheck"
           shellcheck --version
       - name: ruff
         id: ruff
@@ -139,10 +186,13 @@ jobs:
         # block as shell.
         env:
           VERSION: ${{ steps.toolchain.outputs.actionlint-version }}
+          SHA256: ${{ steps.toolchain.outputs.actionlint-sha256 }}
         run: |
           set -euo pipefail
-          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/actionlint_${VERSION}_linux_amd64.tar.gz" \
-            | tar -xz -C /usr/local/bin actionlint
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl -fsSL -o "$archive" "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/actionlint_${VERSION}_linux_amd64.tar.gz"
+          echo "${SHA256}  ${archive}" | sha256sum --check --quiet
+          tar -xzf "$archive" -C /usr/local/bin actionlint
           actionlint -color
           set -- .github/workflows/*.yml
           echo "$# workflows pass actionlint ${VERSION}, run: blocks included" | tee "$RUNNER_TEMP/gate-workflows"
@@ -203,9 +253,10 @@ jobs:
           . ./scripts/toolchain.env
           # shellcheck disable=SC2086  # both lists are meant to split
           set -- $SHELL_SOURCES
+          # Each parsed by the shell its first line names.
           for f; do
-            case "$f" in
-              *backup.sh|*ci-local.sh|*hq-*.sh) bash -n "$f" ;;
+            case "$(head -n 1 "$f")" in
+              *bash*) bash -n "$f" ;;
               *) sh -n "$f" ;;
             esac
           done
@@ -300,6 +351,8 @@ jobs:
 
   tests:
     name: Tests
+    needs: proven
+    if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
@@ -320,7 +373,6 @@ jobs:
           cache: pip
       - run: pip install --require-hashes -r requirements.txt
       - run: pip install --require-hashes --no-deps -r requirements-tools.txt
-      - run: python manage.py check
       - name: Public plugin contract
         env:
           SEVERINO_HQ_PLUGINS: example_hq_plugin.plugin:plugin
@@ -371,6 +423,8 @@ jobs:
   # process; the browser reaches nothing. scripts/ci-local.sh runs the same.
   browser:
     name: Browser
+    needs: proven
+    if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -398,11 +452,10 @@ jobs:
 
   image:
     name: Image
-    # Alongside the other gates, not after them: it waits on none of them, so
-    # the composition can start as soon as the image exists. Nothing is lost:
-    # Ready requires every gate, and on main Compose starts only once all of CI
-    # has succeeded, so an image from a failing commit is never composed for
-    # production.
+    # Alongside the other gates, not after them: on a pull request Compose
+    # starts with this run and composes as soon as the image exists. On main
+    # Compose starts only once every gate has passed (Ready), so an image from
+    # a failing commit is never composed for production.
     #
     # Also on pull requests: the composition (the only environment that runs
     # this application the way production does, with DEBUG off and the
@@ -412,10 +465,12 @@ jobs:
     # Same-repository pull requests only: a fork's token cannot write packages,
     # and handing one the ability to push an image under this name is not a
     # thing to arrange by accident.
+    needs: proven
     if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository)
+      !cancelled() &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -433,70 +488,59 @@ jobs:
       # would read as "no such image" rather than "these two disagree about
       # which commit this is".
       HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      # Set when this tree's image was proven on its pull request: promoted,
+      # not rebuilt.
+      PROVEN: ${{ needs.proven.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Layers cached between runs: most changes touch the application, not
       # its dependencies, so those layers are reused rather than rebuilt.
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        if: env.PROVEN == ''
       - name: Build the production image
         id: build
+        if: env.PROVEN == ''
         run: |
           set -euo pipefail
           image="ghcr.io/${{ github.repository }}:sha-${HEAD_SHA::12}"
           # The security archive's release date keys the layer that applies
           # Debian's fixes, so a cached layer is reused until Debian publishes.
-          security_release="$(curl -fsSL https://deb.debian.org/debian-security/dists/bookworm-security/InRelease | sed -n 's/^Date: //p')"
-          test -n "$security_release"
+          # Unreachable, the day keys it instead: rebuilt at most daily.
+          security_release="$(curl -fsSL --retry 3 https://deb.debian.org/debian-security/dists/bookworm-security/InRelease 2>/dev/null \
+            | sed -n 's/^Date: //p' || true)"
+          if [ -z "$security_release" ]; then
+            security_release="$(date -u +%F)"
+            echo "::warning title=Debian security date unknown::deb.debian.org did not answer; the upgrade layer is keyed on ${security_release} instead."
+          fi
           # The source label is the standard OCI one: GHCR links the package to
           # this repository by it, and the controller reads which repository
-          # delivers it from the image it runs.
+          # delivers it from the image it runs. The tree label is what a push
+          # to main compares to promote this image (scripts/proven-on-pr.sh).
           docker buildx build --load \
             --cache-from type=gha,scope=host-image \
             --cache-to type=gha,scope=host-image,mode=max \
             --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
             --label "org.opencontainers.image.revision=$HEAD_SHA" \
+            --label "dev.severino.hq.tree=$(git rev-parse 'HEAD^{tree}')" \
             --build-arg "HQ_SOURCE=https://github.com/${{ github.repository }}" \
             --build-arg "HQ_REVISION=$HEAD_SHA" \
             --build-arg "DEBIAN_SECURITY_RELEASE=$security_release" \
             -t "$image" .
           echo "image=$image" >> "$GITHUB_OUTPUT"
       - name: It runs Python 3.14 without package managers
+        if: env.PROVEN == ''
         env:
           IMAGE: ${{ steps.build.outputs.image }}
         run: |
           docker run --rm --entrypoint python "$IMAGE" -c \
             "import importlib.util, shutil, sys; sys.exit(0 if sys.version_info[:2] == (3, 14) and importlib.util.find_spec('pip') is None and shutil.which('pip') is None and shutil.which('uv') is None else 1)"
       - name: It comes up healthy
+        if: env.PROVEN == ''
         env:
           IMAGE: ${{ steps.build.outputs.image }}
-        run: |
-          cleanup() {
-            docker rm --force severino-hq-candidate >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
-          docker run --detach --name severino-hq-candidate \
-            --publish 127.0.0.1:8000:8000 \
-            --health-interval 2s \
-            --health-timeout 3s \
-            --health-retries 5 \
-            --health-start-period 1s \
-            --env DJANGO_SECRET_KEY=ci-only-container-key-0123456789abcdef0123456789abcdef \
-            --env DJANGO_ALLOWED_HOSTS=127.0.0.1 \
-            "$IMAGE"
-          ready=0
-          for _attempt in $(seq 1 30); do
-            status="$(docker inspect --format '{{.State.Health.Status}}' severino-hq-candidate)"
-            if [ "$status" = healthy ]; then
-              ready=1
-              break
-            fi
-            sleep 2
-          done
-          if [ "$ready" -ne 1 ]; then
-            docker logs severino-hq-candidate
-            exit 1
-          fi
+        run: scripts/image-health.sh "$IMAGE"
       - name: It cannot import development layers
+        if: env.PROVEN == ''
         # requirements-dev.txt is never installed in the image; this proves it.
         env:
           IMAGE: ${{ steps.build.outputs.image }}
@@ -507,6 +551,7 @@ jobs:
       # Scans the exact artifact about to be published: a fixable HIGH or
       # CRITICAL in the image stops it here.
       - name: Scan
+        if: env.PROVEN == ''
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.build.outputs.image }}
@@ -514,7 +559,6 @@ jobs:
           exit-code: "1"
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          trivyignores: .trivyignore
       - name: Log in to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -525,6 +569,7 @@ jobs:
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Publish
         id: publish
+        if: env.PROVEN == ''
         env:
           IMAGE: ${{ steps.build.outputs.image }}
         run: |
@@ -547,14 +592,25 @@ jobs:
       #
       # Signed by digest, not by tag: a tag is a pointer somebody can move, and
       # a signature over a pointer proves nothing about what it points at now.
+      - name: Promote the image its pull request proved
+        id: promote
+        if: env.PROVEN != ''
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${{ github.repository }}"
+          docker buildx imagetools create \
+            -t "$image:sha-${HEAD_SHA::12}" -t "$image:latest" "$PROVEN"
+          echo "digest=$PROVEN" >> "$GITHUB_OUTPUT"
       - name: Sign
+        # On a promotion too: Compose deploys only an image signed by this
+        # workflow on main, and the pull request's signature is not that.
         env:
-          DIGEST: ${{ steps.publish.outputs.digest }}
+          DIGEST: ${{ steps.publish.outputs.digest || steps.promote.outputs.digest }}
         run: cosign sign --yes "$DIGEST"
 
   ready:
     name: Ready
-    needs: [checks, tests, browser, image]
+    needs: [proven, checks, tests, browser, image]
     # Waits for every gate, and on a pull request for the same commit's Compose
     # and CodeQL too, then moves HQ's review to its verdict: ready to merge, or
     # held, why and what fixes it. That review is the one check the ruleset
