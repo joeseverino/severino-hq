@@ -172,3 +172,41 @@ class RequestedHostRouteTests(TestCase):
         )
 
         self.assertIsNone(origin_machine(resource))
+
+
+class ServedCertificateExpiryTests(TestCase):
+    """A certificate only a proxy's routes name still warns before it lapses."""
+
+    def routes(self, days, *domains):
+        expires = (timezone.now() + timedelta(days=days)).isoformat()
+        store("caddy.route", *(
+            {"connection_ref": "example-edge", "domain": domain, "upstream": "shop:8080",
+             "certificate": {"name": "example.dev", "provider": "Example Root CA",
+                             "expires_on": expires,
+                             "domains": ["example.dev", "*.example.dev"]}}
+            for domain in domains
+        ))
+
+    def found(self):
+        with projection_scope():
+            return findings(principal=cli_principal(), rule="certificate-expiring")["findings"]
+
+    def test_one_near_expiry_is_raised_once_with_every_name_it_serves(self):
+        self.routes(5, "example.dev", "*.example.dev")
+
+        (finding,) = self.found()
+
+        self.assertEqual(finding["severity"], "serious")
+        self.assertTrue(finding["title"].startswith("Certificate example.dev expires"))
+        self.assertIn({"label": "Held in", "value": "example-edge"}, finding["evidence"])
+        self.assertIn({"label": "Serves", "value": "*.example.dev, example.dev"},
+                      finding["evidence"])
+
+    def test_a_distant_one_and_a_route_caddy_manages_say_nothing(self):
+        self.routes(400, "example.dev")
+        self.assertEqual(self.found(), [])
+
+        store("caddy.route", {"connection_ref": "example-edge", "domain": "example.dev",
+                              "upstream": "shop:8080", "certificate_unread": "managed by Caddy"})
+        self.assertEqual(self.found(), [])
+

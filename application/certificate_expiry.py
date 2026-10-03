@@ -1,19 +1,22 @@
 """Certificates a reading reports, near or past expiry.
 
 Every reading that supplies the certificate facet and states an expiry counts,
-whichever provider holds the certificate. The fact sits on the connection that
-read it, because that is where the certificate lives; the names it serves are
-evidence. Days left come from ``application.expiry``, the one rule every page
+whichever provider holds the certificate, and so does the certificate a proxy
+reports serving a name with: one loaded from a file on the proxy's own host is
+read nowhere else, and HQ neither issued nor manages it. The fact sits on the
+connection that read it, because that is where the certificate lives; the
+names it serves are evidence. Days left come from ``application.expiry``, the one rule every page
 uses.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import replace
 from typing import Any
 
 from control_plane.observations import OBSERVATIONS
+from control_plane.providers import PROVIDERS
 
 from .expiry import days_until
 from .facts import Joined, inventory_records
@@ -27,8 +30,31 @@ WARN_DAYS = 21
 SERIOUS_DAYS = 7
 
 
-def add(nodes, readers: Callable[[Joined], Iterable[str]]) -> None:
-    """One fact per expiring certificate reading, on each node that read it."""
+def add(
+    nodes,
+    readers: Callable[[Joined], Iterable[str]],
+    holders: Callable[[Any, Mapping[str, Any]], Iterable[str]],
+) -> None:
+    """One fact per certificate that states an expiry, on each node that read it.
+
+    ``readers`` names the nodes behind a certificate reading; ``holders`` the
+    connection nodes a proxy's own record was read through.
+    """
+
+    for fact, node_ids in (*_read(readers), *_served(holders)):
+        _kind, name, expires, _names = _parts(fact[1])
+        for node_id in node_ids:
+            node = nodes.get(node_id)
+            # A proxy that also lists its certificates has already said this one.
+            if node is not None and not _stated(node, name, expires):
+                nodes[node_id] = replace(node, facts=node.facts + (fact,))
+
+
+Found = Iterator[tuple[tuple[str, str], tuple[str, ...]]]
+
+
+def _read(readers) -> Found:
+    """Each certificate a reading lists, and the nodes that read it."""
 
     for kind, spec in OBSERVATIONS.items():
         if spec.facet != "certificate":
@@ -45,11 +71,50 @@ def add(nodes, readers: Callable[[Joined], Iterable[str]]) -> None:
                 controller_id=str(getattr(snapshot, "controller_id", "") or ""),
             )
             names = ",".join(spec.hostnames(record))
-            fact = (CERTIFICATE_EXPIRES, "|".join((kind, spec.title(record), expires, names)))
-            for node_id in readers(joined):
-                node = nodes.get(node_id)
-                if node is not None and fact not in node.facts:
-                    nodes[node_id] = replace(node, facts=node.facts + (fact,))
+            yield (
+                (CERTIFICATE_EXPIRES, "|".join((kind, spec.title(record), expires, names))),
+                tuple(readers(joined)),
+            )
+
+
+def _served(holders) -> Found:
+    """Each certificate a proxy serves with, every name it serves with it, and
+    the nodes the proxy was read through."""
+
+    found: dict[tuple[str, str, str], tuple[set[str], tuple[str, ...]]] = {}
+    for kind, provider in PROVIDERS.items():
+        if provider.served_certificate is None:
+            continue
+        for _snapshot, record in inventory_records(kind):
+            served = provider.served_certificate(dict(record))
+            if served is None or served.unread:
+                continue
+            expires = str(served.certificate.get("expires_on", "") or "")
+            if not moment(expires):
+                continue
+            for node_id in holders(provider, record):
+                key = (kind, str(served.certificate.get("name", "")), expires)
+                found.setdefault((node_id, *key), (set(), key))[0].update(served.hostnames)
+    for (node_id, *_), (names, key) in found.items():
+        yield (CERTIFICATE_EXPIRES, "|".join((*key, ",".join(sorted(names))))), (node_id,)
+
+
+def _parts(value: str) -> list[str]:
+    """A fact's kind, certificate name, expiry and the names it serves."""
+
+    return (value.split("|") + [""] * 4)[:4]
+
+
+def _stated(node, name: str, expires: str) -> bool:
+    """Whether ``node`` already carries this certificate, by name and expiry."""
+
+    for key, value in node.facts:
+        if key != CERTIFICATE_EXPIRES:
+            continue
+        _kind, title, stamp, _names = _parts(value)
+        if title == name and moment(stamp) == moment(expires):
+            return True
+    return False
 
 
 def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
@@ -62,7 +127,7 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
         for key, value in node.facts:
             if key != CERTIFICATE_EXPIRES:
                 continue
-            kind, title, stamp, names = (value.split("|") + [""] * 4)[:4]
+            kind, title, stamp, names = _parts(value)
             when = moment(stamp)
             if when is None:
                 continue
@@ -70,7 +135,8 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
             if days > WARN_DAYS:
                 continue
             spec = OBSERVATIONS.get(kind)
-            label = spec.label if spec is not None else kind
+            # A served certificate is known only as what a proxy answers with.
+            label = spec.label if spec is not None else "Certificate"
             found.append(
                 dict(
                     rule="certificate-expiring",
