@@ -75,6 +75,20 @@ secrets_private_dir() {
     [ "$(stat -c '%u %a' "$1" 2>/dev/null || stat -f '%u %Lp' "$1")" = "${2:-0} 700" ]
 }
 
+# The directory holding the rendered application environment: the tmpfs copy
+# once refresh-secrets.sh has rendered one, and the checkout's only on a host
+# no refresh has reached yet. The order deploy-image.sh binds in, which matters
+# because the deploy that binds the tmpfs copy deletes the checkout's: a reader
+# that knew only the checkout would lose its file to a successful deploy.
+#   secrets_app_env_dir <tmpfs web dir> <checkout secret dir>
+secrets_app_env_dir() {
+    if [ -e "$1/severino_hq_env" ] || [ -L "$1/severino_hq_env" ]; then
+        printf '%s\n' "$1"
+    else
+        printf '%s\n' "$2"
+    fi
+}
+
 # Preserve existing inodes for Docker file bind mounts. Copying is not atomic.
 # shellcheck disable=SC2034
 secrets_install_if_changed() {

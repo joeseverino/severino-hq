@@ -13,7 +13,14 @@ readonly env_file="${controller_env}"
 readonly mode="${1:-}"
 readonly container="${HQ_CONTAINER:-severino-hq}"
 readonly acme_dir="${app_dir}/secrets/acme"
-readonly app_env="${app_dir}/secrets/severino_hq_env"
+readonly web_secret_dir="${SEVERINO_HQ_WEB_SECRET_DIR:-${controller_runtime_dir}/web}"
+# shellcheck source=scripts/lib/secrets.sh
+. "${script_dir}/lib/secrets.sh"
+# Where refresh-secrets.sh rendered the environment, which is the tmpfs once a
+# refresh has run and the checkout only before one has.
+app_env_dir="$(secrets_app_env_dir "${web_secret_dir}" "${app_dir}/secrets")"
+readonly app_env_dir
+readonly app_env="${app_env_dir}/severino_hq_env"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "run-controller.sh must run as root." >&2
@@ -21,16 +28,14 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 controller_require_environment
 if [ ! -s "${app_env}" ]; then
-    echo "Controller application environment is missing." >&2
+    echo "Controller application environment is missing: ${app_env}." >&2
     exit 1
 fi
-# The environment sits in the application checkout, which another account can
-# write. Only what refresh-secrets.sh rendered is handed to the controller: a
+# The checkout is somewhere another account can write. Only what
+# refresh-secrets.sh rendered is handed to the controller, wherever it sits: a
 # root-only directory holding a file of the web user's own.
-# shellcheck source=scripts/lib/secrets.sh
-. "${script_dir}/lib/secrets.sh"
-if ! secrets_private_dir "${app_dir}/secrets" || ! secrets_trusted_file "${app_env}" 10001; then
-    echo "Refusing the application environment: ${app_dir}/secrets must be root's alone, holding a file owned by 10001." >&2
+if ! secrets_private_dir "${app_env_dir}" || ! secrets_trusted_file "${app_env}" 10001; then
+    echo "Refusing the application environment: ${app_env_dir} must be root's alone, holding a file owned by 10001." >&2
     exit 1
 fi
 
