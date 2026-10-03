@@ -426,8 +426,19 @@ code=0
 upgrade >"${fixture}/out" || code=$?
 [ "${code}" = 2 ] || fail "a flow-style override was edited (exit ${code})"
 has 'not block style' "${fixture}/out" || fail "a flow-style override was not named as the reason"
-[ "$(cat "${fixture}/starts" 2>/dev/null)" = 1 ] || fail "a flow-style override left the service stopped"
+has ' stop app' "${fixture}/calls" && fail "a flow-style override stopped the service before it was refused"
 [ "$(cat "${override}")" = "$(printf 'services:\n  app: {image: x}')" ] || fail "a flow-style override was changed"
+rm -f "${override}"
+# An override written as JSON is refused the same way, with nothing stopped.
+reset
+printf '{\n  "services": {\n    "app": {\n      "mem_limit": "512m"\n    }\n  }\n}\n' >"${override}"
+cp "${override}" "${fixture}/override.json"
+code=0
+upgrade >"${fixture}/out" || code=$?
+[ "${code}" = 2 ] || fail "a JSON override was edited (exit ${code})"
+has 'not block style' "${fixture}/out" || fail "a JSON override was not named as the reason"
+has ' stop app' "${fixture}/calls" && fail "a JSON override stopped the service before it was refused"
+cmp -s "${fixture}/override.json" "${override}" || fail "a JSON override was changed"
 rm -f "${override}"
 reset
 refused "a non-root run" with STUB_UID=1000 --
