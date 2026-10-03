@@ -3,7 +3,9 @@
 asgiref==3.12.1 \
     --hash=sha256:59dcb51c272ad209d59bed5708a64a333083e86017d7fcdd67498eeab7784340 \
     --hash=sha256:fe386d1c2bff7259ea95929266d12a8cf9a8b5a1c2598402967d8792e7a7c094
-    # via django
+    # via
+    #   -c requirements.txt
+    #   django
 ast-serialize==0.11.2 \
     --hash=sha256:00119a8fb8c1dc0f1fab023f4d8071fa49e3b0208ee54d589fd463c16ab0124e \
     --hash=sha256:00bbf1f6669f813b48925b759f7ae4591067d456d443924055cab386e7e0a719 \
@@ -190,6 +192,7 @@ django==6.1.1 \
     --hash=sha256:585fb82bf15053c42cf52e67c2f1b54a032dca384759315fd6678ab1870d1d72 \
     --hash=sha256:7ab93536d8e677aa14554c56426290c69480bf2ee68d7513d4a22f57d6bfeb84
     # via
+    #   -c requirements.txt
     #   django-stubs
     #   django-stubs-ext
 django-stubs==6.1.1 \
@@ -287,7 +290,7 @@ hypothesis==6.168.3 \
     --hash=sha256:fd7f75a2e23288ee82ee965a952473d9c5447c2cbc1afc94be09d2402201774e \
     --hash=sha256:fd81241f4cd76fb18d481e87b9688b30a0cb5c30841730513323ba1c7aba1837
     # via -r requirements-tools.in
-librt==0.15.0 \
+librt==0.15.0 ; platform_python_implementation != 'PyPy' \
     --hash=sha256:04d5387b908676c0b8d5d2f5fb58373b4ea382d81f7a6f0fab8ea2a462bb4738 \
     --hash=sha256:077471b3182db4e17c36ae91555f36a4d2c00080b267f749bcad34a478a9a302 \
     --hash=sha256:0a15cb554761247d84a3ec0cbdf4078d70725384f0e4662c0fa3b26266eb60ad \
@@ -515,7 +518,9 @@ sortedcontainers==2.4.0 \
 sqlparse==0.6.0 \
     --hash=sha256:113c35c75365ab9cc9c7231d68c6428fb11c085fc8e9eb1ad659b7ddbf6cd2b9 \
     --hash=sha256:b861c0288ce2fa56209a9a6412d2e066ac664b3873b89c26c9d8415e8e32996f
-    # via django
+    # via
+    #   -c requirements.txt
+    #   django
 types-pyyaml==6.0.12.20260906 \
     --hash=sha256:bca893ff0d51df5c9053137d5d0e6ccd36e939a196356f1d5c16372422f5137b \
     --hash=sha256:f59c1cc05010b833d2d72287bbaa72610106b28d42d89a907313117faba85212
@@ -524,9 +529,16 @@ typing-extensions==4.16.0 \
     --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8 \
     --hash=sha256:dc983d19a509c94dba722ee6abd33940f7c05a89e243c47e907eb4db6f1a43e5
     # via
+    #   -c requirements.txt
     #   django-stubs
     #   django-stubs-ext
     #   mypy
+tzdata==2026.5 ; sys_platform == 'win32' \
+    --hash=sha256:8cc73c0a0bfca7dbfa59235d60b2eff82231dee33f53d206db1acd9173cfc0a7 \
+    --hash=sha256:b683bd1b6659ddcd810ff02ad09ba821d4bf1065072805063eb35c49617905ac
+    # via
+    #   -c requirements.txt
+    #   django
 uv==0.12.20 \
     --hash=sha256:08ca4588bac6a4bb8972236c0958aaa0ebea7b2045289edbf85f9a21f44db979 \
     --hash=sha256:108e4bce126b0baec03dd035b656fe4ce614d336e182eff02abec7df5212a86c \
