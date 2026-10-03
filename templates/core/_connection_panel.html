@@ -134,10 +134,10 @@ page it falls back to. Nothing here knows which one it is in.
           {% else %}standard{% endif %}
         </dd>
         {% if connection.identity.last_sign_in %}
-          <dt>Last sign-in</dt><dd><time datetime="{{ connection.identity.last_sign_in|date:'c' }}">{{ connection.identity.last_sign_in|date:"M j, Y, g:i a" }}</time></dd>
+          <dt>Last sign-in</dt><dd>{{ connection.identity.last_sign_in|when }}</dd>
         {% endif %}
         {% if connection.identity.session_expires %}
-          <dt>Session until</dt><dd><time datetime="{{ connection.identity.session_expires|date:'c' }}">{{ connection.identity.session_expires|date:"M j, Y, g:i a" }}</time></dd>
+          <dt>Session until</dt><dd>{{ connection.identity.session_expires|when }}</dd>
         {% endif %}
       </dl>
       {% if connection.identity.corroborated %}
@@ -276,7 +276,7 @@ page it falls back to. Nothing here knows which one it is in.
               {% if hop.source %}
                 <dl>
                   <dt>Read from</dt>
-                  <dd>{{ hop.source.phrase }}{% if hop.source.observed_at %} · <time datetime="{{ hop.source.observed_at|date:'c' }}">{{ hop.source.observed_at|date:"M j, Y, g:i a" }}</time>{% endif %}</dd>
+                  <dd>{{ hop.source.phrase }}{% if hop.source.observed_at %} · {{ hop.source.observed_at|when }}{% endif %}</dd>
                 </dl>
               {% endif %}
               {% if hop.certificate %}<p class="conn-row-note">{{ hop.certificate.statement }}</p>{% endif %}
@@ -344,7 +344,7 @@ page it falls back to. Nothing here knows which one it is in.
       <section>
         <h3>Your address evidence</h3>
         {% if connection.tailnet_observed_at %}
-          <p class="conn-note">Tailnet snapshot: <time datetime="{{ connection.tailnet_observed_at|date:'c' }}">{{ connection.tailnet_observed_at|date:"M j, Y, g:i a" }}</time></p>
+          <p class="conn-note">Tailnet snapshot: {{ connection.tailnet_observed_at|when }}</p>
         {% endif %}
         <div class="conn-rows">
           {% for address in request_path.addresses %}

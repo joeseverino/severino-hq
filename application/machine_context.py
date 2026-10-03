@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from django.urls import reverse
+from application.routes import reverse
 
 from core.models import AuditLog
 

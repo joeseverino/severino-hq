@@ -1,31 +1,31 @@
-"""Action items: the list, its unread count, and marking items read."""
+"""Action items: the queue under its domains, and setting items aside."""
 
 from __future__ import annotations
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import TemplateView, View
 
-from application import action_items as read_state
+from application import action_items as queue_state
 from application.dashboard import work_queue
 from application.projection import projection_scope
 from application.security import safe_next
-from application.pages import PageAction, PageMixin
+from application.pages import PageMixin
 
 
 ACTION_ITEM_FILTERS = ("q", "status", "source")
 
 
 def _action_items(request, current=None):
-    """Every action item with its read state, and those the request's filters keep."""
+    """Every action item with whether it is set aside, and those the request's filters keep."""
 
     if current is None:
         with projection_scope():
             current = work_queue()
-    all_items = read_state.with_read_state(current, request.user)
-    items = read_state.filter_items(
+    all_items = queue_state.with_aside_state(current, request.user)
+    items = queue_state.filter_items(
         all_items,
         query=request.GET.get("q", ""),
         status=request.GET.get("status", ""),
@@ -40,38 +40,35 @@ class ActionItemsView(PageMixin, LoginRequiredMixin, TemplateView):
     template_name = "action_items.html"
     page_title = "Action items"
 
-    def get_page_actions(self):
-        actions = []
-        if self._unread:
-            actions.append(PageAction("Mark all read", self._mark_all_url(), method="post"))
-        return tuple(actions)
-
-    def _mark_all_url(self) -> str:
-        # The filters travel in the URL, so "all" means all that are shown.
+    def _aside_all_url(self, part: str) -> str:
+        # The filters travel in the URL, so "all" means all that are shown, of
+        # the part of the queue the button stands over.
         shown = self.request.GET.copy()
         for name in list(shown):
             if name not in ACTION_ITEM_FILTERS:
                 del shown[name]
-        url = reverse("action_items_read_all")
-        if shown:
-            url = f"{url}?{shown.urlencode()}"
-        return url
+        shown["part"] = part
+        return f'{reverse("action_items_set_aside")}?{shown.urlencode()}'
 
     def get_context_data(self, **kwargs):
         all_items, items = _action_items(self.request)
-        self._unread = [item for item in items if not item["read"]]
         context = super().get_context_data(**kwargs)
         status = self.request.GET.get("status", "").strip()
         source = self.request.GET.get("source", "").strip()
         sources = tuple(
             {item["source_id"]: item["source"] for item in all_items}.items()
         )
-        unread = self._unread
+        doing, told = queue_state.split_waiting(items)
         context.update(
-            action_items=unread,
-            read_action_items=[item for item in items if item["read"]],
-            action_item_total=len(unread),
-            profile_action_count=read_state.count_unread(all_items),
+            aside_all_url=self._aside_all_url("doing"),
+            notices_aside_url=self._aside_all_url("told"),
+            action_groups=queue_state.by_source(doing),
+            action_item_total=len(doing),
+            notice_groups=queue_state.by_source(told),
+            notice_total=len(told),
+            aside_groups=queue_state.by_source([item for item in items if item["aside"]]),
+            aside_total=len(items) - len(doing) - len(told),
+            profile_action_count=queue_state.count_waiting(all_items),
             show_action_count=True,
             action_sources=sources,
             action_query=self.request.GET.get("q", "").strip(),
@@ -82,49 +79,47 @@ class ActionItemsView(PageMixin, LoginRequiredMixin, TemplateView):
 
 
 class ActionItemCountView(LoginRequiredMixin, View):
-    """The unread count for the header, fetched after the page rather than during it."""
+    """How many items wait, for the header, fetched after the page rather than during it."""
 
     def get(self, request):
-        count = read_state.unread_count(work_queue(), request.user)
+        count = queue_state.waiting_count(work_queue(), request.user)
         return JsonResponse({"count": count})
 
 
-class ActionItemReadView(LoginRequiredMixin, View):
-    """Mark action items read or unread for the signed-in person.
+class ActionItemAsideView(LoginRequiredMixin, View):
+    """Dismiss items, or restore them, for the signed-in person.
 
-    Each route names the state in ``read``, so a button posts only the item's
-    key as its own value.
+    Each route names the state in ``aside``. A row's button posts the row
+    itself (its revision and key), and that is all a dismissal or a restore
+    needs: the queue is not composed to handle it. Only "all of these" has to
+    know what "these" are: everything the page's filters (in the query string)
+    show of the part of the queue it names, or of one family in it.
+    A page that asked with a script is answered with nothing; a plain form is
+    sent back to the queue.
     """
 
-    read = False
+    aside = False
 
     def post(self, request):
-        with projection_scope():
-            current = work_queue()
-        read_state.mark(
-            request.user,
-            request.POST.getlist("key"),
-            read=self.read,
-            current=current,
-        )
-        return redirect(
-            safe_next(request, scope=reverse("action_items"), fallback=reverse("action_items"))
-        )
-
-
-class ActionItemReadAllView(LoginRequiredMixin, View):
-    """Mark read every unread item the page's filters (in the query string) show."""
-
-    def post(self, request):
-        with projection_scope():
-            current = work_queue()
-        _, items = _action_items(request, current)
-        read_state.mark(
-            request.user,
-            [item["key"] for item in items if not item["read"]],
-            read=True,
-            current=current,
-        )
+        rows = queue_state.named_rows(request.POST.getlist("key"))
+        if rows and self.aside:
+            queue_state.dismiss_rows(request.user, rows)
+        elif rows:
+            queue_state.restore_rows(request.user, rows)
+        elif self.aside:
+            with projection_scope():
+                current = work_queue()
+            _, items = _action_items(request, current)
+            doing, told = queue_state.split_waiting(items)
+            part = {"doing": doing, "told": told}.get(request.GET.get("part", ""), [])
+            family = request.GET.get("family", "")
+            if family:
+                part = queue_state.of_family(part, family)
+            queue_state.set_aside(
+                request.user, [item["key"] for item in part], aside=True, current=current
+            )
+        if request.headers.get("x-requested-with") == "XMLHttpRequest":
+            return HttpResponse(status=204)
         return redirect(
             safe_next(request, scope=reverse("action_items"), fallback=reverse("action_items"))
         )

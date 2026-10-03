@@ -1,0 +1,29 @@
+{% comment %}
+A part of the queue (what needs doing, the notices, what was dismissed) under
+its domains, from `action_items.by_source`. An entry is one item, or a family
+of them folded under its owner's name for it: closed, it is one line saying
+how many and how bad; open, it is the same rows as anywhere else. `aside_url`,
+where the part can be dismissed, lets a family be dismissed whole.
+{% endcomment %}
+{% for group in groups %}
+  <section class="queue-group" aria-labelledby="{{ prefix }}-{{ forloop.counter }}">
+    <h3 id="{{ prefix }}-{{ forloop.counter }}">{{ group.label }} <span class="count" data-queue-count>{{ group.items|length }}</span></h3>
+    <div class="queue-entries">
+      {% for entry in group.entries %}
+        {% if entry.folded %}
+          <details class="queue-family" data-queue-family>
+            <summary>
+              <span class="pill pill-{{ entry.status }}">{{ entry.status|capfirst }}</span>
+              <strong>{{ entry.family }}</strong>
+              <span class="count" data-queue-count>{{ entry.items|length }}</span>
+              {% if aside_url %}{% post_button "Dismiss these" aside_url|add:"&family="|add:entry.id css="btn compact ghost queue-family-end" %}{% endif %}
+            </summary>
+            {% include "partials/_work_queue.html" with items=entry.items grouped=True triage=True %}
+          </details>
+        {% else %}
+          {% include "partials/_work_queue.html" with items=entry.items grouped=True triage=True %}
+        {% endif %}
+      {% endfor %}
+    </div>
+  </section>
+{% endfor %}

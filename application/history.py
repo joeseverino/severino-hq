@@ -126,8 +126,9 @@ class Entry:
         if len(objects) == 1 and first.object_repr:
             # One thing, again and again: "operator · 4 times", not "4 users".
             return f"{first.object_repr} · {len(self.events)} times"
-        noun = lower_first(first.type_label or "Event")
-        return counted(len(objects), noun, f"{noun}s")
+        if not first.type_label:
+            return counted(len(objects), "event")
+        return counted(len(objects), lower_first(first.type_label), lower_first(first.type_plural))
 
 
 def moments(*, since: datetime, until: datetime | None = None, limit: int = 200) -> tuple[Moment, ...]:

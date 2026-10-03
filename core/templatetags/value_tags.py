@@ -1,15 +1,22 @@
 import re
-from datetime import datetime
+from datetime import date, datetime
 from urllib.parse import unquote, urlsplit
 
 from django import template
 from django.utils import timezone
-from django.utils.formats import date_format
 from django.utils.html import format_html
 
 from application.entity_links import web_url as _web_url
 from application.timestamps import moment
-from application.ui import MISSING, ago as _ago, counted as _counted, elapsed as _elapsed
+from application.ui import (
+    MISSING,
+    ago as _ago,
+    counted as _counted,
+    elapsed as _elapsed,
+    when as _when,
+    when_day as _when_day,
+    when_exact as _when_exact,
+)
 
 register = template.Library()
 
@@ -48,13 +55,99 @@ def or_empty(value):
     return value
 
 
+def _instant(value) -> date | datetime | None:
+    """A datetime, a date, or either as an ISO stamp; None when it names neither."""
+
+    if isinstance(value, date):  # a datetime is one too
+        return value
+    text = str(value or "").strip()
+    found = moment(text) if "T" in text or " " in text else None
+    if found is not None:
+        return found
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+# What ``when`` can be asked for, and the words each one shows.
+_WHEN_FORMS = {
+    "": _when,
+    "ago": lambda value: _ago(value) if isinstance(value, datetime) else _when_day(value),
+    "day": _when_day,
+    "exact": _when_exact,
+}
+
+
+@register.filter
+def when(value, form=""):
+    """``{{ moment|when }}``: the one way a page shows a moment, a date or an age.
+
+    A ``<time>`` whose ``datetime`` is the instant as a machine reads it (which
+    is what a table sorts on) and whose ``title`` is the exact moment, around
+    the words ``application.ui`` writes:
+
+    - ``{{ at|when }}``: "Oct 3, 9:29 AM"; a date reads "Oct 3".
+    - ``{{ at|when:"ago" }}``: "5 days ago", the moment itself on hover.
+    - ``{{ at|when:"day" }}``: the day a moment fell on.
+    - ``{{ at|when:"exact" }}``: "Oct 3, 2026, 9:29:15 AM CDT".
+
+    Takes a datetime, a date or an ISO stamp. Nothing shows the mark for a
+    missing value; text that names no instant is shown as it came.
+    """
+
+    if form not in _WHEN_FORMS:
+        raise template.TemplateSyntaxError(
+            f"when takes {', '.join(repr(name) for name in _WHEN_FORMS if name)} or nothing; got {form!r}."
+        )
+    if value is None or value == "":
+        return or_empty(value)
+    found = _instant(value)
+    if found is None:
+        return value
+    return format_html(
+        '<time datetime="{}" title="{}">{}</time>',
+        found.isoformat(),
+        _when_exact(found),
+        _WHEN_FORMS[form](found),
+    )
+
+
 @register.filter
 def ago(value):
-    """``{{ moment|ago }}``: a datetime or an ISO stamp as an age, in ``application.ui``'s phrasing."""
+    """``{{ moment|ago }}``: an age as bare words, for a sentence or an attribute.
+
+    A datetime or an ISO stamp, in ``application.ui``'s phrasing. On its own
+    in a cell or a readout, ``{{ moment|when:"ago" }}`` says the same words
+    and keeps the exact moment behind them.
+    """
 
     if isinstance(value, datetime):
         return _ago(value)
     return _elapsed(str(value or ""))
+
+
+@register.filter
+def signed_in(request):
+    """``{{ request|signed_in }}``: how long ago this session's sign-in was, in hours or days.
+
+    Never minutes: a menu that counts them is a clock nobody asked for. The
+    session says when its sign-in was; one that does not (a password sign-in)
+    falls back on the account's last login.
+    """
+    from core.oidc import SIGNED_IN_SESSION_KEY
+
+    session = getattr(request, "session", None)
+    when = moment(str(session.get(SIGNED_IN_SESSION_KEY) or "")) if session is not None else None
+    when = when or getattr(getattr(request, "user", None), "last_login", None)
+    if when is None:
+        return ""
+    hours = int((timezone.now() - when).total_seconds() // 3600)
+    if hours < 1:
+        return "Signed in within the hour"
+    if hours < 48:
+        return f"Signed in {_counted(hours, 'hour', 'hours')} ago"
+    return f"Signed in {_counted(hours // 24, 'day', 'days')} ago"
 
 
 @register.filter
@@ -74,27 +167,20 @@ def posture_state(posture, check_id):
 
 @register.filter
 def ago_short(value):
-    """One unit of age, for a table column."""
-    from application.ui import ago_short as _ago_short
-    from application.ui import moment
+    """``ago``, saying nothing rather than the missing mark when there is no moment."""
 
     # A datetime, or an ISO stamp as a provider wrote it, like ``ago``.
-    when = value if isinstance(value, datetime) else moment(str(value or ""))
-    return _ago_short(when) if when else ""
+    found = value if isinstance(value, datetime) else moment(str(value or ""))
+    return _ago(found) if found else ""
 
 
 @register.filter
 def readable(value):
-    """An ISO 8601 timestamp as a person reads one; anything else unchanged."""
+    """A value that may be an ISO 8601 timestamp: ``when`` if it is, unchanged if not."""
 
     if not isinstance(value, str) or "T" not in value:
         return value
-    when = moment(value, naive="keep")
-    if when is None:
-        return value
-    if timezone.is_aware(when):
-        when = timezone.localtime(when)
-    return date_format(when, "DATETIME_FORMAT")
+    return when(value)
 
 
 def _is_this_page(context, url: str) -> bool:

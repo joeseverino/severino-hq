@@ -1,5 +1,7 @@
 <div class="empty{% if compact %} compact{% endif %}">
+  {% comment %}What is missing, then (when the page can say) what would fill it.{% endcomment %}
   <p>{{ message }}</p>
+  {% if why %}<p class="empty-why">{{ why }}</p>{% endif %}
   {% if action_url and action_label %}
     <p><a class="empty-cta" href="{{ action_url }}">{{ action_label }} &rarr;</a></p>
   {% endif %}

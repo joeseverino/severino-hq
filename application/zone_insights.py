@@ -19,7 +19,7 @@ one is an entry rather than an edit to a page.
 from __future__ import annotations
 
 import re
-from django.urls import reverse
+from application.routes import reverse
 
 from control_plane.credential_reads import REGISTRAR_READ
 from control_plane.models import ManagedResource

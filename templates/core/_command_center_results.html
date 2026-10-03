@@ -18,7 +18,7 @@
                 {% if item.snippet %}<span class="muted">{% for text, hit in item.snippet %}{{ text }}{% endfor %}</span>{% endif %}
               </span>
               <span class="command-center-evidence">
-                {% if item.timestamp %}<span class="command-center-destination">{{ item.timestamp }}</span>{% endif %}
+                {% if item.timestamp %}<span class="command-center-destination">{{ item.timestamp|when }}</span>{% endif %}
               </span>
               <span class="command-center-arrow" aria-hidden="true">→</span>
             </a>

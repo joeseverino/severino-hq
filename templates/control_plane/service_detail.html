@@ -1,6 +1,7 @@
 {% extends "page.html" %}
 {% load nav_tags %}
 {% block page %}
+{% include "partials/_visit_refresh.html" with subject="service" name=service.hostname %}
 <section id="overview" class="page-section" aria-label="Overview" data-page-section>
 {% comment %}
 The summary first: what it is, where it runs, and whether it is healthy. Each
@@ -85,7 +86,7 @@ readings. The path is the next section, drawn once.
               {% if facet.observed.published %}<dt>Publishes</dt><dd>{{ facet.observed.published }}</dd>{% endif %}
               {% if facet.observed.status %}<dt>Status</dt><dd>{{ facet.observed.status }}</dd>{% endif %}
               {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}<dt>Compose project</dt><dd><code>{{ facet.observed.stack }}</code></dd>{% endif %}
-              <dt>Seen</dt><dd>{{ facet.observed.observed_at|ago }}</dd>
+              <dt>Seen</dt><dd>{{ facet.observed.observed_at|when:"ago" }}</dd>
             </dl>
             <span class="readout"><a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">Edit declaration &rarr;</a></span>
           </details>
@@ -160,7 +161,7 @@ readings. The path is the next section, drawn once.
             Only when it differs from the container's own name.
             {% endcomment %}
             {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}<dt>Compose project</dt><dd><code>{{ facet.observed.stack }}</code></dd>{% endif %}
-            <dt>Seen</dt><dd>{{ facet.observed.observed_at|ago }}</dd>
+            <dt>Seen</dt><dd>{{ facet.observed.observed_at|when:"ago" }}</dd>
             {% comment %}
             The offer to take it on, only when taking it on would not mean
             building a second one. A container started by compose on the machine
@@ -274,7 +275,7 @@ it is not what anyone opens this page to read.
     <summary>{{ service.alias_summary }}</summary>
     <div class="table-scroll">
       <table class="data-table">
-        <thead><tr><th>Resource</th><th>Kind</th><th>For</th><th>Health</th></tr></thead>
+        <thead><tr><th>Resource</th><th>Kind</th><th>For</th><th class="key-col">Health</th></tr></thead>
         <tbody>
           {% for alias, claim in service.alias_claims %}
             <tr>

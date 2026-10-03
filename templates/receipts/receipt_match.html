@@ -20,7 +20,7 @@
         <tbody>
           {% for exp in matches %}
             <tr>
-              <td>{{ exp.date }}</td>
+              <td>{{ exp.date|when }}</td>
               <td><strong>{{ exp.vendor }}</strong></td>
               <td>{{ exp.item }}</td>
               <td>${{ exp.total_cost|floatformat:2|intcomma }}</td>
@@ -44,7 +44,7 @@
   </div>
   <dl class="kv">
     <dt>Vendor</dt><dd>{{ receipt.vendor|or_empty }}</dd>
-    <dt>Date</dt><dd>{{ receipt.date|or_empty }}</dd>
+    <dt>Date</dt><dd>{{ receipt.date|when }}</dd>
     <dt>Amount</dt><dd>${{ receipt.amount|floatformat:2|intcomma }}</dd>
     <dt>Original file</dt><dd>{{ receipt.original_filename }}</dd>
   </dl>

@@ -224,7 +224,7 @@ class CalendarCell:
     def url(self) -> str:
         """This day, open beside its month."""
 
-        from django.urls import reverse
+        from application.routes import reverse
 
         return f"{reverse('calendar:month')}?month={self.day:%Y-%m}&day={self.day.isoformat()}"
 

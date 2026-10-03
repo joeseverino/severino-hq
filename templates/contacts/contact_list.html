@@ -34,7 +34,7 @@
     {% for s in submissions %}
       <tr {% if s.status == "unread" %}class="row-unread"{% endif %}>
         <td><a href="{% url 'contacts:detail' s.id %}">{{ s.id }}</a></td>
-        <td class="muted">{{ s.created_at }}</td>
+        <td class="muted">{{ s.created_at|when }}</td>
         <td>
           <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name }}</strong></a>
           <div class="muted">{{ s.email }}</div>

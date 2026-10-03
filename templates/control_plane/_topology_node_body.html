@@ -59,7 +59,7 @@
       <dt>Last observed</dt>
       <dd>
         {% if item.observed_age %}
-          <time datetime="{{ item.node.observed_at }}" title="{{ item.node.observed_at }}">{{ item.observed_age|ago }}</time>
+          {{ item.node.observed_at|when:"ago" }}
           {% if item.node.reason %}<span class="muted">· {{ item.node.reason }}</span>{% endif %}
         {% elif item.observable %}
           <span class="muted">Not observed yet.</span>
@@ -96,12 +96,12 @@
                   {% for link in row.entities %}
                     <li>
                       <span class="topology-relation-value">{% entity link %}</span>
-                      <span class="topology-relation-source muted">{{ link.kind_label }}{% if row.observed_age %} · <time datetime="{{ row.observed_at }}">read {{ row.observed_age|ago }}</time>{% endif %}</span>
+                      <span class="topology-relation-source muted">{{ link.kind_label }}{% if row.observed_age %} · read {{ row.observed_at|when:"ago" }}{% endif %}</span>
                     </li>
                   {% endfor %}
                 </ul>
               {% elif row.detail or row.observed_age %}
-                <p class="topology-relation-source muted">{{ row.detail }}{% if row.detail and row.observed_age %} · {% endif %}{% if row.observed_age %}<time datetime="{{ row.observed_at }}">read {{ row.observed_age|ago }}</time>{% endif %}</p>
+                <p class="topology-relation-source muted">{{ row.detail }}{% if row.detail and row.observed_age %} · {% endif %}{% if row.observed_age %}read {{ row.observed_at|when:"ago" }}{% endif %}</p>
               {% endif %}
             </li>
           {% endfor %}

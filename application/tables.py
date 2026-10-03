@@ -37,6 +37,9 @@ class TableColumn:
     sort: str = ""
     ascending_label: str = ""
     descending_label: str = ""
+    # Classes for the heading. ``key-col`` keeps the column on a phone, where a
+    # table of four or more shows only the column that names each row and the
+    # ones marked key; the rest are listed when a row is expanded.
     css: str = ""
 
     def sorts(self) -> tuple[TableSort, ...]:

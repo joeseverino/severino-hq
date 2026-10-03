@@ -8,7 +8,7 @@ reaches closes the table, so nothing the name is made of goes unshown.
 {% endcomment %}
 <div class="table-scroll">
   <table class="data-table compact-table service-parts">
-    <thead><tr><th>Part</th><th>What</th><th>Health</th><th>If it changes</th><th>Read from</th></tr></thead>
+    <thead><tr><th>Part</th><th>What</th><th class="key-col">Health</th><th>If it changes</th><th>Read from</th></tr></thead>
     <tbody>
       {% for part in parts %}{% with hop=part.hop %}
         <tr>

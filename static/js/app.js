@@ -296,8 +296,11 @@ document.addEventListener("change", (event) => {
     });
     // The last section often cannot reach the reading line because the footer
     // leaves no page below it. At the document end it is nevertheless the
-    // section being read, and the local map should say so.
-    if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2) {
+    // section being read, and the local map should say so. Only once the page
+    // has moved: a page short enough to show whole is at its end before
+    // anybody scrolls, and the reader is at the top of it.
+    if (window.scrollY > 0
+      && window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2) {
       current = sections.at(-1);
     }
     links.forEach((link) => {
@@ -322,6 +325,62 @@ document.addEventListener("change", (event) => {
   window.addEventListener("hashchange", schedule);
   schedule();
 })();
+
+// Dismissing a queue row, or restoring one, happens in place: the row's own
+// button posts as it would without script, and the row answers at once
+// instead of the whole queue being composed and drawn again. A dismissed row
+// becomes one quiet line with the way back; the counts over it and the
+// header's follow. "Dismiss all" and a family's "Dismiss these" stay ordinary
+// posts, since what they cover is the server's to say.
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-triage] button[formaction]");
+  if (!button || event.defaultPrevented) return;
+  const row = button.closest("[data-attention-item]");
+  const form = document.getElementById(button.getAttribute("form"));
+  if (!row || !form) return;
+  event.preventDefault();
+  const was = { action: button.getAttribute("formaction"), label: button.textContent };
+  const other = button.dataset.other ? JSON.parse(button.dataset.other) : null;
+  const dismissing = !("dismissed" in row.dataset) && !row.closest(".action-items-aside");
+  const body = new FormData(form);
+  body.set(button.name, button.value);
+  button.disabled = true;
+  hqFetch(was.action, { method: "POST", body, credentials: "same-origin" })
+    .then((response) => {
+      if (!response.ok) throw new Error(String(response.status));
+      // Counts over the row: its family's, its domain's, its section's.
+      const step = dismissing ? -1 : 1;
+      const counts = new Set();
+      for (let box = row.parentElement; box; box = box.parentElement) {
+        const count = box.querySelector(":scope > summary [data-queue-count], :scope > h3 [data-queue-count], :scope > .section-head [data-queue-count]");
+        if (count) counts.add(count);
+      }
+      counts.forEach((count) => { count.textContent = String(Math.max(0, Number(count.textContent) + step)); });
+      if (!row.closest(".action-items-aside")) {
+        document.querySelectorAll("[data-action-count]").forEach((badge) => {
+          const next = Math.max(0, Number(badge.textContent || 0) + step);
+          badge.textContent = String(next);
+          badge.hidden = next === 0;
+        });
+        try { sessionStorage.removeItem("hq.actionCount"); } catch (_error) { /* asked again next page */ }
+      }
+      // The button becomes its opposite, posting to the other route.
+      if (dismissing) row.dataset.dismissed = `Dismissed: ${row.querySelector(".attention-title")?.textContent.trim() || ""}`;
+      else delete row.dataset.dismissed;
+      button.dataset.other = JSON.stringify(was);
+      if (other) {
+        button.setAttribute("formaction", other.action);
+        button.textContent = other.label;
+      } else {
+        const routes = document.querySelector("[data-triage-routes]")?.dataset;
+        button.setAttribute("formaction", dismissing ? routes?.restore : routes?.dismiss);
+        button.textContent = dismissing ? "Undo" : "Dismiss";
+      }
+    })
+    // Whatever went wrong, the plain form still works.
+    .catch(() => { button.setAttribute("form", form.id); form.requestSubmit ? form.requestSubmit(button) : form.submit(); })
+    .finally(() => { button.disabled = false; });
+});
 
 // Long-running forms stay ordinary HTML forms: uploads and commands still work
 // without JavaScript and keep Django's redirect/error semantics. Enhancement
@@ -822,6 +881,119 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   document.addEventListener("focusout", () => {
     tip.hidden = true;
   });
+})();
+
+// A page about one thing asks for that thing's readings when it is opened.
+// Only while the page is showing: a tab in the background asks for nothing,
+// and asks again when it is brought back, which costs nothing if HQ finds the
+// readings still fresh. The server decides what is read and whether it is due;
+// this only says the page is being looked at, and follows the answer.
+//
+// When the reading lands the page is loaded again, so everything on it is the
+// same reading and every enhancement is bound as on any other load. Not under
+// somebody's hands, though: once the page has been touched it says a newer
+// reading is in and leaves showing it to them. And never twice running: a page
+// that reloaded itself a moment ago says so instead, whatever the server
+// answers, so no answer can turn an open page into a loop.
+(() => {
+  const form = document.querySelector("form[data-visit-refresh]");
+  if (!form) return;
+  const status = document.querySelector("[data-visit-status]");
+  const POLL_MS = 4000;
+  const LIMIT_MS = 180_000;
+  const RELOAD_GAP_MS = 120_000;
+  const reloadedKey = `hq.visit.reloaded:${window.location.pathname}`;
+  let busy = false;
+  let touched = false;
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach((type) =>
+    document.addEventListener(type, () => { touched = true; }, { once: true, passive: true, capture: true }),
+  );
+  const showing = () => document.visibilityState === "visible";
+
+  const say = (text, reload = false) => {
+    if (!status) return;
+    status.replaceChildren(text);
+    if (reload) {
+      const link = document.createElement("a");
+      link.href = window.location.href;
+      link.textContent = "Show it";
+      status.append(" ", link);
+    }
+    status.hidden = !text;
+  };
+
+  // sessionStorage can be unavailable; then the page never reloads itself.
+  const reloadedRecently = () => {
+    try {
+      const at = Number(window.sessionStorage.getItem(reloadedKey) || 0);
+      return Date.now() - at < RELOAD_GAP_MS;
+    } catch (_error) {
+      return true;
+    }
+  };
+  const land = () => {
+    if (touched || !showing() || reloadedRecently()) {
+      say("A newer reading is in.", true);
+      return;
+    }
+    try {
+      window.sessionStorage.setItem(reloadedKey, String(Date.now()));
+    } catch (_error) {
+      say("A newer reading is in.", true);
+      return;
+    }
+    window.location.reload();
+  };
+
+  // What the server said, or null when it did not answer as expected: an
+  // expired session, an error, a page that is gone. Null is not "the reading
+  // is in", so nothing follows from it.
+  const answer = async (response) => (response.ok ? response.json() : null);
+
+  const follow = async (watch) => {
+    const until = Date.now() + LIMIT_MS;
+    const query = new URLSearchParams({ watch });
+    while (showing() && Date.now() < until) {
+      await new Promise((resolve) => window.setTimeout(resolve, POLL_MS));
+      const found = await answer(
+        await hqFetch(`${form.action}?${query}`, { credentials: "same-origin", renewSession: false }),
+      );
+      if (!found) break;
+      if (found.pending) continue;
+      land();
+      return;
+    }
+    // Unanswered, or no longer being watched: say nothing rather than leave a
+    // promise on the page.
+    say("");
+  };
+
+  const ask = async () => {
+    if (busy || !showing()) return;
+    busy = true;
+    try {
+      const found = await answer(
+        await hqFetch(form.action, {
+          method: "POST",
+          body: new FormData(form),
+          credentials: "same-origin",
+          // Looking at a page is not a request to leave it for a sign-in.
+          renewSession: false,
+        }),
+      );
+      if (found && found.pending && found.watch) {
+        say("Reading now…");
+        await follow(found.watch);
+      }
+    } catch (_error) {
+      say("");
+    } finally {
+      busy = false;
+    }
+  };
+
+  ask();
+  document.addEventListener("visibilitychange", ask);
 })();
 
 // Calendar paging without a page load. The links and forms work on their own:

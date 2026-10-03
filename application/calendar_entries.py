@@ -16,7 +16,7 @@ from typing import Any, Literal
 from django.db import transaction
 from django.db.models import Q
 from django.db.models.functions import Coalesce
-from django.urls import reverse
+from application.routes import reverse
 from django.utils import timezone
 
 from calendars.models import Entry, Preference
@@ -24,6 +24,7 @@ from core.audit import operation_context
 
 from .calendar import CalendarEvent, CalendarSource
 from .security import Capability, Principal
+from .ui import counted, when_day
 
 OWN_SOURCE = "calendar.mine"
 # Occurrences a repeating entry may yield into one window, so a daily entry
@@ -171,11 +172,11 @@ def repeat_label(entry: Entry) -> str:
     if not entry.repeat:
         return ""
     unit = {"daily": "day", "weekly": "week", "monthly": "month", "yearly": "year"}[entry.repeat]
-    every = f"Every {unit}" if entry.interval == 1 else f"Every {entry.interval} {unit}s"
+    every = f"Every {unit}" if entry.interval == 1 else f"Every {counted(entry.interval, unit)}"
     if entry.repeat == Entry.Repeat.WEEKLY and entry.weekday_numbers:
         every += " on " + ", ".join(_WEEKDAY_NAMES[day] for day in entry.weekday_numbers)
     if entry.repeat_until:
-        every += f" until {entry.repeat_until:%b} {entry.repeat_until.day}, {entry.repeat_until.year}"
+        every += f" until {when_day(entry.repeat_until)}"
     return every
 
 

@@ -5,7 +5,7 @@ register = template.Library()
 
 
 @register.inclusion_tag("partials/_table_sort_header.html", takes_context=True)
-def table_sort_header(context, label, ascending, descending=""):
+def table_sort_header(context, label, ascending, descending="", css=""):
     table = context["table"]
     current = table["selected_sort"]
     descending = descending or f"-{ascending}"
@@ -22,6 +22,8 @@ def table_sort_header(context, label, ascending, descending=""):
     )
     return {
         "label": label,
+        # The column's own classes, which a heading that sorts still carries.
+        "css": css,
         "url": f"?{params.urlencode()}",
         "direction": direction,
         "next_direction": "descending" if next_sort == descending else "ascending",

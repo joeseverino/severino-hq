@@ -92,7 +92,7 @@
           <p class="search-snippet">{% for text, hit in item.snippet %}{% if hit %}<mark>{{ text }}</mark>{% else %}{{ text }}{% endif %}{% endfor %}</p>
           {% endif %}
         </div>
-        {% if item.timestamp %}<span class="row-meta">{{ item.timestamp }}</span>{% endif %}
+        {% if item.timestamp %}<span class="row-meta">{{ item.timestamp|when }}</span>{% endif %}
       </li>
       {% endfor %}
     </ul>
@@ -114,7 +114,7 @@
             {% if item.status %}<span class="muted">· {{ item.status|capfirst }}</span>{% endif %}
           </p>
         </div>
-        <span class="row-meta">{{ item.created_at }}</span>
+        <span class="row-meta">{{ item.created_at|when }}</span>
       </li>
       {% endfor %}
     </ul>

@@ -24,7 +24,7 @@ from dataclasses import dataclass, replace
 from typing import Any, Callable
 from urllib.parse import urlparse
 
-from django.urls import reverse
+from application.routes import reverse
 
 from core.models import AuditLog
 from control_plane.names import normalized_hostname

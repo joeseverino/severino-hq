@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 
-from django.urls import reverse
+from application.routes import reverse
 
 from control_plane.models import ManagedResource
 from control_plane.names import names_a_host, normalized_hostname

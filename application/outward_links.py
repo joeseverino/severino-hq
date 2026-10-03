@@ -65,7 +65,7 @@ def outward_links(user=None) -> tuple[list[dict[str, str]], bool]:
 
     from .pins import DASHBOARD_LINK, pinned
 
-    from django.urls import reverse
+    from application.routes import reverse
 
     from .published_sites import public_sites
 

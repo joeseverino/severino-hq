@@ -189,7 +189,7 @@ class WorkerTests(TestCase):
 
     @mock.patch("controller_runtime.worker.connections", return_value=[])
     @mock.patch("controller_runtime.worker._manage")
-    def test_idle_apply_claims_after_reporting_findings(self, manage, _connections):
+    def test_idle_apply_asks_for_queued_work_before_and_after_the_sweep(self, manage, _connections):
         manage.side_effect = _bridge(
             **{
                 "sweep-due": {"ok": True, "due": True},
@@ -204,13 +204,16 @@ class WorkerTests(TestCase):
         self.assertEqual(worker.run_once("test", apply=True), 0)
 
         called = [call.args[0] for call in manage.call_args_list]
-        # Both sweeps, before anything is claimed. What HQ can reach is reported
-        # ahead of what it found there, so an empty inventory can be read
-        # against the credential that would have filled it.
+        # What somebody queued is asked for before the sweep, so it never waits
+        # behind every reader; what the sweep found to do is asked for after
+        # it. Within the sweep, what HQ can reach is reported ahead of what it
+        # found there, so an empty inventory can be read against the
+        # credential that would have filled it.
         self.assertEqual(
             called,
             [
                 "glance-plan",
+                "claim",
                 "sweep-due",
                 "connections",
                 "inventory",
@@ -266,6 +269,136 @@ class WorkerTests(TestCase):
             call for call in manage.call_args_list if call.args[0] == "analytics-plan"
         )
         self.assertNotIn("provider-only-account-id", " ".join(plan_call.args))
+
+    def _queued(self, manage, *keys, due=True):
+        """A bridge whose queue holds one reconcile per key, claimed in order."""
+
+        waiting = [
+            {
+                "operation": {"id": f"operation-{key}", "action": "reconcile"},
+                "resource": {"key": key, "kind": "adguard.rewrite", "generation": 2, "spec": {}},
+            }
+            for key in keys
+        ]
+        answer = _bridge(
+            **{
+                "sweep-due": {"ok": True, "due": due},
+                "connections": {"ok": True, "recorded": []},
+                "inventory": {"ok": True, "recorded": []},
+                "analytics": {"ok": True, "recorded": {}},
+                "schedule": {"ok": True, "scheduled": []},
+                "report": {"ok": True},
+            }
+        )
+
+        def respond(*args, **kwargs):
+            if args[0] == "claim":
+                return waiting.pop(0) if waiting else {"ok": True, "operation": None}
+            return answer(*args, **kwargs)
+
+        manage.side_effect = respond
+
+    @mock.patch("controller_runtime.worker.connections", return_value=[])
+    @mock.patch("controller_runtime.worker.execute")
+    @mock.patch("controller_runtime.worker._manage")
+    def test_queued_work_is_applied_before_the_sweep_it_used_to_wait_behind(
+        self, manage, execute, _connections
+    ):
+        self._queued(manage, "dns")
+        execute.return_value = ProviderResult(changed=True, status={}, conditions=[], message="Applied.")
+
+        self.assertEqual(worker.run_once("test", apply=True), 0)
+
+        called = [call.args[0] for call in manage.call_args_list]
+        self.assertLess(called.index("report"), called.index("sweep-due"))
+        # The sweep still runs, and reads the estate as the work left it.
+        self.assertIn("inventory", called)
+
+    @mock.patch("controller_runtime.worker.connections", return_value=[])
+    @mock.patch("controller_runtime.worker.execute")
+    @mock.patch("controller_runtime.worker._manage")
+    def test_several_queued_together_are_applied_in_one_run(self, manage, execute, _connections):
+        self._queued(manage, "one", "two", "three")
+        execute.return_value = ProviderResult(changed=True, status={}, conditions=[], message="Applied.")
+
+        self.assertEqual(worker.run_once("test", apply=True), 0)
+
+        self.assertEqual([call.args[0]["key"] for call in execute.call_args_list], ["one", "two", "three"])
+
+    @mock.patch("controller_runtime.worker.connections", return_value=[])
+    @mock.patch("controller_runtime.worker.execute")
+    @mock.patch("controller_runtime.worker._manage")
+    def test_a_run_applies_a_bounded_number_and_leaves_the_rest(self, manage, execute, _connections):
+        # More than both passes together could take, so only the bound stops it.
+        self._queued(manage, *(f"r{index}" for index in range(2 * worker.APPLY_LIMIT + 3)), due=False)
+        execute.return_value = ProviderResult(changed=True, status={}, conditions=[], message="Applied.")
+
+        self.assertEqual(worker.run_once("test", apply=True), 0)
+
+        # Once before the sweep and once after it, each exactly to the limit.
+        self.assertEqual(execute.call_count, 2 * worker.APPLY_LIMIT)
+
+    @mock.patch("controller_runtime.worker.connections", return_value=[])
+    @mock.patch("controller_runtime.worker.execute")
+    @mock.patch("controller_runtime.worker._manage")
+    def test_work_that_breaks_the_run_does_not_stop_the_estate_being_looked_at(
+        self, manage, execute, _connections
+    ):
+        """HQ refusing a report, or a handler that cannot run, ends the run as
+        it always did, but only after the sweep: before queued work went
+        first, the sweep had already happened by the time anything could break."""
+
+        self._queued(manage, "dns")
+        execute.side_effect = KeyError("a handler that could not run")
+
+        with self.assertRaises(KeyError):
+            worker.run_once("test", apply=True)
+
+        called = [call.args[0] for call in manage.call_args_list]
+        self.assertIn("inventory", called)
+        self.assertIn("schedule", called)
+        # And nothing more is claimed on top of what broke.
+        self.assertEqual(called.count("claim"), 1)
+
+    @mock.patch("controller_runtime.worker.connections", return_value=[])
+    @mock.patch("controller_runtime.worker.execute")
+    @mock.patch("controller_runtime.worker._manage")
+    def test_a_failure_stops_the_queue_and_still_lets_the_sweep_run(self, manage, execute, _connections):
+        self._queued(manage, "one", "two")
+        execute.side_effect = ProviderError("Provider request failed.")
+
+        self.assertEqual(worker.run_once("test", apply=True), 1)
+
+        called = [call.args[0] for call in manage.call_args_list]
+        # The one that failed is reported; the one behind it is not started on
+        # top of a step that did not happen, in this run at all.
+        self.assertEqual(execute.call_count, 1)
+        self.assertEqual(called.count("claim"), 1)
+        # A failing operation does not leave the estate unwatched.
+        self.assertIn("inventory", called)
+        self.assertIn("schedule", called)
+
+    @mock.patch("controller_runtime.worker.connections", return_value=[])
+    @mock.patch("controller_runtime.worker.execute")
+    @mock.patch("controller_runtime.worker._manage")
+    def test_when_the_work_and_the_sweep_both_break_neither_is_lost(self, manage, execute, _connections):
+        self._queued(manage, "dns")
+        execute.side_effect = KeyError("a handler that could not run")
+        answer = manage.side_effect
+
+        def respond(*args, **kwargs):
+            if args[0] == "schedule":
+                raise worker.BridgeError("HQ did not answer")
+            return answer(*args, **kwargs)
+
+        manage.side_effect = respond
+
+        with self.assertRaises(KeyError) as raised:
+            worker.run_once("test", apply=True)
+
+        # The first thing that went wrong is what the run ends with, and what
+        # went wrong after it travels with it.
+        self.assertIsInstance(raised.exception.__context__, worker.BridgeError)
 
     def test_capability_registry_drives_supported_kinds(self):
         """What the controller offers is the registry, minus what is locked.
@@ -325,31 +458,13 @@ class WorkerTests(TestCase):
     def test_provider_failure_is_reported_without_secret(
         self, manage, execute, _connections
     ):
-        manage.side_effect = _bridge(
-            **{
-                "sweep-due": {"ok": True, "due": True},
-                "connections": {"ok": True, "recorded": []},
-                "inventory": {"ok": True, "recorded": []},
-                "analytics": {"ok": True, "recorded": {}},
-                "glance-plan": {"ok": True, "panels": [], "targets": {}},
-                "schedule": {"ok": True, "scheduled": []},
-                "claim": {
-                    "operation": {"id": "operation-1", "action": "reconcile"},
-                    "resource": {
-                        "key": "dns",
-                        "kind": "adguard.rewrite",
-                        "generation": 2,
-                        "spec": {},
-                    },
-                },
-                "report": {"ok": True},
-            }
-        )
+        self._queued(manage, "dns")
         execute.side_effect = ProviderError("Provider request failed.")
 
         self.assertEqual(worker.run_once("test", apply=True), 1)
 
-        report_payload = manage.call_args.kwargs["payload"]
+        report = next(call for call in manage.call_args_list if call.args[0] == "report")
+        report_payload = report.kwargs["payload"]
         self.assertFalse(report_payload["success"])
         self.assertNotIn("password", json.dumps(report_payload).lower())
 
@@ -359,26 +474,7 @@ class WorkerTests(TestCase):
     def test_claimed_operation_executes_without_an_unrelated_global_gate(
         self, manage, execute, connections
     ):
-        manage.side_effect = _bridge(
-            **{
-                "sweep-due": {"ok": True, "due": True},
-                "connections": {"ok": True, "recorded": []},
-                "inventory": {"ok": True, "recorded": []},
-                "analytics": {"ok": True, "recorded": {}},
-                "glance-plan": {"ok": True, "panels": [], "targets": {}},
-                "schedule": {"ok": True, "scheduled": []},
-                "claim": {
-                    "operation": {"id": "operation-1", "action": "reconcile"},
-                    "resource": {
-                        "key": "dns",
-                        "kind": "adguard.rewrite",
-                        "generation": 2,
-                        "spec": {},
-                    },
-                },
-                "report": {"ok": True},
-            }
-        )
+        self._queued(manage, "dns")
         execute.return_value = ProviderResult(
             changed=False,
             status={},
@@ -616,6 +712,66 @@ class ThisRunIsNotTheEstateTests(TestCase):
             ),
             ["a-stray", "a-web"],
         )
+
+
+class SweepOrderTests(TestCase):
+    """Providers are read at once; one provider's kinds, in turn."""
+
+    def test_kinds_of_one_provider_never_overlap_and_providers_do(self):
+        import threading
+        import time
+
+        lock = threading.Lock()
+        running: dict[str, int] = {}
+        most: dict[str, int] = {}
+        together = 0
+
+        def reader(provider):
+            def read():
+                nonlocal together
+                with lock:
+                    running[provider] = running.get(provider, 0) + 1
+                    most[provider] = max(most.get(provider, 0), running[provider])
+                    together = max(together, sum(running.values()))
+                time.sleep(0.03)
+                with lock:
+                    running[provider] -= 1
+                return []
+
+            return read
+
+        kinds = {f"{provider}.kind{index}": reader(provider) for provider in ("alpha", "beta", "gamma") for index in range(3)}
+        with (
+            mock.patch.dict(providers.PROVIDER_INVENTORY, kinds, clear=True),
+            mock.patch.object(providers, "_has_source", return_value=True),
+        ):
+            found = providers.inventory()
+
+        self.assertEqual(list(found), list(kinds))
+        self.assertEqual(most, {"alpha": 1, "beta": 1, "gamma": 1})
+        self.assertGreater(together, 1)
+
+
+class ProviderGroupingTests(TestCase):
+    """Which kinds are read in turn with which, against the real registries."""
+
+    def test_one_vendors_kinds_are_one_group_whichever_credential_reads_them(self):
+        # Read through two different credentials, and still one provider's:
+        # its limits and its refusals are shared.
+        self.assertEqual(providers._provider_of("cloudflare.zone"), "cloudflare")
+        self.assertEqual(providers._provider_of("cloudflare.tunnel"), "cloudflare")
+        self.assertEqual(providers._provider_of("github.repository"), "github")
+
+    def test_every_kind_read_by_logging_in_is_one_group(self):
+        """A host is never asked to open two sessions for one sweep."""
+
+        self.assertEqual(providers._provider_of("host.perimeter"), "ssh")
+        self.assertEqual(providers._provider_of("caddy.route"), "ssh")
+
+    def test_every_kind_the_sweep_reads_has_a_group(self):
+        for kind in providers.PROVIDER_INVENTORY:
+            with self.subTest(kind=kind):
+                self.assertTrue(providers._provider_of(kind))
 
 
 class SlowSweepTests(TestCase):

@@ -9,7 +9,7 @@
   <div class="table-scroll">
     <table class="data-table compact-table">
       <tbody>
-        <tr><th>When</th><td>{{ event.created_at|date:"M j, Y H:i:s" }}</td></tr>
+        <tr><th>When</th><td>{{ event.created_at|when:"exact" }}</td></tr>
         <tr><th>Who</th><td>{{ event.actor_label }}</td></tr>
         <tr><th>Action</th><td>{{ event.get_action_display }}</td></tr>
         {% if event.object_type %}<tr><th>Object</th><td>{{ event.object_repr|default:event.type_label }}{% if event.object_id %} <span class="muted">#{{ event.object_id }}</span>{% endif %}</td></tr>{% endif %}
@@ -66,7 +66,7 @@
       <tbody>
         {% for row in siblings %}
         <tr>
-          <td><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|date:"H:i:s" }}</a></td>
+          <td><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|when }}</a></td>
           <td>{{ row.get_action_display }}</td>
           <td>{{ row.object_repr|default:row.type_label|or_empty }}</td>
           <td>{% if row.message %}{{ row.message|truncatewords:12 }}{% else %}{% empty_value %}{% endif %}</td>
@@ -87,7 +87,7 @@
       <tbody>
         {% for row in history %}
         <tr>
-          <td><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|date:"M j, H:i" }}</a></td>
+          <td><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|when }}</a></td>
           <td>{{ row.get_action_display }}</td>
           <td>{{ row.actor_label }}</td>
           <td>{% if row.message %}{{ row.message|truncatewords:12 }}{% else %}{% empty_value %}{% endif %}</td>

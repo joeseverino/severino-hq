@@ -14,7 +14,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from django.shortcuts import redirect, render
-from django.urls import reverse
+from application.routes import reverse
 from django.utils.html import format_html
 from django.views import View
 

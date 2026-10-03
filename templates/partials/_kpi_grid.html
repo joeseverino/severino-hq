@@ -1,9 +1,37 @@
-<section class="kpi-grid"{% if label %} aria-label="{{ label }}"{% endif %}>
+<section class="kpi-grid{% if featured %} is-featured{% endif %}"{% if label %} aria-label="{{ label }}"{% endif %}>
   {% for item in items %}
-    {% if item.url %}<a class="kpi{% if item.is_zero %} is-zero{% endif %}" href="{{ item.url }}">{% else %}<div class="kpi{% if item.is_zero %} is-zero{% endif %}">{% endif %}
-      <span class="label">{{ item.label }}</span>
-      <span class="value">{{ item.value }}</span>
+    {% with drawing=item.drawing %}
+    {% comment %}
+    A figure with a page is one link, the whole cell. One whose dots lead to
+    pages of their own cannot be: a link does not hold links. Its value links
+    to the figure's page instead, and each dot to its own.
+    {% endcomment %}
+    {% if item.url and not drawing.links %}<a class="kpi{% if item.is_zero %} is-zero{% endif %}" href="{{ item.url }}">{% else %}<div class="kpi{% if item.is_zero %} is-zero{% endif %}">{% endif %}
+      <span class="label">{% if item.icon %}{% include "partials/_icon.html" with name=item.icon only %}{% endif %}{{ item.label }}</span>
+      <span class="kpi-figure">
+        {% if item.url and drawing.links %}<a class="value" href="{{ item.url }}">{{ item.value }}</a>{% else %}<span class="value">{{ item.value }}</span>{% endif %}
+        {% comment %}
+        What the figure looks like: dots for a part of a whole, a line for a
+        direction. Either repeats what the value and its note already say, so a
+        drawing that is only decoration is not announced; dots that are links
+        are, each by what it names.
+        {% endcomment %}
+        {% if drawing.kind == "dots" and drawing.shown %}
+          <span class="kpi-dots"{% if not drawing.links %} aria-hidden="true"{% endif %}>{% for dot in drawing.shown %}{% if dot.url %}<a class="kpi-dot{% if dot.filled %} is-filled{% endif %}" href="{{ dot.url }}" aria-label="{{ dot.tip }}" data-tip="{{ dot.tip }}"></a>{% else %}<i class="kpi-dot{% if dot.filled %} is-filled{% endif %}"{% if dot.tip %} data-tip="{{ dot.tip }}"{% endif %}></i>{% endif %}{% endfor %}</span>
+        {% elif drawing.kind == "trend" and drawing.marks %}
+          {% comment %}
+          Each reading answers across its own strip of the line, which is far
+          easier to point at than the point. Its dot is a zero-length
+          round-capped stroke: the drawing is stretched to the room it has, and
+          a circle would stretch with it. The box is wider than the line by a
+          margin each side, so the dot on the first and the newest reading is
+          whole.
+          {% endcomment %}
+          <svg class="kpi-trend" viewBox="-5 -3 110 30" preserveAspectRatio="none" aria-hidden="true" focusable="false"><polyline points="{{ drawing.points }}"></polyline>{% for mark in drawing.marks %}<rect class="kpi-trend-hit" x="{{ mark.left }}" y="0" width="{{ mark.width }}" height="24" data-tip="{{ mark.tip }}"></rect><line class="kpi-trend-dot{% if mark.latest %} is-latest{% endif %}" x1="{{ mark.x }}" y1="{{ mark.y }}" x2="{{ mark.x }}" y2="{{ mark.y }}"></line>{% endfor %}</svg>
+        {% endif %}
+      </span>
       {% if item.detail %}<span class="muted">{{ item.detail }}</span>{% endif %}
-    {% if item.url %}</a>{% else %}</div>{% endif %}
+    {% if item.url and not drawing.links %}</a>{% else %}</div>{% endif %}
+    {% endwith %}
   {% endfor %}
 </section>

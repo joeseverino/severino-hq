@@ -9,6 +9,7 @@ from control_plane.names import names_a_host, normalized_hostname
 from control_plane.providers import PROVIDERS
 from projects.models import Project
 
+from .projection import read_once
 from .entity_links import entity_link
 
 
@@ -39,6 +40,10 @@ def projects_by_hostname() -> dict[str, Project]:
     modules is two answers to one question.
     """
 
+    return read_once("published_sites.projects_by_hostname", _load_projects_by_hostname)
+
+
+def _load_projects_by_hostname() -> dict[str, Project]:
     found: dict[str, Project] = {}
     for project in Project.objects.exclude(public_url=""):
         hostname = urlparse(project.public_url).hostname

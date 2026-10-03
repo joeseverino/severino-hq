@@ -27,6 +27,7 @@ from core import secrets
 
 from .infrastructure import delivery_targets
 from .security import Capability, Principal
+from .ui import when_day
 
 
 class CertificateError(ValueError):
@@ -74,7 +75,7 @@ def inspect(fullchain: str, private_key: str) -> dict[str, Any]:
     expires = certificate.not_valid_after_utc
     if expires <= timezone.now():
         raise CertificateError(
-            f"The certificate expired on {expires:%-d %b %Y}. Upload a current one."
+            f"The certificate expired on {when_day(expires)}. Upload a current one."
         )
     return {
         "fingerprint_sha256": certificate.fingerprint(hashes.SHA256()).hex(),

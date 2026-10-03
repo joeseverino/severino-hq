@@ -3,7 +3,9 @@
 import re
 from urllib.parse import urlsplit
 
-from django.urls import NoReverseMatch, reverse
+from django.urls import NoReverseMatch
+
+from application.routes import reverse
 
 
 DOTTED_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")

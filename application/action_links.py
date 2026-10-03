@@ -14,7 +14,9 @@ from dataclasses import replace
 from typing import Protocol
 from urllib.parse import urlencode
 
-from django.urls import NoReverseMatch, reverse
+from django.urls import NoReverseMatch
+
+from application.routes import reverse
 
 from .contracts import route_url
 from .security import AuthorizationError, Principal

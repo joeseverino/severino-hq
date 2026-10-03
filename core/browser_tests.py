@@ -52,7 +52,16 @@ ORIGIN = "http://hq.example.test"
 AUDIT = Path(settings.BASE_DIR) / "scripts" / "layout-audit.js"
 
 SELECTORS = {
+    "decisions": "[data-attention-item]",
+    "decision_family": "details[data-queue-family] > summary strong",
+    "decision_title": ".attention-title",
+    "decision_evidence": ".attention-evidence",
+    "decision_summary": ".attention-evidence > summary",
+    "decision_detail": ".attention-detail",
+    "decision_actions": ".attention-actions",
     "highlights": ".dashboard-highlights > .highlight-card",
+    # Each reading in the dashboard's row: a mark, then its lines.
+    "readings": ".dash-readings .glance-panel-head",
     "patterns": ".dashboard-patterns > .card",
     "pill": ".pill",
     # The one box allowed to scroll sideways.
@@ -559,6 +568,91 @@ _UNPADDED_TILES = "([exempt, control, detached, disclosure]) => {" + _DESCRIBE +
 }"""
 
 
+# The first table on a page as a phone lays it out: whether it runs past its
+# box, how wide each showing column is, and how tall each record's row is.
+# The row toggle and the line an open row adds are made by tables.js, so no
+# template renders them and they are found by tag and attribute.
+_PHONE_TABLE = """(scroll) => {
+  const box = document.querySelector('main ' + scroll);
+  const table = box && box.querySelector('table');
+  if (!table) return null;
+  const showing = (el) => getComputedStyle(el).display !== 'none';
+  return {
+    sideways: Math.round(box.scrollWidth - box.clientWidth),
+    headings: table.querySelectorAll('thead th').length,
+    columns: [...table.querySelectorAll('thead th')].filter(showing)
+      .map((heading) => Math.round(heading.getBoundingClientRect().width)),
+    rows: [...table.querySelectorAll('tbody > tr:not([data-row-detail])')]
+      .map((row) => Math.round(row.getBoundingClientRect().height)),
+    toggles: table.querySelectorAll('tbody button[aria-expanded]').length,
+    details: [...table.querySelectorAll('tr[data-row-detail] dt')].map((term) => term.textContent),
+    held: table.hasAttribute('data-rows-held'),
+  };
+}"""
+# Every table that is wider than the box it scrolls in, and for each table
+# that has row toggles, how many different left edges its rows' names start on.
+_TABLES_THAT_DO_NOT_FIT = """(scroll) => [...document.querySelectorAll('main ' + scroll)]
+  .filter((box) => box.checkVisibility() && !box.closest('details:not([open])'))
+  .map((box) => [box, box.querySelector(':scope > table')])
+  .filter(([box, table]) => table && table.querySelector('tbody td')
+    && table.getBoundingClientRect().width > box.clientWidth + 1)
+  .map(([box, table]) => (table.querySelector('th') || table).textContent.trim().slice(0, 24)
+    + ' +' + Math.round(table.getBoundingClientRect().width - box.clientWidth))"""
+_NAME_EDGES = """(scroll) => [...document.querySelectorAll('main ' + scroll + ' > table')]
+  .filter((table) => table.checkVisibility() && table.querySelector('tbody button[aria-expanded]'))
+  .map((table) => {
+    const toggle = table.querySelector('tbody button[aria-expanded]');
+    const column = toggle.closest('td, th').cellIndex;
+    const edges = [...table.querySelectorAll('tbody > tr:not([data-row-detail])')]
+      .map((row) => row.children[column])
+      .filter((cell) => cell && !cell.hasAttribute('colspan') && cell.textContent.trim())
+      .map((cell) => {
+        const range = document.createRange();
+        range.selectNodeContents(cell);
+        const first = [...range.getClientRects()].find((rect) => rect.width > 1);
+        return first ? Math.round(first.left) : null;
+      })
+      .filter((edge) => edge !== null);
+    return new Set(edges).size;
+  })"""
+# Press a heading's sort control and read its column back, top to bottom.
+_SORT_BY = """([scroll, column]) => {
+  const table = document.querySelector('main ' + scroll + ' > table');
+  const heading = table.querySelectorAll('thead th')[column];
+  const control = heading.querySelector('button');
+  if (!control) return null;
+  control.click();
+  return {
+    sort: heading.getAttribute('aria-sort'),
+    values: [...table.querySelectorAll('tbody')].map((body) =>
+      [...body.querySelectorAll(':scope > tr')]
+        .filter((row) => row.children.length > column && !row.querySelector('[colspan]'))
+        .map((row) => row.children[column].textContent.trim().replace(/\\s+/g, ' '))),
+  };
+}"""
+_PRESS_FIRST_ROW_TOGGLE = "(scroll) => document.querySelector('main ' + scroll + ' tbody button[aria-expanded]').click()"
+
+
+# Each reading's mark and lines, as laid out: where the mark sits, and for each
+# line whether it starts beside the mark, whether it is cut short, and where
+# its top is.
+_READINGS = """(heads) => heads.map((head) => {
+  const [mark, ...lines] = [...head.children].filter((el) => el.checkVisibility());
+  const at = mark.getBoundingClientRect();
+  return {
+    top: Math.round(head.getBoundingClientRect().top),
+    mark: Math.round((at.top + at.bottom) / 2),
+    lead: (() => { const r = lines[0].getBoundingClientRect(); return Math.round((r.top + r.bottom) / 2); })(),
+    under_the_mark: lines.filter((line) => line.getBoundingClientRect().left < at.right - 1)
+      .map((line) => line.textContent.trim().slice(0, 30)),
+    cut: lines.filter((line) => line.scrollWidth > line.clientWidth + 1)
+      .map((line) => line.textContent.trim().slice(0, 30)),
+    second: lines[1] ? Math.round(lines[1].getBoundingClientRect().top - head.getBoundingClientRect().top) : null,
+    size: getComputedStyle(lines[0].querySelector('strong') || lines[0]).fontSize,
+  };
+})"""
+
+
 # A table with one row whose only clipped text is for screen readers, beside
 # a decoration hidden from them, and one row whose value really is cut off.
 _ROW_TOGGLE_PROBE = f"""<!doctype html><html><head>
@@ -696,6 +790,35 @@ class LayoutBrowserTests(SimpleTestCase):
             self.assertEqual(sheets["empty"], [])
 
         self.each(check)
+
+    def assert_decision_evidence(self, row):
+        evidence = row.locator(SELECTORS["decision_evidence"])
+        if not evidence.count():
+            return
+        detail = evidence.locator(SELECTORS["decision_detail"])
+        if detail.count():
+            self.assertFalse(detail.is_visible())
+        row.locator(SELECTORS["decision_summary"]).click()
+        if detail.count():
+            self.assertTrue(detail.is_visible())
+        row.locator(SELECTORS["decision_summary"]).click()
+
+    def test_decisions_keep_actions_visible_and_evidence_reachable_without_script(self):
+        for width in OVERFLOW_WIDTHS:
+            with self.subTest(width=width):
+                self.open("action-items", width)
+                # A family of the same kind of item is folded behind its own
+                # native summary: one press, no script, and its rows are there.
+                for family in self.page.locator(SELECTORS["decision_family"]).all():
+                    self.assertTrue(family.is_visible())
+                    family.click()
+                rows = self.page.locator(SELECTORS["decisions"])
+                self.assertGreater(rows.count(), 0)
+                for row in rows.all():
+                    self.assertTrue(row.locator(SELECTORS["decision_title"]).is_visible())
+                    for action in row.locator(SELECTORS["decision_actions"]).all():
+                        self.assertTrue(action.is_visible())
+                    self.assert_decision_evidence(row)
 
     def test_nothing_escapes_the_page_sideways(self):
         """Closed, and with every disclosure and popover open."""
@@ -865,6 +988,128 @@ class LayoutBrowserTests(SimpleTestCase):
         self.assertEqual(rows["clamped"]["toggles"], 1)
         self.assertTrue(rows["clamped"]["beside_name"])
         self.assertFalse(rows["clamped"]["in_decoration"])
+
+    def test_a_wide_table_fits_a_phone_and_opening_a_row_moves_nothing(self):
+        """A table of four columns or more keeps the column that names each row
+        and the ones marked key, and fits the screen; it does not stack into
+        cards and is not swiped through. What left is listed when a row is
+        opened, beneath that row, and opening it changes no column's width and
+        no other row's height: the reader's place in the table holds.
+        """
+
+        self.start(java_script_enabled=True)
+        for name in ("connections", "services", "containers", "projects"):
+            with self.subTest(page=name):
+                self.open(name, 390)
+                closed = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
+                self.assertGreaterEqual(closed["headings"], 4)
+                self.assertLess(len(closed["columns"]), closed["headings"])
+                self.assertLessEqual(closed["sideways"], 1)
+                self.assertGreater(closed["toggles"], 0)
+
+                self.page.evaluate(_PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
+                opened = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
+                self.assertTrue(opened["details"])
+                self.assertEqual(opened["columns"], closed["columns"])
+                self.assertEqual(opened["rows"][1:], closed["rows"][1:])
+                self.assertLessEqual(opened["sideways"], 1)
+
+                self.page.evaluate(_PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
+                again = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
+                self.assertEqual(again["details"], [])
+                self.assertFalse(again["held"])
+                self.assertEqual(again["columns"], closed["columns"])
+                self.assertEqual(again["rows"], closed["rows"])
+
+    def test_a_wide_table_on_a_desktop_keeps_every_column_and_holds_them_when_a_row_opens(self):
+        self.start(java_script_enabled=True)
+        self.open("connections", 1440)
+        closed = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
+        self.assertEqual(len(closed["columns"]), closed["headings"])
+
+        if closed["toggles"]:
+            self.page.evaluate(_PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
+            opened = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
+            self.assertEqual(opened["columns"], closed["columns"])
+            self.assertEqual(opened["rows"][1:], closed["rows"][1:])
+
+    def test_a_table_fits_its_box_at_every_width(self):
+        """Not only on a phone. A table wider than its box wraps, and where
+        wrapping would cramp it gives up columns from the far end, so nothing
+        a reader came for is off the edge at a tablet or a laptop width
+        either. Every page, with every disclosure open.
+        """
+
+        self.start(java_script_enabled=True)
+
+        def check(_name):
+            self.page.evaluate(
+                "() => document.querySelectorAll('details').forEach((d) => { d.open = true; })"
+            )
+            self.page.evaluate("() => window.dispatchEvent(new Event('resize'))")
+            self.page.wait_for_timeout(200)
+            self.assertEqual(
+                self.page.evaluate(_TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), []
+            )
+
+        self.across(check)
+
+    def test_a_tables_names_share_one_edge_whether_or_not_a_row_opens(self):
+        """A row with a toggle and a row without start their names on the same
+        line down the column: the toggle has a gutter every row keeps.
+        """
+
+        self.start(java_script_enabled=True)
+
+        def check(_name):
+            for edges in self.page.evaluate(_NAME_EDGES, SELECTORS["table_scroll"]):
+                self.assertEqual(edges, 1)
+
+        self.across(check)
+
+    def test_any_table_sorts_by_a_heading(self):
+        """A table whose server does not sort it sorts on the page: ascending,
+        then descending, then as it came, each section keeping its own rows.
+        """
+
+        self.start(java_script_enabled=True)
+        self.open("services", 1440)
+        came = self.page.evaluate(
+            "(scroll) => [...document.querySelectorAll('main ' + scroll + ' > table tbody')]"
+            ".map((body) => [...body.querySelectorAll(':scope > tr')]"
+            ".filter((row) => !row.querySelector('[colspan]'))"
+            ".map((row) => row.children[0].textContent.trim().replace(/\\s+/g, ' ')))",
+            SELECTORS["table_scroll"],
+        )
+        up = self.page.evaluate(_SORT_BY, [SELECTORS["table_scroll"], 0])
+        self.assertEqual(up["sort"], "ascending")
+        self.assertEqual(up["values"], [sorted(group, key=str.lower) for group in came])
+        down = self.page.evaluate(_SORT_BY, [SELECTORS["table_scroll"], 0])
+        self.assertEqual(down["sort"], "descending")
+        self.assertEqual(down["values"], [sorted(group, key=str.lower, reverse=True) for group in came])
+        back = self.page.evaluate(_SORT_BY, [SELECTORS["table_scroll"], 0])
+        self.assertEqual(back["sort"], "none")
+        self.assertEqual(back["values"], came)
+
+    def test_the_dashboards_readings_are_one_shape(self):
+        """Each is a mark, a lead and its lines, and they are the same shape:
+        the mark beside the lead and nothing set under it, every lead one size,
+        every second line starting the same distance down, and no line cut
+        short. A caption that fell into the mark's own narrow column read as
+        "Via h" and "Has", and nothing else in the gate would have said so.
+        """
+
+        for width in (390, 820, 1280, 1440):
+            with self.subTest(width=width):
+                self.open("dashboard", width)
+                readings = self.page.locator(SELECTORS["readings"]).evaluate_all(_READINGS)
+                self.assertGreaterEqual(len(readings), 3)
+                for reading in readings:
+                    self.assertEqual(reading["under_the_mark"], [])
+                    self.assertEqual(reading["cut"], [])
+                    self.assertAlmostEqual(reading["mark"], reading["lead"], delta=3)
+                self.assertEqual(len({reading["size"] for reading in readings}), 1)
+                self.assertEqual(len({reading["second"] for reading in readings if reading["second"]}), 1)
 
     def test_a_filled_box_keeps_its_padding(self):
         self.across(

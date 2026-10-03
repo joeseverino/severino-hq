@@ -1,6 +1,29 @@
 from django.test import SimpleTestCase
 
-from ..labels import lower_first
+from ..labels import lower_first, plural
+
+
+class PluralTests(SimpleTestCase):
+    def test_a_noun_is_spelled_as_english_spells_many_of_it(self):
+        for one, many in (
+            ("host", "hosts"),
+            ("calendar entry", "calendar entries"),
+            ("Registry", "Registries"),
+            ("day", "days"),
+            ("address", "addresses"),
+            ("match", "matches"),
+            ("box", "boxes"),
+            ("DNS record", "DNS records"),
+        ):
+            with self.subTest(one=one):
+                self.assertEqual(plural(one), many)
+
+    def test_counted_spells_a_single_noun_the_same_way(self):
+        from ..ui import counted
+
+        self.assertEqual(counted(2, "entry"), "2 entries")
+        self.assertEqual(counted(1, "entry"), "1 entry")
+        self.assertEqual(counted(3, "change"), "3 changes")
 
 
 class LowerFirstTests(SimpleTestCase):

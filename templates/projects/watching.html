@@ -42,7 +42,7 @@ would be a page about anybody.
               {% empty %}{% empty_value %}{% endfor %}
               {% if repo.advisories|length > 2 %}<a class="muted" href="{{ repo.url }}/security/advisories" rel="noopener">and {{ repo.advisories|length|add:"-2" }} more</a>{% endif %}
             </td>
-            <td class="nowrap">{% if repo.starred %}{{ repo.starred|ago_short }}{% else %}{% empty_value %}{% endif %}</td>
+            <td class="nowrap">{% if repo.starred %}{{ repo.starred|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
           </tr>
         {% endfor %}
       </tbody>

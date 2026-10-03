@@ -17,7 +17,7 @@ import shlex
 from datetime import timedelta
 from typing import Any, Callable
 
-from django.urls import reverse
+from application.routes import reverse
 from django.utils import timezone
 
 from .github_estate import Repository, repositories
@@ -407,6 +407,7 @@ def attention() -> tuple[Insight, ...]:
             Insight(
                 status="serious" if check.serious else "attention",
                 eyebrow="Posture",
+                family="Repository posture",
                 key=f"github-posture:{check.id}",
                 title=f"{check.label}: not met in {counted(len(missing), 'repository', 'repositories')}",
                 value=str(len(missing)),

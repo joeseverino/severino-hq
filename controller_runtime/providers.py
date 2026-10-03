@@ -24,6 +24,7 @@ from control_plane.provider_adapters.contracts import (
 from control_plane.provider_adapters import onepassword
 from control_plane.provider_adapters.tailscale import TAILNET_KIND
 from control_plane.provider_adapters.parts import part_ledger
+from control_plane.provider_adapters.together import read_each
 from . import (
     cloudflare,
     cloudflare_account,
@@ -187,33 +188,56 @@ def _inventory(only: frozenset[str] = frozenset()) -> dict[str, Any]:
     would make the least reliable provider decide whether HQ can see any of them.
     """
 
-    found: dict[str, Any] = {}
-    took: dict[str, float] = {}
     ssh_refs = set(connection_env.ssh_connection_refs())
     connected = {connection_env.effective_provider(ref, ssh_refs) for ref in connection_env.connection_prefixes()}
-    for kind, lister in PROVIDER_INVENTORY.items():
-        if only and kind not in only:
-            continue
-        if not _has_source(kind, connected):
-            found[kind] = {"ok": True, "records": [], "connected": False}
-            continue
+    wanted = [kind for kind in PROVIDER_INVENTORY if not only or kind in only]
+    sourced = [kind for kind in wanted if _has_source(kind, connected)]
+
+    def read(kind: str) -> tuple[dict[str, Any], float]:
         started = time.monotonic()
-        found[kind] = _read_kind(lister)
-        took[kind] = time.monotonic() - started
-    _say_if_slow(took)
+        return _read_kind(PROVIDER_INVENTORY[kind]), time.monotonic() - started
+
+    # Reading a kind is mostly waiting on its provider, so providers are read
+    # at once. One provider's kinds stay in turn: they share its rate limit and
+    # its lists, and a credential it refuses is then refused once, not by every
+    # kind that happened to be asking at the same moment.
+    by_provider: dict[str, list[str]] = {}
+    for kind in sourced:
+        by_provider.setdefault(_provider_of(kind), []).append(kind)
+    started = time.monotonic()
+    read_groups = read_each(list(by_provider.values()), lambda kinds: [read(kind) for kind in kinds])
+    elapsed = time.monotonic() - started
+    read_kinds = {
+        kind: result
+        for kinds, results in zip(by_provider.values(), read_groups, strict=True)
+        for kind, result in zip(kinds, results, strict=True)
+    }
+
+    found: dict[str, Any] = {}
+    for kind in wanted:
+        found[kind] = (
+            read_kinds[kind][0]
+            if kind in read_kinds
+            else {"ok": True, "records": [], "connected": False}
+        )
+    _say_if_slow({kind: seconds for kind, (_report, seconds) in read_kinds.items()}, elapsed=elapsed)
     return found
 
 
-# A sweep runs every minute while HQ is in use; one that takes longer than this
-# is overlapping itself, and which reader it spent the time in is the question.
+# A sweep that takes longer than this is worth a line: which reader it spent
+# the time in is the question.
 SLOW_SWEEP_SECONDS = 60
 
 
-def _say_if_slow(took: dict[str, float]) -> None:
+def _say_if_slow(took: dict[str, float], *, elapsed: float | None = None) -> None:
     """One line naming the slowest readers when a sweep ran long. Kinds only,
-    never a record, so the line is safe to copy anywhere."""
+    never a record, so the line is safe to copy anywhere.
 
-    total = sum(took.values())
+    ``elapsed`` is how long the sweep took on the clock, which with kinds read
+    at once is less than their sum; without it, the sum.
+    """
+
+    total = sum(took.values()) if elapsed is None else elapsed
     if total < SLOW_SWEEP_SECONDS:
         return
     slowest = sorted(took.items(), key=lambda item: item[1], reverse=True)[:5]
@@ -258,6 +282,27 @@ _LOCAL_SOURCES: dict[str, Callable[[], bool]] = {
     TAILNET_KIND: lambda: bool(tailscale.TAILNET_STATUS),
     "host.firewall": lambda: bool(host_readings.HOST_FIREWALL),
 }
+
+
+def _provider_of(kind: str) -> str:
+    """Whose kind this is, for reading one provider's kinds in turn.
+
+    The vendor a kind is named for: ``cloudflare.zone`` and
+    ``cloudflare.tunnel`` are one provider's, whichever of its credentials each
+    happens to be read through, and share its limits and its refusals. Every
+    kind read by logging in to a machine is one group as well, so a host is
+    never asked to open two sessions for one sweep.
+    """
+
+    from control_plane.observations import OBSERVATIONS
+
+    reading = OBSERVATIONS.get(kind)
+    declared = PROVIDERS.get(kind)
+    if (reading is not None and reading.provider == "ssh") or (
+        declared is not None and "ssh" in declared.connection_providers
+    ):
+        return "ssh"
+    return kind.split(".", 1)[0]
 
 
 def _has_source(kind: str, connected: set[str]) -> bool:

@@ -9,6 +9,7 @@ from django.conf import settings
 
 from projects.views import PostureView, WatchingRefreshView, WatchingView
 from core.views import (
+    AvatarView,
     ConnectionView,
     AgentAccessView,
     ThemeView,
@@ -22,12 +23,10 @@ from core.csp_views import csp_report
 from core.health_views import health_live, health_ready
 from core.action_item_views import (
     ActionItemCountView,
-    ActionItemReadAllView,
-    ActionItemReadView,
+    ActionItemAsideView,
     ActionItemsView,
 )
 from core.dashboard_views import (
-    DashboardContactsView,
     DashboardLinkChoiceView,
     DashboardGlanceView,
     DashboardGlanceSettingsView,
@@ -72,24 +71,19 @@ urlpatterns = [
         "action-items/count/", ActionItemCountView.as_view(), name="action_item_count"
     ),
     path(
-        "action-items/mark-read/",
-        ActionItemReadView.as_view(read=True),
-        name="action_items_mark_read",
+        "action-items/set-aside/",
+        ActionItemAsideView.as_view(aside=True),
+        name="action_items_set_aside",
     ),
     path(
-        "action-items/mark-unread/",
-        ActionItemReadView.as_view(read=False),
-        name="action_items_mark_unread",
+        "action-items/bring-back/",
+        ActionItemAsideView.as_view(aside=False),
+        name="action_items_bring_back",
     ),
-    path(
-        "action-items/read-all/",
-        ActionItemReadAllView.as_view(),
-        name="action_items_read_all",
-    ),
-    path("dashboard/contacts/", DashboardContactsView.as_view(), name="dashboard_contacts"),
     path("demo/", DemoModeView.as_view(), name="demo_mode"),
     path("agent-access/", AgentAccessView.as_view(), name="agent_access"),
     path("theme/", ThemeView.as_view(), name="theme"),
+    path("avatar/<str:digest>/", AvatarView.as_view(), name="avatar"),
     path("agents/", AgentPolicyView.as_view(), name="agent_policy"),
     path("connection/", ConnectionView.as_view(), name="connection"),
     path(

@@ -23,10 +23,17 @@ NEVER = "never"
 # Cadence names for readings that are not observation kinds.
 DASHBOARD_GLANCE = "dashboard.glance"
 SSH_PROBE = "connection.ssh_probe"
+PAGE_VISIT = "page.visit"
 
 # A dashboard reading costs a trip to a machine, so it is re-read when the
 # dashboard is opened and older than this.
 GLANCE_EVERY = timedelta(minutes=5)
+
+# What a page about one thing is assembled from is re-read when that page is
+# opened and older than this. A provider API call, not a trip to a machine, so
+# it may be asked sooner than a dashboard reading; an SSH connection keeps its
+# own, slower, cadence however the page is opened.
+VISIT_EVERY = timedelta(minutes=2)
 
 
 @dataclass(frozen=True)
@@ -50,6 +57,8 @@ def cadence(kind: str = "") -> Cadence:
 
     if kind == DASHBOARD_GLANCE:
         return Cadence(GLANCE_EVERY, missed=3)
+    if kind == PAGE_VISIT:
+        return Cadence(VISIT_EVERY, missed=3)
     if kind == SSH_PROBE:
         return Cadence(ssh_probe_interval(), missed=2)
     spec = OBSERVATIONS.get(kind)

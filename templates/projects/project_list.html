@@ -4,7 +4,7 @@
   <td>{{ row.get_category_display }}</td>
   <td><span class="pill pill-{{ row.status }}">{{ row.get_status_display }}</span></td>
   <td class="muted">{{ row.technologies_used|truncatechars:60 }}</td>
-  <td class="muted">{{ row.updated_at }}</td>
+  <td class="muted">{{ row.updated_at|when:"ago" }}</td>
   <td class="row-actions"><a href="{% url 'projects:edit' row.slug %}">Edit</a></td>
 {% endblock %}
 {% block empty %}No projects yet. <a href="{% url 'projects:create' %}">New project</a>{% endblock %}

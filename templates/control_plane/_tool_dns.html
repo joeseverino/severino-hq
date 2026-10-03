@@ -99,7 +99,7 @@
           {% if reading.observed_at %}
             <p class="help">
               From
-              <time datetime="{{ reading.observed_at|date:'c' }}">{{ reading.observed_at|date:"M j, Y, g:i a" }}</time>
+              {{ reading.observed_at|when }}
               <form method="post" class="inline-form">
                 {% csrf_token %}
                 <input type="hidden" name="tab" value="dns">

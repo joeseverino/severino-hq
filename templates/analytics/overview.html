@@ -1,5 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
+  {% comment %}A window is chosen over readings; with none there is nothing to window.{% endcomment %}
+  {% if latest %}
   <div class="window-bar">
     <nav class="window-switch" aria-label="Reporting window">
       {% for option in windows %}
@@ -9,12 +11,13 @@
       {% endfor %}
     </nav>
   </div>
+  {% endif %}
 
   {% if latest %}
     {% include "partials/_kpi_grid.html" with label="Traffic" items=kpis %}
 
     <p class="muted reading-note">
-      {{ totals.start|date:"j M" }} – {{ totals.end|date:"j M Y" }}{% if totals.sample_interval > 1 %} · sampled 1:{{ totals.sample_interval }}{% endif %}{% if observed_at %} · read {{ observed_at|ago }}{% endif %}
+      {{ totals.start|when:"day" }} – {{ totals.end|when:"day" }}{% if totals.sample_interval > 1 %} · sampled 1:{{ totals.sample_interval }}{% endif %}{% if observed_at %} · read {{ observed_at|ago }}{% endif %}
       {% if coverage.expected_days and not coverage.complete %}
         · {{ coverage.covered_days }} of {{ coverage.expected_days }} site-days read, {{ coverage.missing_days }} queued for backfill
       {% endif %}
@@ -60,6 +63,7 @@
       </dl>
     </section>
   {% else %}
-    {% include "partials/_empty_state.html" with message="No readings yet." %}
+    {% url 'control_plane:connections' as connections_url %}
+    {% include "partials/_empty_state.html" with message="No traffic readings yet." why="They arrive once a connection that can read site analytics has been read." action_url=connections_url action_label="Connections" only %}
   {% endif %}
 {% endblock %}

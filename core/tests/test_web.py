@@ -586,6 +586,28 @@ class SearchPageTests(_AuthedTestCase):
         self.assertNotIn("Expenses</h2>", content)
 
 
+class KeyColumnTests(_AuthedTestCase):
+    """A list says which columns a phone keeps, on the heading, sortable or not."""
+
+    def test_a_sortable_heading_carries_its_columns_classes(self):
+        page = self.client.get(reverse("expenses:list"))
+
+        # Cost sorts, and is one of the two an expense is read for.
+        self.assertRegex(
+            page.content.decode(),
+            r'<th class="key-col" aria-sort="[a-z]+">\s*<a class="table-sort-link"[^>]*>Cost',
+        )
+        # A column that is not key carries no class at all.
+        self.assertRegex(page.content.decode(), r'<th aria-sort="[a-z]+">\s*<a class="table-sort-link"[^>]*>Category')
+
+    def test_every_shared_list_names_at_least_one_key_column(self):
+        """With none, a phone would show only the column that names the row."""
+
+        for name in ("expenses:list", "projects:list", "content:list", "assets:list", "core:audit_list"):
+            with self.subTest(page=name):
+                self.assertContains(self.client.get(reverse(name)), "key-col")
+
+
 class DashboardWorkflowTests(_AuthedTestCase):
     def test_dashboard_and_machine_page_share_the_machine_observation(self):
         from control_plane.models import DashboardMachine, ManagedResource
@@ -710,7 +732,31 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertContains(page, "data-action-count hidden")
         self.assertEqual(count.json()["count"], 1)
 
-    def test_neither_the_dashboard_nor_its_contacts_panel_waits_on_d1(self):
+    def test_the_controllers_dot_says_only_what_is_known(self):
+        """Green while it is arriving, the attention colour once it has gone
+        quiet, and neither where it has never run."""
+
+        import os
+        import tempfile
+        import time
+        from pathlib import Path
+
+        marker = Path(tempfile.mkdtemp()) / "controller-heartbeat"
+        with self.settings(SEVERINO_CONTROLLER_HEARTBEAT=str(marker)):
+            never = self.client.get("/")
+            marker.touch()
+            arriving = self.client.get("/")
+            long_ago = time.time() - 3600
+            os.utime(marker, (long_ago, long_ago))
+            silent = self.client.get("/")
+
+        self.assertContains(never, 'dash-reading dash-controller"')
+        self.assertContains(never, "Has not run here")
+        self.assertContains(arriving, "dash-controller is-arriving")
+        self.assertContains(silent, "dash-controller is-silent")
+        self.assertContains(silent, "Silent for")
+
+    def test_the_dashboard_draws_its_contacts_without_waiting_on_d1(self):
         from application import readings
         from contacts import d1
 
@@ -718,17 +764,32 @@ class DashboardWorkflowTests(_AuthedTestCase):
         readings.record(d1.UNREAD, {"count": 3, "rows": [row], "status": "ok"})
         with patch("contacts.d1.query", side_effect=AssertionError("a page called D1")):
             page = self.client.get("/")
-            panel = self.client.get(reverse("dashboard_contacts"))
 
-        self.assertContains(page, 'data-deferred="%s"' % reverse("dashboard_contacts"))
-        self.assertContains(panel, "One call")
-        self.assertContains(panel, "3 unread")
+        # With the page, from the stored rows: nothing is fetched afterwards,
+        # so no card appears and then changes.
+        self.assertContains(page, "One call")
+        self.assertContains(page, "3 unread")
+        self.assertNotContains(page, "data-deferred")
 
-    def test_an_empty_contact_feed_renders_nothing(self):
+    def test_an_empty_contact_feed_draws_no_card(self):
         with patch("contacts.d1.query", side_effect=AssertionError("a page called D1")):
-            panel = self.client.get(reverse("dashboard_contacts"))
+            page = self.client.get("/")
 
-        self.assertEqual(panel.content.decode().strip(), "")
+        self.assertNotContains(page, "<h2>Contacts</h2>")
+
+    def test_the_dashboard_says_how_this_request_reached_it(self):
+        """The reading the connection panel opens on, and a link to that panel."""
+
+        page = self.client.get("/")
+        panel = self.client.get(reverse("connection"))
+
+        found = page.context["request_connection"]
+        self.assertEqual(found.summary, panel.context["connection"].summary)
+        self.assertContains(page, "dash-connection conn-badge-loopback")
+        self.assertContains(page, found.summary)
+        self.assertContains(page, found.transport)
+        # It opens the panel, and is a plain link to it without script.
+        self.assertContains(page, 'data-connection-source="%s"' % reverse("connection"))
 
     def test_dashboard_routes_infrastructure_findings_to_their_evidence(self):
         from control_plane.models import ManagedResource

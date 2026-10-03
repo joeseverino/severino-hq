@@ -156,7 +156,7 @@ standard. Each said once; the band above has its version and standing.
     {% if item.serves %}<div><dt>Answers for</dt><dd>{% for hostname in item.serves %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}, {% endif %}{% endfor %}</dd></div>{% endif %}
     {% if item.mounts %}{% with shared=item.shared_mounts %}<div><dt>Mounts</dt><dd>{% for mount in item.mounts %}<code>{{ mount.source }}</code> → <code>{{ mount.destination }}</code>{% if mount.read_only %} <span class="muted">read-only</span>{% endif %}{% with others=shared|dictkey:mount.source %}{% if others %} <span class="muted">· also</span> {% for other in others %}<a href="{{ other.url }}">{{ other.running.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}{% endwith %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</dd></div>{% endwith %}{% endif %}
     {% if posture.measured < posture.results|length %}<div><dt>Not read yet</dt><dd class="muted"><span tabindex="0" data-tip="{% for result in posture.results %}{% if result.state == 'unavailable' %}{{ result.check.label }}&#10;{% endif %}{% endfor %}">{{ posture.unread|counted:"check,checks" }}</span>, read from Docker's inspect of it once HQ's controller takes that reading</dd></div>{% endif %}
-    <div><dt>Seen</dt><dd>{{ item.running.observed_at|ago }}</dd></div>
+    <div><dt>Seen</dt><dd>{{ item.running.observed_at|when:"ago" }}</dd></div>
   </dl>
 </section>
 {% endwith %}

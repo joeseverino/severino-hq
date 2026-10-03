@@ -76,7 +76,7 @@ class DashboardQueueTests(TestCase):
             queue[1]["workflow"]["steps"][-1]["actions"][0]["method"], "POST"
         )
 
-    def test_full_queue_renders_workflows_while_dashboard_only_counts(self):
+    def test_queue_has_safe_actions_and_dashboard_keeps_domain_overviews_first(self):
         from control_plane.models import DashboardRefreshRequest
 
         with patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")):
@@ -85,18 +85,16 @@ class DashboardQueueTests(TestCase):
                     response = self.client.get(path)
                     if path == "/action-items/":
                         self.assertContains(response, "Reconcile the bill")
-                        self.assertContains(response, "Inspect evidence")
+                        self.assertContains(response, "Inspect evidence", count=1)
                         self.assertContains(response, "Recheck facts")
-                        self.assertContains(
-                            response, 'action="/dashboard/glance/" method="post"'
-                        )
+                        self.assertContains(response, 'formaction="/dashboard/glance/"')
+                        self.assertContains(response, 'form="hq-post"')
                         self.assertContains(response, 'name="csrfmiddlewaretoken"')
                         self.assertContains(response, "Serious</span>")
                         self.assertTemplateUsed(response, "partials/_work_queue.html")
                     else:
-                        # The dashboard counts the queue and links to it.
-                        self.assertNotContains(response, "Steps to resolve")
                         self.assertNotContains(response, "Reconcile the bill")
+                        self.assertNotContains(response, "data-attention-item")
                         self.assertContains(response, 'href="/action-items/"')
                     self.assertNotContains(response, "An interesting observation")
                     self.assertNotContains(response, 'href=""')
@@ -106,6 +104,39 @@ class DashboardQueueTests(TestCase):
         response = self.client.get("/action-items/", {"q": "Reconcile the bill"})
         self.assertContains(response, "Check the reading")
         self.assertNotContains(response, "A service needs you")
+
+    def test_dashboard_counts_share_one_read_state_query_at_any_queue_size(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from application.action_items import set_aside
+
+        for size in (4, 40):
+            items = [{**work_queue()[0], "key": f"example:{i}", "label": f"Decision {i}"}
+                     for i in range(size)]
+            set_aside(self.user, [items[0]["key"]], aside=True, current=items)
+            with patch("application.dashboard.work_queue", return_value=items):
+                with CaptureQueriesContext(connection) as queries:
+                    response = self.client.get("/")
+            self.assertEqual(response.context["action_queue_count"], size - 1)
+            self.assertEqual(response.context["profile_action_count"], size - 1)
+            self.assertEqual(response.context["aside_count"], 1)
+            self.assertEqual(sum("core_actionitemread" in query["sql"] for query in queries), 1)
+
+    def test_set_aside_does_not_claim_resolved(self):
+        from application.action_items import set_aside
+
+        items = work_queue()
+        set_aside(self.user, [item["key"] for item in items], aside=True, current=items)
+        response = self.client.get("/")
+        self.assertContains(response, "2 dismissed")
+        self.assertNotContains(response, "All clear")
+
+    def test_empty_filtered_queue_offers_a_way_back(self):
+        response = self.client.get("/action-items/", {"q": "not an existing item"})
+        self.assertContains(response, "Nothing waiting matches these filters.")
+        self.assertContains(response, "Clear filters")
+        self.assertNotContains(response, "Nothing waits on you.")
 
     def test_anonymous_reader_cannot_open_either_queue(self):
         self.client.logout()

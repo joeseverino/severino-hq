@@ -24,8 +24,8 @@ class JobListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     table_search_placeholder = "Search jobs and notes…"
     table_columns = (
         TableColumn("Started", "created_at"),
-        TableColumn("Job"),
-        TableColumn("State"),
+        TableColumn("Job", css="key-col"),
+        TableColumn("State", css="key-col"),
         TableColumn("Duration", css="num-col"),
         TableColumn("Last update"),
         TableColumn("Requested by"),

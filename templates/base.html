@@ -99,6 +99,13 @@
         {% endfor %}
       </nav>
       {% comment %}
+      In the header rather than on a page, because the mode outlives whichever
+      page is open and the one failure worth designing against is an operator
+      forgetting it is on and filing a screenshot of fiction as fact. First of the
+      controls, so it is read before any figure the controls lead to.
+      {% endcomment %}
+      {% if request.showing_demo %}<span class="demo-flag">Demo</span>{% endif %}
+      {% comment %}
       A doorway, not a field: it opens the command center, and without script it
       is a link to the search page. With nothing to type into here there is no
       focus to return to it and nothing to expand over its neighbours.
@@ -111,65 +118,74 @@
         <span class="search-label">Find anything</span>
         <kbd class="search-key" aria-hidden="true">⌘K</kbd>
       </a>
-      {% comment %}
-      In the header rather than on a page, because the mode outlives whichever
-      page is open and the one failure worth designing against is an operator
-      forgetting it is on and filing a screenshot of fiction as fact.
-      {% endcomment %}
-      {% if request.showing_demo %}<span class="demo-flag">Demo</span>{% endif %}
       <a class="action-badge" href="{% url 'action_items' %}" title="Action items" data-action-count-url="{% url 'action_item_count' %}"{% if show_action_count %} data-action-count-fresh="{{ profile_action_count }}"{% endif %}>
         <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>
         <span data-action-count{% if not show_action_count or not profile_action_count %} hidden{% endif %}>{{ profile_action_count }}</span>
         <span class="visually-hidden">Action items</span>
       </a>
       <details class="user-menu" data-menu>
+        {% comment %}
+        The mark first and the name after it in source, drawn the other way
+        round: when the bar has no room for both, it is the name that wraps
+        out of the control's one line and is not shown, never the mark. The
+        mark is the person's own picture when sign-on gave one, kept and
+        served by HQ (`application/avatars.py`).
+        {% endcomment %}
+        {% with avatar=request.session.avatar %}
         <summary>
-          <span class="user-name">{{ user.get_username }}</span>
+          {% if avatar %}
+          <img class="user-avatar" src="{% url 'avatar' avatar %}" alt="" width="22" height="22" decoding="async">
+          {% else %}
           <svg class="user-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
             <circle cx="12" cy="8.2" r="3.6"/>
             <path d="M5.4 19.4c0-3.7 3-5.9 6.6-5.9s6.6 2.2 6.6 5.9"/>
           </svg>
+          {% endif %}
+          <span class="user-name">{{ user.get_username }}</span>
         </summary>
         <div class="user-menu-panel">
-          <a class="menu-item" href="{% url 'admin:index' %}">Admin</a>
           {% comment %}
-          A real link to the page that answers this, so it works with the dialog
-          closed, unopenable, or bookmarked. The dialog fetches the same page
-          and lifts the panel out of it. The dot carries which network this
-          request came over; the word stays put so the control does not change
-          shape depending on where you are sitting.
+          Who this is, what they may do and when they last signed in, before
+          anything they can do: the menu is the one place the header says
+          whose session it is.
           {% endcomment %}
-          <a class="menu-item menu-item-split conn-badge-{{ CONNECTION_CHANNEL.id }}"
-             href="{% url 'connection' %}"
-             data-modal-open="connection"
-             data-connection-source="{% url 'connection' %}">
-            <span>Connection</span>
-            <span class="menu-item-status" aria-hidden="true"><span class="conn-dot"></span></span>
-          </a>
+          <div class="menu-identity">
+            {% if avatar %}<img class="menu-identity-picture" src="{% url 'avatar' avatar %}" alt="" width="36" height="36" decoding="async">{% endif %}
+            <div class="menu-identity-who">
+              <strong>{{ user.get_full_name|default:user.get_username }}</strong>
+              {% if user.is_superuser %}<span class="role-mark">Admin</span>{% elif user.is_staff %}<span class="role-mark">Staff</span>{% endif %}
+            </div>
+            {% with when=request|signed_in %}{% if when %}<span class="menu-identity-when">{{ when }}</span>{% endif %}{% endwith %}
+          </div>
+          {% endwith %}
           {% comment %}
-          A switch, not a verb. The state is the label: a menu entry that renames
-          itself leaves the reader working out what is currently true. POST because
-          it changes what every number on the page means, and a thing that flips by
-          following a link can be flipped by an image tag on another site.
+          The two switches share a line: their names on it, their tracks on
+          the line under. A row apiece left a word at one edge, a track at the
+          other and nothing between. A switch, not a verb: the state is the
+          track, so no entry renames itself to say what is true. POST because
+          Demo changes what every number on the page means, and a thing that
+          flips by following a link can be flipped by an image tag on another
+          site. Agents is global, unlike Demo, and sends a state, not a toggle.
           {% endcomment %}
-          <form action="{% url 'demo_mode' %}" method="post">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            <button type="submit" class="menu-item menu-item-split" role="switch" aria-checked="{% if request.showing_demo %}true{% else %}false{% endif %}">
-              <span>Demo</span>
-              <span class="menu-item-status" aria-hidden="true"><span class="switch-track"><span class="switch-knob"></span></span></span>
-            </button>
-          </form>
-          {% comment %}Global, unlike Demo. Sends a state, not a toggle.{% endcomment %}
-          <form action="{% url 'agent_access' %}" method="post">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            <input type="hidden" name="paused" value="{% if agents_paused %}0{% else %}1{% endif %}">
-            <button type="submit" class="menu-item menu-item-split" role="switch" aria-checked="{% if agents_paused %}false{% else %}true{% endif %}">
-              <span>Agents</span>
-              <span class="menu-item-status" aria-hidden="true"><span class="switch-track"><span class="switch-knob"></span></span></span>
-            </button>
-          </form>
+          <div class="menu-settings">
+            <form action="{% url 'demo_mode' %}" method="post">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button type="submit" class="menu-item menu-setting" role="switch" aria-checked="{% if request.showing_demo %}true{% else %}false{% endif %}">
+                <span>Demo</span>
+                <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+              </button>
+            </form>
+            <form action="{% url 'agent_access' %}" method="post">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <input type="hidden" name="paused" value="{% if agents_paused %}0{% else %}1{% endif %}">
+              <button type="submit" class="menu-item menu-setting" role="switch" aria-checked="{% if agents_paused %}false{% else %}true{% endif %}">
+                <span>Agents</span>
+                <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+              </button>
+            </form>
+          </div>
           {% comment %}
           Three choices, so a set of buttons rather than a switch; each sends
           the choice it names. System follows the operating system.
@@ -184,10 +200,34 @@
               {% endfor %}
             </span>
           </form>
-          <form action="{% url 'logout' %}" method="post">
-            {% csrf_token %}
-            <button type="submit" class="menu-item">Sign out</button>
-          </form>
+          {% comment %}
+          Places to go, after the things to set. Connection is a real link to
+          the page that answers this, so it works with the dialog closed,
+          unopenable, or bookmarked. The dialog fetches the same page and
+          lifts the panel out of it. The dot carries which network this
+          request came over; the word stays put so the control does not change
+          shape depending on where you are sitting.
+          {% endcomment %}
+          <div class="menu-places">
+            <a class="menu-item menu-item-split conn-badge-{{ CONNECTION_CHANNEL.id }}"
+               href="{% url 'connection' %}"
+               data-modal-open="connection"
+               data-connection-source="{% url 'connection' %}">
+              <span>Connection</span>
+              <span class="menu-item-status"><span class="conn-dot" aria-hidden="true"></span><span class="menu-item-note">{{ CONNECTION_CHANNEL.label }}</span></span>
+            </a>
+            {% comment %}
+            The two ways out of HQ's own pages share a line; a plain account
+            has only the one, which then takes the line.
+            {% endcomment %}
+            <div class="menu-pair">
+              {% if user.is_staff %}<a class="menu-item" href="{% url 'admin:index' %}">Admin</a>{% endif %}
+              <form action="{% url 'logout' %}" method="post">
+                {% csrf_token %}
+                <button type="submit" class="menu-item">Sign out</button>
+              </form>
+            </div>
+          </div>
         </div>
       </details>
     {% endif %}

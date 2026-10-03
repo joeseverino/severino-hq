@@ -492,7 +492,7 @@ class OverviewPageTests(TestCase):
         response = self.client.get("/analytics/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "No readings yet")
+        self.assertContains(response, "No traffic readings yet")
 
     def test_every_breakdown_the_reader_collects_reaches_the_page(self):
         service.record_analytics(

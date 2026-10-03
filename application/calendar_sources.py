@@ -10,7 +10,7 @@ from collections import Counter
 from collections.abc import Iterator
 from datetime import date, datetime, time, timedelta
 
-from django.urls import reverse
+from application.routes import reverse
 from django.utils import timezone
 
 from .calendar import CalendarEvent, CalendarSource

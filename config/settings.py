@@ -723,8 +723,13 @@ SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS = env_bool(
 
 # How stale the estate may look while somebody is using HQ. This is the number
 # that decides whether the board is worth trusting at a glance.
+#
+# Longer than a sweep takes, or the controller never rests: one sweep is due
+# again before the last has finished, every run is a sweep, and a doorbell rung
+# while it runs is not heard until it ends. The controller being idle between
+# sweeps is what lets queued work start the moment it is asked for.
 SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS = env_int(
-    "SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS", 60
+    "SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS", 300
 )
 # And while nobody is. Every sweep costs a call to each provider, and nothing
 # reads the answer until somebody opens a page.

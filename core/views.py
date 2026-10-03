@@ -8,7 +8,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView
 from django.conf import settings
-from django.http import HttpResponseBadRequest, HttpResponseForbidden
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -16,6 +16,7 @@ from django.views.generic import TemplateView, View
 
 from application.agent_access import set_agents_paused
 from application.appearance import set_theme
+from application.avatars import avatar_of
 from application.command_center import command_center
 from application.projection import projection_scope
 from application.search import global_search
@@ -164,6 +165,27 @@ class ThemeView(LoginRequiredMixin, View):
             # in-process, not something a request gets to read back.
             return HttpResponseBadRequest("Choose system, light or dark.")
         return redirect(safe_next(request, fallback=reverse("dashboard")))
+
+
+class AvatarView(LoginRequiredMixin, View):
+    """The picture of whoever is asking, and nobody else's.
+
+    The address carries the picture's digest, so a new picture is a new
+    address and this one never changes: a browser may keep it for good. The
+    reply forbids everything a document could do, in case a file that passed
+    as an image is ever opened as one.
+    """
+
+    def get(self, request, digest):
+        avatar = avatar_of(request.user)
+        if avatar is None or avatar.digest != digest:
+            raise Http404
+        response = HttpResponse(bytes(avatar.image), content_type=avatar.content_type)
+        response["Cache-Control"] = "private, max-age=31536000, immutable"
+        response["Content-Disposition"] = "inline"
+        response["Content-Security-Policy"] = "default-src 'none'; sandbox"
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
 
 
 class AgentPolicyView(PageMixin, LoginRequiredMixin, TemplateView):

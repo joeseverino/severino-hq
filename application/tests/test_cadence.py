@@ -20,6 +20,7 @@ from django.utils import timezone
 
 from control_plane.models import ManagedResource, OperationRequest, ProviderInventory
 
+from .. import cadence
 from ..cadence import (
     carried_connections,
     sweep_interval,
@@ -402,3 +403,43 @@ class BootTests(TestCase):
         self.assertFalse(request_delivery_read())
         self.assertFalse(ReadRequest.objects.exists())
         self.assertFalse((self.directory / "doorbell").exists())
+
+
+class ControllerStandingTests(TestCase):
+    """Whether the controller is still arriving, which no record of a sweep can say."""
+
+    def setUp(self):
+        self.marker = Path(tempfile.mkdtemp()) / "controller-heartbeat"
+        self.enterContext(override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(self.marker)))
+
+    def test_an_installation_the_controller_never_reached_is_unknown_not_silent(self):
+        standing = cadence.controller_standing()
+
+        self.assertFalse(standing.known)
+        self.assertFalse(standing.silent)
+
+    def test_a_controller_that_just_arrived_is_not_silent(self):
+        cadence.note_controller()
+        standing = cadence.controller_standing()
+
+        self.assertTrue(standing.known)
+        self.assertFalse(standing.silent)
+
+    def test_one_that_stopped_arriving_is_silent(self):
+        cadence.note_controller()
+        later = timezone.now() + cadence.CONTROLLER_SILENT_AFTER + timedelta(minutes=1)
+
+        self.assertTrue(cadence.controller_standing(later).silent)
+
+    def test_the_arrival_is_noted_on_the_first_call_every_applying_run_makes(self):
+        from django.core.management import call_command
+        from io import StringIO
+
+        call_command("infrastructure_controller", "glance-plan", "--controller-id", "test", stdout=StringIO())
+
+        self.assertTrue(cadence.controller_standing().known)
+
+    def test_a_marker_that_cannot_be_written_does_not_fail_the_controller(self):
+        with override_settings(SEVERINO_CONTROLLER_HEARTBEAT="/nonexistent/dir/heartbeat"):
+            cadence.note_controller()
+            self.assertFalse(cadence.controller_standing().known)

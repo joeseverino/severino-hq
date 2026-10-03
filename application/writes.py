@@ -23,7 +23,7 @@ from __future__ import annotations
 from django.contrib import messages
 from django.core.exceptions import ImproperlyConfigured
 from django.shortcuts import redirect
-from django.urls import reverse
+from application.routes import reverse
 
 from .deletion import DeleteCommand
 from .security import web_principal

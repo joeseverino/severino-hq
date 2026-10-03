@@ -651,7 +651,7 @@ class FocusedPageTests(TestCase):
             for line in re.findall(r"<li>(.*?)</li>", block, flags=re.S):
                 self.assertEqual(line.count('class="topology-relation-value"'), 1)
                 self.assertIn('class="topology-relation-source muted"', line)
-                self.assertRegex(line, r"read [^<]+</time>")
+                self.assertRegex(line, r'read <time datetime="[^"]+" title="[^"]+">[^<]+</time>')
         # No comma-joined link lists.
         self.assertNotRegex(body, r"</a>,\s*<a")
 

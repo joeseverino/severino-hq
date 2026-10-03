@@ -211,6 +211,22 @@ class AuditHistoryPageTests(TestCase):
         self.assertIn('<details class="history-run">', page)
         self.assertIn(reverse("core:audit_detail", args=[found[0].events[5].pk]), page)
 
+    def test_a_run_is_counted_in_the_plural_its_type_has(self):
+        """Not the label with an "s": that read "2 calendar entrys"."""
+
+        for index in range(2):
+            event(ago=timedelta(minutes=10, seconds=index * 20), repr_=f"entry-{index}", type_="Calendar entry")
+        for index in range(2):
+            event("updated", ago=timedelta(hours=2, seconds=index), repr_=f"sweep-{index}",
+                  type_="ProviderInventory")
+
+        page = self.client.get(self.url()).content.decode()
+
+        self.assertIn("<summary>2 calendar entries</summary>", page)
+        self.assertNotIn("entrys", page)
+        # A model that declares its plural is counted in it.
+        self.assertIn("<summary>2 provider inventories</summary>", page)
+
     def test_the_same_thing_again_and_again_is_counted_as_times(self):
         for index in range(4):
             event("login", ago=timedelta(minutes=10, seconds=index * 20), repr_="example-operator", type_="User")

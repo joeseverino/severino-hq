@@ -37,34 +37,40 @@ class SubstitutionTests(TestCase):
         self.assertEqual(first, second)
         self.assertNotEqual(first, other)
 
-    def test_a_stand_in_keeps_the_magnitude_and_the_sign(self):
-        """Six figures replaced by three reads as an empty account, and a page
-        laid out for one is misread as broken. What is owed goes on reading as
-        owed."""
+    def test_a_small_amount_keeps_its_size_and_every_amount_its_sign(self):
+        """A coffee replaced by a salary reads as broken, and what is owed goes
+        on reading as owed."""
 
         with demo_scope(True):
-            big = amount(Decimal("110068.00"), key="net-worth")
             small = amount(Decimal("12.34"), key="coffee")
             owed = amount(Decimal("-817.00"), key="card")
 
-        self.assertEqual(len(str(int(big))), 6)
         self.assertEqual(len(str(int(small))), 2)
         self.assertLess(owed, 0)
         self.assertEqual(len(str(int(abs(owed)))), 3)
 
-    def test_magnitude_is_the_only_thing_a_stand_in_carries_over(self):
-        """The deliberate leak, pinned so it stays deliberate.
+    def test_a_large_amount_is_shown_as_one_nobody_would_take_for_real(self):
+        """A stand-in the size of the real amount says how large the real one
+        is, which for a balance is most of what there is to know."""
 
-        Everything but the number of digits comes from the key, so two amounts
-        of the same size under one key are the same stand-in and nothing finer
-        than "six figures" survives. Keeping the size is the trade: a page laid
-        out for six figures is misread as broken when handed three.
-        """
+        with demo_scope(True):
+            shown = [
+                amount(Decimal(real), key=f"account-{index}")
+                for index, real in enumerate(("12345.00", "110068.00", "2500000.00", "-48000.00"))
+            ]
+
+        for stand_in in shown:
+            self.assertEqual(len(str(int(abs(stand_in)))), 4)
+        self.assertLess(shown[-1], 0)
+
+    def test_nothing_about_a_large_amount_survives_but_that_it_is_large(self):
+        """Everything but the capped number of figures comes from the key, so
+        five figures and seven under one key are the same stand-in."""
 
         with demo_scope(True):
             self.assertEqual(
-                amount(Decimal("110068.00"), key="k"),
-                amount(Decimal("999999.00"), key="k"),
+                amount(Decimal("12345.00"), key="k"),
+                amount(Decimal("2500000.00"), key="k"),
             )
             self.assertNotEqual(
                 amount(Decimal("110068.00"), key="k"),

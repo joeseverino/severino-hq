@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect
-from django.urls import reverse
+from application.routes import reverse
 from django.views.generic import TemplateView
 
 from application.pages import PageMixin

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import approval_views, connection_views, finding_views, machine_views, resource_form_views, service_views, tool_views, topology_views, views
+from . import approval_views, connection_views, controller_views, finding_views, machine_views, resource_form_views, service_views, tool_views, topology_views, views, visit_views
 from .container_views import ContainerListView
 from .models import OperationRequest
 
@@ -22,6 +22,10 @@ urlpatterns = [
         name="connections",
     ),
     path("connections/read/", connection_views.ReadNowView.as_view(), name="read_now"),
+    # Before <slug:key>: the controller's own page.
+    path("controller/", controller_views.ControllerView.as_view(), name="controller"),
+    # Before <slug:key>, like the rest: an open page asking for its own readings.
+    path("visit/", visit_views.VisitRefreshView.as_view(), name="visit"),
     # Before <slug:key>, which would otherwise swallow "approvals" as a
     # resource key.
     path("approvals/", approval_views.ApprovalListView.as_view(), name="approvals"),

@@ -276,12 +276,12 @@ def drift_evidence(node: TopologyNode) -> tuple[tuple[str, str], ...]:
     since = fact_values(node, "drift-since")
     if not since:
         return ()
-    from .ui import ago_short, moment
+    from .ui import ago, moment
 
     first = moment(since[0])
     near = fact_values(node, "drift-near")
     return (
-        ("First seen changed", ago_short(first) if first else since[0]),
+        ("First seen changed", ago(first) if first else since[0]),
         *(("Near then", item) for item in near),
         *((("Near then", "Nothing HQ records happened within six hours of it"),) if not near else ()),
     )

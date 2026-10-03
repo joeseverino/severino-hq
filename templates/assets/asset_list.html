@@ -4,7 +4,7 @@
   <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.item_name }}</strong></a></td>
   <td>{{ row.vendor }}</td>
   <td>{{ row.get_category_display }}</td>
-  <td class="muted">{{ row.purchase_date|or_empty }}</td>
+  <td class="muted">{{ row.purchase_date|when }}</td>
   <td>${{ row.total_cost|floatformat:2|intcomma }}</td>
   <td class="muted">{{ row.business_use_percentage }}%</td>
   <td>${{ row.estimated_deductible_amount|floatformat:2|intcomma }}</td>

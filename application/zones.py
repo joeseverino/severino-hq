@@ -31,7 +31,7 @@ from functools import cached_property
 from typing import Any
 
 from django.db import transaction
-from django.urls import reverse
+from application.routes import reverse
 
 from control_plane.models import ManagedResource, ProviderInventory
 from control_plane.names import normalized_hostname

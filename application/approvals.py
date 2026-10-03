@@ -48,7 +48,7 @@ from typing import Any
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.conf import settings
 from django.db import transaction
-from django.urls import reverse
+from application.routes import reverse
 from django.utils import timezone
 
 from control_plane.models import ApprovalRequest, ManagedResource

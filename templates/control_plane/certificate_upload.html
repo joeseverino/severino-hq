@@ -5,7 +5,7 @@
     <h2>Current certificate</h2>
     <dl class="kv compact">
       <dt>Covers</dt><dd>{% for domain in material.domains %}<span class="tag">{{ domain }}</span>{% endfor %}</dd>
-      <dt>Expires</dt><dd>{{ material.not_after|date:"j M Y" }} · {{ material.not_after|timeuntil }} left</dd>
+      <dt>Expires</dt><dd>{{ material.not_after|expiry }}</dd>
       <dt>Fingerprint</dt><dd><code>{{ material.fingerprint_sha256|slice:":16" }}…</code></dd>
     </dl>
     <p class="muted">Uploading again replaces it. The key is never shown.</p>

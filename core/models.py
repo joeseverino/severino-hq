@@ -20,6 +20,29 @@ def _model_labels() -> dict[str, str]:
     }
 
 
+@functools.cache
+def _model_plurals() -> dict[str, str]:
+    """The plural a model declares, by its class name and by its audit label.
+
+    Only a declared one: Django's default is the singular with an "s", which
+    is the guess ``labels.plural`` exists to replace.
+    """
+    from django.apps import apps
+
+    from .audit import audited_labels
+
+    declared = {
+        model: _sentence(str(model._meta.verbose_name_plural))
+        for model in reversed(apps.get_models())
+        if "verbose_name_plural" in model._meta.original_attrs
+    }
+    labels = audited_labels()
+    return {
+        **{model.__name__: many for model, many in declared.items()},
+        **{labels[model]: many for model, many in declared.items() if model in labels},
+    }
+
+
 # A UUID, or a run of hex long enough to be a key or digest.
 _IDENTIFIER = re.compile(
     r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b[0-9a-f]{16,}\b",
@@ -47,6 +70,20 @@ def object_type_label(stored: str) -> str:
     return _sentence(words)
 
 
+def object_type_plural(stored: str) -> str:
+    """Many of an audit row's object type: "Calendar entries", "Managed resources".
+
+    The model's own ``verbose_name_plural`` where it declares one, and
+    otherwise the label as ``labels.plural`` spells many of it. The one place
+    a type's plural comes from, so no page appends an "s" to a label.
+    """
+    from application.labels import plural
+
+    if not stored:
+        return ""
+    return _model_plurals().get(stored) or plural(object_type_label(stored))
+
+
 def _sentence(text: str) -> str:
     return text[:1].upper() + text[1:]
 
@@ -67,6 +104,10 @@ class AuditLog(models.Model):
     @property
     def type_label(self) -> str:
         return object_type_label(self.object_type)
+
+    @property
+    def type_plural(self) -> str:
+        return object_type_plural(self.object_type)
 
     class Action(models.TextChoices):
         CREATED = "created", "Created"
@@ -301,3 +342,27 @@ class Appearance(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user_id}:{self.theme}"
+
+
+class Avatar(models.Model):
+    """A person's picture, as their identity provider last gave it.
+
+    Kept here rather than loaded from the provider by the browser. A page that
+    drew it from there would need the content policy opened to another origin,
+    would show nothing whenever sign-on was unreachable, and would tell the
+    provider every time somebody looked at a page.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="avatar"
+    )
+    content_type = models.CharField(max_length=32)
+    image = models.BinaryField()
+    # What a page puts in the image's address, so a new picture is a new address
+    # and the old one can be cached for as long as a browser likes.
+    digest = models.CharField(max_length=64)
+    source = models.CharField(max_length=500)
+    fetched_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self) -> str:
+        return f"{self.user_id}:{self.digest[:12]}"

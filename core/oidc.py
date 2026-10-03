@@ -19,6 +19,10 @@ TAILSCALE_PRINCIPAL_CLAIM = "tailscale_principal"
 TAILSCALE_PRINCIPAL_SESSION_KEY = "oidc_tailscale_principal"
 # Why the last sign-in did not finish, for the page it lands on.
 SSO_FAILURE_SESSION_KEY = "oidc_failure"
+# When this session's person signed in. A session is renewed with the
+# provider every few minutes and each renewal is a login to Django, so the
+# account's last login says only that the session is alive.
+SIGNED_IN_SESSION_KEY = "signed_in_at"
 
 
 def _tailscale_principal(payload) -> str:
@@ -83,22 +87,60 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
             raise SuspiciousOperation("The ID token came from another issuer.")
         return payload
 
+    def get_userinfo(self, access_token, id_token, payload):
+        """Kept for the rest of this sign-in: the picture claim is read from it."""
+
+        self._userinfo = super().get_userinfo(access_token, id_token, payload)
+        return self._userinfo
+
     def get_or_create_user(self, access_token, id_token, payload):
         user = super().get_or_create_user(access_token, id_token, payload)
         if user is None:
             return None
+        self._remember_picture(user, access_token)
         from application.linked_accounts import bind_sign_in, record_claimed_accounts
 
         bind_sign_in(user, self._subject_key(payload))
         record_claimed_accounts(user, payload)
         session = getattr(getattr(self, "request", None), "session", None)
         if session is not None:
+            from django.utils import timezone
+
+            session.setdefault(SIGNED_IN_SESSION_KEY, timezone.now().isoformat())
             principal = _tailscale_principal(payload)
             if principal:
                 session[TAILSCALE_PRINCIPAL_SESSION_KEY] = principal
             else:
                 session.pop(TAILSCALE_PRINCIPAL_SESSION_KEY, None)
         return user
+
+    def _remember_picture(self, user, access_token) -> None:
+        """Keep the person's picture, and tell the session which one it is.
+
+        Never a reason for a sign-in to fail: whatever goes wrong here, the
+        person is still who the provider said, without a picture.
+        """
+
+        from application.avatars import SESSION_KEY, remember_avatar
+
+        session = getattr(getattr(self, "request", None), "session", None)
+        try:
+            claims = getattr(self, "_userinfo", None) or {}
+            digest = remember_avatar(
+                user,
+                str(claims.get("picture") or "").strip(),
+                issuer=getattr(settings, "OIDC_ISSUER", ""),
+                access_token=access_token or "",
+            )
+        except Exception:  # noqa: BLE001 - a picture must not stop a sign-in
+            logger.warning("The picture could not be kept.", extra={"event": "auth.avatar.failed"})
+            return
+        if session is None:
+            return
+        if digest:
+            session[SESSION_KEY] = digest
+        else:
+            session.pop(SESSION_KEY, None)
 
     def verify_claims(self, claims):
         preferred_username = claims.get("preferred_username", "").strip()

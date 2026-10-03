@@ -4,13 +4,13 @@
 <dl class="kv">
   <dt>Slug</dt><dd><code>{{ asset.slug }}</code></dd>
   {% if asset.vendor %}<dt>Vendor</dt><dd>{{ asset.vendor }}</dd>{% endif %}
-  <dt>Purchased</dt><dd>{{ asset.purchase_date|or_empty }}</dd>
+  <dt>Purchased</dt><dd>{{ asset.purchase_date|when }}</dd>
   <dt>Total cost</dt><dd>${{ asset.total_cost|floatformat:2|intcomma }}</dd>
   <dt>Business use</dt><dd>{{ asset.business_use_percentage }}%</dd>
   <dt>Estimated deductible</dt><dd>${{ asset.estimated_deductible_amount|floatformat:2|intcomma }} <span class="muted">(estimate, not tax advice)</span></dd>
   {% if asset.payment_method %}<dt>Payment method</dt><dd>{{ asset.get_payment_method_display }}</dd>{% endif %}
   {% if asset.serial_number %}<dt>Serial</dt><dd><code>{{ asset.serial_number }}</code></dd>{% endif %}
-  {% if asset.warranty_date %}<dt>Warranty until</dt><dd>{{ asset.warranty_date }}</dd>{% endif %}
+  {% if asset.warranty_date %}<dt>Warranty until</dt><dd>{{ asset.warranty_date|when }}</dd>{% endif %}
 </dl>
 
 {% if asset.notes %}<h2>Notes</h2><p>{{ asset.notes|linebreaksbr }}</p>{% endif %}
@@ -22,7 +22,7 @@
       {% if asset.related_projects.all %}<div><h3>Projects</h3><ul>{% for p in asset.related_projects.all %}<li><a href="{{ p.get_absolute_url }}">{{ p.name }}</a></li>{% endfor %}</ul></div>{% endif %}
       {% if asset.content_items.all %}<div><h3>Content items</h3><ul>{% for c in asset.content_items.all %}<li><a href="{{ c.get_absolute_url }}">{{ c.title }}</a></li>{% endfor %}</ul></div>{% endif %}
       {% if asset.documentation_records.all %}<div><h3>Documentation</h3><ul>{% for d in asset.documentation_records.all %}<li><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} · {{ d.title }}</a></li>{% endfor %}</ul></div>{% endif %}
-      {% if asset.expenses.all %}<div><h3>Expenses</h3><ul>{% for e in asset.expenses.all %}<li><a href="{{ e.get_absolute_url }}">{{ e.date }} {{ e.vendor }}</a> <span class="muted">${{ e.total_cost }}</span></li>{% endfor %}</ul></div>{% endif %}
+      {% if asset.expenses.all %}<div><h3>Expenses</h3><ul>{% for e in asset.expenses.all %}<li><a href="{{ e.get_absolute_url }}">{{ e.date|when }} {{ e.vendor }}</a> <span class="muted">${{ e.total_cost }}</span></li>{% endfor %}</ul></div>{% endif %}
       {% if asset.receipts.all %}<div><h3>Receipts</h3><ul>{% for r in asset.receipts.all %}<li><a href="{{ r.get_absolute_url }}">{{ r.original_filename|default:"receipt" }}</a> <span class="muted">${{ r.amount }}</span></li>{% endfor %}</ul></div>{% endif %}
     </div>
   {% else %}

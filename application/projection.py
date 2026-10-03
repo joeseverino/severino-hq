@@ -68,6 +68,37 @@ def read_once(key: str, loader: Callable[[], _T]) -> _T:
     return found
 
 
+def day_span(first, last=None):
+    """A run of local days as the moments a datetime column is filtered by.
+
+    Returns ``(start, end)``: the first day's midnight and the midnight after
+    the last, in HQ's timezone, for ``column__gte=start, column__lt=end``.
+    ``last`` left out means from the first day on, and ``end`` is None.
+
+    Asked this way the database compares the column as stored and can use its
+    index. Asked as ``column__date__gte=day`` it has to turn every row's moment
+    into a local date first, which on SQLite is a call back into Python per
+    row: the slow part of a read that returns a few hundred rows of thousands.
+    """
+
+    from datetime import date as _date, datetime, time, timedelta
+
+    from django.utils import timezone
+
+    def day(value):
+        if isinstance(value, datetime):
+            return timezone.localtime(value).date() if timezone.is_aware(value) else value.date()
+        if not isinstance(value, _date):
+            raise TypeError("day_span takes dates")
+        return value
+
+    zone = timezone.get_current_timezone()
+    start = timezone.make_aware(datetime.combine(day(first), time.min), zone)
+    if last is None:
+        return start, None
+    return start, timezone.make_aware(datetime.combine(day(last) + timedelta(days=1), time.min), zone)
+
+
 def page_size(limit: int, *, maximum: int = MAX_PAGE_SIZE) -> int:
     """How many rows to actually return for a requested limit.
 

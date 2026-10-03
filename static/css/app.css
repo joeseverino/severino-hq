@@ -127,6 +127,7 @@
   --text-2xl: 18px;
   --text-3xl: 20px;
   --text-4xl: 22px;
+  --text-display: 40px;
 
   /* Tones. A status colour is never one value: it is a fill, ink that stays
      legible on that fill, and a border a shade deeper than both. Those three
@@ -248,7 +249,7 @@
      or 3 or 1. Read where they are used, so 100% is that grid's width.
      `(x - 100%) * 999` is a step, hugely positive below x and negative above
      it, so clamp() lands on one end or the other. For gapless bands. */
-  --tracks-4-2-1: clamp(clamp(25%, (48rem - 100%) * 999, 50%), (24rem - 100%) * 999, 100%);
+  --tracks-4-2-1: clamp(clamp(25%, (54rem - 100%) * 999, 50%), (24rem - 100%) * 999, 100%);
   --tracks-3-1: clamp(33.333%, (36rem - 100%) * 999, 100%);
   --stack-gap: var(--space-9);
   /* The widest a chart drawing with type inside it renders. Its SVG scales
@@ -628,20 +629,15 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .page-head .page-actions { margin-left: auto; display: flex; gap: var(--space-4); flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
 .page-head .page-actions > * { white-space: nowrap; }
 /* Ambient readings beside the greeting: no frame of their own, each panel a
-   number worth reading at a distance and one quiet line under it, divided by
-   hairlines. A panel opens in place into a popover; the strip never changes
-   height. */
-.dashboard-glance {
-  display: flex;
-  align-items: center;
-  margin-left: auto;
-  min-width: 0;
-  max-width: 100%;
-}
+   number worth reading at a distance and one quiet line under it. A panel
+   opens in place into a popover; the strip never changes height. */
+/* The strip's own box and its row of panels lay nothing out: each panel is an
+   item of the dashboard's one row of readings (`.dash-readings`), beside the
+   readings about HQ itself, so all of them share a size, a spacing and a line. */
+.dashboard-glance { display: contents; }
 .page-head:has(.dashboard-glance) { align-items: center; }
-.glance-panels { display: flex; min-width: 0; }
+.glance-panels { display: contents; }
 .glance-panel { position: relative; min-width: 0; }
-.glance-panel + .glance-panel { border-left: 1px solid var(--line-2); }
 .glance-panel-head {
   display: grid;
   grid-template-columns: 22px minmax(0, auto);
@@ -668,7 +664,6 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .glance-alert { color: var(--attn); font-weight: 650; }
 .glance-freshness { color: var(--warn); font-size: var(--text-3xs); white-space: nowrap; }
 .glance-panel[data-refreshing] .glance-freshness { color: var(--muted-2); }
-.glance-panel.is-outdated .glance-lead strong { color: var(--muted); }
 .glance-expanded { position: absolute; top: calc(100% + 6px); right: 0; z-index: 5; display: grid; gap: var(--space-6); width: min(340px, calc(100vw - 32px)); padding: var(--space-6) var(--space-7); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
 .glance-expanded-head { display: grid; gap: 1px; font-size: var(--text-xs); color: var(--muted); }
 .glance-expanded-head strong { color: var(--ink); font-size: var(--text-sm); }
@@ -796,16 +791,24 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    This whole component lives after the generic button primitive in the same
    layer. A POST row and a link row therefore share `.menu-item`; their HTML
    element never changes their visual hierarchy. */
+/* The control's one line holds the mark and the name. On a phone, where every
+   other control in the bar is as small as it gets, this one gives way first,
+   down to the mark alone: squeezed, the name wraps to a second line that the
+   control does not show. So the name is there on every phone that fits it and
+   on none that does not, all of it or none of it, without a width being named. */
 .user-menu { position: relative; flex: 0 0 auto; }
 .action-badge { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-width: var(--control-size); min-height: var(--control-size); padding: var(--space-2) var(--space-4); border: 1px solid var(--bar-control-line); border-radius: var(--radius-sm); background: var(--bar-control-bg); color: var(--ink-2); font-size: var(--text-sm); font-weight: 600; font-variant-numeric: tabular-nums; text-decoration: none; white-space: nowrap; }
 .action-badge:hover { background: var(--bar-control-bg-hover); color: var(--ink); text-decoration: none; }
 .action-badge svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .user-menu > summary {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: var(--control-size);
-  padding: var(--space-2) var(--space-5);
+  display: flex;
+  flex-flow: row-reverse wrap;
+  align-content: flex-start;
+  justify-content: center;
+  column-gap: var(--space-3);
+  height: var(--control-size);
+  overflow: hidden;
+  padding: 0 var(--space-5);
   border: 1px solid var(--bar-control-line);
   border-radius: var(--radius-sm);
   background: var(--bar-control-bg);
@@ -817,6 +820,29 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   white-space: nowrap;
 }
 .user-menu > summary::-webkit-details-marker { display: none; }
+/* Each fills the control's one line exactly, so the line after it starts
+   below the control's edge and is not shown. */
+.user-menu > summary > * { flex: none; height: calc(var(--control-size) - 2px); }
+/* The name asks for only a few characters of the line and takes what there
+   is, up to its own length: a long one is cut short beside the mark rather
+   than wrapping away and leaving the control wide and empty. Only when not
+   even those few characters fit does it leave the line. */
+.user-menu .user-name { flex: 1 1 5ch; min-width: 0; max-width: max-content; overflow: hidden; line-height: calc(var(--control-size) - 2px); text-overflow: ellipsis; white-space: nowrap; }
+/* Who the menu belongs to, above what it offers. */
+/* The picture, when there is one, stands beside both lines; the name and
+   what the person may do share the first, when they signed in is the second. */
+.menu-identity { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; padding: var(--space-4) var(--space-5) var(--space-5); border-bottom: 1px solid var(--line-2); }
+.menu-identity > * { grid-column: 2; }
+.menu-identity-picture { grid-column: 1; grid-row: 1 / span 2; width: 36px; height: 36px; margin-right: var(--space-5); border-radius: 50%; object-fit: cover; background: var(--bg-tint); }
+.menu-identity-who { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
+.menu-identity-who strong { overflow: hidden; color: var(--ink); font-size: var(--text-sm); text-overflow: ellipsis; white-space: nowrap; }
+.menu-identity-when { color: var(--muted); font-size: var(--text-2xs); }
+/* What an account may do, said once beside its name. Not a status: it has no
+   tone, only the accent, and it never changes while you watch. */
+.role-mark { flex: none; padding: 0 var(--space-3); border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); font-size: var(--text-2xs); font-weight: 600; letter-spacing: .04em; line-height: 1.5; text-transform: uppercase; }
+/* The person's own picture as the control's mark. Its margins make it as tall
+   as the control's one line, like everything else in it. */
+.user-menu .user-avatar { width: 22px; height: 22px; margin-block: calc((var(--control-size) - 2px - 22px) / 2); border-radius: 50%; object-fit: cover; background: var(--bg-tint); }
 .user-menu > summary:hover,
 .user-menu[open] > summary { background: var(--bar-control-bg-hover); color: var(--ink); }
 .user-menu .user-icon {
@@ -834,9 +860,13 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   right: 0;
   z-index: 20;
   display: flex;
-  min-width: 156px;
+  /* As wide as what it holds, up to a width that still fits beside the
+     controls to its right on the narrowest phone; a longer name is cut. */
+  width: max-content;
+  min-width: 200px;
+  max-width: 248px;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--space-2);
   padding: var(--space-2);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -869,14 +899,26 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   color: var(--ink);
   text-decoration: none;
 }
-.menu-item-split { justify-content: space-between; gap: var(--space-6); }
+.menu-item-split { display: grid; grid-template-columns: 1fr 1fr; }
+/* The menu is two columns, and every row keeps to them: what starts a row
+   starts at the first column's edge, and what answers it starts at the
+   second's, half-way across. The switches, the theme's buttons, the
+   connection's network and the second of two links all share that one edge,
+   so nothing is centred in one row and pushed to the side in the next. */
+.menu-settings, .menu-pair { display: grid; grid-template-columns: 1fr 1fr; }
+.menu-setting { flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+/* What a row's status says in a word, after its mark, and light. */
+.menu-item-note { overflow: hidden; color: var(--muted); font-size: var(--text-2xs); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+/* Where the menu leads, set off from what it sets. */
+.menu-places { display: grid; gap: 1px; padding-top: var(--space-2); border-top: 1px solid var(--line-2); }
 /* One trailing column for counts, connection state and switches. New menu
    statuses align by taking this slot instead of inventing their own margin. */
 .menu-item-status {
-  display: inline-grid;
-  min-width: 32px;
-  flex: none;
-  place-items: center;
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+  padding-left: var(--space-5);
 }
 /* A switch in the profile menu. The track carries the state, so the label
    never has to rename itself to say what is currently true. */
@@ -897,12 +939,12 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 }
 /* The theme choice: a label in the row's own inset, then three buttons that
    share one track. The pressed one is the choice in force. */
-.menu-theme { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5); }
+.menu-theme { display: grid; grid-template-columns: 1fr 1fr; align-items: center; padding: 0 var(--space-5); }
 .menu-theme-label { color: var(--ink); font-size: var(--text-sm); font-weight: 500; }
 /* Three icons in one small track: a screen for the system's choice, a sun, a
    moon. Named for a screen reader and in their tooltip; the words would make
    a menu row a paragraph. */
-.menu-theme-options { display: inline-flex; gap: var(--space-1); padding: var(--space-1); border-radius: 999px; background: var(--bg-tint); }
+.menu-theme-options { justify-self: start; margin-left: var(--space-5); display: inline-flex; gap: var(--space-1); padding: var(--space-1); border-radius: 999px; background: var(--bg-tint); }
 .menu-item.menu-theme-option {
   display: grid; place-items: center; width: 26px; height: 26px; min-height: 0; padding: 0;
   border: 0; border-radius: 999px; background: none; box-shadow: none;
@@ -1136,8 +1178,9 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .chart-cats { position: absolute; inset: 0; pointer-events: none; }
 /* Every label is centred on the point it names, including the two at the ends:
    anchored inward, the end labels leave their own points and overlap their
-   neighbours. Room is made for the overhang below rather than taken out of the
-   label. */
+   neighbours. The drawing keeps a strip either side of its plot for the
+   overhang, and what a long label needs beyond that it takes from the card's
+   padding, rather than from the label. */
 .chart-frame .chart-category {
   left: var(--at);
   bottom: 0;
@@ -1159,22 +1202,11 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-6); margin: var(--space-6) 0 var(--space-1); color: var(--muted); font-size: var(--text-xs); }
 .chart-legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
 .chart-legend i { inline-size: 9px; block-size: 9px; border-radius: 2px; }
-/* Padded by half a label, and pulled back by the same amount, so the drawing
-   stays put while the first and last labels have somewhere to hang, rather
-   than being clipped by the scroller or growing a scrollbar. */
-/* Both axes stated, which is the point of the second one: with `overflow-x:
-   auto` alone, a `visible` counterpart computes to `auto`. The drawing's
-   height is fractional, so the chart would overflow itself by one rounded
-   pixel and draw a full-height scrollbar for it.
-   `clip` says what is meant. Alongside a scrolling axis the spec uses it as
-   `hidden`, which is the same result here. The tooltip is appended to <body>,
-   so it is not clipped. */
-.chart-scroll {
-  overflow-x: auto;
-  overflow-y: clip;
-  padding-inline: var(--space-12);
-  margin-inline: calc(var(--space-12) * -1);
-}
+/* `.chart-scroll`, the drawing's wrapper, has no rule of its own, and that is
+   the rule. A chart has no floor (see `.bar-chart`), so it is never wider than
+   its card and there is nothing to scroll. An end label hangs half its width
+   past the drawing, into the card's padding, and the wrapper is exactly as
+   wide as the card's content whatever the card's inset. */
 /* Fills the card it is in, at a height this stylesheet decides rather than one
    the viewBox dictates. Its parts are rectangles and horizontal rules, so
    `preserveAspectRatio="none"` stretches them to the box without saying
@@ -1271,10 +1303,13 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .code-list { display: inline-flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
 .code-list code { white-space: nowrap; }
 .external-link::after { content: " \2197"; font-size: .85em; }
-/* Four cards that each answer one question sit in one row where they fit. */
-.control-summary-four {
-  grid-template-columns: repeat(auto-fit, minmax(var(--tracks-4-2-1), 1fr));
-}
+/* A band of cells in a grid lays out as whole rows, by how many cells it has:
+   one takes the band, three are three or one, four are four, two or one. Read
+   off the band itself, so no page has to say how many it holds and none is
+   left with three over one. */
+:is(.control-summary, .insight-grid, .finding-facts):has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+:is(.control-summary, .insight-grid, .finding-facts):has(> :nth-child(3):last-child) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-3-1), 1fr)); }
+:is(.control-summary, .insight-grid, .finding-facts):has(> :nth-child(4):last-child) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-4-2-1), 1fr)); }
 
 /* A service's overview: one raised band, not a box per fact. Each fact is its
    icon tile, then its label over its value; hairlines divide them. Health's
@@ -1393,8 +1428,8 @@ td.row-actions > * + * { margin-left: var(--space-6); }
    it a grid or flex ancestor sizes to the table's content instead, and the
    overflow escapes to the page rather than scrolling inside its card. */
 /* A wide table scrolls sideways rather than widening the page. `overflow-y`
-   is stated for the same reason as `.chart-scroll`: left alone it computes to
-   `auto` and offers a scrollbar it has no content for. */
+   is stated because left alone it computes to `auto` and offers a scrollbar
+   it has no content for. */
 .table-scroll { overflow-x: auto; overflow-y: clip; -webkit-overflow-scrolling: touch; margin-bottom: var(--space-8); min-width: 0; max-width: 100%; }
 .table-scroll .data-table { margin-bottom: 0; }
 /* The surface is the scroll box's, not the table's. A box that scrolls clips
@@ -1410,9 +1445,25 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .table-scroll:last-child { margin-bottom: 0; }
 /* Refreshes pin column widths (fixed layout); long unbroken tokens must
    wrap inside their cell instead of bleeding across the pinned columns. */
+/* Before tables.js has fitted it, and where there is no script at all, a
+   table is sized to its content and scrolls inside its box: squeezed to fit
+   with nothing to hold its columns open, every value would stand up as a strip
+   a word wide. The cap stops a prose column running to a four-screen swipe. */
+.table-scroll > .data-table:not([data-fit]):has(tbody td:not([colspan])) { width: max-content; min-width: 100%; max-width: 1400px; }
 .table-scroll td { overflow-wrap: break-word; }
-.data-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
-.data-table th, .data-table td { padding: var(--space-4) var(--space-6); text-align: left; vertical-align: top; border-bottom: 1px solid var(--line-2); font-size: var(--text-sm); }
+/* Fitted, a long unbroken value has to count as breakable when the columns
+   are sized, or one identifier pushes the table past its box, and only
+   `anywhere` does that. Each column's floor (below) keeps it readable. */
+.table-scroll > .data-table[data-fit] td { overflow-wrap: anywhere; }
+.data-table {
+  /* A cell's space above and below, named because the row toggle is placed
+     by it. A narrow table's roomier rows set it and both follow. */
+  --row-pad: var(--space-4);
+  /* How narrow a column may get; tables.js says, per heading. */
+  --column-floor: 0px;
+  width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm);
+}
+.data-table th, .data-table td { padding: var(--row-pad) var(--space-6); text-align: left; vertical-align: top; border-bottom: 1px solid var(--line-2); font-size: var(--text-sm); }
 .data-table thead th { background: var(--surface-2); font-size: var(--text-xs); color: var(--muted); font-weight: 600; }
 /* A sticky table heading, the way the platform does it.
 
@@ -1437,37 +1488,33 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 
    No `overscroll-behavior` on purpose: that belongs on dialogs and sheets; on
    a table it stops scroll chaining and traps the wheel at the last row. */
-/* Where tables fit (1280px and up, where they are not content-sized). Below
-   that a table can be wider than its box at any moment, including after a
-   disclosure opens, so the wrapper stays a scroll container from the start
-   rather than once a script has measured it. */
-@media (min-width: 1280px) {
-  .table-scroll:not([data-chart]):not(.is-pane) { overflow: visible; }
-  .table-scroll:not([data-chart]) .data-table { overflow: visible; }
-
-  .table-scroll:not([data-chart]) .data-table thead th {
-    position: sticky;
-    z-index: 2;
-    background: var(--surface-2);
-    box-shadow: inset 0 -1px 0 var(--line);
-  }
-  /* The offset must name whichever box the heading actually sticks to. */
-  .table-scroll:not([data-chart]):not(.is-pane) .data-table thead th {
-    inset-block-start: calc(var(--site-header-height) + var(--page-nav-height));
-  }
-  /* A wrapper that IS the scroll container: its top edge, not the chrome's,
-     a chrome-height offset here floats the heading down inside the box and
-     lets rows scroll above it. */
-  .table-scroll:not([data-chart]).is-pane .data-table thead th {
-    inset-block-start: 0;
-  }
-  .table-scroll:not([data-chart]).is-pane:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
+/* Wherever the table fits its box, which tables.js makes true at every width
+   and marks (`is-fitted`). Unmarked, with no script or a table capped to a
+   height, the wrapper stays a scroll container from the start. */
+.table-scroll.is-fitted:not([data-chart]) { overflow: visible; }
+.table-scroll:is(.is-fitted, .is-pane):not([data-chart]) .data-table { overflow: visible; }
+.table-scroll:is(.is-fitted, .is-pane):not([data-chart]) .data-table thead th {
+  position: sticky;
+  z-index: 2;
+  background: var(--surface-2);
+  box-shadow: inset 0 -1px 0 var(--line);
 }
+/* The offset must name whichever box the heading actually sticks to. */
+.table-scroll.is-fitted:not([data-chart]) .data-table thead th {
+  inset-block-start: calc(var(--site-header-height) + var(--page-nav-height));
+}
+/* A wrapper that IS the scroll container: its top edge, not the chrome's,
+   a chrome-height offset here floats the heading down inside the box and
+   lets rows scroll above it. */
+.table-scroll.is-pane:not([data-chart]) .data-table thead th { inset-block-start: 0; }
+.table-scroll.is-pane:not([data-chart]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .table-sort-link { display: inline-flex; align-items: center; gap: var(--space-2); color: inherit; white-space: nowrap; }
 .table-sort-link:hover { color: var(--ink); text-decoration: none; }
+/* The same control where the page sorts its own rows (tables.js): a button,
+   so everything the button primitive gives it is taken back off. It looks and
+   reads exactly as a list its server sorts: one control, wherever the sorting
+   happens. */
+.data-table thead button.table-sort-link { min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; font: inherit; text-align: inherit; cursor: pointer; }
 .sort-indicator { color: var(--muted-2); font-size: var(--text-2xs); }
 [aria-sort="ascending"] .sort-indicator, [aria-sort="descending"] .sort-indicator { color: var(--accent); }
 .data-table tbody tr:last-child > * { border-bottom: 0; }
@@ -1640,16 +1687,91 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 }
 .figure-hero-note { margin: var(--space-3) 0 0; font-size: var(--text-sm); color: var(--muted); font-feature-settings: "tnum"; }
 
-/* Columns a phone can lose. A five-column table stacked into label/value rows
-   becomes five lines per record. Dropping the columns that merely identify
-   a row keeps it a table, and the row still says which account it is. */
-@media (max-width: 640px) {
-  /* Not in a table that declares its column widths: a hidden cell leaves the
-     row, the cells after it move one slot left into the next column's width,
-     and the declared slot it left stays empty at the end of every row. That
-     table scrolls sideways instead, with every column where it belongs. */
-  .data-table:not(:has(colgroup)) .optional-col { display: none; }
+/* A table in a narrow box (a phone, or half a page beside a chart: tables.js
+   marks it by its box's width, not the screen's). Its rows are something to
+   put a thumb on, so they get the room a control in them needs; an identifier
+   is cut sooner, whole again when the row is opened; and within a column that
+   stays, what is marked `narrow-more` waits in the line beneath the row. */
+.data-table[data-narrow] > tbody { --row-pad: var(--space-6); }
+.data-table[data-narrow] > tbody > tr:not(.row-detail) .narrow-more { display: none; }
+.table-scroll > .data-table[data-narrow] { --identifier-max: 22ch; }
+/* A column held to a width that suits a wide table gives it back here, so
+   the room goes to the column that names the row. */
+.data-table[data-narrow] .tight-col > * { min-width: 0; }
+/* A status that is a sentence wraps between its words here, never inside
+   one, before its column is given up for it. */
+.data-table[data-narrow] .pill { white-space: normal; overflow-wrap: normal; }
+/* What a page says about a table's columns, for tables.js to read: which stay
+   whatever happens, and which leave first. Named here because this sheet is
+   the list of classes a template may use (an extension's templates are held
+   to it); they carry no style of their own. */
+.data-table :is(.key-col, .optional-col) { }
+/* A table fits its box at every width, by one mechanism (tables.js): it
+   takes the box's width and wraps, and where that would cramp a column it
+   gives up columns, named here, until the rest are comfortable. Never the
+   column that names the row or one marked `key-col`; one marked
+   `optional-col` goes first, then from the far end. Whatever leaves is in the
+   row's toggle. No screen width is asked anywhere. */
+.data-table[data-drop~="2"] > * > tr > :nth-child(2):not([colspan]),
+.data-table[data-drop~="3"] > * > tr > :nth-child(3):not([colspan]),
+.data-table[data-drop~="4"] > * > tr > :nth-child(4):not([colspan]),
+.data-table[data-drop~="5"] > * > tr > :nth-child(5):not([colspan]),
+.data-table[data-drop~="6"] > * > tr > :nth-child(6):not([colspan]),
+.data-table[data-drop~="7"] > * > tr > :nth-child(7):not([colspan]),
+.data-table[data-drop~="8"] > * > tr > :nth-child(8):not([colspan]),
+.data-table[data-drop~="9"] > * > tr > :nth-child(9):not([colspan]),
+.data-table[data-drop~="10"] > * > tr > :nth-child(10):not([colspan]),
+.data-table[data-drop~="11"] > * > tr > :nth-child(11):not([colspan]),
+.data-table[data-drop~="12"] > * > tr > :nth-child(12):not([colspan]) { display: none; }
+/* Each column's floor: tables.js says how narrow a column may get (its own
+   one-line width, or a few words' worth, whichever is less; more for the
+   column that names the row), and this holds it there without capping how
+   wide it may grow. With every floor held, a table that is still wider than
+   its box is one that has to give up a column. */
+.data-table > thead > tr > th::after { content: ""; display: block; width: var(--column-floor, 0); height: 0; }
+/* Nothing left to give up and still too wide (a row of identifiers on a
+   phone): the columns share the box evenly and a value is cut at its
+   column's edge, whole again when the row is opened. */
+.table-scroll > .data-table[data-wrap="tight"] { table-layout: fixed; }
+.table-scroll > .data-table[data-wrap="tight"] .tight-col { width: auto; white-space: normal; }
+.table-scroll > .data-table[data-wrap="tight"] td .code-list { display: flex; }
+.table-scroll > .data-table[data-wrap="tight"] td code { min-width: 0; max-width: 100%; }
+.table-scroll > .data-table[data-wrap="tight"] > thead > tr > th::after { content: none; }
+/* While tables.js asks what each column would take on one line. */
+.data-table[data-measure] > * > tr > :is(td, th),
+.data-table[data-measure] > * > tr > :is(td, th) * { white-space: nowrap !important; }
+/* A finger is not a cursor. Where the pointer is coarse, a control that is
+   only as tall as its line of text (a sort heading, a "view all" link, a
+   disclosure, a tick box) is given room around it to be hit, without moving
+   anything: the room is the control's own, drawn over the space beside it. */
+@media (pointer: coarse) {
+  :is(.table-sort-link, .subtle-link, .pagination a, .month-mark, .month-span),
+  main summary:not(.glance-panel-head) { position: relative; }
+  :is(.table-sort-link, .subtle-link, .pagination a, .month-mark, .month-span)::after {
+    content: ""; position: absolute; inset: calc(-1 * var(--space-5)) calc(-1 * var(--space-3));
+  }
+  /* A disclosure's whole line is its target, above and below. */
+  main summary:not(.glance-panel-head) { padding-block: var(--space-3); margin-block: calc(-1 * var(--space-3)); }
+  input[type=checkbox], input[type=radio] { inline-size: 20px; block-size: 20px; }
 }
+/* The toggle's gutter: the cell that names a row keeps room at its start in
+   every row of a table where any row opens, and in the heading over it, so
+   the names share one edge. The toggle stands in that room. */
+.data-table .row-gutter { position: relative; padding-left: calc(var(--space-6) + 1.5rem); }
+.data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--space-3); inset-block-start: calc(var(--row-pad) - var(--space-1)); }
+/* What an open row was holding back, in a line of its own beneath it: each
+   part under its column's name. Beneath the row and the table's full width, so
+   opening one moves nothing else: the row's own cells stay as they were, and
+   tables.js holds the columns at their widths while any row is open. */
+.row-columns { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-3) var(--space-6); margin: 0; }
+.row-columns dt { color: var(--muted); font-size: var(--text-2xs); }
+.row-columns dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.data-table tr.is-expanded:has(+ .row-detail) > * { border-bottom: 0; }
+.data-table .row-detail > td { padding-top: 0; }
+.data-table .row-detail:hover { background: none; }
+/* With its columns held, a value the open row no longer cuts short has to
+   break inside its column rather than run under the next. */
+.data-table tr.is-expanded > :is(td, th) { overflow-wrap: anywhere; }
 
 /* ── Pills / tags ───────────────────────────────────────────────── */
 
@@ -1721,6 +1843,18 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
 a.kpi:hover { background: var(--surface-2); }
 .kpi .label { font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+/* A mark for what the figure counts: quieter than the label it sits before.
+   The label is a row, so a label too long for its column wraps beside its
+   mark, never underneath it. */
+.kpi .label:has(> .icon) { display: flex; align-items: flex-start; gap: var(--space-3); }
+.kpi .label .icon { width: 14px; height: 14px; margin-top: 1px; color: var(--muted-2); }
+/* The supporting figures of an overview stand three to a row. In a card too
+   narrow for a mark and its label to fit one of those columns, the mark goes:
+   a label running into its neighbour costs more than the mark is worth. */
+.kpi-grid.is-featured > :not(:first-child) .label .icon { display: none; }
+@container (min-width: 325px) {
+  .kpi-grid.is-featured > :not(:first-child) .label .icon { display: inline; }
+}
 .kpi .value { font-size: var(--text-4xl); font-weight: 650; letter-spacing: -.018em; line-height: 1.1; font-feature-settings: "tnum"; }
 .kpi.is-zero .value { color: var(--muted-2); font-weight: 500; }
 .kpi .muted { font-size: var(--text-2xs); }
@@ -1759,7 +1893,7 @@ a.kpi:hover { background: var(--surface-2); }
   display: grid;
   /* A narrower track ceiling lets four insights share one row at desktop
      widths instead of stranding the fourth alone beside two empty columns. */
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, clamp(240px, 22%, 290px)), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, clamp(240px, 22%, 290px)), 1fr));
   margin: 0 0 var(--stack-gap);
 }
 .insight-card {
@@ -1788,32 +1922,60 @@ a.kpi:hover { background: var(--surface-2); }
    position carries meaning when only the order does. */
 
 .attention-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+/* The decision, then (where the reader sorts their own queue) the one thing
+   they can do to the row itself. The second wraps under the first when the
+   row is too narrow for both, at the row's own width. */
 .attention-row {
-  display: grid;
-  grid-template-columns: minmax(88px, auto) 1fr auto;
-  align-items: start;
-  gap: var(--space-7);
-  padding: var(--space-6) 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-2) var(--space-7);
+  padding: var(--space-5) 0;
   border-top: 1px solid var(--line-2);
 }
-.attention-row:first-child { border-top: 0; padding-top: var(--space-2); }
-/* Grid items stretch to fill their track by default; the pill hugs its label
-   instead of inflating into a wide oval. */
-.attention-row > .pill { justify-self: start; align-self: start; }
-.attention-body { min-width: 0; }
-.attention-title { display: block; font-size: var(--text-md); font-weight: 650; color: var(--ink); letter-spacing: -.005em; }
-.attention-detail { margin: var(--space-1) 0 0; font-size: var(--text-sm); line-height: 1.5; color: var(--ink-2); }
-.attention-action { margin: var(--space-2) 0 0; font-size: var(--text-xs); line-height: 1.5; color: var(--muted); }
-.attention-value { font-size: var(--text-sm); font-weight: 650; color: var(--ink-2); white-space: nowrap; font-feature-settings: "tnum"; }
-.attention-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
-.attention-actions form { margin: 0; }
-.attention-end { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-3); }
+.attention-body { flex: 1 1 24rem; }
+.attention-end { flex: none; margin-left: auto; }
 .attention-end form { margin: 0; }
-.action-items-read > summary { cursor: pointer; font-size: var(--text-sm); font-weight: 600; color: var(--muted); }
-.action-items-read[open] > summary { margin-bottom: var(--space-6); }
-.action-items-read .attention-row { opacity: .7; }
+.attention-row:first-child { border-top: 0; padding-top: var(--space-2); }
+
+/* What is wrong, on one line with how bad it is and what it is about: the
+   line a reader scans the queue by. */
+.attention-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); }
+.attention-meta { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); color: var(--muted); font-size: var(--text-xs); }
+.attention-meta > a { overflow-wrap: anywhere; }
+.attention-title { min-width: 0; max-width: 100%; font-size: var(--text-md); font-weight: 650; color: var(--ink); letter-spacing: -.005em; overflow-wrap: anywhere; }
+.attention-detail { max-width: var(--measure); margin: var(--space-5) 0 0; font-size: var(--text-sm); line-height: 1.65; color: var(--ink-2); overflow-wrap: anywhere; }
+.attention-action { margin: var(--space-2) 0 0; font-size: var(--text-sm); line-height: 1.5; color: var(--ink-2); }
+.attention-value { font-size: var(--text-sm); font-weight: 650; color: var(--ink-2); white-space: nowrap; font-feature-settings: "tnum"; }
+.attention-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-3); }
+.attention-actions form { margin: 0; }
+/* The queue under its domains: a heading per domain and its count. */
+.queue-group + .queue-group { margin-top: var(--space-8); }
+.queue-group > h3 { display: flex; align-items: baseline; gap: var(--space-4); margin: 0; padding-bottom: var(--space-3); border-bottom: 1px solid var(--line); color: var(--muted); font-size: var(--text-xs); font-weight: 650; letter-spacing: .05em; text-transform: uppercase; }
+.action-items-aside[open] > summary { margin-bottom: var(--space-6); }
+/* A domain's entries: an item, or a family of them folded. Each after the
+   first is ruled off from the one before, whichever it is. */
+.queue-entries > * + * { border-top: 1px solid var(--line-2); }
+.queue-entries .attention-row:first-child { padding-top: var(--space-5); }
+/* A family, closed: how bad, what kind, how many, and the one thing that can
+   be done to all of them. Open, its rows are set in from the fold's mark. */
+.queue-family > summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); padding: var(--space-5) 0; cursor: pointer; font-size: var(--text-md); }
+/* The fold's mark follows the count, so a family's pill starts where a
+   single row's does; the family's own control ends the line. */
+.queue-family > summary::before { order: 1; }
+.queue-family > summary .queue-family-end { order: 2; margin-left: auto; }
+.queue-family > .attention-list { padding-left: var(--space-8); border-top: 1px solid var(--line-2); }
+/* A row the reader has just dismissed, until the page is next drawn: one quiet
+   line in its place, with the way back. */
+.attention-row[data-dismissed] > .attention-body { display: none; }
+.attention-row[data-dismissed] { align-items: center; color: var(--muted); font-size: var(--text-sm); }
+.attention-row[data-dismissed]::before { content: attr(data-dismissed); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attention-clear { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
 .action-items-card { padding-top: var(--space-5); }
+/* The next step is the toggle for the evidence behind it. */
+.attention-evidence { margin-top: var(--space-2); }
+.attention-evidence > summary { width: fit-content; max-width: 100%; color: var(--ink-2); font-size: var(--text-sm); line-height: 1.5; cursor: pointer; }
+.attention-evidence[open] > summary { color: var(--accent); }
 
 .finding-list { display: grid; gap: var(--space-6); }
 /* A command scrolls inside its card rather than widening every card. */
@@ -1861,12 +2023,7 @@ a.kpi:hover { background: var(--surface-2); }
    restyles every element once the container is measured and runs their
    transitions from nothing, so each button in the queue would fade in on load. */
 @media (max-width: 720px) {
-  /* The count and "Mark read" ride beside the pill, so the explanation gets
-     the whole width instead of a strip beside a column of its own. */
-  .attention-row { grid-template-columns: 1fr auto; grid-template-areas: "pill end" "body body"; row-gap: var(--space-3); }
-  .attention-row > .pill { grid-area: pill; justify-self: start; }
-  .attention-row > .attention-body { grid-area: body; }
-  .attention-row > .attention-end { grid-area: end; flex-direction: row; align-items: center; gap: var(--space-4); }
+  /* The decision keeps the width; bookkeeping follows it in reading order. */
   .finding-card .section-head { flex-direction: column; }
   .finding-card .section-head > div { width: 100%; }
   .finding-card .section-head > .finding-actions { margin-top: var(--space-1); }
@@ -1940,11 +2097,15 @@ a.kpi:hover { background: var(--surface-2); }
 .card-columns { columns: 22rem 2; column-gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
 .card-columns > * { break-inside: avoid; margin: 0 0 var(--layout-gap); display: block; width: 100%; }
 .dashboard-patterns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: var(--layout-gap); margin-bottom: var(--stack-gap); }
-/* Two cards across at most, so a wide screen never leaves a third track empty
-   beside a pair while the odd card takes a row of its own. */
-.dashboard-highlights { display: grid; grid-template-columns: repeat(auto-fit, minmax(max(min(100%, 440px), calc(50% - var(--layout-gap))), 1fr)); gap: var(--layout-gap); margin-bottom: var(--stack-gap); }
-.dashboard-highlights > .highlight-card:nth-child(odd):last-child { grid-column: 1 / -1; }
-.highlight-card.card { display: flex; flex-direction: column; min-width: 0; padding: var(--space-6); }
+/* Overview cards share the available width, so three contributing domains
+   stay in one scan on a desktop. Narrow containers naturally stack them. */
+/* As many overviews to a row as fit, sharing it evenly, and a row's cards the
+   same height. Flex rather than a grid of fixed tracks, so the last row's
+   cards share the whole row too: three domains on a window that fits two put
+   the third across the full width, not in half of it beside nothing. */
+.dashboard-highlights { display: flex; flex-wrap: wrap; gap: var(--layout-gap); margin-bottom: var(--stack-gap); }
+.dashboard-highlights > .highlight-card { flex: 1 1 320px; }
+.highlight-card.card { display: flex; flex-direction: column; min-width: 0; padding: var(--space-8); }
 .highlight-card > .kpi-grid { flex: 1; }
 /* A card holding a band of stats is the container its columns are measured
    against, so the same count-aware columns hold in any card, not only the
@@ -1953,7 +2114,7 @@ a.kpi:hover { background: var(--surface-2); }
 .card > .kpi-grid {
   --kpi-columns: 3;
 }
-.highlight-card .section-head { margin-bottom: var(--space-4); }
+.highlight-card .section-head { margin-bottom: var(--space-8); padding-bottom: var(--space-6); border-bottom: 1px solid var(--line); }
 .highlight-card .kpi { flex: 1 1 calc(100% / var(--kpi-columns) - 1px); padding: var(--space-5); }
 /* Columns follow the cell count and the card's width (110px a cell), so rows
    stay even: four cells are 4 or 2+2, six are 6 or 3+3, never 3+1. */
@@ -1963,7 +2124,7 @@ a.kpi:hover { background: var(--surface-2); }
 .card > .kpi-grid:has(> :nth-child(6):last-child) { --kpi-columns: 2; }
 /* Two rows of three wait for a card wide enough to fit them; in a phone's card
    three columns are cramped. */
-@container (min-width: 480px) {
+@container (min-width: 360px) {
   .card > .kpi-grid:has(> :nth-child(6):last-child) { --kpi-columns: 3; }
 }
 @container (min-width: 440px) {
@@ -2393,6 +2554,10 @@ a.kpi:hover { background: var(--surface-2); }
 .empty.compact { padding: var(--space-2) 0 0; }
 .empty p { margin: 0 0 var(--space-3); }
 .empty .empty-cta { color: var(--accent-2); font-weight: 500; }
+/* What is missing leads; what would fill it follows, quieter and at a
+   reading width. */
+.empty > p:first-child { color: var(--ink-2); font-weight: 600; }
+.empty .empty-why { max-width: var(--measure); }
 
 /* ── KV grid ────────────────────────────────────────────────────── */
 
@@ -2413,25 +2578,19 @@ a.kpi:hover { background: var(--surface-2); }
 .audit-list li:last-child { border-bottom: 0; }
 .audit-list .ts { color: var(--muted-2); font-variant-numeric: tabular-nums; font-size: var(--text-xs); white-space: nowrap; }
 
-@media (max-width: 900px) {
-  .page-head:has(.dashboard-glance) { flex-wrap: wrap; }
-  .dashboard-glance { position: relative; width: 100%; margin: var(--space-5) 0 0; }
-  .glance-panels { flex: 1; }
-  .glance-panel { flex: 1; }
-  /* Popovers hang from the strip's right edge, which is the page's, rather
-     than from a segment that may sit anywhere along it. */
+/* Until the readings are one row (their own container says when), a popover
+   hangs from the readings' right edge, which is the page's, rather than from
+   a panel that may sit anywhere along it. */
+@container (max-width: 899px) {
   .glance-panel { position: static; }
   .glance-expanded { right: 0; width: min(340px, 100%); }
 }
 
 @media (max-width: 640px) {
-  .glance-panel-head { padding-inline: var(--space-5); column-gap: var(--space-3); }
-  /* Panels wrap to two rows rather than cut a reading off; the line under a
-     lead gives way at its end, never the lead. */
-  .glance-panels { flex-wrap: wrap; }
-  .glance-panel { flex: 1 1 9rem; }
+  .glance-panel-head { column-gap: var(--space-3); }
+  .user-menu { flex-shrink: 1000; min-width: var(--control-size); }
+  /* The line under a lead gives way at its end, never the lead. */
   .glance-caption { overflow: hidden; text-overflow: ellipsis; }
-  .user-menu .user-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 
 /* A description under a row's name: two lines at most, and never wider than
@@ -2440,20 +2599,24 @@ a.kpi:hover { background: var(--surface-2); }
 
 /* ── Forms ──────────────────────────────────────────────────────── */
 
-/* Fields flow into as many columns as fit, never narrower than 18rem, in
-   reading order: a long form uses the width it is given instead of one column
-   and a page of empty card beside it. Anything that is not a single short
-   field (a textarea, a group of boxes, errors, the actions) takes the row. */
+/* A form is two columns where there is room and one where there is not, in
+   reading order, and a row's fields share its whole width: pairs sit side by
+   side, and the odd one of a run takes its row rather than leaving a hole.
+   Two, never three: a third column is where a run of four became three and a
+   stray. Anything that is not a single short field (a textarea, a group of
+   boxes, errors, the actions) takes the row. */
 .form {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-7) var(--space-10);
-  align-items: start;
+  align-items: flex-start;
   padding: var(--surface-inset, var(--space-10));
 }
-.form > :not(.field) { grid-column: 1 / -1; }
-.form > .field:has(textarea) { grid-column: 1 / -1; }
-.form > .field:has(> div > * + *) { grid-column: 1 / -1; }
+/* More than a third of the row, so no more than two fit it. */
+.form .field { flex: 1 1 max(18rem, 34%); min-width: min(100%, 18rem); }
+.form > :not(.field) { flex-basis: 100%; }
+.form > .field:has(textarea) { flex-basis: 100%; }
+.form > .field:has(> div > * + *) { flex-basis: 100%; }
 .form > .field { margin-bottom: 0; }
 /* A lone checkbox sits beside its label, the help under both, rather than
    alone on a line under its own question. */
@@ -2474,7 +2637,7 @@ a.kpi:hover { background: var(--surface-2); }
 .field input, .field select, .field textarea { width: 100%; }
 .field textarea { resize: vertical; min-height: 80px; }
 /* A field that is the form's subject (a title, a note) takes the whole row. */
-.form .field.is-wide { grid-column: 1 / -1; }
+.form .field.is-wide { flex-basis: 100%; }
 /* A field shown only when another's value calls for it (app.js). The wrapper
    adds no box, so the fields inside keep their place in the grid. */
 .form [data-when]:not([hidden]) { display: contents; }
@@ -3155,7 +3318,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-endpoint {
   display: inline-block;
   overflow: hidden;
-  max-width: min(100%, 32ch);
+  max-width: min(100%, var(--identifier-max));
   text-overflow: ellipsis;
   vertical-align: bottom;
   white-space: nowrap;
@@ -3245,7 +3408,10 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-more { margin-top: var(--space-2); }
 .connection-more summary { color: var(--accent); cursor: pointer; font-size: var(--text-xs); }
 .connection-more[open] summary { margin-bottom: var(--space-2); }
+/* Each thing to do next keeps to one line: the column is as wide as its
+   longest, and the table gives the room from columns that can wrap. */
 .connection-next { min-width: 0; }
+.connection-next > :is(a, .btn) { white-space: nowrap; }
 .connection-next > .muted { display: block; max-width: 240px; margin-top: var(--space-2); font-size: var(--text-2xs); line-height: 1.35; }
 .connection-actions { margin-top: var(--space-3); }
 .connection-actions > summary { color: var(--accent); cursor: pointer; font-size: var(--text-xs); }
@@ -3525,21 +3691,22 @@ kbd {
 .notice-body { margin: 0 0 var(--space-10); color: var(--muted); line-height: 1.6; }
 .notice-page .page-actions { justify-content: center; display: flex; }
 
-@media (max-width: 640px) {
-  .connection-available li { display: grid; gap: var(--space-1); }
-
-  /* The cadence matrix drops its oldest periods rather than scrolling. A
-     sideways scrollbar under a five-column grid of dots is both ugly and
-     useless: the columns only mean anything lined up against each other, and
-     half of them parked off-screen are not lined up against anything. The
-     three most recent survive, which is the end of the row an eye goes to
-     first and the part a decision is made from; the full history is a tap away
-     on the page this panel links to.
-     Counted from the end, so it is "the last three" whatever the window
-     length happens to be, rather than a fixed set of column numbers. */
-  .cadence-matrix th:nth-child(n+2):nth-last-child(n+5),
-  .cadence-matrix td:nth-child(n+2):nth-last-child(n+5) { display: none; }
-}
+/* In a narrow box (tables.js marks it by the box's width, not the screen's)
+   the cadence matrix drops its oldest periods rather than scrolling. A
+   sideways scrollbar under a five-column grid of dots is both ugly and
+   useless: the columns only mean anything lined up against each other, and
+   half of them parked off-screen are not lined up against anything. The
+   three most recent survive, which is the end of the row an eye goes to
+   first and the part a decision is made from; the full history is a tap away
+   on the page this panel links to.
+   Counted from the end, so it is "the last three" whatever the window
+   length happens to be, rather than a fixed set of column numbers. */
+.cadence-matrix[data-narrow] th:nth-child(n+2):nth-last-child(n+5),
+.cadence-matrix[data-narrow] td:nth-child(n+2):nth-last-child(n+5) { display: none; }
+/* The "last trained" line is what pushes the label column past a narrow box.
+   The dots are the reading; the exact recency is on the split page. */
+.cadence-matrix[data-narrow] .cadence-detail { display: none; }
+.cadence-matrix[data-narrow] th, .cadence-matrix[data-narrow] td { padding: var(--space-3) var(--space-1); }
 
 /* ── Cadence strip ──────────────────────────────────────────────────
    Whether a thing happened, period by period. A filled mark is a period it
@@ -3590,12 +3757,6 @@ kbd {
 .cadence-matrix.is-compact .cadence-period { font-size: var(--text-3xs); }
 .cadence-matrix.is-compact th[scope="row"] { font-size: var(--text-sm); }
 .cadence-matrix.is-compact .cadence-detail { font-size: var(--text-3xs); }
-@media (max-width: 640px) {
-  /* The "last trained" line is what pushes the label column past a phone. The
-     dots are the reading; the exact recency is on the split page. */
-  .cadence-matrix .cadence-detail { display: none; }
-  .cadence-matrix th, .cadence-matrix td { padding: var(--space-3) var(--space-1); }
-}
 
 /* Tabbed charts. Several drawings of one thing in the space of one, built from
    radios so the panel works with no JavaScript and the arrow keys move between
@@ -3826,13 +3987,6 @@ kbd {
   .table-scroll { overflow: visible; }
   /* A heading pinned to a viewport that does not exist on paper. */
   .data-table thead th { position: static; box-shadow: none; }
-  /* The chart's scroller, unclipped. On paper there is nothing to scroll,
-     and a clipping box that a page break lands inside prints empty. */
-  .chart-scroll {
-    overflow: visible !important;
-    margin-inline: 0 !important;
-    padding-inline: 0 !important;
-  }
 
   /* Disclosures print closed, silently dropping their contents, and those
      are the numbers behind every drawing. */
@@ -3986,16 +4140,11 @@ kbd {
 .modal .filter-bar .control-label { margin: 0 var(--space-1) 0 0; }
 /* ── Row-header tables ──────────────────────────────────────────────
    A `th[scope=row]` table with no `thead` is a description list in table
-   markup, and fixed layout holds every one to the same grid.
-
-   `:not(:has(thead))` is load-bearing: the cadence matrix also uses row
-   headers but is a real grid and must size its own columns. */
-.data-table:has(th[scope=row]):not(:has(thead)) { table-layout: fixed; }
-/* In viewport units, not %: a table cell ignores a percentage inside clamp(),
-   and fixed layout would then split the table in half. */
-.data-table th[scope=row] { width: clamp(7rem, 25vw, 180px); font-weight: 600; color: var(--muted); }
-/* Fixed layout means a value cannot widen its column, so it has to break. */
-.data-table:has(th[scope=row]):not(:has(thead)) td { overflow-wrap: anywhere; }
+   markup. Its label column is as wide as its longest label and no wider,
+   whatever the screen; the value takes the rest and breaks where it has to.
+   The cadence matrix also uses row headers but is a real grid and sizes its
+   own columns. */
+.data-table th[scope=row] { width: 1%; padding-right: var(--space-10); font-weight: 600; color: var(--muted); white-space: nowrap; }
 
 /* A long value the model puts no ceiling on: a policy document, a compose
    file. Monospace because it is structured text where alignment carries
@@ -4037,7 +4186,9 @@ textarea.code {
 .conn-badge-network .conn-dot, .conn-badge-loopback .conn-dot { background: var(--warn); }
 .conn-badge-elsewhere .conn-dot { background: var(--danger); }
 
-.conn { display: grid; gap: var(--space-10); }
+/* The panel is read in a dialog and on a page of its own, so what it does when
+   it is narrow is asked of the panel, not the screen. */
+.conn { display: grid; gap: var(--space-10); container: conn / inline-size; }
 .conn-pending { padding: var(--space-10) 0; }
 .conn h3 {
   font-size: var(--text-2xs); letter-spacing: .07em; text-transform: uppercase;
@@ -4227,7 +4378,7 @@ textarea.code {
   height: calc(var(--at) * 1%); min-height: 2px;
 }
 
-@media (max-width: 620px) {
+@container conn (max-width: 36rem) {
   .conn-cols { grid-template-columns: 1fr; }
   .conn-verdict { flex-wrap: wrap; }
   .conn-address { width: 100%; }
@@ -4266,7 +4417,7 @@ textarea.code {
 .conn-link-relayed .conn-link-label { color: var(--warn); }
 .conn-link-idle .conn-link-line { background: var(--line); }
 .conn-link-idle .conn-link-label, .conn-link-unknown .conn-link-label { color: var(--muted); }
-@media (max-width: 620px) {
+@container conn (max-width: 36rem) {
   /* Stacked, the two ends read as one column rather than as two facing each
      other, so they share an axis instead of one hugging each edge. */
   .conn-peering { grid-template-columns: 1fr; text-align: center; }
@@ -4379,48 +4530,8 @@ textarea.code {
 }
 .pin-move button:hover { color: var(--ink); }
 
-/* On a phone a wide table scrolls sideways inside `.table-scroll`. Squeezing
-   every column to fit stands each value up as a vertical strip, which is what
-   `width: 100%` plus `break-word` does, and it is unreadable. Sized to its
-   content the table overflows the wrapper that scrolls it, and the reader
-   swipes. It never stacks into cards: core/browser_tests.py holds that.
-
-   The exemptions sit immediately after the rule they exempt, which is what
-   makes them win: same layer, same specificity or better, later in source
-   order.
-
-   Below 1280px, not only on a phone: a table squeezed to a laptop's width
-   stands its values up as strips just as it does on a phone. */
-@media (max-width: 1279px) {
-  /* Content-sized but bounded: `max-content` is the width with no line
-     breaking at all, which for a prose column is its longest sentence on one
-     line. Past the cap the browser wraps what can wrap. The cap is a fixed
-     length: 1400px stops a prose column running to a four-screen swipe without
-     squeezing the other columns into strips. */
-  .table-scroll .data-table {
-    width: max-content;
-    min-width: 100%;
-    max-width: 1400px;
-  }
-  .table-scroll .data-table td,
-  .table-scroll .data-table th { overflow-wrap: normal; }
-  /* An empty table has no content to size to, so the header row would size it.
-     The headings wait until there is something to head. */
-  .table-scroll .data-table:not(:has(tbody td:not([colspan]))) {
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-  }
-  .data-table:not(:has(tbody td:not([colspan]))) thead { display: none; }
-  /* A row-header table has no columns to align. Later in source order at
-     higher specificity, which is what makes this an exemption. */
-  .table-scroll .data-table:has(th[scope=row]):not(:has(thead)) {
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-  }
-  .table-scroll .data-table:has(th[scope=row]):not(:has(thead)) td { overflow-wrap: anywhere; }
-}
+/* An empty table has nothing to head: the headings wait until there is. */
+.data-table:not(:has(tbody td:not([colspan]))) thead { display: none; }
 
 /* ----- Provider readings ------------------------------------------------ */
 
@@ -4471,8 +4582,8 @@ textarea.code {
 .topology-hop { display: flex; align-items: center; gap: var(--space-3); }
 
 .topology-workspace {
-    background: var(--surface-2);
-   overflow: hidden;
+  background: var(--surface-2);
+  overflow: hidden;
 }
 .topology-toolbar {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-8);
@@ -4496,6 +4607,9 @@ textarea.code {
 /* The map and the selected node's details. The details sit beside the lanes
    where there is room and below them where there is not; never in a lane. */
 .topology-stage { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+/* A viewport query, not a container one: the workspace holds buttons, and
+   inside a size container Chrome restyles them once the container is measured
+   and runs their transitions from nothing (docs/DESIGN.md). */
 @media (min-width: 1180px) {
   .topology-stage.has-detail { grid-template-columns: minmax(0, 1fr) minmax(320px, 34%); }
   .topology-stage.has-detail .topology-detail {
@@ -4686,19 +4800,16 @@ textarea.code {
    form and result line up across every card in the row no matter how the
    prose wraps, at any width, without anyone measuring text.
 
-   Only once the cards are actually side by side. Stacked in one column there
-   is nothing to align to, and spanning three parent rows there would overlap
-   them. */
+   Stacked in one column it holds as well: each card takes the next three
+   rows, which then belong to it alone, so no width has to be asked. */
 @supports (grid-template-rows: subgrid) {
-  @media (min-width: 760px) {
-    .lookup-grid { grid-template-rows: auto auto auto; }
-    /* No result yet in either card: two rows, not a third holding nothing. */
-    .lookup-grid:not(:has(.tool-result)) { grid-template-rows: auto auto; }
-    .lookup-grid:not(:has(.tool-result)) > .card { grid-row: span 2; }
-    .lookup-grid > .card {
-      display: grid; grid-row: span 3; grid-template-rows: subgrid;
-      align-content: start;
-    }
+  .lookup-grid { grid-template-rows: auto auto auto; }
+  /* No result yet in either card: two rows, not a third holding nothing. */
+  .lookup-grid:not(:has(.tool-result)) { grid-template-rows: auto auto; }
+  .lookup-grid:not(:has(.tool-result)) > .card { grid-row: span 2; }
+  .lookup-grid > .card {
+    display: grid; grid-row: span 3; grid-template-rows: subgrid;
+    align-content: start;
   }
 }
 
@@ -4822,6 +4933,56 @@ form[data-clean] .save-bar { display: none; }
 .dash-status { margin: 0; color: var(--muted); font-size: var(--text-md); }
 .dash-status a { color: var(--ink-2); }
 .dash-status strong { color: var(--accent); font-variant-numeric: tabular-nums; }
+/* What a page says while its own readings are being read, and once they are
+   in: one quiet line, never a banner. */
+.visit-status { margin: 0 0 var(--space-5); color: var(--muted); font-size: var(--text-xs); }
+/* The dashboard's readings: how this request arrived, whether the controller
+   still is, and what the estate reports. One row of equals: the same mark, the
+   same lead and the same quiet line under it, spaced rather than ruled apart,
+   since a rule between two that have wrapped onto different lines divides
+   nothing.
+
+   The row asks its own width what it can show, never the window's. With room
+   it is one line at the right of the greeting. Without, the readings pair up,
+   two to a line, and on a phone the connection keeps its name and its verdict
+   and drops the line between: how it arrived is one tap away.
+
+   It is a layer of its own so that a panel's popover opens over the cards
+   below it; a container is otherwise painted beneath what follows it. */
+.dash-head > .dash-hello { flex: 0 1 auto; }
+.dash-readings { position: relative; z-index: 2; display: flex; flex-wrap: wrap; align-items: flex-start; flex: 1 1 22rem; min-width: 0; container-type: inline-size; }
+.dash-readings :is(.dash-reading, .glance-panel) { flex: 1 1 50%; min-width: 0; }
+.dash-readings .glance-panel-head { padding-inline: var(--space-3); }
+/* One shape for all of them, so they line up: the lead on a line of one
+   height, in one size and one colour, with the mark beside that line rather
+   than centred on however many lines the reading happens to have (it keeps
+   its own column for the whole reading, so nothing is ever set under it); then the
+   quiet lines, which start level because the leads do. A reading that is
+   empty or out of date says so in the line under its lead, not by being
+   smaller or greyer than its neighbours. */
+.dash-readings .glance-symbol { align-self: start; margin-top: var(--space-1); }
+.dash-readings .glance-panel-head > :not(.glance-symbol) { grid-column: 2; }
+.dash-readings .glance-lead { display: flex; align-items: baseline; gap: var(--space-3); min-height: 26px; color: var(--muted); line-height: 1; }
+.dash-readings .glance-lead :is(strong, .conn-dot) { align-self: center; }
+.dash-readings .glance-lead strong,
+.dash-readings .glance-lead-empty { color: var(--ink); font-size: var(--text-4xl); font-weight: 650; line-height: 1.15; letter-spacing: -.01em; }
+.dash-reading { color: inherit; }
+.dash-reading:hover { color: inherit; text-decoration: none; }
+.dash-reading .glance-caption { overflow: hidden; text-overflow: ellipsis; }
+.dash-connection .glance-caption { display: none; }
+.dash-controller.is-silent .glance-caption { color: var(--attn); font-weight: 650; }
+.dash-controller.is-arriving .conn-dot { background: var(--ok); }
+.dash-controller.is-silent .conn-dot { background: var(--attn); }
+@container (min-width: 440px) {
+  .dash-connection .glance-caption { display: flex; }
+}
+@container (min-width: 900px) {
+  .dash-readings :is(.dash-reading, .glance-panel) { flex: 0 1 auto; }
+  .dash-readings > :first-child { margin-left: auto; }
+  .dash-readings .glance-panel-head { padding-inline: var(--space-7); }
+}
+.dash-connection-checks { color: var(--muted-2); font-size: var(--text-3xs); white-space: nowrap; }
+.dash-connection-checks.is-attention { color: var(--attn); font-weight: 650; }
 .dash-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: var(--layout-gap); margin-bottom: var(--stack-gap); }
 .dash-row > .card, .dash-cell > .card { display: flex; flex-direction: column; min-width: 0; margin: 0; }
 .dash-cell { display: contents; }
@@ -5050,7 +5211,68 @@ form[data-clean] .save-bar { display: none; }
     gap: var(--space-6) var(--space-7);
     background: none;
   }
-  :is(.card, .highlight-card) > .kpi-grid > .kpi { padding: 0; background: none; box-shadow: none; }
+  /* A row of stats shares its lines. Each stat takes the row's three tracks
+     (label, value, note), so the labels start level and the values stand
+     level, however many lines one label wraps to. */
+  :is(.card, .highlight-card) > .kpi-grid > .kpi {
+    padding: 0;
+    background: none;
+    box-shadow: none;
+    display: grid;
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+    row-gap: var(--space-2);
+  }
+  /* What a figure looks like, beside it: dots for a part of a whole, a line
+     for a direction. A filled dot is solid and an empty one is a ring, so the
+     count does not rest on colour. The line takes the room the value leaves
+     and is drawn only in a card wide enough to give it some. */
+  .kpi-figure { display: flex; align-items: center; gap: var(--space-5); min-width: 0; }
+  .kpi-dots { display: inline-flex; flex-wrap: wrap; gap: var(--space-3); }
+  /* More than fit beside a value in a narrow column are set in two even rows,
+     filled column by column, rather than left to break wherever the column ends. */
+  .kpi-dots:has(> :nth-child(7)) { display: inline-grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); }
+  .kpi-dot { position: relative; display: block; width: 9px; height: 9px; border: 1.5px solid var(--muted-2); border-radius: 50%; }
+  .kpi-dot.is-filled { border-color: var(--ok); background: var(--ok); }
+  /* A dot that leads somewhere is aimed at through a larger target than it draws. */
+  a.kpi-dot::after { content: ""; position: absolute; inset: -7px -3px; }
+  a.kpi-dot:hover, a.kpi-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .kpi a.value { color: inherit; text-decoration: none; }
+  .kpi a.value:hover { text-decoration: underline; }
+  .kpi-trend { display: none; flex: 1 1 0; min-width: 0; max-width: 260px; height: 28px; margin-left: auto; overflow: visible; }
+  .kpi-trend polyline { fill: none; stroke: var(--accent); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+  .kpi-trend-hit { fill: transparent; }
+  .kpi-trend-dot { stroke: var(--accent); stroke-width: 7; stroke-linecap: round; vector-effect: non-scaling-stroke; opacity: 0; pointer-events: none; }
+  .kpi-trend-dot.is-latest, .kpi-trend-hit:hover + .kpi-trend-dot { opacity: 1; }
+  .kpi-grid.is-featured > :first-child .kpi-trend { height: 40px; }
+  @container (min-width: 340px) {
+    .kpi-trend { display: block; }
+  }
+
+  /* The contributor's first of four figures leads the overview. The same
+     values and links appear once; supporting facts form a compact second row. */
+  .kpi-grid.is-featured .value { color: var(--accent); }
+  .kpi-grid.is-featured > .kpi { gap: var(--space-3); }
+  .kpi-grid.is-featured:has(> :nth-child(4):last-child) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-content: start;
+    row-gap: var(--space-10);
+  }
+  .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child {
+    grid-column: 1 / -1;
+    padding-bottom: var(--space-8);
+    border-bottom: 1px solid var(--line-2);
+  }
+  .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child .value {
+    font-size: var(--text-display);
+    letter-spacing: -.04em;
+    overflow-wrap: anywhere;
+  }
+  .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :not(:first-child) .value {
+    font-size: var(--text-2xl);
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
 
   /* The last thing in a card ends the card: its own bottom margin would be
      dead space inside the card's padding. */
@@ -5108,7 +5330,7 @@ form[data-clean] .save-bar { display: none; }
      when open. */
   .row-expand {
     display: inline-grid; place-items: center;
-    width: 1.5rem; height: 1.5rem; min-height: 0; padding: 0; margin: 0 var(--space-2) 0 calc(-1 * var(--space-2));
+    width: 1.5rem; height: 1.5rem; min-height: 0; padding: 0; margin: 0;
     border: 0; border-radius: var(--radius-sm); background: none; box-shadow: none;
     color: var(--muted); font-size: var(--text-sm); line-height: 1; cursor: pointer;
     vertical-align: middle;

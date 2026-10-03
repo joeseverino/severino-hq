@@ -16,6 +16,45 @@ register = template.Library()
 POST_FORM_ID = "hq-post"
 
 
+@register.filter
+def row_value(item):
+    """``{{ item|row_value }}``: what a queue row's own button names, from its one owner."""
+    from application.action_items import row_value as named
+
+    return named(item)
+
+
+@register.filter
+def decision(item):
+    from application.decisions import decision as present
+
+    return present(item)
+
+
+@register.filter
+def queue_entries(entries):
+    """Keep the SDK attention include on the queue's single projection."""
+    from application.dashboard import queue_item
+
+    return [queue_item(entry.get("source_id", ""), entry["source"], entry["item"])
+            for entry in entries]
+
+
+@register.filter
+def workflow_action(action):
+    """An emitted ActionLink uses the same renderer as a page action."""
+    from dataclasses import asdict, is_dataclass
+
+    from application.pages import PageAction
+
+    values = asdict(action) if is_dataclass(action) else action
+    return PageAction(
+        values["label"], values["url"], method=values["method"].lower(),
+        primary=values.get("recommended", False),
+        danger=values.get("effect") == "destructive", title=values.get("reason", ""),
+    )
+
+
 @register.simple_tag
 def post_button(label, url, *, name="action", value="", css="btn", title="", disabled=False):
     attributes = {"name": name, "value": value, "title": title, "aria-label": title}

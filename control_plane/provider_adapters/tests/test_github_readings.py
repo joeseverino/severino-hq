@@ -279,7 +279,12 @@ class SweepTokenTests(SimpleTestCase):
         self.assertEqual(hub.count("mint"), 1 + len(FLEET))
         self.assertEqual(hub.count("lookup"), 0)
         scoped = [grant for grant in hub.minted if "repositories" in grant]
-        self.assertEqual([grant["repositories"] for grant in scoped], [[name.split("/")[1]] for name in FLEET])
+        # Repositories are read a few at once, so the records come back in the
+        # installation's order and the tokens are minted in whichever order
+        # the reads began.
+        self.assertEqual(
+            sorted(grant["repositories"] for grant in scoped), [[name.split("/")[1]] for name in FLEET]
+        )
         self.assertTrue(all(grant["permissions"] == github_readings.READ for grant in scoped))
 
     def test_without_the_snapshot_the_same_reading_mints_per_call(self):

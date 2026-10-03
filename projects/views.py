@@ -55,7 +55,7 @@ class ProjectListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     table_columns = (
         TableColumn("Name", "name"),
         TableColumn("Category", "category"),
-        TableColumn("Status", "status"),
+        TableColumn("Status", "status", css="key-col"),
         TableColumn("Tech", "technologies_used"),
         TableColumn("Updated", "updated_at"),
         TableColumn("", css="row-actions"),

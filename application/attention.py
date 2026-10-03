@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 
 from django.db.models import Count, Q
-from django.urls import reverse
+from application.routes import reverse
 
 from assets.models import Asset
 from contacts import inbox
@@ -31,7 +31,7 @@ from receipts.models import Receipt
 
 from .entity_links import entity_link
 from .estate import subject_link
-from .findings import derive_findings
+from .findings import derive_findings, rule_for
 from .infrastructure import enabled_resources, resource_health
 from .item_help import cannot_help, commands, finding_plan, remedy_link
 from .projection import read_once
@@ -283,6 +283,7 @@ def tailnet() -> tuple[Insight, ...]:
             Insight(
                 status="serious" if days <= KEY_EXPIRY_SERIOUS_DAYS else "attention",
                 eyebrow="Tailnet",
+                family="Tailnet key expiry",
                 key=f"tailnet-expiry:{name}",
                 title=(
                     f"{name} leaves the tailnet in {days} days"
@@ -316,6 +317,7 @@ def tailnet() -> tuple[Insight, ...]:
             Insight(
                 status="serious",
                 eyebrow="Tailnet",
+                family="Tailnet lock",
                 key=f"tailnet-locked-out:{name}",
                 title=f"{name} is locked out of the tailnet",
                 value="1",
@@ -335,6 +337,7 @@ def tailnet() -> tuple[Insight, ...]:
                 Insight(
                     status="serious",
                     eyebrow="Tailnet",
+                    family="Tailnet devices awaiting approval",
                     key=f"tailnet-unauthorized:{name}",
                     title=f"{name} is waiting for tailnet approval",
                     value="1",
@@ -354,6 +357,7 @@ def tailnet() -> tuple[Insight, ...]:
                 Insight(
                     status="serious",
                     eyebrow="Tailnet",
+                    family="Tailnet lock",
                     key=f"tailnet-lock-unsigned:{name}",
                     title=f"{name} is not signed for tailnet lock",
                     value="1",
@@ -372,6 +376,7 @@ def tailnet() -> tuple[Insight, ...]:
                 Insight(
                     status="attention",
                     eyebrow="Tailnet",
+                    family="Tailscale updates",
                     key=f"tailnet-update:{name}",
                     title=f"Tailscale update available for {name}",
                     value="1",
@@ -393,6 +398,7 @@ def tailnet() -> tuple[Insight, ...]:
             Insight(
                 status="attention",
                 eyebrow="Tailnet",
+                family="Tailnet routes",
                 key=f"tailnet-routes:{name}",
                 title=(
                     f"{name} advertises "
@@ -489,12 +495,15 @@ def infrastructure() -> tuple[Insight, ...]:
     )
     nodes = {node.id: node for node in topology.nodes}
     # One item per finding, so each can be read, acted on and resolved on its
-    # own. Grouping is the page's job, not the queue's.
+    # own. Folding them is the page's job; each says which family it is of.
     findings_url = reverse("control_plane:findings")
     items = [
         Insight(
             status=_FINDING_STATUS.get(finding.severity, "attention"),
             eyebrow="Finding",
+            # A rule's findings are one kind of matter, named as the rule
+            # names itself.
+            family=getattr(rule_for(finding.rule), "title", ""),
             key=f"finding:{finding.rule}:{finding.subject or finding.scope}",
             title=finding.title,
             value="",

@@ -578,13 +578,21 @@ class GlanceRenderingTests(TestCase):
 
         self.assertEqual(weather["readings"], ())
 
-    def test_empty_text_comes_from_the_spec(self):
+    def test_no_machine_draws_no_machine_reading_unless_it_is_the_only_way_in(self):
         DashboardMachine.objects.all().delete()
         spec = panel_specs()[0]
 
-        panel = next(p for p in dashboard_panels() if p["id"] == "infrastructure")
+        # Another reading is there: the dashboard carries no empty placeholder.
+        self.assertNotIn("infrastructure", [panel["id"] for panel in dashboard_panels()])
 
-        self.assertEqual((panel["label"], panel["empty"]), (spec.label, spec.empty))
+        # Nothing else is: the placeholder is how readings get chosen, and its
+        # words come from the spec.
+        with patch("application.glance.panel_specs", return_value=(spec,)):
+            (panel,) = dashboard_panels()
+        self.assertEqual(
+            (panel["id"], panel["label"], panel["empty"]),
+            ("infrastructure", spec.label, spec.empty),
+        )
 
     def test_the_settings_page_holds_the_form_and_its_placeholder_is_not_a_coordinate(self):
         self.client.force_login(get_user_model().objects.create_user("glance-settings"))

@@ -24,7 +24,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db.models import Count, Q, Sum
-from django.urls import reverse
+from application.routes import reverse
 from django.utils import timezone
 
 from content.models import ContentItem

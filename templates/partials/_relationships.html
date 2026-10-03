@@ -19,20 +19,20 @@
   </div>
   <div class="table-scroll">
     <table class="data-table compact-table relationship-table">
-      <tbody>
         {% for group in relationships.groups %}
+        <tbody>
           {% for item in group.items %}
             <tr>
               {% if forloop.first %}<th scope="rowgroup" rowspan="{{ group.items|length }}">{{ group.phrase }}</th>{% endif %}
               <td>{% entity item.entity %}{% if item.entity.detail %} <span class="muted">{{ item.entity.detail }}</span>{% endif %}</td>
               <td class="muted">
-                {% if item.source %}via {% entity item.source %}{% endif %}{% if item.source and item.observed_at %} · {% endif %}{% if item.observed_at %}<time datetime="{{ item.observed_at.isoformat }}">read {{ item.observed_at|ago_short }}</time>{% endif %}
+                {% if item.source %}via {% entity item.source %}{% endif %}{% if item.source and item.observed_at %} · {% endif %}{% if item.observed_at %}read {{ item.observed_at|when:"ago" }}{% endif %}
                 {% if item.stale %}<span class="pill pill-attention">Stale</span>{% endif %}
               </td>
             </tr>
           {% endfor %}
+        </tbody>
         {% endfor %}
-      </tbody>
     </table>
   </div>
   {% endif %}

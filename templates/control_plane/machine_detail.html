@@ -1,5 +1,6 @@
 {% extends "page.html" %}
 {% block page %}
+{% include "partials/_visit_refresh.html" with subject="machine" name=machine.name %}
 <p class="muted">
       {% comment %}
       One state, as on the list. Presence decides when the tailnet reports the
