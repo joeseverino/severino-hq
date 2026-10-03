@@ -22,6 +22,8 @@
 #   - The data is the running container's writable mounts, from Docker.
 #
 # The steps:
+#   0. check what runs, and that the override takes the pin and compose reads
+#      it from there, before anything is stopped;
 #   1. pull the target by digest;
 #   2. stop the service and snapshot its data (so the snapshot is consistent);
 #   3. run the target from the service's own compose definition, as
@@ -249,6 +251,12 @@ service_image() {
     '
 }
 
+# The image compose gives the service with $1 standing in for the override.
+pinned_image() (
+    override="$1"
+    service_image
+)
+
 # Running, healthy or with no health check, and not restarted, for SETTLE
 # seconds across at least two readings, within the wait. A restart starts the
 # window again, so a crash loop never finishes it.
@@ -386,6 +394,9 @@ edit_override() {
         # The name as a pattern: a dot in it is a dot.
         BEGIN { literal = service; gsub(/[.]/, "[.]", literal) }
         done || /^[ ]*(#.*)?$/ { print; next }
+        # A document written as one flow mapping, JSON among them, has no
+        # line this can add to.
+        !in_services && /^[ ]*[{[]/ { bad = 1; exit }
         !in_services {
             if (indent($0) == 0 && names($0, "services")) {
                 if (!bare($0, "services")) { bad = 1; exit }
@@ -478,6 +489,22 @@ live="$(only_container)" || { step check false "${service} is not exactly one ru
 [ "$(docker inspect -f '{{.Config.Image}}' "${live}")" = "${from}" ] \
     || { step check false "the running container is not ${from}"; finish refused 2; }
 read_data "${live}" || finish refused 2
+# The pin is written and proved here, while the service still runs: an
+# override this cannot edit, or one compose does not read the pin from, is
+# refused with nothing stopped.
+pinned="${state}/override.pinned"
+if [ -n "${override}" ]; then
+    cp -p "${override}" "${pinned}"
+    edit_override <"${override}" >"${pinned}" || pinned=""
+else
+    : >"${pinned}"
+    chmod 0644 "${pinned}"
+    edit_override </dev/null >"${pinned}" || pinned=""
+fi
+[ -n "${pinned}" ] \
+    || { step check false "the compose override is not block style YAML this can edit; nothing changed"; finish refused 2; }
+[ "$(pinned_image "${pinned}")" = "${to}" ] \
+    || { step check false "compose would not resolve the pin from the override; nothing changed"; finish refused 2; }
 step check true "${service} runs ${from}, with ${count} data mount(s)"
 
 # 1. Pull by digest.
@@ -552,22 +579,8 @@ step trial true "proven on a copy of the data, with no network"
 cleanup_trial
 
 # 4. Pin in the override, keeping a byte-exact copy and every other line.
-if [ -n "${override}" ]; then
-    cp -p "${override}" "${state}/override.before"
-    cp -p "${override}" "${pin_file}.hq-pin"
-    edited=yes
-    edit_override <"${state}/override.before" >"${pin_file}.hq-pin" || edited=no
-else
-    : >"${pin_file}.hq-pin"
-    chmod 0644 "${pin_file}.hq-pin"
-    edited=yes
-    edit_override </dev/null >"${pin_file}.hq-pin" || edited=no
-fi
-if [ "${edited}" = no ]; then
-    rm -f "${pin_file}.hq-pin"
-    step pin false "the compose override is not block style YAML this can edit; nothing changed"
-    unchanged
-fi
+[ -z "${override}" ] || cp -p "${override}" "${state}/override.before"
+cp -p "${pinned}" "${pin_file}.hq-pin"
 phase=pinned
 mv "${pin_file}.hq-pin" "${pin_file}"
 override="${pin_file}"
