@@ -2,85 +2,49 @@
 
 from __future__ import annotations
 
+import secrets
+from collections.abc import Callable
 from dataclasses import replace
-
 from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from pydantic import TypeAdapter, ValidationError as PydanticValidationError
+from pydantic import TypeAdapter
+from pydantic import ValidationError as PydanticValidationError
 
-from control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from core.audit import audit_connection
 
-from .labels import human_label
-from .policy_fixes import request_empty_groups_removal
-from .tailnet import POLICY_KIND as TAILNET_POLICY_KIND, TAILNET_KIND
-from .assets import AssetCommand, save_asset, upsert_asset
-from .content import ContentCommand, save_content
-from .contact_submissions import (
-    ContactDeleteCommand,
-    ContactListCommand,
-    ContactReviewCommand,
-    execute_contact_delete,
-    execute_contact_list,
-    execute_contact_review,
+from .approvals import RefusedHold, hold_for_approval
+from .capability_policy import Rule, decide
+from .denials import record_denial
+from .idempotency import (
+    IdempotencyConflict,
+    InvalidIdempotencyKey,
+    execute_once,
+    request_fingerprint,
+    validate_key,
 )
-from .cadence import ControllerSweepCommand, request_controller_sweep
-from .deletion import (
-    DeleteCommand,
-    delete_asset,
-    delete_content,
-    delete_documentation,
-    delete_expense,
-    delete_project,
-    delete_receipt,
-)
-from .documentation import (
-    DocumentationCommand,
-    DocumentationSyncCommand,
-    execute_documentation_sync,
-    save_documentation,
-)
-from .expenses import ExpenseCommand, save_expense
 from .input_errors import (
     Refusal,
     django_refusal,
     pydantic_refusal,
     unknown_field_errors,
 )
-from .infrastructure import ManagedResourceCommand, save_managed_resource
-from .resource_operations import (
-    accept_observed,
-    OperationCommand,
-    request_certificate_renewal,
-    request_reach_allow,
-    request_route_approval,
-    request_reconcile,
-    request_removal,
+from .integration_specs import (
+    IDEMPOTENCY_FIELD,
+    TARGET_KINDS,
+    CapabilitySpec,
+    capability_schema,
+    declares_idempotency_key,
 )
-from .approvals import RefusedHold, hold_for_approval
-from .capability_policy import Rule, decide
-from .denials import record_denial
-from .integration_specs import TARGET_KINDS, CapabilitySpec, command_schema
-from .lookup import (
-    AddressCommand,
-    NameCommand,
-    look_up_address,
-    look_up_name,
-)
-from .projects import (
-    ProjectCommand,
-    ProjectRefreshCommand,
-    execute_project_refresh,
-    save_project,
-    upsert_project,
-)
-from .receipts import ReceiptMetadataCommand, update_receipt
 from .integrations import integration_graph
-from .security import AuthorizationError, Capability, PolicyDenied, Principal, require_all
-from .registry_import import REQUIRED_CAPABILITIES as IMPORT_CAPABILITIES
-from .registry_import import HQImportCommand, execute_hq_import
-from .sync import HQSyncCommand, execute_hq_sync
+from .labels import human_label
+from .security import (
+    AuthorizationError,
+    Capability,
+    PolicyDenied,
+    Principal,
+    require_all,
+)
 
 
 class _UnusableTarget(Exception):
@@ -106,543 +70,6 @@ def capability_title(name: str) -> str:
 
     spec = capability_registry().get(name)
     return spec.title if spec else human_label(name)
-
-
-CORE_CAPABILITY_SPECS = (
-    CapabilitySpec(
-        "hq.sync",
-        "Atomically synchronize the vault manifest into HQ.",
-        "remote_write",
-        # Documentation authority alone, so an account allowed to sync docs
-        # needs no control-plane authority.
-        Capability.SYNC_DOCUMENTATION,
-        HQSyncCommand,
-        execute_hq_sync,
-        subject_resource="documentation",
-        label="Sync the vault",
-    ),
-    CapabilitySpec(
-        "hq.import",
-        "Atomically import one document of projects and assets, by slug.",
-        "remote_write",
-        # The capabilities of the upserts it runs, both of them.
-        IMPORT_CAPABILITIES,
-        HQImportCommand,
-        execute_hq_import,
-        subject_resource="projects",
-        execution_notes=(
-            "Validate every record before writing any.",
-            "Upsert each record through project.upsert or asset.upsert, in one transaction.",
-            "Keep a stored derived field that differs, and report it.",
-            "Record one audit event per record and one for the import.",
-        ),
-        label="Import projects and assets",
-    ),
-    CapabilitySpec(
-        "project.create",
-        "Create an HQ project.",
-        "remote_write",
-        Capability.WRITE_PROJECTS,
-        ProjectCommand,
-        save_project,
-        subject_resource="projects",
-        label="Create project",
-    ),
-    CapabilitySpec(
-        "project.upsert",
-        "Idempotently create or update an HQ project by slug.",
-        "remote_write",
-        Capability.WRITE_PROJECTS,
-        ProjectCommand,
-        upsert_project,
-        subject_resource="projects",
-        label="Create or update project",
-    ),
-    CapabilitySpec(
-        "project.update",
-        "Update an HQ project.",
-        "remote_write",
-        Capability.WRITE_PROJECTS,
-        ProjectCommand,
-        save_project,
-        "slug",
-        "projects",
-        target_label="Project slug",
-        target_help="The project to update.",
-        label="Update project",
-    ),
-    CapabilitySpec(
-        "project.refresh",
-        "Refresh a project's GitHub and published-content metadata.",
-        "remote_write",
-        Capability.WRITE_PROJECTS,
-        ProjectRefreshCommand,
-        execute_project_refresh,
-        "slug",
-        "projects",
-        target_label="Project slug",
-        target_help="The project whose external metadata to refresh.",
-        execution_notes=(
-            "Read the selected project's registered repository URL.",
-            "Where the GitHub App reads the repository, ask the controller to read that "
-            "connection now, through infrastructure.controller.refresh.",
-            "For a repository the App does not read, read its last push from GitHub's "
-            "public API, which needs no credential.",
-            "Persist the observed timestamp and attribute the refresh to this operator.",
-        ),
-        label="Refresh project metadata",
-    ),
-    CapabilitySpec(
-        "contact.submissions.list",
-        "List contact submissions held in Cloudflare D1.",
-        "read",
-        Capability.MANAGE_CONTACTS,
-        ContactListCommand,
-        execute_contact_list,
-        subject_resource="contact.submissions",
-        execution_notes=(
-            "Validate the requested status and result bound locally.",
-            "Read submissions through the configured D1 connection.",
-            "Return only the requested bounded result set.",
-        ),
-        label="List contact submissions",
-    ),
-    CapabilitySpec(
-        "contact.submission.review",
-        "Review and update one contact submission in Cloudflare D1.",
-        "remote_write",
-        Capability.MANAGE_CONTACTS,
-        ContactReviewCommand,
-        execute_contact_review,
-        "integer",
-        "contact.submissions",
-        target_label="Submission ID",
-        target_help="The contact submission to review.",
-        execution_notes=(
-            "Read the selected submission and validate its new review state.",
-            "Write the review fields through the configured D1 connection.",
-            "Record the attributed change in HQ's audit log.",
-        ),
-        label="Review contact submission",
-    ),
-    CapabilitySpec(
-        "contact.submission.delete",
-        "Delete one explicitly confirmed contact submission from Cloudflare D1.",
-        "destructive",
-        Capability.MANAGE_CONTACTS,
-        ContactDeleteCommand,
-        execute_contact_delete,
-        "integer",
-        "contact.submissions",
-        target_label="Submission ID",
-        target_help="The contact submission to delete.",
-        execution_notes=(
-            "Require confirmation that exactly matches the selected submission ID.",
-            "Delete the record through the configured D1 connection.",
-            "Treat an already-absent record as a successful retry and audit the change.",
-        ),
-        label="Delete contact submission",
-    ),
-    CapabilitySpec(
-        "asset.create",
-        "Create an HQ asset.",
-        "remote_write",
-        Capability.WRITE_ASSETS,
-        AssetCommand,
-        save_asset,
-        subject_resource="assets",
-        label="Create asset",
-    ),
-    CapabilitySpec(
-        "asset.upsert",
-        "Idempotently create or update an HQ asset by slug.",
-        "remote_write",
-        Capability.WRITE_ASSETS,
-        AssetCommand,
-        upsert_asset,
-        subject_resource="assets",
-        label="Create or update asset",
-    ),
-    CapabilitySpec(
-        "asset.update",
-        "Update an HQ asset.",
-        "remote_write",
-        Capability.WRITE_ASSETS,
-        AssetCommand,
-        save_asset,
-        "slug",
-        "assets",
-        target_label="Asset slug",
-        target_help="The asset to update.",
-        label="Update asset",
-    ),
-    CapabilitySpec(
-        "content.create",
-        "Create an HQ content item.",
-        "remote_write",
-        Capability.WRITE_CONTENT,
-        ContentCommand,
-        save_content,
-        subject_resource="content",
-        label="Create content",
-    ),
-    CapabilitySpec(
-        "content.update",
-        "Update an HQ content item.",
-        "remote_write",
-        Capability.WRITE_CONTENT,
-        ContentCommand,
-        save_content,
-        "slug",
-        "content",
-        target_label="Content slug",
-        target_help="The content item to update.",
-        label="Update content",
-    ),
-    CapabilitySpec(
-        "expense.create",
-        "Create an HQ expense.",
-        "remote_write",
-        Capability.WRITE_EXPENSES,
-        ExpenseCommand,
-        save_expense,
-        subject_resource="expenses",
-        label="Record expense",
-    ),
-    CapabilitySpec(
-        "expense.update",
-        "Update an HQ expense.",
-        "remote_write",
-        Capability.WRITE_EXPENSES,
-        ExpenseCommand,
-        save_expense,
-        "integer",
-        "expenses",
-        target_label="Expense ID",
-        target_help="The expense to update.",
-        label="Update expense",
-    ),
-    CapabilitySpec(
-        "documentation.create",
-        "Create an HQ documentation metadata record.",
-        "remote_write",
-        Capability.WRITE_DOCUMENTATION,
-        DocumentationCommand,
-        save_documentation,
-        subject_resource="documentation",
-        label="Create document",
-    ),
-    CapabilitySpec(
-        "documentation.update",
-        "Update an HQ documentation metadata record.",
-        "remote_write",
-        Capability.WRITE_DOCUMENTATION,
-        DocumentationCommand,
-        save_documentation,
-        "doc_id",
-        "documentation",
-        target_label="Document ID",
-        target_help="The documentation record to update.",
-        label="Update document",
-    ),
-    CapabilitySpec(
-        "documentation.sync",
-        "Synchronize a validated vault manifest into HQ.",
-        "remote_write",
-        Capability.SYNC_DOCUMENTATION,
-        DocumentationSyncCommand,
-        execute_documentation_sync,
-        subject_resource="documentation",
-        label="Sync documentation",
-    ),
-    CapabilitySpec(
-        "receipt.update",
-        "Update receipt metadata and relationships (never file bytes).",
-        "remote_write",
-        Capability.WRITE_RECEIPTS,
-        ReceiptMetadataCommand,
-        update_receipt,
-        "integer",
-        "receipts",
-        target_label="Receipt ID",
-        target_help="The receipt to update.",
-        label="Update receipt",
-    ),
-    CapabilitySpec(
-        "project.delete",
-        "Delete a confirmed project.",
-        "destructive",
-        Capability.DELETE_PROJECTS,
-        DeleteCommand,
-        delete_project,
-        "slug",
-        "projects",
-        target_label="Project slug",
-        target_help="The project to delete.",
-        label="Delete project",
-    ),
-    CapabilitySpec(
-        "asset.delete",
-        "Delete a confirmed asset.",
-        "destructive",
-        Capability.DELETE_ASSETS,
-        DeleteCommand,
-        delete_asset,
-        "slug",
-        "assets",
-        target_label="Asset slug",
-        target_help="The asset to delete.",
-        label="Delete asset",
-    ),
-    CapabilitySpec(
-        "content.delete",
-        "Delete confirmed content.",
-        "destructive",
-        Capability.DELETE_CONTENT,
-        DeleteCommand,
-        delete_content,
-        "slug",
-        "content",
-        target_label="Content slug",
-        target_help="The content item to delete.",
-        label="Delete content",
-    ),
-    CapabilitySpec(
-        "expense.delete",
-        "Delete a confirmed expense.",
-        "destructive",
-        Capability.DELETE_EXPENSES,
-        DeleteCommand,
-        delete_expense,
-        "integer",
-        "expenses",
-        target_label="Expense ID",
-        target_help="The expense to delete.",
-        label="Delete expense",
-    ),
-    CapabilitySpec(
-        "documentation.delete",
-        "Delete confirmed documentation metadata.",
-        "destructive",
-        Capability.DELETE_DOCUMENTATION,
-        DeleteCommand,
-        delete_documentation,
-        "doc_id",
-        "documentation",
-        target_label="Document ID",
-        target_help="The documentation record to delete.",
-        label="Delete document",
-    ),
-    CapabilitySpec(
-        "receipt.delete",
-        "Delete a confirmed receipt and its private file.",
-        "destructive",
-        Capability.DELETE_RECEIPTS,
-        DeleteCommand,
-        delete_receipt,
-        "integer",
-        "receipts",
-        target_label="Receipt ID",
-        target_help="The receipt to delete.",
-        label="Delete receipt",
-    ),
-    CapabilitySpec(
-        "infrastructure.resource.create",
-        "Declare a typed managed infrastructure resource.",
-        "remote_write",
-        Capability.MANAGE_INFRASTRUCTURE,
-        ManagedResourceCommand,
-        save_managed_resource,
-        subject_resource="infrastructure.resources",
-        label="Declare resource",
-    ),
-    CapabilitySpec(
-        "infrastructure.resource.update",
-        "Update a typed managed infrastructure resource.",
-        "remote_write",
-        Capability.MANAGE_INFRASTRUCTURE,
-        ManagedResourceCommand,
-        save_managed_resource,
-        "key",
-        "infrastructure.resources",
-        target_label="Resource key",
-        target_help="The managed infrastructure resource to update.",
-        target_initial_fields=("key", "kind", "spec", "enabled"),
-        label="Update resource",
-    ),
-    CapabilitySpec(
-        "infrastructure.resource.accept_observed",
-        "Copy what is live into HQ's record, keeping a change made outside HQ.",
-        "remote_write",
-        Capability.MANAGE_INFRASTRUCTURE,
-        OperationCommand,
-        accept_observed,
-        "key",
-        "infrastructure.resources",
-        target_label="Resource key",
-        target_help="The managed infrastructure resource whose live version to keep.",
-        label="Keep the live version",
-    ),
-    CapabilitySpec(
-        "infrastructure.reconcile",
-        "Queue reconciliation of one managed infrastructure resource.",
-        "infrastructure_change",
-        Capability.MANAGE_INFRASTRUCTURE,
-        OperationCommand,
-        request_reconcile,
-        "key",
-        "infrastructure.resources",
-        target_label="Resource key",
-        target_help="The managed infrastructure resource to reconcile.",
-        label="Reconcile resource",
-    ),
-    CapabilitySpec(
-        "infrastructure.controller.refresh",
-        "Wake the privileged controller to pull work and refresh due observations.",
-        "infrastructure_change",
-        Capability.MANAGE_INFRASTRUCTURE,
-        ControllerSweepCommand,
-        request_controller_sweep,
-        execution_notes=(
-            "Mark HQ active so the short observation cadence applies.",
-            "Ring the credential-free controller doorbell; no provider authority enters the web process.",
-            "The privileged controller pulls its own contract and refreshes only what HQ says is due.",
-        ),
-        label="Refresh controller readings",
-    ),
-    CapabilitySpec(
-        "infrastructure.resource.remove",
-        "Remove the record this declaration describes, then forget it.",
-        "destructive",
-        Capability.MANAGE_INFRASTRUCTURE,
-        OperationCommand,
-        request_removal,
-        "key",
-        "infrastructure.resources",
-        target_label="Resource key",
-        target_help="The managed infrastructure resource to remove.",
-        label="Remove resource",
-    ),
-    CapabilitySpec(
-        "tailnet.routes.approve",
-        "Approve the routes a tailnet device already advertises.",
-        "infrastructure_change",
-        Capability.MANAGE_INFRASTRUCTURE,
-        OperationCommand,
-        request_route_approval,
-        "key",
-        "infrastructure.resources",
-        target_label="Device key",
-        target_help="The tailnet device whose advertised routes to approve.",
-        target_query=(("kind", TAILNET_KIND),),
-        execution_notes=(
-            "Read what the device currently advertises and what is already approved.",
-            "Queue one approval for the controller; the API call runs outside this request.",
-            "Approve exactly the advertised set, so no route this was not about is withdrawn.",
-        ),
-        label="Approve subnet routes",
-    ),
-    CapabilitySpec(
-        "tailnet.reach.allow",
-        "Open a path the tailnet refuses that an observation says is needed.",
-        "infrastructure_change",
-        Capability.MANAGE_INFRASTRUCTURE,
-        OperationCommand,
-        request_reach_allow,
-        "key",
-        "infrastructure.resources",
-        target_label="Resource key",
-        target_help="The resource with a consumer the controller could not reach.",
-        # Scoped to what it acts on, not to what it changes. The amendment
-        # lands on the tailnet policy, but the thing an operator selects is the
-        # certificate whose consumer went unread: the same split that keeps
-        # `certificate.renew` off the tailnet ability.
-        target_query=(("kind", CERTIFICATE_KIND),),
-        execution_notes=(
-            "Read the addresses and ports the last reading could not reach.",
-            "Ask the policy whether it refuses each one, and keep only those it does.",
-            "Amend the tailnet policy, which is a gated kind: a person consents "
-            "before anything reaches the tailnet.",
-        ),
-        label="Allow tailnet reach",
-    ),
-    CapabilitySpec(
-        "tailnet.policy.remove_empty_groups",
-        "Remove the groups with no members that the tailnet policy still grants.",
-        "infrastructure_change",
-        Capability.MANAGE_INFRASTRUCTURE,
-        OperationCommand,
-        request_empty_groups_removal,
-        "key",
-        "infrastructure.resources",
-        target_label="Policy key",
-        target_help="The tailnet policy declaration to amend.",
-        target_query=(("kind", TAILNET_POLICY_KIND),),
-        execution_notes=(
-            "Read the declared policy and find the groups with no members that a rule names.",
-            "Refuse when such a group is named anywhere else, since removing it would "
-            "change what the policy means.",
-            "Strike them from their rules, dropping a rule left admitting nobody, and "
-            "propose the amended policy through the gated policy kind.",
-        ),
-        label="Remove empty groups",
-    ),
-    CapabilitySpec(
-        "certificate.renew",
-        "Request certificate renewal when policy allows it.",
-        "infrastructure_change",
-        Capability.REQUEST_CERTIFICATE_RENEWAL,
-        OperationCommand,
-        request_certificate_renewal,
-        "key",
-        "infrastructure.resources",
-        target_label="Certificate key",
-        target_help="The managed certificate to renew.",
-        target_query=(("kind", CERTIFICATE_KIND),),
-        execution_notes=(
-            "Read the selected certificate declaration and evaluate renewal policy.",
-            "Queue one renewal request for the controller; provider work runs outside this page request.",
-            "Return the queued operation and policy decision, attributed to this operator.",
-        ),
-        label="Renew certificate",
-    ),
-    # Capabilities that read something HQ does not hold. Both are `read`, so
-    # neither takes an idempotency key and neither writes: asking a
-    # registry the same question twice is the same question twice.
-    CapabilitySpec(
-        "lookup.name",
-        "Ask a public resolver what the internet returns for a hostname.",
-        "read",
-        Capability.LOOK_UP_PUBLIC_RECORDS,
-        NameCommand,
-        look_up_name,
-        execution_notes=(
-            "Validate the hostname before anything leaves this machine.",
-            "Ask one resolver outside this network, so internal rewrites cannot "
-            "answer a question about the public internet.",
-            "Return the records as the resolver gave them, with no TTL: this "
-            "provider reports a constant, which is not a measurement.",
-        ),
-        label="Look up a name",
-    ),
-    CapabilitySpec(
-        "lookup.address",
-        "Ask what name and which allocation a public address belongs to.",
-        "read",
-        Capability.LOOK_UP_PUBLIC_RECORDS,
-        AddressCommand,
-        look_up_address,
-        execution_notes=(
-            "Refuse a private address locally; nothing outside can describe it, "
-            "and asking would disclose it for no answer.",
-            "Read reverse DNS, which the address holder publishes and which "
-            "usually carries a brand name.",
-            "Read the RDAP allocation, which the registry publishes and which "
-            "carries the company. Either registry may fail without the other.",
-        ),
-        label="Look up an address",
-    ),
-)
 
 
 def capability_registry() -> dict[str, CapabilitySpec]:
@@ -680,7 +107,7 @@ def describe_capabilities() -> dict[str, Any]:
                 "execution_notes": list(spec.execution_notes),
                 "target_initial_fields": list(spec.target_initial_fields),
                 "resource": spec.subject_resource,
-                "input_schema": command_schema(spec.command_type),
+                "input_schema": capability_schema(spec),
             }
             for spec in integration_graph().capabilities.values()
         ],
@@ -717,18 +144,9 @@ def execute_capability(
         return refused
 
     try:
-        # Authority first, then the payload, then the target. A caller who may
-        # not run this at all is told exactly that, and learns nothing about
-        # what shape of target it would have taken.
-        authorize_capability(spec, principal)
-        _refuse_unknown_fields(spec, payload)
-        command: Any = TypeAdapter(spec.command_type).validate_python(payload)
-        held, principal = _consent(spec, name, payload, target, principal)
-        if held is not None:
-            return held
-        return _run(
+        return _authorized_run(
             spec,
-            command,
+            payload,
             principal=principal,
             target=target,
             expected_updated_at=expected_updated_at,
@@ -767,6 +185,105 @@ def execute_capability(
         # It can contain argument names, provider responses, paths, or values
         # from the request. The capability name is registry-owned and safe.
         return _error("operation_failed", f"{name} could not be executed.")
+
+
+def _authorized_run(
+    spec: CapabilitySpec,
+    payload: dict[str, Any],
+    *,
+    principal: Principal,
+    target: str | int | None,
+    expected_updated_at: str | None,
+) -> dict[str, Any]:
+    """Check authority, shape and consent, then run once under the caller's key."""
+
+    # Authority first, then the payload, then the target. A caller who may
+    # not run this at all is told exactly that, and learns nothing about
+    # what shape of target it would have taken.
+    authorize_capability(spec, principal)
+    _refuse_unknown_fields(spec, payload)
+    key, payload = _retry_key(spec, payload)
+    command: Any = TypeAdapter(spec.command_type).validate_python(payload)
+    # A held request has acted on nothing, so it is answered afresh each
+    # time: the same key runs the command once a person has agreed.
+    held, acting = _consent(spec, spec.name, payload, target, principal)
+    if held is not None:
+        return held
+
+    def act() -> dict[str, Any]:
+        return _run(
+            spec,
+            command,
+            principal=acting,
+            target=target,
+            expected_updated_at=expected_updated_at,
+        )
+
+    if not key:
+        return act()
+    try:
+        return _once(
+            spec,
+            key,
+            {"command": payload, "target": target, "expected_updated_at": expected_updated_at},
+            act,
+            actor=principal.actor,
+        )
+    except IdempotencyConflict:
+        return _error(
+            "idempotency_conflict",
+            f"This {IDEMPOTENCY_FIELD} was already used for a different request.",
+        )
+
+
+def _retry_key(spec: CapabilitySpec, payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """``(key, payload)``: the caller's retry key, and the payload its command reads.
+
+    The key is optional on every capability that takes one. A command type that
+    declares the field stores it with the operation it queues, so it receives
+    the caller's key, or a fresh one when the caller sent none. Any other
+    command never sees the field.
+    """
+
+    if spec.effect == "read" or not isinstance(payload, dict):
+        return "", payload
+    sent = payload.get(IDEMPOTENCY_FIELD)
+    try:
+        key = "" if sent is None else validate_key(sent)
+    except (InvalidIdempotencyKey, TypeError) as exc:
+        # Answered as any other field of the wrong shape is.
+        raise DjangoValidationError(
+            {IDEMPOTENCY_FIELD: "Must be 1-128 URL-safe characters."}
+        ) from exc
+    rest = {name: value for name, value in payload.items() if name != IDEMPOTENCY_FIELD}
+    if declares_idempotency_key(spec.command_type):
+        rest[IDEMPOTENCY_FIELD] = key or f"command:{secrets.token_urlsafe(18)}"
+    return key, rest
+
+
+def _once(
+    spec: CapabilitySpec,
+    key: str,
+    request: dict[str, Any],
+    act: Callable[[], dict[str, Any]],
+    *,
+    actor: str,
+) -> dict[str, Any]:
+    """Run ``act`` under the caller's key, or return what it returned the first time.
+
+    The key belongs to the actor and to one request: the same key with another
+    capability, target or payload is a conflict. A call that raises commits
+    nothing, so its key is free for the corrected request.
+    """
+
+    result, _status, _replayed = execute_once(
+        actor=actor,
+        key=key,
+        request_sha256=request_fingerprint(spec.name, request, api_version=2),
+        operation=lambda: (act(), 200),
+        scope="command",
+    )
+    return result
 
 
 def _target_refusal(
@@ -863,7 +380,7 @@ def _refuse_unknown_fields(spec: CapabilitySpec, payload: dict[str, Any]) -> Non
     # CapabilitySpec accepts host dataclasses and plugin StrictCommand models.
     # Their JSON Schema is already the shared adapter contract, so it is also
     # the single source of field names.
-    known = set(command_schema(spec.command_type).get("properties", {}))
+    known = set(capability_schema(spec).get("properties", {}))
     unknown = sorted(set(payload) - known)
     if unknown:
         raise _UnknownFields(unknown)

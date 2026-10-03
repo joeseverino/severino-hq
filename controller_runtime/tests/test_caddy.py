@@ -234,6 +234,20 @@ class CaddyRouteSweepTests(TestCase):
 
         self.assertEqual(self._routes(balanced)["ha.example.com"], "")
 
+    def test_the_same_upstream_named_twice_is_one_upstream(self):
+        """Two handlers forwarding to one address is still one answer."""
+
+        twice = {"apps": {"http": {"servers": {"srv0": {"routes": [{
+            "match": [{"host": ["app.example.com"]}],
+            "handle": [{"handler": "subroute", "routes": [
+                {"match": [{"path": ["/api/*"]}],
+                 "handle": [{"handler": "reverse_proxy", "upstreams": [{"dial": "app:8080"}]}]},
+                {"handle": [{"handler": "reverse_proxy", "upstreams": [{"dial": "app:8080"}]}]},
+            ]}],
+        }]}}}}}
+
+        self.assertEqual(self._routes(twice)["app.example.com"], "app:8080")
+
     def test_an_edge_that_refuses_the_operation_is_skipped_not_fatal(self):
         """Most SSH hosts are not an edge, and one down host is not a blackout."""
 
@@ -414,3 +428,62 @@ class CaddyDiscoveryByRoleTests(TestCase):
         caddy.inventory(runtime)
 
         self.assertEqual([ref for ref, _ in runtime.asked], ["edge", "other"])
+
+
+# An apex and its wildcard on one site, forwarded to whichever host was asked for.
+PASSED_THROUGH = {"apps": {"http": {"servers": {"srv0": {"listen": [":443"], "routes": [{
+    "match": [{"host": ["example.dev", "*.example.dev"]}],
+    "handle": [{"handler": "subroute", "routes": [{"handle": [{
+        "handler": "reverse_proxy",
+        "transport": {"protocol": "http", "tls": {}},
+        "upstreams": [{"dial": "{http.request.host}:443"}],
+    }]}]}],
+    "terminal": True,
+}]}}}}}
+
+
+class PlaceholderUpstreamTests(TestCase):
+    """A route whose upstream Caddy fills in per request, read as that."""
+
+    def setUp(self):
+        self.found = {record["domain"]: record for record in caddy.routes(PASSED_THROUGH, "an-edge")}
+
+    def test_a_wildcard_site_address_is_a_name_of_its_own(self):
+        self.assertEqual(sorted(self.found), ["*.example.dev", "example.dev"])
+
+    def test_the_placeholder_is_kept_as_caddy_holds_it(self):
+        for record in self.found.values():
+            with self.subTest(domain=record["domain"]):
+                self.assertEqual(record["upstream"], "{http.request.host}:443")
+                self.assertTrue(record["to_requested_host"])
+
+    def test_a_fixed_upstream_is_not_marked(self):
+        (record,) = caddy.routes(ADAPTED_CADDY, "an-edge")[:1]
+
+        self.assertEqual(record["upstream"], "uptime-kuma:3001")
+        self.assertFalse(record["to_requested_host"])
+
+    def test_a_placeholder_is_never_an_origin_to_resolve(self):
+        definition = caddy.DEFINITION
+        for record in self.found.values():
+            spec = definition.from_record(record)
+            with self.subTest(domain=record["domain"]):
+                self.assertEqual(spec["upstream"], "{http.request.host}:443")
+                self.assertEqual(definition.origin(spec), "")
+
+    def test_the_readout_says_where_requests_go(self):
+        spec = caddy.DEFINITION.from_record(self.found["example.dev"])
+
+        rows = dict((label, found) for label, _, found in caddy.DEFINITION.readout(spec, {}))
+
+        self.assertEqual(rows["Hands off to"], "the host each request names, on port 443")
+
+    def test_another_placeholder_is_decided_per_request_and_not_the_requested_host(self):
+        self.assertTrue(caddy.decided_per_request("{env.BACKEND}:8080"))
+        self.assertFalse(caddy.to_requested_host("{env.BACKEND}:8080"))
+        self.assertEqual(caddy.DEFINITION.origin({"upstream": "{env.BACKEND}:8080"}), "")
+        self.assertFalse(caddy.decided_per_request("app:8080"))
+
+    def test_a_placeholder_never_reaches_the_file_hq_writes(self):
+        with self.assertRaises(ProviderError):
+            caddy.render_routes([{"domain": "example.dev", "upstream": "{http.request.host}:443"}])

@@ -247,3 +247,70 @@ class StopManagingAnyKindTests(TestCase):
         adopt(AdoptCommand(kind=item.kind, token=item.token), principal=cli_principal())
         self.assertTrue(ManagedResource.objects.filter(kind="portainer.container").exists())
         self.assertFalse(NotManaged.objects.exists())
+
+
+class OperatorOwnedRouteTests(TestCase):
+    """A Caddy route no declaration accounts for is in the operator's own
+    Caddyfile: HQ shows it, and neither adopts it nor writes it."""
+
+    KIND = "caddy.route"
+    ROUTES = [
+        {"connection_ref": "example-edge", "domain": "example.dev",
+         "upstream": "{http.request.host}:443", "to_requested_host": True},
+        {"connection_ref": "example-edge", "domain": "*.example.dev",
+         "upstream": "{http.request.host}:443", "to_requested_host": True},
+        {"connection_ref": "example-edge", "domain": "status.example.com",
+         "upstream": "status:3001", "to_requested_host": False},
+    ]
+
+    def setUp(self):
+        connection("ssh", "example-edge")
+
+    def sweep(self):
+        return record_sweep(
+            {self.KIND: {"ok": True, "records": self.ROUTES}}, principal=cli_principal()
+        )
+
+    def test_a_sweep_through_a_managing_connection_adopts_none_of_them(self):
+        result = self.sweep()
+
+        self.assertEqual(result["adopted"], [])
+        self.assertFalse(ManagedResource.objects.filter(kind=self.KIND).exists())
+
+    def test_they_are_shown_as_observed(self):
+        self.sweep()
+
+        found = [item for item in unmanaged() if item.kind == self.KIND]
+
+        self.assertEqual(
+            sorted(item.hostname for item in found),
+            ["*.example.dev", "example.dev", "status.example.com"],
+        )
+        self.assertTrue(all(item.observed_only and not item.adoptable for item in found))
+
+    def test_adopting_one_by_hand_is_refused_and_says_whose_it_is(self):
+        self.sweep()
+
+        for item in [item for item in unmanaged() if item.kind == self.KIND]:
+            with self.subTest(hostname=item.hostname), self.assertRaises(PolicyError) as refused:
+                adopt(AdoptCommand(kind=item.kind, token=item.token), principal=cli_principal())
+            self.assertIn("edge's own Caddyfile", str(refused.exception))
+        self.assertFalse(ManagedResource.objects.filter(kind=self.KIND).exists())
+
+    def test_the_file_hq_writes_names_only_what_it_declares(self):
+        from ..infrastructure import resolved_spec
+        from control_plane.provider_adapters.caddy import render_routes
+
+        declared = ManagedResource.objects.create(
+            key="app-example-com-caddy", kind=self.KIND,
+            spec={"connection_ref": "example-edge", "domain": "app.example.com", "upstream": "app:8080"},
+        )
+        self.sweep()
+
+        resolved = resolved_spec(declared)
+        rendered = render_routes(resolved["routes"])
+
+        self.assertEqual([route["domain"] for route in resolved["routes"]], ["app.example.com"])
+        self.assertIn("app.example.com {", rendered)
+        for theirs in ("example.dev", "status.example.com", "http.request.host"):
+            self.assertNotIn(theirs, rendered)

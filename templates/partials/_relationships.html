@@ -21,6 +21,12 @@
     <table class="data-table compact-table relationship-table">
         {% for group in relationships.groups %}
         <tbody>
+          {% if group.bare %}
+            <tr>
+              <th scope="rowgroup">{{ group.phrase }}</th>
+              <td colspan="2">{% for item in group.items %}{% entity item.entity %}{% if not forloop.last %} · {% endif %}{% endfor %}</td>
+            </tr>
+          {% else %}
           {% for item in group.items %}
             <tr>
               {% if forloop.first %}<th scope="rowgroup" rowspan="{{ group.items|length }}">{{ group.phrase }}</th>{% endif %}
@@ -31,6 +37,7 @@
               </td>
             </tr>
           {% endfor %}
+          {% endif %}
         </tbody>
         {% endfor %}
     </table>

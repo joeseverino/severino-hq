@@ -1196,8 +1196,11 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 /* Two lines are reserved only when the pair sits side by side, so the drawings
    start level; a stacked card has no neighbour to line up with and reserves
    nothing. 656px is two 320px tracks and the 16px gap `.two-col` resolves to. */
+/* A calendar is not a plot: its legend comes between the caption and the
+   days, so nothing under its caption lines up with a neighbour's drawing and
+   a reserved line there is only a blank band. */
 @container pair (min-width: 656px) {
-  .chart-card figcaption p { min-height: calc(2 * 1.45em); }
+  .chart-card:not(.calendar-card) figcaption p { min-height: calc(2 * 1.45em); }
 }
 .chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-6); margin: var(--space-6) 0 var(--space-1); color: var(--muted); font-size: var(--text-xs); }
 .chart-legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
@@ -1694,7 +1697,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    stays, what is marked `narrow-more` waits in the line beneath the row. */
 .data-table[data-narrow] > tbody { --row-pad: var(--space-6); }
 .data-table[data-narrow] > tbody > tr:not(.row-detail) .narrow-more { display: none; }
-.table-scroll > .data-table[data-narrow] { --identifier-max: 22ch; }
+.table-scroll > .data-table:is([data-narrow], [data-snug]) { --identifier-max: 22ch; }
 /* A column held to a width that suits a wide table gives it back here, so
    the room goes to the column that names the row. */
 .data-table[data-narrow] .tight-col > * { min-width: 0; }

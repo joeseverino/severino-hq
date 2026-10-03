@@ -25,8 +25,7 @@ from pydantic import (
     model_validator,
 )
 
-from application.moments import when_day
-from application.ui import counted
+from application.moments import span, when_day
 
 from .names import in_zone
 from .observations.contract import ReadingPart
@@ -302,6 +301,12 @@ class ProviderSpec:
     # declarations that cannot be removed. Stated here rather than discovered
     # at the point somebody tries.
     removal_gap: str = ""
+    # Why a record a sweep found is never taken on, or "" when it may be.
+    #
+    # For a kind whose found records belong to something HQ reads and does not
+    # write. They are shown as observed, and neither a sweep nor a person
+    # adopts one.
+    adoption_gap: str = ""
     # The page a resource of this kind lives on, when it has one of its own.
     home: Callable[[Any], str] | None = None
     # The provider console page for a swept record, built only from ids the
@@ -532,7 +537,7 @@ def expiry_phrase(stamp: str) -> str:
     days = days_until(expires)
     if days < 0:
         return f"{when_day(expires)} · expired"
-    return f"{when_day(expires)} · {counted(days, 'day')}"
+    return f"{when_day(expires)} · {span(days)}"
 
 
 def named_page(route: str, resource: Any, field: str) -> str:

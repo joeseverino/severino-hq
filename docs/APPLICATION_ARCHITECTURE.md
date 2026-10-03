@@ -368,6 +368,14 @@ retried without repeating a non-idempotent plugin write. This adapter guard
 does not replace domain idempotency, which continues to protect the same use
 case when invoked through any interface.
 
+The executor itself takes a retry key from every interface. A capability whose
+effect is not `read` accepts an optional `idempotency_key` in its payload:
+`capability_schema` in `application/integration_specs.py` derives that from the
+effect for the published schema and for unknown-field rejection, and
+`execute_capability` replays the first result for a repeated key. A command
+type declares the field only when its handler stores the key with what it
+queues; no capability declares whether it accepts one.
+
 ## Source-of-truth map
 
 "Single source of truth" is scoped by domain. Pretending one database owns

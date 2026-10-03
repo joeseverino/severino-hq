@@ -116,6 +116,40 @@ if printf '%s\n' "${leaf}" | grep -q "PRIVATE KEY"; then
 fi
 test "$(printf '%s\n' "${leaf}" | grep -c "BEGIN CERTIFICATE")" = 1
 
+# The certificates arm hands over the leaf of every file the adapted config
+# loads: the deployed one and one the operator's own Caddyfile loads beside it.
+second_dir="${root}/second"; mkdir -p "${second_dir}"
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=preview.example.test \
+    -keyout "${second_dir}/privkey.pem" -out "${second_dir}/fullchain.pem" >/dev/null 2>&1
+second_fingerprint="$(openssl x509 -in "${second_dir}/fullchain.pem" -noout -fingerprint -sha256)"
+cat >"${bin_dir}/docker" <<EOF
+#!/bin/sh
+if [ "\$3" = "cat" ]; then
+    exec cat "\$4"
+fi
+printf '%s' '{"apps":{"tls":{"certificates":{"load_files":[{"certificate":"${cert_dir}/fullchain.pem","key":"${cert_dir}/privkey.pem","tags":["cert0"]},{"certificate":"${second_dir}/fullchain.pem","key":"${second_dir}/privkey.pem","tags":["cert1"]}]}}}}'
+EOF
+chmod +x "${bin_dir}/docker"
+
+leaves="$(env PATH="${bin_dir}:${PATH}" \
+    deploy/targets/severino-hq-edge-controller certificates)"
+test "$(printf '%s\n' "${leaves}" | grep -c "BEGIN CERTIFICATE")" = 2
+if printf '%s\n' "${leaves}" | grep -q "PRIVATE KEY"; then
+    echo "the certificates operation returned key material" >&2
+    exit 1
+fi
+for wanted in "${expected_fingerprint}" "${second_fingerprint}"; do
+    found=0
+    for index in 1 2; do
+        one="$(printf '%s\n' "${leaves}" | awk -v want="${index}" \
+            '/BEGIN CERTIFICATE/ {count++} count == want {print}')"
+        if [ "$(printf '%s\n' "${one}" | openssl x509 -noout -fingerprint -sha256)" = "${wanted}" ]; then
+            found=1
+        fi
+    done
+    test "${found}" = 1
+done
+
 # And anything not named is still refused.
 if env PATH="${bin_dir}:${PATH}" \
     deploy/targets/severino-hq-edge-controller rm-rf >/dev/null 2>&1; then
@@ -123,7 +157,7 @@ if env PATH="${bin_dir}:${PATH}" \
     exit 1
 fi
 
-echo "Edge controller deploy, routes, certificate, and refusal all behave."
+echo "Edge controller deploy, routes, certificate, certificates, and refusal all behave."
 
 # The write arm, stubbed at `docker` again. What is checked here is the
 # transaction: a good file is installed, and a reload that fails puts the

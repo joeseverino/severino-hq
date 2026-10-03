@@ -308,7 +308,11 @@ that resource's strict query contract and turns the result into an authorized
 choice control. `execution_notes` may describe the registered read, queue, and
 provider boundary shown in the live, zero-network execution preview. Fields named
 `idempotency_key` are generated and hidden in the browser; HQ separately wraps
-all state-changing browser submissions in durable replay protection. Plugins
+all state-changing browser submissions in durable replay protection. Every
+capability whose effect is not `read` accepts an optional `idempotency_key` in
+its payload and replays the first result for a repeated key, so a command type
+declares that field only when its handler keeps the key itself; HQ then fills
+it in when the caller sends none. Plugins
 use the authorized `list_resource` and `get_resource` SDK functions for reads;
 the host's raw registry and handler callables are intentionally not exported.
 For a replacement-style targeted command, `target_initial_fields` names command

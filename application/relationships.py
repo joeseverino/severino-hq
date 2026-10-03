@@ -40,6 +40,22 @@ class RelationGroup:
     rank: int
     items: tuple[Relationship, ...]
 
+    @property
+    def bare(self) -> bool:
+        """Whether every end is only its name: nothing says who read it or when.
+
+        Such ends are a list, and read across on one line rather than taking a
+        row apiece to say nothing beside each.
+        """
+
+        return all(
+            item.source is None
+            and item.observed_at is None
+            and not item.stale
+            and not item.entity.detail
+            for item in self.items
+        )
+
 
 @dataclass(frozen=True)
 class Relationships:

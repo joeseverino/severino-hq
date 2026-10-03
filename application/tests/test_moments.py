@@ -203,3 +203,15 @@ class DaySpanTests(TestCase):
             set(AuditLog.objects.filter(created_at__gte=start, created_at__lt=end).values_list("pk", flat=True)),
             set(AuditLog.objects.filter(created_at__date=day).values_list("pk", flat=True)),
         )
+
+
+class SpanTests(SimpleTestCase):
+    def test_a_deadline_is_counted_in_days_and_a_long_one_in_months_and_years(self):
+        from ..moments import span
+
+        self.assertEqual(span(1), "1 day")
+        self.assertEqual(span(46), "46 days")
+        self.assertEqual(span(90), "90 days")
+        self.assertEqual(span(301), "9 months, 3 weeks")
+        self.assertEqual(span(1443), "3 years, 11 months")
+        self.assertEqual(span(-3), "3 days overdue")

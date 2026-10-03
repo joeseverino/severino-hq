@@ -6,8 +6,9 @@ name: Deploy
 #
 #   Resolve  finds the signed image for the commit, and says on it, as HQ's
 #            app, that it waits for approval
-#   Deploy   on the self-hosted runner, after a person approves: verify the
-#            signature, recreate, wait for health, roll back if it fails
+#   Approve  waits for a person. A newer release takes its place in the wait
+#   Deploy   on the self-hosted runner, once approved: verify the signature,
+#            recreate, wait for health, roll back if it fails
 #   Report   says on the commit whether it is live, or why not and what fixes
 #            it, and comments once on the merged pull request
 #
@@ -90,18 +91,38 @@ jobs:
           scripts/hq-check.sh "Severino HQ · Production" "$COMMIT" in_progress "Waiting for approval"
           "HQ is built, signed and ready. Open the run and review the deployment to put it in production."
 
+  approve:
+    name: Approve
+    needs: resolve
+    if: needs.resolve.outputs.image != ''
+    # The approval, apart from the deploy it allows. One release waits at a
+    # time and it is the newest: a later run takes this group and the older
+    # wait is cancelled, so the queue holds the build that includes everything
+    # and a superseded release ends as cancelled, not as a refusal. Cancelling
+    # a wait changes nothing on the host; the deploy itself is never cancelled.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: production
+    concurrency:
+      group: deploy-awaiting-approval
+      cancel-in-progress: true
+    permissions: {}
+    steps:
+      - name: Approved
+        run: echo "approved for production"
+
   deploy:
     name: Deploy
-    needs: resolve
+    needs: [resolve, approve]
     if: needs.resolve.outputs.image != ''
     # Self-hosted runner ON the homelab. It dials out to GitHub; GitHub never
     # connects in. Only this job runs there, only for main, and it holds no
     # key of HQ's app.
     runs-on: [self-hosted, severino-hq]
     timeout-minutes: 30
-    environment: production
-    # One deploy at a time. Held by this job, not the workflow, so Resolve and
-    # Report never wait behind a release that is waiting for approval.
+    # Approved in the job before this one, which is what holds the
+    # environment's protection. One deploy at a time, and one that has
+    # started always finishes.
     concurrency:
       group: deploy-production
       cancel-in-progress: false

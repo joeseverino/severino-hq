@@ -142,3 +142,24 @@ def duration(delta) -> str:
 
     start = datetime(2000, 1, 1, tzinfo=_tz.utc)
     return timesince(start, start + max(delta, timedelta(0)))
+
+
+# Up to this many days a length of time is said in days: "46 days" is what a
+# deadline is counted in. Past it the count stops meaning anything at a glance
+# and the length is said in months and years.
+DAYS_SAID_AS_DAYS = 90
+
+
+def span(days: int) -> str:
+    """A whole number of days as a length of time a person reads: "46 days", "2 years, 11 months", "3 days overdue"."""
+
+    from datetime import timedelta
+
+    from .ui import counted
+
+    if abs(days) <= DAYS_SAID_AS_DAYS:
+        said = counted(abs(days), "day")
+    else:
+        said = duration(timedelta(days=abs(days))).replace("\xa0", " ")
+    # A count below nothing is that long past.
+    return f"{said} overdue" if days < 0 else said

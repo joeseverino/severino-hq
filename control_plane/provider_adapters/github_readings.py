@@ -379,8 +379,22 @@ def _head(commit: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _ran(run: Mapping[str, Any]) -> tuple[str, int]:
+    """When a check run started, then its id: later is greater."""
+
+    return (str(run.get("started_at") or ""), int(run.get("id") or 0))
+
+
 def _checks(answer: Any) -> dict[str, Any]:
-    runs = (answer or {}).get("check_runs") or []
+    # A check that ran more than once on a commit stands as its last run did: a
+    # rerun that passed, or a release approved after an earlier one was turned
+    # down, is what the commit's state is.
+    latest: dict[str, Mapping[str, Any]] = {}
+    for run in (answer or {}).get("check_runs") or []:
+        name = str(run.get("name"))
+        if name not in latest or _ran(run) >= _ran(latest[name]):
+            latest[name] = run
+    runs = list(latest.values())
     failing = sorted({str(run.get("name")) for run in runs if run.get("conclusion") in _FAILED})
     running = sum(1 for run in runs if run.get("status") in _RUNNING)
     state = "failure" if failing else "pending" if running else "success" if runs else ""

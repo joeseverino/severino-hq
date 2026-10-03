@@ -632,9 +632,15 @@ def plugin_attention_items() -> tuple[dict[str, Any], ...]:
     `source_id` rather than fetch the same question from a second channel.
     """
 
-    return gather_attention(
-        (plugin.id, plugin.name, integration.attention)
-        for plugin, integration in installed_integrations()
+    # A notice reports something and asks for nothing, so it is not a
+    # decision: it is in the queue's own section and nowhere under this name.
+    return tuple(
+        entry
+        for entry in gather_attention(
+            (plugin.id, plugin.name, integration.attention)
+            for plugin, integration in installed_integrations()
+        )
+        if not getattr(entry["item"], "notice", False)
     )
 
 

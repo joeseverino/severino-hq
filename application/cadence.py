@@ -40,6 +40,7 @@ from django.utils import timezone
 
 from control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
 
+from .moments import duration
 from .security import Capability, Principal
 
 
@@ -221,6 +222,23 @@ def carried_connections(controller_id: str, *, failing: bool = False) -> list[st
     return sorted(probes.values_list("connection_ref", flat=True))
 
 
+def swept(kind: str) -> bool:
+    """Whether the controller's sweep is what reads ``kind``.
+
+    The one place that says so: the sweep's own clock and a page asking for a
+    reading both go by it. A kind nothing declares is not swept.
+    """
+
+    from control_plane.observations import OBSERVATIONS
+    from control_plane.providers import PROVIDERS
+
+    reading = OBSERVATIONS.get(kind)
+    if reading is not None:
+        return reading.read_by == "controller"
+    declared = PROVIDERS.get(kind)
+    return declared is not None and not declared.unobserved_reason
+
+
 def sweep_due(controller_id: str = "") -> dict[str, object]:
     """Whether the controller should sweep now, and why.
 
@@ -243,10 +261,20 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
         else []
     )
     interval = sweep_interval()
-    oldest = (
-        ProviderInventory.objects.order_by("observed_at")
-        .values_list("observed_at", flat=True)
-        .first()
+    # Of what the sweep reads, the kind it tried longest ago. A kind HQ reads
+    # itself (a public registry) is stored beside these and is not the
+    # sweep's to refresh: counted here, its age would make every run a sweep.
+    # Tried, not read: a provider that is down has been tried, and is tried
+    # again at the next interval rather than on every run.
+    oldest = min(
+        (
+            max(observed_at, updated_at)
+            for kind, observed_at, updated_at in ProviderInventory.objects.values_list(
+                "kind", "observed_at", "updated_at"
+            )
+            if swept(kind)
+        ),
+        default=None,
     )
     verdict: dict[str, object] = {
         "ok": True,
@@ -260,8 +288,8 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
     age = timezone.now() - oldest
     due = age >= interval
     reason = (
-        f"Oldest sweep is {int(age.total_seconds())}s old; "
-        f"{'due' if due else 'not due'} at {int(interval.total_seconds())}s."
+        f"The kind tried longest ago was tried {duration(age)} ago; "
+        f"{'due' if due else 'not due'} every {duration(interval)}."
     )
     if not due and forced:
         reason += f" Read now asked for {', '.join(read.subject for read in forced)}."

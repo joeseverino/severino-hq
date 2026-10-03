@@ -43,15 +43,15 @@ def markers():
     ), directory
 
 
-def swept(age_seconds):
+def swept(age_seconds, kind="adguard.rewrite", tried_seconds=None):
+    """A kind last read ``age_seconds`` ago, and last tried then or since."""
+
+    at = timezone.now() - timedelta(seconds=age_seconds)
     ProviderInventory.objects.update_or_create(
-        kind="adguard.rewrite",
-        defaults={
-            "records": [],
-            "reachable": True,
-            "observed_at": timezone.now() - timedelta(seconds=age_seconds),
-        },
+        kind=kind, defaults={"records": [], "reachable": True, "observed_at": at}
     )
+    tried = at if tried_seconds is None else timezone.now() - timedelta(seconds=tried_seconds)
+    ProviderInventory.objects.filter(kind=kind).update(updated_at=tried)
 
 
 class SweepPolicyTests(TestCase):
@@ -91,6 +91,35 @@ class SweepPolicyTests(TestCase):
         verdict = sweep_due()
         self.assertTrue(verdict["due"])
         self.assertEqual(verdict["interval_seconds"], 60)
+
+    @override_settings(SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=300)
+    def test_a_kind_hq_reads_itself_does_not_make_the_sweep_due(self):
+        """A public registry's reading is days old by design and is not the sweep's."""
+
+        swept(age_seconds=30)
+        swept(age_seconds=500_000, kind="registry.address")
+        note_activity()
+
+        verdict = sweep_due()
+        self.assertFalse(verdict["due"])
+        self.assertLess(verdict["age_seconds"], 300)
+
+    @override_settings(SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=300)
+    def test_a_provider_that_is_down_is_tried_each_interval_not_each_run(self):
+        swept(age_seconds=90_000, tried_seconds=30)
+        note_activity()
+
+        self.assertFalse(sweep_due()["due"])
+
+    @override_settings(SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=300)
+    def test_the_reason_reads_as_lengths_of_time(self):
+        swept(age_seconds=4000)
+        note_activity()
+
+        reason = sweep_due()["reason"]
+        self.assertIn("1\xa0hour", reason)
+        self.assertIn("every 5\xa0minutes", reason)
+        self.assertNotRegex(reason, r"\d+s\b")
 
     @override_settings(SEVERINO_ACTIVE_WINDOW_SECONDS=0)
     def test_use_stops_counting_once_the_window_passes(self):

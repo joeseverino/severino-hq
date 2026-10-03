@@ -138,7 +138,13 @@ for: each once, the detail below. Whatever it is also declared as is the
           <th scope="row">State</th>
           <td>{% if machine.presence.online %}Connected{% else %}Not connected{% if machine.presence.last_seen %}, last seen {{ machine.presence.last_seen|slice:":10" }}{% endif %}{% endif %}</td>
         </tr>
-        {% if machine.presence.reached_hq %}
+        {% comment %}
+        When a request last came to HQ from this machine. Not said of the
+        machine HQ runs on: its controller reaches HQ without a request, so the
+        last request from its own address says nothing about whether it is
+        there.
+        {% endcomment %}
+        {% if machine.presence.reached_hq and not machine.presence.observer %}
           <tr>
             <th scope="row">Last reached HQ</th>
             <td>{{ machine.presence.reached_hq.phrase|capfirst }}</td>

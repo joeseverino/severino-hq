@@ -153,6 +153,7 @@
     if (table.style.tableLayout === "fixed") return;
     table.dataset.fit = "";
     delete table.dataset.drop;
+    delete table.dataset.snug;
     delete table.dataset.wrap;
     const overflows = () => table.getBoundingClientRect().width > wrapper.clientWidth + 1;
     const all = [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
@@ -172,6 +173,9 @@
         const floor = Math.min(wanted[index], index === named ? READABLE_NAME : READABLE);
         heading.style.setProperty("--column-floor", `${Math.max(0, Math.floor(floor - inset))}px`);
       });
+      // Before any column leaves, identifiers are cut sooner: a long name in a
+      // chip is whole again when its row is opened, and a column is not.
+      if (overflows()) table.dataset.snug = "";
       if (overflows() && headings.length >= 3 && !table.querySelector(":scope > colgroup")) {
         const last = headings.length - 1;
         const marked = headings.some((heading) => heading.classList.contains("key-col"));
@@ -641,7 +645,7 @@
       const nextHeads = nextTable.querySelectorAll("thead th");
       if (!currentHeads.length || currentHeads.length !== nextHeads.length) return;
       // The incoming table gives up the same columns the current one has.
-      ["fit", "drop", "wrap", "narrow"].forEach((key) => {
+      ["fit", "drop", "wrap", "narrow", "snug"].forEach((key) => {
         if (key in table.dataset) nextTable.dataset[key] = table.dataset[key];
       });
       currentHeads.forEach((th, index) => {

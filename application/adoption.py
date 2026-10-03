@@ -161,8 +161,9 @@ class Unmanaged:
     adoptable: bool = True
     # The connection that read it, when the record names one.
     connection_ref: str = ""
-    # True unless it was read through a connection that manages. An observed
-    # record is shown and never adopted. See ``application.adoption``.
+    # True unless it was read through a connection that manages and its kind
+    # takes found records on. An observed record is shown and never adopted.
+    # See ``application.adoption``.
     observed_only: bool = True
 
     @property
@@ -247,9 +248,11 @@ def unmanaged() -> tuple[Unmanaged, ...]:
                     hostnames=service_hostnames(snapshot.kind, spec),
                     spec=spec,
                     observed_at=snapshot.observed_at,
-                    adoptable=provider.adopts is None or provider.adopts(record),
+                    adoptable=not provider.adoption_gap
+                    and (provider.adopts is None or provider.adopts(record)),
                     connection_ref=connection_ref,
-                    observed_only=not manages(snapshot.kind, connection_ref),
+                    observed_only=bool(provider.adoption_gap)
+                    or not manages(snapshot.kind, connection_ref),
                 )
             )
     return tuple(sorted(found, key=lambda item: (item.identity, item.kind)))
@@ -443,6 +446,8 @@ def adopt(
             f"No unmanaged {command.kind} was last seen for {subject!r}. "
             "It may have been adopted already, or removed at the provider."
         )
+    if PROVIDERS[found.kind].adoption_gap:
+        raise PolicyError(PROVIDERS[found.kind].adoption_gap)
     if found.observed_only:
         raise PolicyError(
             f"This {found.label.lower()} is read through a connection that only "

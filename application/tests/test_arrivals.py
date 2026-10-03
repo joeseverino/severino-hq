@@ -202,3 +202,25 @@ class ArrivalTests(TestCase):
 
         self.assertContains(response, "Last reached HQ")
         self.assertContains(response, "relayed over the tailnet, through the proxy at 172.18.0.2")
+
+    def test_it_is_not_said_of_the_machine_hq_runs_on(self):
+        """Its controller reaches HQ without a request, so its last request says nothing."""
+
+        from control_plane.models import ProviderInventory
+
+        ManagedResource.objects.create(
+            key="a-laptop", kind="machine", spec={"name": "a-laptop", "addresses": [LAPTOP]}
+        )
+        arrivals.note(a_request())
+        for row in ProviderInventory.objects.filter(kind="tailscale.device"):
+            row.records = [{**record, "self": True} for record in row.records]
+            row.save()
+        user = get_user_model().objects.create_user("someone", password="not-used-here")
+        self.client.force_login(user)
+
+        with override_settings(SEVERINO_REQUEST_PATH_SECONDS=0):
+            response = self.client.get(
+                reverse("control_plane:machine", kwargs={"name": "a-laptop"})
+            )
+
+        self.assertNotContains(response, "Last reached HQ")
