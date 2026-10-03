@@ -441,7 +441,7 @@ class CommandTitleTests(TestCase):
         self.assertEqual(capability_title("example.not.registered"), "Example Not Registered")
 
     def test_every_core_command_is_named(self):
-        from ..capabilities import CORE_CAPABILITY_SPECS
+        from ..core_capabilities import CORE_CAPABILITY_SPECS
 
         self.assertEqual([item.name for item in CORE_CAPABILITY_SPECS if not item.label], [])
 

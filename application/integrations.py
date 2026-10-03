@@ -323,7 +323,7 @@ def compile_integration_graph(
 
 @cache
 def _compiled_integration_graph() -> IntegrationGraph:
-    from .capabilities import CORE_CAPABILITY_SPECS
+    from .core_capabilities import CORE_CAPABILITY_SPECS
     from .domains import host_specs
     from .plugins import (
         plugin_capability_specs,
