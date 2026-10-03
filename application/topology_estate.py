@@ -500,7 +500,9 @@ def _derived_from_readings(nodes, edges, resources, estate: _Estate) -> None:
         docker_estate.add(nodes, edges, resources, estate.machine)
     by_ref, by_provider = _reader_index(nodes)
     certificate_expiry.add(
-        nodes, lambda joined: _readers(joined, by_ref, by_provider, nodes)
+        nodes,
+        lambda joined: _readers(joined, by_ref, by_provider, nodes),
+        lambda provider, record: _holding(provider, record, by_ref, by_provider, nodes),
     )
 
 
@@ -574,9 +576,28 @@ def _readers(joined: Joined, by_ref, by_provider, nodes) -> tuple[str, ...]:
         found = narrowed or found
     if found:
         return tuple(found)
-    # A stored reading whose connection no controller reports now: the edge
-    # stays, from a node naming that connection, rather than vanishing.
-    name = joined.connection_ref or joined.spec.provider
+    return _unreported(
+        nodes, by_ref, joined.connection_ref or joined.spec.provider, joined.spec.provider
+    )
+
+
+def _holding(provider, record, by_ref, by_provider, nodes) -> tuple[str, ...]:
+    """The connection nodes a provider's stored record was read through."""
+
+    found = _holders(provider, record, by_ref, by_provider)
+    if found:
+        return tuple(found)
+    name = next(iter(provider.connection_providers), provider.kind)
+    return _unreported(nodes, by_ref, str(record.get("connection_ref", "") or name), name)
+
+
+def _unreported(nodes, by_ref, name: str, provider: str) -> tuple[str, ...]:
+    """A node for a connection no controller reports now.
+
+    What was read through it stays, from a node naming that connection, rather
+    than vanishing.
+    """
+
     node_id = f"connection:unreported:{name}"
     nodes.setdefault(
         node_id,
@@ -584,10 +605,10 @@ def _readers(joined: Joined, by_ref, by_provider, nodes) -> tuple[str, ...]:
             id=node_id,
             kind="connection",
             label=name,
-            subtitle=joined.spec.provider,
+            subtitle=provider,
             status_label="Not reported",
             detail="No controller reports this connection now.",
-            kind_key=joined.spec.provider,
+            kind_key=provider,
         ),
     )
     by_ref.setdefault(name, []).append(node_id)

@@ -186,6 +186,19 @@ class CertificateFindingTests(TestCase):
         self.assertIn("serves no name", finding["explanation"])
         self.assertIn("rather than renew it", finding["explanation"])
 
+    def test_one_a_proxy_host_also_names_is_raised_once(self):
+        expires = in_days(5)
+        store("npm.certificate", certificate(expires, "app.example.com"))
+        store("npm.proxy_host", {"domain_names": ["app.example.com"], "forward_scheme": "http",
+                                 "forward_host": "127.0.0.1", "forward_port": 8000,
+                                 "connection_ref": NPM,
+                                 "certificate": {"name": "example wildcard",
+                                                 "expires_on": expires}})
+
+        (finding,) = self.found()
+
+        self.assertTrue(finding["title"].startswith("NPM certificate"))
+
     def test_a_certificate_with_no_expiry_says_nothing(self):
         store("npm.certificate", certificate("not a date"))
 
