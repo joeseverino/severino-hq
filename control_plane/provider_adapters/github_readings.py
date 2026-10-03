@@ -30,6 +30,7 @@ from . import github_app
 from .contracts import PERMISSION_REFUSAL, ProviderError, ProviderRuntime
 from .parts import refuse_part
 from .refusals import not_found
+from .together import read_each
 
 READ = {
     "metadata": "read",
@@ -52,7 +53,12 @@ _RUNNING = frozenset({"queued", "in_progress", "requested", "pending", "waiting"
 
 def read_repositories(runtime: ProviderRuntime) -> list[dict[str, Any]]:
     ref = github_app._ref(runtime, "")
-    return [_repository(runtime, name, ref) for name in github_app.installation_repositories(runtime)]
+    # A repository is a couple of dozen requests under a token of its own, and
+    # none of them depends on another repository's: read a few at once.
+    return read_each(
+        github_app.installation_repositories(runtime),
+        lambda name: _repository(runtime, name, ref),
+    )
 
 
 def _repository(runtime: ProviderRuntime, name: str, ref: str) -> dict[str, Any]:

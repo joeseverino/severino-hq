@@ -334,7 +334,7 @@ def _authority_readout(
     remaining = ""
     if expires:
         from application.expiry import days_until
-        from application.ui import moment
+        from application.timestamps import moment
 
         when = moment(expires)
         days = days_until(when) if when is not None else None

@@ -9,6 +9,7 @@ import json
 import os
 import secrets
 import ssl
+import threading
 import logging
 import urllib.error
 import urllib.parse
@@ -30,6 +31,7 @@ logger = logging.getLogger("severino.controller")
 logger = logging.getLogger("severino.controller")
 
 _SnapshotValue = TypeVar("_SnapshotValue")
+_SNAPSHOT_LOCKS_GUARD = threading.Lock()
 PROVIDER_SNAPSHOT: ContextVar[dict[tuple[object, ...], object] | None] = ContextVar(
     "provider_snapshot", default=None
 )
@@ -47,11 +49,27 @@ def provider_snapshot() -> Iterator[None]:
 def snapshot_value(
     key: tuple[object, ...], load: Callable[[], _SnapshotValue]
 ) -> _SnapshotValue:
+    """A value read at most once per sweep, however many readers ask at once.
+
+    Readers run a few at a time, and two that want the same list arrive
+    together: each key has a lock, so the second waits for the first's answer
+    instead of fetching its own, and every reader builds on one fetch. Only a
+    success is kept: a load that raised leaves nothing behind, and the next
+    asker tries again.
+    """
+
     snapshot = PROVIDER_SNAPSHOT.get()
     if snapshot is None:
         return load()
-    if key not in snapshot:
-        snapshot[key] = load()
+    if key in snapshot:
+        return cast(_SnapshotValue, snapshot[key])
+    with _SNAPSHOT_LOCKS_GUARD:
+        # Re-entrant, so a loader that asks for its own key again does not
+        # wait on itself.
+        lock = cast(Any, snapshot.setdefault(("snapshot.lock", key), threading.RLock()))
+    with lock:
+        if key not in snapshot:
+            snapshot[key] = load()
     return cast(_SnapshotValue, snapshot[key])
 
 

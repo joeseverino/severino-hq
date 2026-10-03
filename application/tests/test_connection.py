@@ -18,6 +18,7 @@ from django.utils import timezone
 
 from control_plane.models import ManagedResource, ProviderInventory
 
+from ..moments import when
 from ..ui import MISSING
 from ..connection import connection
 from ..request_addresses import addresses_of, addresses_of_hq
@@ -549,7 +550,8 @@ class ConnectionPageTests(TestCase):
 
         response = self.client.get(reverse("connection"))
 
-        self.assertContains(response, "Aug 23, 2026, 4:12 p.m.")
+        self.assertContains(response, f">{when(self.user.last_login)}</time>")
+        self.assertContains(response, "4:12 PM</time>")
 
     def test_the_request_timeline_includes_the_observed_npm_edge(self):
         ProviderInventory.objects.create(

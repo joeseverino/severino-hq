@@ -16,9 +16,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.contrib.humanize.templatetags.humanize import intcomma
 from django.template.defaultfilters import floatformat
 from django.urls import reverse, reverse_lazy
-from django.utils.formats import date_format
 from django.utils.html import format_html
-from django.utils.timezone import localtime
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -41,6 +39,7 @@ from application.deletion import DeleteCommand, delete_receipt
 from application.security import web_principal
 from application.pages import PageAction, PageMixin, record_trail
 from application.tables import TableColumn, TableListMixin, TableToggle
+from application.moments import when
 
 from expenses.models import Expense
 from .forms import ReceiptUploadForm
@@ -63,9 +62,9 @@ class ReceiptListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     table_selectable = True
     table_columns = (
         TableColumn("Uploaded", "uploaded_at", "Least recently uploaded", "Recently uploaded"),
-        TableColumn("Vendor", "vendor", "Vendor A–Z", "Vendor Z–A"),
+        TableColumn("Vendor", "vendor", "Vendor A–Z", "Vendor Z–A", css="key-col"),
         TableColumn("Date", "date", "Oldest receipt date", "Newest receipt date"),
-        TableColumn("Amount", "amount", "Lowest amount", "Highest amount"),
+        TableColumn("Amount", "amount", "Lowest amount", "Highest amount", css="key-col"),
         TableColumn("Filename", "original_filename", "Filename A–Z", "Filename Z–A"),
         TableColumn("Links"),
     )
@@ -109,7 +108,7 @@ class ReceiptDetailView(PageMixin, LoginRequiredMixin, DetailView):
         receipt = self.object
         return (
             f"{receipt.original_filename or 'file'} · "
-            f"uploaded {date_format(localtime(receipt.uploaded_at), 'DATETIME_FORMAT')}"
+            f"uploaded {when(receipt.uploaded_at)}"
         )
 
     def get_page_trail(self):

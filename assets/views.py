@@ -39,7 +39,7 @@ class AssetListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
         TableColumn("Vendor", "vendor", "Vendor A–Z", "Vendor Z–A"),
         TableColumn("Category", "category"),
         TableColumn("Purchased", "purchase_date", "Oldest purchase", "Newest purchase"),
-        TableColumn("Cost", "total_cost", "Lowest cost", "Highest cost"),
+        TableColumn("Cost", "total_cost", "Lowest cost", "Highest cost", css="key-col"),
         TableColumn("% biz", "business_use_percentage", "Lowest business use", "Highest business use"),
         TableColumn("Est. deduct.", "estimated_deductible_amount", "Lowest deductible", "Highest deductible"),
         TableColumn("Status", "status"),

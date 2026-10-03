@@ -1,0 +1,21 @@
+{% comment %}
+Whether the controller is still arriving. Every reading on this page is the
+controller's, so one that has stopped leaves them all as they were, which
+looks like a quiet estate. This says so: when it last reached HQ, and in the
+attention colour once that is longer ago than a healthy controller ever goes.
+An installation it has never reached says that and nothing more.
+{% endcomment %}
+<a class="glance-panel-head dash-reading dash-controller{% if controller.silent %} is-silent{% elif controller.known %} is-arriving{% endif %}" href="{% url 'control_plane:controller' %}">
+  <span class="glance-symbol">{% include "partials/_icon.html" with name="activity" %}</span>
+  {% comment %}
+  The same dot the connection carries, and held to the same rule: green only while it is
+  arriving, the attention colour once it has gone quiet, and grey where it has
+  never run, which is not known to be either. The words beside it say which.
+  {% endcomment %}
+  <span class="glance-lead"><span class="conn-dot" aria-hidden="true"></span><strong>Controller</strong></span>
+  <span class="glance-caption">
+    {% if not controller.known %}<span>Has not run here</span>
+    {% elif controller.silent %}<span>Silent for {{ controller.seen_at|timesince }}</span>
+    {% else %}<span>Ran {{ controller.seen_at|when:"ago" }}</span>{% endif %}
+  </span>
+</a>

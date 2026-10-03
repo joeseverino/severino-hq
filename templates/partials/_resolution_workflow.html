@@ -20,13 +20,7 @@ A "run" step's summary is a command the operator runs (application.item_help).
         </div>
         {% if step.actions %}
           <div class="finding-actions">
-            {% for action in step.actions %}
-              {% if action.method == "POST" %}
-                <form action="{{ action.url }}" method="post">{% csrf_token %}<button type="submit" class="btn compact{% if action.recommended %} primary{% endif %}">{{ action.label }}</button></form>
-              {% else %}
-                <a class="btn compact{% if action.recommended %} primary{% endif %}" href="{{ action.url }}">{{ action.label }}</a>
-              {% endif %}
-            {% endfor %}
+            {% include "partials/_action_links.html" with actions=step.actions only %}
           </div>
         {% endif %}
       </li>

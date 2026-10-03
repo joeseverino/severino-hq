@@ -17,7 +17,7 @@ so a page never has to tell the two apart.
       <tr>
         {% if table.selectable %}<th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% endif %}
         {% for column in table.columns %}
-          {% if column.sort %}{% table_sort_header column.label column.sort %}{% else %}<th{% if column.css %} class="{{ column.css }}"{% endif %}>{{ column.label }}</th>{% endif %}
+          {% if column.sort %}{% table_sort_header column.label column.sort css=column.css %}{% else %}<th{% if column.css %} class="{{ column.css }}"{% endif %}>{{ column.label }}</th>{% endif %}
         {% endfor %}
       </tr>
     </thead>

@@ -8,10 +8,11 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect, render
 from django.urls import reverse
-from django.utils import formats, timezone
+from django.utils import timezone
 from django.views.generic import TemplateView, View
 
-from application import action_items as read_state
+from application import action_items as queue_state
+from application.cadence import controller_standing
 from application.calendar import calendar_month, month_of
 from application.calendar_entries import calendar_choices
 from application.outward_links import link_choices, outward_links
@@ -24,9 +25,11 @@ from application.glance import (
     request_stale_panel_refresh,
     save_dashboard_settings,
 )
+from application.request_path import request_path
 from application.security import safe_next, web_principal
 from application.timestamps import moment
 from application.pages import page_context
+from application.moments import when_day
 from application.ui import ListRow
 from contacts import inbox
 
@@ -86,8 +89,11 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 item["updated_at"] = moment(item["updated_at"], naive="keep")
                 if item["published_at"]:
                     item["published_at"] = date.fromisoformat(item["published_at"])
-        # Unread items, counted as the header's count endpoint counts them.
-        action_queue_count = read_state.unread_count(snapshot["priority"], self.request.user)
+        # What waits on this person, counted as the header's count endpoint
+        # counts it: everything open that they have not set aside.
+        queue = queue_state.with_aside_state(snapshot["priority"], self.request.user)
+        doing, told = queue_state.split_waiting(queue)
+        action_queue_count = len(doing)
         hour = timezone.localtime().hour
         greeting = (
             "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
@@ -107,7 +113,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             ListRow(
                 title=item["title"],
                 meta=f"{item['content_type_label']} · "
-                f"{formats.date_format(item['updated_at'], 'M j')}",
+                f"{when_day(item['updated_at'])}",
                 url=reverse("content:detail", args=[item["slug"]]),
             )
             for item in snapshot["draft_content"]
@@ -115,9 +121,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         published_rows = [
             ListRow(
                 title=item["title"],
-                meta=formats.date_format(
-                    item["published_at"] or item["updated_at"], "M j"
-                ),
+                meta=when_day(item["published_at"] or item["updated_at"]),
                 url=item["published_url"]
                 or reverse("content:detail", args=[item["slug"]]),
                 external=bool(item["published_url"]),
@@ -137,6 +141,23 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 "today": "?",
             },
             greeting=greeting,
+            # The reading the connection panel opens on, so the header and the
+            # panel cannot disagree about a request. Rendered with the page: a
+            # line that arrives after it is a line that visibly changes.
+            request_connection=request_path(self.request).connection,
+            controller=controller_standing(),
+            # The stored rows, kept by the refresh_contacts_inbox timer: reading
+            # them asks no one, so the card is drawn with the page.
+            recent_contacts=[
+                ListRow(
+                    title=submission["name"],
+                    detail=submission["status"],
+                    meta=submission["created_at"],
+                    url=reverse("contacts:detail", args=[submission["id"]]),
+                )
+                for submission in inbox.recent()
+            ],
+            unread_contacts_count=inbox.unread()[0],
             content_rows=content_rows,
             published_rows=published_rows,
             active_project_count=snapshot["kpis"]["active_projects"],
@@ -145,7 +166,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             external_choices=external_choices,
             draft_content_count=snapshot["kpis"]["draft_content"],
             action_queue_count=action_queue_count,
-            profile_action_count=action_queue_count,
+            notice_count=len(told),
+            aside_count=len(queue) - action_queue_count - len(told),
+            profile_action_count=action_queue_count + len(told),
             show_action_count=True,
             dashboard_cards=highlights["compact"],
             dashboard_highlights=highlights["highlights"],
@@ -218,25 +241,3 @@ class DashboardGlanceSettingsView(LoginRequiredMixin, View):
         else:
             messages.success(request, "Dashboard settings saved.")
         return redirect("dashboard")
-
-
-class DashboardContactsView(LoginRequiredMixin, View):
-    """Recent submissions, fetched by the dashboard after it has rendered."""
-
-    def get(self, request):
-        # The stored rows, kept by the refresh_contacts_inbox timer.
-        submissions = inbox.recent()
-        rows = [
-            ListRow(
-                title=submission["name"],
-                detail=submission["status"],
-                meta=submission["created_at"],
-                url=reverse("contacts:detail", args=[submission["id"]]),
-            )
-            for submission in submissions
-        ]
-        return render(
-            request,
-            "core/_dashboard_contacts.html",
-            {"recent_contacts": rows, "unread_contacts_count": inbox.unread()[0]},
-        )

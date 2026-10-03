@@ -23,8 +23,8 @@
   <dl class="kv">
     <dt>Entry ID</dt><dd>#{{ submission.id }}</dd>
     <dt>Turnstile</dt><dd>{{ submission.turnstile|or_empty }}</dd>
-    <dt>Submitted</dt><dd>{{ submission.created_at }}</dd>
-    <dt>Updated</dt><dd>{{ submission.updated_at }}</dd>
+    <dt>Submitted</dt><dd>{{ submission.created_at|when }}</dd>
+    <dt>Updated</dt><dd>{{ submission.updated_at|when }}</dd>
     <dt>IP address</dt><dd>{{ submission.ip_address|or_empty }}</dd>
     <dt>Browser</dt><dd>{{ submission.browser|or_empty }}</dd>
     <dt>Device</dt><dd>{{ submission.device|or_empty }}</dd>

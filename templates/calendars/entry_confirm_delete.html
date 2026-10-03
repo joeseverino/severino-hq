@@ -1,4 +1,4 @@
 {% extends "confirm_page.html" %}
 {% block consequences %}
-<p>{{ entry.title }} · {{ entry.starts_on }}{% if entry.repeat %} · every occurrence{% endif %}</p>
+<p>{{ entry.title }} · {{ entry.starts_on|when }}{% if entry.repeat %} · every occurrence{% endif %}</p>
 {% endblock %}

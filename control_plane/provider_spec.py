@@ -13,7 +13,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
 
-from django.urls import NoReverseMatch, reverse
+from django.urls import NoReverseMatch
+
+from application.routes import reverse
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -23,6 +25,7 @@ from pydantic import (
     model_validator,
 )
 
+from application.moments import when_day
 from application.ui import counted
 
 from .names import in_zone
@@ -528,8 +531,8 @@ def expiry_phrase(stamp: str) -> str:
 
     days = days_until(expires)
     if days < 0:
-        return f"{expires:%-d %b %Y} · expired"
-    return f"{expires:%-d %b %Y} · {counted(days, 'day')}"
+        return f"{when_day(expires)} · expired"
+    return f"{when_day(expires)} · {counted(days, 'day')}"
 
 
 def named_page(route: str, resource: Any, field: str) -> str:

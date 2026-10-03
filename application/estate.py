@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from django.urls import reverse
+from application.routes import reverse
 from django.utils import timezone
 
 from control_plane.provider_adapters.tls import (
@@ -27,7 +27,9 @@ from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
 from .item_help import cannot_help, remedy_link
 from .projection import read_once
 from .timestamps import moment
-from .ui import Insight, Kpi, ago, counted
+from .drawings import Dot, Dots
+from .moments import ago, when_day
+from .ui import Insight, Kpi, counted
 from .workflow_contracts import ActionLink
 
 # A machine that holds something for the estate and has been offline this long
@@ -342,20 +344,88 @@ def cards() -> tuple[dict[str, Any], ...]:
     return tuple(found)
 
 
+def _answers_at(machine) -> str:
+    """Where a machine answers, as few addresses as say it.
+
+    Loopback is left out, since it is true of every machine and reaches none of
+    them, and an IPv4 address is preferred because it is the one a person
+    types. Two at most: which is right depends on where the reader is sitting.
+    """
+
+    known = tuple(dict.fromkeys(address for address in (machine.address, *machine.addresses) if address))
+    reachable = tuple(address for address in known if not address.startswith("127.") and address != "::1")
+    typed = tuple(address for address in reachable if ":" not in address)
+    return ", ".join((typed or reachable)[:2])
+
+
 def overview():
     from .ui import DomainOverview
 
     shown = cards()
+    estate = estate_reading()
+    # A part of a whole is drawn as well as said: one dot a machine or a
+    # service, naming it when pointed at and leading to its page. On the
+    # overview only: the cards are also a transport payload, which carries no
+    # drawing.
+    drawings = {
+        "hq.estate.machines": Dots(
+            tuple(
+                Dot(
+                    filled=machine.state[0] == "online",
+                    tip=" · ".join(
+                        part for part in (machine.name, _answers_at(machine), machine.state[0]) if part
+                    ),
+                    url=entity_link("machine", machine.name).url,
+                )
+                for machine in estate.watched
+            )
+        ),
+        "hq.estate.services": Dots(
+            tuple(
+                Dot(
+                    filled=not service.faults,
+                    tip=" · ".join((service.hostname, service.faults[0] if service.faults else "wired")),
+                    url=entity_link("service", service.hostname).url,
+                )
+                for service in estate.services
+            )
+        ),
+    }
+    # One word each, so a label and its mark fit a narrow column; the note
+    # carries the rest. For a date that runs out, the note is what and when.
+    labels = {
+        "hq.estate.machines": "Machines",
+        "hq.estate.registration": "Renewal",
+        "hq.estate.certificate": "Certificate",
+        "hq.estate.connections": "Attention",
+    }
+    notes = {"hq.estate.machines": "" if estate.offline else f"of {len(estate.watched)} online"}
+    for card_id, expiries in (
+        ("hq.estate.registration", estate.registrations),
+        ("hq.estate.certificate", estate.operator_certificates),
+    ):
+        if expiries and not expiries[0].overdue:
+            notes[card_id] = f"{expiries[0].subject} · {when_day(expiries[0].expires)}"
+    icons = {
+        "hq.estate.machines": "server",
+        "hq.estate.services": "layers",
+        "hq.estate.domains": "globe",
+        "hq.estate.registration": "calendar",
+        "hq.estate.certificate": "lock",
+        "hq.estate.connections": "link",
+    }
     return DomainOverview(
         description="Machines, services, domains and connections.",
         url=reverse("control_plane:topology"),
         kpis=tuple(
             Kpi(
-                label=card["label"],
+                label=labels.get(card["id"], card["label"]),
                 value=card["value"],
-                detail=card.get("detail", ""),
+                detail=notes.get(card["id"]) or card.get("detail", ""),
                 url=card["url"],
                 is_zero=card["value"] == "0",
+                icon=icons.get(card["id"], ""),
+                drawing=drawings.get(card["id"]),
             )
             for card in shown
         ),

@@ -40,7 +40,7 @@ A year with no expenses is said by the count above; its breakdowns do not draw.
     <h2>Largest expenses, {{ year }}</h2>
     <ul class="list-rows">
       {% for e in largest_expenses %}
-        <li><span class="row-main"><a href="{{ e.get_absolute_url }}">{{ e.vendor }} · {{ e.item }}</a></span><span class="row-meta">{{ e.date }} · {{ e.get_category_display }} · <strong>${{ e.total_cost|floatformat:2|intcomma }}</strong></span></li>
+        <li><span class="row-main"><a href="{{ e.get_absolute_url }}">{{ e.vendor }} · {{ e.item }}</a></span><span class="row-meta">{{ e.date|when }} · {{ e.get_category_display }} · <strong>${{ e.total_cost|floatformat:2|intcomma }}</strong></span></li>
       {% endfor %}
     </ul>
   </section>
@@ -98,7 +98,7 @@ as two cards of their own they would be mostly empty card.
   {% if recent_audit %}
     <ul class="audit-list">
       {% for ev in recent_audit %}
-        <li><span class="muted">{{ ev.created_at }}</span> <strong>{{ ev.actor_label }}</strong>
+        <li><span class="muted">{{ ev.created_at|when }}</span> <strong>{{ ev.actor_label }}</strong>
  {{ ev.get_action_display|lower }} {% if ev.object_type %}<span class="muted">{{ ev.type_label|lower }}</span>{% endif %}{% if ev.object_repr %} · {{ ev.object_repr }}{% endif %}</li>
       {% endfor %}
     </ul>

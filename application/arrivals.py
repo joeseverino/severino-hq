@@ -185,7 +185,7 @@ def _key(item: dict[str, Any]) -> str:
 
 
 def _current(item: dict[str, Any], now: datetime) -> bool:
-    from .ui import moment
+    from .timestamps import moment
 
     seen = moment(str(item.get("last_seen") or ""))
     return seen is not None and now - seen <= WINDOW
@@ -226,7 +226,7 @@ class Arrival:
     def phrase(self) -> str:
         """"3 hours ago, directly over the tailnet"."""
 
-        from .ui import ago
+        from .moments import ago
 
         return f"{ago(self.last_seen)}, {self.how}"
 
@@ -234,7 +234,7 @@ class Arrival:
 def arrivals(snapshots=()) -> dict[str, Arrival]:
     """Each current arrival by its device name, else its address."""
 
-    from .ui import moment
+    from .timestamps import moment
 
     now = timezone.now()
     found: dict[str, Arrival] = {}

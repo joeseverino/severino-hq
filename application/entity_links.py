@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 from urllib.parse import urlsplit
 
-from django.urls import reverse
+from application.routes import reverse
 
 from control_plane.names import normalized_hostname, names_a_host
 from control_plane.observations import OBSERVATIONS

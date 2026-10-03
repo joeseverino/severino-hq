@@ -69,7 +69,7 @@ declaration's machinery: the controller's actions are the buttons above, and
     <div class="control-metric">
       <span class="control-label">Renewal policy</span>
       <strong class="{% if capabilities.actions.renew.enabled %}control-warn{% else %}control-good{% endif %}">{% if capabilities.actions.renew.enabled %}Eligible now{% else %}Not due{% endif %}</strong>
-      <span>{% if capabilities.actions.renew.automatic %}Renewal begins {% if renewal_at %}{{ renewal_at|date:"F j, Y" }}{% else %}when policy allows{% endif %}. The controller resumes after restarts. {% endif %}{% if capabilities.actions.renew.reason not in controller.reasons %}{{ capabilities.actions.renew.reason }}{% endif %}</span>
+      <span>{% if capabilities.actions.renew.automatic %}Renewal begins {% if renewal_at %}{{ renewal_at|when:"day" }}{% else %}when policy allows{% endif %}. The controller resumes after restarts. {% endif %}{% if capabilities.actions.renew.reason not in controller.reasons %}{{ capabilities.actions.renew.reason }}{% endif %}</span>
     </div>
   {% endif %}
 </div>
@@ -215,7 +215,7 @@ declaration's machinery: the controller's actions are the buttons above, and
         {% endif %}
         {% if container.running and container.standing %}
           {% if container.running.published %}<dt>Publishes</dt><dd>{{ container.running.published }}</dd>{% endif %}
-          <dt>Seen</dt><dd>{{ container.running.observed_at|ago }}</dd>
+          <dt>Seen</dt><dd>{{ container.running.observed_at|when:"ago" }}</dd>
         {% elif container.running %}
           <dt>State</dt>
           <dd>
@@ -224,7 +224,7 @@ declaration's machinery: the controller's actions are the buttons above, and
           </dd>
           <dt>Image</dt><dd><code>{{ container.running.image_label }}</code></dd>
           {% if container.running.published %}<dt>Publishes</dt><dd>{{ container.running.published }}</dd>{% endif %}
-          <dt>Seen</dt><dd>{{ container.running.observed_at|ago }}</dd>
+          <dt>Seen</dt><dd>{{ container.running.observed_at|when:"ago" }}</dd>
         {% else %}
           <dt>State</dt>
           <dd><span class="muted">Not seen by a sweep yet.</span></dd>
@@ -325,8 +325,8 @@ one thing worth doing then is reading what it was.
         <tr>
           <td>{{ operation.action_label }}{% if operation.automatic %}<br><span class="tag">automatic</span>{% endif %}</td>
           <td><span class="pill pill-{{ operation.state }}">{{ operation.state_label }}</span></td>
-          <td>{{ operation.created_at }}<br><span class="muted">{{ operation.requested_actor }} via {{ operation.requested_interface }}</span>{% if operation.attempt_count %}<br><span class="muted">Attempt {{ operation.attempt_count }}</span>{% endif %}</td>
-          <td>{{ operation.completed_at|or_empty }}</td>
+          <td>{{ operation.created_at|when }}<br><span class="muted">{{ operation.requested_actor }} via {{ operation.requested_interface }}</span>{% if operation.attempt_count %}<br><span class="muted">Attempt {{ operation.attempt_count }}</span>{% endif %}</td>
+          <td>{{ operation.completed_at|when }}</td>
           <td class="operation-result">
             <strong>{{ operation.headline }}</strong>
             <p class="operation-guidance">{{ operation.guidance }}</p>

@@ -81,6 +81,8 @@ def queue_item(source_id: str, source: str, item: Any) -> dict[str, Any]:
         "workflow": serialize_workflow(item.workflow),
         "actions": [asdict(action) for action in item.actions],
         "subject": asdict(subject) if subject else None,
+        "notice": bool(getattr(item, "notice", False)),
+        "family": getattr(item, "family", ""),
     }
 
 

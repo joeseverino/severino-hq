@@ -137,7 +137,9 @@ def unrecognised_containers(estate: Any) -> tuple[dict[str, Any], ...]:
     container nobody declared must never look like one somebody did.
     """
 
-    from django.urls import NoReverseMatch, reverse
+    from django.urls import NoReverseMatch
+
+    from application.routes import reverse
 
     from .finding_model import Remedy
     from .inventory import record_token

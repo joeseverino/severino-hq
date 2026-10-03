@@ -13,13 +13,21 @@ here names one.
     <h1>{{ greeting }}</h1>
     <p class="dash-status">
       {% if action_queue_count %}
-        <a href="{% url 'action_items' %}"><strong>{{ action_queue_count|counted:"thing needs you,things need you" }}</strong></a>
+        <a href="{% url 'action_items' %}"><strong>{{ action_queue_count|counted:"thing needs you,things need you" }}</strong></a>{% if notice_count %} <span class="muted">· {{ notice_count|counted:"notice,notices" }}</span>{% endif %}
+      {% elif notice_count %}
+        Nothing needs you. <a href="{% url 'action_items' %}">{{ notice_count|counted:"notice,notices" }}</a>
+      {% elif aside_count %}
+        Nothing waits on you. <a href="{% url 'action_items' %}">{{ aside_count }} dismissed</a>
       {% else %}
-        All clear. Nothing needs you.
+        Nothing needs your attention right now.
       {% endif %}
     </p>
   </div>
-  {% include "core/_dashboard_glance.html" %}
+  <div class="dash-readings">
+    {% include "core/_dashboard_connection.html" with connection=request_connection only %}
+    {% include "core/_dashboard_controller.html" with controller=controller only %}
+    {% include "core/_dashboard_glance.html" %}
+  </div>
 </header>
 
 {% include "core/_dashboard_highlights.html" %}
@@ -72,7 +80,7 @@ A domain's own calendar stays on its pages.
               {% if p.get_category_display %}<span class="visually-hidden">{{ p.get_category_display }}</span>{% endif %}
               <strong>{% entity "project"|entity_of:p.slug label=p.name %}</strong>
             </span>
-            <span class="row-meta">{{ p.updated_at|date:"M j" }}</span>
+            <span class="row-meta">{{ p.updated_at|when:"day" }}</span>
           </li>
         {% endfor %}
       </ul>
@@ -98,12 +106,11 @@ A domain's own calendar stays on its pages.
   </section>
   {% endif %}
 
-  <div class="dash-cell" data-deferred="{% url 'dashboard_contacts' %}">
-    <section class="card">
-      <div class="section-head"><h2>Contacts</h2></div>
-      <p class="dash-empty">Loading…</p>
-    </section>
-  </div>
+  {% comment %}
+  Rendered with the page, from the rows HQ already holds, so the card is there
+  or it is not: nothing arrives after the page to appear or vanish.
+  {% endcomment %}
+  {% include "core/_dashboard_contacts.html" %}
 </div>
 
 {% if external_links or external_choices %}

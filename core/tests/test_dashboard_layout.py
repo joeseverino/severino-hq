@@ -75,14 +75,12 @@ class HighlightGridTests(SimpleTestCase):
         self.assertEqual(columns(4, 520), 4)
         self.assertEqual(columns(6, 520), 3)
 
-    def test_at_most_two_highlight_cards_share_a_row(self):
+    def test_highlight_cards_fit_the_available_width_without_empty_tracks(self):
         css = (Path(settings.BASE_DIR) / "static" / "css" / "app.css").read_text(encoding="utf-8")
         rule = re.search(r"\.dashboard-highlights \{([^}]*)\}", css).group(1)
-
-        # Every track is at least half the row, so a third never fits beside two.
-        self.assertIn("calc(50% - var(--layout-gap))", rule)
-        self.assertIn(
-            ".dashboard-highlights > .highlight-card:nth-child(odd):last-child "
-            "{ grid-column: 1 / -1; }",
-            css,
-        )
+        # As many to a row as fit, each row shared evenly by the cards on it:
+        # the last row too, so a third card on a window that fits two takes the
+        # whole width, never half of it beside an empty track.
+        self.assertIn("display: flex", rule)
+        self.assertIn("flex-wrap: wrap", rule)
+        self.assertIn(".dashboard-highlights > .highlight-card { flex: 1 1 320px; }", css)

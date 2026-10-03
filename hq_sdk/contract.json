@@ -776,6 +776,22 @@
         "parameters": []
       }
     },
+    "reads": {
+      "day_span": {
+        "kind": "function",
+        "parameters": [
+          "first",
+          "last="
+        ]
+      },
+      "read_once": {
+        "kind": "function",
+        "parameters": [
+          "key",
+          "loader"
+        ]
+      }
+    },
     "resources": {
       "ResourceQuery": {
         "bases": [
@@ -1214,6 +1230,40 @@
         "kind": "dataclass",
         "members": {}
       },
+      "Dot": {
+        "bases": [],
+        "constructor": [
+          "filled",
+          "tip=",
+          "url="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "Dots": {
+        "bases": [],
+        "constructor": [
+          "dots"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "links": {
+            "kind": "property"
+          },
+          "of": {
+            "kind": "classmethod",
+            "parameters": [
+              "filled",
+              "whole"
+            ]
+          },
+          "shown": {
+            "kind": "property"
+          }
+        }
+      },
       "Insight": {
         "bases": [],
         "constructor": [
@@ -1228,7 +1278,9 @@
           "workflow=",
           "actions=",
           "key=",
-          "subject="
+          "subject=",
+          "notice=",
+          "family="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -1241,7 +1293,9 @@
           "value",
           "detail=",
           "url=",
-          "is_zero="
+          "is_zero=",
+          "icon=",
+          "drawing="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -1381,6 +1435,23 @@
         "kind": "dataclass",
         "members": {}
       },
+      "Trend": {
+        "bases": [],
+        "constructor": [
+          "values",
+          "tips="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "marks": {
+            "kind": "property"
+          },
+          "points": {
+            "kind": "property"
+          }
+        }
+      },
       "WeekPlan": {
         "bases": [],
         "constructor": [
@@ -1392,6 +1463,12 @@
         "fields": [],
         "kind": "dataclass",
         "members": {}
+      },
+      "ago": {
+        "kind": "function",
+        "parameters": [
+          "moment"
+        ]
       },
       "counted": {
         "kind": "function",
@@ -1425,6 +1502,31 @@
           "*",
           "unit",
           "maximum="
+        ]
+      },
+      "when": {
+        "kind": "function",
+        "parameters": [
+          "value"
+        ]
+      },
+      "when_day": {
+        "kind": "function",
+        "parameters": [
+          "value"
+        ]
+      },
+      "when_exact": {
+        "kind": "function",
+        "parameters": [
+          "value"
+        ]
+      },
+      "when_range": {
+        "kind": "function",
+        "parameters": [
+          "start",
+          "end"
         ]
       }
     },

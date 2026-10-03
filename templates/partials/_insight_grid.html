@@ -29,6 +29,7 @@ communicated by colour alone.
       </h3>
       {% if item.body %}<p class="insight-body">{{ item.body }}</p>{% endif %}
       {% if item.action %}<p class="insight-action"><span class="insight-action-label">Next</span> {{ item.action }}</p>{% endif %}
+      {% if item.actions %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=item.actions only %}</div>{% endif %}
       {% if item.workflow %}<details class="attention-workflow"><summary>Steps to resolve</summary>{% include "partials/_resolution_workflow.html" with workflow=item.workflow compact=True %}</details>{% endif %}
     </article>
   {% endfor %}

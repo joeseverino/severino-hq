@@ -25,6 +25,7 @@ replayed, the worst it can cause is a controller run that finds nothing to do.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -34,6 +35,7 @@ import time
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.utils import timezone
 
 from control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
@@ -104,15 +106,67 @@ def recently_used(now: float | None = None) -> bool:
     return age <= window
 
 
+def note_controller() -> None:
+    """Record that the controller reached HQ, on the call every real run makes.
+
+    A file's mtime, like the activity marker and for the same reason: it is
+    written about once a minute and read by one page. What it is for is the
+    case no record of a sweep can show, a controller that stopped arriving at
+    all: every reading then stays as it was, which looks like a quiet
+    estate until somebody notices nothing has moved.
+
+    Best effort. The controller's work may not fail because a note about it
+    could not be written.
+    """
+
+    try:
+        _touch(_path("SEVERINO_CONTROLLER_HEARTBEAT", "controller-heartbeat"))
+    except OSError:
+        return
+
+
+# A run starts within a minute of the last ending and a sweep takes a few, so
+# a healthy controller is never this long between arrivals.
+CONTROLLER_SILENT_AFTER = timedelta(minutes=15)
+
+
+@dataclass(frozen=True)
+class ControllerStanding:
+    """When the controller last reached HQ, and whether that is too long ago."""
+
+    seen_at: datetime | None
+    silent: bool
+
+    @property
+    def known(self) -> bool:
+        return self.seen_at is not None
+
+
+def controller_standing(now: datetime | None = None) -> ControllerStanding:
+    """The controller's last arrival. Never seen is unknown, not silent: an
+    installation with no controller has nothing to be late."""
+
+    marker = _path("SEVERINO_CONTROLLER_HEARTBEAT", "controller-heartbeat")
+    try:
+        seen_at = datetime.fromtimestamp(marker.stat().st_mtime, tz=timezone.get_current_timezone())
+    except OSError:
+        return ControllerStanding(seen_at=None, silent=False)
+    return ControllerStanding(
+        seen_at=seen_at, silent=(now or timezone.now()) - seen_at > CONTROLLER_SILENT_AFTER
+    )
+
+
 def sweep_interval() -> timedelta:
     """How stale a sweep may be before another is worth the calls.
 
     Adaptive, because the answer depends on whether anybody is looking. In use,
-    a minute-old view of the estate is the point of having one. Idle, twelve
-    hours of staleness costs nothing and saves the calls.
+    a view of the estate a few minutes old is the point of having one, and the
+    interval stays longer than a sweep takes so the controller is idle, and
+    answers its doorbell, between them. Idle, twelve hours of staleness costs
+    nothing and saves the calls.
     """
 
-    active = _seconds("SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS", 60)
+    active = _seconds("SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS", 300)
     idle = _seconds("SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS", 12 * 60 * 60)
     return timedelta(seconds=active if recently_used() else idle)
 
@@ -141,24 +195,30 @@ def ssh_probe_interval() -> timedelta:
     return timedelta(seconds=_seconds("SEVERINO_SSH_PROBE_INTERVAL_SECONDS", 60 * 60))
 
 
-def carried_connections(controller_id: str) -> list[str]:
+def carried_connections(controller_id: str, *, failing: bool = False) -> list[str]:
     """SSH connections this controller should report without probing again.
 
-    Only ones whose last probe succeeded and is younger than the interval. A
-    failing connection is asked again on every sweep, so a recovery shows up as
-    soon as it happens rather than an hour later.
+    On the sweep's own clock, only ones whose last probe succeeded and is
+    younger than the interval: a failing connection is asked again, so a
+    recovery shows up as soon as it happens rather than an hour later.
+
+    ``failing`` carries the failing ones too. That is for a sweep that runs
+    only because somebody asked for a reading: it was not asked to look at
+    SSH, and a host that is refusing a login counts every further attempt.
+    Opening pages must not turn into a login every couple of minutes against
+    a host that has already said no.
     """
 
     fresh_since = timezone.now() - ssh_probe_interval()
-    return sorted(
-        ProviderConnection.objects.filter(
-            controller_id=controller_id,
-            provider="ssh",
-            probed=True,
-            reachable=True,
-            observed_at__gte=fresh_since,
-        ).values_list("connection_ref", flat=True)
+    probes = ProviderConnection.objects.filter(
+        controller_id=controller_id,
+        provider="ssh",
+        probed=True,
+        observed_at__gte=fresh_since,
     )
+    if not failing:
+        probes = probes.filter(reachable=True)
+    return sorted(probes.values_list("connection_ref", flat=True))
 
 
 def sweep_due(controller_id: str = "") -> dict[str, object]:
@@ -205,6 +265,14 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
     )
     if not due and forced:
         reason += f" Read now asked for {', '.join(read.subject for read in forced)}."
+        if controller_id:
+            # Due only because somebody asked: SSH is left as it was last
+            # found, working or not, unless it is what they asked for.
+            verdict["carry"] = [
+                ref
+                for ref in carried_connections(controller_id, failing=True)
+                if ref not in forced_refs
+            ]
         if all(read.kinds is not None for read in forced):
             verdict["only_kinds"] = sorted(
                 {kind for read in forced for kind in read.kinds or ()}
@@ -443,6 +511,34 @@ def request_controller_sweep(
         "read_now": _read_label(subject),
         "message": _sweep_message(subject, bool(verdict["due"])),
     }
+
+
+@transaction.atomic
+def request_reads(kinds: Iterable[str], *, principal: Principal) -> tuple[str, ...]:
+    """Ask for several kinds to be read now, as one request: the kinds asked for.
+
+    Each is held to the same test a single read is, so nothing is asked for
+    that HQ does not store a kind for. Activity is noted once and the doorbell
+    rung once, after the requests are stored: rung before, the controller could
+    arrive to find nothing asked.
+    """
+
+    principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    wanted = [
+        subject[1]
+        for kind in dict.fromkeys(kinds)
+        if (subject := _read_subject(ControllerSweepCommand(kind=kind))) is not None
+    ]
+    if not wanted:
+        return ()
+    note_activity()
+    now = timezone.now()
+    for kind in wanted:
+        ReadRequest.objects.update_or_create(
+            connection_ref="", kind=kind, defaults={"requested_at": now}
+        )
+    transaction.on_commit(ring_doorbell)
+    return tuple(wanted)
 
 
 def _read_label(subject: tuple[str, str] | None) -> str:

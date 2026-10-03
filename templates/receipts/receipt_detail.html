@@ -2,7 +2,7 @@
 {% load humanize %}
 {% block page %}
 <dl class="kv">
-  <dt>Date</dt><dd>{{ receipt.date|or_empty }}</dd>
+  <dt>Date</dt><dd>{{ receipt.date|when }}</dd>
   <dt>Amount</dt><dd>${{ receipt.amount|floatformat:2|intcomma }}</dd>
   {% if receipt.content_type %}<dt>Content type</dt><dd><code>{{ receipt.content_type }}</code></dd>{% endif %}
   {% if receipt.size_bytes %}<dt>Size</dt><dd>{{ receipt.size_bytes|filesizeformat }}</dd>{% endif %}

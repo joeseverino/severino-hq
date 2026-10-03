@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass, replace
 from typing import Any
-from django.urls import reverse
+from application.routes import reverse
 
 from control_plane.names import normalized_hostname
 from control_plane.models import ManagedResource

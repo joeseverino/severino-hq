@@ -83,13 +83,21 @@ def _fraction(key: str, stream: str = "") -> float:
     return int(digest[:12], 16) / float(16**12)
 
 
-def amount(value: Any, *, key: str) -> Decimal:
-    """A stand-in of the same magnitude and sign, or the real value.
+# The most figures a stand-in has. A stand-in of the real size says how large
+# the real amount is, and for money that is most of what there is to know: a
+# five-figure stand-in for a five-figure balance reads as plausibly the real
+# one. Capped, a demo shows amounts nobody would take for anybody's.
+DEMO_MAX_DIGITS = 4
 
-    Magnitude is kept because it is the shape rather than the secret: six
-    figures replaced by three reads as an empty record, and a page laid out
-    for one is misread as broken. The sign is kept for the same reason: what
-    is owed must go on reading as owed.
+
+def amount(value: Any, *, key: str) -> Decimal:
+    """A stand-in with the same sign, or the real value.
+
+    Small amounts keep their size, because the shape of a page depends on it:
+    a coffee replaced by a salary reads as broken. Large ones do not: anything
+    of ``DEMO_MAX_DIGITS`` figures or more is shown at that many, so the
+    stand-in says only "a thousand or more" about what it replaced. The sign
+    is kept: what is owed must go on reading as owed.
     """
 
     real = to_money(value)
@@ -98,7 +106,7 @@ def amount(value: Any, *, key: str) -> Decimal:
     size = abs(real)
     if size < 1:
         return quantize_money(Decimal("0"))
-    digits = len(str(int(size)))
+    digits = min(len(str(int(size))), DEMO_MAX_DIGITS)
     floor = Decimal(10) ** (digits - 1)
     span = floor * 9
     stand_in = floor + (span * Decimal(str(_fraction(key, "amount"))))

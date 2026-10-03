@@ -1,42 +1,53 @@
 {% comment %}
-The canonical work_queue projection, rendered by the action items page.
-Workflow actions retain their owner's method, route, and authorization boundary.
+The canonical queue, on the dashboard, queue and domain pages. Subjects,
+actions and evidence come from the owner. A row leads with what is wrong; its
+next step is the toggle for the evidence behind it, and what can be done about
+it follows. Under a domain's own heading (`grouped`) a row does not repeat the
+domain. Where the reader sorts their own queue (`triage`) a row ends with the
+one thing they can do to it: dismiss it, or restore it. Neither closes it.
 {% endcomment %}
 <ul class="attention-list">
-  {% for item in items %}
-    <li class="attention-row">
-      <span class="pill pill-{{ item.status }}">{{ item.status|capfirst }}</span>
+  {% for entry in items %}
+    {% with item=entry|decision %}
+    <li class="attention-row" data-attention-item>
       <div class="attention-body">
-        <small class="muted">{{ item.source }}{% if item.subject %} · <a href="{{ item.subject.url }}">{{ item.subject.label }}</a>{% endif %}</small>
-        {% if item.url %}<a class="attention-title" href="{{ item.url }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}
-        {% if item.detail %}<p class="attention-detail">{{ item.detail }}</p>{% endif %}
-        {% if item.action %}<p class="attention-action"><span class="insight-action-label">Next</span> {{ item.action }}</p>{% endif %}
+        <div class="attention-head">
+          {% if item.notice %}<span class="pill pill-idea">Notice</span>{% else %}<span class="pill pill-{{ item.status }}">{{ item.status|capfirst }}</span>{% endif %}
+          {% if item.url %}<a class="attention-title" href="{{ item.url }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}
+          <span class="attention-meta">
+            {% if not grouped %}<span>{{ item.source }}</span>{% endif %}
+            {% if item.subject %}<a href="{{ item.subject.url }}">{{ item.subject.label }}</a>{% endif %}
+            {% if item.count > 1 %}<span class="attention-value">{{ item.count }} affected</span>{% endif %}
+          </span>
+        </div>
+        {% if item.detail or item.workflow %}
+          <details class="attention-evidence">
+            <summary>{% if item.action %}<span class="insight-action-label">Next</span> {{ item.action }}{% elif item.workflow %}Evidence &amp; steps{% else %}Evidence{% endif %}<span class="visually-hidden"> for {{ item.label }}</span></summary>
+            {% if item.detail %}<p class="attention-detail">{{ item.detail }}</p>{% endif %}
+            {% if item.workflow %}{% include "partials/_resolution_workflow.html" with workflow=item.workflow compact=True %}{% endif %}
+          </details>
+        {% elif item.action %}
+          <p class="attention-action"><span class="insight-action-label">Next</span> {{ item.action }}</p>
+        {% endif %}
         {% if item.actions %}
           <div class="attention-actions">
-            {% for action in item.actions %}
-              {% if action.method == "POST" %}
-                {% if action.recommended %}{% post_button action.label action.url css="btn compact primary" %}{% else %}{% post_button action.label action.url css="btn compact" %}{% endif %}
-              {% else %}
-                <a class="btn compact{% if action.recommended %} primary{% endif %}" href="{{ action.url }}">{{ action.label }}</a>
-              {% endif %}
-            {% endfor %}
+            {% include "partials/_action_links.html" with actions=item.actions only %}
           </div>
         {% endif %}
-        {% if item.workflow %}<details class="attention-workflow"><summary>Steps to resolve</summary>{% include "partials/_resolution_workflow.html" with workflow=item.workflow compact=True %}</details>{% endif %}
       </div>
-      <div class="attention-end">
-        <span class="attention-value">{{ item.count }}</span>
-        {% if markable %}
-          {% if item.read %}
-            {% url 'action_items_mark_unread' as mark_url %}
-            {% post_button "Mark unread" mark_url name="key" value=item.key css="btn compact ghost" %}
-          {% else %}
-            {% url 'action_items_mark_read' as mark_url %}
-            {% post_button "Mark read" mark_url name="key" value=item.key css="btn compact ghost" %}
-          {% endif %}
+      {% if triage %}
+      <div class="attention-end" data-triage>
+        {% if item.aside %}
+          {% url 'action_items_bring_back' as triage_url %}
+          {% post_button "Restore" triage_url name="key" value=item|row_value css="btn compact ghost" %}
+        {% else %}
+          {% url 'action_items_set_aside' as triage_url %}
+          {% post_button "Dismiss" triage_url name="key" value=item|row_value css="btn compact ghost" %}
         {% endif %}
       </div>
+      {% endif %}
     </li>
+    {% endwith %}
   {% empty %}
     <li class="attention-row"><p class="attention-clear">{{ empty|default:"Nothing to do." }}</p></li>
   {% endfor %}

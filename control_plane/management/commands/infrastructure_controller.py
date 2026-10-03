@@ -25,7 +25,7 @@ from application.controller import (
     schedule_automatic_operations,
 )
 from application.certificates import CertificateError, material_for
-from application.cadence import sweep_due
+from application.cadence import note_controller, sweep_due
 from application.analytics import analytics_plan, record_analytics
 from application.inventory import record_connections, record_step_failures
 from application.sweep import record_sweep
@@ -116,6 +116,10 @@ def _sweep_due(options: dict) -> Any:
 
 
 def _glance_plan(options: dict) -> Any:
+    # The first call of every applying run, before any work that could end it
+    # early, and one a preflight never makes: so this is the controller
+    # arriving, noted before anything it does can go wrong.
+    note_controller()
     return dashboard_refresh_plan(options["controller_id"])
 
 

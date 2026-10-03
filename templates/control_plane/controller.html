@@ -1,0 +1,90 @@
+{% extends "page.html" %}
+{% block page %}
+{% comment %}
+What HQ knows of the controller, from what the controller left behind: its
+last arrival, what the sweep read and when each kind was last tried, when the
+next sweep is due, and the work waiting for it. Nothing here asks it anything.
+{% endcomment %}
+{% with standing=controller.standing %}
+<div class="fact-band" role="group" aria-label="Controller standing">
+  <div class="band-fact{% if standing.silent %} tone-serious{% elif standing.known %} tone-good{% endif %}">
+    <span class="band-icon">{% include "partials/_icon.html" with name="activity" %}</span>
+    <div>
+      <span class="band-label">Arriving</span>
+      {% if not standing.known %}<strong>Has not run here</strong><small>No controller has reached this installation.</small>
+      {% elif standing.silent %}<strong>Silent for {{ standing.seen_at|timesince }}</strong><small>Last reached HQ {{ standing.seen_at|when }}. Nothing has been read or applied since.</small>
+      {% else %}<strong>Yes</strong><small>Last reached HQ {{ standing.seen_at|when:"ago" }}.</small>{% endif %}
+    </div>
+  </div>
+  <div class="band-fact{% if controller.failing %} tone-attention{% endif %}">
+    <span class="band-icon">{% include "partials/_icon.html" with name="eye" %}</span>
+    <div>
+      <span class="band-label">Last sweep</span>
+      {% if controller.swept_at %}<strong>{{ controller.swept_at|when:"ago" }}</strong><small>{{ controller.readings|length|counted:"kind" }} read{% if controller.failing %} · {{ controller.failing }} could not be{% endif %}</small>
+      {% else %}<strong>Never</strong><small>Nothing has been swept yet.</small>{% endif %}
+    </div>
+  </div>
+  <div class="band-fact">
+    <span class="band-icon">{% include "partials/_icon.html" with name="clock" %}</span>
+    <div>
+      <span class="band-label">Next sweep</span>
+      {% if controller.sweep_due %}<strong>Due now</strong>{% elif controller.next_sweep_at %}<strong>In {{ controller.next_sweep_at|timeuntil }}</strong>{% else %}<strong>Not scheduled</strong>{% endif %}
+      <small>{{ controller.sweep_reason }}</small>
+    </div>
+  </div>
+  <div class="band-fact{% if controller.queue %} tone-attention{% endif %}">
+    <span class="band-icon">{% include "partials/_icon.html" with name="layers" %}</span>
+    <div>
+      <span class="band-label">Waiting for it</span>
+      <strong>{{ controller.queue|length|counted:"operation" }}</strong>
+      <small>{% if controller.asked %}{{ controller.asked|length|counted:"read" }} asked for: {% for read in controller.asked %}{{ read.subject }}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}No read asked for.{% endif %}</small>
+    </div>
+  </div>
+</div>
+{% endwith %}
+
+{% if controller.queue %}
+<section class="page-section" aria-labelledby="controller-queue">
+  <div class="section-head"><h2 id="controller-queue">Queued work</h2><span class="count">{{ controller.queue|length }}</span></div>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Resource</th><th>Action</th><th class="key-col">State</th><th>Queued</th></tr></thead>
+      <tbody>
+        {% for work in controller.queue %}
+          <tr>
+            <td><strong>{% entity "resource"|entity_of:work.resource %}</strong></td>
+            <td>{{ work.action }}</td>
+            <td>{{ work.state }}</td>
+            <td>{{ work.created_at|when:"ago" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="page-section" aria-labelledby="controller-readings">
+  <div class="section-head"><h2 id="controller-readings">What it read</h2><span class="count">{{ controller.readings|length }}</span></div>
+  {% if controller.readings %}
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Kind</th><th>Last tried</th><th>Last reading</th><th class="num-col">Records</th><th class="key-col">Result</th></tr></thead>
+      <tbody>
+        {% for reading in controller.readings %}
+          <tr>
+            <td><strong>{{ reading.label }}</strong><br><code>{{ reading.kind }}</code></td>
+            <td>{{ reading.attempted_at|when:"ago" }}</td>
+            <td>{{ reading.observed_at|when:"ago" }}</td>
+            <td class="num-col">{{ reading.records }}</td>
+            <td><span class="pill pill-{% if reading.ok %}good{% else %}serious{% endif %}">{% if reading.ok %}{{ reading.result }}{% else %}Failed{% endif %}</span>{% if not reading.ok %}<br><span class="muted cell-line">{{ reading.result }}</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    {% include "partials/_empty_state.html" with message="The controller has stored no reading yet." %}
+  {% endif %}
+</section>
+{% endblock %}

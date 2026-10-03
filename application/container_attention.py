@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.urls import reverse
+from application.routes import reverse
 
 from control_plane.provider_adapters.portainer import CONTAINER_KIND
 
@@ -101,6 +101,7 @@ def _advisory(label: str, standing: Standing, running: list[Container]) -> Insig
     return Insight(
         status=status_at("serious" if standing.serious and not waiting else "attention", level),
         eyebrow="Containers",
+        family="Image advisories",
         key=f"container-advisory:{standing.image.name}:{standing.tag}",
         title=f"{label} has {standing.summary}" + ("; no release fixes it yet" if waiting else ""),
         value=str(known),
@@ -168,6 +169,7 @@ def _reach_attention() -> list[Insight]:
                 Insight(
                     status=status_at("serious", level),
                     eyebrow="Containers",
+                    family="Container hardening",
                     key=f"container-posture:{check.id}",
                     title=f"{check.label}: not met by {counted(len(failing), 'container', 'containers')}",
                     value=str(len(failing)),

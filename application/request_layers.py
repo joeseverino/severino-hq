@@ -9,7 +9,8 @@ from django.utils.csp import CSP
 from core.network import split_host_port
 
 from . import tailnet
-from .ui import counted, moment
+from .timestamps import moment
+from .ui import counted
 from .request_channel import Channel
 from .request_identity import Identity
 

@@ -1,0 +1,16 @@
+{% comment %}
+A page about one thing asks for that thing's readings when it is opened.
+
+  {% include "partials/_visit_refresh.html" with subject="machine" name=machine.name %}
+
+The page says only which page it is; HQ works out what is behind it, and
+whether any of it is old enough to read again. It asks by posting this form
+once the page is showing, so nothing is read for a page nobody has in front of
+them, and without script the page is what HQ holds.
+{% endcomment %}
+<form method="post" action="{% url 'control_plane:visit' %}" data-visit-refresh hidden>
+  {% csrf_token %}
+  <input type="hidden" name="subject" value="{{ subject }}">
+  <input type="hidden" name="name" value="{{ name }}">
+</form>
+<p class="visit-status" data-visit-status role="status" hidden></p>

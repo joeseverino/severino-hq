@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
-from django.urls import reverse
+from application.routes import reverse
 
 from pydantic import (
     TypeAdapter,

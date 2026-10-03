@@ -304,7 +304,8 @@ class EstateCardTests(TestCase):
         response = self.client.get(reverse("dashboard"))
 
         self.assertContains(response, "<h2>Estate")
-        self.assertContains(response, "Machines online")
+        # "Machines", so it fits its column: the dots and the note say "online".
+        self.assertContains(response, "Machines</span>")
         self.assertContains(response, f'href="{reverse("control_plane:connections")}"')
 
     def test_a_refused_credential_is_said_as_refused(self):

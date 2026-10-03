@@ -16,6 +16,7 @@ from docs_index.importer import (
     validate_manifest_data,
 )
 from docs_index.models import DocumentationRecord
+from .labels import plural
 from .security import Capability, Principal
 from .ui import counted
 from assets.models import Asset
@@ -95,7 +96,7 @@ def _resolve(model, field, values, label):
     missing = sorted(set(values) - found)
     if missing:
         found_none = counted(
-            len(missing), f"related {label} not found", f"related {label}s not found"
+            len(missing), f"related {label} not found", f"related {plural(label)} not found"
         )
         raise ManifestImportError(f"{found_none}: {missing}")
     return records

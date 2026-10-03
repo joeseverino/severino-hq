@@ -23,7 +23,7 @@
           {% comment %}Said only when it is news: a current reading needs no age.{% endcomment %}
           {% if panel.refreshing or panel.outdated or panel.payload.refresh_failed %}
             <span class="glance-freshness">
-              {% if panel.refreshing %}Refreshing{% elif panel.payload.refresh_failed %}Refresh failed{% elif panel.observed_at %}Out of date · as of <time datetime="{{ panel.observed_at|date:'c' }}" title="{{ panel.observed_at }}">{{ panel.observed_at|ago }}</time>{% else %}Out of date{% endif %}
+              {% if panel.refreshing %}Refreshing{% elif panel.payload.refresh_failed %}Refresh failed{% elif panel.observed_at %}Out of date · as of {{ panel.observed_at|when:"ago" }}{% else %}Out of date{% endif %}
             </span>
           {% endif %}
         </summary>

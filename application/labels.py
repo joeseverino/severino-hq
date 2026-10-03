@@ -27,6 +27,25 @@ def lower_first(text: str) -> str:
     return text[:1].lower() + text[1:]
 
 
+_SIBILANT_ENDINGS = ("s", "x", "z", "ch", "sh")
+
+
+def plural(noun: str) -> str:
+    """Many of a noun, as English spells it: "entries", "addresses", "hosts".
+
+    The one place a plural is derived from a singular. A noun whose plural
+    this cannot reach ("person") is given whole to ``counted`` instead, or
+    declared as its model's ``verbose_name_plural``.
+    """
+
+    lowered = noun.lower()
+    if lowered.endswith("y") and lowered[-2:-1] not in ("", *"aeiou"):
+        return f"{noun[:-1]}ies"
+    if lowered.endswith(_SIBILANT_ENDINGS):
+        return f"{noun}es"
+    return f"{noun}s"
+
+
 def human_bytes(value: int | float) -> str:
     """A byte count as people say it: ``512 B``, ``38 MB``, ``1.7 GB``."""
 

@@ -239,7 +239,7 @@ class DomainCardTests(TestCase):
         # The count lives in the Security card's one line of facts.
         self.assertContains(response, "2 certificates")
         self.assertContains(response, "example-site")
-        self.assertContains(response, 'class="control-summary control-summary-four"')
+        self.assertContains(response, 'class="control-summary"')
 
 
 class RegistrationFallbackTests(TestCase):

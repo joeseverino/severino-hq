@@ -17,7 +17,7 @@ from control_plane.observations import OBSERVATIONS
 
 from .expiry import days_until
 from .facts import Joined, inventory_records
-from .ui import moment
+from .timestamps import moment
 from .finding_model import FindingRule, built_findings
 
 CERTIFICATE_EXPIRES = "certificate-expires"

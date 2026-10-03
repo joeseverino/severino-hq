@@ -285,6 +285,10 @@ class StyleContractTests(SimpleTestCase):
                 if not trimmed:
                     continue
                 subject = trimmed.split()[-1].split(">")[-1].strip()
+                # A part's pseudo-element is a box inside the part, not the part:
+                # giving it a display leaves the cell in table layout.
+                if "::" in subject:
+                    continue
                 # An element qualifier settles it either way: `span.x` cannot
                 # match a table part however `.x` is used elsewhere, and `td.x`
                 # always does. Only an unqualified class has to be judged by
@@ -309,7 +313,10 @@ class StyleContractTests(SimpleTestCase):
         # The table sizes to its content; the endpoint caps itself instead.
         self.assertNotIn(".connection-table { table-layout: fixed; }", css)
         endpoint_rule = css.split(".connection-endpoint {", 1)[1].split("}", 1)[0]
-        self.assertIn("max-width: min(100%, 32ch);", endpoint_rule)
+        # The cap every identifier in a table shares, so a narrow table can
+        # cut it sooner in one place, and never more than the cell.
+        self.assertIn("max-width: min(100%, var(--identifier-max));", endpoint_rule)
+        self.assertIn("--identifier-max: 32ch;", css)
         self.assertIn("text-overflow: ellipsis;", endpoint_rule)
         self.assertIn("white-space: nowrap;", endpoint_rule)
 
@@ -318,7 +325,7 @@ class StyleContractTests(SimpleTestCase):
     # sizing, the head's overflow menu, the dashboard strip, a few dense
     # diagrams. It only goes down. A layout answers to its own width with a
     # fluid rule (auto-fit, flex-wrap, clamp) or a container query instead.
-    VIEWPORT_BREAKPOINTS = 19
+    VIEWPORT_BREAKPOINTS = 10
 
     def test_viewport_breakpoints_only_go_down(self):
 
@@ -1401,3 +1408,38 @@ class CognitiveComplexityTests(SimpleTestCase):
             if score > self.LIMIT
         }
         self.assertEqual(over, {}, "split these into named steps")
+
+
+class RouteOwnerTests(SimpleTestCase):
+    """Routes are resolved in one place, so the answer can be remembered."""
+
+    def test_the_application_resolves_routes_through_its_one_owner(self):
+        root = Path(__file__).resolve().parents[2]
+        offenders = [
+            str(path.relative_to(root))
+            for package in ("application", "control_plane")
+            for path in (root / package).rglob("*.py")
+            if "tests" not in path.parts
+            and path.name != "routes.py"
+            and re.search(r"django\.urls import[^\n]*\breverse\b", path.read_text(encoding="utf-8"))
+        ]
+
+        self.assertEqual(offenders, [], "import reverse from application.routes")
+
+    def test_a_remembered_route_is_djangos_and_follows_the_url_configuration(self):
+        from django.urls import reverse as django_reverse
+
+        from application.routes import reverse
+
+        for name, kwargs in (("dashboard", None), ("control_plane:detail", {"key": "example"})):
+            self.assertEqual(reverse(name, kwargs=kwargs), django_reverse(name, kwargs=kwargs))
+            self.assertEqual(reverse(name, kwargs=kwargs), django_reverse(name, kwargs=kwargs))
+        with self.settings(FORCE_SCRIPT_NAME="/under"):
+            from django.urls import set_script_prefix
+
+            set_script_prefix("/under/")
+            try:
+                self.assertEqual(reverse("dashboard"), django_reverse("dashboard"))
+            finally:
+                set_script_prefix("/")
+        self.assertEqual(reverse("dashboard"), django_reverse("dashboard"))

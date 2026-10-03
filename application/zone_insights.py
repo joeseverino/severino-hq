@@ -19,7 +19,7 @@ one is an entry rather than an edit to a page.
 from __future__ import annotations
 
 import re
-from django.urls import reverse
+from application.routes import reverse
 
 from control_plane.credential_reads import REGISTRAR_READ
 from control_plane.models import ManagedResource
@@ -46,7 +46,8 @@ from .infrastructure import delivery_targets, resolved_spec
 from .known_hosts import operator, registrable
 
 
-from .ui import ListRow, counted, ended, moment
+from .timestamps import moment
+from .ui import ListRow, counted, ended
 from .zones import ZONE_KIND, ZoneInsight
 
 # The authority HQ's own certificate provider issues from. Stated here because

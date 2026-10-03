@@ -11,6 +11,7 @@ from control_plane.provider_adapters.portainer import CONTAINER_KIND
 from .entity_links import EntityLink, entity_link
 from .infrastructure import declared_machines
 from .locate import Machines, host_of, machines_index, split_endpoint
+from .projection import read_once
 
 
 @dataclass(frozen=True)
@@ -341,7 +342,32 @@ def _hosting(container: str, at: "Whereabouts | None" = None) -> list[str]:
     return found.get(container, [])
 
 
+def _container_reads() -> tuple[tuple[Any, ...], tuple[Any, ...]]:
+    """What was read of containers, and what was declared of them, once.
+
+    The two indexes below are two ways into the same two tables.
+    """
+
+    return read_once(
+        "whereabouts.container_reads",
+        lambda: (
+            tuple(ProviderInventory.objects.filter(kind=CONTAINER_KIND)),
+            tuple(
+                ManagedResource.objects.filter(kind=CONTAINER_KIND, enabled=True).values_list(
+                    "spec", flat=True
+                )
+            ),
+        ),
+    )
+
+
 def _containers_by_name() -> dict[str, list[str]]:
+    # Built once for the page however many rows ask of it: the comment below
+    # says why it is built whole, and this is what keeps it built once.
+    return read_once("whereabouts.containers_by_name", _load_containers_by_name)
+
+
+def _load_containers_by_name() -> dict[str, list[str]]:
     """Which machines run a container of each name.
 
     The inverse of the index below, and read from the same two tables, because
@@ -350,15 +376,13 @@ def _containers_by_name() -> dict[str, list[str]]:
     """
 
     found: dict[str, set[str]] = {}
-    for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND):
+    for snapshot in _container_reads()[0]:
         for record in snapshot.records:
             host = str(record.get("host", "") or "")
             name = str(record.get("name", "") or "")
             if host and name:
                 found.setdefault(name, set()).add(host)
-    for spec in ManagedResource.objects.filter(
-        kind=CONTAINER_KIND, enabled=True
-    ).values_list("spec", flat=True):
+    for spec in _container_reads()[1]:
         host = str(spec.get("host", "") or "")
         name = str(spec.get("name", "") or "")
         if host and name:
@@ -367,6 +391,10 @@ def _containers_by_name() -> dict[str, list[str]]:
 
 
 def _answering() -> dict[tuple[str, Any], list[str]]:
+    return read_once("whereabouts.answering", _load_answering)
+
+
+def _load_answering() -> dict[tuple[str, Any], list[str]]:
     """Every container answering on a port of a machine, by that pair.
 
     Built whole rather than asked per address. The same two tables answer every
@@ -384,12 +412,10 @@ def _answering() -> dict[tuple[str, Any], list[str]]:
         for port in ports or ():
             found.setdefault((host, port), set()).add(name)
 
-    for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND):
+    for snapshot in _container_reads()[0]:
         for record in snapshot.records:
             note(record.get("host"), record.get("name"), record.get("ports"))
-    for spec in ManagedResource.objects.filter(
-        kind=CONTAINER_KIND, enabled=True
-    ).values_list("spec", flat=True):
+    for spec in _container_reads()[1]:
         note(spec.get("host"), spec.get("name"), spec.get("serves_ports"))
     return {key: sorted(names) for key, names in found.items()}
 

@@ -38,7 +38,7 @@ from .entity_links import entity_link
 from .integrations import integration_graph
 from .integration_validation import required_capability_names
 from .security import Capability, Principal
-from .ui import ago
+from .moments import ago
 from .connection_catalog import CONTROLLER_CONNECTIONS, connection_catalog, serialize_connection
 
 

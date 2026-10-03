@@ -15,14 +15,46 @@
   {% if action_query or action_status or action_source %}<a class="btn ghost" href="{% url 'action_items' %}">Clear</a>{% endif %}
 </form>
 
-<section class="card action-items-card">
-  {% include "partials/_work_queue.html" with items=action_items markable=True empty="Nothing unread." %}
+{% comment %}
+What waits on the reader, under the domain that raised it. An item is open
+until its owner stops raising it; one the reader is not going to act on now can
+be dismissed: it leaves the queue and the counts, stays reachable below, and
+comes back on its own only if it gets worse.
+{% endcomment %}
+<section class="card action-items-card" data-triage-routes data-dismiss="{% url 'action_items_set_aside' %}" data-restore="{% url 'action_items_bring_back' %}">
+  <div class="section-head">
+    <h2>{% if action_query or action_status or action_source %}Matching{% else %}Needs you{% endif %} <span class="count" data-queue-count>{{ action_item_total }}</span></h2>
+    {% if action_groups %}{% post_button "Dismiss all" aside_all_url css="btn compact ghost" %}{% endif %}
+  </div>
+  {% if action_groups %}
+    {% include "partials/_queue_groups.html" with groups=action_groups prefix="queue" aside_url=aside_all_url %}
+  {% elif action_query or action_status or action_source %}
+    {% url 'action_items' as all_actions_url %}
+    {% include "partials/_empty_state.html" with message="Nothing waiting matches these filters." action_url=all_actions_url action_label="Clear filters" compact=True only %}
+  {% else %}
+    {% include "partials/_work_queue.html" with items=action_groups empty="Nothing waits on you." %}
+  {% endif %}
 </section>
 
-{% if read_action_items %}
-  <details class="card action-items-read">
-    <summary>Read · {{ read_action_items|length }}</summary>
-    {% include "partials/_work_queue.html" with items=read_action_items markable=True %}
+{% comment %}
+What is only being told: something happened or was measured, and there is
+nothing to resolve. Kept apart from what needs doing; dismissing one is the end
+of it unless it reports something else.
+{% endcomment %}
+{% if notice_groups %}
+  <section class="card action-items-card">
+    <div class="section-head">
+      <h2>Notices <span class="count" data-queue-count>{{ notice_total }}</span></h2>
+      {% post_button "Dismiss all" notices_aside_url css="btn compact ghost" %}
+    </div>
+    {% include "partials/_queue_groups.html" with groups=notice_groups prefix="notice" aside_url=notices_aside_url %}
+  </section>
+{% endif %}
+
+{% if aside_groups %}
+  <details class="card section-fold action-items-aside">
+    <summary><h2>Dismissed <span class="count">{{ aside_total }}</span></h2></summary>
+    {% include "partials/_queue_groups.html" with groups=aside_groups prefix="aside" %}
   </details>
 {% endif %}
 {% endblock %}

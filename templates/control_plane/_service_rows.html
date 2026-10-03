@@ -16,7 +16,7 @@ alphabetical is the order and there is nothing to move.
         {% for id, label in facets %}<th>{{ label }}</th>{% endfor %}
         <th>Runs on</th>
         {% if show_service_projects %}<th>Project</th>{% endif %}
-        <th>State</th>
+        <th class="key-col">State</th>
       </tr>
     </thead>
     {% for group_label, rows, reorderable in groups %}

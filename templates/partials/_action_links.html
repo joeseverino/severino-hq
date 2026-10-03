@@ -1,0 +1,2 @@
+{% comment %}ActionLink objects and serialized actions share page-action semantics.{% endcomment %}
+{% for action in actions %}{% include "partials/_page_action.html" with action=action|workflow_action extra="compact" only %}{% endfor %}

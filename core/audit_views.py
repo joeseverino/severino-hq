@@ -6,6 +6,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse
 from django.views.generic import DetailView, ListView
 
+from application.projection import day_span
 from application import history
 from application.pages import PageAction, PageMixin
 from application.projection import projection_scope
@@ -28,7 +29,7 @@ class AuditLogListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     table_columns = (
         TableColumn("When", "created_at", "Oldest event", "Newest event"),
         TableColumn("Who", "user__username", "User A–Z", "User Z–A"),
-        TableColumn("Action", "action", "Action", "Action reverse"),
+        TableColumn("Action", "action", "Action", "Action reverse", css="key-col"),
         TableColumn("Object", "object_type", "Object type", "Object type reverse"),
         TableColumn("Message", "message", "Message A–Z", "Message Z–A"),
     )
@@ -61,7 +62,8 @@ class AuditLogListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
             )
         day = self._day()
         if day is not None:
-            qs = qs.filter(created_at__date=day)
+            start, end = day_span(day, day)
+            qs = qs.filter(created_at__gte=start, created_at__lt=end)
         return self.apply_table_query(qs)
 
     def _day_bounds(self) -> dict:

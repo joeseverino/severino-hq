@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404
-from django.urls import reverse
+from application.routes import reverse
 from django.views.generic import TemplateView
 
 from application.entity_links import NODE_KINDS, node_link

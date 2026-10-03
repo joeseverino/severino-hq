@@ -165,6 +165,12 @@ def audit_connection(connection_ref: str):
         _connection_context.reset(token)
 
 
+def audited_labels() -> dict[type, str]:
+    """Each registered model and the label its audit rows are stored under."""
+
+    return dict(_AUDITED_MODELS)
+
+
 def register_audit(
     model,
     type_label: str,

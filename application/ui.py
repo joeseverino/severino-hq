@@ -5,7 +5,8 @@ import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from .timestamps import moment
+from .drawings import Dots, Trend
+from .labels import plural
 from .workflow_contracts import ActionLink, WorkflowPlan
 
 # The one status vocabulary. Every surface that shows state (dashboard cards,
@@ -25,8 +26,9 @@ def counted(count: int, one: str, many: str | None = None) -> str:
 
     The phrase is given whole for one and for many, so a noun and its verb agree
     by construction rather than by a suffix guessed afterwards. ``many`` may be
-    left out only for a single word that takes an "s"; a phrase has a verb, and
-    a verb cannot be pluralized by adding a letter.
+    left out only for a single regular noun, which ``labels.plural`` spells
+    ("entry" counts as "entries"); a phrase has a verb, and a verb cannot be
+    pluralized by adding a letter.
     """
     one, many = counted_forms(one, many)
     return f"{count:,} {one if count == 1 else many}"
@@ -43,7 +45,7 @@ def counted_forms(one: str, many: str | None = None) -> tuple[str, str]:
     if many is None:
         if " " in one.strip():
             raise ValueError(f"Give the plural of {one!r}: a phrase has a verb to agree.")
-        many = f"{one}s"
+        many = plural(one)
     return one, many
 
 
@@ -61,48 +63,6 @@ def ended(text: str) -> str:
 
 
 PAGE_SECTION_ID = re.compile(r"[a-z][a-z0-9-]*\Z")
-
-
-def elapsed(stamp: str) -> str:
-    """A provider's timestamp as an age, or as the fact that there is none."""
-
-    from datetime import datetime, timezone as _tz
-
-    found = moment(stamp)
-    if found is None:
-        return MISSING
-    if found > datetime.now(_tz.utc):
-        return "just now"
-    return ago(found)
-
-
-def ago(moment) -> str:
-    """How long ago something happened, in the one phrasing HQ uses."""
-
-    from django.utils.timesince import timesince
-
-    age = timesince(moment)
-    return "just now" if age.startswith("0\xa0minutes") or age.startswith("0 minutes") else f"{age} ago"
-
-
-def ago_short(moment) -> str:
-    """``ago`` to one unit, for a column: "5 days ago", not "5 days, 15 hours ago"."""
-
-    from django.utils.timesince import timesince
-
-    age = timesince(moment, depth=1)
-    return "just now" if age.startswith("0\xa0minutes") or age.startswith("0 minutes") else f"{age} ago"
-
-
-def duration(delta) -> str:
-    """A length of time in the phrasing ``ago`` uses, without the "ago"."""
-
-    from datetime import datetime, timedelta, timezone as _tz
-
-    from django.utils.timesince import timesince
-
-    start = datetime(2000, 1, 1, tzinfo=_tz.utc)
-    return timesince(start, start + max(delta, timedelta(0)))
 
 
 @dataclass(frozen=True)
@@ -156,6 +116,14 @@ class Kpi:
     detail: str = ""
     url: str = ""
     is_zero: bool = False
+    # A mark before the label, by its name in ``partials/_icon.html``: what
+    # kind of thing the figure counts, for an eye scanning a card of several.
+    # A name the set does not draw shows nothing.
+    icon: str = ""
+    # What the figure looks like beside its value: ``Dots`` for a part of a
+    # whole, ``Trend`` for a direction. One or neither. It repeats what the
+    # value and the note already say, so the words stay.
+    drawing: Dots | Trend | None = None
 
 
 @dataclass(frozen=True)
@@ -194,6 +162,20 @@ class Insight:
     key: str = ""
     # The thing this item is about, as a link to its own page.
     subject: ActionLink | None = None
+    # A notice reports something that happened or was measured; there is
+    # nothing to resolve and no reading to refresh until it clears. The queue
+    # keeps notices apart from what needs doing and out of that count, and a
+    # reader who dismisses one is done with it: it returns only when what it
+    # reports (its ``body``) changes. So a notice's body says the occurrence
+    # (the run, the day, the figures), and a counter that moves on its own
+    # (days since) belongs in ``value``.
+    notice: bool = False
+    # What kind of matter this is, as its owner would head a list of them:
+    # "Image advisories", "Tailscale updates". Several open items of one family
+    # from one source are folded under that heading in the queue, so a dozen of
+    # the same thing read as one line until opened. Left empty, the item
+    # stands alone.
+    family: str = ""
 
     def __post_init__(self) -> None:
         if self.status not in STATUS_VALUES:

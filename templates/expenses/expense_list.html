@@ -4,7 +4,7 @@
 <p class="muted">Filtered: <strong>${{ total_filtered|floatformat:2|intcomma }}</strong> total · <strong>${{ deductible_filtered|floatformat:2|intcomma }}</strong> est. deductible</p>
 {% endblock %}
 {% block row %}
-  <td><a href="{{ row.get_absolute_url }}">{{ row.date }}</a></td>
+  <td><a href="{{ row.get_absolute_url }}">{{ row.date|when }}</a></td>
   <td>{{ row.vendor }}</td>
   <td>{{ row.item }}</td>
   <td>{{ row.get_category_display }}</td>

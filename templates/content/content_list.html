@@ -5,8 +5,8 @@
   <td><span class="pill pill-{{ row.status }}">{{ row.get_status_display }}</span></td>
   <td class="muted">{{ row.topic|or_empty }}</td>
   <td class="num-col">{{ row.pageviews|or_empty }}</td>
-  <td class="muted">{{ row.published_at|or_empty }}</td>
-  <td class="muted">{{ row.updated_at }}</td>
+  <td class="muted">{{ row.published_at|when }}</td>
+  <td class="muted">{{ row.updated_at|when:"ago" }}</td>
   <td class="actions-col">
     {% if row.published_url|web_url %}
       <a class="icon-link" href="{{ row.published_url|web_url }}" target="_blank" rel="noopener noreferrer" title="Open published page" aria-label="Open published page">↗</a>

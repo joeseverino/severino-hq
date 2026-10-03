@@ -1,9 +1,9 @@
 {% extends "list_page.html" %}
 {% load humanize %}
 {% block row %}
-  <td><a href="{{ row.get_absolute_url }}">{{ row.uploaded_at }}</a></td>
+  <td><a href="{{ row.get_absolute_url }}">{{ row.uploaded_at|when }}</a></td>
   <td>{{ row.vendor|or_empty }}</td>
-  <td>{{ row.date|or_empty }}</td>
+  <td>{{ row.date|when }}</td>
   <td>${{ row.amount|floatformat:2|intcomma }}</td>
   <td class="muted">{{ row.original_filename|or_empty }}</td>
   <td class="muted">

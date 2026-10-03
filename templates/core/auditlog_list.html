@@ -6,14 +6,14 @@ moment another source dated (a deploy, a container start).
 {% endcomment %}
 {% block row %}
   {% if row.moment %}
-    <td class="muted date-col">{% if row.moment.external %}<a href="{{ row.moment.url }}" rel="noopener">{{ row.at }}</a>{% else %}{{ row.at }}{% endif %}</td>
+    <td class="muted date-col">{% if row.moment.external %}<a href="{{ row.moment.url }}" rel="noopener">{{ row.at|when }}</a>{% else %}{{ row.at|when }}{% endif %}</td>
     <td>{{ row.moment.actor }}</td>
     <td><span class="pill">{{ row.moment.source }}</span></td>
     <td>{{ row.moment.title }}</td>
     <td class="muted">{{ row.moment.detail }}</td>
   {% elif row.grouped %}
     {% with first=row.events.0 %}
-    <td class="muted date-col"><a href="{% url 'core:audit_detail' first.pk %}">{{ row.at }}</a></td>
+    <td class="muted date-col"><a href="{% url 'core:audit_detail' first.pk %}">{{ row.at|when }}</a></td>
     <td>{{ first.actor_label }}</td>
     <td><span class="pill pill-{{ first.action }}">{{ first.get_action_display }}</span></td>
     <td>
@@ -28,7 +28,7 @@ moment another source dated (a deploy, a container start).
     {% endwith %}
   {% else %}
     {% with event=row.event %}
-    <td class="muted date-col"><a href="{% url 'core:audit_detail' event.pk %}">{{ event.created_at }}</a></td>
+    <td class="muted date-col"><a href="{% url 'core:audit_detail' event.pk %}">{{ event.created_at|when }}</a></td>
     <td>{{ event.actor_label }}</td>
     <td><span class="pill pill-{{ event.action }}">{{ event.get_action_display }}</span></td>
     <td>{{ event.object_repr|default:event.type_label }}{% if event.object_type and event.object_repr %}<br><span class="muted">{{ event.type_label }}</span>{% endif %}</td>

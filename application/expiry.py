@@ -10,7 +10,7 @@ import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
-from .ui import moment
+from .timestamps import moment
 
 DEFAULT_RENEWAL_WINDOW_DAYS = 30
 

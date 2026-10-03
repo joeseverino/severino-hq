@@ -1,6 +1,6 @@
 {% extends "list_page.html" %}
 {% block row %}
-  <td>{{ row.created_at|date:"M j, H:i" }}</td>
+  <td>{{ row.created_at|when }}</td>
   <td>{{ row.label }}</td>
   <td>{{ row.get_state_display }}</td>
   <td class="num-col">{% if row.duration_seconds %}{{ row.duration_seconds|floatformat:0 }}s{% else %}{% empty_value %}{% endif %}</td>

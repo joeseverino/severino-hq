@@ -82,7 +82,7 @@ class Certificate:
 
         if not self.verified_fingerprint:
             return ""
-        from .ui import ago
+        from .moments import ago
 
         when = self.source.observed_at if self.source else None
         checked = f", checked {ago(when)}" if when else ""

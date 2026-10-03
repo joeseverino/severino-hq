@@ -24,7 +24,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db.models import Count, Q, Sum
-from django.urls import reverse
+from application.routes import reverse
 from django.utils import timezone
 
 from content.models import ContentItem
@@ -294,7 +294,7 @@ def watching() -> tuple[Card, ...]:
     from core.models import UpstreamReading
 
     from .github_profile import KEY_PREFIX, profile
-    from .ui import moment
+    from .timestamps import moment
 
     # One query whatever is linked: a profile is only ever read for a signed-in
     # person's own linked account, so its reading names them.

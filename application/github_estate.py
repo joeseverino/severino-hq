@@ -22,7 +22,8 @@ from .expiry import days_until
 from .github_public import github_repository
 from .item_help import cannot_help, commands
 from .projection import read_once
-from .ui import Insight, counted, moment
+from .timestamps import moment
+from .ui import Insight, counted
 
 # An admission artifact that lapses stops the composition admitting its
 # extension, and nothing else says so until a deploy fails.
@@ -169,6 +170,7 @@ def attention() -> tuple[Insight, ...]:
                 Insight(
                     status="serious",
                     eyebrow="GitHub",
+                    family="Failing workflows",
                     key=f"github-failing:{repo.name}",
                     title=f"{repo.short} is failing on {repo.default_branch}",
                     value=str(len(failing) or 1),
@@ -184,6 +186,7 @@ def attention() -> tuple[Insight, ...]:
                 Insight(
                     status="serious",
                     eyebrow="GitHub",
+                    family="Unverified commits",
                     key=f"github-unverified:{repo.name}",
                     title=f"{repo.short}'s last deploy did not pass its own verification",
                     value=str(len(failed)),
@@ -202,6 +205,7 @@ def attention() -> tuple[Insight, ...]:
                 Insight(
                     status="serious" if _has(repo, "critical") else "attention",
                     eyebrow="GitHub",
+                    family="Security alerts",
                     key=f"github-alerts:{repo.name}",
                     title=f"{counted(repo.serious_alerts, 'serious alert', 'serious alerts')} in {repo.short}",
                     value=str(repo.serious_alerts),
@@ -220,6 +224,7 @@ def attention() -> tuple[Insight, ...]:
                 Insight(
                     status="serious" if artifact["days"] <= ARTIFACT_SERIOUS_DAYS else "attention",
                     eyebrow="GitHub",
+                    family="Workflow artifacts",
                     key=f"github-artifact:{repo.name}:{artifact['name']}",
                     title=f"{repo.short}'s admission lapses in {artifact['days']} days",
                     value=str(artifact["days"]),
@@ -261,6 +266,7 @@ def _waiting(repo: Repository) -> list[Insight]:
             Insight(
                 status="serious" if waited >= WAITING_SERIOUS_AFTER else "attention",
                 eyebrow="GitHub",
+                family="Deployments awaiting approval",
                 key=f"github-waiting:{repo.name}:{run.get('id')}",
                 value=f"{int(waited.total_seconds() // 3600)}h",
                 title=f"{run.get('name') or 'A run'} waits for your approval to deploy to {where}",

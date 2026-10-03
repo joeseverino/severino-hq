@@ -11,7 +11,8 @@ from typing import Any, Callable, Iterable
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from django.urls import URLResolver, include, path, reverse
+from django.urls import URLResolver, include, path
+from application.routes import reverse
 
 from .ui import STATUS_VALUES, DomainOverview
 

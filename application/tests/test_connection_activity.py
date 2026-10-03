@@ -134,7 +134,7 @@ class LastActivityPageTests(TestCase):
 
         self.assertContains(response, reverse("core:audit_detail", args=[event.pk]))
         self.assertContains(response, "Reconciled example.com · ")
-        self.assertContains(response, 'class="connection-last-activity"', count=1)
+        self.assertContains(response, 'class="connection-last-activity narrow-more"', count=1)
 
     def test_last_activity_does_not_cost_a_query_per_row(self):
         def queries_with(count):

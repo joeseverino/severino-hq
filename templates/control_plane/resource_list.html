@@ -3,7 +3,7 @@
 <div class="table-scroll">
   <table class="data-table">
     <thead>
-      <tr><th>Resource</th><th>Kind</th><th>Sync</th><th>Health</th><th>Observed</th></tr>
+      <tr><th>Resource</th><th>Kind</th><th>Sync</th><th class="key-col">Health</th><th>Observed</th></tr>
     </thead>
     <tbody>
       {% for resource in resources %}
@@ -40,7 +40,7 @@
               <span class="pill control-{{ resource.control_health.state }}">{{ resource.control_health.label }}</span>
             {% endif %}
           </td>
-          <td class="muted">{% if resource.last_observed_at %}{{ resource.last_observed_at }}{% elif resource.converges %}Never{% else %}{% empty_value %}{% endif %}</td>
+          <td class="muted date-col">{% if resource.last_observed_at %}{{ resource.last_observed_at|when:"ago" }}{% elif resource.converges %}Never{% else %}{% empty_value %}{% endif %}</td>
         </tr>
       {% empty %}
         <tr><td colspan="5" class="muted">No resources.</td></tr>
@@ -52,7 +52,7 @@
 <h2>Recent operations</h2>
 <div class="table-scroll">
   <table class="data-table">
-    <thead><tr><th>Resource</th><th>Action</th><th>State</th><th>Requested by</th><th>Created</th></tr></thead>
+    <thead><tr><th>Resource</th><th>Action</th><th class="key-col">State</th><th>Requested by</th><th>Created</th></tr></thead>
     <tbody>
       {% for operation in operations %}
         <tr>
@@ -60,7 +60,7 @@
           <td>{{ operation.get_action_display }}</td>
           <td><span class="pill pill-{{ operation.state }}">{{ operation.get_state_display }}</span></td>
           <td>{{ operation.requested_actor }} <span class="muted">via {{ operation.requested_interface }}</span></td>
-          <td class="muted">{{ operation.created_at }}</td>
+          <td class="muted">{{ operation.created_at|when }}</td>
         </tr>
       {% empty %}
         <tr><td colspan="5" class="muted">No operations yet.</td></tr>

@@ -52,7 +52,7 @@ class _ContentSectionView(PageMixin, TableListMixin, LoginRequiredMixin, ListVie
     table_columns = (
         TableColumn("Title", "title", "Title A–Z", "Title Z–A"),
         TableColumn("Type", "content_type", "Type", "Type reverse"),
-        TableColumn("Status", "status", "Status", "Status reverse"),
+        TableColumn("Status", "status", "Status", "Status reverse", css="key-col"),
         TableColumn("Description"),
         TableColumn(f"Views, {CONTENT_TRAFFIC_DAYS}d", css="num-col"),
         TableColumn("Published", "published_at", "Oldest published", "Recently published"),

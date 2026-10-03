@@ -86,7 +86,8 @@ class AgoFilterTests(TestCase):
     def test_a_moment_and_a_stamp_read_as_ui_ago(self):
         from datetime import timedelta
 
-        from ..ui import MISSING, ago
+        from ..moments import ago
+        from ..ui import MISSING
 
         moment = timezone.now() - timedelta(hours=3)
 

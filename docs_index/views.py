@@ -54,7 +54,7 @@ class DocsListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     table_selectable = True
     table_columns = (
         TableColumn("Doc ID", "doc_id"),
-        TableColumn("Title", "title"),
+        TableColumn("Title", "title", css="key-col"),
         TableColumn("Type", "doc_type"),
         TableColumn("Environment", "environment"),
         TableColumn("Status", "status"),

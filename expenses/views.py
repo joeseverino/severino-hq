@@ -3,7 +3,6 @@ from decimal import Decimal
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Sum
 from django.urls import reverse, reverse_lazy
-from django.utils.formats import date_format
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -16,6 +15,7 @@ from application.expenses import expense_command_from_cleaned_data, save_expense
 from application.deletion import delete_expense
 from application.pages import PageAction, PageMixin, record_trail
 from application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
+from application.moments import when_day
 from application.writes import (
     ServiceCreateMixin,
     ServiceDeleteMixin,
@@ -34,10 +34,10 @@ class ExpenseListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     table_selectable = True
     table_columns = (
         TableColumn("Date", "date", "Oldest expense", "Newest expense"),
-        TableColumn("Vendor", "vendor", "Vendor A–Z", "Vendor Z–A"),
+        TableColumn("Vendor", "vendor", "Vendor A–Z", "Vendor Z–A", css="key-col"),
         TableColumn("Item", "item", "Item A–Z", "Item Z–A"),
         TableColumn("Category", "category", "Category", "Category reverse"),
-        TableColumn("Cost", "total_cost", "Lowest cost", "Highest cost"),
+        TableColumn("Cost", "total_cost", "Lowest cost", "Highest cost", css="key-col"),
         TableColumn("% biz", "business_use_percentage", "Lowest business use", "Highest business use"),
         TableColumn("Est. deduct.", "estimated_deductible_amount", "Lowest deductible", "Highest deductible"),
     )
@@ -102,7 +102,7 @@ class ExpenseDetailView(PageMixin, LoginRequiredMixin, DetailView):
         return f"{self.object.vendor} · {self.object.item}"
 
     def get_page_lede(self):
-        return f"{date_format(self.object.date)} · {self.object.get_category_display()}"
+        return f"{when_day(self.object.date)} · {self.object.get_category_display()}"
 
     def get_page_trail(self):
         return (EXPENSES_TRAIL,)

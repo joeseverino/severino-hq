@@ -114,12 +114,12 @@ class CardTests(TestCase):
 
 
 class ShortAgeTests(TestCase):
-    def test_a_column_age_is_one_unit(self):
+    def test_an_age_is_one_unit(self):
         from datetime import timedelta
 
-        from ..ui import ago_short
+        from ..moments import ago
 
-        self.assertEqual(ago_short(timezone.now() - timedelta(days=5, hours=15)), "5\xa0days ago")
+        self.assertEqual(ago(timezone.now() - timedelta(days=5, hours=15)), "5\xa0days ago")
 
 
 class ShortAgeFilterTests(TestCase):

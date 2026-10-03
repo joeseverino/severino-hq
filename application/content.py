@@ -14,6 +14,7 @@ from core.audit import operation_context
 from docs_index.models import DocumentationRecord
 from expenses.models import Expense
 from projects.models import Project
+from .labels import plural
 from .sensitivity import safe_doc_ids
 from .security import Capability, Principal
 from .projection import iso
@@ -85,7 +86,7 @@ def _resolve(model, field: str, values: tuple, label: str):
     missing = sorted(set(values) - found)
     if missing:
         found_none = counted(
-            len(missing), f"related {label} not found", f"related {label}s not found"
+            len(missing), f"related {label} not found", f"related {plural(label)} not found"
         )
         raise NotFoundError(f"{found_none}: {', '.join(map(str, missing))}")
     return records

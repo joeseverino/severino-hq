@@ -1,4 +1,4 @@
-"""One-shot controller: claim, execute, and report exactly one operation."""
+"""One-shot controller: apply what is queued, sweep when HQ says to, and report."""
 
 from __future__ import annotations
 
@@ -357,16 +357,71 @@ def run_once(controller_id: str, *, apply: bool) -> int:
         return 0 if healthy else 1
 
     _report_glance(controller_id)
-    _report_findings(controller_id)
-    _manage("schedule", "--controller-id", controller_id)
+    # What somebody queued goes first. It was asked for and is waiting; the
+    # sweep describes records that change slowly and loses nothing by coming
+    # second, while work queued behind it waited out every reader.
+    applied, failed, broke = 0, False, None
+    try:
+        applied, failed = _apply_queued(controller_id)
+    except Exception as exc:  # noqa: BLE001 - re-raised below, after the sweep
+        # Something other than the provider refusing: HQ rejecting the report,
+        # material that is not there, a handler that could not run. The run
+        # ends with it, as it always did, but not before the estate has been
+        # looked at: work that keeps failing must not be what stops HQ seeing.
+        broke = exc
+    try:
+        _report_findings(controller_id)
+        _manage("schedule", "--controller-id", controller_id)
+    finally:
+        # Raised here so it is raised even if the sweep failed too; that
+        # failure then travels with it as its context rather than replacing it.
+        if broke is not None:
+            raise broke
+    if not failed:
+        # And what this sweep found to do, in the same run.
+        scheduled, failed = _apply_queued(controller_id)
+        applied += scheduled
+    if not applied and not failed:
+        print(json.dumps({"ok": True, "mode": "apply", "claimed": False}))
+    return 1 if failed else 0
+
+
+# One run applies this many operations at most, then leaves the rest for the
+# next. Several queued together should not each cost a run; a queue that never
+# empties should not keep the run, and the sweep after it, from ending.
+APPLY_LIMIT = 5
+
+
+def _apply_queued(controller_id: str) -> tuple[int, bool]:
+    """Claim and execute what is queued: how many succeeded, and whether one failed.
+
+    Stops at the first failure. What failed is reported and left for HQ to
+    decide about; carrying on past it would apply later work on top of a step
+    that did not happen.
+    """
+
+    applied = 0
+    for _ in range(APPLY_LIMIT):
+        outcome = _apply_one(controller_id)
+        if outcome is None:
+            break
+        if not outcome:
+            return applied, True
+        applied += 1
+    return applied, False
+
+
+def _apply_one(controller_id: str) -> bool | None:
+    """Claim one operation and execute it: whether it succeeded, or None when
+    nothing was waiting."""
+
     claim_args = ["claim", "--controller-id", controller_id]
     for kind, action in supported_capabilities():
         claim_args.extend(("--capability", f"{kind}:{action}"))
     claim = _manage(*claim_args)
     operation = claim.get("operation")
     if operation is None:
-        print(json.dumps({"ok": True, "mode": "apply", "claimed": False}))
-        return 0
+        return None
 
     resource = claim["resource"]
     generation = resource["generation"]
@@ -401,7 +456,7 @@ def run_once(controller_id: str, *, apply: bool) -> int:
                 }
             )
         )
-        return 1
+        return False
 
     _report(
         controller_id,
@@ -422,7 +477,7 @@ def run_once(controller_id: str, *, apply: bool) -> int:
             }
         )
     )
-    return 0
+    return True
 
 
 def main() -> int:
@@ -436,7 +491,7 @@ def main() -> int:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Claim and execute one operation; omitted means preflight-only plan mode.",
+        help="Claim and execute queued operations; omitted means preflight-only plan mode.",
     )
     options = parser.parse_args()
     try:

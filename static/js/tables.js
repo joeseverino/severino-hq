@@ -36,6 +36,7 @@
       const tooWide = !!table && table.scrollWidth > wrapper.clientWidth + 1;
       const scrolls = capped || tooWide;
       wrapper.classList.toggle("is-pane", scrolls);
+      wrapper.classList.toggle("is-fitted", !!table && !scrolls);
       if (scrolls) {
         if (!wrapper.hasAttribute("tabindex")) wrapper.tabIndex = 0;
         if (!wrapper.hasAttribute("role")) wrapper.setAttribute("role", "region");
@@ -69,31 +70,279 @@
     return el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
   };
 
+  // Cells of this row that are not shown at all: a column a narrow table
+  // dropped. An empty one says nothing, so it is not something held back.
+  const droppedCells = (row) =>
+    [...row.children].filter(
+      (cell) =>
+        cell.tagName === "TD"
+        && getComputedStyle(cell).display === "none"
+        && cell.textContent.trim() !== ""
+        && !cell.querySelector(":scope > .empty-value:only-child"),
+    );
+
+  // Within a cell that is showing, what a narrow table holds back.
+  const heldBack = (cell) =>
+    [...cell.querySelectorAll(".narrow-more")].filter(
+      (el) => getComputedStyle(el).display === "none",
+    );
+
+  // Every table sorts. A list whose server sorts it already has links in its
+  // headings and is left to them; any other table with headings gets the same
+  // control here, working on the rows that are on the page. A press sorts
+  // ascending, the next descending, the third puts the rows back as they came.
+  // Rows keep to their own section, a section's heading row stays on top of
+  // it, and an open row takes the line beneath it along.
+  const UNIT_SECONDS = { second: 1, minute: 60, hour: 3600, day: 86400, week: 604800, month: 2629800, year: 31557600 };
+  const EMPTY = /^[\s\u2013\u2014-]*$/;
+  const sortValue = (cell) => {
+    if (!cell) return null;
+    if (cell.dataset.sort !== undefined) {
+      const given = Number(cell.dataset.sort);
+      return Number.isNaN(given) ? cell.dataset.sort.toLowerCase() : given;
+    }
+    const stamp = cell.querySelector("time[datetime]");
+    if (stamp) {
+      const when = Date.parse(stamp.getAttribute("datetime"));
+      if (!Number.isNaN(when)) return when;
+    }
+    const copy = cell.cloneNode(true);
+    copy.querySelectorAll(".visually-hidden, [data-row-toggle], [aria-hidden=true]").forEach((part) => part.remove());
+    const text = copy.textContent.trim().replace(/\s+/g, " ");
+    if (EMPTY.test(text)) return null;
+    // A length of time, however it is phrased around the number.
+    const span = text.match(/^(?:up |in |about )?(\d+(?:\.\d+)?)\s*(second|minute|hour|day|week|month|year)s?\b/i);
+    if (span) return Number(span[1]) * UNIT_SECONDS[span[2].toLowerCase()];
+    // An amount: a sign, a currency mark, digits, a unit after.
+    const amount = text.replace(/\u2212/g, "-").match(/^([-+]?)[$\u00a3\u20ac]?\s?(\d[\d,]*(?:\.\d+)?)\s*(?:[%a-z\u00b0/ ]{0,12})$/i);
+    if (amount) return Number(amount[2].replace(/,/g, "")) * (amount[1] === "-" ? -1 : 1);
+    if (/\d/.test(text) && text.length < 32 && /[/,:-]|[a-z]{3}/i.test(text)) {
+      const when = Date.parse(text);
+      if (!Number.isNaN(when)) return when;
+    }
+    return text.toLowerCase();
+  };
+  const compare = (left, right) => {
+    if (typeof left === "number" && typeof right === "number") return left - right;
+    return String(left).localeCompare(String(right), undefined, { numeric: true });
+  };
+  // A table fits its box, at any width, by measurement: no screen width is
+  // asked. It takes the box's width and wraps. Each column is given a floor,
+  // the least it can be and still be read: its own one-line width, or a few
+  // words' worth, whichever is less, and more for the column that names the
+  // row. The browser lays the table out above those floors, taking room from
+  // the columns with room to give. Only when the floors themselves do not fit
+  // does a column leave: first any marked `optional-col`, then from the far
+  // end, never the one that names the row, one marked `key-col`, or the
+  // closing figure of a table that marks none. What leaves is in the row's
+  // own toggle. A window that grows gets its columns back.
+  const READABLE = 120;
+  const READABLE_NAME = 200;
+  // Below this a table's box is narrow, whatever the screen: a phone, or half
+  // a page beside a chart.
+  const NARROW_BOX = 640;
+  const fitTable = (table) => {
+    const wrapper = table.parentElement;
+    if (!wrapper?.classList.contains("table-scroll")) return;
+    // Every table is told when its box is narrow, a drawing's table too: what
+    // it does about it is its own rule's.
+    if (wrapper.clientWidth < NARROW_BOX) table.dataset.narrow = "";
+    else delete table.dataset.narrow;
+    if (wrapper.hasAttribute("data-chart") || wrapper.parentElement?.classList.contains("chart-data")) return;
+    // Held open or pinned across a refresh: its columns are not to move.
+    if (table.style.tableLayout === "fixed") return;
+    table.dataset.fit = "";
+    delete table.dataset.drop;
+    delete table.dataset.wrap;
+    const overflows = () => table.getBoundingClientRect().width > wrapper.clientWidth + 1;
+    const all = [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
+    all.forEach((heading) => heading.style.removeProperty("--column-floor"));
+    const headings = all.filter((heading) => getComputedStyle(heading).display !== "none");
+    // Only the headings showing: a table whose own rule has already dropped
+    // columns in a narrow box (a matrix of periods) is fitted from what is left.
+    if (headings.length) {
+      // What each column would take with every value on one line.
+      table.dataset.measure = "";
+      const wanted = headings.map((heading) => heading.getBoundingClientRect().width);
+      delete table.dataset.measure;
+      const named = headings[0].classList.contains("select-column") ? 1 : 0;
+      headings.forEach((heading, index) => {
+        const style = getComputedStyle(heading);
+        const inset = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+        const floor = Math.min(wanted[index], index === named ? READABLE_NAME : READABLE);
+        heading.style.setProperty("--column-floor", `${Math.max(0, Math.floor(floor - inset))}px`);
+      });
+      if (overflows() && headings.length >= 3 && !table.querySelector(":scope > colgroup")) {
+        const last = headings.length - 1;
+        const marked = headings.some((heading) => heading.classList.contains("key-col"));
+        const figures = [...table.querySelectorAll(":scope > tbody > tr:not(.row-group):not(.row-detail)")]
+          .map((row) => sortValue(row.children[headings[last].cellIndex]))
+          .filter((value) => value !== null);
+        const endsInFigure = !marked && figures.length > 0
+          && figures.filter((value) => typeof value === "number").length * 2 > figures.length;
+        const spare = headings.filter((heading, index) => index > named
+          && !(endsInFigure && index === last)
+          && !heading.classList.contains("key-col"));
+        // Popped from the end: the far end first, and before any of those,
+        // whatever the page said it can do without.
+        spare.sort((left, right) =>
+          left.classList.contains("optional-col") - right.classList.contains("optional-col"));
+        const dropped = [];
+        while (spare.length && overflows()) {
+          dropped.push(spare.pop().cellIndex + 1);
+          table.dataset.drop = dropped.join(" ");
+        }
+      }
+    }
+    // Still wider than its box with nothing left to give up.
+    if (overflows()) table.dataset.wrap = "tight";
+  };
+  const fitTables = () => {
+    document.querySelectorAll(".table-scroll > .data-table").forEach(fitTable);
+  };
+
+  // Opening a row must not move the table. Left to itself the browser sizes
+  // every column again around whatever the open row now shows, and each row
+  // on the page shifts. So the columns are held at the widths they have, for
+  // as long as any row is open, and let go when the last one closes or the
+  // window changes.
+  const holdColumns = (table) => {
+    if ("rowsHeld" in table.dataset) return;
+    const headings = [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
+    if (!headings.length) return;
+    const widths = headings.map((heading) => heading.getBoundingClientRect().width);
+    table.style.width = `${table.getBoundingClientRect().width}px`;
+    headings.forEach((heading, index) => {
+      if (widths[index]) heading.style.width = `${widths[index]}px`;
+    });
+    table.style.tableLayout = "fixed";
+    table.dataset.rowsHeld = "";
+  };
+  const releaseColumns = (table) => {
+    if (!("rowsHeld" in table.dataset)) return;
+    table.querySelectorAll(":scope > thead > tr:last-child > th").forEach((heading) => {
+      heading.style.width = "";
+    });
+    table.style.width = "";
+    table.style.tableLayout = "";
+    delete table.dataset.rowsHeld;
+  };
+
+  // What an open row was holding back, in a line of its own beneath it and
+  // the full width of the table: the columns a narrow table dropped, and the
+  // parts of the columns that stayed, each under its column's name. Beneath,
+  // not inside, so the row itself stays exactly as it was. Built when the row
+  // opens and removed when it closes, so it is never stale and never a second
+  // copy of something that is showing.
+  // A heading's words, without the sort arrow beside them.
+  const headingName = (heading) => {
+    if (!heading) return "";
+    const copy = heading.cloneNode(true);
+    copy.querySelectorAll("[aria-hidden=true]").forEach((mark) => mark.remove());
+    return copy.textContent.trim().replace(/\s+/g, " ");
+  };
+
+  // What the line beneath shows is the row's own content, moved there and
+  // moved back when it closes, never a copy: a control copied into the line
+  // would be a second control of the same name in the same form.
+  const restore = new WeakMap();
+  const closeDetail = (row) => {
+    const detail = row.nextElementSibling;
+    if (!detail?.classList.contains("row-detail")) return;
+    restore.get(detail)?.forEach((putBack) => putBack());
+    detail.remove();
+  };
+  const openDetail = (row) => {
+    closeDetail(row);
+    const table = row.closest("table");
+    const headings = [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
+    const cells = [...row.children];
+    const dropped = droppedCells(row);
+    const parts = [];
+    const undo = [];
+    cells.forEach((cell, index) => {
+      // A column of controls has no heading to read; it is still named here.
+      const name = headingName(headings[index])
+        || (cell.querySelector("a, button, select, input") ? "Actions" : "");
+      if (dropped.includes(cell)) {
+        const nodes = [...cell.childNodes];
+        parts.push([name, nodes]);
+        undo.push(() => cell.append(...nodes));
+        return;
+      }
+      const held = heldBack(cell);
+      if (held.length) {
+        parts.push([name, held]);
+        held.forEach((el) => {
+          const place = document.createComment("");
+          el.replaceWith(place);
+          el.classList.remove("narrow-more");
+          undo.push(() => {
+            el.classList.add("narrow-more");
+            place.replaceWith(el);
+          });
+        });
+      }
+    });
+    if (!parts.length) return;
+    const list = document.createElement("dl");
+    list.className = "row-columns";
+    parts.forEach(([name, nodes]) => {
+      const term = document.createElement("dt");
+      term.textContent = name;
+      const value = document.createElement("dd");
+      value.append(...nodes);
+      list.append(term, value);
+    });
+    const cell = document.createElement("td");
+    cell.colSpan = cells.length;
+    cell.append(list);
+    const detail = document.createElement("tr");
+    detail.className = "row-detail";
+    // Named by attribute as well, for anything that has to tell a record from
+    // the line beneath it without knowing how either is styled.
+    detail.dataset.rowDetail = "";
+    detail.append(cell);
+    restore.set(detail, undo);
+    row.after(detail);
+  };
+
   const rowSaysMore = (row) =>
     row.querySelector(":is(td, th) .row-more") !== null
+    || droppedCells(row).length > 0
+    || [...row.children].some((cell) => heldBack(cell).length > 0)
     || [...row.querySelectorAll(":is(td, th) *")].some(isCut)
     || row.querySelectorAll(":is(td, th) details").length >= 2;
 
   // The row's first cell, header or data: the toggle sits beside what names
   // the row, not in whichever column happens to be the first <td>.
-  const toggleCell = (row) =>
-    [...row.children].find((cell) => !cell.querySelector("input[type=checkbox]"));
+  // The same column in every row: the first that is not the tick-box column,
+  // read off the headings, so a row with no tick box does not put its toggle
+  // one column to the left of its neighbours'.
+  const toggleCell = (row) => {
+    const heads = [...row.closest("table").querySelectorAll(":scope > thead > tr:last-child > th")];
+    const column = heads.findIndex((head) => !head.classList.contains("select-column") && !head.querySelector("input[type=checkbox]"));
+    if (column > 0 && row.children[column] && row.children.length === heads.length) return row.children[column];
+    return [...row.children].find((cell) => !cell.querySelector("input[type=checkbox]"));
+  };
 
   function markExpandableRows() {
-    document.querySelectorAll(".data-table > tbody > tr").forEach((row) => {
+    document.querySelectorAll(".data-table > tbody > tr:not(.row-detail)").forEach((row) => {
       if (row.classList.contains("is-expanded")) return;
+      // A drawing's table is read as a whole, column against column: a period
+      // it drops in a narrow box is not something one row holds back.
+      const box = row.closest("table").parentElement;
+      if (box?.hasAttribute("data-chart") || box?.parentElement?.classList.contains("chart-data")) return;
       const toggle = row.querySelector(".row-expand");
       const expandable = rowSaysMore(row);
       if (expandable && !toggle) {
-        let cell = toggleCell(row);
+        // A child of the cell itself, never of anything in it: the stylesheet
+        // stands it in the cell's gutter, clear of the cell's own layout and
+        // of any control there.
+        const cell = toggleCell(row);
         if (!cell) return;
-        // Into the cell's own layout, so it sits beside the first value
-        // rather than on a line above a flex row of its own.
-        for (let depth = 0; depth < 2 && cell.firstElementChild && !unseen(cell.firstElementChild)
-          && ["flex", "inline-flex", "grid"].includes(getComputedStyle(cell.firstElementChild).display); depth++) {
-          cell = cell.firstElementChild;
-        }
         const button = document.createElement("button");
+        button.dataset.rowToggle = "";
         button.type = "button";
         button.className = "row-expand";
         button.setAttribute("aria-expanded", "false");
@@ -109,7 +358,10 @@
         path.setAttribute("d", "M1 1l4 4-4 4");
         mark.append(path);
         button.append(mark);
-        cell.prepend(button);
+        // Last in the cell, not first: it is placed by the stylesheet either
+        // way, and a rule that asks what a cell starts with should get the
+        // same answer whether or not the row has a toggle.
+        cell.append(button);
       } else if (!expandable && toggle) {
         toggle.remove();
       }
@@ -121,7 +373,17 @@
     if (!button) return;
     const row = button.closest("tr");
     const expanding = !row.classList.contains("is-expanded");
+    const table = row.closest("table");
+    // Held before anything in the row changes, so what is held is the table
+    // as the reader was looking at it.
+    if (expanding) {
+      holdColumns(table);
+      openDetail(row);
+    } else {
+      closeDetail(row);
+    }
     row.classList.toggle("is-expanded", expanding);
+    if (!table.querySelector(":scope > tbody > tr.is-expanded")) releaseColumns(table);
     button.setAttribute("aria-expanded", String(expanding));
     button.setAttribute("aria-label", expanding ? "Show less of this row" : "Show all of this row");
     // Open what was folded, and on the way back close only what this opened.
@@ -136,10 +398,128 @@
     });
   });
 
+  // A toggle stands in a gutter of its own at the start of the cell that names
+  // the row, and every row of a table that has one keeps the gutter, the
+  // heading too: names start on one line down the column whether or not a
+  // given row has anything to open.
+  function markGutters() {
+    document.querySelectorAll(".data-table").forEach((table) => {
+      const rows = [...table.querySelectorAll(":scope > tbody > tr:not(.row-detail):not(.row-group)")];
+      const any = rows.some((row) => row.querySelector(".row-expand"));
+      const cells = rows.map(toggleCell).filter(Boolean);
+      const first = cells[0];
+      const heading = first
+        ? table.querySelector(`:scope > thead > tr:last-child > th:nth-child(${first.cellIndex + 1})`)
+        : null;
+      [...cells, heading].forEach((cell) => cell?.classList.toggle("row-gutter", any));
+    });
+  }
+
+  const cameIn = new WeakMap();
+  const SORT_MARK = { ascending: "\u2191\ufe0e", descending: "\u2193\ufe0e", none: "\u2195\ufe0e" };
+
+  const sortRows = (table, column, direction) => {
+    table.querySelectorAll(":scope > tbody").forEach((body) => {
+      const units = [];
+      const fixed = [];
+      [...body.children].forEach((row) => {
+        if (row.classList.contains("row-detail") && units.length) units[units.length - 1].rows.push(row);
+        else if (row.classList.contains("row-group") || row.querySelector(":scope > [colspan]")) fixed.push(row);
+        else {
+          if (!cameIn.has(row)) cameIn.set(row, cameIn.get(body) ?? 0), cameIn.set(body, (cameIn.get(body) ?? 0) + 1);
+          units.push({ rows: [row], value: sortValue(row.children[column]), came: cameIn.get(row) });
+        }
+      });
+      const sign = direction === "descending" ? -1 : 1;
+      units.sort((left, right) => {
+        if (direction === "none") return left.came - right.came;
+        // Nothing to compare sorts last in both directions.
+        if (left.value === null || right.value === null) return (left.value === null) - (right.value === null) || left.came - right.came;
+        return sign * compare(left.value, right.value) || left.came - right.came;
+      });
+      body.append(...fixed, ...units.flatMap((unit) => unit.rows));
+    });
+  };
+
+  function markSortable() {
+    document.querySelectorAll(".table-scroll > .data-table").forEach((table) => {
+      if (table.parentElement.hasAttribute("data-chart") || table.parentElement.parentElement?.classList.contains("chart-data")) return;
+      const headings = [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
+      if (!headings.length || table.querySelector(":scope > thead a.table-sort-link")) return;
+      if (table.querySelector(":scope > thead > tr:only-child") === null) return;
+      if (table.querySelector(":scope > tbody > tr > [rowspan]")) return;
+      const records = table.querySelectorAll(":scope > tbody > tr:not(.row-group):not(.row-detail)");
+      if (records.length < 2) return;
+      headings.forEach((heading) => {
+        if ("sortReady" in heading.dataset || heading.colSpan > 1) return;
+        const name = headingName(heading);
+        if (!name || heading.querySelector("input, button, a, select")) return;
+        heading.dataset.sortReady = "";
+        heading.setAttribute("aria-sort", "none");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "table-sort-link";
+        button.dataset.sortLocal = "";
+        button.append(...heading.childNodes);
+        const mark = document.createElement("span");
+        mark.className = "sort-indicator";
+        mark.setAttribute("aria-hidden", "true");
+        mark.textContent = SORT_MARK.none;
+        button.append(mark);
+        button.setAttribute("aria-label", `Sort by ${name}`);
+        heading.append(button);
+      });
+    });
+  }
+
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-sort-local]");
+    if (!button) return;
+    const heading = button.closest("th");
+    const table = heading.closest("table");
+    const next = { none: "ascending", ascending: "descending", descending: "none" }[heading.getAttribute("aria-sort")] || "ascending";
+    table.querySelectorAll(":scope > thead th[data-sort-ready]").forEach((other) => {
+      other.setAttribute("aria-sort", "none");
+      other.querySelector(".sort-indicator").textContent = SORT_MARK.none;
+    });
+    heading.setAttribute("aria-sort", next);
+    button.querySelector(".sort-indicator").textContent = SORT_MARK[next];
+    sortRows(table, heading.cellIndex, next);
+  });
+
   let rowsTimer = null;
+  // A window that changes size changes what fits, so widths held for the old
+  // size are let go and taken again, and each open row lists what is held
+  // back now, which may be nothing if its columns came back.
+  const settleOpenRows = () => {
+    document.querySelectorAll(".data-table[data-rows-held]").forEach((table) => {
+      releaseColumns(table);
+      const open = [...table.querySelectorAll(":scope > tbody > tr.is-expanded")];
+      open.forEach((row) => {
+        row.classList.remove("is-expanded");
+        closeDetail(row);
+      });
+      fitTable(table);
+      if (!open.length) return;
+      holdColumns(table);
+      open.forEach((row) => {
+        openDetail(row);
+        row.classList.add("is-expanded");
+      });
+    });
+  };
+
   const markTables = () => {
-    markScrollRegions();
-    markExpandableRows();
+    settleOpenRows();
+    markSortable();
+    // Twice: a toggle and its gutter take room in the column that names the
+    // row, which can be the room a table that only just fitted did not have.
+    for (let pass = 0; pass < 2; pass++) {
+      fitTables();
+      markScrollRegions();
+      markExpandableRows();
+      markGutters();
+    }
   };
   const markTablesSoon = () => {
     window.clearTimeout(rowsTimer);
@@ -160,6 +540,11 @@
 
   markTables();
   window.addEventListener("resize", markTablesSoon);
+  // Everything above is measured in the face the text is drawn in. Measured
+  // before that face has loaded, a column's floor is the fallback's width and
+  // a word the real face draws wider wraps. So it is measured again when the
+  // faces are in.
+  document.fonts?.ready.then(markTables);
 
   const persistSelection = () => {
     try {
@@ -255,8 +640,13 @@
       const currentHeads = table.querySelectorAll("thead th");
       const nextHeads = nextTable.querySelectorAll("thead th");
       if (!currentHeads.length || currentHeads.length !== nextHeads.length) return;
+      // The incoming table gives up the same columns the current one has.
+      ["fit", "drop", "wrap", "narrow"].forEach((key) => {
+        if (key in table.dataset) nextTable.dataset[key] = table.dataset[key];
+      });
       currentHeads.forEach((th, index) => {
-        nextHeads[index].style.width = `${th.getBoundingClientRect().width}px`;
+        const width = th.getBoundingClientRect().width;
+        if (width) nextHeads[index].style.width = `${width}px`;
       });
       nextTable.style.tableLayout = "fixed";
     });
@@ -343,7 +733,7 @@
     // Leave modified clicks (new tab, window, download) to the browser.
     if (event.defaultPrevented || event.button !== 0) return;
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const link = event.target.closest(".table-sort-link, .pagination a");
+    const link = event.target.closest("a.table-sort-link, .pagination a");
     if (!link) return;
     event.preventDefault();
     refreshTable(link.href);

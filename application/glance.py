@@ -33,7 +33,7 @@ from .security import Capability, Principal
 def connection_specs():
     """Emit the keyless NWS boundary without spending a discovery query."""
 
-    from django.urls import reverse
+    from application.routes import reverse
 
     from .connections import (
         ConnectionAbility,
@@ -153,7 +153,7 @@ def _forecast_url(point: str) -> str:
 def panel_specs(
     configuration: DashboardConfiguration | None = None,
 ) -> tuple[DashboardPanelSpec, ...]:
-    from django.urls import reverse
+    from application.routes import reverse
 
     configuration = configuration or dashboard_configuration()
     specs = [
@@ -415,7 +415,10 @@ def dashboard_panels(
                 refreshable=resource.pk in routes,
             )
         )
-    if not panels:
+    # Nothing empty takes space: with no machine chosen there is no machine
+    # reading to draw. The one exception is a dashboard that would otherwise
+    # have no reading at all, where this one is the way in to choosing some.
+    if not panels and "weather" not in specs:
         panels.append(
             _panel(
                 specs["infrastructure"],

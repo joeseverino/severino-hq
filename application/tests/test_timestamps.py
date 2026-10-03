@@ -79,10 +79,10 @@ class MomentTests(SimpleTestCase):
     def test_a_date_reads_as_its_midnight(self):
         self.assertEqual(moment(date(2026, 7, 25)), datetime(2026, 7, 25, tzinfo=UTC))
 
-    def test_ui_still_exports_the_one_parser(self):
-        from .. import ui
+    def test_extensions_are_handed_the_one_parser(self):
+        from .. import timestamps
 
-        self.assertIs(ui.moment, moment)
+        self.assertIs(timestamps.moment, moment)
 
 
 class CorrectedCallSiteTests(SimpleTestCase):

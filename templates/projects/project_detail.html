@@ -19,7 +19,7 @@
       {% if content %}<div><h3>Content items</h3><ul>{% for c in content %}<li><a href="{{ c.get_absolute_url }}">{{ c.title }}</a> <span class="muted">{{ c.get_status_display }}</span></li>{% endfor %}</ul></div>{% endif %}
       {% if assets %}<div><h3>Assets</h3><ul>{% for a in assets %}<li><a href="{{ a.get_absolute_url }}">{{ a.item_name }}</a> <span class="muted">${{ a.total_cost }}</span></li>{% endfor %}</ul></div>{% endif %}
       {% if docs %}<div><h3>Documentation</h3><ul>{% for d in docs %}<li><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} · {{ d.title }}</a></li>{% endfor %}</ul></div>{% endif %}
-      {% if expenses %}<div><h3>Expenses</h3><ul>{% for e in expenses %}<li><a href="{{ e.get_absolute_url }}">{{ e.date }} {{ e.vendor }} · {{ e.item }}</a> <span class="muted">${{ e.total_cost }}</span></li>{% endfor %}</ul></div>{% endif %}
+      {% if expenses %}<div><h3>Expenses</h3><ul>{% for e in expenses %}<li><a href="{{ e.get_absolute_url }}">{{ e.date|when }} {{ e.vendor }} · {{ e.item }}</a> <span class="muted">${{ e.total_cost }}</span></li>{% endfor %}</ul></div>{% endif %}
     </div>
   {% else %}
     <p class="muted">Nothing related yet: no content, assets, documentation or expenses name this project.</p>
