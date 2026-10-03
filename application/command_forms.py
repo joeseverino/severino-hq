@@ -10,7 +10,8 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 
-from .capabilities import CapabilitySpec, command_schema
+from .capabilities import CapabilitySpec
+from .integration_specs import command_schema
 from .command_targets import CommandTargetOption
 from .forms import LinesField
 

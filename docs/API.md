@@ -329,6 +329,18 @@ next machine write. Configure the window with
 it protects imports arriving through web, CLI, or MCP, while this transport
 contract protects an HTTP client that did not receive the first response.
 
+The header is the HTTP transport's key. Every interface, MCP and CLI included,
+also has one in the command itself: each capability whose effect is not `read`
+accepts an optional `idempotency_key` in its payload, and its `input_schema`
+says so. The rule is declared once, from the capability's effect, so no command
+rejects the field and none requires it. A repeat by the same actor with the
+same key and the same request returns the first result without running the
+command again; the same key with a different request returns
+`idempotency_conflict`. A request that is refused, or held for approval, keeps
+nothing under its key, so the corrected or approved request runs. A command
+that queues controller work stores the key with the operation it queues, and
+generates one when the caller sent none. A `read` capability takes no key.
+
 ## Recipe: a narrowly scoped first-party automation
 
 This synthetic example demonstrates the transport contract without placing a

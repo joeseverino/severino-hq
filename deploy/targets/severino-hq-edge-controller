@@ -6,7 +6,7 @@ readonly operation="${1:-}"
 # Bumped whenever an operation is added. The controller asks for this, so a
 # target older than the controller says so plainly instead of refusing an
 # operation it has simply never heard of.
-readonly target_version=3
+readonly target_version=4
 readonly cert_dir="${SEVERINO_HQ_CADDY_CERT_DIR:-/opt/apps/caddy/certs}"
 readonly routes_file="${SEVERINO_HQ_CADDY_ROUTES:-/opt/apps/caddy/config/hq-routes.caddy}"
 readonly cert_owner="${SEVERINO_HQ_CERT_OWNER:-root}"
@@ -67,6 +67,24 @@ case "${operation}" in
         # The certificate Caddy serves from the directory deploy installs
         # into: the leaf alone, which is public. `snapshot` would carry the key.
         exec openssl x509 -in "${cert_dir}/fullchain.pem"
+        ;;
+    certificates)
+        # The leaf of every certificate file Caddy loads, one after another.
+        # The paths come from the config Caddy adapts, so a certificate the
+        # operator's Caddyfile loads beside the deployed one is reported too.
+        # Each is read inside the container, where those paths mean something,
+        # and passed through `openssl x509`, which emits the first certificate
+        # in the file and nothing else: no chain and no key.
+        config="$(docker exec caddy caddy adapt --config /etc/caddy/Caddyfile)"
+        paths="$(printf '%s' "${config}" \
+            | grep -o '"certificate":"/[^"]*"' \
+            | sed 's/^"certificate":"//; s/"$//' \
+            | sort -u || true)"
+        test -n "${paths}"
+        printf '%s\n' "${paths}" | while IFS= read -r path; do
+            pem="$(docker exec caddy cat "${path}" </dev/null)"
+            printf '%s\n' "${pem}" | openssl x509
+        done
         ;;
     routes:write)
         # The routes HQ declares, and only those. They go in a file of their

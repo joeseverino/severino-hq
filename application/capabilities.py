@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import secrets
+from collections.abc import Callable
 from dataclasses import replace
 
 from typing import Any
@@ -61,7 +63,20 @@ from .resource_operations import (
 from .approvals import RefusedHold, hold_for_approval
 from .capability_policy import Rule, decide
 from .denials import record_denial
-from .integration_specs import TARGET_KINDS, CapabilitySpec, command_schema
+from .idempotency import (
+    IdempotencyConflict,
+    InvalidIdempotencyKey,
+    execute_once,
+    request_fingerprint,
+    validate_key,
+)
+from .integration_specs import (
+    IDEMPOTENCY_FIELD,
+    TARGET_KINDS,
+    CapabilitySpec,
+    capability_schema,
+    declares_idempotency_key,
+)
 from .lookup import (
     AddressCommand,
     NameCommand,
@@ -680,7 +695,7 @@ def describe_capabilities() -> dict[str, Any]:
                 "execution_notes": list(spec.execution_notes),
                 "target_initial_fields": list(spec.target_initial_fields),
                 "resource": spec.subject_resource,
-                "input_schema": command_schema(spec.command_type),
+                "input_schema": capability_schema(spec),
             }
             for spec in integration_graph().capabilities.values()
         ],
@@ -717,18 +732,9 @@ def execute_capability(
         return refused
 
     try:
-        # Authority first, then the payload, then the target. A caller who may
-        # not run this at all is told exactly that, and learns nothing about
-        # what shape of target it would have taken.
-        authorize_capability(spec, principal)
-        _refuse_unknown_fields(spec, payload)
-        command: Any = TypeAdapter(spec.command_type).validate_python(payload)
-        held, principal = _consent(spec, name, payload, target, principal)
-        if held is not None:
-            return held
-        return _run(
+        return _authorized_run(
             spec,
-            command,
+            payload,
             principal=principal,
             target=target,
             expected_updated_at=expected_updated_at,
@@ -767,6 +773,105 @@ def execute_capability(
         # It can contain argument names, provider responses, paths, or values
         # from the request. The capability name is registry-owned and safe.
         return _error("operation_failed", f"{name} could not be executed.")
+
+
+def _authorized_run(
+    spec: CapabilitySpec,
+    payload: dict[str, Any],
+    *,
+    principal: Principal,
+    target: str | int | None,
+    expected_updated_at: str | None,
+) -> dict[str, Any]:
+    """Check authority, shape and consent, then run once under the caller's key."""
+
+    # Authority first, then the payload, then the target. A caller who may
+    # not run this at all is told exactly that, and learns nothing about
+    # what shape of target it would have taken.
+    authorize_capability(spec, principal)
+    _refuse_unknown_fields(spec, payload)
+    key, payload = _retry_key(spec, payload)
+    command: Any = TypeAdapter(spec.command_type).validate_python(payload)
+    # A held request has acted on nothing, so it is answered afresh each
+    # time: the same key runs the command once a person has agreed.
+    held, acting = _consent(spec, spec.name, payload, target, principal)
+    if held is not None:
+        return held
+
+    def act() -> dict[str, Any]:
+        return _run(
+            spec,
+            command,
+            principal=acting,
+            target=target,
+            expected_updated_at=expected_updated_at,
+        )
+
+    if not key:
+        return act()
+    try:
+        return _once(
+            spec,
+            key,
+            {"command": payload, "target": target, "expected_updated_at": expected_updated_at},
+            act,
+            actor=principal.actor,
+        )
+    except IdempotencyConflict:
+        return _error(
+            "idempotency_conflict",
+            f"This {IDEMPOTENCY_FIELD} was already used for a different request.",
+        )
+
+
+def _retry_key(spec: CapabilitySpec, payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """``(key, payload)``: the caller's retry key, and the payload its command reads.
+
+    The key is optional on every capability that takes one. A command type that
+    declares the field stores it with the operation it queues, so it receives
+    the caller's key, or a fresh one when the caller sent none. Any other
+    command never sees the field.
+    """
+
+    if spec.effect == "read" or not isinstance(payload, dict):
+        return "", payload
+    sent = payload.get(IDEMPOTENCY_FIELD)
+    try:
+        key = "" if sent is None else validate_key(sent)
+    except (InvalidIdempotencyKey, TypeError) as exc:
+        # Answered as any other field of the wrong shape is.
+        raise DjangoValidationError(
+            {IDEMPOTENCY_FIELD: "Must be 1-128 URL-safe characters."}
+        ) from exc
+    rest = {name: value for name, value in payload.items() if name != IDEMPOTENCY_FIELD}
+    if declares_idempotency_key(spec.command_type):
+        rest[IDEMPOTENCY_FIELD] = key or f"command:{secrets.token_urlsafe(18)}"
+    return key, rest
+
+
+def _once(
+    spec: CapabilitySpec,
+    key: str,
+    request: dict[str, Any],
+    act: Callable[[], dict[str, Any]],
+    *,
+    actor: str,
+) -> dict[str, Any]:
+    """Run ``act`` under the caller's key, or return what it returned the first time.
+
+    The key belongs to the actor and to one request: the same key with another
+    capability, target or payload is a conflict. A call that raises commits
+    nothing, so its key is free for the corrected request.
+    """
+
+    result, _status, _replayed = execute_once(
+        actor=actor,
+        key=key,
+        request_sha256=request_fingerprint(spec.name, request, api_version=2),
+        operation=lambda: (act(), 200),
+        scope="command",
+    )
+    return result
 
 
 def _target_refusal(
@@ -863,7 +968,7 @@ def _refuse_unknown_fields(spec: CapabilitySpec, payload: dict[str, Any]) -> Non
     # CapabilitySpec accepts host dataclasses and plugin StrictCommand models.
     # Their JSON Schema is already the shared adapter contract, so it is also
     # the single source of field names.
-    known = set(command_schema(spec.command_type).get("properties", {}))
+    known = set(capability_schema(spec).get("properties", {}))
     unknown = sorted(set(payload) - known)
     if unknown:
         raise _UnknownFields(unknown)

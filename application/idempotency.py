@@ -59,8 +59,12 @@ def execute_once(
     key: str,
     request_sha256: str,
     operation: Callable[[], tuple[dict[str, Any], int]],
+    scope: str = "",
 ) -> tuple[dict[str, Any], int, bool]:
     """Run once, or replay the committed response for the same request.
+
+    ``scope`` separates keys that arrive by different routes: a key in a
+    command's payload and the same text in a transport's header are two keys.
 
     The reservation and domain operation share a transaction. A crashed
     process therefore leaves neither a partial domain write nor a poisoned
@@ -68,7 +72,8 @@ def execute_once(
     SQLite and PostgreSQL.
     """
 
-    actor_sha256 = hashlib.sha256(actor.encode("utf-8")).hexdigest()
+    owner = f"{scope}\x1f{actor}" if scope else actor
+    actor_sha256 = hashlib.sha256(owner.encode("utf-8")).hexdigest()
     now = timezone.now()
     ttl = timedelta(seconds=settings.SEVERINO_API_IDEMPOTENCY_TTL_SECONDS)
     with transaction.atomic():

@@ -19,7 +19,6 @@ from application.action_links import command_url
 from application.capabilities import (
     authorize_capability,
     capability_registry,
-    command_schema,
     execute_capability,
 )
 from application.command_forms import command_form_class
@@ -35,6 +34,7 @@ from application.idempotency import (
     request_fingerprint,
     validate_key,
 )
+from application.integration_specs import capability_schema
 from application.integrations import integration_graph
 from application.pages import PageAction, page_context
 from application.security import AuthorizationError, safe_next, web_principal
@@ -171,7 +171,7 @@ class CommandView(LoginRequiredMixin, View):
 
     def _context(self, form, *, result=None):
         resource = integration_graph().resources.get(self.spec.subject_resource)
-        schema = command_schema(self.spec.command_type)
+        schema = capability_schema(self.spec)
         required_capabilities = tuple(
             item.value if hasattr(item, "value") else str(item)
             for item in self.spec.required_capabilities

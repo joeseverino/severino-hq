@@ -242,8 +242,14 @@ The certificate is per hop: a proxied name shows the edge certificate, then the
 origin certificate the proxy behind it serves; a tailnet name shows the
 certificate the proxy serves. A Caddy route states the certificate it serves
 when the edge loads one from a file whose names cover the route (the edge
-target's read-only `certificate` operation hands over the public leaf only), and
-otherwise why it cannot (`ServedCertificate.unread`). A container name an
+target's read-only `certificates` operation hands over the public leaf of
+every file the edge loads, and each route names the one covering it, a
+certificate naming the host before one covering it by wildcard), and
+otherwise why it cannot (`ServedCertificate.unread`). A Caddy route whose
+upstream is a placeholder (`{http.request.host}:443`) forwards to whichever
+host the request names: its record keeps the placeholder and it has no origin,
+so its path ends at the proxy. A route no declaration accounts for is in the
+edge's own Caddyfile and is observed, never adopted. A container name an
 ingress forwards to resolves on the ingress's own machine first. HQ's own names end at HQ, with the address and
 port the request reached it on. `paths.hq_path(request)` starts from the
 caller's device and joins each hop to the request (`request_path.joined`): the

@@ -53,6 +53,11 @@ def execute_capability(
     the request is recorded, nothing has been written, and an operator has to
     approve it in HQ's web interface, which this interface cannot do. Report the
     approval id from `approval.id` to whoever asked, and stop.
+
+    Every capability whose effect is not `read` accepts an optional
+    `idempotency_key` in its payload. Send one when a call may be retried: a
+    repeat carrying the same key returns the first result instead of acting a
+    second time. A `read` takes none.
     """
 
     return execute_application_capability(

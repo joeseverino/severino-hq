@@ -20,7 +20,11 @@ from .contracts import (
 
 # Why a route carries no certificate, when the edge could not say.
 _NO_CERTIFICATE_OPERATION = (
-    "the edge target does not report its certificate; redeploy it at version 3 or later"
+    "the edge target does not report its certificates; redeploy it at version 4 or later"
+)
+_SOME_UNREPORTED = (
+    "the edge loads {loaded} certificates from files and its target reports {read}; "
+    "redeploy it at version 4 or later"
 )
 _MANAGED_BY_CADDY = (
     "Caddy manages this name's certificate itself, and the edge reports only the "
@@ -28,6 +32,42 @@ _MANAGED_BY_CADDY = (
 )
 
 CADDY_ROUTE_KIND = "caddy.route"
+
+
+# A Caddy placeholder: text Caddy replaces while it handles each request.
+_PLACEHOLDER = re.compile(r"\{[^{}\s]+\}")
+# The placeholders that stand for the host the request itself names.
+_REQUESTED_HOST = re.compile(r"^\{http\.request\.host(?:port)?\}(?::(?P<port>[0-9]{1,5}))?$")
+
+
+def decided_per_request(upstream: Any) -> bool:
+    """Whether an upstream is a placeholder Caddy fills in for each request.
+
+    Such an upstream names no machine, container or port of its own, so it is
+    never an address to resolve or locate.
+    """
+
+    return bool(_PLACEHOLDER.search(str(upstream or "")))
+
+
+def to_requested_host(upstream: Any) -> bool:
+    """Whether a route forwards to the host each request names, not to a fixed target."""
+
+    return bool(_REQUESTED_HOST.fullmatch(str(upstream or "").strip()))
+
+
+def _hands_off_to(upstream: str) -> str:
+    """Where a route sends requests, as a sentence fragment for its readout."""
+
+    if not upstream:
+        return "Caddy answers this itself"
+    matched = _REQUESTED_HOST.fullmatch(upstream)
+    if matched:
+        port = matched.group("port")
+        return "the host each request names" + (f", on port {port}" if port else "")
+    if decided_per_request(upstream):
+        return f"decided per request ({upstream})"
+    return upstream
 
 
 def upstreams(node: Any) -> list[str]:
@@ -65,33 +105,57 @@ def routes(config: dict[str, Any], connection_ref: str) -> list[dict[str, Any]]:
             ]
             if not hosts:
                 continue
-            destinations = upstreams(route.get("handle"))
+            # One address named by several handlers is one destination.
+            destinations = list(dict.fromkeys(upstreams(route.get("handle"))))
+            upstream = destinations[0] if len(destinations) == 1 else ""
             for host in hosts:
                 found.setdefault(
                     (connection_ref, host),
                     {
                         "connection_ref": connection_ref,
                         "domain": host,
-                        "upstream": (destinations[0] if len(destinations) == 1 else ""),
+                        # A placeholder is kept as Caddy holds it.
+                        "upstream": upstream,
+                        "to_requested_host": to_requested_host(upstream),
                     },
                 )
     return list(found.values())
 
 
-def loads_files(config: dict[str, Any]) -> bool:
-    """Whether the config serves certificates from files rather than only its own ACME."""
+def loaded_files(config: dict[str, Any]) -> int:
+    """How many certificate files the config loads, rather than obtaining its own."""
 
     tls = ((config or {}).get("apps") or {}).get("tls") or {}
-    return bool((tls.get("certificates") or {}).get("load_files"))
+    entries = (tls.get("certificates") or {}).get("load_files") or ()
+    return len(
+        {
+            str(entry.get("certificate", "") or "") if isinstance(entry, dict) else str(entry)
+            for entry in entries
+        }
+    )
 
 
 def certificate_facts(pem: bytes) -> dict[str, Any]:
-    """The served leaf as a route states it: names, issuer, expiry. Public facts only."""
+    """The first certificate in ``pem`` as a route states it."""
+
+    from cryptography import x509
+
+    return _facts(x509.load_pem_x509_certificate(pem))
+
+
+def loaded_certificates(pem: bytes) -> list[dict[str, Any]]:
+    """Every certificate in ``pem``, each as a route states it, in the order given."""
+
+    from cryptography import x509
+
+    return [_facts(leaf) for leaf in x509.load_pem_x509_certificates(pem)]
+
+
+def _facts(leaf: Any) -> dict[str, Any]:
+    """One leaf's names, issuer and expiry. Public facts only."""
 
     from cryptography import x509
     from cryptography.x509.oid import ExtensionOID, NameOID
-
-    leaf = x509.load_pem_x509_certificate(pem)
 
     def first(name, oid) -> str:
         found = name.get_attributes_for_oid(oid)
@@ -113,27 +177,76 @@ def certificate_facts(pem: bytes) -> dict[str, Any]:
     }
 
 
-def _served(runtime: ProviderRuntime, connection_ref: str, config: dict[str, Any]):
-    """``(certificate, unread)``: the file certificate this edge serves, or why not."""
+def _leaves(runtime: ProviderRuntime, connection_ref: str) -> bytes:
+    """The leaf of every certificate file the edge loads, as PEM.
 
-    if not loads_files(config):
-        return None, _MANAGED_BY_CADDY
+    A target older than version 4 has no ``certificates`` operation and answers
+    ``certificate`` with the one leaf in its certificate directory.
+    """
+
     try:
-        return certificate_facts(runtime.ssh(connection_ref, "certificate")), ""
+        return runtime.ssh(connection_ref, "certificates")
     except ProviderError:
-        return None, _NO_CERTIFICATE_OPERATION
+        return runtime.ssh(connection_ref, "certificate")
+
+
+def _served(
+    runtime: ProviderRuntime, connection_ref: str, config: dict[str, Any]
+) -> tuple[list[dict[str, Any]], str]:
+    """``(certificates, unread)``: every file certificate this edge serves, and
+    why a route none of them covers names no certificate."""
+
+    loaded = loaded_files(config)
+    if not loaded:
+        return [], _MANAGED_BY_CADDY
+    try:
+        found = loaded_certificates(_leaves(runtime, connection_ref))
+    except ProviderError:
+        return [], _NO_CERTIFICATE_OPERATION
     except (OSError, ValueError) as exc:
-        return None, f"its certificate did not parse ({type(exc).__name__})"
+        return [], f"its certificate did not parse ({type(exc).__name__})"
+    if not found:
+        return [], _NO_CERTIFICATE_OPERATION
+    if len(found) < loaded:
+        return found, _SOME_UNREPORTED.format(loaded=loaded, read=len(found))
+    return found, ""
+
+
+def covering_certificate(
+    domain: str, certificates: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """The loaded certificate a name is served with, or None when none covers it.
+
+    A certificate naming the host itself is chosen over one covering it by
+    wildcard, and of two that match alike the one valid longest, which is how
+    Caddy chooses among the certificates it holds.
+    """
+
+    name = normalized_hostname(domain)
+    covering = [
+        certificate
+        for certificate in certificates
+        if certificate_covers(name, frozenset(certificate.get("domains") or ()))
+    ]
+    if not covering:
+        return None
+    return max(
+        covering,
+        key=lambda certificate: (
+            name in (certificate.get("domains") or ()),
+            str(certificate.get("expires_on", "")),
+        ),
+    )
 
 
 def with_certificates(
-    found: list[dict[str, Any]], certificate: dict[str, Any] | None, unread: str
+    found: list[dict[str, Any]], certificates: list[dict[str, Any]], unread: str
 ) -> list[dict[str, Any]]:
-    """Each route with the loaded certificate when it covers the route's name."""
+    """Each route with the loaded certificate that covers its name, when one does."""
 
-    names = frozenset((certificate or {}).get("domains") or ())
     for route in found:
-        if certificate is not None and certificate_covers(route["domain"], names):
+        certificate = covering_certificate(route["domain"], certificates)
+        if certificate is not None:
             route["certificate"] = certificate
         else:
             route["certificate_unread"] = unread or _MANAGED_BY_CADDY
@@ -177,8 +290,8 @@ def inventory(runtime: ProviderRuntime) -> list[dict[str, Any]]:
         except (json.JSONDecodeError, UnicodeDecodeError):
             continue
         if isinstance(config, dict):
-            certificate, unread = _served(runtime, connection_ref, config)
-            found.extend(with_certificates(routes(config, connection_ref), certificate, unread))
+            certificates, unread = _served(runtime, connection_ref, config)
+            found.extend(with_certificates(routes(config, connection_ref), certificates, unread))
     return found
 
 
@@ -325,6 +438,17 @@ class ResolvedCaddyRouteSpec(CaddyRouteSpec):
     certificate_directory: str = Field(default="", max_length=500, pattern=rf"^(?:|{DIRECTORY[1:-1]})$")
     routes: list[CaddyRouteInFile] = Field(default_factory=list)
 
+def _origin(spec: dict[str, Any]) -> str:
+    """The fixed address a route forwards to, or "" when it has none.
+
+    A route Caddy answers itself has none, and neither has one whose upstream
+    is decided per request: a placeholder is not a hostname or a port.
+    """
+
+    upstream = str(spec.get("upstream", "") or "").strip()
+    return "" if decided_per_request(upstream) else upstream
+
+
 def _identity(spec: dict[str, Any]) -> tuple[str, ...]:
     return (
         str(spec.get("connection_ref", "") or ""),
@@ -342,7 +466,7 @@ DEFINITION = ProviderSpec(
     connection_providers=("ssh",),
     facet="proxy",
     hostnames=lambda spec: (spec["domain"],),
-    origin=lambda spec: str(spec.get("upstream", "") or "").strip(),
+    origin=_origin,
     served_certificate=served_certificate,
     identity=_identity,
     from_record=lambda record: {
@@ -362,14 +486,22 @@ DEFINITION = ProviderSpec(
         (
             "Hands off to",
             "",
-            str(spec.get("upstream", "") or "") or "Caddy answers this itself",
+            _hands_off_to(str(spec.get("upstream", "") or "").strip()),
         ),
     ),
     sample_record={
         "connection_ref": "an-edge",
         "domain": "app.example.com",
         "upstream": "app:8080",
+        "to_requested_host": False,
     },
+    # HQ's file holds only the routes it declares, so a route no declaration
+    # accounts for is in the operator's Caddyfile. Declaring it would write a
+    # second site block for a name the operator's file already serves.
+    adoption_gap=(
+        "This route is in the edge's own Caddyfile, which HQ reads and never "
+        "writes. Declare a route to have HQ serve a name from its own file."
+    ),
     removal_gap=(
         "The controller cannot delete Caddy routes yet, so the edge would "
         "keep serving it."

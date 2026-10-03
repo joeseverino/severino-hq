@@ -39,6 +39,49 @@ def command_schema(command_type: type) -> dict[str, Any]:
     return schema
 
 
+# The one retry field every capability that changes or queues something takes.
+IDEMPOTENCY_FIELD = "idempotency_key"
+_IDEMPOTENCY_SCHEMA: dict[str, Any] = {
+    "type": "string",
+    "title": "Idempotency Key",
+    "description": (
+        "Optional. A repeat carrying the same key returns the first result "
+        "instead of acting a second time."
+    ),
+    "minLength": 1,
+    "maxLength": 128,
+    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+}
+
+
+def declares_idempotency_key(command_type: type) -> bool:
+    """Whether the command carries the key into its own domain operation."""
+
+    return IDEMPOTENCY_FIELD in command_schema(command_type).get("properties", {})
+
+
+def capability_schema(spec: CapabilitySpec) -> dict[str, Any]:
+    """The input a capability accepts: its command's schema and the retry key.
+
+    A capability whose effect is not ``read`` takes an optional
+    ``idempotency_key``, whether or not its command type declares the field,
+    and never requires it. A ``read`` takes none.
+    """
+
+    schema = command_schema(spec.command_type)
+    if spec.effect == "read":
+        return schema
+    properties = dict(schema.get("properties", {}))
+    properties[IDEMPOTENCY_FIELD] = dict(_IDEMPOTENCY_SCHEMA)
+    derived = {**schema, "properties": properties}
+    required = [name for name in schema.get("required", ()) if name != IDEMPOTENCY_FIELD]
+    if required:
+        derived["required"] = required
+    else:
+        derived.pop("required", None)
+    return derived
+
+
 @dataclass(frozen=True)
 class CapabilitySpec:
     name: str
