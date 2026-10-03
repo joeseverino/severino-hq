@@ -15,7 +15,7 @@ from application.expenses import expense_command_from_cleaned_data, save_expense
 from application.deletion import delete_expense
 from application.pages import PageAction, PageMixin, record_trail
 from application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
-from application.ui import when_day
+from application.moments import when_day
 from application.writes import (
     ServiceCreateMixin,
     ServiceDeleteMixin,

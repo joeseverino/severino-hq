@@ -27,7 +27,7 @@ from core import secrets
 
 from .infrastructure import delivery_targets
 from .security import Capability, Principal
-from .ui import when_day
+from .moments import when_day
 
 
 class CertificateError(ValueError):

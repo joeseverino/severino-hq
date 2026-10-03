@@ -25,7 +25,8 @@ from .labels import human_bytes
 from .entity_links import entity_link
 from .facts import Subject, readings
 from .service_context import Cell, ServiceSection
-from .ui import MISSING, counted, moment
+from .timestamps import moment
+from .ui import MISSING, counted
 
 
 def _records(machine, kind: str) -> tuple[Mapping[str, Any], ...]:

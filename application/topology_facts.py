@@ -236,7 +236,7 @@ def add_observed_facts(
 def _drift_facts(resource) -> tuple[tuple[str, str], ...]:
     from .conditions import held_since
     from .history import near
-    from .ui import ago
+    from .moments import ago
 
     since = held_since(resource.conditions, "Drifted")
     if since is None:

@@ -22,7 +22,8 @@ from .expiry import days_until
 from .github_public import github_repository
 from .item_help import cannot_help, commands
 from .projection import read_once
-from .ui import Insight, counted, moment
+from .timestamps import moment
+from .ui import Insight, counted
 
 # An admission artifact that lapses stops the composition admitting its
 # extension, and nothing else says so until a deploy fails.

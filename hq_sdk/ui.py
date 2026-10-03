@@ -1,5 +1,13 @@
 """Stable view models and chart builders for host-rendered plugin UI."""
 
+from application.drawings import Dot, Dots, Trend
+from application.moments import (
+    ago,
+    when,
+    when_day,
+    when_exact,
+    when_range,
+)
 from application.ui import (
     ActivityCalendar,
     Cadence,
@@ -10,8 +18,6 @@ from application.ui import (
     ChartCategory,
     ChartSeries,
     DomainOverview,
-    Dot,
-    Dots,
     Insight,
     Kpi,
     LinePoint,
@@ -24,16 +30,10 @@ from application.ui import (
     StackedBarChart,
     Timeline,
     TimelineItem,
-    Trend,
     WeekPlan,
-    ago,
     counted,
     line_chart,
     stacked_bar_chart,
-    when,
-    when_day,
-    when_exact,
-    when_range,
 )
 
 __all__ = [

@@ -1,9 +1,8 @@
 """How HQ writes a moment, a day and an age.
 
 One owner for the words, so a page, a chart tip and an extension all say a
-time the same way. ``application.ui`` hands these on under the same names, and
-``hq_sdk.ui`` hands them to extensions; ``core.templatetags.value_tags`` owns
-the one filter that puts them in a page.
+time the same way. ``hq_sdk.ui`` hands these to extensions, and
+``core.templatetags.value_tags`` owns the one filter that puts them in a page.
 """
 
 from __future__ import annotations

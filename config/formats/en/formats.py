@@ -9,7 +9,7 @@ template prints bare reads as ``|when`` would write it. A page uses ``|when``:
 it leaves out the year while it is this one and keeps the instant sortable.
 """
 
-from application.ui import CLOCK_FORMAT, DAY_FORMAT, DAY_YEAR_FORMAT, MOMENT_YEAR_FORMAT
+from application.moments import CLOCK_FORMAT, DAY_FORMAT, DAY_YEAR_FORMAT, MOMENT_YEAR_FORMAT
 
 DATE_FORMAT = DAY_YEAR_FORMAT
 DATETIME_FORMAT = MOMENT_YEAR_FORMAT

@@ -32,7 +32,8 @@ from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import entity_link, kind_label
 from .projection import projection_scope
 from .service_context import Cell, ServiceSection
-from .ui import MISSING, ago
+from .moments import ago
+from .ui import MISSING
 
 
 def sections_for(machine) -> tuple[ServiceSection, ...]:

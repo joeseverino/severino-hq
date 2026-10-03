@@ -8,15 +8,14 @@ from django.utils.html import format_html
 
 from application.entity_links import web_url as _web_url
 from application.timestamps import moment
-from application.ui import (
-    MISSING,
+from application.moments import (
     ago as _ago,
-    counted as _counted,
     elapsed as _elapsed,
     when as _when,
     when_day as _when_day,
     when_exact as _when_exact,
 )
+from application.ui import MISSING, counted as _counted
 
 register = template.Library()
 

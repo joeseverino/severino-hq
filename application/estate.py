@@ -27,7 +27,9 @@ from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
 from .item_help import cannot_help, remedy_link
 from .projection import read_once
 from .timestamps import moment
-from .ui import Dot, Dots, Insight, Kpi, ago, counted, when_day
+from .drawings import Dot, Dots
+from .moments import ago, when_day
+from .ui import Insight, Kpi, counted
 from .workflow_contracts import ActionLink
 
 # A machine that holds something for the estate and has been offline this long

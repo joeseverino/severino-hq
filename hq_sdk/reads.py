@@ -7,8 +7,8 @@ again. Nothing is kept between requests, so nothing can be stale.
 An extension's page is assembled by several of its own functions, and three of
 them wanting the same series is three reads unless they share it here::
 
-    def net_worth_series(days=90):
-        return read_once(f"example.net_worth:{days}", lambda: _load(days))
+    def weekly_totals(weeks=12):
+        return read_once(f"example.weekly_totals:{weeks}", lambda: _load(weeks))
 
 The key is the extension's to choose, and to keep apart from everybody else's:
 start it with the extension's own name, and put in it every argument the

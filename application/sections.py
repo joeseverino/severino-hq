@@ -294,7 +294,7 @@ def watching() -> tuple[Card, ...]:
     from core.models import UpstreamReading
 
     from .github_profile import KEY_PREFIX, profile
-    from .ui import moment
+    from .timestamps import moment
 
     # One query whatever is linked: a profile is only ever read for a signed-in
     # person's own linked account, so its reading names them.

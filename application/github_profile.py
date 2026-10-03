@@ -49,7 +49,7 @@ def profile(login: str) -> dict[str, Any] | None:
     reading = stored(reading_key(login))
     if reading is None:
         return None
-    from .ui import moment
+    from .timestamps import moment
 
     value = reading.value
     watched = [

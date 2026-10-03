@@ -16,7 +16,7 @@ from .facts import Joined
 from .labels import lower_first
 from .projection import read_once
 from .service_declarations import Claim
-from .ui import moment
+from .timestamps import moment
 
 
 @dataclass(frozen=True)

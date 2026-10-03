@@ -11,7 +11,8 @@ from django.template import Context, Template, TemplateSyntaxError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import formats, timezone
 
-from ..ui import MISSING, ago, when, when_day, when_exact, when_range
+from ..moments import ago, when, when_day, when_exact, when_range
+from ..ui import MISSING
 
 CHICAGO = ZoneInfo("America/Chicago")
 UTC = ZoneInfo("UTC")
@@ -149,11 +150,11 @@ class OneOwnerTests(SimpleTestCase):
     def test_django_is_handed_the_owners_formats(self):
         from config.formats.en import formats as handed
 
-        from .. import ui
+        from .. import moments
 
-        self.assertEqual(handed.DATE_FORMAT, ui.DAY_YEAR_FORMAT)
-        self.assertEqual(handed.DATETIME_FORMAT, ui.MOMENT_YEAR_FORMAT)
-        self.assertEqual(handed.TIME_FORMAT, ui.CLOCK_FORMAT)
+        self.assertEqual(handed.DATE_FORMAT, moments.DAY_YEAR_FORMAT)
+        self.assertEqual(handed.DATETIME_FORMAT, moments.MOMENT_YEAR_FORMAT)
+        self.assertEqual(handed.TIME_FORMAT, moments.CLOCK_FORMAT)
 
 
 class DaySpanTests(TestCase):

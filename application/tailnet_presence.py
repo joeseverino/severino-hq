@@ -114,7 +114,7 @@ class Presence:
         a path to anywhere.
         """
 
-        from .ui import moment
+        from .timestamps import moment
 
         if self.observer:
             return False
@@ -125,7 +125,7 @@ class Presence:
         """When the two keys last completed a handshake, phrased as HQ phrases
         every other elapsed time."""
 
-        from .ui import elapsed
+        from .moments import elapsed
 
         return elapsed(self.last_handshake)
 

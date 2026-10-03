@@ -39,7 +39,7 @@ from application.deletion import DeleteCommand, delete_receipt
 from application.security import web_principal
 from application.pages import PageAction, PageMixin, record_trail
 from application.tables import TableColumn, TableListMixin, TableToggle
-from application.ui import when
+from application.moments import when
 
 from expenses.models import Expense
 from .forms import ReceiptUploadForm

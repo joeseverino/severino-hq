@@ -421,7 +421,7 @@ def _edge_certificate(name: str, fronting_kind: str) -> Certificate:
 def _certificate_of(role: str, found: tuple[Joined, ...]) -> Certificate:
     """One certificate from the readings covering a name: every issuer, the earliest expiry."""
 
-    from .ui import moment
+    from .timestamps import moment
 
     dated = [(when, joined) for joined in found if (when := moment(joined.expires))]
     earliest = min(dated, key=lambda pair: pair[0])[1] if dated else found[0]
@@ -720,7 +720,8 @@ def _served_certificate(name: str, row: _Row, role: str) -> Certificate:
 
 def _days_left(stamp: str) -> str:
     from .expiry import days_until
-    from .ui import counted, moment
+    from .timestamps import moment
+    from .ui import counted
 
     when = moment(stamp) if stamp else None
     if when is None:

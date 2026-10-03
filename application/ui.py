@@ -5,25 +5,8 @@ import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-# Handed on under this module's name: these live in their own modules and are
-# part of what ``application.ui`` (and through it ``hq_sdk.ui``) offers.
-from .drawings import Dot as Dot
-from .drawings import Dots as Dots
-from .drawings import Trend as Trend
+from .drawings import Dots, Trend
 from .labels import plural
-from .moments import CLOCK_EXACT_FORMAT as CLOCK_EXACT_FORMAT
-from .moments import CLOCK_FORMAT as CLOCK_FORMAT
-from .moments import DAY_FORMAT as DAY_FORMAT
-from .moments import DAY_YEAR_FORMAT as DAY_YEAR_FORMAT
-from .moments import MOMENT_YEAR_FORMAT as MOMENT_YEAR_FORMAT
-from .moments import ago as ago
-from .moments import duration as duration
-from .moments import elapsed as elapsed
-from .moments import when as when
-from .moments import when_day as when_day
-from .moments import when_exact as when_exact
-from .moments import when_range as when_range
-from .timestamps import moment as moment
 from .workflow_contracts import ActionLink, WorkflowPlan
 
 # The one status vocabulary. Every surface that shows state (dashboard cards,

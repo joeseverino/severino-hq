@@ -29,7 +29,8 @@ from application.request_path import request_path
 from application.security import safe_next, web_principal
 from application.timestamps import moment
 from application.pages import page_context
-from application.ui import ListRow, when_day
+from application.moments import when_day
+from application.ui import ListRow
 from contacts import inbox
 
 

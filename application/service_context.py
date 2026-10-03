@@ -31,7 +31,8 @@ from control_plane.names import normalized_hostname
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import EntityLink, entity_link, kind_label
 from .published_sites import projects_by_hostname
-from .ui import MISSING, PAGE_SECTION_ID, ago, counted
+from .moments import ago
+from .ui import MISSING, PAGE_SECTION_ID, counted
 
 
 @dataclass(frozen=True)

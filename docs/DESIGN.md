@@ -146,7 +146,7 @@ when anything is set. No chip walls.
 paths, ports) in `<code>` and leaves counts, words and phrases as text.
 Numbers are never chips.
 
-A moment, a date and an age are each written one way, by `application/ui.py`:
+A moment, a date and an age are each written one way, by `application/moments.py`:
 `when` ("Oct 3, 9:29 AM"), `when_day` ("Oct 3"), `ago` ("5 days ago", one
 unit) and `when_exact` ("Oct 3, 2026, 9:29:15 AM CDT"). The year is said only
 when it is not this one. A page shows them through the built-in `|when`

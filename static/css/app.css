@@ -4951,7 +4951,9 @@ form[data-clean] .save-bar { display: none; }
    below it; a container is otherwise painted beneath what follows it. */
 .dash-head > .dash-hello { flex: 0 1 auto; }
 .dash-readings { position: relative; z-index: 2; display: flex; flex-wrap: wrap; align-items: flex-start; flex: 1 1 22rem; min-width: 0; container-type: inline-size; }
-.dash-readings :is(.dash-reading, .glance-panel) { flex: 1 1 50%; min-width: 0; }
+/* Two to a row while each half can hold a reading's lead, and one to a row
+   below that: a half narrower than a lead would push the lead past the page. */
+.dash-readings :is(.dash-reading, .glance-panel) { flex: 1 1 max(50%, 11rem); min-width: 0; }
 .dash-readings .glance-panel-head { padding-inline: var(--space-3); }
 /* One shape for all of them, so they line up: the lead on a line of one
    height, in one size and one colour, with the mark beside that line rather

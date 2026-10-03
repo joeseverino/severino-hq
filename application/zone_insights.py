@@ -46,7 +46,8 @@ from .infrastructure import delivery_targets, resolved_spec
 from .known_hosts import operator, registrable
 
 
-from .ui import ListRow, counted, ended, moment
+from .timestamps import moment
+from .ui import ListRow, counted, ended
 from .zones import ZONE_KIND, ZoneInsight
 
 # The authority HQ's own certificate provider issues from. Stated here because

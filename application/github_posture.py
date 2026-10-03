@@ -25,7 +25,8 @@ from .github_estate import attention as repository_attention
 from .item_help import cannot_help, commands
 from .standards import UNMET, Posture, measure
 from .standards import Check as _Check
-from .ui import Insight, counted, moment
+from .timestamps import moment
+from .ui import Insight, counted
 
 BOTH = "both"
 PUBLIC = "public"

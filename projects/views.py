@@ -23,7 +23,8 @@ from application.projects import (
 from application.deletion import delete_project
 from projects.github import github_repository
 from application.security import web_principal
-from application.ui import counted, moment
+from application.timestamps import moment
+from application.ui import counted
 from application.pages import PageAction, PageMixin, record_trail
 from application.tables import (
     TableColumn,

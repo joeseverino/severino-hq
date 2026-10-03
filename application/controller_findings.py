@@ -10,7 +10,8 @@ from .cadence import slowest_sweep_interval as _slowest_sweep_interval, sweep_in
 from .topology_lenses import _STALE_AFTER
 from .infrastructure import DRIFT_LABEL
 from .topology_model import TopologyNode
-from .ui import counted, duration
+from .moments import duration
+from .ui import counted
 from .finding_model import (
     Finding,
     Remedy,
@@ -276,7 +277,8 @@ def drift_evidence(node: TopologyNode) -> tuple[tuple[str, str], ...]:
     since = fact_values(node, "drift-since")
     if not since:
         return ()
-    from .ui import ago, moment
+    from .moments import ago
+    from .timestamps import moment
 
     first = moment(since[0])
     near = fact_values(node, "drift-near")

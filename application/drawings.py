@@ -1,7 +1,7 @@
 """What a figure may be drawn as, beside being said.
 
 A ``Kpi`` takes one drawing or none: dots for a part of a whole, a trend for
-recent readings. ``application.ui`` hands these on under the same names.
+recent readings. ``hq_sdk.ui`` hands these to extensions.
 """
 
 from __future__ import annotations

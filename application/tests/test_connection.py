@@ -18,7 +18,8 @@ from django.utils import timezone
 
 from control_plane.models import ManagedResource, ProviderInventory
 
-from ..ui import MISSING, when
+from ..moments import when
+from ..ui import MISSING
 from ..connection import connection
 from ..request_addresses import addresses_of, addresses_of_hq
 from ..request_channel import channel_for_request, channel_of

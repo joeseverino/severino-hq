@@ -117,7 +117,7 @@ class ShortAgeTests(TestCase):
     def test_an_age_is_one_unit(self):
         from datetime import timedelta
 
-        from ..ui import ago
+        from ..moments import ago
 
         self.assertEqual(ago(timezone.now() - timedelta(days=5, hours=15)), "5\xa0days ago")
 

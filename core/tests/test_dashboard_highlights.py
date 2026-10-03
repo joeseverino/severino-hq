@@ -12,7 +12,8 @@ from application.dashboard import dashboard_highlights
 from application.domains import Domain, domain_dashboard_cards
 from application.plugins import NavigationItem, PluginIntegration
 from application.projection import projection_scope
-from application.ui import DomainOverview, Dot, Dots, Kpi, Trend
+from application.drawings import Dot, Dots, Trend
+from application.ui import DomainOverview, Kpi
 
 
 def contributor(number, *, overview=None):

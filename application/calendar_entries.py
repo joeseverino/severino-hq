@@ -24,7 +24,8 @@ from core.audit import operation_context
 
 from .calendar import CalendarEvent, CalendarSource
 from .security import Capability, Principal
-from .ui import counted, when_day
+from .moments import when_day
+from .ui import counted
 
 OWN_SOURCE = "calendar.mine"
 # Occurrences a repeating entry may yield into one window, so a daily entry

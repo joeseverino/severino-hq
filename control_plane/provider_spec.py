@@ -25,7 +25,8 @@ from pydantic import (
     model_validator,
 )
 
-from application.ui import counted, when_day
+from application.moments import when_day
+from application.ui import counted
 
 from .names import in_zone
 from .observations.contract import ReadingPart
