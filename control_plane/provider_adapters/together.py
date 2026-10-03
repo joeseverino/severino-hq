@@ -43,12 +43,19 @@ def read_each(
         return [read(item) for item in todo]
     with ThreadPoolExecutor(max_workers=count, thread_name_prefix="read") as pool:
         futures = [pool.submit(copy_context().run, read, item) for item in todo]
-        # As soon as any read fails, whichever it is, reads not yet started are
-        # not started: one item failing fails the whole read, so asking the
-        # provider for the rest buys nothing. Only reads submitted after the
-        # failed one can still be waiting, so the first failure in the order
-        # asked is still the one a caller sees.
-        _done, waiting = wait(futures, return_when=FIRST_EXCEPTION)
-        for future in waiting:
+        # As soon as any read fails, reads asked for after it are not started:
+        # one item failing fails the whole read, so asking the provider for the
+        # rest buys nothing. Reads asked for before it are left to finish, so
+        # the first failure in the order asked is still the one a caller sees.
+        done, _waiting = wait(futures, return_when=FIRST_EXCEPTION)
+        failed = next(
+            (
+                index
+                for index, future in enumerate(futures)
+                if future in done and future.exception() is not None
+            ),
+            len(futures),
+        )
+        for future in futures[failed + 1 :]:
             future.cancel()
         return [future.result() for future in futures]
