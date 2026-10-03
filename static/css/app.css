@@ -1694,7 +1694,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    stays, what is marked `narrow-more` waits in the line beneath the row. */
 .data-table[data-narrow] > tbody { --row-pad: var(--space-6); }
 .data-table[data-narrow] > tbody > tr:not(.row-detail) .narrow-more { display: none; }
-.table-scroll > .data-table[data-narrow] { --identifier-max: 22ch; }
+.table-scroll > .data-table:is([data-narrow], [data-snug]) { --identifier-max: 22ch; }
 /* A column held to a width that suits a wide table gives it back here, so
    the room goes to the column that names the row. */
 .data-table[data-narrow] .tight-col > * { min-width: 0; }

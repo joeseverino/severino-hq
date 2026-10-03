@@ -1492,6 +1492,12 @@
           "maximum="
         ]
       },
+      "span": {
+        "kind": "function",
+        "parameters": [
+          "days"
+        ]
+      },
       "stacked_bar_chart": {
         "kind": "function",
         "parameters": [

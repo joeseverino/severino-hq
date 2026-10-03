@@ -31,6 +31,8 @@ def store(kind: str, *, age: timedelta = timedelta(0), **fields) -> None:
         kind=kind,
         defaults={"records": [{}, {}], "reachable": True, "observed_at": timezone.now() - age, **fields},
     )
+    # Tried when it was read: storing it just now is not an attempt.
+    ProviderInventory.objects.filter(kind=kind).update(updated_at=timezone.now() - age)
 
 
 @MARKERS

@@ -71,15 +71,14 @@ def askable(kind: str) -> bool:
     from control_plane.observations import OBSERVATIONS
     from control_plane.providers import PROVIDERS
 
+    from .cadence import swept
+
+    if not swept(kind):
+        return False
     reading = OBSERVATIONS.get(kind)
     if reading is not None:
-        return reading.read_by == "controller" and reading.provider != "ssh"
-    declared = PROVIDERS.get(kind)
-    return (
-        declared is not None
-        and not declared.unobserved_reason
-        and "ssh" not in declared.connection_providers
-    )
+        return reading.provider != "ssh"
+    return "ssh" not in PROVIDERS[kind].connection_providers
 
 
 def _machine_reads(name: str) -> Reads | None:

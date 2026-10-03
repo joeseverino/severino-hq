@@ -16,7 +16,7 @@ from control_plane.models import ManagedResource, ProviderConnection, ProviderIn
 from control_plane.observations import OBSERVATIONS
 from control_plane.providers import PROVIDERS
 
-from ..entity_links import NODE_KINDS, entity_link, kind_label
+from ..entity_links import NODE_KINDS, EntityLink, entity_link, kind_label
 from ..facts import Subject, readings, unreadable_labels
 from ..projection import projection_scope
 from ..relationships import relationships_for
@@ -657,3 +657,36 @@ class UnreadableScopeTests(TestCase):
         self.assertFalse(graph.subjects["machine:example-host"].dns_names)
         self.assertNotIn(label, machine.unreadable)
         self.assertIn(label, unreadable_labels())
+
+
+class BareGroupTests(TestCase):
+    """Ends that are only names read across one line; ends with a source keep a row each."""
+
+    def render(self, *items):
+        from django.template.loader import render_to_string
+
+        from ..relationships import RelationGroup, Relationships
+
+        panel = Relationships(node_id="machine:example", groups=(RelationGroup("Carries", 10, items),))
+        return render_to_string("partials/_relationships.html", {"relationships": panel})
+
+    def test_names_alone_share_one_row(self):
+        from ..relationships import Relationship
+
+        html = self.render(*(Relationship(EntityLink(name)) for name in ("alpha", "beta", "gamma")))
+
+        self.assertEqual(html.count("<tr>"), 1)
+        self.assertIn("alpha", html)
+        self.assertIn("gamma", html)
+
+    def test_an_end_somebody_read_keeps_its_own_row(self):
+        from django.utils import timezone
+
+        from ..relationships import Relationship
+
+        html = self.render(
+            Relationship(EntityLink("alpha"), observed_at=timezone.now()),
+            Relationship(EntityLink("beta")),
+        )
+
+        self.assertEqual(html.count("<tr>"), 2)

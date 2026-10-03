@@ -150,6 +150,17 @@ def signed_in(request):
 
 
 @register.filter
+def span(days):
+    """``{{ days_left|span }}``: a count of days as a length of time, from its one owner."""
+    from application.moments import span as said
+
+    try:
+        return said(int(days))
+    except (TypeError, ValueError):
+        return MISSING
+
+
+@register.filter
 def expiry(value):
     """``{{ not_after|expiry }}``: "22 Dec 2026 · 87 days", the one phrasing HQ uses for an end date."""
     from control_plane.provider_spec import expiry_phrase

@@ -37,6 +37,8 @@ jobs:
     permissions:
       contents: read
       packages: read
+      # To withdraw an older release that is still waiting for approval.
+      actions: write
     outputs:
       image: ${{ steps.find.outputs.image }}
       commit: ${{ steps.find.outputs.commit }}
@@ -68,6 +70,26 @@ jobs:
           echo "image=${tag%:*}@$digest" >> "$GITHUB_OUTPUT"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
           echo "deploying ${tag%:*}@$digest, composed from ${commit:0:12}"
+      - name: Withdraw older releases still waiting for approval
+        # One release waits at a time, and it is the newest: an older one that
+        # nobody has approved is cancelled, so the queue holds the build that
+        # includes everything and a superseded one ends as cancelled, not as a
+        # refusal. A release that has started deploying is never touched.
+        if: steps.find.outputs.image != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          THIS_RUN: ${{ github.run_id }}
+          WORKFLOW: ${{ github.workflow_ref }}
+        run: |
+          set -euo pipefail
+          file="${WORKFLOW%@*}"; file="${file##*/}"
+          for status in waiting pending queued; do
+            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${file}/runs?status=${status}&per_page=50" \
+              --jq ".workflow_runs[] | select(.id < ${THIS_RUN}) | .id"
+          done | sort -u | while read -r older; do
+            echo "withdrawing run ${older}: superseded by ${THIS_RUN}"
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/runs/${older}/cancel" >/dev/null || true
+          done
       - name: Mint a token for HQ's check
         id: app
         if: steps.find.outputs.image != ''

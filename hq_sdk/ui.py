@@ -3,6 +3,7 @@
 from application.drawings import Dot, Dots, Trend
 from application.moments import (
     ago,
+    span,
     when,
     when_day,
     when_exact,
@@ -63,6 +64,7 @@ __all__ = [
     "Trend",
     "WeekPlan",
     "ago",
+    "span",
     "counted",
     "line_chart",
     "stacked_bar_chart",

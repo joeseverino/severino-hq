@@ -136,6 +136,33 @@ class RepositoryReadingTests(SimpleTestCase):
         self.assertTrue(all(item["reason"].startswith("Not offered on this repository") for item in refused))
 
 
+class ChecksTests(SimpleTestCase):
+    def run_of(self, name, conclusion, started, run_id):
+        return {"name": name, "conclusion": conclusion, "status": "completed", "started_at": started, "id": run_id}
+
+    def test_a_check_stands_as_its_last_run_did(self):
+        """A release turned down, then one approved: the commit is not failing."""
+
+        answer = {"check_runs": [
+            self.run_of("Deploy", "failure", "2026-01-01T10:00:00Z", 1),
+            self.run_of("Deploy", "cancelled", "2026-01-01T10:05:00Z", 2),
+            self.run_of("Deploy", "success", "2026-01-01T10:10:00Z", 3),
+            self.run_of("Tests", "success", "2026-01-01T09:00:00Z", 4),
+        ]}
+
+        checks = github_readings._checks(answer)
+
+        self.assertEqual((checks["state"], checks["failing"], checks["total"]), ("success", [], 2))
+
+    def test_a_check_whose_last_run_failed_is_failing(self):
+        answer = {"check_runs": [
+            self.run_of("Tests", "success", "2026-01-01T09:00:00Z", 1),
+            self.run_of("Tests", "failure", "2026-01-01T09:30:00Z", 2),
+        ]}
+
+        self.assertEqual(github_readings._checks(answer)["failing"], ["Tests"])
+
+
 class WorkflowTests(SimpleTestCase):
     def test_each_workflow_that_exists_now_once_under_its_name_now(self):
         runs = [
