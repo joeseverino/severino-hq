@@ -118,8 +118,8 @@ func zone(i int) any {
 	return map[string]any{"id": fmt.Sprintf("zone%03d", i), "name": fmt.Sprintf("z%03d.example", i), "account": map[string]any{"id": "acct"}, "status": "active"}
 }
 
-// Regression: the DNS probe read /zones as one page of 50, so zones past the
-// first page went unnamed. Every page is read on both surfaces.
+// Every page of /zones is read on both surfaces, so a zone past the first
+// page is still named.
 func TestZonesReadPastFiftyIsNotTruncated(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -159,9 +159,9 @@ func TestZonesReadPastFiftyIsNotTruncated(t *testing.T) {
 	}
 }
 
-// Regression: a refused credential is recorded once per sweep; every later
-// call that sweep is refused without reaching Cloudflare, so repeated failures
-// cannot lock the token out. The next sweep asks again.
+// A refused credential is recorded once per sweep; every later call that
+// sweep is refused without reaching Cloudflare, so repeated failures cannot
+// lock the token out. The next sweep asks again.
 func TestRefusedCredentialIsNotRetriedThisSweep(t *testing.T) {
 	r, fake := newCloudflare(t, map[string]http.HandlerFunc{
 		"GET /accounts": refusing(http.StatusForbidden, 9109, "Cannot use the access token from location: 192.0.2.1"),

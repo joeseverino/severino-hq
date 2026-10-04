@@ -654,7 +654,7 @@ func TestGitHubDelivery(t *testing.T) {
 	}
 }
 
-// Regression: a run from before the admission never carries it.
+// A run from before the admission never carries it.
 func TestGitHubDeliveryRunBeforeTheAdmissionDoesNotCarryIt(t *testing.T) {
 	routes := deliveryRoutes(admitted, `{"workflow_runs":[{"id":59,"name":"Compose","status":"completed","conclusion":"success","created_at":"2030-01-04T23:59:59Z"},{"id":64,"name":"Compose","status":"queued","created_at":"2030-01-05T00:00:00Z"}]}`)
 	key, value := checkRunsRoute(admitted, `{"check_runs":[]}`)

@@ -17,8 +17,8 @@ func TestBoundedBufferKeepsTheLimitAndNotesTheRest(t *testing.T) {
 	}
 }
 
-// Regression: an embedded bytes.Buffer lent io.Copy its ReadFrom, which
-// skipped Write and with it the limit on the bridge's output.
+// The buffer is not embedded: an embedded bytes.Buffer lends io.Copy its
+// ReadFrom, which skips Write and with it the limit on the bridge's output.
 func TestBoundedBufferCapHoldsUnderIOCopy(t *testing.T) {
 	buffer := BoundedBuffer{Limit: 1024}
 	if _, ok := any(&buffer).(io.ReaderFrom); ok {

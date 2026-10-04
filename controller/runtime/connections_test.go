@@ -63,8 +63,8 @@ func TestMissingSettingDoesNotExposeEnvironment(t *testing.T) {
 	}
 }
 
-// Regression (Stage 1 M3): naming a connection skipped the provider check, so
-// one vendor's credential could be sent to another.
+// Naming a connection does not skip the provider check: one vendor's
+// credential is never sent to another.
 func TestNamedConnectionMustBeTheProvidersOwn(t *testing.T) {
 	env := Environment{"CLOUDFLARE_DNS_CONNECTION_REF": "dns", "PORTAINER_HOME_CONNECTION_REF": "home", "PORTAINER_HOME_PROVIDER": "portainer"}
 	for _, provider := range []ConnectionProvider{ConnectionProviderOnePassword, ConnectionProviderPortainer, ConnectionProviderTailscale} {

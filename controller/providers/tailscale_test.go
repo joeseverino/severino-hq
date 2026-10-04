@@ -322,8 +322,8 @@ func policyReconcile(t *testing.T, api *tailnetAPIServer, document string, apply
 	return r.runAction(runtime.ResourceKindTailscalePolicy, "reconcile", t.Context(), Object{"document": document}, nil, apply)
 }
 
-// Stage 1 M1: the write is held to the version the deny check judged, taken
-// from that same read, never a second GET.
+// The write is held to the version the deny check judged, taken from that
+// same read, never a second GET.
 func TestPolicyWriteUsesTheETagOfTheCheckedRead(t *testing.T) {
 	api := newTailnetAPI(t, map[string]tailnetAnswer{
 		"GET /tailnet/-/acl":           {body: livePolicy, etag: `"v1"`},

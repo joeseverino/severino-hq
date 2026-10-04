@@ -316,7 +316,7 @@ func TestRenderCaddyRoutes(t *testing.T) {
 			}
 		})
 	}
-	// Regression: the directory is checked even when no route would use it.
+	// The directory is checked even when no route would use it.
 	if _, err := renderCaddyRoutes(nil, "relative/certs"); err == nil {
 		t.Fatal("an invalid certificate directory with no routes was accepted")
 	}

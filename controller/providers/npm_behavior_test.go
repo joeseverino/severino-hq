@@ -147,8 +147,8 @@ func TestNPMUpdateCarriesNPMsOwnLocationsAndCertificate(t *testing.T) {
 	}
 }
 
-// Regression: an NPM write goes through the connection the spec names, which
-// is the one the manages gate approved, never the default connection.
+// An NPM write goes through the connection the spec names, which is the one
+// the manages gate approved, never the default connection.
 func TestNPMWriteUsesTheNamedConnection(t *testing.T) {
 	fallback, named := newNPMServer(t), newNPMServer(t)
 	fallback.lists["/api/nginx/proxy-hosts"] = `[]`

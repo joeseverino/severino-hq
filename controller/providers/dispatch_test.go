@@ -51,8 +51,7 @@ func TestExecuteRefusesWritesThatNoManagingConnectionApproves(t *testing.T) {
 		{"managing connection", with(adguard, map[string]string{"ADGUARD_MANAGES": "true"}), declared, nil, true, nil},
 		{"undeclared kind fails closed", with(adguard, map[string]string{"ADGUARD_MANAGES": "true"}), runtime.ControllerRegistry{}, nil, true, ErrUndeclared},
 		{"undeclared kind still plans", adguard, runtime.ControllerRegistry{}, nil, false, nil},
-		// Regression (Stage 1 M3): a named connection of another provider passed
-		// the gate because it managed something.
+		// A named connection of another provider is refused, whatever it manages.
 		{"named connection of another provider", with(with(adguard, edge), map[string]string{"ADGUARD_MANAGES": "true"}), declared, Object{"connection_ref": "edge"}, true, ErrForeignConnection},
 		{"named connection nobody supplied", with(adguard, map[string]string{"ADGUARD_MANAGES": "true"}), declared, Object{"connection_ref": "nowhere"}, true, ErrForeignConnection},
 		{"two items sharing a ref name neither", with(adguard, map[string]string{"ADGUARD_MANAGES": "true", "DNS2_CONNECTION_REF": "dns", "DNS2_PROVIDER": "adguard", "DNS2_MANAGES": "true"}), declared, nil, true, ErrNoManager},
@@ -124,8 +123,8 @@ func inventoryController(kinds ...string) *Controller {
 	return dispatchController(env, declared)
 }
 
-// Regression: connected:false was dropped by omitempty, so an unconnected kind
-// read as a successful empty read.
+// connected:false is always sent, so an unconnected kind never reads as a
+// successful empty read.
 func TestUnconnectedKindSaysConnectedFalseOnTheWire(t *testing.T) {
 	controller := dispatchController(runtime.Environment{}, runtime.ControllerRegistry{
 		Observations: map[string]string{"alpha.thing": "alpha"}, ConnectionCredentials: []runtime.ConnectionProvider{"alpha"},

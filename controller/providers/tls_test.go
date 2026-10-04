@@ -258,8 +258,8 @@ func TestCertbotNamesAreCheckedBeforeTheyReachArgv(t *testing.T) {
 	}
 }
 
-// Stage 1 M2: a renewal is verified only when every consumer was read and
-// serves the new certificate. One matching consumer never vouches for another
+// A renewal is verified only when every consumer was read and serves the
+// new certificate. One matching consumer never vouches for another
 // that was unreachable or had nothing to check.
 func TestRenewalNotVerifiedWhileAConsumerIsUnreadOrUnchecked(t *testing.T) {
 	edge := Object{"kind": "caddy", "name": "edge", "connection_ref": "caddy", "verify_domains": []any{"a.example"}}
