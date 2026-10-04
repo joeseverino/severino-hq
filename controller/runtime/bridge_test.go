@@ -28,7 +28,7 @@ func TestBridgeChild(t *testing.T) {
 	case "wait":
 		time.Sleep(time.Minute)
 	case "flood":
-		os.Stdout.Write(make([]byte, maxBridgeOutput+1))
+		os.Stdout.Write(make([]byte, MaxBridgeOutput+1))
 	default:
 		data, _ := io.ReadAll(os.Stdin)
 		_ = json.NewEncoder(os.Stdout).Encode(Object{"args": os.Args, "bytes": len(data)})

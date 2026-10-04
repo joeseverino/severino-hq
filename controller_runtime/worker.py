@@ -18,6 +18,7 @@ from .providers import (
     inventory,
 )
 
+from control_plane.provider_adapters.parts import report_text
 from .glance import dashboard_glance
 
 from .cloudflare_analytics import (
@@ -429,7 +430,7 @@ def _apply_one(controller_id: str) -> bool | None:
         resource = _with_material(resource)
         result = execute(resource, operation["action"])
     except ProviderError as exc:
-        message = str(exc)
+        message = report_text(str(exc))
         _report(
             controller_id,
             operation["id"],

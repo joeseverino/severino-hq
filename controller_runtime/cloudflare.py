@@ -385,9 +385,9 @@ def _probe_cloudflare_dns(connection_ref: str) -> dict[str, Any]:
     # Which zones *matter* is not the controller's to know. The credential
     # reports what it can reach; HQ declares which zones it is responsible for
     # and is the only side able to compare the two.
-    zones = cloudflare_api.cloudflare_envelope(
-        "/zones?per_page=50", connection_ref=connection_ref
-    ).get("result")
+    zones = cloudflare_api.cloudflare_list(
+        "/zones", connection_ref, per_page=cloudflare_api.CLOUDFLARE_PER_PAGE, provider="cloudflare_dns"
+    )
     names = sorted(
         zone["name"]
         for zone in zones or ()

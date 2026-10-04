@@ -14,12 +14,6 @@ import (
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
-// tailnetKind is read from the tailnet status file this host mounts.
-const tailnetKind = "tailscale.device"
-
-// slowSweep is how long a sweep runs before it is worth a line naming the slowest readers.
-const slowSweep = 60 * time.Second
-
 // Controller is the native runtime.Providers: the registry's handlers,
 // dispatched by HQ's provider declarations, which arrive through the bridge.
 type Controller struct {
@@ -58,13 +52,13 @@ func (c *Controller) Uncovered() []string {
 	found := []string{}
 	for _, capability := range c.Declared.Capabilities {
 		if _, ok := c.actions[actionKey{capability.Kind, capability.Action}]; !ok {
-			found = append(found, capability.Kind+":"+capability.Action)
+			found = append(found, string(capability.Kind)+":"+capability.Action)
 		}
 	}
 	return found
 }
 
-func (c *Controller) NeedsMaterial(kind string) bool {
+func (c *Controller) NeedsMaterial(kind runtime.ResourceKind) bool {
 	for _, found := range c.Declared.MaterialKinds {
 		if found == kind {
 			return true
@@ -73,7 +67,7 @@ func (c *Controller) NeedsMaterial(kind string) bool {
 	return false
 }
 
-func (c *Controller) locked(kind, action string) (string, bool) {
+func (c *Controller) locked(kind runtime.ResourceKind, action string) (string, bool) {
 	for _, entry := range c.Declared.Locked {
 		if entry.Kind == kind && entry.Action == action {
 			return entry.Reason, true
@@ -137,19 +131,6 @@ func sortedRefs(prefixes map[string]string) []string {
 	return refs
 }
 
-// reportTextLimit is how much of a failure's text a report carries
-// (parts.REPORT_TEXT_LIMIT): remote and refusal text can be long.
-const reportTextLimit = 500
-
-// reportText is failure text as a report carries it, cut by runes as Python
-// slices a str.
-func reportText(text string) string {
-	if runes := []rune(text); len(runes) > reportTextLimit {
-		return string(runes[:reportTextLimit])
-	}
-	return text
-}
-
 // namedRef is the connection a spec names, or "" for the kind's default. The
 // manages gate checks this one and the write uses it.
 func namedRef(spec Object) string {
@@ -157,8 +138,8 @@ func namedRef(spec Object) string {
 	return value
 }
 
-func (c *Controller) refuseUnlessManaged(kind string, spec Object) error {
-	providers := c.Declared.ConnectionProviders[kind]
+func (c *Controller) refuseUnlessManaged(kind runtime.ResourceKind, spec Object) error {
+	providers := c.Declared.ConnectionProviders[string(kind)]
 	if len(providers) == 0 {
 		// Fail closed: a write nothing declares a connection for has no
 		// manages switch an operator could have set.
@@ -238,12 +219,12 @@ func (c *Controller) probeSSH(ctx context.Context, ref string) (ProbeResult, err
 	return ProbeResult{Detail: fmt.Sprintf("%s@%s:%d", target.User, target.Host, target.Port), Reaches: []string{target.Host}}, nil
 }
 
-func failureOf(err error) string {
+func failureOf(err error) runtime.FailureClass {
 	var provider *ProviderError
 	if errors.As(err, &provider) {
 		return provider.Failure
 	}
-	return ""
+	return runtime.FailureClassUnclassified
 }
 
 // Connections is every connection the environment carries and whether it
@@ -280,7 +261,7 @@ func (c *Controller) Connections(ctx context.Context, carry []string) ([]runtime
 		default:
 			result, err := probe(ctx, ref)
 			if err != nil {
-				connection.OK, connection.Detail, connection.Failure = false, reportText(err.Error()), failureOf(err)
+				connection.OK, connection.Detail, connection.Failure = false, runtime.ReportText(err.Error()), failureOf(err)
 			} else {
 				connection.Detail, connection.Reaches = result.Detail, result.Reaches
 				if result.ExpiresAt != nil {
@@ -330,10 +311,10 @@ func (c *Controller) hasSource(kind string, connected map[string]bool) bool {
 			return true
 		}
 	}
-	switch kind {
-	case tailnetKind:
+	switch runtime.ResourceKind(kind) {
+	case runtime.ResourceKindTailscaleDevice:
 		return c.Env["SEVERINO_TAILNET_STATUS"] != ""
-	case "host.firewall":
+	case runtime.ResourceKindHostFirewall:
 		return c.Env["SEVERINO_HOST_FIREWALL"] != ""
 	}
 	return false
@@ -345,12 +326,12 @@ func (c *Controller) readKind(ctx context.Context, reader Reader) runtime.KindRe
 	ledger := &refusals{}
 	records, err := reader(context.WithValue(ctx, refusalKey{}, ledger))
 	if err != nil {
-		report := runtime.KindReport{OK: false, Records: []any{}, Error: reportText(err.Error())}
+		report := runtime.KindReport{OK: false, Records: []any{}, Error: runtime.ReportText(err.Error())}
 		var provider *ProviderError
 		if errors.As(err, &provider) {
 			report.Refusal = provider.Refusal
-			if provider.Refusal == "credential" && provider.Reason != "" {
-				report.Error = reportText(provider.Reason)
+			if provider.Refusal == runtime.RefusalCredential && provider.Reason != "" {
+				report.Error = runtime.ReportText(provider.Reason)
 			}
 		}
 		return report
@@ -365,10 +346,10 @@ func (c *Controller) readKind(ctx context.Context, reader Reader) runtime.KindRe
 // Providers are read at once, one provider's kinds in turn, so a credential it
 // refuses is refused once and not by every kind asking at the same moment.
 // An unreachable provider reports as unreachable rather than failing the sweep.
-func (c *Controller) Inventory(ctx context.Context, only []string) (runtime.Inventory, error) {
+func (c *Controller) Inventory(ctx context.Context, only []runtime.ResourceKind) (runtime.Inventory, error) {
 	wantedOnly := map[string]bool{}
 	for _, kind := range only {
-		wantedOnly[kind] = true
+		wantedOnly[string(kind)] = true
 	}
 	ssh := c.sshRefs()
 	connected := map[string]bool{}
@@ -413,7 +394,7 @@ func (c *Controller) Inventory(ctx context.Context, only []string) (runtime.Inve
 
 // sayIfSlow logs the slowest readers when a sweep ran long: kinds, never records.
 func (c *Controller) sayIfSlow(took map[string]time.Duration, elapsed time.Duration) {
-	if elapsed < slowSweep {
+	if elapsed < runtime.SlowSweep {
 		return
 	}
 	kinds := sortedKeys(took)

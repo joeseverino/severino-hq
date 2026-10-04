@@ -27,8 +27,8 @@ func (r Result) MarshalJSON() ([]byte, error) {
 type ProviderError struct {
 	Message    string
 	Status     any
-	Failure    string
-	Refusal    string
+	Failure    FailureClass
+	Refusal    Refusal
 	Reason     string
 	HTTPStatus int    // the provider's non-2xx answer, when it gave one
 	Body       []byte // that answer's body, bounded; some providers explain a refusal there
@@ -38,8 +38,20 @@ func (e *ProviderError) Error() string { return e.Message }
 
 // HTTPRefusal is a provider's non-2xx answer: 401 refuses the credential, 403 permission.
 func HTTPRefusal(code int) *ProviderError {
-	failure := map[int]string{401: "credential", 403: "permission"}[code]
-	return &ProviderError{Message: "Provider request failed: HTTPError.", Failure: failure, Refusal: failure, HTTPStatus: code}
+	failure := StatusFailure(code)
+	return &ProviderError{Message: "Provider request failed: HTTPError.", Failure: failure, Refusal: Refusal(failure), HTTPStatus: code}
+}
+
+// StatusFailure is what a 401 or 403 from a provider says went wrong: 401
+// refuses the credential, 403 the permission. Other statuses say nothing.
+func StatusFailure(code int) FailureClass {
+	switch code {
+	case 401:
+		return FailureClassCredential
+	case 403:
+		return FailureClassPermission
+	}
+	return FailureClassUnclassified
 }
 
 // Bridge calls only the host's declared management-command actions. Payloads
@@ -52,10 +64,10 @@ type Bridge interface {
 // Implementations must not write during Execute when apply is false.
 type Providers interface {
 	Capabilities() []Capability
-	NeedsMaterial(string) bool
+	NeedsMaterial(ResourceKind) bool
 	Execute(context.Context, Resource, string, bool) (Result, error)
 	Connections(context.Context, []string) ([]ConnectionRecord, error)
-	Inventory(context.Context, []string) (Inventory, error)
+	Inventory(context.Context, []ResourceKind) (Inventory, error)
 	AnalyticsSites(context.Context) ([]AnalyticsSiteIdentity, error)
 	Analytics(context.Context, []AnalyticsSiteIdentity, []AnalyticsWindow) (AnalyticsReadings, error)
 	Glance(context.Context, GlancePlan) (GlanceObservations, error)
@@ -71,7 +83,7 @@ func decodeObject(value any, into any) error {
 	return json.Unmarshal(data, into)
 }
 
-func isNetworkFailure(c ConnectionRecord) bool { return !c.OK && c.Failure == "network" }
+func isNetworkFailure(c ConnectionRecord) bool { return !c.OK && c.Failure == FailureClassNetwork }
 
 func planHealth(connections []ConnectionRecord) (bool, []string) {
 	tried, network := 0, 0

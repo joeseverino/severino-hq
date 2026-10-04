@@ -30,7 +30,7 @@ type localFixture struct {
 	Resource   runtime.Resource           `json:"resource"`
 	Action     string                     `json:"action"`
 	Apply      bool                       `json:"apply"`
-	Only       []string                   `json:"only"`
+	Only       []runtime.ResourceKind     `json:"only"`
 	Undeclared []string                   `json:"undeclared"`
 	Zones      map[string][]RedirectZone  `json:"zones"`
 	Portainer  struct {

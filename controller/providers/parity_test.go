@@ -76,6 +76,10 @@ func TestParityChild(t *testing.T) {
 		"PORTAINER_URL":            "https://example.invalid",
 		"PORTAINER_API_TOKEN":      "synthetic",
 		"HQ_CONTROLLER_ID":         "hq-node",
+		// Python inspects one container at a time and stops at the first failure;
+		// one at a time here makes the request logs comparable. The concurrent
+		// path is held by TestPortainerInspectsRunConcurrentlyInOrder.
+		inspectConcurrencyEnv: "1",
 	}
 	if input.ControllerID != nil {
 		portainerEnv["HQ_CONTROLLER_ID"] = *input.ControllerID
@@ -177,8 +181,8 @@ func TestParityChild(t *testing.T) {
 			"volumes": "portainer.volume", "images": "portainer.image", "runtime": "portainer.runtime", "stacks": "portainer.compose_project",
 		}
 		actions := map[string]actionKey{
-			"reconcile": {portainerStackKind, "reconcile"}, "delete": {portainerStackKind, "delete"},
-			"restart": {portainerContainerKind, "restart"}, "start": {portainerContainerKind, "start"}, "stop": {portainerContainerKind, "stop"},
+			"reconcile": {runtime.ResourceKindPortainerStack, "reconcile"}, "delete": {runtime.ResourceKindPortainerStack, "delete"},
+			"restart": {runtime.ResourceKindPortainerContainer, "restart"}, "start": {runtime.ResourceKindPortainerContainer, "start"}, "stop": {runtime.ResourceKindPortainerContainer, "stop"},
 		}
 		if key, ok := actions[input.Surface]; ok {
 			value, err = r.actions[key](ctx, input.Spec, input.Observed, input.Apply)
@@ -193,9 +197,9 @@ func TestParityChild(t *testing.T) {
 	} else if input.Provider == "npm" {
 		switch input.Surface {
 		case "reconcile":
-			value, err = r.npmReconcile(ctx, input.Spec, input.Observed, input.Apply)
+			value, err = r.runAction(runtime.ResourceKindNPMProxyHost, "reconcile", ctx, input.Spec, input.Observed, input.Apply)
 		case "delete":
-			value, err = r.npmDelete(ctx, input.Spec, input.Observed, input.Apply)
+			value, err = r.runAction(runtime.ResourceKindNPMProxyHost, "delete", ctx, input.Spec, input.Observed, input.Apply)
 		case "inventory":
 			value, err = r.npmInventory(ctx)
 		case "certificates":
@@ -218,11 +222,11 @@ func TestParityChild(t *testing.T) {
 	} else if input.Provider == "tailscale" {
 		switch input.Surface {
 		case "reconcile_device":
-			value, err = r.tailscaleDeviceReconcile(ctx, input.Spec, input.Observed, input.Apply)
+			value, err = r.runAction(runtime.ResourceKindTailscaleDevice, "reconcile", ctx, input.Spec, input.Observed, input.Apply)
 		case "approve_routes":
-			value, err = r.tailscaleApproveRoutes(ctx, input.Spec, input.Observed, input.Apply)
+			value, err = r.runAction(runtime.ResourceKindTailscaleDevice, "approve-routes", ctx, input.Spec, input.Observed, input.Apply)
 		case "reconcile_policy":
-			value, err = r.tailnetPolicyReconcile(ctx, input.Spec, input.Observed, input.Apply)
+			value, err = r.runAction(runtime.ResourceKindTailscalePolicy, "reconcile", ctx, input.Spec, input.Observed, input.Apply)
 		case "device_inventory":
 			value, err = r.tailscaleDeviceInventory(ctx)
 		case "policy_inventory":
@@ -245,9 +249,9 @@ func TestParityChild(t *testing.T) {
 	} else {
 		switch input.Surface {
 		case "reconcile":
-			value, err = r.adguardReconcile(ctx, input.Spec, input.Observed, input.Apply)
+			value, err = r.runAction(runtime.ResourceKindAdGuardRewrite, "reconcile", ctx, input.Spec, input.Observed, input.Apply)
 		case "delete":
-			value, err = r.adguardDelete(ctx, input.Spec, input.Observed, input.Apply)
+			value, err = r.runAction(runtime.ResourceKindAdGuardRewrite, "delete", ctx, input.Spec, input.Observed, input.Apply)
 		case "inventory":
 			value, err = r.adguardInventory(ctx)
 		case "clients":
@@ -302,9 +306,9 @@ func cloudflareParitySurface(ctx context.Context, r *Registry, surface string, s
 	}
 	switch surface {
 	case "reconcile":
-		return r.cloudflareRecordReconcile(ctx, spec, observed, apply)
+		return r.runAction(runtime.ResourceKindCloudflareDNSRecord, "reconcile", ctx, spec, observed, apply)
 	case "delete":
-		return r.cloudflareRecordDelete(ctx, spec, observed, apply)
+		return r.runAction(runtime.ResourceKindCloudflareDNSRecord, "delete", ctx, spec, observed, apply)
 	case "probe_dns":
 		return r.probes["cloudflare_dns"](ctx, "example")
 	case "probe_api":

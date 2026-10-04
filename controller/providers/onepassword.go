@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // The complete set of fields HQ writes about a certificate, with the type op
@@ -74,9 +76,7 @@ func certificateFacts(spec TLSCertificateSpec, status *TLSCertificateStatus) map
 	}
 	sort.Strings(installed)
 	expires := status.NotAfter
-	if len(expires) > 10 {
-		expires = expires[:10]
-	}
+	expires = runtime.ISODate(expires)
 	return map[string]string{
 		"Covers":                strings.Join(spec.Domains, ", "),
 		"Issued by":             status.Issuer,
@@ -95,7 +95,9 @@ type opField struct {
 type opItem struct {
 	Fields []opField         `json:"fields"`
 	Tags   []json.RawMessage `json:"tags"`
-	Files  []map[string]any  `json:"files"`
+	Files  []struct {
+		Name json.RawMessage `json:"name"` // only a string names a file
+	} `json:"files"`
 }
 
 // pyStr is Python's str() of a decoded JSON value; a missing value is "".
@@ -186,7 +188,8 @@ func (r *Registry) onePasswordCurrent(ctx context.Context, publication OnePasswo
 	}
 	files := map[string]bool{}
 	for _, entry := range item.Files {
-		if name, ok := entry["name"].(string); ok && name != "" {
+		var name string
+		if json.Unmarshal(entry.Name, &name) == nil && name != "" {
 			files[name] = true
 		}
 	}

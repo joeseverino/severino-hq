@@ -52,8 +52,9 @@ func TestRedirectRefusesDifferentOriginAndAllWrites(t *testing.T) {
 }
 func TestProviderResponseFailures(t *testing.T) {
 	for _, tc := range []struct {
-		name, body, failure string
-		status              int
+		name, body string
+		failure    FailureClass
+		status     int
 	}{
 		{"credential", "", "credential", 401}, {"permission", "", "permission", 403},
 		{"html", "<html>login</html>", "address", 200}, {"malformed", "{", "", 200},

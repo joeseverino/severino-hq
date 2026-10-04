@@ -76,13 +76,13 @@ func runTLSParity(data []byte) {
 	var err error
 	switch input.Surface {
 	case "reconcile":
-		value, err = r.tlsReconcile(ctx, input.Spec, input.Observed, input.Apply)
+		value, err = r.runAction(runtime.ResourceKindTLSCertificate, "reconcile", ctx, input.Spec, input.Observed, input.Apply)
 	case "renew":
-		value, err = r.tlsRenew(ctx, input.Spec, input.Observed, input.Apply)
+		value, err = r.runAction(runtime.ResourceKindTLSCertificate, "renew", ctx, input.Spec, input.Observed, input.Apply)
 	case "uploaded_reconcile":
-		value, err = r.uploadedReconcile(ctx, input.Spec, input.Observed, input.Apply)
+		value, err = r.runAction(runtime.ResourceKindTLSUploadedCertificate, "reconcile", ctx, input.Spec, input.Observed, input.Apply)
 	case "uploaded_delete":
-		value, err = r.uploadedDelete(ctx, input.Spec, input.Observed, input.Apply)
+		value, err = r.runAction(runtime.ResourceKindTLSUploadedCertificate, "delete", ctx, input.Spec, input.Observed, input.Apply)
 	case "sign":
 		var signature []byte
 		signature, err = r.Sign(ctx, input.Ref, []byte(input.Data))

@@ -3,23 +3,23 @@ package providers
 import (
 	"bytes"
 	"encoding/json"
+
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 const (
-	certificateKind         = "tls.certificate"
-	uploadedCertificateKind = "tls.uploaded_certificate"
-	npmCertificateIDsKey    = "npm_certificate_ids"
+	npmCertificateIDsKey = "npm_certificate_ids"
 )
 
 // TLSConsumer is one place a certificate is served from.
 type TLSConsumer struct {
-	Kind                 string   `json:"kind"`
-	Name                 string   `json:"name"`
-	ConnectionRef        string   `json:"connection_ref"`
-	VerifyDomains        []string `json:"verify_domains"`
-	CertificateDirectory string   `json:"certificate_directory,omitempty"`
-	DiscoverCoveredHosts bool     `json:"discover_covered_hosts,omitempty"`
-	InstallDomains       []string `json:"install_domains,omitempty"`
+	Kind                 runtime.TLSConsumerKind `json:"kind"`
+	Name                 string                  `json:"name"`
+	ConnectionRef        string                  `json:"connection_ref"`
+	VerifyDomains        []string                `json:"verify_domains"`
+	CertificateDirectory string                  `json:"certificate_directory,omitempty"`
+	DiscoverCoveredHosts bool                    `json:"discover_covered_hosts,omitempty"`
+	InstallDomains       []string                `json:"install_domains,omitempty"`
 }
 
 // OnePasswordPublication is where a certificate's facts are written, and nothing about what.
@@ -31,13 +31,6 @@ type OnePasswordPublication struct {
 	Item          string `json:"item"`
 }
 
-// UploadedMaterial is a stored certificate, released only to the controller applying it.
-type UploadedMaterial struct {
-	Fullchain  string   `json:"fullchain"`
-	PrivateKey string   `json:"private_key"`
-	Domains    []string `json:"domains"`
-}
-
 // TLSCertificateSpec is the resolved spec of both certificate kinds.
 type TLSCertificateSpec struct {
 	CertificateName   string                   `json:"certificate_name"`
@@ -45,19 +38,27 @@ type TLSCertificateSpec struct {
 	Consumers         []TLSConsumer            `json:"consumers"`
 	PublishTo         []OnePasswordPublication `json:"publish_to"`
 	RenewalWindowDays int                      `json:"renewal_window_days"`
-	Material          *UploadedMaterial        `json:"material,omitempty"`
+	Material          *runtime.Material        `json:"material,omitempty"`
+}
+
+// TLSCertificateObserved is what a certificate resource was last seen holding:
+// the NPM certificate id installed for each NPM consumer (the single id is the
+// older form, for a resource with one such consumer).
+type TLSCertificateObserved struct {
+	NPMCertificateIDs map[string]json.RawMessage `json:"npm_certificate_ids"`
+	NPMCertificateID  json.RawMessage            `json:"npm_certificate_id"`
 }
 
 // TLSObservation is what one consumer served for one name.
 type TLSObservation struct {
-	Domain            string   `json:"domain"`
-	NotAfter          string   `json:"not_after"`
-	FingerprintSHA256 string   `json:"fingerprint_sha256"`
-	Issuer            string   `json:"issuer"`
-	SANs              []string `json:"sans"`
-	Consumer          string   `json:"consumer"`
-	ConsumerKind      string   `json:"consumer_kind"`
-	MatchesExpected   *bool    `json:"matches_expected,omitempty"`
+	Domain            string                  `json:"domain"`
+	NotAfter          string                  `json:"not_after"`
+	FingerprintSHA256 string                  `json:"fingerprint_sha256"`
+	Issuer            string                  `json:"issuer"`
+	SANs              []string                `json:"sans"`
+	Consumer          string                  `json:"consumer"`
+	ConsumerKind      runtime.TLSConsumerKind `json:"consumer_kind"`
+	MatchesExpected   *bool                   `json:"matches_expected,omitempty"`
 	certificatePEM    string
 }
 
@@ -184,11 +185,11 @@ type TLSVerificationEvidence struct {
 }
 
 type TLSConsumerEvidence struct {
-	Consumer          string `json:"consumer"`
-	Kind              string `json:"kind"`
-	Domain            string `json:"domain"`
-	FingerprintSHA256 string `json:"fingerprint_sha256"`
-	MatchesExpected   bool   `json:"matches_expected"`
+	Consumer          string                  `json:"consumer"`
+	Kind              runtime.TLSConsumerKind `json:"kind"`
+	Domain            string                  `json:"domain"`
+	FingerprintSHA256 string                  `json:"fingerprint_sha256"`
+	MatchesExpected   bool                    `json:"matches_expected"`
 }
 
 // UploadedCertificateStatus is an uploaded certificate's report.

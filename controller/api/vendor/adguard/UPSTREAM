@@ -1,0 +1,4 @@
+repository: https://github.com/AdguardTeam/AdGuardHome
+file: openapi/openapi.yaml
+commit: 336e9c9df4efa3fb5918e7f33827300805f46bf3
+sha256: 599aec2ef8e68669126ef249c64ecd70dde44025fb3bc8c385efd1991160ca3f

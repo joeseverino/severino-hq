@@ -632,7 +632,7 @@
             "type": "string"
           },
           "kind": {
-            "type": "string"
+            "$ref": "#/components/schemas/ResourceKind"
           },
           "generation": {
             "type": "integer",
@@ -829,7 +829,7 @@
             }
           },
           "failure": {
-            "type": "string"
+            "$ref": "#/components/schemas/FailureClass"
           },
           "carried": {
             "type": "boolean"
@@ -890,7 +890,7 @@
             "type": "string"
           },
           "refusal": {
-            "type": "string"
+            "$ref": "#/components/schemas/FailureClass"
           },
           "reason": {
             "type": "string"
@@ -933,7 +933,7 @@
             "type": "string"
           },
           "refusal": {
-            "type": "string"
+            "$ref": "#/components/schemas/Refusal"
           },
           "refused_parts": {
             "type": "array",
@@ -1105,7 +1105,7 @@
           "panels": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/GlancePanelID"
             }
           },
           "targets": {
@@ -1134,7 +1134,7 @@
             "type": "string"
           },
           "kind": {
-            "type": "string"
+            "$ref": "#/components/schemas/ResourceKind"
           },
           "requested_at": {
             "type": "string",
@@ -1146,7 +1146,7 @@
               "null"
             ],
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ResourceKind"
             }
           }
         },
@@ -1183,7 +1183,7 @@
           "only_kinds": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ResourceKind"
             }
           },
           "due": {
@@ -1225,7 +1225,7 @@
         "type": "object",
         "properties": {
           "kind": {
-            "type": "string"
+            "$ref": "#/components/schemas/ResourceKind"
           },
           "action": {
             "type": "string"
@@ -1242,7 +1242,7 @@
         "description": "An action the registry refuses, and the reason it gives.",
         "properties": {
           "kind": {
-            "type": "string"
+            "$ref": "#/components/schemas/ResourceKind"
           },
           "action": {
             "type": "string"
@@ -1281,7 +1281,7 @@
           "material_kinds": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ResourceKind"
             },
             "description": "Kinds whose work needs material HQ holds."
           },
@@ -1532,6 +1532,332 @@
           "interval_seconds"
         ],
         "additionalProperties": false
+      },
+      "ResourceKind": {
+        "type": "string",
+        "description": "Every kind of resource or reading HQ's provider registry declares. Django's contract test holds this list equal to the registry, so a kind added on either side fails the build.",
+        "enum": [
+          "adguard.client",
+          "adguard.dns",
+          "adguard.query_summary",
+          "adguard.rewrite",
+          "caddy.route",
+          "cloudflare.access_app",
+          "cloudflare.access_service_token",
+          "cloudflare.d1_database",
+          "cloudflare.dns_record",
+          "cloudflare.edge_certificate",
+          "cloudflare.pages_project",
+          "cloudflare.redirect",
+          "cloudflare.tunnel",
+          "cloudflare.zone",
+          "github.delivery",
+          "github.repository",
+          "host.firewall",
+          "host.perimeter",
+          "hq.request_path",
+          "machine",
+          "network",
+          "npm.access_list",
+          "npm.certificate",
+          "npm.dead_host",
+          "npm.proxy_host",
+          "npm.redirect",
+          "npm.stream",
+          "pki.authority",
+          "portainer.compose_project",
+          "portainer.container",
+          "portainer.environment",
+          "portainer.image",
+          "portainer.network",
+          "portainer.runtime",
+          "portainer.stack",
+          "portainer.volume",
+          "registry.address",
+          "registry.digest",
+          "registry.domain",
+          "registry.image",
+          "registry.upstream",
+          "registry.vulnerabilities",
+          "tailscale.device",
+          "tailscale.dns",
+          "tailscale.policy",
+          "tailscale.settings",
+          "tailscale.user",
+          "tls.certificate",
+          "tls.delivery_target",
+          "tls.uploaded_certificate"
+        ],
+        "x-enum-varnames": [
+          "ResourceKindAdGuardClient",
+          "ResourceKindAdGuardDNS",
+          "ResourceKindAdGuardQuerySummary",
+          "ResourceKindAdGuardRewrite",
+          "ResourceKindCaddyRoute",
+          "ResourceKindCloudflareAccessApp",
+          "ResourceKindCloudflareAccessServiceToken",
+          "ResourceKindCloudflareD1Database",
+          "ResourceKindCloudflareDNSRecord",
+          "ResourceKindCloudflareEdgeCertificate",
+          "ResourceKindCloudflarePagesProject",
+          "ResourceKindCloudflareRedirect",
+          "ResourceKindCloudflareTunnel",
+          "ResourceKindCloudflareZone",
+          "ResourceKindGitHubDelivery",
+          "ResourceKindGitHubRepository",
+          "ResourceKindHostFirewall",
+          "ResourceKindHostPerimeter",
+          "ResourceKindHQRequestPath",
+          "ResourceKindMachine",
+          "ResourceKindNetwork",
+          "ResourceKindNPMAccessList",
+          "ResourceKindNPMCertificate",
+          "ResourceKindNPMDeadHost",
+          "ResourceKindNPMProxyHost",
+          "ResourceKindNPMRedirect",
+          "ResourceKindNPMStream",
+          "ResourceKindPKIAuthority",
+          "ResourceKindPortainerComposeProject",
+          "ResourceKindPortainerContainer",
+          "ResourceKindPortainerEnvironment",
+          "ResourceKindPortainerImage",
+          "ResourceKindPortainerNetwork",
+          "ResourceKindPortainerRuntime",
+          "ResourceKindPortainerStack",
+          "ResourceKindPortainerVolume",
+          "ResourceKindRegistryAddress",
+          "ResourceKindRegistryDigest",
+          "ResourceKindRegistryDomain",
+          "ResourceKindRegistryImage",
+          "ResourceKindRegistryUpstream",
+          "ResourceKindRegistryVulnerabilities",
+          "ResourceKindTailscaleDevice",
+          "ResourceKindTailscaleDNS",
+          "ResourceKindTailscalePolicy",
+          "ResourceKindTailscaleSettings",
+          "ResourceKindTailscaleUser",
+          "ResourceKindTLSCertificate",
+          "ResourceKindTLSDeliveryTarget",
+          "ResourceKindTLSUploadedCertificate"
+        ]
+      },
+      "Refusal": {
+        "type": "string",
+        "description": "Why a provider refused a read: the credential itself, or one permission it lacks. Empty when the reason is unclassified.",
+        "enum": [
+          "",
+          "credential",
+          "permission"
+        ],
+        "x-enum-varnames": [
+          "RefusalUnclassified",
+          "RefusalCredential",
+          "RefusalPermission"
+        ]
+      },
+      "FailureClass": {
+        "type": "string",
+        "description": "Why a read got no usable answer: a refusal, an address that answered as something other than the API, or nothing answering. Empty when unclassified.",
+        "enum": [
+          "",
+          "credential",
+          "permission",
+          "address",
+          "network"
+        ],
+        "x-enum-varnames": [
+          "FailureClassUnclassified",
+          "FailureClassCredential",
+          "FailureClassPermission",
+          "FailureClassAddress",
+          "FailureClassNetwork"
+        ]
+      },
+      "PassMode": {
+        "type": "string",
+        "enum": [
+          "plan",
+          "apply"
+        ],
+        "x-enum-varnames": [
+          "PassModePlan",
+          "PassModeApply"
+        ],
+        "description": "Whether a pass only looked (plan) or claimed and executed work (apply)."
+      },
+      "PlannedOperation": {
+        "type": "object",
+        "description": "The operation a plan pass would run next and what it would change.",
+        "properties": {
+          "operation": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "would_change": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "resource",
+          "action",
+          "would_change",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "PlanPassOutput": {
+        "type": "object",
+        "description": "The line a plan pass prints on stdout. The Python worker prints the same shape.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/PassMode"
+          },
+          "claimed": {
+            "type": "boolean"
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionRecord"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlannedOperation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "x-go-type": "PlannedOperation",
+            "x-go-type-skip-optional-pointer": false
+          }
+        },
+        "required": [
+          "ok",
+          "mode",
+          "claimed",
+          "connections",
+          "warnings",
+          "plan"
+        ],
+        "additionalProperties": false
+      },
+      "IdlePassOutput": {
+        "type": "object",
+        "description": "The line an apply pass prints when it found nothing to claim.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/PassMode"
+          },
+          "claimed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "mode",
+          "claimed"
+        ],
+        "additionalProperties": false
+      },
+      "AppliedOperationOutput": {
+        "type": "object",
+        "description": "The line an apply pass prints for one operation it ran.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "changed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "operation",
+          "resource",
+          "changed"
+        ],
+        "additionalProperties": false
+      },
+      "RefusedOperationOutput": {
+        "type": "object",
+        "description": "The line an apply pass prints for one operation a provider refused.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "operation",
+          "resource",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "TLSConsumerKind": {
+        "type": "string",
+        "description": "Where a certificate is served from: the kinds of TLS consumer a certificate spec declares.",
+        "enum": [
+          "caddy",
+          "cpanel",
+          "npm"
+        ],
+        "x-enum-varnames": [
+          "TLSConsumerKindCaddy",
+          "TLSConsumerKindCPanel",
+          "TLSConsumerKindNPM"
+        ]
+      },
+      "GlancePanelID": {
+        "type": "string",
+        "description": "A dashboard panel the glance plan can ask the controller to read.",
+        "enum": [
+          "infrastructure",
+          "weather"
+        ],
+        "x-enum-varnames": [
+          "GlancePanelIDInfrastructure",
+          "GlancePanelIDWeather"
+        ]
       }
     }
   }

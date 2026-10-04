@@ -9,12 +9,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
+
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // Readings of the host the controller runs on: its firewall and its perimeter.
-
-const sshPort = 22
 
 // PublishedContainer is a container the sweep found and the ports it publishes.
 // Host is the environment's connection ref, HostAddress its address.
@@ -36,8 +35,8 @@ type HostPerimeterRecord struct {
 }
 
 func (r *Registry) admitHostReadings() {
-	r.reader("host.firewall", r.hostFirewall)
-	r.reader("host.perimeter", r.hostPerimeter)
+	r.reader(runtime.ResourceKindHostFirewall, r.hostFirewall)
+	r.reader(runtime.ResourceKindHostPerimeter, r.hostPerimeter)
 }
 
 // hostFirewall is whether HQ's port must arrive on the tailnet interface. Root
@@ -89,7 +88,7 @@ func (r *Registry) hostPerimeter(ctx context.Context) ([]any, error) {
 			at[address] = true
 		}
 		ports := r.publishedPortsAt(ctx, ref, at)
-		ports[sshPort], ports[target.Port] = true, true
+		ports[standardSSHPort], ports[target.Port] = true, true
 		checked := sortedPorts(ports)
 		found = append(found, HostPerimeterRecord{
 			Record:           "perimeter",
@@ -172,7 +171,7 @@ func (r *Registry) answered(ctx context.Context, addresses []string, ports []int
 // dialFromHere is whether a TCP connection is accepted, asked from this machine,
 // which reaches a public address the way anybody else would.
 func dialFromHere(ctx context.Context, address string, port int) bool {
-	dialer := net.Dialer{Timeout: 3 * time.Second}
+	dialer := net.Dialer{Timeout: perimeterDialTimeout}
 	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(address, strconv.Itoa(port)))
 	if err != nil {
 		return false

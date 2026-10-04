@@ -34,28 +34,20 @@ func idText(raw json.RawMessage) string {
 }
 
 // npmCertificateIDs is the NPM certificate id HQ installed for each NPM consumer, as last reported.
-func npmCertificateIDsOf(spec TLSCertificateSpec, observed Object) npmCertificateIDs {
+func npmCertificateIDsOf(spec TLSCertificateSpec, observed TLSCertificateObserved) npmCertificateIDs {
 	consumers := []string{}
 	for _, consumer := range spec.Consumers {
-		if consumer.Kind == "npm" {
+		if consumer.Kind == runtime.TLSConsumerKindNPM {
 			consumers = append(consumers, consumer.Name)
 		}
 	}
-	var report struct {
-		IDs    map[string]json.RawMessage `json:"npm_certificate_ids"`
-		Single json.RawMessage            `json:"npm_certificate_id"`
-	}
-	if observed != nil {
-		data, _ := json.Marshal(observed)
-		_ = json.Unmarshal(data, &report)
-	}
 	ids := map[string]int{}
-	for name, raw := range report.IDs {
+	for name, raw := range observed.NPMCertificateIDs {
 		if value, ok := jsonInt(raw); ok {
 			ids[name] = value
 		}
 	}
-	if single, ok := jsonInt(report.Single); len(ids) == 0 && len(consumers) == 1 && ok {
+	if single, ok := jsonInt(observed.NPMCertificateID); len(ids) == 0 && len(consumers) == 1 && ok {
 		ids[consumers[0]] = single
 	}
 	known := npmCertificateIDs{}

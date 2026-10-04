@@ -40,6 +40,12 @@ from . import connection_env, provider_http
 
 CLOUDFLARE_API_URL = "https://api.cloudflare.com/client/v4"
 
+# List paging. The Go controller (providers/cloudflare_api.go) holds the same numbers.
+CLOUDFLARE_PER_PAGE = 100
+CLOUDFLARE_ACCOUNT_PER_PAGE = 50
+CLOUDFLARE_MAX_PAGES = 50
+CLOUDFLARE_MAX_CURSOR_PAGES = 200
+
 
 def cloudflare_url(
     connection_ref: str = "", *, provider: str = "cloudflare_dns"
@@ -205,10 +211,14 @@ def cloudflare_refused(
     return ProviderError(message, refusal=refusal)
 
 
-def cloudflare_request(path: str, *, method: str = "GET", payload: Any = None) -> Any:
+def cloudflare_request(
+    path: str, *, method: str = "GET", payload: Any = None, connection_ref: str = ""
+) -> Any:
     """The zone-scoped DNS surface, unwrapped to the result callers expect."""
 
-    return cloudflare_envelope(path, method=method, payload=payload).get("result")
+    return cloudflare_envelope(
+        path, method=method, payload=payload, connection_ref=connection_ref
+    ).get("result")
 
 
 def cloudflare_errors(raw: bytes) -> str:
@@ -225,26 +235,14 @@ def cloudflare_errors(raw: bytes) -> str:
 
 
 def cloudflare_paged(path: str) -> list[dict[str, Any]]:
-    """Every page of a list endpoint.
+    """Every page of a DNS-surface list.
 
-    Cloudflare returns 100 records at most. A zone that outgrew one page would
-    otherwise have its tail silently reported as absent, and "absent" is the
-    word this system acts on, so the reconciler would set about recreating
-    records that were there all along.
+    A zone that outgrew one page would otherwise have its tail silently
+    reported as absent, and "absent" is the word this system acts on, so the
+    reconciler would set about recreating records that were there all along.
     """
 
-    collected: list[dict[str, Any]] = []
-    page = 1
-    while True:
-        separator = "&" if "?" in path else "?"
-        result = cloudflare_request(f"{path}{separator}per_page=100&page={page}")
-        batch = result or []
-        collected.extend(batch)
-        if len(batch) < 100:
-            return collected
-        page += 1
-        if page > 50:
-            raise ProviderError("Cloudflare list did not terminate.")
+    return cloudflare_list(path, per_page=CLOUDFLARE_PER_PAGE, provider="cloudflare_dns")
 
 
 # Account readings through `cloudflare_api`. Every list is fetched once per
@@ -265,7 +263,7 @@ def cloudflare_api_result(path: str, connection_ref: str) -> Any:
 def cloudflare_api_zones(connection_ref: str) -> list[dict[str, Any]]:
     return provider_http.snapshot_value(
         ("cloudflare-api-zones", connection_ref),
-        lambda: cloudflare_api_list("/zones", connection_ref, per_page=50),
+        lambda: cloudflare_api_list("/zones", connection_ref, per_page=CLOUDFLARE_ACCOUNT_PER_PAGE),
     )
 
 
@@ -278,46 +276,71 @@ def cloudflare_api_request(path: str, connection_ref: str = "") -> Any:
 
 
 def cloudflare_api_list(
-    path: str, connection_ref: str = "", *, per_page: int = 100
+    path: str, connection_ref: str = "", *, per_page: int = CLOUDFLARE_PER_PAGE
 ) -> list[dict[str, Any]]:
     """Every page from one Cloudflare account list endpoint."""
 
+    return cloudflare_list(path, connection_ref, per_page=per_page, provider="cloudflare_api")
+
+
+def _list_batch(response: dict[str, Any]) -> list[Any]:
+    """A list page's result: missing or null is empty, anything but a list is invalid."""
+
+    batch = response.get("result")
+    if batch is None:
+        return []
+    if not isinstance(batch, list):
+        raise ProviderError("Cloudflare list returned an invalid result.")
+    return batch
+
+
+def cloudflare_list(
+    path: str,
+    connection_ref: str = "",
+    *,
+    per_page: int = CLOUDFLARE_PER_PAGE,
+    provider: str = "cloudflare_api",
+) -> list[dict[str, Any]]:
+    """The one pagination loop for page-numbered lists, on either credential.
+
+    The account surface reports total_pages and it decides when present: an
+    endpoint may cap per_page below what was asked, so a short page is not
+    proof of the last one. The DNS surface answers with its result only, so a
+    short page ends it. Non-object entries are dropped.
+    """
+
+    def fetch(page_path: str) -> dict[str, Any]:
+        if provider == "cloudflare_api":
+            return cloudflare_api_request(page_path, connection_ref) or {}
+        extra = {"connection_ref": connection_ref} if connection_ref else {}
+        return {"result": cloudflare_request(page_path, **extra)}
+
     collected: list[dict[str, Any]] = []
-    for page in range(1, 51):
+    for page in range(1, CLOUDFLARE_MAX_PAGES + 1):
         separator = "&" if "?" in path else "?"
-        response = cloudflare_api_request(
-            f"{path}{separator}per_page={per_page}&page={page}", connection_ref
-        )
-        batch = (response or {}).get("result", [])
-        if not isinstance(batch, list):
-            raise ProviderError("Cloudflare account list returned an invalid result.")
+        response = fetch(f"{path}{separator}per_page={per_page}&page={page}")
+        batch = _list_batch(response)
         collected.extend(item for item in batch if isinstance(item, dict))
-        total_pages = int(
-            ((response or {}).get("result_info") or {}).get("total_pages") or 0
-        )
-        # total_pages decides when present: an endpoint may cap per_page below
-        # what was asked, so a short page is not proof of the last one.
+        total_pages = int((response.get("result_info") or {}).get("total_pages") or 0)
         if (page >= total_pages) if total_pages else (len(batch) < per_page):
             return collected
-    raise ProviderError("Cloudflare account list did not terminate.")
+    raise ProviderError("Cloudflare list did not terminate.")
 
 
 def cloudflare_api_cursor_list(
-    path: str, connection_ref: str = "", *, per_page: int = 50
+    path: str, connection_ref: str = "", *, per_page: int = CLOUDFLARE_ACCOUNT_PER_PAGE
 ) -> list[dict[str, Any]]:
     """Every page from a cursor-paginated Cloudflare list; an empty cursor ends it."""
 
     collected: list[dict[str, Any]] = []
     cursor = ""
-    for _ in range(200):
+    for _ in range(CLOUDFLARE_MAX_CURSOR_PAGES):
         query = f"per_page={per_page}" + (f"&cursor={urllib.parse.quote(cursor, safe='')}" if cursor else "")
         separator = "&" if "?" in path else "?"
         response = cloudflare_api_request(f"{path}{separator}{query}", connection_ref)
-        batch = (response or {}).get("result", [])
-        if not isinstance(batch, list):
-            raise ProviderError("Cloudflare account list returned an invalid result.")
+        batch = _list_batch(response or {})
         collected.extend(item for item in batch if isinstance(item, dict))
         cursor = str(((response or {}).get("result_info") or {}).get("cursor") or "")
         if not cursor:
             return collected
-    raise ProviderError("Cloudflare account list did not terminate.")
+    raise ProviderError("Cloudflare list did not terminate.")

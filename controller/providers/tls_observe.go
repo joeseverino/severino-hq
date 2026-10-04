@@ -17,10 +17,6 @@ import (
 	"time"
 )
 
-// tlsPort is the port every TLS reading is taken on, named because a failed
-// reading reports what was tried.
-const tlsPort = 443
-
 // TLSDialer returns the leaf certificate a host serves for one name, verified
 // against the system roots and the controller's CA bundle.
 type TLSDialer interface {
@@ -51,8 +47,8 @@ func (d NetTLSDialer) Peer(ctx context.Context, domain, connectHost string) ([]b
 	if err != nil {
 		return nil, err
 	}
-	dialer := &net.Dialer{Timeout: 15 * time.Second}
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	dialer := &net.Dialer{Timeout: tlsDialTimeout}
+	ctx, cancel := context.WithTimeout(ctx, tlsDialTimeout)
 	defer cancel()
 	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(connectHost, strconv.Itoa(tlsPort)))
 	if err != nil {

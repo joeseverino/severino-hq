@@ -10,9 +10,69 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/joeseverino/severino-hq/controller/runtime"
+	tsapi "tailscale.com/client/tailscale/v2"
 )
 
+// tailnetAPI is the default control server; a connection's <PREFIX>_URL replaces it.
 const tailnetAPI = "https://api.tailscale.com/api/v2"
+
+// tailnetClient is one connection's access to the Tailscale API: its base URL
+// and the token exchanged for it. Every tailnet request goes through call.
+type tailnetClient struct {
+	r     *Registry
+	base  string
+	token string
+}
+
+// tailnetBase is where the connection's API lives: its URL, else the public one.
+func (r *Registry) tailnetBase(prefix string) string {
+	if base := strings.TrimRight(strings.TrimSpace(r.Env[prefix+"_URL"]), "/"); base != "" {
+		return base
+	}
+	return tailnetAPI
+}
+
+// tailnetClient exchanges the connection's credential and returns the client.
+func (r *Registry) tailnetClient(ctx context.Context, connectionRef string) (tailnetClient, error) {
+	token, err := r.tailnetToken(ctx, connectionRef)
+	if err != nil {
+		return tailnetClient{}, err
+	}
+	prefix, err := r.Env.Prefix("tailscale", connectionRef)
+	if err != nil {
+		return tailnetClient{}, err
+	}
+	return tailnetClient{r: r, base: r.tailnetBase(prefix), token: token}, nil
+}
+
+// call sends one request to the tailnet API: base URL and bearer auth are set
+// here, extra carries the headers that differ per call.
+func (c tailnetClient) call(ctx context.Context, method, path string, extra map[string]string, body any) (json.RawMessage, error) {
+	return c.r.HTTP.Request(ctx, c.base+path, method, c.headers(extra), body)
+}
+
+// callHeader is a GET that also returns one response header.
+func (c tailnetClient) callHeader(ctx context.Context, path string, extra map[string]string, name string) (json.RawMessage, string, error) {
+	return c.r.HTTP.RequestHeader(ctx, c.base+path, c.headers(extra), name)
+}
+
+func (c tailnetClient) headers(extra map[string]string) map[string]string {
+	headers := map[string]string{"Authorization": "Bearer " + c.token}
+	for name, value := range extra {
+		headers[name] = value
+	}
+	return headers
+}
+
+// tailnet is a path under the tailnet this credential belongs to.
+func tailnet(path string) string { return "/tailnet/-/" + path }
+
+// tailnetDevicePath is a path under one device.
+func tailnetDevicePath(identifier, tail string) string {
+	return "/device/" + url.PathEscape(identifier) + "/" + tail
+}
 
 // tailnetNode is one node of `tailscale status --json` (Self, or a Peer).
 type tailnetNode struct {
@@ -103,13 +163,10 @@ func (list tailnetResolvers) addresses() []string {
 }
 
 type tailnetDNSConfiguration struct {
-	Nameservers tailnetResolvers `json:"nameservers"`
-	Preferences struct {
-		OverrideLocalDNS bool `json:"overrideLocalDNS"`
-		MagicDNS         bool `json:"magicDNS"`
-	} `json:"preferences"`
-	SearchPaths []string                    `json:"searchPaths"`
-	SplitDNS    map[string]tailnetResolvers `json:"splitDNS"`
+	Nameservers tailnetResolvers                  `json:"nameservers"`
+	Preferences tsapi.DNSConfigurationPreferences `json:"preferences"`
+	SearchPaths []string                          `json:"searchPaths"`
+	SplitDNS    map[string]tailnetResolvers       `json:"splitDNS"`
 }
 
 // tailnetSettings carries Tailscale's settings verbatim: HQ stores what
@@ -218,16 +275,16 @@ type TailscaleUserRecord struct {
 }
 
 func (r *Registry) admitTailscale() {
-	r.action("tailscale.device", "reconcile", r.tailscaleDeviceReconcile)
-	r.action("tailscale.device", "approve-routes", r.tailscaleApproveRoutes)
-	r.reader("tailscale.device", r.tailscaleDeviceInventory)
+	act(r, runtime.ResourceKindTailscaleDevice, "reconcile", r.tailscaleDeviceReconcile)
+	act(r, runtime.ResourceKindTailscaleDevice, "approve-routes", r.tailscaleApproveRoutes)
+	r.reader(runtime.ResourceKindTailscaleDevice, r.tailscaleDeviceInventory)
 
-	r.action("tailscale.policy", "reconcile", r.tailnetPolicyReconcile)
-	r.reader("tailscale.policy", r.tailnetPolicyInventory)
+	act(r, runtime.ResourceKindTailscalePolicy, "reconcile", r.tailnetPolicyReconcile)
+	r.reader(runtime.ResourceKindTailscalePolicy, r.tailnetPolicyInventory)
 
-	r.reader("tailscale.dns", r.tailscaleDNS)
-	r.reader("tailscale.settings", r.tailscaleSettings)
-	r.reader("tailscale.user", r.tailscaleUsers)
+	r.reader(runtime.ResourceKindTailscaleDNS, r.tailscaleDNS)
+	r.reader(runtime.ResourceKindTailscaleSettings, r.tailscaleSettings)
+	r.reader(runtime.ResourceKindTailscaleUser, r.tailscaleUsers)
 
 	r.probe("tailscale", r.tailscaleProbe)
 }
@@ -247,12 +304,12 @@ func (r *Registry) tailnetToken(ctx context.Context, connectionRef string) (stri
 			return nil, err
 		}
 		data := url.Values{"client_id": {clientID}, "client_secret": {clientSecret}}
-		answer, err := r.HTTP.Request(ctx, tailnetAPI+"/oauth/token", "POST", map[string]string{
+		answer, err := r.HTTP.Request(ctx, r.tailnetBase(prefix)+"/oauth/token", "POST", map[string]string{
 			"Content-Type": "application/x-www-form-urlencoded",
 		}, data)
 		if code := httpStatus(err); code != 0 {
 			reason := fmt.Sprintf("Tailscale refused the credential for %s (%d). It has to be an OAuth client, not an API key.", connectionRef, code)
-			return nil, &ProviderError{Message: reason, Refusal: "credential", Failure: "credential", Reason: reason}
+			return nil, &ProviderError{Message: reason, Refusal: runtime.RefusalCredential, Failure: runtime.FailureClassCredential, Reason: reason}
 		}
 		if err != nil || !isObject(answer) {
 			return nil, &ProviderError{Message: "Tailscale did not answer the token request.", Failure: networkFailure(err)}
@@ -281,12 +338,12 @@ func httpStatus(err error) int {
 }
 
 // networkFailure keeps a network failure's classification on the error that wraps it.
-func networkFailure(err error) string {
+func networkFailure(err error) runtime.FailureClass {
 	var provider *ProviderError
-	if errors.As(err, &provider) && provider.Failure == "network" {
-		return "network"
+	if errors.As(err, &provider) && provider.Failure == runtime.FailureClassNetwork {
+		return runtime.FailureClassNetwork
 	}
-	return ""
+	return runtime.FailureClassUnclassified
 }
 
 // unreadable names what went wrong with an answer that was not an HTTP
@@ -311,14 +368,14 @@ func tailnetRefused(what, scope string, code int) error {
 	case 403, 404:
 		return &ProviderError{
 			Message: fmt.Sprintf("Tailscale refused %s (%d). The credential needs the %s scope.", what, code, scope),
-			Failure: "permission",
-			Refusal: "permission",
+			Failure: runtime.FailureClassPermission,
+			Refusal: runtime.RefusalPermission,
 		}
 	case 401:
 		return &ProviderError{
 			Message: fmt.Sprintf("Tailscale refused %s (%d).", what, code),
-			Failure: "credential",
-			Refusal: "credential",
+			Failure: runtime.FailureClassCredential,
+			Refusal: runtime.RefusalCredential,
 			Reason:  fmt.Sprintf("Tailscale refused the access token (%d).", code),
 		}
 	}
@@ -326,22 +383,19 @@ func tailnetRefused(what, scope string, code int) error {
 }
 
 // tailnetGet reads one tailnet endpoint, undecoded.
-func (r *Registry) tailnetGet(ctx context.Context, token, path string) (json.RawMessage, error) {
-	return r.HTTP.Request(ctx, tailnetAPI+"/tailnet/-/"+path, "GET", map[string]string{
-		"Authorization": "Bearer " + token,
-		"Accept":        "application/json",
-	}, nil)
+func (c tailnetClient) tailnetGet(ctx context.Context, path string) (json.RawMessage, error) {
+	return c.call(ctx, "GET", tailnet(path), map[string]string{"Accept": "application/json"}, nil)
 }
 
 // tailnetRead reads one tailnet endpoint into its response type. A refusal
 // names the scope the read needs.
 func tailnetRead[T any](ctx context.Context, r *Registry, path, what, scope string) (T, error) {
 	var zero T
-	token, err := r.tailnetToken(ctx, "")
+	client, err := r.tailnetClient(ctx, "")
 	if err != nil {
 		return zero, err
 	}
-	raw, err := r.tailnetGet(ctx, token, path)
+	raw, err := client.tailnetGet(ctx, path)
 	if code := httpStatus(err); code != 0 {
 		return zero, tailnetRefused("the "+what+" read", scope, code)
 	}
@@ -353,8 +407,8 @@ func tailnetRead[T any](ctx context.Context, r *Registry, path, what, scope stri
 }
 
 // tailnetPart is one tailnet read for a declared part of a record.
-func (r *Registry) tailnetPart(ctx context.Context, token, path string) (map[string]json.RawMessage, error) {
-	raw, err := r.HTTP.Request(ctx, tailnetAPI+"/tailnet/-/"+path, "GET", map[string]string{"Authorization": "Bearer " + token}, nil)
+func (c tailnetClient) tailnetPart(ctx context.Context, path string) (map[string]json.RawMessage, error) {
+	raw, err := c.call(ctx, "GET", tailnet(path), nil, nil)
 	if code := httpStatus(err); code != 0 {
 		return nil, &ProviderError{Message: fmt.Sprintf("/%s answered HTTP %d.", path, code)}
 	}
@@ -368,10 +422,8 @@ func (r *Registry) tailnetPart(ctx context.Context, token, path string) (map[str
 	return fields, nil
 }
 
-func (r *Registry) tailnetAPIDevices(ctx context.Context, token string) ([]tailnetDevice, error) {
-	raw, err := r.HTTP.Request(ctx, tailnetAPI+"/tailnet/-/devices?fields=all", "GET", map[string]string{
-		"Authorization": "Bearer " + token,
-	}, nil)
+func (c tailnetClient) tailnetAPIDevices(ctx context.Context) ([]tailnetDevice, error) {
+	raw, err := c.call(ctx, "GET", tailnet("devices?fields=all"), nil, nil)
 	if code := httpStatus(err); code != 0 {
 		return nil, tailnetRefused("the tailnet device list", "devices:core:read", code)
 	}
@@ -580,19 +632,19 @@ func (r *Registry) tailscaleDeviceInventory(ctx context.Context) ([]any, error) 
 			return nil, err
 		}
 		devices = local
-		if token, err := r.tailnetToken(ctx, ""); err == nil {
-			if apiDevices, err := r.tailnetAPIDevices(ctx, token); err == nil {
+		if client, err := r.tailnetClient(ctx, ""); err == nil {
+			if apiDevices, err := client.tailnetAPIDevices(ctx); err == nil {
 				identities = identitiesFrom(apiDevices)
 			}
 		}
 	} else {
-		token, err := r.tailnetToken(ctx, "")
+		client, err := r.tailnetClient(ctx, "")
 		if err != nil {
 			return nil, &ProviderError{
 				Message: "This controller was not given a tailnet reading or a tailnet credential, so it cannot say which machines are up. " + err.Error(),
 			}
 		}
-		apiDevices, err := r.tailnetAPIDevices(ctx, token)
+		apiDevices, err := client.tailnetAPIDevices(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -664,11 +716,7 @@ func (r *Registry) tailnetDeviceState(name string) (TailnetDeviceStatus, error) 
 	return TailnetDeviceStatus{}, &ProviderError{Message: fmt.Sprintf("No device called %s is on the tailnet this machine can see.", pyRepr(name))}
 }
 
-func (r *Registry) tailscaleDeviceReconcile(ctx context.Context, rawSpec, _ Object, apply bool) (Result, error) {
-	spec, err := decodePayload[TailnetDeviceSpec](rawSpec)
-	if err != nil {
-		return Result{}, err
-	}
+func (r *Registry) tailscaleDeviceReconcile(ctx context.Context, spec TailnetDeviceSpec, _ struct{}, apply bool) (Result, error) {
 	name := spec.Name
 	wanted := spec.KeyExpiryDisabled
 	current, err := r.tailnetDeviceState(name)
@@ -686,19 +734,18 @@ func (r *Registry) tailscaleDeviceReconcile(ctx context.Context, rawSpec, _ Obje
 	if err != nil {
 		return Result{}, err
 	}
-	token, err := r.tailnetToken(ctx, spec.ConnectionRef)
+	client, err := r.tailnetClient(ctx, spec.ConnectionRef)
 	if err != nil {
 		return Result{}, err
 	}
-	_, err = r.HTTP.Request(ctx, fmt.Sprintf("%s/device/%s/key", tailnetAPI, url.PathEscape(identifier)), "POST", map[string]string{
-		"Authorization": "Bearer " + token,
-		"Content-Type":  "application/json",
+	_, err = client.call(ctx, "POST", tailnetDevicePath(identifier, "key"), map[string]string{
+		"Content-Type": "application/json",
 	}, tailnetKeyRequest{KeyExpiryDisabled: wanted})
 	switch code := httpStatus(err); {
 	case code == 403:
-		return Result{}, &ProviderError{Message: "This Tailscale credential may not change devices. It needs the devices:core scope.", Failure: "permission"}
+		return Result{}, &ProviderError{Message: "This Tailscale credential may not change devices. It needs the devices:core scope.", Failure: runtime.FailureClassPermission}
 	case code != 0:
-		return Result{}, &ProviderError{Message: fmt.Sprintf("Tailscale refused the change to %s (%d).", name, code), Failure: map[int]string{401: "credential"}[code]}
+		return Result{}, &ProviderError{Message: fmt.Sprintf("Tailscale refused the change to %s (%d).", name, code), Failure: runtime.StatusFailure(code)}
 	case err != nil:
 		return Result{}, &ProviderError{Message: "Tailscale did not answer the change request.", Failure: networkFailure(err)}
 	}
@@ -710,25 +757,21 @@ func (r *Registry) tailscaleDeviceReconcile(ctx context.Context, rawSpec, _ Obje
 	return result(true, status, "Reconciled", "The device is as declared.", message), nil
 }
 
-func (r *Registry) tailscaleApproveRoutes(ctx context.Context, rawSpec, _ Object, apply bool) (Result, error) {
-	spec, err := decodePayload[TailnetDeviceSpec](rawSpec)
-	if err != nil {
-		return Result{}, err
-	}
+func (r *Registry) tailscaleApproveRoutes(ctx context.Context, spec TailnetDeviceSpec, _ struct{}, apply bool) (Result, error) {
 	name := spec.Name
 	identifier, err := r.tailnetDeviceID(name)
 	if err != nil {
 		return Result{}, err
 	}
-	token, err := r.tailnetToken(ctx, spec.ConnectionRef)
+	client, err := r.tailnetClient(ctx, spec.ConnectionRef)
 	if err != nil {
 		return Result{}, err
 	}
-	routesURL := fmt.Sprintf("%s/device/%s/routes", tailnetAPI, url.PathEscape(identifier))
-	raw, err := r.HTTP.Request(ctx, routesURL, "GET", map[string]string{"Authorization": "Bearer " + token}, nil)
+	routesPath := tailnetDevicePath(identifier, "routes")
+	raw, err := client.call(ctx, "GET", routesPath, nil, nil)
 	unreported := fmt.Sprintf("Tailscale did not report the routes for %s.", name)
 	if code := httpStatus(err); code == 401 || code == 403 {
-		return Result{}, &ProviderError{Message: "This Tailscale credential may not read routes. It needs the devices:routes:read scope, or devices:routes to approve them.", Failure: map[int]string{401: "credential", 403: "permission"}[code]}
+		return Result{}, &ProviderError{Message: "This Tailscale credential may not read routes. It needs the devices:routes:read scope, or devices:routes to approve them.", Failure: runtime.StatusFailure(code)}
 	}
 	if err != nil || len(raw) == 0 {
 		return Result{}, &ProviderError{Message: unreported, Failure: networkFailure(err)}
@@ -760,13 +803,12 @@ func (r *Registry) tailscaleApproveRoutes(ctx context.Context, rawSpec, _ Object
 	if !apply {
 		return Result{Changed: true, Status: status, Message: fmt.Sprintf("Would approve %s for %s.", strings.Join(pending, ", "), name)}, nil
 	}
-	answer, err := r.HTTP.Request(ctx, routesURL, "POST", map[string]string{
-		"Authorization": "Bearer " + token,
-		"Content-Type":  "application/json",
+	answer, err := client.call(ctx, "POST", routesPath, map[string]string{
+		"Content-Type": "application/json",
 	}, tailnetRoutesRequest{Routes: advertised})
 	switch code := httpStatus(err); {
 	case code == 401 || code == 403:
-		return Result{}, &ProviderError{Message: "This Tailscale credential may not approve routes. It needs the devices:routes scope.", Failure: map[int]string{401: "credential", 403: "permission"}[code]}
+		return Result{}, &ProviderError{Message: "This Tailscale credential may not approve routes. It needs the devices:routes scope.", Failure: runtime.StatusFailure(code)}
 	case code != 0:
 		return Result{}, &ProviderError{Message: fmt.Sprintf("Tailscale refused the route approval for %s.", name)}
 	case err != nil || len(answer) == 0:
@@ -818,7 +860,7 @@ func (r *Registry) tailscaleSettings(ctx context.Context) ([]any, error) {
 		raw       json.RawMessage
 	}{{"httpsEnabled", "https", found.HTTPSEnabled}, {"aclsExternallyManagedOn", "acl_management", found.ACLsExternallyManagedOn}} {
 		if withheld(part.raw) {
-			refuse(ctx, part.name, "", "", &ProviderError{Message: fmt.Sprintf("Tailscale withheld %s.", part.key), Failure: "permission", Refusal: "permission"})
+			refuse(ctx, part.name, "", "", &ProviderError{Message: fmt.Sprintf("Tailscale withheld %s.", part.key), Failure: runtime.FailureClassPermission, Refusal: runtime.RefusalPermission})
 		}
 	}
 	return []any{TailscaleSettingsRecord{

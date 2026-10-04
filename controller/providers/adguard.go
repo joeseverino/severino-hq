@@ -5,35 +5,19 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"strings"
+
+	"github.com/joeseverino/severino-hq/controller/providers/adguardapi"
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
-// adguardRewrite is one entry of /control/rewrite/list. Enabled is absent on
-// AdGuard releases that predate per-rewrite toggles, which means enabled.
-type adguardRewrite struct {
-	Domain  string `json:"domain"`
-	Answer  string `json:"answer"`
-	Enabled *bool  `json:"enabled"`
-}
+// rewriteEnabled reads a rewrite's toggle; it is absent on AdGuard releases
+// that predate per-rewrite toggles, which means enabled.
+func rewriteEnabled(w adguardapi.RewriteEntry) bool { return w.Enabled == nil || *w.Enabled }
 
-func (w adguardRewrite) enabled() bool { return w.Enabled == nil || *w.Enabled }
-
-type adguardRewritePair struct {
-	Domain string `json:"domain"`
-	Answer string `json:"answer"`
-}
-
-type adguardRewriteUpdate struct {
-	Target adguardRewritePair `json:"target"`
-	Update adguardRewritePair `json:"update"`
-}
-
-// adguardStatus is /control/status. DNSAddresses is raw so a present but
-// empty field still proves the answer came from AdGuard.
-type adguardStatus struct {
-	Version           string          `json:"version"`
-	Running           *bool           `json:"running"`
-	ProtectionEnabled *bool           `json:"protection_enabled"`
-	DNSAddresses      json.RawMessage `json:"dns_addresses"`
+// rewritePair is the target or the update of a rewrite call: domain and
+// answer only, so the toggle is left as AdGuard holds it.
+func rewritePair(domain, answer string) adguardapi.RewriteEntry {
+	return adguardapi.RewriteEntry{Domain: &domain, Answer: &answer}
 }
 
 type AdGuardRewriteInventoryRecord struct {
@@ -44,12 +28,12 @@ type AdGuardRewriteInventoryRecord struct {
 }
 
 func (r *Registry) admitAdGuard() {
-	r.action("adguard.rewrite", "reconcile", r.adguardReconcile)
-	r.action("adguard.rewrite", "delete", r.adguardDelete)
-	r.reader("adguard.rewrite", r.adguardInventory)
-	r.reader("adguard.client", r.adguardClients)
-	r.reader("adguard.dns", r.adguardDNS)
-	r.reader("adguard.query_summary", r.adguardQueries)
+	act(r, runtime.ResourceKindAdGuardRewrite, "reconcile", r.adguardReconcile)
+	act(r, runtime.ResourceKindAdGuardRewrite, "delete", r.adguardDelete)
+	r.reader(runtime.ResourceKindAdGuardRewrite, r.adguardInventory)
+	r.reader(runtime.ResourceKindAdGuardClient, r.adguardClients)
+	r.reader(runtime.ResourceKindAdGuardDNS, r.adguardDNS)
+	r.reader(runtime.ResourceKindAdGuardQuerySummary, r.adguardQueries)
 	r.probe("adguard", r.adguardProbe)
 }
 
@@ -74,9 +58,12 @@ func (r *Registry) adguardRequest(ctx context.Context, ref, path, method string,
 	return r.HTTP.Request(ctx, strings.TrimRight(base, "/")+path, method, headers, payload)
 }
 
-// adguardGet reads one AdGuard endpoint into its response type.
+// adguardGet reads one AdGuard endpoint into its response type. A sweep reads
+// each endpoint once, whichever kinds need it.
 func adguardGet[T any](ctx context.Context, r *Registry, ref, path, invalid string) (T, error) {
-	raw, err := r.adguardRequest(ctx, ref, path, "GET", nil)
+	raw, err := r.cached(ctx, "adguard-get:"+ref+":"+path, func() (json.RawMessage, error) {
+		return r.adguardRequest(ctx, ref, path, "GET", nil)
+	})
 	if err != nil {
 		var zero T
 		return zero, err
@@ -84,7 +71,7 @@ func adguardGet[T any](ctx context.Context, r *Registry, ref, path, invalid stri
 	return decodeAs[T](raw, invalid)
 }
 
-func (r *Registry) adguardRewrites(ctx context.Context, ref string, cached bool) ([]adguardRewrite, error) {
+func (r *Registry) adguardRewrites(ctx context.Context, ref string, cached bool) ([]adguardapi.RewriteEntry, error) {
 	load := func() (json.RawMessage, error) {
 		return r.adguardRequest(ctx, ref, "/control/rewrite/list", "GET", nil)
 	}
@@ -98,27 +85,22 @@ func (r *Registry) adguardRewrites(ctx context.Context, ref string, cached bool)
 	if err != nil {
 		return nil, err
 	}
-	rewrites, err := decodeAs[[]adguardRewrite](raw, "Provider returned an invalid record list.")
+	rewrites, err := decodeAs[[]adguardapi.RewriteEntry](raw, "Provider returned an invalid record list.")
 	if err != nil {
 		return nil, err
 	}
 	if rewrites == nil {
-		rewrites = []adguardRewrite{}
+		rewrites = []adguardapi.RewriteEntry{}
 	}
 	return rewrites, nil
 }
 
-func (r *Registry) adguardReconcile(ctx context.Context, rawSpec, rawObserved Object, apply bool) (Result, error) {
-	spec, err := decodePayload[AdGuardRewriteSpec](rawSpec)
-	if err != nil {
-		return Result{}, err
-	}
-	observed, _ := decodePayload[AdGuardRewriteObserved](rawObserved)
+func (r *Registry) adguardReconcile(ctx context.Context, spec AdGuardRewriteSpec, observed AdGuardRewriteObserved, apply bool) (Result, error) {
 	rewrites, err := r.adguardRewrites(ctx, "", false)
 	if err != nil {
 		return Result{}, err
 	}
-	desired := adguardRewritePair{Domain: spec.Domain, Answer: spec.Answer}
+	desired := rewritePair(spec.Domain, spec.Answer)
 	matches := matchingRewrites(rewrites, spec.Domain)
 	if len(matches) == 0 && observed.Domain != "" && observed.Domain != spec.Domain {
 		matches = matchingRewrites(rewrites, observed.Domain)
@@ -126,22 +108,23 @@ func (r *Registry) adguardReconcile(ctx context.Context, rawSpec, rawObserved Ob
 	if len(matches) > 1 {
 		return Result{}, &ProviderError{Message: "AdGuard contains duplicate rewrites for the domain."}
 	}
-	var live adguardRewrite
+	var live adguardapi.RewriteEntry
 	if len(matches) == 1 {
 		live = matches[0]
 	}
-	changed := len(matches) == 0 || live.Domain != desired.Domain || live.Answer != desired.Answer
+	changed := len(matches) == 0 || deref(live.Domain) != spec.Domain || deref(live.Answer) != spec.Answer
 	if changed && apply {
 		path, method, payload := "/control/rewrite/add", "POST", any(desired)
 		if len(matches) == 1 {
 			path, method = "/control/rewrite/update", "PUT"
-			payload = adguardRewriteUpdate{Target: adguardRewritePair{Domain: live.Domain, Answer: live.Answer}, Update: desired}
+			target := rewritePair(deref(live.Domain), deref(live.Answer))
+			payload = adguardapi.RewriteUpdate{Target: &target, Update: &desired}
 		}
 		if _, err := r.adguardRequest(ctx, "", path, method, payload); err != nil {
 			return Result{}, err
 		}
 	}
-	status := AdGuardRewriteStatus{Domain: spec.Domain, Answer: spec.Answer, Enabled: live.enabled()}
+	status := AdGuardRewriteStatus{Domain: spec.Domain, Answer: spec.Answer, Enabled: rewriteEnabled(live)}
 	if !status.Enabled {
 		return Result{Changed: changed, Status: status, Conditions: []Condition{condition("Degraded", "Disabled", "The rewrite is disabled in AdGuard, so the name does not resolve. Enable it in AdGuard.")}, Message: "AdGuard rewrite is present but disabled."}, nil
 	}
@@ -152,21 +135,17 @@ func (r *Registry) adguardReconcile(ctx context.Context, rawSpec, rawObserved Ob
 	return result(changed, status, "Reconciled", "AdGuard rewrite is current.", message), nil
 }
 
-func matchingRewrites(rewrites []adguardRewrite, domain string) []adguardRewrite {
-	found := []adguardRewrite{}
+func matchingRewrites(rewrites []adguardapi.RewriteEntry, domain string) []adguardapi.RewriteEntry {
+	found := []adguardapi.RewriteEntry{}
 	for _, rewrite := range rewrites {
-		if rewrite.Domain == domain {
+		if deref(rewrite.Domain) == domain {
 			found = append(found, rewrite)
 		}
 	}
 	return found
 }
 
-func (r *Registry) adguardDelete(ctx context.Context, rawSpec, _ Object, apply bool) (Result, error) {
-	spec, err := decodePayload[AdGuardRewriteSpec](rawSpec)
-	if err != nil {
-		return Result{}, err
-	}
+func (r *Registry) adguardDelete(ctx context.Context, spec AdGuardRewriteSpec, _ struct{}, apply bool) (Result, error) {
 	rewrites, err := r.adguardRewrites(ctx, "", false)
 	if err != nil {
 		return Result{}, err
@@ -178,7 +157,7 @@ func (r *Registry) adguardDelete(ctx context.Context, rawSpec, _ Object, apply b
 	}
 	if apply {
 		for _, match := range matches {
-			if _, err := r.adguardRequest(ctx, "", "/control/rewrite/delete", "POST", adguardRewritePair{Domain: match.Domain, Answer: match.Answer}); err != nil {
+			if _, err := r.adguardRequest(ctx, "", "/control/rewrite/delete", "POST", rewritePair(deref(match.Domain), deref(match.Answer))); err != nil {
 				return Result{}, err
 			}
 		}
@@ -194,22 +173,22 @@ func (r *Registry) adguardInventory(ctx context.Context) ([]any, error) {
 			return nil, err
 		}
 		for _, item := range rewrites {
-			if item.Domain == "" || item.Answer == "" {
+			if deref(item.Domain) == "" || deref(item.Answer) == "" {
 				continue
 			}
-			found = append(found, AdGuardRewriteInventoryRecord{ConnectionRef: ref, Domain: item.Domain, Answer: item.Answer, Enabled: item.enabled()})
+			found = append(found, AdGuardRewriteInventoryRecord{ConnectionRef: ref, Domain: *item.Domain, Answer: *item.Answer, Enabled: rewriteEnabled(item)})
 		}
 	}
 	return found, nil
 }
 
 func (r *Registry) adguardProbe(ctx context.Context, ref string) (ProbeResult, error) {
-	status, err := adguardGet[adguardStatus](ctx, r, ref, "/control/status", "AdGuard did not return a status.")
+	status, err := adguardGet[adguardapi.ServerStatus](ctx, r, ref, "/control/status", "AdGuard did not return a status.")
 	if err != nil {
 		return ProbeResult{}, err
 	}
-	if len(status.DNSAddresses) == 0 {
+	if status.DnsAddresses == nil {
 		return ProbeResult{}, &ProviderError{Message: "AdGuard did not return a status."}
 	}
-	return ProbeResult{Detail: strings.TrimSpace("AdGuard " + status.Version), Reaches: []string{}}, nil
+	return ProbeResult{Detail: strings.TrimSpace("AdGuard " + deref(status.Version)), Reaches: []string{}}, nil
 }

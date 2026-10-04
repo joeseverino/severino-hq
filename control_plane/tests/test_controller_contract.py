@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from io import StringIO
 from pathlib import Path
+from typing import get_args
 from unittest.mock import patch
 
 from django.conf import settings
@@ -22,6 +23,7 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
+from application.glance import panel_specs
 from application.infrastructure import ManagedResourceCommand, save_managed_resource
 from application.resource_operations import (
     OperationCommand,
@@ -30,7 +32,10 @@ from application.resource_operations import (
 )
 from application.security import cli_principal
 from control_plane.management.commands.infrastructure_controller import ACTIONS
-from control_plane.models import ManagedResource
+from control_plane.models import DashboardConfiguration, ManagedResource
+from control_plane.provider_adapters.contracts import FAILURES, REFUSALS
+from control_plane.provider_adapters.tls import TLSConsumer
+from control_plane.providers import OBSERVATION_KINDS, PROVIDERS
 
 from .test_control_plane import certificate_spec, declare_targets
 
@@ -96,6 +101,37 @@ class ControllerContractTests(TestCase):
         self.assertEqual(
             {f"/{action.name}" for action in ACTIONS},
             set(CONTRACT["paths"]),
+        )
+
+    def test_the_contract_names_every_kind_the_registry_declares(self):
+        schemas = CONTRACT["components"]["schemas"]
+        self.assertEqual(
+            set(schemas["ResourceKind"]["enum"]),
+            set(PROVIDERS) | set(OBSERVATION_KINDS),
+        )
+
+    def test_the_contract_names_every_failure_class(self):
+        schemas = CONTRACT["components"]["schemas"]
+        self.assertEqual(set(schemas["FailureClass"]["enum"]), {"", *FAILURES})
+        self.assertEqual(set(schemas["Refusal"]["enum"]), {"", *REFUSALS})
+
+    def test_the_contract_names_every_tls_consumer_kind(self):
+        union, _field = get_args(TLSConsumer)
+        kinds = {
+            literal
+            for model in get_args(union)
+            for literal in get_args(model.model_fields["kind"].annotation)
+        }
+        self.assertEqual(
+            set(CONTRACT["components"]["schemas"]["TLSConsumerKind"]["enum"]), kinds
+        )
+
+    def test_the_contract_names_every_glance_panel(self):
+        # The weather panel is declared only once a point is configured.
+        configuration = DashboardConfiguration(weather_point="40.0,-75.0")
+        self.assertEqual(
+            set(CONTRACT["components"]["schemas"]["GlancePanelID"]["enum"]),
+            {spec.id for spec in panel_specs(configuration)},
         )
 
     def test_an_empty_queue(self):

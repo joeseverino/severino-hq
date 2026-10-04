@@ -48,7 +48,7 @@ func (w *Worker) claimArgs(action string) []string {
 		args = append(args, "--controller-id", w.ID)
 	}
 	for _, capability := range w.Providers.Capabilities() {
-		args = append(args, "--capability", capability.Kind+":"+capability.Action)
+		args = append(args, "--capability", string(capability.Kind)+":"+capability.Action)
 	}
 	return args
 }
@@ -88,7 +88,7 @@ func (w *Worker) Run(ctx context.Context, apply bool) (int, error) {
 		}
 	}
 	if applied == 0 && !failed {
-		if err := w.emit(Object{"ok": true, "mode": "apply", "claimed": false}); err != nil {
+		if err := w.emit(IdlePassOutput{OK: true, Mode: PassModeApply}); err != nil {
 			return 1, err
 		}
 	}
@@ -110,22 +110,21 @@ func (w *Worker) plan(ctx context.Context) (int, error) {
 	if connections == nil {
 		connections = []ConnectionRecord{}
 	}
-	var plan any
+	var plan *PlannedOperation
 	if pending.Operation != nil {
 		result, err := w.Providers.Execute(ctx, pending.Resource, pending.Operation.Action, false)
 		if err != nil {
 			return 1, err
 		}
-		plan = Object{"operation": pending.Operation.ID, "resource": pending.Resource.Key,
-			"action": pending.Operation.Action, "would_change": result.Changed, "message": result.Message}
+		plan = &PlannedOperation{Operation: pending.Operation.ID, Resource: pending.Resource.Key,
+			Action: pending.Operation.Action, WouldChange: result.Changed, Message: result.Message}
 	}
 	connections, err = w.retryNetwork(ctx, connections)
 	if err != nil {
 		return 1, err
 	}
 	healthy, warnings := planHealth(connections)
-	err = w.emit(Object{"ok": healthy, "mode": "plan", "claimed": false,
-		"connections": connections, "warnings": warnings, "plan": plan})
+	err = w.emit(PlanPassOutput{OK: healthy, Mode: PassModePlan, Connections: connections, Warnings: warnings, Plan: plan})
 	if err != nil {
 		return 1, err
 	}
@@ -187,7 +186,7 @@ func (w *Worker) applyOne(ctx context.Context) (bool, bool, error) {
 	}
 	resource := pending.Resource
 	if w.Providers.NeedsMaterial(resource.Kind) {
-		var material Object
+		var material Material
 		if err := w.call(ctx, "material", nil, &material, "--resource", resource.Key); err != nil {
 			return true, false, err
 		}
@@ -202,8 +201,9 @@ func (w *Worker) applyOne(ctx context.Context) (bool, bool, error) {
 		return true, false, err
 	}
 	if refusal != nil {
-		result = Result{Status: refusal.Status, Message: refusal.Message, Conditions: []Condition{
-			{Type: "Degraded", Status: true, Reason: "ProviderError", Message: refusal.Message},
+		message := ReportText(refusal.Message)
+		result = Result{Status: refusal.Status, Message: message, Conditions: []Condition{
+			{Type: "Degraded", Status: true, Reason: "ProviderError", Message: message},
 		}}
 	}
 	if result.Status == nil {
@@ -222,11 +222,9 @@ func (w *Worker) applyOne(ctx context.Context) (bool, bool, error) {
 	if err := w.call(ctx, "report", report, nil, "--controller-id", w.ID, "--operation", pending.Operation.ID); err != nil {
 		return true, false, err
 	}
-	output := Object{"ok": refusal == nil, "operation": pending.Operation.ID, "resource": resource.Key}
+	var output any = AppliedOperationOutput{OK: true, Operation: pending.Operation.ID, Resource: resource.Key, Changed: result.Changed}
 	if refusal != nil {
-		output["message"] = refusal.Message
-	} else {
-		output["changed"] = result.Changed
+		output = RefusedOperationOutput{OK: false, Operation: pending.Operation.ID, Resource: resource.Key, Message: ReportText(refusal.Message)}
 	}
 	return true, refusal == nil, w.emit(output)
 }

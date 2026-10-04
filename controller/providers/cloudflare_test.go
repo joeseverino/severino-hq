@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // The query is sent verbatim; its digest is the Python controller's.
@@ -22,15 +24,15 @@ func TestCloudflareRefusal(t *testing.T) {
 		detail   string
 		status   int
 		verified bool
-		want     string
+		want     runtime.Refusal
 	}{
-		{"Invalid API Token", 400, false, "credential"},
-		{"Authentication error", 403, false, "permission"},
-		{"Authentication error", 401, true, "permission"},
-		{"Authentication error", 401, false, "credential"},
-		{"no reason given", 401, true, "credential"},
-		{"no reason given", 403, false, "permission"},
-		{"Record already exists", 400, false, ""},
+		{"Invalid API Token", 400, false, runtime.RefusalCredential},
+		{"Authentication error", 403, false, runtime.RefusalPermission},
+		{"Authentication error", 401, true, runtime.RefusalPermission},
+		{"Authentication error", 401, false, runtime.RefusalCredential},
+		{"no reason given", 401, true, runtime.RefusalCredential},
+		{"no reason given", 403, false, runtime.RefusalPermission},
+		{"Record already exists", 400, false, runtime.RefusalUnclassified},
 	}
 	for _, c := range cases {
 		if got := cloudflareRefusal(c.detail, c.status, func() bool { return c.verified }); got != c.want {

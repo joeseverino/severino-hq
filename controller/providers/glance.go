@@ -207,28 +207,24 @@ func (r *Registry) Glance(ctx context.Context, plan runtime.GlancePlan) (runtime
 		var reading any
 		var err error
 		switch panel {
-		case "infrastructure":
+		case runtime.GlancePanelIDInfrastructure:
 			reading, err = r.infrastructureGlance(ctx, plan.Targets.Infrastructure)
-		case "weather":
+		case runtime.GlancePanelIDWeather:
 			reading, err = r.weatherGlance(ctx, plan.Targets.Weather.Point)
 		default:
 			continue
 		}
 		if err != nil {
 			kind := failureKind(err)
-			reason := []rune(err.Error())
-			if len(reason) > 200 {
-				reason = reason[:200]
-			}
-			slog.Warn(fmt.Sprintf("dashboard glance failed: %s (%s): %s", panel, kind, string(reason)),
-				slog.String("event", "controller.glance.failed"), slog.String("panel", panel))
+			slog.Warn(fmt.Sprintf("dashboard glance failed: %s (%s): %s", string(panel), kind, runtime.Clip(err.Error(), runtime.ReasonLimit)),
+				slog.String("event", "controller.glance.failed"), slog.String("panel", string(panel)))
 			summary := "Refresh failed (" + kind + ")."
-			if panel == "infrastructure" {
-				reading = infrastructurePanel{PanelID: panel, Machines: []GlanceMachine{{
+			if panel == runtime.GlancePanelIDInfrastructure {
+				reading = infrastructurePanel{PanelID: string(panel), Machines: []GlanceMachine{{
 					Key: r.controllerID(), Status: "serious", Summary: summary, Metrics: []GlanceMetric{}, RefreshFailed: kind,
 				}}}
 			} else {
-				reading = weatherFailure{PanelID: panel, Point: plan.Targets.Weather.Point, Status: "serious",
+				reading = weatherFailure{PanelID: string(panel), Point: plan.Targets.Weather.Point, Status: "serious",
 					Summary: summary, Metrics: []GlanceMetric{}, RefreshFailed: kind}
 			}
 		}
@@ -284,7 +280,7 @@ func (r *Registry) infrastructureGlance(ctx context.Context, targets []runtime.G
 				Summary: "No host telemetry connection is available.", Metrics: []GlanceMetric{}})
 		}
 	}
-	return infrastructurePanel{PanelID: "infrastructure", Machines: machines}, nil
+	return infrastructurePanel{PanelID: string(runtime.GlancePanelIDInfrastructure), Machines: machines}, nil
 }
 
 func percent(part, whole int64) float64 {
@@ -621,7 +617,7 @@ func (r *Registry) weatherGlance(ctx context.Context, rawPoint string) (weatherP
 			Forecast: strField(period, "shortForecast"), Precipitation: fmt.Sprintf("%d%%", periodChance(period)),
 		})
 	}
-	return weatherPanel{PanelID: "weather", Point: located, Status: status, Summary: summary, Metrics: metrics, Hours: hours}, nil
+	return weatherPanel{PanelID: string(runtime.GlancePanelIDWeather), Point: located, Status: status, Summary: summary, Metrics: metrics, Hours: hours}, nil
 }
 
 // outlook is the range ahead and when rain next comes, from the hourly periods.

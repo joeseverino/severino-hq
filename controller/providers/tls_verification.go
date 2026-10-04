@@ -96,7 +96,7 @@ func (r *Registry) npmCoveredHosts(ctx context.Context, certificateDomains []str
 // tlsConsumerDomains is the names to read one consumer on: declared, plus what NPM routes.
 func (r *Registry) tlsConsumerDomains(ctx context.Context, consumer TLSConsumer, spec TLSCertificateSpec) ([]string, error) {
 	domains := append([]string{}, consumer.VerifyDomains...)
-	if consumer.Kind == "npm" && consumer.DiscoverCoveredHosts {
+	if consumer.Kind == runtime.TLSConsumerKindNPM && consumer.DiscoverCoveredHosts {
 		covered, err := r.npmCoveredHosts(ctx, spec.Domains)
 		if err != nil {
 			return nil, err
@@ -115,7 +115,7 @@ func (r *Registry) tlsConsumerDomains(ctx context.Context, consumer TLSConsumer,
 // consumerTLSEndpoint resolves a consumer's origin without changing the name sent as SNI.
 func (r *Registry) consumerTLSEndpoint(consumer TLSConsumer) (string, error) {
 	switch consumer.Kind {
-	case "npm":
+	case runtime.TLSConsumerKindNPM:
 		prefix, err := r.Env.Prefix("npm", "")
 		if err != nil {
 			return "", err
@@ -129,13 +129,13 @@ func (r *Registry) consumerTLSEndpoint(consumer TLSConsumer) (string, error) {
 			return "", &ProviderError{Message: "NPM origin verification endpoint is missing."}
 		}
 		return strings.ToLower(parsed.Hostname()), nil
-	case "caddy", "cpanel":
+	case runtime.TLSConsumerKindCaddy, runtime.TLSConsumerKindCPanel:
 		target, err := r.Env.SSH(consumer.ConnectionRef)
 		if err != nil {
 			return "", err
 		}
 		if target.Host == "" {
-			return "", &ProviderError{Message: consumer.Kind + " origin verification endpoint is missing."}
+			return "", &ProviderError{Message: string(consumer.Kind) + " origin verification endpoint is missing."}
 		}
 		return target.Host, nil
 	}
@@ -276,7 +276,7 @@ func tlsVerificationPolicy(ctx context.Context) (time.Duration, time.Duration, e
 		return 0, 0, &ProviderError{Message: "TLS renewal declares no verification policy."}
 	}
 	timeout, interval := policy.TimeoutSeconds, policy.IntervalSeconds
-	if timeout < 30 || timeout > 600 || interval < 1 || interval > 30 || interval > timeout {
+	if timeout < verificationTimeoutMin || timeout > verificationTimeoutMax || interval < verificationIntervalMin || interval > verificationIntervalMax || interval > timeout {
 		return 0, 0, &ProviderError{Message: "TLS renewal verification policy is out of bounds."}
 	}
 	return time.Duration(timeout) * time.Second, time.Duration(interval) * time.Second, nil

@@ -16,6 +16,8 @@ echo "==> generated types match their specs"
 generated=(
     "runtime/bridge.gen.go:api/hq-controller.openapi.json"
     "providers/cfapi/cloudflare.gen.go:api/vendor/cloudflare/openapi.slice.json"
+    "providers/adguardapi/adguard.gen.go:api/vendor/adguard/openapi.yaml"
+    "providers/npmapi/npm.gen.go:api/vendor/npm/openapi.bundled.json"
 )
 snapshot=$(mktemp -d)
 for pair in "${generated[@]}"; do

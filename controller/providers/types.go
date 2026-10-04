@@ -1,5 +1,7 @@
 package providers
 
+import "encoding/json"
+
 // AdGuard types
 
 type AdGuardRewriteSpec struct {
@@ -32,23 +34,37 @@ type AdGuardDeleteStatus struct {
 
 // NPM (Nginx Proxy Manager) types
 
+// namedConnection is the connection a declaration names ("connection_ref"); a
+// value that is not text names none.
+type namedConnection string
+
+func (n *namedConnection) UnmarshalJSON(data []byte) error {
+	var text string
+	if json.Unmarshal(data, &text) != nil {
+		text = ""
+	}
+	*n = namedConnection(text)
+	return nil
+}
+
 type NPMProxyHostSpec struct {
-	DomainNames         []string `json:"domain_names"`
-	ForwardScheme       string   `json:"forward_scheme"`
-	ForwardHost         string   `json:"forward_host"`
-	ForwardPort         int      `json:"forward_port"`
-	ForceSSL            bool     `json:"force_ssl"`
-	HTTP2               bool     `json:"http2"`
-	Websocket           bool     `json:"websocket"`
-	CachingEnabled      bool     `json:"caching_enabled"`
-	BlockExploits       bool     `json:"block_exploits"`
-	AccessListID        int      `json:"access_list_id"`
-	CertificateID       int      `json:"certificate_id"`
-	AdvancedConfig      string   `json:"advanced_config"`
-	HSTSEnabled         bool     `json:"hsts_enabled"`
-	HSTSSubdomains      bool     `json:"hsts_subdomains"`
-	TrustForwardedProto bool     `json:"trust_forwarded_proto"`
-	Serving             bool     `json:"serving"`
+	ConnectionRef       namedConnection `json:"connection_ref"`
+	DomainNames         []string        `json:"domain_names"`
+	ForwardScheme       string          `json:"forward_scheme"`
+	ForwardHost         string          `json:"forward_host"`
+	ForwardPort         int             `json:"forward_port"`
+	ForceSSL            bool            `json:"force_ssl"`
+	HTTP2               bool            `json:"http2"`
+	Websocket           bool            `json:"websocket"`
+	CachingEnabled      bool            `json:"caching_enabled"`
+	BlockExploits       bool            `json:"block_exploits"`
+	AccessListID        int             `json:"access_list_id"`
+	CertificateID       int             `json:"certificate_id"`
+	AdvancedConfig      string          `json:"advanced_config"`
+	HSTSEnabled         bool            `json:"hsts_enabled"`
+	HSTSSubdomains      bool            `json:"hsts_subdomains"`
+	TrustForwardedProto bool            `json:"trust_forwarded_proto"`
+	Serving             bool            `json:"serving"`
 }
 
 type NPMProxyHostObserved struct {

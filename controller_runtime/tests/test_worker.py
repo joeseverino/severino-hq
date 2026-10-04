@@ -381,6 +381,21 @@ class WorkerTests(TestCase):
     @mock.patch("controller_runtime.worker.connections", return_value=[])
     @mock.patch("controller_runtime.worker.execute")
     @mock.patch("controller_runtime.worker._manage")
+    def test_a_refusal_reaches_the_report_capped(self, manage, execute, _connections):
+        self._queued(manage, "one")
+        execute.side_effect = ProviderError("é" * 900)
+
+        worker.run_once("test", apply=True)
+
+        reports = [call for call in manage.call_args_list if call.args[0] == "report"]
+        self.assertEqual(len(reports), 1)
+        payload = reports[0].kwargs["payload"]
+        self.assertEqual(len(payload["message"]), 500)
+        self.assertEqual(len(payload["conditions"][0]["message"]), 500)
+
+    @mock.patch("controller_runtime.worker.connections", return_value=[])
+    @mock.patch("controller_runtime.worker.execute")
+    @mock.patch("controller_runtime.worker._manage")
     def test_when_the_work_and_the_sweep_both_break_neither_is_lost(self, manage, execute, _connections):
         self._queued(manage, "dns")
         execute.side_effect = KeyError("a handler that could not run")

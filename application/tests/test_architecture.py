@@ -671,8 +671,14 @@ class StyleContractTests(SimpleTestCase):
             )
         except OSError:
             terms = ()
-        # Lockfiles and pinned action SHAs are hashes, not hosts.
-        skip = ("package-lock.json", "requirements.txt", ".github/")
+        # Lockfiles and pinned action SHAs are hashes, not hosts. Vendored
+        # upstream specs carry their own documentation examples verbatim.
+        skip = (
+            "package-lock.json",
+            "requirements.txt",
+            ".github/",
+            "controller/api/vendor/",
+        )
 
         findings = []
         for name in tracked:

@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // Portainer holds one credential and reaches every Docker host registered with
@@ -21,14 +23,12 @@ import (
 // are read through the accessors below.
 
 const (
-	portainerStackKind     = "portainer.stack"
-	portainerContainerKind = "portainer.container"
-	portainerRunLabel      = "severino-hq.run"
-	portainerNeeds         = "environment access"
-	composeProject         = "com.docker.compose.project"
-	composeWorkingDir      = "com.docker.compose.project.working_dir"
-	composeConfigFiles     = "com.docker.compose.project.config_files"
-	composeService         = "com.docker.compose.service"
+	portainerRunLabel  = "severino-hq.run"
+	portainerNeeds     = "environment access"
+	composeProject     = "com.docker.compose.project"
+	composeWorkingDir  = "com.docker.compose.project.working_dir"
+	composeConfigFiles = "com.docker.compose.project.config_files"
+	composeService     = "com.docker.compose.service"
 )
 
 var (
@@ -146,18 +146,18 @@ type portainerStackPayload struct {
 }
 
 func (r *Registry) admitPortainer() {
-	r.action(portainerStackKind, "reconcile", r.portainerReconcile)
-	r.action(portainerStackKind, "delete", r.portainerDelete)
-	r.action(portainerContainerKind, "restart", r.portainerCycler("restart"))
-	r.action(portainerContainerKind, "start", r.portainerCycler("start"))
-	r.action(portainerContainerKind, "stop", r.portainerCycler("stop"))
-	r.reader(portainerContainerKind, r.portainerInventory)
-	r.reader("portainer.environment", r.portainerEnvironmentReading)
-	r.reader("portainer.network", r.portainerEach("The network list", r.portainerNetworks))
-	r.reader("portainer.volume", r.portainerEach("The volume list", r.portainerVolumes))
-	r.reader("portainer.image", r.portainerEach("The image list", r.portainerImages))
-	r.reader("portainer.runtime", r.portainerEach("Each container's inspect", r.portainerRuntime))
-	r.reader("portainer.compose_project", r.portainerEach("The stack list", r.portainerStacksReading))
+	act(r, runtime.ResourceKindPortainerStack, "reconcile", r.portainerReconcile)
+	act(r, runtime.ResourceKindPortainerStack, "delete", r.portainerDelete)
+	act(r, runtime.ResourceKindPortainerContainer, "restart", r.portainerCycler("restart"))
+	act(r, runtime.ResourceKindPortainerContainer, "start", r.portainerCycler("start"))
+	act(r, runtime.ResourceKindPortainerContainer, "stop", r.portainerCycler("stop"))
+	r.reader(runtime.ResourceKindPortainerContainer, r.portainerInventory)
+	r.reader(runtime.ResourceKindPortainerEnvironment, r.portainerEnvironmentReading)
+	r.reader(runtime.ResourceKindPortainerNetwork, r.portainerEach("The network list", r.portainerNetworks))
+	r.reader(runtime.ResourceKindPortainerVolume, r.portainerEach("The volume list", r.portainerVolumes))
+	r.reader(runtime.ResourceKindPortainerImage, r.portainerEach("The image list", r.portainerImages))
+	r.reader(runtime.ResourceKindPortainerRuntime, r.portainerEach("Each container's inspect", r.portainerRuntime))
+	r.reader(runtime.ResourceKindPortainerComposeProject, r.portainerEach("The stack list", r.portainerStacksReading))
 	r.probe("portainer", r.portainerProbe)
 	if r.Portainer == nil {
 		r.Portainer = registryPortainer{r}
@@ -554,11 +554,7 @@ func (r *Registry) namedStacks(ctx context.Context, ref string, environment pyVa
 	return found, nil
 }
 
-func (r *Registry) portainerReconcile(ctx context.Context, rawSpec, _ Object, apply bool) (Result, error) {
-	spec, err := decodePayload[PortainerStackSpec](rawSpec)
-	if err != nil {
-		return Result{}, err
-	}
+func (r *Registry) portainerReconcile(ctx context.Context, spec PortainerStackSpec, _ struct{}, apply bool) (Result, error) {
 	ref := spec.ConnectionRef
 	environment, err := r.portainerEnvironmentFor(ctx, spec.Host, ref)
 	if err != nil {
@@ -646,11 +642,7 @@ func (r *Registry) portainerReconcile(ctx context.Context, rawSpec, _ Object, ap
 	return result(changed, status, "Reconciled", "Stack is running.", message), nil
 }
 
-func (r *Registry) portainerDelete(ctx context.Context, rawSpec, _ Object, apply bool) (Result, error) {
-	spec, err := decodePayload[PortainerStackSpec](rawSpec)
-	if err != nil {
-		return Result{}, err
-	}
+func (r *Registry) portainerDelete(ctx context.Context, spec PortainerStackSpec, _ struct{}, apply bool) (Result, error) {
 	ref := spec.ConnectionRef
 	environment, err := r.portainerEnvironmentFor(ctx, spec.Host, ref)
 	if err != nil {
@@ -750,12 +742,8 @@ func (r *Registry) portainerContainerID(ctx context.Context, spec PortainerConta
 
 // portainerCycler starts, stops or restarts one container and reports what it
 // did. Docker answers 304 for a container already in the state asked for.
-func (r *Registry) portainerCycler(verb string) Action {
-	return func(ctx context.Context, rawSpec, _ Object, apply bool) (Result, error) {
-		spec, err := decodePayload[PortainerContainerSpec](rawSpec)
-		if err != nil {
-			return Result{}, err
-		}
+func (r *Registry) portainerCycler(verb string) func(context.Context, PortainerContainerSpec, struct{}, bool) (Result, error) {
+	return func(ctx context.Context, spec PortainerContainerSpec, _ struct{}, apply bool) (Result, error) {
 		containerID, environment, err := r.portainerContainerID(ctx, spec)
 		if err != nil {
 			return Result{}, err

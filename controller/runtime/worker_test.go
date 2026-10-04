@@ -3,10 +3,13 @@ package runtime
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"reflect"
+	"sort"
+	"strings"
 	"testing"
 )
 
@@ -32,7 +35,7 @@ func (b *fakeBridge) Call(_ context.Context, args []string, payload, into any) e
 		b.Pending = b.Pending[1:]
 	}
 	if result == nil && args[0] == "sweep-due" {
-		result = SweepVerdict{OK: true, Due: true, Carry: []string{}, Forced: []ForcedRead{}, OnlyKinds: []string{}, Reason: "Nothing has been swept yet."}
+		result = SweepVerdict{OK: true, Due: true, Carry: []string{}, Forced: []ForcedRead{}, OnlyKinds: []ResourceKind{}, Reason: "Nothing has been swept yet."}
 	}
 	if result == nil {
 		result = Object{}
@@ -55,7 +58,8 @@ type fakeProviders struct {
 	ProbeCalls     int
 	Apply          []bool
 	ExecErr        error
-	Carried, Only  []string
+	Carried        []string
+	Only           []ResourceKind
 	Sites          []AnalyticsSiteIdentity
 	AnalyticsCalls int
 	SnapshotOpen   bool
@@ -63,8 +67,8 @@ type fakeProviders struct {
 	Executed       []Resource
 }
 
-func (*fakeProviders) Capabilities() []Capability  { return []Capability{{"example.kind", "reconcile"}} }
-func (p *fakeProviders) NeedsMaterial(string) bool { return p.Material }
+func (*fakeProviders) Capabilities() []Capability        { return []Capability{{"example.kind", "reconcile"}} }
+func (p *fakeProviders) NeedsMaterial(ResourceKind) bool { return p.Material }
 func (p *fakeProviders) Execute(_ context.Context, resource Resource, _ string, apply bool) (Result, error) {
 	p.Apply = append(p.Apply, apply)
 	p.Executed = append(p.Executed, resource)
@@ -79,7 +83,7 @@ func (p *fakeProviders) Connections(_ context.Context, carry []string) ([]Connec
 	i := min(p.ProbeCalls-1, len(p.Rounds)-1)
 	return append([]ConnectionRecord{}, p.Rounds[i]...), nil
 }
-func (p *fakeProviders) Inventory(_ context.Context, only []string) (Inventory, error) {
+func (p *fakeProviders) Inventory(_ context.Context, only []ResourceKind) (Inventory, error) {
 	p.Only = only
 	return Inventory{}, nil
 }
@@ -137,7 +141,7 @@ func TestTargetedSweepDoesNotReadAnalytics(t *testing.T) {
 	w, b, p, _ := newWorker()
 	b.Responses["sweep-due"] = Object{"due": true, "carry": []string{"example-ssh"}, "only_kinds": []string{"example.kind"}}
 	_, err := w.Run(context.Background(), true)
-	if err != nil || p.AnalyticsCalls != 0 || !reflect.DeepEqual(p.Only, []string{"example.kind"}) || !reflect.DeepEqual(p.Carried, []string{"example-ssh"}) {
+	if err != nil || p.AnalyticsCalls != 0 || !reflect.DeepEqual(p.Only, []ResourceKind{"example.kind"}) || !reflect.DeepEqual(p.Carried, []string{"example-ssh"}) {
 		t.Fatalf("%v %#v", err, p)
 	}
 }
@@ -225,5 +229,40 @@ func TestAnalyticsPlanContainsNoProviderAccountIdentity(t *testing.T) {
 				t.Fatalf("%#v", call.Payload)
 			}
 		}
+	}
+}
+
+// The passes print the lines the Python worker prints, key for key.
+func TestPassOutputKeysMatchThePythonWorker(t *testing.T) {
+	keys := func(value any) []string {
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fields map[string]json.RawMessage
+		_ = json.Unmarshal(raw, &fields)
+		found := []string{}
+		for key := range fields {
+			found = append(found, key)
+		}
+		sort.Strings(found)
+		return found
+	}
+	for name, tc := range map[string]struct {
+		value any
+		want  []string
+	}{
+		"idle":    {IdlePassOutput{OK: true, Mode: PassModeApply}, []string{"claimed", "mode", "ok"}},
+		"plan":    {PlanPassOutput{Connections: []ConnectionRecord{}, Warnings: []string{}}, []string{"claimed", "connections", "mode", "ok", "plan", "warnings"}},
+		"applied": {AppliedOperationOutput{}, []string{"changed", "ok", "operation", "resource"}},
+		"refused": {RefusedOperationOutput{}, []string{"message", "ok", "operation", "resource"}},
+	} {
+		if got := keys(tc.value); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s: %v, want %v", name, got, tc.want)
+		}
+	}
+	raw, _ := json.Marshal(PlanPassOutput{})
+	if !strings.Contains(string(raw), `"plan":null`) {
+		t.Errorf("an empty plan must print null: %s", raw)
 	}
 }

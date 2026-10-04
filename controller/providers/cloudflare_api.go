@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/providers/cfapi"
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // Two credentials, each scoped to one surface. cloudflare_dns reads zones and
@@ -16,6 +17,15 @@ import (
 // account surface (analytics, zone settings, registration) and no DNS record.
 
 const cloudflareAPIURL = "https://api.cloudflare.com/client/v4"
+
+// List paging. The caps bound a loop a misbehaving endpoint could keep going;
+// Python's controller_runtime/cloudflare_api.py holds the same numbers.
+const (
+	cloudflarePerPage        = 100 // default and maximum page size
+	cloudflareAccountPerPage = 50  // account lists
+	cloudflareMaxPages       = 50
+	cloudflareMaxCursorPages = 200
+)
 
 // Cloudflare's wording for a refusal of the credential itself rather than of
 // one request. "Authentication error" alone is a missing permission.
@@ -109,8 +119,8 @@ func cloudflareTransportError(err error, failed, invalid string) error {
 	var provider *ProviderError
 	if errors.As(err, &provider) {
 		switch {
-		case provider.Failure == "network":
-			return &ProviderError{Message: failed + ": URLError.", Failure: "network"}
+		case provider.Failure == runtime.FailureClassNetwork:
+			return &ProviderError{Message: failed + ": URLError.", Failure: runtime.FailureClassNetwork}
 		case provider.Message == "Provider returned invalid JSON.":
 			return &ProviderError{Message: invalid}
 		}
@@ -128,45 +138,45 @@ func (r *Registry) cloudflareBreaker(prefix string) error {
 	if !refused {
 		return nil
 	}
-	return &ProviderError{Message: "Cloudflare refused the request: " + reason + " Not retried for the rest of this sweep.", Refusal: "credential", Failure: "credential", Reason: reason}
+	return &ProviderError{Message: "Cloudflare refused the request: " + reason + " Not retried for the rest of this sweep.", Refusal: runtime.RefusalCredential, Failure: runtime.FailureClassCredential, Reason: reason}
 }
 
 func (r *Registry) cloudflareRefused(prefix, message, detail string, status int, verified func() bool) error {
 	refusal := cloudflareRefusal(detail, status, verified)
-	if refusal == "credential" {
+	if refusal == runtime.RefusalCredential {
 		r.snapshotMu.Lock()
 		if r.refusedCredentials != nil {
 			r.refusedCredentials[prefix] = detail
 		}
 		r.snapshotMu.Unlock()
-		return &ProviderError{Message: message, Refusal: refusal, Failure: refusal, Reason: detail}
+		return &ProviderError{Message: message, Refusal: refusal, Failure: runtime.FailureClass(refusal), Reason: detail}
 	}
-	return &ProviderError{Message: message, Refusal: refusal, Failure: refusal}
+	return &ProviderError{Message: message, Refusal: refusal, Failure: runtime.FailureClass(refusal)}
 }
 
 // cloudflareRefusal names the refusal Cloudflare's text and status describe.
 // Under 401 the words alone cannot tell a missing permission from a dead
 // credential, so whether the credential still verifies decides.
-func cloudflareRefusal(detail string, status int, verified func() bool) string {
+func cloudflareRefusal(detail string, status int, verified func() bool) runtime.Refusal {
 	lowered := strings.ToLower(detail)
 	for _, phrase := range cloudflareCredentialRefusals {
 		if strings.Contains(lowered, phrase) {
-			return "credential"
+			return runtime.RefusalCredential
 		}
 	}
 	if strings.Contains(lowered, cloudflarePermissionRefusal) && status != 401 {
-		return "permission"
+		return runtime.RefusalPermission
 	}
 	if status == 401 {
 		if strings.Contains(lowered, cloudflarePermissionRefusal) && verified != nil && verified() {
-			return "permission"
+			return runtime.RefusalPermission
 		}
-		return "credential"
+		return runtime.RefusalCredential
 	}
 	if status == 403 {
-		return "permission"
+		return runtime.RefusalPermission
 	}
-	return ""
+	return runtime.RefusalUnclassified
 }
 
 // cloudflareVerification is /user/tokens/verify's result for one credential,
@@ -239,30 +249,9 @@ func (r *Registry) cloudflareRequest(ctx context.Context, path, method string, p
 	return envelope.Result, err
 }
 
-// cloudflarePaged reads every page of a DNS-surface list. Cloudflare returns 100
-// records at most; a tail silently missing would read as absent, and absent is
-// what the reconciler acts on.
+// cloudflarePaged reads every page of a DNS-surface list through the shared primitive.
 func (r *Registry) cloudflarePaged(ctx context.Context, path string) ([]json.RawMessage, error) {
-	collected := []json.RawMessage{}
-	for page := 1; ; page++ {
-		if page > 50 {
-			return nil, &ProviderError{Message: "Cloudflare list did not terminate."}
-		}
-		result, err := r.cloudflareRequest(ctx, fmt.Sprintf("%s%sper_page=100&page=%d", path, querySeparator(path), page), "GET", nil)
-		if err != nil {
-			return nil, err
-		}
-		batch := []json.RawMessage{}
-		if pyTruthy(result) {
-			if err := json.Unmarshal(result, &batch); err != nil {
-				return nil, &ProviderError{Message: "Cloudflare returned an invalid list."}
-			}
-		}
-		collected = append(collected, batch...)
-		if len(batch) < 100 {
-			return collected, nil
-		}
-	}
+	return r.cloudflareList(ctx, "cloudflare_dns", path, "", cloudflarePerPage)
 }
 
 // Account readings go through cloudflare_api. Every list is read once per sweep;
@@ -279,13 +268,22 @@ func (r *Registry) cloudflareAPIResult(ctx context.Context, path, ref string) (j
 	return envelope.Result, err
 }
 
-// cloudflareAPIList reads every page of an account list; non-object entries are
-// dropped. total_pages decides when present: an endpoint may cap per_page below
-// what was asked, so a short page is not proof of the last one.
+// cloudflareAPIList reads every page of an account list.
 func (r *Registry) cloudflareAPIList(ctx context.Context, path, ref string, perPage int) ([]json.RawMessage, error) {
+	return r.cloudflareList(ctx, "cloudflare_api", path, ref, perPage)
+}
+
+// cloudflareList is the one pagination loop for page-numbered lists, on either
+// credential. A tail silently missing would read as absent, and absent is what
+// the reconciler acts on, so every list is read to its last page. The account
+// surface reports total_pages and it decides when present: an endpoint may cap
+// per_page below what was asked, so a short page is not proof of the last one.
+// The DNS surface answers with its result only, so a short page ends it.
+// Non-object entries are dropped; a null or missing result is an empty page.
+func (r *Registry) cloudflareList(ctx context.Context, provider, path, ref string, perPage int) ([]json.RawMessage, error) {
 	collected := []json.RawMessage{}
-	for page := 1; page <= 50; page++ {
-		envelope, err := r.cloudflareAPIRequest(ctx, fmt.Sprintf("%s%sper_page=%d&page=%d", path, querySeparator(path), perPage, page), ref)
+	for page := 1; page <= cloudflareMaxPages; page++ {
+		envelope, err := r.cloudflareEnvelope(ctx, provider, ref, fmt.Sprintf("%s%sper_page=%d&page=%d", path, querySeparator(path), perPage, page), "GET", nil)
 		if err != nil {
 			return nil, err
 		}
@@ -295,21 +293,21 @@ func (r *Registry) cloudflareAPIList(ctx context.Context, path, ref string, perP
 		}
 		collected = append(collected, objectsOnly(batch)...)
 		totalPages := 0
-		if envelope.ResultInfo != nil {
+		if envelope.ResultInfo != nil && provider == "cloudflare_api" {
 			totalPages = rawInt(envelope.ResultInfo.TotalPages)
 		}
 		if (totalPages != 0 && page >= totalPages) || (totalPages == 0 && len(batch) < perPage) {
 			return collected, nil
 		}
 	}
-	return nil, &ProviderError{Message: "Cloudflare account list did not terminate."}
+	return nil, &ProviderError{Message: "Cloudflare list did not terminate."}
 }
 
 // cloudflareAPICursorList reads a cursor-paginated account list; an empty cursor ends it.
 func (r *Registry) cloudflareAPICursorList(ctx context.Context, path, ref string, perPage int) ([]json.RawMessage, error) {
 	collected := []json.RawMessage{}
 	cursor := ""
-	for range 200 {
+	for range cloudflareMaxCursorPages {
 		query := fmt.Sprintf("per_page=%d", perPage)
 		if cursor != "" {
 			query += "&cursor=" + pyQuote(cursor)
@@ -331,24 +329,24 @@ func (r *Registry) cloudflareAPICursorList(ctx context.Context, path, ref string
 			return collected, nil
 		}
 	}
-	return nil, &ProviderError{Message: "Cloudflare account list did not terminate."}
+	return nil, &ProviderError{Message: "Cloudflare list did not terminate."}
 }
 
-// cloudflareBatch is a list page's result: missing is empty, anything but a list is invalid.
+// cloudflareBatch is a list page's result: missing or null is empty, anything but a list is invalid.
 func cloudflareBatch(envelope cfEnvelope) ([]json.RawMessage, error) {
-	if envelope.Result == nil {
+	if envelope.Result == nil || string(envelope.Result) == "null" {
 		return []json.RawMessage{}, nil
 	}
 	batch := []json.RawMessage{}
-	if err := json.Unmarshal(envelope.Result, &batch); err != nil || string(envelope.Result) == "null" {
-		return nil, &ProviderError{Message: "Cloudflare account list returned an invalid result."}
+	if err := json.Unmarshal(envelope.Result, &batch); err != nil {
+		return nil, &ProviderError{Message: "Cloudflare list returned an invalid result."}
 	}
 	return batch, nil
 }
 
 func (r *Registry) cloudflareAPIZones(ctx context.Context, ref string) ([]cfapi.ZonesZone, error) {
 	raw, err := r.cached(ctx, "cloudflare-api-zones:"+ref, func() (json.RawMessage, error) {
-		items, err := r.cloudflareAPIList(ctx, "/zones", ref, 50)
+		items, err := r.cloudflareAPIList(ctx, "/zones", ref, cloudflareAccountPerPage)
 		if err != nil {
 			return nil, err
 		}

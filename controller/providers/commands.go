@@ -12,13 +12,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
-
-// CommandTimeout bounds one local tool or SSH call.
-const CommandTimeout = 180 * time.Second
 
 // Exec runs one process. A start failure is err; a non-zero exit is exit.
 type Exec func(ctx context.Context, argv []string, stdin []byte, env []string) (stdout, stderr []byte, exit int, err error)
@@ -42,7 +38,7 @@ const CommandOutputLimit = 16 << 20
 var errOutputLimit = errors.New("output over limit")
 
 func execProcess(ctx context.Context, argv []string, stdin []byte, env []string) ([]byte, []byte, int, error) {
-	ctx, cancel := context.WithTimeout(ctx, CommandTimeout)
+	ctx, cancel := context.WithTimeout(ctx, runtime.CommandTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Stdin = bytes.NewReader(stdin)
@@ -112,8 +108,6 @@ func startFailure(err error) string {
 	return "OSError"
 }
 
-const saidLimit = 240
-
 func lastLine(stderr string) string {
 	lines := []string{}
 	for _, line := range strings.Split(stderr, "\n") {
@@ -124,11 +118,11 @@ func lastLine(stderr string) string {
 	if len(lines) == 0 {
 		return ""
 	}
-	line := []rune(lines[len(lines)-1])
-	if len(line) <= saidLimit {
-		return string(line)
+	line := lines[len(lines)-1]
+	if clipped := runtime.Clip(line, runtime.SaidLimit); clipped == line {
+		return line
 	}
-	return string(line[:saidLimit-1]) + "…"
+	return runtime.Clip(line, runtime.SaidLimit-1) + "…"
 }
 
 // Run runs a local command. step names what failed; env is added for this one
@@ -184,7 +178,7 @@ func (c *Commands) SSH(ctx context.Context, ref, operation string, payload []byt
 		"-o", "StrictHostKeyChecking=yes",
 		"-o", "UserKnownHostsFile=" + filepath.Join(dir, "known_hosts"),
 		"-o", "GlobalKnownHostsFile=/dev/null",
-		"-o", "ConnectTimeout=10",
+		"-o", "ConnectTimeout=" + strconv.Itoa(runtime.SSHConnectTimeoutSeconds),
 		"-i", filepath.Join(dir, ref),
 		"-p", strconv.Itoa(target.Port),
 		"--", target.User + "@" + target.Host,

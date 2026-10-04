@@ -101,7 +101,7 @@ func TestTailnetDeviceReconcile(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Device already as declared (a-server has no expiry -> disabled=true)
-	res, err := r.tailscaleDeviceReconcile(ctx, Object{"name": "a-server", "key_expiry_disabled": true, "connection_ref": "example-tailnet"}, nil, true)
+	res, err := r.runAction(runtime.ResourceKindTailscaleDevice, "reconcile", ctx, Object{"name": "a-server", "key_expiry_disabled": true, "connection_ref": "example-tailnet"}, nil, true)
 	if err != nil || res.Changed {
 		t.Fatalf("a-server already current: %v, %#v", err, res)
 	}
@@ -110,7 +110,7 @@ func TestTailnetDeviceReconcile(t *testing.T) {
 	}
 
 	// 2. Dry run (apply=false) on an-edge
-	res, err = r.tailscaleDeviceReconcile(ctx, Object{"name": "an-edge", "key_expiry_disabled": true, "connection_ref": "example-tailnet"}, nil, false)
+	res, err = r.runAction(runtime.ResourceKindTailscaleDevice, "reconcile", ctx, Object{"name": "an-edge", "key_expiry_disabled": true, "connection_ref": "example-tailnet"}, nil, false)
 	if err != nil || !res.Changed {
 		t.Fatalf("an-edge dry run: %v, %#v", err, res)
 	}
@@ -121,7 +121,7 @@ func TestTailnetDeviceReconcile(t *testing.T) {
 	// 3. Apply on an-edge
 	h := r.HTTP.(*fakeHTTP)
 	h.routes["/device/nEDGE/key"] = Object{"success": true}
-	res, err = r.tailscaleDeviceReconcile(ctx, Object{"name": "an-edge", "key_expiry_disabled": true, "connection_ref": "example-tailnet"}, nil, true)
+	res, err = r.runAction(runtime.ResourceKindTailscaleDevice, "reconcile", ctx, Object{"name": "an-edge", "key_expiry_disabled": true, "connection_ref": "example-tailnet"}, nil, true)
 	if err != nil || !res.Changed {
 		t.Fatalf("an-edge apply: %v, %#v", err, res)
 	}
@@ -131,7 +131,7 @@ func TestTailnetDeviceReconcile(t *testing.T) {
 
 	// 4. Missing scope 403 on device key
 	h.fail["/device/nEDGE/key"] = runtime.HTTPRefusal(403)
-	_, err = r.tailscaleDeviceReconcile(ctx, Object{"name": "an-edge", "key_expiry_disabled": true, "connection_ref": "example-tailnet"}, nil, true)
+	_, err = r.runAction(runtime.ResourceKindTailscaleDevice, "reconcile", ctx, Object{"name": "an-edge", "key_expiry_disabled": true, "connection_ref": "example-tailnet"}, nil, true)
 	if err == nil || !strings.Contains(err.Error(), "devices:core") {
 		t.Fatalf("expected devices:core scope error, got: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestTailscaleApproveRoutes(t *testing.T) {
 		"advertisedRoutes": []any{"10.0.0.0/24", "0.0.0.0/0"},
 		"enabledRoutes":    []any{},
 	}
-	res, err := r.tailscaleApproveRoutes(ctx, Object{"name": "a-router", "connection_ref": "example-tailnet"}, nil, false)
+	res, err := r.runAction(runtime.ResourceKindTailscaleDevice, "approve-routes", ctx, Object{"name": "a-router", "connection_ref": "example-tailnet"}, nil, false)
 	if err != nil || !res.Changed {
 		t.Fatalf("dry run approve: %v, %#v", err, res)
 	}
@@ -164,7 +164,7 @@ func TestTailscaleApproveRoutes(t *testing.T) {
 	}
 
 	// Apply
-	res, err = r.tailscaleApproveRoutes(ctx, Object{"name": "a-router", "connection_ref": "example-tailnet"}, nil, true)
+	res, err = r.runAction(runtime.ResourceKindTailscaleDevice, "approve-routes", ctx, Object{"name": "a-router", "connection_ref": "example-tailnet"}, nil, true)
 	if err != nil || !res.Changed {
 		t.Fatalf("apply approve: %v, %#v", err, res)
 	}
@@ -177,7 +177,7 @@ func TestTailscaleApproveRoutes(t *testing.T) {
 		"advertisedRoutes": []any{"10.0.0.0/24"},
 		"enabledRoutes":    []any{"10.0.0.0/24"},
 	}
-	res, err = r.tailscaleApproveRoutes(ctx, Object{"name": "a-router", "connection_ref": "example-tailnet"}, nil, true)
+	res, err = r.runAction(runtime.ResourceKindTailscaleDevice, "approve-routes", ctx, Object{"name": "a-router", "connection_ref": "example-tailnet"}, nil, true)
 	if err != nil || res.Changed {
 		t.Fatalf("already approved: %v, %#v", err, res)
 	}
@@ -190,7 +190,7 @@ func TestTailscaleApproveRoutes(t *testing.T) {
 		"advertisedRoutes": []any{},
 		"enabledRoutes":    []any{},
 	}
-	res, err = r.tailscaleApproveRoutes(ctx, Object{"name": "a-router", "connection_ref": "example-tailnet"}, nil, true)
+	res, err = r.runAction(runtime.ResourceKindTailscaleDevice, "approve-routes", ctx, Object{"name": "a-router", "connection_ref": "example-tailnet"}, nil, true)
 	if err != nil || res.Changed {
 		t.Fatalf("no routes: %v, %#v", err, res)
 	}
@@ -269,20 +269,20 @@ func TestTailnetPolicyReconcile(t *testing.T) {
 	h.routes["/tailnet/-/acl/validate"] = Object{}
 
 	// 1. Empty declaration
-	res, err := r.tailnetPolicyReconcile(ctx, Object{"document": "   ", "connection_ref": "example-tailnet"}, nil, true)
+	res, err := r.runAction(runtime.ResourceKindTailscalePolicy, "reconcile", ctx, Object{"document": "   ", "connection_ref": "example-tailnet"}, nil, true)
 	if err != nil || res.Changed || !strings.Contains(res.Message, "No policy is declared") {
 		t.Fatalf("empty declaration: %v, %#v", err, res)
 	}
 
 	// 2. Unreadable JSON
-	_, err = r.tailnetPolicyReconcile(ctx, Object{"document": "{not-json", "connection_ref": "example-tailnet"}, nil, true)
+	_, err = r.runAction(runtime.ResourceKindTailscalePolicy, "reconcile", ctx, Object{"document": "{not-json", "connection_ref": "example-tailnet"}, nil, true)
 	if err == nil || !strings.Contains(err.Error(), "not readable JSON") {
 		t.Fatalf("expected unreadable JSON error, got: %v", err)
 	}
 
 	// 3. Current tested policy
 	liveBytes, _ := json.Marshal(live)
-	res, err = r.tailnetPolicyReconcile(ctx, Object{"document": string(liveBytes), "connection_ref": "example-tailnet"}, nil, true)
+	res, err = r.runAction(runtime.ResourceKindTailscalePolicy, "reconcile", ctx, Object{"document": string(liveBytes), "connection_ref": "example-tailnet"}, nil, true)
 	if err != nil || res.Changed || res.Message != "Tailnet policy is current." {
 		t.Fatalf("current policy: %v, %#v", err, res)
 	}
@@ -297,7 +297,7 @@ func TestTailnetPolicyReconcile(t *testing.T) {
 	}
 	h.routes["/tailnet/-/acl"] = untested
 	untestedBytes, _ := json.Marshal(untested)
-	res, err = r.tailnetPolicyReconcile(ctx, Object{"document": string(untestedBytes), "connection_ref": "example-tailnet"}, nil, true)
+	res, err = r.runAction(runtime.ResourceKindTailscalePolicy, "reconcile", ctx, Object{"document": string(untestedBytes), "connection_ref": "example-tailnet"}, nil, true)
 	if err != nil || res.Changed || res.Message != "Tailnet policy is current and untested." {
 		t.Fatalf("untested current: %v, %#v", err, res)
 	}
@@ -312,14 +312,14 @@ func TestTailnetPolicyReconcile(t *testing.T) {
 		"tests":  []any{Object{"src": "a-laptop", "accept": []any{"a-server:443", "a-server:80"}}},
 	}
 	updatedBytes, _ := json.Marshal(updated)
-	res, err = r.tailnetPolicyReconcile(ctx, Object{"document": string(updatedBytes), "connection_ref": "example-tailnet"}, nil, false)
+	res, err = r.runAction(runtime.ResourceKindTailscalePolicy, "reconcile", ctx, Object{"document": string(updatedBytes), "connection_ref": "example-tailnet"}, nil, false)
 	if err != nil || !res.Changed || res.Message != "The policy passes its own tests and would be applied." {
 		t.Fatalf("dry run update: %v, %#v", err, res)
 	}
 
 	// 6. Apply with no version from the live read: nothing is written.
 	writes := len(h.requests)
-	_, err = r.tailnetPolicyReconcile(ctx, Object{"document": string(updatedBytes), "connection_ref": "example-tailnet"}, nil, true)
+	_, err = r.runAction(runtime.ResourceKindTailscalePolicy, "reconcile", ctx, Object{"document": string(updatedBytes), "connection_ref": "example-tailnet"}, nil, true)
 	if err == nil || !strings.Contains(err.Error(), "did not say which version") {
 		t.Fatalf("apply without etag: %v", err)
 	}
@@ -332,7 +332,7 @@ func TestTailnetPolicyReconcile(t *testing.T) {
 	// 7. Apply with the live read's version: one read, held to it.
 	h.headers = map[string]map[string]any{"/tailnet/-/acl": {"etag": `"v1"`}}
 	writes = len(h.requests)
-	res, err = r.tailnetPolicyReconcile(ctx, Object{"document": string(updatedBytes), "connection_ref": "example-tailnet"}, nil, true)
+	res, err = r.runAction(runtime.ResourceKindTailscalePolicy, "reconcile", ctx, Object{"document": string(updatedBytes), "connection_ref": "example-tailnet"}, nil, true)
 	if err != nil || !res.Changed || res.Message != "Tailnet policy applied after its own tests passed." {
 		t.Fatalf("apply update: %v, %#v", err, res)
 	}
@@ -477,5 +477,39 @@ func TestTailnetPolicyInventoryAndAppConnectors(t *testing.T) {
 	}
 	if len(rec.Services) != 1 || rec.Services[0].Name != "svc:example" {
 		t.Fatalf("services mismatch: %#v", rec.Services)
+	}
+}
+
+type addressSpy struct {
+	*fakeHTTP
+	addresses []string
+}
+
+func (s *addressSpy) Request(ctx context.Context, address, method string, headers map[string]string, payload any) (json.RawMessage, error) {
+	s.addresses = append(s.addresses, address)
+	routed := "https://example.invalid" + strings.TrimPrefix(address, "https://control.example.invalid/api/v2")
+	return s.fakeHTTP.Request(ctx, routed, method, headers, payload)
+}
+
+func TestTailnetRequestsFollowTheConnectionURL(t *testing.T) {
+	spy := &addressSpy{fakeHTTP: &fakeHTTP{routes: map[string]any{
+		"/oauth/token":      Object{"access_token": "ts-token-123"},
+		"/tailnet/-/policy": Object{},
+	}, fail: map[string]error{}}}
+	r := New(runtime.Environment{
+		"TAILSCALE_CONNECTION_REF": "example-tailnet",
+		"TAILSCALE_CLIENT_ID":      "client-id-123",
+		"TAILSCALE_CLIENT_SECRET":  "client-secret-123",
+		"TAILSCALE_URL":            "https://control.example.invalid/api/v2/",
+	}, spy)
+	defer r.BeginSnapshot()()
+	client, err := r.tailnetClient(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = client.call(context.Background(), "GET", tailnet("policy"), nil, nil)
+	want := []string{"https://control.example.invalid/api/v2/oauth/token", "https://control.example.invalid/api/v2/tailnet/-/policy"}
+	if !reflect.DeepEqual(spy.addresses, want) {
+		t.Fatalf("addresses %v, want %v", spy.addresses, want)
 	}
 }

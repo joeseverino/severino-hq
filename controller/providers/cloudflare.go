@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/providers/cfapi"
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // The zone settings worth carrying: how a domain answers over TLS.
@@ -18,17 +19,17 @@ var zonePostureSettings = []string{"ssl", "min_tls_version", "tls_1_3", "always_
 var caaValueParts = regexp.MustCompile(`^\s*(\d{1,3})\s+(issue|issuewild|iodef)\s+"([^"]*)"\s*$`)
 
 func (r *Registry) admitCloudflare() {
-	r.action("cloudflare.dns_record", "reconcile", r.cloudflareRecordReconcile)
-	r.action("cloudflare.dns_record", "delete", r.cloudflareRecordDelete)
-	r.reader("cloudflare.zone", r.cloudflareZoneInventory)
-	r.reader("cloudflare.dns_record", r.cloudflareRecordInventory)
-	r.reader("cloudflare.pages_project", r.cloudflarePagesProjects)
-	r.reader("cloudflare.d1_database", r.cloudflareD1Databases)
-	r.reader("cloudflare.access_app", r.cloudflareAccessApps)
-	r.reader("cloudflare.access_service_token", r.cloudflareServiceTokens)
-	r.reader("cloudflare.tunnel", r.cloudflareTunnels)
-	r.reader("cloudflare.edge_certificate", r.cloudflareEdgeCertificates)
-	r.reader("cloudflare.redirect", r.cloudflareRedirects)
+	act(r, runtime.ResourceKindCloudflareDNSRecord, "reconcile", r.cloudflareRecordReconcile)
+	act(r, runtime.ResourceKindCloudflareDNSRecord, "delete", r.cloudflareRecordDelete)
+	r.reader(runtime.ResourceKindCloudflareZone, r.cloudflareZoneInventory)
+	r.reader(runtime.ResourceKindCloudflareDNSRecord, r.cloudflareRecordInventory)
+	r.reader(runtime.ResourceKindCloudflarePagesProject, r.cloudflarePagesProjects)
+	r.reader(runtime.ResourceKindCloudflareD1Database, r.cloudflareD1Databases)
+	r.reader(runtime.ResourceKindCloudflareAccessApp, r.cloudflareAccessApps)
+	r.reader(runtime.ResourceKindCloudflareAccessServiceToken, r.cloudflareServiceTokens)
+	r.reader(runtime.ResourceKindCloudflareTunnel, r.cloudflareTunnels)
+	r.reader(runtime.ResourceKindCloudflareEdgeCertificate, r.cloudflareEdgeCertificates)
+	r.reader(runtime.ResourceKindCloudflareRedirect, r.cloudflareRedirects)
 	r.probe("cloudflare_dns", r.cloudflareDNSProbe)
 	r.probe("cloudflare_api", r.cloudflareAPIProbe)
 }
@@ -219,22 +220,17 @@ func findRecord(records []cfRecordFields, observed CloudflareDNSRecordObserved, 
 	return nil
 }
 
-func (r *Registry) cloudflareRecordTarget(ctx context.Context, rawSpec, rawObserved Object) (CloudflareDNSRecordSpec, string, string, *cfRecordFields, error) {
-	spec, err := decodePayload[CloudflareDNSRecordSpec](rawSpec)
-	if err != nil {
-		return spec, "", "", nil, err
-	}
-	observed, _ := decodePayload[CloudflareDNSRecordObserved](rawObserved)
+func (r *Registry) cloudflareRecordTarget(ctx context.Context, spec CloudflareDNSRecordSpec, observed CloudflareDNSRecordObserved) (string, string, *cfRecordFields, error) {
 	zone := hostname(spec.Zone)
 	zoneID, err := r.cloudflareZoneID(ctx, zone)
 	if err != nil {
-		return spec, zone, "", nil, err
+		return zone, "", nil, err
 	}
 	records, err := r.cloudflareRecords(ctx, zoneID)
 	if err != nil {
-		return spec, zone, zoneID, nil, err
+		return zone, zoneID, nil, err
 	}
-	return spec, zone, zoneID, findRecord(records, observed, spec), nil
+	return zone, zoneID, findRecord(records, observed, spec), nil
 }
 
 func decodeRecord(raw json.RawMessage) *cfRecordFields {
@@ -246,8 +242,8 @@ func decodeRecord(raw json.RawMessage) *cfRecordFields {
 }
 
 // cloudflareRecordReconcile makes one public DNS record match its declaration.
-func (r *Registry) cloudflareRecordReconcile(ctx context.Context, rawSpec, rawObserved Object, apply bool) (Result, error) {
-	spec, zone, zoneID, live, err := r.cloudflareRecordTarget(ctx, rawSpec, rawObserved)
+func (r *Registry) cloudflareRecordReconcile(ctx context.Context, spec CloudflareDNSRecordSpec, observed CloudflareDNSRecordObserved, apply bool) (Result, error) {
+	zone, zoneID, live, err := r.cloudflareRecordTarget(ctx, spec, observed)
 	if err != nil {
 		return Result{}, err
 	}
@@ -314,8 +310,8 @@ func pyStringEquals(raw json.RawMessage, want string) bool {
 }
 
 // cloudflareRecordDelete removes only the record this declaration owns, by id.
-func (r *Registry) cloudflareRecordDelete(ctx context.Context, rawSpec, rawObserved Object, apply bool) (Result, error) {
-	spec, zone, zoneID, live, err := r.cloudflareRecordTarget(ctx, rawSpec, rawObserved)
+func (r *Registry) cloudflareRecordDelete(ctx context.Context, spec CloudflareDNSRecordSpec, observed CloudflareDNSRecordObserved, apply bool) (Result, error) {
+	zone, zoneID, live, err := r.cloudflareRecordTarget(ctx, spec, observed)
 	if err != nil {
 		return Result{}, err
 	}
@@ -337,7 +333,7 @@ func (r *Registry) cloudflareRegistrarDomains(ctx context.Context) map[string]Cl
 	account, err := r.cloudflareAnalyticsAccount(ctx, "")
 	var items []json.RawMessage
 	if err == nil {
-		items, err = r.cloudflareAPICursorList(ctx, "/accounts/"+account+"/registrar/registrations", "", 50)
+		items, err = r.cloudflareAPICursorList(ctx, "/accounts/"+account+"/registrar/registrations", "", cloudflareAccountPerPage)
 	}
 	if err != nil {
 		refuse(ctx, "registration", "", "", err)
@@ -354,9 +350,7 @@ func (r *Registry) cloudflareRegistrarDomains(ctx context.Context) map[string]Cl
 			continue
 		}
 		expires := domain.ExpiresAt
-		if len([]rune(expires)) > 10 {
-			expires = string([]rune(expires)[:10])
-		}
+		expires = runtime.ISODate(expires)
 		found[name] = CloudflareRegistration{ExpiresAt: expires, AutoRenew: domain.AutoRenew, Locked: domain.Locked, Status: string(domain.Status), Registrar: "Cloudflare", known: true}
 	}
 	return found
@@ -452,18 +446,15 @@ func (r *Registry) cloudflareDNSProbe(ctx context.Context, ref string) (ProbeRes
 	if err != nil {
 		return ProbeResult{}, err
 	}
-	zones, err := r.cloudflareEnvelope(ctx, "cloudflare_dns", ref, "/zones?per_page=50", "GET", nil)
+	items, err := r.cloudflareList(ctx, "cloudflare_dns", "/zones", ref, cloudflarePerPage)
 	if err != nil {
 		return ProbeResult{}, err
 	}
 	names := []string{}
-	var items []json.RawMessage
-	if pyTruthy(zones.Result) && json.Unmarshal(zones.Result, &items) == nil {
-		for _, item := range items {
-			var zone cfapi.ZonesZone
-			if isJSONObject(item) && json.Unmarshal(item, &zone) == nil && zone.Name != "" {
-				names = append(names, zone.Name)
-			}
+	for _, item := range items {
+		var zone cfapi.ZonesZone
+		if json.Unmarshal(item, &zone) == nil && zone.Name != "" {
+			names = append(names, zone.Name)
 		}
 	}
 	sort.Strings(names)

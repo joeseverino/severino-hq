@@ -180,7 +180,7 @@ func TestReconcileTLSReadsEveryConsumer(t *testing.T) {
 		Object{"kind": "npm", "name": "proxy", "connection_ref": "npm", "verify_domains": []any{"a.example"}},
 		Object{"kind": "cpanel", "name": "host", "connection_ref": "nope", "verify_domains": []any{}},
 	}}
-	result, err := h.r.tlsReconcile(context.Background(), spec, nil, false)
+	result, err := h.r.runAction(runtime.ResourceKindTLSCertificate, "reconcile", context.Background(), spec, nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestRenewalDeploysVerifiesAndRollsBack(t *testing.T) {
 	}}
 
 	h.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}}, {"edge.example|a.example": {Cert: "new"}}}
-	result, err := h.r.tlsRenew(verified(context.Background()), spec, nil, true)
+	result, err := h.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(context.Background()), spec, nil, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,12 +235,12 @@ func TestRenewalDeploysVerifiesAndRollsBack(t *testing.T) {
 	h2.dialer.certs, h2.command.outcomes, h2.command.lineage = h.dialer.certs, h.command.outcomes, h.command.lineage
 	_ = os.RemoveAll(filepath.Join(env["HQ_ACME_DIR"], "config"))
 	h2.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}}}
-	_, err = h2.r.tlsRenew(verified(context.Background()), spec, nil, true)
+	_, err = h2.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(context.Background()), spec, nil, true)
 	want := "Certificate deployment failed: 1 of 1 TLS consumers did not activate the certificate within 30s: edge still serves the previous certificate at a.example. Rollback succeeded."
 	if err == nil || err.Error() != want {
 		t.Fatalf("rollback: %v", err)
 	}
-	if _, err := h2.r.tlsRenew(context.Background(), spec, nil, true); err == nil {
+	if _, err := h2.r.runAction(runtime.ResourceKindTLSCertificate, "renew", context.Background(), spec, nil, true); err == nil {
 		t.Fatal("a renewal without a declared verification policy must refuse")
 	}
 }
@@ -263,18 +263,23 @@ func TestCPanelPlanRefusesUnservedNames(t *testing.T) {
 	}
 }
 
+func observedOf(raw Object) TLSCertificateObserved {
+	observed, _ := decodePayload[TLSCertificateObserved](raw)
+	return observed
+}
+
 func TestNPMCertificateIDs(t *testing.T) {
 	spec := TLSCertificateSpec{Consumers: []TLSConsumer{{Kind: "npm", Name: "one"}, {Kind: "caddy", Name: "edge"}, {Kind: "npm", Name: "two"}}}
-	known := npmCertificateIDsOf(spec, Object{"npm_certificate_ids": Object{"two": json.Number("7"), "one": json.Number("5"), "bogus": true}})
+	known := npmCertificateIDsOf(spec, observedOf(Object{"npm_certificate_ids": Object{"two": json.Number("7"), "one": json.Number("5"), "bogus": true}}))
 	data, _ := json.Marshal(known)
 	if string(data) != `{"one":5,"two":7}` {
 		t.Fatalf("ids: %s", data)
 	}
-	single := npmCertificateIDsOf(TLSCertificateSpec{Consumers: []TLSConsumer{{Kind: "npm", Name: "one"}}}, Object{"npm_certificate_id": float64(9)})
+	single := npmCertificateIDsOf(TLSCertificateSpec{Consumers: []TLSConsumer{{Kind: "npm", Name: "one"}}}, observedOf(Object{"npm_certificate_id": float64(9)}))
 	if len(single) != 1 || single[0].ID != 9 {
 		t.Fatalf("single: %+v", single)
 	}
-	if got := npmCertificateIDsOf(spec, Object{"npm_certificate_id": 9.5}); len(got) != 0 {
+	if got := npmCertificateIDsOf(spec, observedOf(Object{"npm_certificate_id": 9.5})); len(got) != 0 {
 		t.Fatalf("a float is not an id: %+v", got)
 	}
 }

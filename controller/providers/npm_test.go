@@ -108,7 +108,7 @@ func TestNPMReconcileAndPlan(t *testing.T) {
 				r := npmFixture()
 				h := r.HTTP.(*fakeHTTP)
 				h.routes["/api/nginx/proxy-hosts"] = tc.live
-				result, err := r.npmReconcile(context.Background(), sampleProxySpec(), tc.observed, apply)
+				result, err := r.runAction(runtime.ResourceKindNPMProxyHost, "reconcile", context.Background(), sampleProxySpec(), tc.observed, apply)
 				if err != nil || result.Changed != tc.changed {
 					t.Fatalf("result=%#v err=%v", result, err)
 				}
@@ -136,7 +136,7 @@ func TestNPMRefusesHTTPSWithoutCertificate(t *testing.T) {
 	spec["force_ssl"] = true
 	spec["certificate_id"] = 0
 
-	_, err := r.npmReconcile(context.Background(), spec, nil, true)
+	_, err := r.runAction(runtime.ResourceKindNPMProxyHost, "reconcile", context.Background(), spec, nil, true)
 	if err == nil {
 		t.Fatal("expected error for https without certificate")
 	}
@@ -149,7 +149,7 @@ func TestNPMDelete(t *testing.T) {
 		{"id": 7, "domain_names": []any{"other.example"}},
 		{"id": 9, "domain_names": []any{"hq.example"}},
 	}
-	result, err := r.npmDelete(context.Background(), Object{"domain_names": []string{"hq.example"}}, nil, true)
+	result, err := r.runAction(runtime.ResourceKindNPMProxyHost, "delete", context.Background(), Object{"domain_names": []string{"hq.example"}}, nil, true)
 	if err != nil || !result.Changed {
 		t.Fatalf("%#v %v", result, err)
 	}

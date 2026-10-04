@@ -1,0 +1,5 @@
+repository: https://github.com/NginxProxyManager/nginx-proxy-manager
+file: backend/schema/swagger.json (multi-file refs under backend/schema)
+commit: f64d43b9ae46f9abbbc07fe035f6a69a42d4b9d2
+bundle: npx @redocly/cli bundle backend/schema/swagger.json -o openapi.bundled.json
+sha256: e072570423252a48ee7d5a4f7661066c41c9e88943c8580a40affceee05c8e68

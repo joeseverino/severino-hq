@@ -57,6 +57,273 @@ func (e AnalyticsWindowReason) Valid() bool {
 	}
 }
 
+// Defines values for FailureClass.
+const (
+	FailureClassAddress      FailureClass = "address"
+	FailureClassCredential   FailureClass = "credential"
+	FailureClassNetwork      FailureClass = "network"
+	FailureClassPermission   FailureClass = "permission"
+	FailureClassUnclassified FailureClass = ""
+)
+
+// Valid indicates whether the value is a known member of the FailureClass enum.
+func (e FailureClass) Valid() bool {
+	switch e {
+	case FailureClassAddress:
+		return true
+	case FailureClassCredential:
+		return true
+	case FailureClassNetwork:
+		return true
+	case FailureClassPermission:
+		return true
+	case FailureClassUnclassified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GlancePanelID.
+const (
+	GlancePanelIDInfrastructure GlancePanelID = "infrastructure"
+	GlancePanelIDWeather        GlancePanelID = "weather"
+)
+
+// Valid indicates whether the value is a known member of the GlancePanelID enum.
+func (e GlancePanelID) Valid() bool {
+	switch e {
+	case GlancePanelIDInfrastructure:
+		return true
+	case GlancePanelIDWeather:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PassMode.
+const (
+	PassModeApply PassMode = "apply"
+	PassModePlan  PassMode = "plan"
+)
+
+// Valid indicates whether the value is a known member of the PassMode enum.
+func (e PassMode) Valid() bool {
+	switch e {
+	case PassModeApply:
+		return true
+	case PassModePlan:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for Refusal.
+const (
+	RefusalCredential   Refusal = "credential"
+	RefusalPermission   Refusal = "permission"
+	RefusalUnclassified Refusal = ""
+)
+
+// Valid indicates whether the value is a known member of the Refusal enum.
+func (e Refusal) Valid() bool {
+	switch e {
+	case RefusalCredential:
+		return true
+	case RefusalPermission:
+		return true
+	case RefusalUnclassified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ResourceKind.
+const (
+	ResourceKindAdGuardClient                ResourceKind = "adguard.client"
+	ResourceKindAdGuardDNS                   ResourceKind = "adguard.dns"
+	ResourceKindAdGuardQuerySummary          ResourceKind = "adguard.query_summary"
+	ResourceKindAdGuardRewrite               ResourceKind = "adguard.rewrite"
+	ResourceKindCaddyRoute                   ResourceKind = "caddy.route"
+	ResourceKindCloudflareAccessApp          ResourceKind = "cloudflare.access_app"
+	ResourceKindCloudflareAccessServiceToken ResourceKind = "cloudflare.access_service_token"
+	ResourceKindCloudflareD1Database         ResourceKind = "cloudflare.d1_database"
+	ResourceKindCloudflareDNSRecord          ResourceKind = "cloudflare.dns_record"
+	ResourceKindCloudflareEdgeCertificate    ResourceKind = "cloudflare.edge_certificate"
+	ResourceKindCloudflarePagesProject       ResourceKind = "cloudflare.pages_project"
+	ResourceKindCloudflareRedirect           ResourceKind = "cloudflare.redirect"
+	ResourceKindCloudflareTunnel             ResourceKind = "cloudflare.tunnel"
+	ResourceKindCloudflareZone               ResourceKind = "cloudflare.zone"
+	ResourceKindGitHubDelivery               ResourceKind = "github.delivery"
+	ResourceKindGitHubRepository             ResourceKind = "github.repository"
+	ResourceKindHQRequestPath                ResourceKind = "hq.request_path"
+	ResourceKindHostFirewall                 ResourceKind = "host.firewall"
+	ResourceKindHostPerimeter                ResourceKind = "host.perimeter"
+	ResourceKindMachine                      ResourceKind = "machine"
+	ResourceKindNPMAccessList                ResourceKind = "npm.access_list"
+	ResourceKindNPMCertificate               ResourceKind = "npm.certificate"
+	ResourceKindNPMDeadHost                  ResourceKind = "npm.dead_host"
+	ResourceKindNPMProxyHost                 ResourceKind = "npm.proxy_host"
+	ResourceKindNPMRedirect                  ResourceKind = "npm.redirect"
+	ResourceKindNPMStream                    ResourceKind = "npm.stream"
+	ResourceKindNetwork                      ResourceKind = "network"
+	ResourceKindPKIAuthority                 ResourceKind = "pki.authority"
+	ResourceKindPortainerComposeProject      ResourceKind = "portainer.compose_project"
+	ResourceKindPortainerContainer           ResourceKind = "portainer.container"
+	ResourceKindPortainerEnvironment         ResourceKind = "portainer.environment"
+	ResourceKindPortainerImage               ResourceKind = "portainer.image"
+	ResourceKindPortainerNetwork             ResourceKind = "portainer.network"
+	ResourceKindPortainerRuntime             ResourceKind = "portainer.runtime"
+	ResourceKindPortainerStack               ResourceKind = "portainer.stack"
+	ResourceKindPortainerVolume              ResourceKind = "portainer.volume"
+	ResourceKindRegistryAddress              ResourceKind = "registry.address"
+	ResourceKindRegistryDigest               ResourceKind = "registry.digest"
+	ResourceKindRegistryDomain               ResourceKind = "registry.domain"
+	ResourceKindRegistryImage                ResourceKind = "registry.image"
+	ResourceKindRegistryUpstream             ResourceKind = "registry.upstream"
+	ResourceKindRegistryVulnerabilities      ResourceKind = "registry.vulnerabilities"
+	ResourceKindTLSCertificate               ResourceKind = "tls.certificate"
+	ResourceKindTLSDeliveryTarget            ResourceKind = "tls.delivery_target"
+	ResourceKindTLSUploadedCertificate       ResourceKind = "tls.uploaded_certificate"
+	ResourceKindTailscaleDNS                 ResourceKind = "tailscale.dns"
+	ResourceKindTailscaleDevice              ResourceKind = "tailscale.device"
+	ResourceKindTailscalePolicy              ResourceKind = "tailscale.policy"
+	ResourceKindTailscaleSettings            ResourceKind = "tailscale.settings"
+	ResourceKindTailscaleUser                ResourceKind = "tailscale.user"
+)
+
+// Valid indicates whether the value is a known member of the ResourceKind enum.
+func (e ResourceKind) Valid() bool {
+	switch e {
+	case ResourceKindAdGuardClient:
+		return true
+	case ResourceKindAdGuardDNS:
+		return true
+	case ResourceKindAdGuardQuerySummary:
+		return true
+	case ResourceKindAdGuardRewrite:
+		return true
+	case ResourceKindCaddyRoute:
+		return true
+	case ResourceKindCloudflareAccessApp:
+		return true
+	case ResourceKindCloudflareAccessServiceToken:
+		return true
+	case ResourceKindCloudflareD1Database:
+		return true
+	case ResourceKindCloudflareDNSRecord:
+		return true
+	case ResourceKindCloudflareEdgeCertificate:
+		return true
+	case ResourceKindCloudflarePagesProject:
+		return true
+	case ResourceKindCloudflareRedirect:
+		return true
+	case ResourceKindCloudflareTunnel:
+		return true
+	case ResourceKindCloudflareZone:
+		return true
+	case ResourceKindGitHubDelivery:
+		return true
+	case ResourceKindGitHubRepository:
+		return true
+	case ResourceKindHQRequestPath:
+		return true
+	case ResourceKindHostFirewall:
+		return true
+	case ResourceKindHostPerimeter:
+		return true
+	case ResourceKindMachine:
+		return true
+	case ResourceKindNPMAccessList:
+		return true
+	case ResourceKindNPMCertificate:
+		return true
+	case ResourceKindNPMDeadHost:
+		return true
+	case ResourceKindNPMProxyHost:
+		return true
+	case ResourceKindNPMRedirect:
+		return true
+	case ResourceKindNPMStream:
+		return true
+	case ResourceKindNetwork:
+		return true
+	case ResourceKindPKIAuthority:
+		return true
+	case ResourceKindPortainerComposeProject:
+		return true
+	case ResourceKindPortainerContainer:
+		return true
+	case ResourceKindPortainerEnvironment:
+		return true
+	case ResourceKindPortainerImage:
+		return true
+	case ResourceKindPortainerNetwork:
+		return true
+	case ResourceKindPortainerRuntime:
+		return true
+	case ResourceKindPortainerStack:
+		return true
+	case ResourceKindPortainerVolume:
+		return true
+	case ResourceKindRegistryAddress:
+		return true
+	case ResourceKindRegistryDigest:
+		return true
+	case ResourceKindRegistryDomain:
+		return true
+	case ResourceKindRegistryImage:
+		return true
+	case ResourceKindRegistryUpstream:
+		return true
+	case ResourceKindRegistryVulnerabilities:
+		return true
+	case ResourceKindTLSCertificate:
+		return true
+	case ResourceKindTLSDeliveryTarget:
+		return true
+	case ResourceKindTLSUploadedCertificate:
+		return true
+	case ResourceKindTailscaleDNS:
+		return true
+	case ResourceKindTailscaleDevice:
+		return true
+	case ResourceKindTailscalePolicy:
+		return true
+	case ResourceKindTailscaleSettings:
+		return true
+	case ResourceKindTailscaleUser:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TLSConsumerKind.
+const (
+	TLSConsumerKindCPanel TLSConsumerKind = "cpanel"
+	TLSConsumerKindCaddy  TLSConsumerKind = "caddy"
+	TLSConsumerKindNPM    TLSConsumerKind = "npm"
+)
+
+// Valid indicates whether the value is a known member of the TLSConsumerKind enum.
+func (e TLSConsumerKind) Valid() bool {
+	switch e {
+	case TLSConsumerKindCPanel:
+		return true
+	case TLSConsumerKindCaddy:
+		return true
+	case TLSConsumerKindNPM:
+		return true
+	default:
+		return false
+	}
+}
+
 // Acknowledgement Django's answer to a report; the controller reads only ok.
 type Acknowledgement struct {
 	OK                   bool                   `json:"ok"`
@@ -144,10 +411,20 @@ type AnalyticsWindow struct {
 // AnalyticsWindowReason defines model for AnalyticsWindow.Reason.
 type AnalyticsWindowReason string
 
+// AppliedOperationOutput The line an apply pass prints for one operation it ran.
+type AppliedOperationOutput struct {
+	Changed   bool   `json:"changed"`
+	OK        bool   `json:"ok"`
+	Operation string `json:"operation"`
+	Resource  string `json:"resource"`
+}
+
 // Capability defines model for Capability.
 type Capability struct {
 	Action string `json:"action"`
-	Kind   string `json:"kind"`
+
+	// Kind Every kind of resource or reading HQ's provider registry declares. Django's contract test holds this list equal to the registry, so a kind added on either side fails the build.
+	Kind ResourceKind `json:"kind"`
 }
 
 // Condition defines model for Condition.
@@ -166,13 +443,15 @@ type ConnectionRecord struct {
 	Endpoint      string `json:"endpoint"`
 
 	// ExpiresAt Credential expiry the probe read, when it read one.
-	ExpiresAt string   `json:"expires_at,omitempty"`
-	Failure   string   `json:"failure,omitempty"`
-	Manages   bool     `json:"manages"`
-	OK        bool     `json:"ok"`
-	Probed    bool     `json:"probed"`
-	Provider  string   `json:"provider"`
-	Reaches   []string `json:"reaches"`
+	ExpiresAt string `json:"expires_at,omitempty"`
+
+	// Failure Why a read got no usable answer: a refusal, an address that answered as something other than the API, or nothing answering. Empty when unclassified.
+	Failure  FailureClass `json:"failure,omitempty"`
+	Manages  bool         `json:"manages"`
+	OK       bool         `json:"ok"`
+	Probed   bool         `json:"probed"`
+	Provider string       `json:"provider"`
+	Reaches  []string     `json:"reaches"`
 
 	// Store Where the connection's credentials are stored, as connection_env reports it.
 	Store any `json:"store,omitempty"`
@@ -197,7 +476,7 @@ type ControllerRegistry struct {
 	Locked              []LockedAction      `json:"locked"`
 
 	// MaterialKinds Kinds whose work needs material HQ holds.
-	MaterialKinds []string `json:"material_kinds"`
+	MaterialKinds []ResourceKind `json:"material_kinds"`
 
 	// Observations Each reading kind's provider.
 	Observations map[string]string `json:"observations"`
@@ -215,12 +494,17 @@ type ControllerReport struct {
 	Success bool `json:"success"`
 }
 
+// FailureClass Why a read got no usable answer: a refusal, an address that answered as something other than the API, or nothing answering. Empty when unclassified.
+type FailureClass string
+
 // ForcedRead An operator's pending read request.
 type ForcedRead struct {
-	ConnectionRef string    `json:"connection_ref"`
-	Kind          string    `json:"kind"`
-	Kinds         []string  `json:"kinds"`
-	RequestedAt   time.Time `json:"requested_at"`
+	ConnectionRef string `json:"connection_ref"`
+
+	// Kind Every kind of resource or reading HQ's provider registry declares. Django's contract test holds this list equal to the registry, so a kind added on either side fails the build.
+	Kind        ResourceKind   `json:"kind"`
+	Kinds       []ResourceKind `json:"kinds"`
+	RequestedAt time.Time      `json:"requested_at"`
 }
 
 // GlanceMachineTarget defines model for GlanceMachineTarget.
@@ -233,10 +517,13 @@ type GlanceMachineTarget struct {
 // GlanceObservations defines model for GlanceObservations.
 type GlanceObservations = []map[string]interface{}
 
+// GlancePanelID A dashboard panel the glance plan can ask the controller to read.
+type GlancePanelID string
+
 // GlancePlan defines model for GlancePlan.
 type GlancePlan struct {
 	OK      bool              `json:"ok"`
-	Panels  []string          `json:"panels"`
+	Panels  []GlancePanelID   `json:"panels"`
 	Targets GlancePlanTargets `json:"targets"`
 }
 
@@ -251,25 +538,38 @@ type GlanceWeatherTarget struct {
 	Point string `json:"point"`
 }
 
+// IdlePassOutput The line an apply pass prints when it found nothing to claim.
+type IdlePassOutput struct {
+	Claimed bool `json:"claimed"`
+
+	// Mode Whether a pass only looked (plan) or claimed and executed work (apply).
+	Mode PassMode `json:"mode"`
+	OK   bool     `json:"ok"`
+}
+
 // Inventory One sweep: each kind read, by kind name.
 type Inventory map[string]KindReport
 
 // KindReport defines model for KindReport.
 type KindReport struct {
 	// Connected False when nothing this controller holds can read the kind; absent means it was read.
-	Connected    *bool         `json:"connected,omitempty"`
-	Error        string        `json:"error,omitempty"`
-	OK           bool          `json:"ok"`
-	Records      []any         `json:"records"`
-	Refusal      string        `json:"refusal,omitempty"`
+	Connected *bool  `json:"connected,omitempty"`
+	Error     string `json:"error,omitempty"`
+	OK        bool   `json:"ok"`
+	Records   []any  `json:"records"`
+
+	// Refusal Why a provider refused a read: the credential itself, or one permission it lacks. Empty when the reason is unclassified.
+	Refusal      Refusal       `json:"refusal,omitempty"`
 	RefusedParts []RefusedPart `json:"refused_parts,omitempty"`
 }
 
 // LockedAction An action the registry refuses, and the reason it gives.
 type LockedAction struct {
 	Action string `json:"action"`
-	Kind   string `json:"kind"`
-	Reason string `json:"reason"`
+
+	// Kind Every kind of resource or reading HQ's provider registry declares. Django's contract test holds this list equal to the registry, so a kind added on either side fails the build.
+	Kind   ResourceKind `json:"kind"`
+	Reason string       `json:"reason"`
 }
 
 // Material A stored certificate's material, released only to the controller applying it.
@@ -298,6 +598,9 @@ type Operation struct {
 	State  string `json:"state"`
 }
 
+// PassMode Whether a pass only looked (plan) or claimed and executed work (apply).
+type PassMode string
+
 // Pending The next operation (claim/peek). schema_version and resource accompany an operation whose contract resolved; unresolvable explains one that did not (peek only); verification is the action's declared verification policy, when it has one.
 type Pending struct {
 	OK            bool       `json:"ok"`
@@ -310,14 +613,48 @@ type Pending struct {
 	Verification *Verification `json:"verification,omitempty"`
 }
 
+// PlanPassOutput The line a plan pass prints on stdout. The Python worker prints the same shape.
+type PlanPassOutput struct {
+	Claimed     bool               `json:"claimed"`
+	Connections []ConnectionRecord `json:"connections"`
+
+	// Mode Whether a pass only looked (plan) or claimed and executed work (apply).
+	Mode     PassMode          `json:"mode"`
+	OK       bool              `json:"ok"`
+	Plan     *PlannedOperation `json:"plan"`
+	Warnings []string          `json:"warnings"`
+}
+
+// PlannedOperation The operation a plan pass would run next and what it would change.
+type PlannedOperation struct {
+	Action      string `json:"action"`
+	Message     string `json:"message"`
+	Operation   string `json:"operation"`
+	Resource    string `json:"resource"`
+	WouldChange bool   `json:"would_change"`
+}
+
+// Refusal Why a provider refused a read: the credential itself, or one permission it lacks. Empty when the reason is unclassified.
+type Refusal string
+
+// RefusedOperationOutput The line an apply pass prints for one operation a provider refused.
+type RefusedOperationOutput struct {
+	Message   string `json:"message"`
+	OK        bool   `json:"ok"`
+	Operation string `json:"operation"`
+	Resource  string `json:"resource"`
+}
+
 // RefusedPart One declared part of a reading that was refused: which part, why, and on what ("" scope for all of it).
 type RefusedPart struct {
 	Address       string `json:"address,omitempty"`
 	ConnectionRef string `json:"connection_ref"`
 	Part          string `json:"part"`
 	Reason        string `json:"reason"`
-	Refusal       string `json:"refusal"`
-	Scope         string `json:"scope"`
+
+	// Refusal Why a read got no usable answer: a refusal, an address that answered as something other than the API, or nothing answering. Empty when unclassified.
+	Refusal FailureClass `json:"refusal"`
+	Scope   string       `json:"scope"`
 }
 
 // Resource defines model for Resource.
@@ -325,7 +662,9 @@ type Resource struct {
 	Enabled    bool   `json:"enabled"`
 	Generation int64  `json:"generation"`
 	Key        string `json:"key"`
-	Kind       string `json:"kind"`
+
+	// Kind Every kind of resource or reading HQ's provider registry declares. Django's contract test holds this list equal to the registry, so a kind added on either side fails the build.
+	Kind ResourceKind `json:"kind"`
 
 	// Observed What the provider was last seen holding for this resource.
 	Observed map[string]interface{} `json:"observed"`
@@ -333,6 +672,9 @@ type Resource struct {
 	// Spec Desired state, resolved for the kind. Each provider decodes it into its own type.
 	Spec map[string]interface{} `json:"spec"`
 }
+
+// ResourceKind Every kind of resource or reading HQ's provider registry declares. Django's contract test holds this list equal to the registry, so a kind added on either side fails the build.
+type ResourceKind string
 
 // StepFailure Work one pass could not finish; subject is the connection ref it used.
 type StepFailure struct {
@@ -344,15 +686,18 @@ type StepFailure struct {
 // SweepVerdict defines model for SweepVerdict.
 type SweepVerdict struct {
 	// AgeSeconds Absent before anything has been swept.
-	AgeSeconds      int          `json:"age_seconds,omitempty"`
-	Carry           []string     `json:"carry"`
-	Due             bool         `json:"due"`
-	Forced          []ForcedRead `json:"forced"`
-	IntervalSeconds int          `json:"interval_seconds"`
-	OK              bool         `json:"ok"`
-	OnlyKinds       []string     `json:"only_kinds"`
-	Reason          string       `json:"reason"`
+	AgeSeconds      int            `json:"age_seconds,omitempty"`
+	Carry           []string       `json:"carry"`
+	Due             bool           `json:"due"`
+	Forced          []ForcedRead   `json:"forced"`
+	IntervalSeconds int            `json:"interval_seconds"`
+	OK              bool           `json:"ok"`
+	OnlyKinds       []ResourceKind `json:"only_kinds"`
+	Reason          string         `json:"reason"`
 }
+
+// TLSConsumerKind Where a certificate is served from: the kinds of TLS consumer a certificate spec declares.
+type TLSConsumerKind string
 
 // Verification How long the controller keeps checking that an applied change is actually served, declared by the action it belongs to.
 type Verification struct {

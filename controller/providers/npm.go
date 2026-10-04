@@ -10,27 +10,49 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/joeseverino/severino-hq/controller/providers/npmapi"
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // npmRecord is one record from an NPM list endpoint, field by field and
 // undecoded. NPM is not consistent about types across releases (flags come
 // as true or 1, ids as numbers or strings), so each field is read through an
-// accessor below that states how it is interpreted.
+// accessor below that states how it is interpreted. The field names are the
+// ones the vendored spec gives the record (npm_spec_test.go holds them to it).
 type npmRecord map[string]json.RawMessage
 
-// scalar decodes one field for the accessors; json.Number keeps ids exact.
-func (n npmRecord) scalar(key string) any {
-	raw, ok := n[key]
-	if !ok || len(raw) == 0 {
-		return nil
+// npmKind is the JSON type of one field.
+type npmKind int
+
+const (
+	npmAbsent npmKind = iota
+	npmString
+	npmNumber
+	npmBool
+	npmList
+	npmObject
+)
+
+// kindOf classifies a field's JSON text; null reads as absent.
+func kindOf(raw json.RawMessage) npmKind {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 {
+		return npmAbsent
 	}
-	var value any
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	if decoder.Decode(&value) != nil {
-		return nil
+	switch raw[0] {
+	case '"':
+		return npmString
+	case 't', 'f':
+		return npmBool
+	case '[':
+		return npmList
+	case '{':
+		return npmObject
+	case 'n':
+		return npmAbsent
 	}
-	return value
+	return npmNumber
 }
 
 // raw is the field verbatim, or null when absent.
@@ -41,38 +63,44 @@ func (n npmRecord) raw(key string) json.RawMessage {
 	return json.RawMessage("null")
 }
 
-func (n npmRecord) present(key string) bool { return n.scalar(key) != nil }
+func (n npmRecord) kind(key string) npmKind { return kindOf(n[key]) }
+
+func (n npmRecord) present(key string) bool { return n.kind(key) != npmAbsent }
+
+// literal is a JSON value as text: a string as written, anything else as its
+// JSON spelling (a number keeps its digits, a flag reads true or false).
+func literal(raw json.RawMessage) string {
+	switch kindOf(raw) {
+	case npmAbsent:
+		return ""
+	case npmString:
+		var text string
+		_ = json.Unmarshal(raw, &text)
+		return text
+	}
+	return string(bytes.TrimSpace(raw))
+}
 
 // text is a string field as written; a number or flag as its literal.
-func (n npmRecord) text(key string) string {
-	switch value := n.scalar(key).(type) {
-	case nil:
-		return ""
-	case string:
-		return value
-	default:
-		return fmt.Sprint(value)
-	}
-}
+func (n npmRecord) text(key string) string { return literal(n[key]) }
 
 // integer reports a whole-number field.
 func (n npmRecord) integer(key string) bool {
-	number, ok := n.scalar(key).(json.Number)
-	if !ok {
+	if n.kind(key) != npmNumber {
 		return false
 	}
-	_, err := number.Int64()
+	_, err := strconv.ParseInt(n.text(key), 10, 64)
 	return err == nil
 }
 
 // int reads a whole number, or a numeric string; anything else is 0.
 func (n npmRecord) int(key string) int {
-	switch value := n.scalar(key).(type) {
-	case json.Number:
-		i, _ := value.Int64()
+	switch n.kind(key) {
+	case npmNumber:
+		i, _ := strconv.ParseInt(n.text(key), 10, 64)
 		return int(i)
-	case string:
-		i, _ := strconv.Atoi(value)
+	case npmString:
+		i, _ := strconv.Atoi(n.text(key))
 		return i
 	}
 	return 0
@@ -81,23 +109,28 @@ func (n npmRecord) int(key string) int {
 // flag reads NPM's booleans: true/false, 1/0, "1"/"0"/"false", or a
 // non-empty list or object.
 func (n npmRecord) flag(key string) bool {
-	switch value := n.scalar(key).(type) {
-	case nil:
+	value := n.text(key)
+	switch n.kind(key) {
+	case npmAbsent:
 		return false
-	case bool:
-		return value
-	case string:
+	case npmBool:
+		return value == "true"
+	case npmString:
 		return value != "" && value != "0" && strings.ToLower(value) != "false"
-	case json.Number:
-		if i, err := value.Int64(); err == nil {
+	case npmNumber:
+		if i, err := strconv.ParseInt(value, 10, 64); err == nil {
 			return i != 0
 		}
-		f, _ := value.Float64()
+		f, _ := strconv.ParseFloat(value, 64)
 		return f != 0
-	case []any:
-		return len(value) > 0
-	case map[string]any:
-		return len(value) > 0
+	case npmList:
+		var items []json.RawMessage
+		_ = json.Unmarshal(n[key], &items)
+		return len(items) > 0
+	case npmObject:
+		var fields map[string]json.RawMessage
+		_ = json.Unmarshal(n[key], &fields)
+		return len(fields) > 0
 	}
 	return true
 }
@@ -113,16 +146,13 @@ func (n npmRecord) flagOr(key string, fallback bool) bool {
 // names reads a list of host names, each as text.
 func (n npmRecord) names(key string) []string {
 	out := []string{}
-	list, _ := n.scalar(key).([]any)
-	for _, item := range list {
-		switch value := item.(type) {
-		case nil:
-			out = append(out, "")
-		case string:
-			out = append(out, value)
-		default:
-			out = append(out, fmt.Sprint(value))
-		}
+	if n.kind(key) != npmList {
+		return out
+	}
+	var items []json.RawMessage
+	_ = json.Unmarshal(n[key], &items)
+	for _, item := range items {
+		out = append(out, literal(item))
 	}
 	return out
 }
@@ -145,25 +175,67 @@ func (n npmRecord) children(key string) []npmRecord {
 	return out
 }
 
-// canonical re-encodes a JSON value the way json.Marshal writes it, so two
-// spellings of one value compare equal.
+// canonical re-encodes a JSON value with sorted keys and json.Marshal's string
+// escaping, so two spellings of one value compare equal. Numbers keep their
+// digits.
 func canonical(raw json.RawMessage) string {
-	var value any
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
-	if decoder.Decode(&value) != nil {
+	out, err := canonicalValue(decoder)
+	if err != nil || decoder.More() {
 		return string(raw)
 	}
-	out, _ := json.Marshal(value)
-	return string(out)
+	return out
 }
 
-type npmTokenRequest struct {
-	Identity string `json:"identity"`
-	Secret   string `json:"secret"`
-}
-type npmTokenAnswer struct {
-	Token string `json:"token"`
+func canonicalValue(decoder *json.Decoder) (string, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return "", err
+	}
+	switch token := token.(type) {
+	case json.Delim:
+		if token == '[' {
+			items := []string{}
+			for decoder.More() {
+				item, err := canonicalValue(decoder)
+				if err != nil {
+					return "", err
+				}
+				items = append(items, item)
+			}
+			_, err := decoder.Token()
+			return "[" + strings.Join(items, ",") + "]", err
+		}
+		fields := map[string]string{}
+		for decoder.More() {
+			key, err := decoder.Token()
+			if err != nil {
+				return "", err
+			}
+			value, err := canonicalValue(decoder)
+			if err != nil {
+				return "", err
+			}
+			fields[key.(string)] = value
+		}
+		_, err := decoder.Token()
+		keys := make([]string, 0, len(fields))
+		for key := range fields {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		parts := make([]string, 0, len(keys))
+		for _, key := range keys {
+			name, _ := json.Marshal(key)
+			parts = append(parts, string(name)+":"+fields[key])
+		}
+		return "{" + strings.Join(parts, ",") + "}", err
+	case json.Number:
+		return token.String(), nil
+	}
+	out, err := json.Marshal(token)
+	return string(out), err
 }
 
 // npmProxyHostRequest is the body NPM takes to create or update a proxy host.
@@ -301,14 +373,14 @@ type NPMAccessListRecord struct {
 }
 
 func (r *Registry) admitNPM() {
-	r.action("npm.proxy_host", "reconcile", r.npmReconcile)
-	r.action("npm.proxy_host", "delete", r.npmDelete)
-	r.reader("npm.proxy_host", r.npmInventory)
-	r.reader("npm.certificate", npmEachConnection(r, r.npmCertificates, func(rec *NPMCertificateRecord, ref *string) { rec.ConnectionRef = ref }))
-	r.reader("npm.redirect", npmEachConnection(r, r.npmRedirects, func(rec *NPMRedirectRecord, ref *string) { rec.ConnectionRef = ref }))
-	r.reader("npm.dead_host", npmEachConnection(r, r.npmDeadHosts, func(rec *NPMDeadHostRecord, ref *string) { rec.ConnectionRef = ref }))
-	r.reader("npm.stream", npmEachConnection(r, r.npmStreams, func(rec *NPMStreamRecord, ref *string) { rec.ConnectionRef = ref }))
-	r.reader("npm.access_list", npmEachConnection(r, r.npmAccessLists, func(rec *NPMAccessListRecord, ref *string) { rec.ConnectionRef = ref }))
+	act(r, runtime.ResourceKindNPMProxyHost, "reconcile", r.npmReconcile)
+	act(r, runtime.ResourceKindNPMProxyHost, "delete", r.npmDelete)
+	r.reader(runtime.ResourceKindNPMProxyHost, r.npmInventory)
+	r.reader(runtime.ResourceKindNPMCertificate, npmEachConnection(r, r.npmCertificates, func(rec *NPMCertificateRecord, ref *string) { rec.ConnectionRef = ref }))
+	r.reader(runtime.ResourceKindNPMRedirect, npmEachConnection(r, r.npmRedirects, func(rec *NPMRedirectRecord, ref *string) { rec.ConnectionRef = ref }))
+	r.reader(runtime.ResourceKindNPMDeadHost, npmEachConnection(r, r.npmDeadHosts, func(rec *NPMDeadHostRecord, ref *string) { rec.ConnectionRef = ref }))
+	r.reader(runtime.ResourceKindNPMStream, npmEachConnection(r, r.npmStreams, func(rec *NPMStreamRecord, ref *string) { rec.ConnectionRef = ref }))
+	r.reader(runtime.ResourceKindNPMAccessList, npmEachConnection(r, r.npmAccessLists, func(rec *NPMAccessListRecord, ref *string) { rec.ConnectionRef = ref }))
 	r.probe("npm", func(ctx context.Context, ref string) (ProbeResult, error) {
 		if _, _, err := r.npmSession(ctx, ref); err != nil {
 			return ProbeResult{}, err
@@ -363,11 +435,11 @@ func (r *Registry) npmSession(ctx context.Context, ref string) (string, map[stri
 		if err != nil {
 			return nil, err
 		}
-		answer, err := r.HTTP.Request(ctx, base.String()+"/tokens", "POST", nil, npmTokenRequest{Identity: user, Secret: password})
+		answer, err := r.HTTP.Request(ctx, base.String()+"/tokens", "POST", nil, npmapi.RequestTokenJSONBody{Identity: user, Secret: password})
 		if err != nil {
 			return nil, err
 		}
-		token, _ := decodeAs[npmTokenAnswer](answer, "")
+		token, _ := decodeAs[npmapi.TokenObject](answer, "")
 		if token.Token == "" {
 			return nil, &ProviderError{Message: "NPM authentication did not return a token."}
 		}
@@ -399,19 +471,19 @@ var (
 func npmRefused(err error, what, needs string) error {
 	var provider *ProviderError
 	if errors.As(err, &provider) {
-		if provider.Refusal == "credential" || provider.Failure == "credential" {
+		if provider.Refusal == runtime.RefusalCredential || provider.Failure == runtime.FailureClassCredential {
 			return &ProviderError{
 				Message: what + ": the credential was refused.",
-				Failure: "credential",
-				Refusal: "credential",
+				Failure: runtime.FailureClassCredential,
+				Refusal: runtime.RefusalCredential,
 				Reason:  "The credential was refused.",
 			}
 		}
-		if provider.Refusal == "permission" || provider.Failure == "permission" {
+		if provider.Refusal == runtime.RefusalPermission || provider.Failure == runtime.FailureClassPermission {
 			return &ProviderError{
 				Message: what + " needs " + needs + ".",
-				Failure: "permission",
-				Refusal: "permission",
+				Failure: runtime.FailureClassPermission,
+				Refusal: runtime.RefusalPermission,
 			}
 		}
 		return provider
@@ -439,29 +511,44 @@ func npmRecords(raw json.RawMessage) ([]npmRecord, error) {
 	return out, nil
 }
 
-func (r *Registry) npmListed(ctx context.Context, ref string, src npmSource) ([]npmRecord, error) {
-	raw, err := r.cached(ctx, "npm-list:"+ref+":"+src.path, func() (json.RawMessage, error) {
+// npmSessionFailed marks an error from signing in, as opposed to one from the
+// list endpoint, which npmListed words differently.
+type npmSessionFailed struct{ error }
+
+func (e npmSessionFailed) Unwrap() error { return e.error }
+
+// npmFetched is one NPM list endpoint's answer, read once per sweep whichever
+// kinds need it. A sign-in failure comes back as npmSessionFailed.
+func (r *Registry) npmFetched(ctx context.Context, ref, path string) (json.RawMessage, error) {
+	prefix, err := r.Env.Prefix("npm", ref)
+	if err != nil {
+		return nil, npmSessionFailed{err}
+	}
+	return r.cached(ctx, "npm-list:"+prefix+":"+path, func() (json.RawMessage, error) {
 		base, headers, err := r.npmSession(ctx, ref)
 		if err != nil {
-			return nil, err
+			return nil, npmSessionFailed{err}
 		}
-		found, err := r.HTTP.Request(ctx, base+src.path, "GET", headers, nil)
-		if err != nil {
-			return nil, npmRefused(err, src.what, src.needs)
-		}
-		if _, err := npmRecords(found); err != nil {
-			return nil, err
-		}
-		return found, nil
+		return r.HTTP.Request(ctx, base+path, "GET", headers, nil)
 	})
+}
+
+func (r *Registry) npmListed(ctx context.Context, ref string, src npmSource) ([]npmRecord, error) {
+	raw, err := r.npmFetched(ctx, ref, src.path)
 	if err != nil {
-		return nil, err
+		var session npmSessionFailed
+		if errors.As(err, &session) {
+			return nil, session.error
+		}
+		return nil, npmRefused(err, src.what, src.needs)
 	}
 	return npmRecords(raw)
 }
 
+// npmProxyHostList reads the proxy hosts fresh: the actions that write decide
+// from the live list, never from the sweep's snapshot.
 func (r *Registry) npmProxyHostList(ctx context.Context, base string, headers map[string]string) ([]npmRecord, error) {
-	raw, err := r.HTTP.Request(ctx, base+"/nginx/proxy-hosts", "GET", headers, nil)
+	raw, err := r.HTTP.Request(ctx, base+npmProxyHosts.path, "GET", headers, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -534,13 +621,8 @@ func npmDiffers(current npmRecord, desired npmProxyHostRequest) bool {
 	return false
 }
 
-func (r *Registry) npmReconcile(ctx context.Context, rawSpec, rawObserved Object, apply bool) (Result, error) {
-	spec, err := decodePayload[NPMProxyHostSpec](rawSpec)
-	if err != nil {
-		return Result{}, err
-	}
-	observed, _ := decodePayload[NPMProxyHostObserved](rawObserved)
-	base, headers, err := r.npmSession(ctx, namedRef(rawSpec))
+func (r *Registry) npmReconcile(ctx context.Context, spec NPMProxyHostSpec, observed NPMProxyHostObserved, apply bool) (Result, error) {
+	base, headers, err := r.npmSession(ctx, string(spec.ConnectionRef))
 	if err != nil {
 		return Result{}, err
 	}
@@ -600,12 +682,8 @@ func (r *Registry) npmReconcile(ctx context.Context, rawSpec, rawObserved Object
 	}, "Reconciled", "NPM proxy host is current.", message), nil
 }
 
-func (r *Registry) npmDelete(ctx context.Context, rawSpec, _ Object, apply bool) (Result, error) {
-	spec, err := decodePayload[NPMProxyHostSpec](rawSpec)
-	if err != nil {
-		return Result{}, err
-	}
-	base, headers, err := r.npmSession(ctx, namedRef(rawSpec))
+func (r *Registry) npmDelete(ctx context.Context, spec NPMProxyHostSpec, _ struct{}, apply bool) (Result, error) {
+	base, headers, err := r.npmSession(ctx, string(spec.ConnectionRef))
 	if err != nil {
 		return Result{}, err
 	}
@@ -642,17 +720,21 @@ func npmClients(record npmRecord) []NPMAccessRule {
 }
 
 func (r *Registry) npmInventory(ctx context.Context) ([]any, error) {
-	base, headers, err := r.npmSession(ctx, "")
+	hosts, err := r.npmFetched(ctx, "", npmProxyHosts.path)
 	if err != nil {
+		var session npmSessionFailed
+		if errors.As(err, &session) {
+			return nil, session.error
+		}
 		return nil, err
 	}
-	hosts, err := r.npmProxyHostList(ctx, base, headers)
+	hostRecords, err := npmRecords(hosts)
 	if err != nil {
 		return nil, err
 	}
 	policies := map[string]*NPMAccessPolicy{}
 	certificates := map[string]*NPMCertificateSummary{}
-	if raw, err := r.HTTP.Request(ctx, base+"/nginx/access-lists?expand=items,clients", "GET", headers, nil); err == nil {
+	if raw, err := r.npmFetched(ctx, "", npmAccessListsSource.path); err == nil {
 		items, _ := npmRecords(raw)
 		for _, item := range items {
 			if !item.integer("id") {
@@ -669,7 +751,7 @@ func (r *Registry) npmInventory(ctx context.Context) ([]any, error) {
 			}
 		}
 	}
-	if raw, err := r.HTTP.Request(ctx, base+"/nginx/certificates", "GET", headers, nil); err == nil {
+	if raw, err := r.npmFetched(ctx, "", npmCertificatesSource.path); err == nil {
 		items, _ := npmRecords(raw)
 		for _, item := range items {
 			if item.flag("id") {
@@ -683,7 +765,7 @@ func (r *Registry) npmInventory(ctx context.Context) ([]any, error) {
 		}
 	}
 	found := []any{}
-	for _, host := range hosts {
+	for _, host := range hostRecords {
 		if !host.flag("domain_names") {
 			continue
 		}

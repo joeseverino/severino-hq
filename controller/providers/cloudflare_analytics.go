@@ -74,8 +74,8 @@ func (r *Registry) cloudflareGraphQL(ctx context.Context, query string, variable
 				return r.cloudflareVerified(ctx, "cloudflare_api", ref)
 			})
 		}
-		if errors.As(err, &refused) && refused.Failure == "network" {
-			return nil, &ProviderError{Message: "Cloudflare analytics was unreachable: URLError.", Failure: "network"}
+		if errors.As(err, &refused) && refused.Failure == runtime.FailureClassNetwork {
+			return nil, &ProviderError{Message: "Cloudflare analytics was unreachable: URLError.", Failure: runtime.FailureClassNetwork}
 		}
 		return nil, cloudflareTransportError(err, "Cloudflare analytics was unreachable", "Cloudflare analytics returned invalid JSON.")
 	}
@@ -105,7 +105,7 @@ func (r *Registry) cloudflareGraphQL(ctx context.Context, query string, variable
 // cloudflareAnalyticsAccount is the one account this credential reads,
 // discovered rather than configured.
 func (r *Registry) cloudflareAnalyticsAccount(ctx context.Context, ref string) (string, error) {
-	items, err := r.cloudflareAPIList(ctx, "/accounts", ref, 50)
+	items, err := r.cloudflareAPIList(ctx, "/accounts", ref, cloudflareAccountPerPage)
 	if err != nil {
 		return "", err
 	}
@@ -125,7 +125,7 @@ func (r *Registry) cloudflareAnalyticsAccount(ctx context.Context, ref string) (
 // cloudflareAccountSites are Web Analytics sites that still describe something:
 // a site whose ruleset names no hostname measures nothing.
 func (r *Registry) cloudflareAccountSites(ctx context.Context, account, ref string) ([]CloudflareAnalyticsSite, error) {
-	items, err := r.cloudflareAPIList(ctx, "/accounts/"+account+"/rum/site_info/list", ref, 100)
+	items, err := r.cloudflareAPIList(ctx, "/accounts/"+account+"/rum/site_info/list", ref, cloudflarePerPage)
 	if err != nil {
 		return nil, err
 	}
@@ -237,9 +237,7 @@ func analyticsRows(account map[string]json.RawMessage) []runtime.AnalyticsRow {
 			if value == "" {
 				continue
 			}
-			if runes := []rune(value); len(runes) > 512 {
-				value = string(runes[:512])
-			}
+			value = runtime.Clip(value, runtime.AnalyticsValueMax)
 			rows = append(rows, runtime.AnalyticsRow{
 				Dimension: runtime.AnalyticsRowDimension(dimension.name), Value: value, Date: dateOrNull(group.Dimensions["date"]),
 				Pageviews: rawInt(group.Count), Visits: rawInt(group.Sum["visits"]), SampleInterval: intOr(group.Avg.SampleInterval, 1),

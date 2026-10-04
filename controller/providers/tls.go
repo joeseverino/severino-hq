@@ -5,19 +5,23 @@ import (
 	"errors"
 	"sort"
 	"strings"
+
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 func (r *Registry) admitTLS() {
-	r.action(certificateKind, "reconcile", r.tlsReconcile)
-	r.action(certificateKind, "renew", r.tlsRenew)
-	r.action(uploadedCertificateKind, "reconcile", r.uploadedReconcile)
-	r.action(uploadedCertificateKind, "delete", r.uploadedDelete)
+	act(r, runtime.ResourceKindTLSCertificate, "reconcile", r.tlsReconcile, invalidSpec(certificateSpecInvalid))
+	act(r, runtime.ResourceKindTLSCertificate, "renew", r.tlsRenew, invalidSpec(certificateSpecInvalid), ignoresSpecInPlan())
+	act(r, runtime.ResourceKindTLSUploadedCertificate, "reconcile", r.uploadedReconcile, invalidSpec(certificateSpecInvalid))
+	act(r, runtime.ResourceKindTLSUploadedCertificate, "delete", r.uploadedDelete, invalidSpec(certificateSpecInvalid))
 	r.probe("onepassword", r.probeOnePassword)
 }
 
+const certificateSpecInvalid = "Certificate spec was invalid."
+
 // NeedsMaterial says whether an action on kind needs HQ's stored certificate material.
-func (r *Registry) NeedsMaterial(kind string) bool {
-	return kind == uploadedCertificateKind
+func (r *Registry) NeedsMaterial(kind runtime.ResourceKind) bool {
+	return kind == runtime.ResourceKindTLSUploadedCertificate
 }
 
 func errorText(err error) string {
@@ -120,7 +124,7 @@ type deploymentPlan map[string][]string
 func (r *Registry) planDeployment(ctx context.Context, spec TLSCertificateSpec) (deploymentPlan, error) {
 	plan := deploymentPlan{}
 	for _, consumer := range spec.Consumers {
-		if consumer.Kind == "cpanel" {
+		if consumer.Kind == runtime.TLSConsumerKindCPanel {
 			sites, err := r.cpanelSitesFor(ctx, consumer)
 			if err != nil {
 				return nil, err
@@ -161,7 +165,7 @@ func (r *Registry) deployCertificate(ctx context.Context, spec TLSCertificateSpe
 	for _, consumer := range spec.Consumers {
 		var err error
 		switch consumer.Kind {
-		case "npm":
+		case runtime.TLSConsumerKindNPM:
 			var knownID *int
 			if id, ok := known.get(consumer.Name); ok {
 				knownID = &id
@@ -177,9 +181,9 @@ func (r *Registry) deployCertificate(ctx context.Context, spec TLSCertificateSpe
 				}
 				deployment.NPMCertificateIDs = deployment.NPMCertificateIDs.set(consumer.Name, id)
 			}
-		case "caddy":
+		case runtime.TLSConsumerKindCaddy:
 			_, err = r.commands().SSH(ctx, consumer.ConnectionRef, "deploy", bundle)
-		case "cpanel":
+		case runtime.TLSConsumerKindCPanel:
 			sites := plan[consumer.Name]
 			_, err = r.commands().SSH(ctx, consumer.ConnectionRef, "deploy", cpanelPayload(sites, leaf, privateKey, chain))
 			if err == nil {
@@ -196,7 +200,7 @@ func (r *Registry) deployCertificate(ctx context.Context, spec TLSCertificateSpe
 			if !isProviderError(err) {
 				return deployment, err
 			}
-			return deployment, &ProviderError{Message: "TLS deployment failed for " + consumer.Name + " (" + consumer.Kind + "): " + errorText(err)}
+			return deployment, &ProviderError{Message: "TLS deployment failed for " + consumer.Name + " (" + string(consumer.Kind) + "): " + errorText(err)}
 		}
 	}
 	return deployment, nil
@@ -233,7 +237,7 @@ func (r *Registry) deployTransaction(ctx context.Context, spec TLSCertificateSpe
 
 func rollbackSource(spec TLSCertificateSpec) (TLSConsumer, bool) {
 	for _, consumer := range spec.Consumers {
-		if consumer.Kind == "caddy" {
+		if consumer.Kind == runtime.TLSConsumerKindCaddy {
 			return consumer, true
 		}
 	}
@@ -347,13 +351,12 @@ func (r *Registry) publishTLSFacts(ctx context.Context, spec TLSCertificateSpec,
 	return result
 }
 
-func (r *Registry) tlsReconcile(ctx context.Context, rawSpec, rawObserved Object, apply bool) (Result, error) {
-	spec, err := decodePayload[TLSCertificateSpec](rawSpec)
-	if err != nil {
-		return Result{}, &ProviderError{Message: "Certificate spec was invalid."}
-	}
-	known := npmCertificateIDsOf(spec, rawObserved)
-	var result Result
+func (r *Registry) tlsReconcile(ctx context.Context, spec TLSCertificateSpec, observed TLSCertificateObserved, apply bool) (Result, error) {
+	known := npmCertificateIDsOf(spec, observed)
+	var (
+		result Result
+		err    error
+	)
 	if apply {
 		result, err = r.applyTLSReconcile(ctx, spec, known)
 	} else {
@@ -365,15 +368,11 @@ func (r *Registry) tlsReconcile(ctx context.Context, rawSpec, rawObserved Object
 	return withNPMCertificateIDs(r.publishTLSFacts(ctx, spec, result, apply), known), nil
 }
 
-func (r *Registry) tlsRenew(ctx context.Context, rawSpec, rawObserved Object, apply bool) (Result, error) {
+func (r *Registry) tlsRenew(ctx context.Context, spec TLSCertificateSpec, observed TLSCertificateObserved, apply bool) (Result, error) {
 	if !apply {
 		return Result{Changed: true, Status: struct{}{}, Message: "Certificate would be issued, deployed, verified, and rolled back on failure."}, nil
 	}
-	spec, err := decodePayload[TLSCertificateSpec](rawSpec)
-	if err != nil {
-		return Result{}, &ProviderError{Message: "Certificate spec was invalid."}
-	}
-	known := npmCertificateIDsOf(spec, rawObserved)
+	known := npmCertificateIDsOf(spec, observed)
 	result, err := r.renewTLS(ctx, spec, known)
 	if err != nil {
 		return Result{}, err
@@ -382,12 +381,8 @@ func (r *Registry) tlsRenew(ctx context.Context, rawSpec, rawObserved Object, ap
 }
 
 // uploadedReconcile installs a certificate HQ was given rather than one it issued.
-func (r *Registry) uploadedReconcile(ctx context.Context, rawSpec, rawObserved Object, apply bool) (Result, error) {
-	spec, err := decodePayload[TLSCertificateSpec](rawSpec)
-	if err != nil {
-		return Result{}, &ProviderError{Message: "Certificate spec was invalid."}
-	}
-	material := UploadedMaterial{}
+func (r *Registry) uploadedReconcile(ctx context.Context, spec TLSCertificateSpec, observed TLSCertificateObserved, apply bool) (Result, error) {
+	material := runtime.Material{}
 	if spec.Material != nil {
 		material = *spec.Material
 	}
@@ -403,7 +398,7 @@ func (r *Registry) uploadedReconcile(ctx context.Context, rawSpec, rawObserved O
 	if err != nil {
 		return Result{}, err
 	}
-	deployment, err := r.deployCertificate(ctx, target, []byte(material.Fullchain), []byte(material.PrivateKey), plan, npmCertificateIDsOf(spec, rawObserved))
+	deployment, err := r.deployCertificate(ctx, target, []byte(material.Fullchain), []byte(material.PrivateKey), plan, npmCertificateIDsOf(spec, observed))
 	if err != nil {
 		return Result{}, err
 	}
@@ -412,14 +407,10 @@ func (r *Registry) uploadedReconcile(ctx context.Context, rawSpec, rawObserved O
 
 // uploadedDelete removes an installed certificate from NPM, or refuses and says
 // who has to remove it elsewhere: a forced command implements deploy and nothing else.
-func (r *Registry) uploadedDelete(ctx context.Context, rawSpec, rawObserved Object, apply bool) (Result, error) {
-	spec, err := decodePayload[TLSCertificateSpec](rawSpec)
-	if err != nil {
-		return Result{}, &ProviderError{Message: "Certificate spec was invalid."}
-	}
+func (r *Registry) uploadedDelete(ctx context.Context, spec TLSCertificateSpec, observed TLSCertificateObserved, apply bool) (Result, error) {
 	elsewhere := []string{}
 	for _, consumer := range spec.Consumers {
-		if consumer.Kind != "npm" {
+		if consumer.Kind != runtime.TLSConsumerKindNPM {
 			elsewhere = append(elsewhere, consumer.Name)
 		}
 	}
@@ -436,7 +427,7 @@ func (r *Registry) uploadedDelete(ctx context.Context, rawSpec, rawObserved Obje
 		return Result{}, err
 	}
 	installed := map[int]bool{}
-	for _, item := range npmCertificateIDsOf(spec, rawObserved) {
+	for _, item := range npmCertificateIDsOf(spec, observed) {
 		installed[item.ID] = true
 	}
 	matches := []int{}

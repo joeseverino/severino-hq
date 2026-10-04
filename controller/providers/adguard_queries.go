@@ -6,28 +6,12 @@ import (
 	"math"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/providers/adguardapi"
 )
-
-// adguardQuerylogPage is one page of /control/querylog, newest first.
-type adguardQuerylogPage struct {
-	Data   []adguardQuery `json:"data"`
-	Oldest string         `json:"oldest"`
-}
-
-type adguardQuery struct {
-	Time     string `json:"time"`
-	Reason   string `json:"reason"`
-	Client   string `json:"client"`
-	ClientID string `json:"client_id"`
-	Question struct {
-		Name string `json:"name"`
-	} `json:"question"`
-	ClientInfo struct {
-		Name string `json:"name"`
-	} `json:"client_info"`
-}
 
 type AdGuardQueryClient struct {
 	Address string `json:"address"`
@@ -59,22 +43,25 @@ type queryTally struct {
 }
 
 func newTally() *queryTally { return &queryTally{clients: map[string]*queryClient{}} }
-func (t *queryTally) add(entry adguardQuery, when time.Time) {
+func (t *queryTally) add(entry adguardapi.QueryLogItem, when time.Time) {
 	t.queries++
-	if strings.HasPrefix(entry.Reason, "Filtered") {
+	if strings.HasPrefix(string(deref(entry.Reason)), "Filtered") {
 		t.blocked++
 	}
 	if when.After(t.last) {
 		t.last = when
 	}
-	id := address(entry.Client)
+	id := address(deref(entry.Client))
 	if id == "" {
-		id = entry.ClientID
+		id = deref(entry.ClientId)
 	}
 	if id == "" {
 		return
 	}
-	name := entry.ClientInfo.Name
+	name := ""
+	if entry.ClientInfo != nil {
+		name = deref(entry.ClientInfo.Name)
+	}
 	if t.clients[id] == nil {
 		t.clients[id] = &queryClient{name: name}
 	}
@@ -146,11 +133,11 @@ func summarizeQueries(get func(string) (json.RawMessage, error), domains []strin
 		}
 	}
 	oldest := now
-	cutoff := now.Add(-24 * time.Hour)
+	cutoff := now.Add(-adguardQueryWindow)
 	full := false
 	cursor := ""
 	for page := 0; page < 10 && !full; page++ {
-		path := "/control/querylog?limit=500"
+		path := "/control/querylog?limit=" + strconv.Itoa(adguardQueryPage)
 		if cursor != "" {
 			path += "&older_than=" + url.QueryEscape(cursor)
 		}
@@ -158,12 +145,12 @@ func summarizeQueries(get func(string) (json.RawMessage, error), domains []strin
 		if err != nil {
 			return nil, err
 		}
-		answer, err := decodeAs[adguardQuerylogPage](raw, "AdGuard returned an invalid query log.")
+		answer, err := decodeAs[adguardapi.QueryLog](raw, "AdGuard returned an invalid query log.")
 		if err != nil {
 			return nil, err
 		}
-		for _, entry := range answer.Data {
-			when, err := time.Parse(time.RFC3339Nano, entry.Time)
+		for _, entry := range deref(answer.Data) {
+			when, err := time.Parse(time.RFC3339Nano, deref(entry.Time))
 			if err != nil {
 				continue
 			}
@@ -174,7 +161,7 @@ func summarizeQueries(get func(string) (json.RawMessage, error), domains []strin
 			if when.Before(oldest) {
 				oldest = when
 			}
-			name := hostname(entry.Question.Name)
+			name := hostname(deref(deref(entry.Question).Name))
 			if name != "" && names.covers(name) {
 				if tallies[name] == nil {
 					tallies[name] = newTally()
@@ -182,8 +169,8 @@ func summarizeQueries(get func(string) (json.RawMessage, error), domains []strin
 				tallies[name].add(entry, when)
 			}
 		}
-		cursor = answer.Oldest
-		if len(answer.Data) < 500 || cursor == "" {
+		cursor = deref(answer.Oldest)
+		if len(deref(answer.Data)) < adguardQueryPage || cursor == "" {
 			break
 		}
 	}
@@ -208,7 +195,7 @@ func (r *Registry) adguardQueries(ctx context.Context) ([]any, error) {
 	now := r.Now().UTC()
 	for _, ref := range r.refs("adguard") {
 		get := func(path string) (json.RawMessage, error) { return r.adguardRequest(ctx, ref, path, "GET", nil) }
-		config, err := adguardGet[adguardQuerylogConfig](ctx, r, ref, "/control/querylog/config", "AdGuard returned an invalid setting.")
+		config, err := adguardGet[adguardapi.GetQueryLogConfigResponse](ctx, r, ref, "/control/querylog/config", "AdGuard returned an invalid setting.")
 		if err != nil {
 			return nil, err
 		}
@@ -221,11 +208,11 @@ func (r *Registry) adguardQueries(ctx context.Context) ([]any, error) {
 		}
 		domains := []string{}
 		for _, rewrite := range rewrites {
-			if rewrite.enabled() {
-				domains = append(domains, rewrite.Domain)
+			if rewriteEnabled(rewrite) {
+				domains = append(domains, deref(rewrite.Domain))
 			}
 		}
-		anonymized := config.AnonymizeClientIP != nil && *config.AnonymizeClientIP
+		anonymized := config.AnonymizeClientIp != nil && *config.AnonymizeClientIp
 		if anonymized {
 			refuse(ctx, "clients", ref, "", &ProviderError{Message: "AdGuard anonymizes client addresses."})
 		}

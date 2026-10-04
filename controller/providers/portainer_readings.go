@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
 )
@@ -448,6 +450,58 @@ func isDigits(s string) bool {
 	return true
 }
 
+// portainerInspectLimit bounds the inspects in flight against one Portainer
+// site when HQ_PORTAINER_INSPECT_CONCURRENCY does not say. Python reads them
+// one at a time; 8 is well under what Docker's API takes, so a large site is
+// not the sweep's critical path.
+const (
+	portainerInspectLimit    = 8
+	portainerInspectMaxLimit = 64
+	inspectConcurrencyEnv    = "HQ_PORTAINER_INSPECT_CONCURRENCY"
+)
+
+// inspectLimit is the operator's inspect concurrency, clamped to 1..64.
+func (r *Registry) inspectLimit() int {
+	limit, err := strconv.Atoi(strings.TrimSpace(r.Env[inspectConcurrencyEnv]))
+	if err != nil {
+		return portainerInspectLimit
+	}
+	return min(max(limit, 1), portainerInspectMaxLimit)
+}
+
+type containerInspect struct {
+	doc pyValue
+	err error
+}
+
+// inspectContainers inspects each container, inspectLimit at a time.
+// The answers are in the order of ids, and the first failure in that order is
+// the one the caller reports, as when they were read one by one. After a
+// failure no further inspect is started.
+func (r *Registry) inspectContainers(ctx context.Context, at portainerSite, ids []string) []containerInspect {
+	out := make([]containerInspect, len(ids))
+	var failed atomic.Bool
+	var wg sync.WaitGroup
+	slots := make(chan struct{}, r.inspectLimit())
+	for i, id := range ids {
+		slots <- struct{}{}
+		if failed.Load() {
+			<-slots
+			break
+		}
+		wg.Add(1)
+		go func() {
+			defer func() { <-slots; wg.Done() }()
+			out[i].doc, out[i].err = r.siteDocker(ctx, at, "/containers/"+id+"/json")
+			if out[i].err != nil {
+				failed.Store(true)
+			}
+		}()
+	}
+	wg.Wait()
+	return out
+}
+
 // portainerRuntime is how each container is run, one inspect per container,
 // built field by field so the inspect's environment is never copied out.
 func (r *Registry) portainerRuntime(ctx context.Context, at portainerSite) ([]any, error) {
@@ -457,12 +511,17 @@ func (r *Registry) portainerRuntime(ctx context.Context, at portainerSite) ([]an
 	}
 	found := []any{}
 	none := pyValue{array: []pyValue{pyText("NONE")}}
+	identified := []pyValue{}
+	identifiers := []string{}
 	for _, container := range containers {
-		identifier := strOr(container.get("Id"))
-		if identifier == "" {
-			continue
+		if identifier := strOr(container.get("Id")); identifier != "" {
+			identified = append(identified, container)
+			identifiers = append(identifiers, identifier)
 		}
-		inspect, err := r.siteDocker(ctx, at, "/containers/"+identifier+"/json")
+	}
+	inspects := r.inspectContainers(ctx, at, identifiers)
+	for i, container := range identified {
+		inspect, err := inspects[i].doc, inspects[i].err
 		if err != nil {
 			return found, err
 		}

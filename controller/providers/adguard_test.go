@@ -6,9 +6,11 @@ import (
 	"errors"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/providers/adguardapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -38,6 +40,7 @@ type request struct {
 	ifMatch      string // the version a conditional write is held to
 }
 type fakeHTTP struct {
+	mu        sync.Mutex // readers run concurrently
 	requests  []request
 	routes    map[string]any
 	fail      map[string]error
@@ -77,7 +80,9 @@ func (h *fakeHTTP) Request(ctx context.Context, address, method string, headers 
 func (h *fakeHTTP) answer(_ context.Context, address, method string, headers map[string]string, payload any) (any, error) {
 	path := strings.TrimPrefix(address, "https://example.invalid")
 	path = strings.TrimPrefix(path, "https://api.tailscale.com/api/v2")
+	h.mu.Lock()
 	h.requests = append(h.requests, request{path, method, payload, headers["If-Match"]})
+	h.mu.Unlock()
 	if method != "GET" {
 		if err, ok := h.writeFail[path]; ok {
 			return nil, err
@@ -124,7 +129,7 @@ func TestAdguardReconcileAndPlan(t *testing.T) {
 				r := adguardFixture()
 				h := r.HTTP.(*fakeHTTP)
 				h.routes["/control/rewrite/list"] = tc.live
-				result, err := r.adguardReconcile(context.Background(), Object{"domain": "example.test", "answer": "192.0.2.1"}, tc.observed, apply)
+				result, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "reconcile", context.Background(), Object{"domain": "example.test", "answer": "192.0.2.1"}, tc.observed, apply)
 				if err != nil || result.Changed != tc.changed {
 					t.Fatalf("%#v %v", result, err)
 				}
@@ -146,7 +151,7 @@ func TestAdguardRefusesDuplicateRewriteWithoutWriting(t *testing.T) {
 	r := adguardFixture()
 	h := r.HTTP.(*fakeHTTP)
 	h.routes["/control/rewrite/list"] = []Object{{"domain": "example.test"}, {"domain": "example.test"}}
-	_, err := r.adguardReconcile(context.Background(), Object{"domain": "example.test", "answer": "192.0.2.1"}, nil, true)
+	_, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "reconcile", context.Background(), Object{"domain": "example.test", "answer": "192.0.2.1"}, nil, true)
 	if err == nil || len(h.requests) != 1 {
 		t.Fatalf("%v %#v", err, h.requests)
 	}
@@ -155,7 +160,7 @@ func TestAdguardDeletePreservesUnrelatedRewrite(t *testing.T) {
 	r := adguardFixture()
 	h := r.HTTP.(*fakeHTTP)
 	h.routes["/control/rewrite/list"] = []Object{{"domain": "example.test", "answer": "192.0.2.1"}, {"domain": "other.test", "answer": "192.0.2.2"}}
-	result, err := r.adguardDelete(context.Background(), Object{"domain": "example.test"}, nil, true)
+	result, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "delete", context.Background(), Object{"domain": "example.test"}, nil, true)
 	if err != nil || !result.Changed || len(h.requests) != 2 {
 		t.Fatalf("%#v %v", result, err)
 	}
@@ -166,13 +171,13 @@ func TestAdguardDeletePreservesUnrelatedRewrite(t *testing.T) {
 func TestAdguardDisabledRewriteIsDegraded(t *testing.T) {
 	r := adguardFixture()
 	r.HTTP.(*fakeHTTP).routes["/control/rewrite/list"] = []Object{{"domain": "example.test", "answer": "192.0.2.1", "enabled": false}}
-	result, err := r.adguardReconcile(context.Background(), Object{"domain": "example.test", "answer": "192.0.2.1"}, nil, true)
+	result, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "reconcile", context.Background(), Object{"domain": "example.test", "answer": "192.0.2.1"}, nil, true)
 	if err != nil || result.Changed || result.Conditions[0].Type != "Degraded" {
 		t.Fatalf("%#v %v", result, err)
 	}
 }
 func TestClientsDeduplicateAddressesAndDoNotExposeExtraFields(t *testing.T) {
-	var payload adguardClients
+	var payload adguardapi.Clients
 	if err := json.Unmarshal([]byte(`{"clients": [{"name": "known", "ids": ["192.0.2.1", "client-id"], "secret": "omit"}], "auto_clients": [{"ip": "192.0.2.1"}, {"ip": "192.0.2.2", "source": "ARP"}, {"ip": "invalid"}]}`), &payload); err != nil {
 		t.Fatal(err)
 	}

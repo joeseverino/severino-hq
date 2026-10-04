@@ -28,9 +28,47 @@ type Transport interface {
 	RequestHeader(ctx context.Context, address string, headers map[string]string, name string) (json.RawMessage, string, error)
 }
 
-// Action receives the resource's spec and observed payloads, opaque in the
-// bridge contract, and decodes them into its kind's types.
+// Action is a registered handler as the controller dispatches it: the
+// resource's spec and observed payloads, opaque in the bridge contract. Handlers
+// are written against their kind's types and registered through act, which
+// decodes once, here at the boundary.
 type Action func(context.Context, Object, Object, bool) (Result, error)
+
+type actConfig struct {
+	invalid         string
+	ignoresSpecPlan bool
+}
+
+type actOption func(*actConfig)
+
+// invalidSpec words the refusal for a spec that does not decode; without it the
+// decoder's own error is the refusal.
+func invalidSpec(message string) actOption { return func(c *actConfig) { c.invalid = message } }
+
+// ignoresSpecInPlan is for an action whose plan answers without reading the
+// spec: a spec that does not decode is refused only when applying.
+func ignoresSpecInPlan() actOption { return func(c *actConfig) { c.ignoresSpecPlan = true } }
+
+// act registers handler for kind and name. The spec decodes into S and the
+// observed payload into O (a payload that does not decode is read as far as it
+// goes, as an unobserved resource is).
+func act[S, O any](r *Registry, kind runtime.ResourceKind, name string, handler func(context.Context, S, O, bool) (Result, error), options ...actOption) {
+	var config actConfig
+	for _, option := range options {
+		option(&config)
+	}
+	r.action(kind, name, func(ctx context.Context, rawSpec, rawObserved Object, apply bool) (Result, error) {
+		spec, err := decodePayload[S](rawSpec)
+		if err != nil && (apply || !config.ignoresSpecPlan) {
+			if config.invalid != "" {
+				return Result{}, &ProviderError{Message: config.invalid}
+			}
+			return Result{}, err
+		}
+		observed, _ := decodePayload[O](rawObserved)
+		return handler(ctx, spec, observed, apply)
+	})
+}
 
 // Reader returns one kind's records, each a kind-specific struct.
 type Reader func(context.Context) ([]any, error)
@@ -48,7 +86,10 @@ type Coverage struct {
 	Probes  []string `json:"probes"`
 }
 
-type actionKey struct{ kind, action string }
+type actionKey struct {
+	kind   runtime.ResourceKind
+	action string
+}
 
 type Registry struct {
 	Env      runtime.Environment
@@ -113,18 +154,18 @@ func (r *Registry) commands() *Commands {
 	return r.Commands
 }
 
-func (r *Registry) action(kind, action string, handler Action) {
+func (r *Registry) action(kind runtime.ResourceKind, action string, handler Action) {
 	key := actionKey{kind, action}
 	if _, exists := r.actions[key]; exists {
-		panic("duplicate native controller action: " + kind + "/" + action)
+		panic("duplicate native controller action: " + string(kind) + "/" + action)
 	}
 	r.actions[key] = handler
 }
-func (r *Registry) reader(kind string, handler Reader) {
-	if _, exists := r.readers[kind]; exists {
-		panic("duplicate native controller reader: " + kind)
+func (r *Registry) reader(kind runtime.ResourceKind, handler Reader) {
+	if _, exists := r.readers[string(kind)]; exists {
+		panic("duplicate native controller reader: " + string(kind))
 	}
-	r.readers[kind] = handler
+	r.readers[string(kind)] = handler
 }
 func (r *Registry) probe(provider string, handler Probe) {
 	if _, exists := r.probes[provider]; exists {
@@ -140,7 +181,7 @@ func (r *Registry) Coverage() Coverage {
 	readers := []string{}
 	probes := []string{}
 	for key := range r.actions {
-		actions = append(actions, key.kind+":"+key.action)
+		actions = append(actions, string(key.kind)+":"+key.action)
 	}
 	for kind := range r.readers {
 		readers = append(readers, kind)
@@ -207,19 +248,15 @@ func refuseAt(ctx context.Context, part, ref, scope, address string, err error) 
 	if ledger == nil {
 		return
 	}
-	failure := ""
+	failure := runtime.FailureClassUnclassified
 	var provider *ProviderError
 	if errors.As(err, &provider) {
 		failure = provider.Failure
-		if provider.Refusal != "" {
-			failure = provider.Refusal
+		if provider.Refusal != runtime.RefusalUnclassified {
+			failure = runtime.FailureClass(provider.Refusal)
 		}
 	}
-	reason := []rune(err.Error())
-	if len(reason) > 200 {
-		reason = reason[:200]
-	}
-	ledger.entries = append(ledger.entries, runtime.RefusedPart{Part: part, ConnectionRef: ref, Scope: scope, Refusal: failure, Reason: string(reason), Address: address})
+	ledger.entries = append(ledger.entries, runtime.RefusedPart{Part: part, ConnectionRef: ref, Scope: scope, Refusal: failure, Reason: runtime.Clip(err.Error(), runtime.ReasonLimit), Address: address})
 }
 
 func sleepContext(ctx context.Context, d time.Duration) error {
@@ -258,6 +295,15 @@ func decodeAs[T any](raw json.RawMessage, invalid string) (T, error) {
 		return target, &ProviderError{Message: invalid}
 	}
 	return target, nil
+}
+
+// deref reads an optional field, or the zero value when it is absent.
+func deref[T any](p *T) T {
+	var zero T
+	if p == nil {
+		return zero
+	}
+	return *p
 }
 
 func hostname(value string) string {

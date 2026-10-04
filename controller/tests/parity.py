@@ -1563,9 +1563,12 @@ CF_SITES = {"/accounts/acc1/rum/site_info/list?per_page=100&page=1": envelope([
 
 
 def cloudflare_probe_fixtures():
-    zones = "/zones?per_page=50"
+    zones = "/zones?per_page=100&page=1"
     yield cf("probe_dns", {**CF_ACTIVE, zones: envelope(CF_ZONES)})
     yield cf("probe_dns", {CF_VERIFY: envelope({"id": "tok", "status": "active"}), zones: envelope(None)})
+    many = [{"id": f"z{n:03}", "name": f"zone{n:03}.example"} for n in range(101)]
+    yield cf("probe_dns", {**CF_ACTIVE, zones: envelope(many[:100], total_pages=2), "/zones?per_page=100&page=2": envelope(many[100:], total_pages=2)})
+    yield cf("probe_dns", {**CF_ACTIVE, zones: envelope(many[:100]), "/zones?per_page=100&page=2": envelope(many[100:])})
     yield cf("probe_dns", {CF_VERIFY: envelope({"id": "tok", "status": "active"}), zones: envelope([{"id": "z9", "name": "b.example"}, {"id": "z8", "name": "A.example"}, {"id": "z7"}])})
     yield cf("probe_dns", {**CF_ACTIVE, zones: {"success": False, "errors": [{"message": "Missing permission"}]}})
     yield cf("probe_dns", {zones: envelope(CF_ZONES)}, statuses={CF_VERIFY: 401}, error_bodies={CF_VERIFY: {"errors": [{"message": "Invalid API Token"}]}})
@@ -1573,6 +1576,7 @@ def cloudflare_probe_fixtures():
     yield cf("probe_api", {**CF_ACTIVE, **CF_ACCOUNTS, "/accounts/acc1/rum/site_info/list?per_page=100&page=1": envelope([
         {"site_tag": "s1", "ruleset": {"zone_name": "example.com"}}])})
     yield cf("probe_api", {**CF_ACTIVE, "/accounts?per_page=50&page=1": envelope([{"id": "acc1"}, {"id": "acc2"}, {"name": "no id"}])})
+    yield cf("probe_api", {**CF_ACTIVE, "/accounts?per_page=50&page=1": envelope(None)})
     yield cf("probe_api", {CF_VERIFY: {"success": False, "errors": []}})
     yield cf("probe_api", {CF_VERIFY: {"success": True, "result": None}, **CF_ACCOUNTS, **CF_SITES})
 

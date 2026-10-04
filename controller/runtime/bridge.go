@@ -25,8 +25,6 @@ type BridgeError struct{ Message string }
 
 func (e *BridgeError) Error() string { return e.Message }
 
-const maxBridgeOutput = 64 << 20
-
 func (b CommandBridge) Call(ctx context.Context, args []string, payload any, result any) error {
 	if len(b.Prefix) == 0 {
 		return &BridgeError{"Controller bridge command is not configured."}
@@ -43,7 +41,7 @@ func (b CommandBridge) Call(ctx context.Context, args []string, payload any, res
 	}
 	timeout := b.Timeout
 	if timeout == 0 {
-		timeout = 3 * time.Minute
+		timeout = BridgeTimeout
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -51,7 +49,7 @@ func (b CommandBridge) Call(ctx context.Context, args []string, payload any, res
 	cmd.Stdin = bytes.NewReader(input)
 	cmd.Env = b.Env
 	cmd.WaitDelay = ProcessWaitDelay
-	stdout, stderr := BoundedBuffer{Limit: maxBridgeOutput}, BoundedBuffer{Limit: maxBridgeOutput}
+	stdout, stderr := BoundedBuffer{Limit: MaxBridgeOutput}, BoundedBuffer{Limit: MaxBridgeOutput}
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
@@ -62,11 +60,7 @@ func (b CommandBridge) Call(ctx context.Context, args []string, payload any, res
 			return &BridgeError{"HQ controller bridge could not start."}
 		}
 		lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
-		said := []rune(lines[len(lines)-1])
-		if len(said) > 300 {
-			said = said[:300]
-		}
-		return &BridgeError{"HQ controller bridge command failed: " + string(said)}
+		return &BridgeError{"HQ controller bridge command failed: " + Clip(lines[len(lines)-1], VerdictLimit)}
 	}
 	if stdout.Overflow {
 		return &BridgeError{"HQ controller bridge returned too much data."}

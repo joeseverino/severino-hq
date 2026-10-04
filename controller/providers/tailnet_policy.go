@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // tailnetPolicyDocument is the tailnet policy file, an operator-authored
@@ -89,17 +91,14 @@ func (d tailnetPolicyDocument) pretty() string {
 	return out
 }
 
-func (r *Registry) tailnetPolicy(ctx context.Context, token string) (tailnetPolicyDocument, error) {
-	document, _, err := r.tailnetPolicyVersion(ctx, token)
+func (c tailnetClient) tailnetPolicy(ctx context.Context) (tailnetPolicyDocument, error) {
+	document, _, err := c.tailnetPolicyVersion(ctx)
 	return document, err
 }
 
 // tailnetPolicyVersion is the policy file and its ETag, from one read.
-func (r *Registry) tailnetPolicyVersion(ctx context.Context, token string) (tailnetPolicyDocument, string, error) {
-	raw, etag, err := r.HTTP.RequestHeader(ctx, tailnetAPI+"/tailnet/-/acl", map[string]string{
-		"Authorization": "Bearer " + token,
-		"Accept":        "application/json",
-	}, "etag")
+func (c tailnetClient) tailnetPolicyVersion(ctx context.Context) (tailnetPolicyDocument, string, error) {
+	raw, etag, err := c.callHeader(ctx, tailnet("acl"), map[string]string{"Accept": "application/json"}, "etag")
 	if code := httpStatus(err); code != 0 {
 		return nil, "", tailnetRefused("the policy read", "policy_file:read", code)
 	}
@@ -185,10 +184,9 @@ func refuseWeakerTests(live, document tailnetPolicyView) error {
 	return nil
 }
 
-func (r *Registry) policyPassesItsTests(ctx context.Context, token string, document tailnetPolicyDocument) error {
-	raw, err := r.HTTP.Request(ctx, tailnetAPI+"/tailnet/-/acl/validate", "POST", map[string]string{
-		"Authorization": "Bearer " + token,
-		"Content-Type":  "application/json",
+func (c tailnetClient) policyPassesItsTests(ctx context.Context, document tailnetPolicyDocument) error {
+	raw, err := c.call(ctx, "POST", tailnet("acl/validate"), map[string]string{
+		"Content-Type": "application/json",
 	}, json.RawMessage(document))
 	if err != nil {
 		return &ProviderError{Message: "Tailscale could not check the policy.", Failure: networkFailure(err)}
@@ -203,10 +201,7 @@ func (r *Registry) policyPassesItsTests(ctx context.Context, token string, docum
 	}
 	if verdict.truthy() {
 		said, _ := pyDumps(raw, 0, false)
-		if len(said) > 300 {
-			said = said[:300]
-		}
-		return &ProviderError{Message: "The declared policy does not pass its own tests, so it was not applied: " + said}
+		return &ProviderError{Message: "The declared policy does not pass its own tests, so it was not applied: " + runtime.Clip(said, runtime.VerdictLimit)}
 	}
 	return nil
 }
@@ -214,17 +209,17 @@ func (r *Registry) policyPassesItsTests(ctx context.Context, token string, docum
 // writeTailnetPolicy writes the policy, conditional on the version the checks
 // ran against: etag comes from that same read, so a change made in between
 // refuses the write (412). Without one nothing is written.
-func (r *Registry) writeTailnetPolicy(ctx context.Context, token string, document tailnetPolicyDocument, etag string) error {
+func (c tailnetClient) writeTailnetPolicy(ctx context.Context, document tailnetPolicyDocument, etag string) error {
 	if etag == "" {
 		return &ProviderError{Message: "Tailscale did not say which version of the policy it holds, so the policy was not written."}
 	}
-	headers := map[string]string{"Authorization": "Bearer " + token, "Content-Type": "application/json", "If-Match": etag}
-	_, err := r.HTTP.Request(ctx, tailnetAPI+"/tailnet/-/acl", "POST", headers, json.RawMessage(document))
+	headers := map[string]string{"Content-Type": "application/json", "If-Match": etag}
+	_, err := c.call(ctx, "POST", tailnet("acl"), headers, json.RawMessage(document))
 	switch code := httpStatus(err); {
 	case code == 412:
 		return &ProviderError{Message: "The policy changed somewhere else since HQ read it, so this was not applied. Read it again and make the change on top."}
 	case code != 0:
-		return &ProviderError{Message: fmt.Sprintf("Tailscale refused the policy (%d).", code), Failure: map[int]string{401: "credential", 403: "permission"}[code]}
+		return &ProviderError{Message: fmt.Sprintf("Tailscale refused the policy (%d).", code), Failure: runtime.StatusFailure(code)}
 	case err != nil:
 		return &ProviderError{Message: "Tailscale did not answer the policy write.", Failure: networkFailure(err)}
 	}
@@ -248,11 +243,7 @@ func currentPolicy(document tailnetPolicyDocument) Result {
 	return Result{Status: status, Conditions: []Condition{condition("Ready", "Reconciled", "The policy is as declared.")}, Message: "Tailnet policy is current."}
 }
 
-func (r *Registry) tailnetPolicyReconcile(ctx context.Context, rawSpec, _ Object, apply bool) (Result, error) {
-	spec, err := decodePayload[TailnetPolicySpec](rawSpec)
-	if err != nil {
-		return Result{}, err
-	}
+func (r *Registry) tailnetPolicyReconcile(ctx context.Context, spec TailnetPolicySpec, _ struct{}, apply bool) (Result, error) {
 	wanted := strings.TrimSpace(spec.Document)
 	if wanted == "" {
 		return Result{Status: struct{}{}, Message: "No policy is declared, so there is nothing to apply."}, nil
@@ -265,11 +256,11 @@ func (r *Registry) tailnetPolicyReconcile(ctx context.Context, rawSpec, _ Object
 		return Result{}, &ProviderError{Message: "The declared policy is not a JSON object."}
 	}
 	document := tailnetPolicyDocument(wanted)
-	token, err := r.tailnetToken(ctx, spec.ConnectionRef)
+	client, err := r.tailnetClient(ctx, spec.ConnectionRef)
 	if err != nil {
 		return Result{}, err
 	}
-	live, etag, err := r.tailnetPolicyVersion(ctx, token)
+	live, etag, err := client.tailnetPolicyVersion(ctx)
 	if err != nil {
 		return Result{}, err
 	}
@@ -279,16 +270,16 @@ func (r *Registry) tailnetPolicyReconcile(ctx context.Context, rawSpec, _ Object
 	if err := refuseWeakerTests(live.view(), document.view()); err != nil {
 		return Result{}, err
 	}
-	if err := r.policyPassesItsTests(ctx, token, document); err != nil {
+	if err := client.policyPassesItsTests(ctx, document); err != nil {
 		return Result{}, err
 	}
 	if !apply {
 		return Result{Changed: true, Status: struct{}{}, Message: "The policy passes its own tests and would be applied."}, nil
 	}
-	if err := r.writeTailnetPolicy(ctx, token, document, etag); err != nil {
+	if err := client.writeTailnetPolicy(ctx, document, etag); err != nil {
 		return Result{}, err
 	}
-	applied, err := r.tailnetPolicy(ctx, token)
+	applied, err := client.tailnetPolicy(ctx)
 	if err != nil {
 		return Result{}, err
 	}
@@ -431,11 +422,11 @@ func sortedKeys[V any](m map[string]V) []string {
 }
 
 func (r *Registry) tailnetPolicyInventory(ctx context.Context) ([]any, error) {
-	token, err := r.tailnetToken(ctx, "")
+	client, err := r.tailnetClient(ctx, "")
 	if err != nil {
 		return nil, err
 	}
-	document, err := r.tailnetPolicy(ctx, token)
+	document, err := client.tailnetPolicy(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -453,7 +444,7 @@ func (r *Registry) tailnetPolicyInventory(ctx context.Context) ([]any, error) {
 	} {
 		merged := map[string]json.RawMessage{}
 		for _, path := range part.paths {
-			fields, err := r.tailnetPart(ctx, token, path)
+			fields, err := client.tailnetPart(ctx, path)
 			if err != nil {
 				refuse(ctx, part.name, "", "", err)
 				break
@@ -524,11 +515,11 @@ type tailnetPreview struct {
 // reachByDevice asks Tailscale who may reach each device's IPv4 address on
 // the ports worth asking about under the live policy.
 func (r *Registry) reachByDevice(ctx context.Context, devices []TailscaleDeviceRecord) map[string][]TailnetReach {
-	token, err := r.tailnetToken(ctx, "")
+	client, err := r.tailnetClient(ctx, "")
 	if err != nil {
 		return map[string][]TailnetReach{}
 	}
-	document, err := r.tailnetPolicy(ctx, token)
+	document, err := client.tailnetPolicy(ctx)
 	if err != nil {
 		return map[string][]TailnetReach{}
 	}
@@ -562,9 +553,8 @@ func (r *Registry) reachByDevice(ctx context.Context, devices []TailscaleDeviceR
 		}
 		for _, port := range asking {
 			target := fmt.Sprintf("%s:%d", address, port)
-			raw, err := r.HTTP.Request(ctx, fmt.Sprintf("%s/tailnet/-/acl/preview?type=ipport&previewFor=%s", tailnetAPI, url.QueryEscape(target)), "POST", map[string]string{
-				"Authorization": "Bearer " + token,
-				"Content-Type":  "application/json",
+			raw, err := client.call(ctx, "POST", tailnet("acl/preview?type=ipport&previewFor="+url.QueryEscape(target)), map[string]string{
+				"Content-Type": "application/json",
 			}, json.RawMessage(document))
 			if err != nil {
 				continue
@@ -588,7 +578,7 @@ func (r *Registry) reachByDevice(ctx context.Context, devices []TailscaleDeviceR
 
 // tailnetBasePorts are where the answers start; the rest are the ports this
 // estate's containers publish.
-var tailnetBasePorts = []int{22, 53, 80, 443}
+var tailnetBasePorts = []int{standardSSHPort, 53, 80, 443}
 
 // portsWorthAsking is the ports something here listens on, plus the usual few.
 // Without Portainer, or with it not answering, the base set still applies.

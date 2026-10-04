@@ -43,7 +43,7 @@ func NewHTTPClient(caFile string) (*HTTPClient, error) {
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
-	return &HTTPClient{Transport: transport, Timeout: 15 * time.Second}, nil
+	return &HTTPClient{Transport: transport, Timeout: DefaultRequestTimeout}, nil
 }
 
 // MultipartFile is one part of a multipart/form-data upload.
@@ -77,9 +77,9 @@ func (m Multipart) encode() ([]byte, string) {
 func requestFailure(err error) *ProviderError {
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
-		return &ProviderError{Message: "Provider request failed: TimeoutError.", Failure: "network"}
+		return &ProviderError{Message: "Provider request failed: TimeoutError.", Failure: FailureClassNetwork}
 	}
-	return &ProviderError{Message: "Provider request failed: URLError.", Failure: "network"}
+	return &ProviderError{Message: "Provider request failed: URLError.", Failure: FailureClassNetwork}
 }
 
 // AsMultipartFailure rewrites a failure the way the Python multipart path does:
@@ -90,7 +90,7 @@ func AsMultipartFailure(err *ProviderError) *ProviderError {
 		kind = "HTTPError"
 	} else if strings.Contains(err.Message, "TimeoutError") {
 		kind = "TimeoutError"
-	} else if err.Failure != "network" {
+	} else if err.Failure != FailureClassNetwork {
 		return err
 	}
 	return &ProviderError{Message: "Provider multipart request failed: " + kind + ".", HTTPStatus: err.HTTPStatus}
@@ -131,7 +131,7 @@ func (h *HTTPClient) RequestHeader(ctx context.Context, address string, headers 
 
 func (h *HTTPClient) do(ctx context.Context, address, method string, headers map[string]string, payload any) (json.RawMessage, http.Header, error) {
 	if files, ok := payload.(Multipart); ok {
-		data, header, err := h.send(ctx, address, method, headers, files, 30*time.Second)
+		data, header, err := h.send(ctx, address, method, headers, files, MultipartTimeout)
 		var provider *ProviderError
 		if errors.As(err, &provider) {
 			return nil, nil, AsMultipartFailure(provider)
@@ -165,7 +165,7 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 	}
 	request, err := http.NewRequestWithContext(ctx, method, address, bytes.NewReader(body))
 	if err != nil || request.URL.User != nil || request.URL.Hostname() == "" || (request.URL.Scheme != "http" && request.URL.Scheme != "https") {
-		return nil, nil, &ProviderError{Message: "Use the provider's direct API address.", Failure: "address"}
+		return nil, nil, &ProviderError{Message: "Use the provider's direct API address.", Failure: FailureClassAddress}
 	}
 	request.Header.Set("Accept", "application/json")
 	for name, value := range headers {
@@ -176,20 +176,20 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 	}
 	timeout := h.Timeout
 	if timeout == 0 {
-		timeout = 15 * time.Second
+		timeout = DefaultRequestTimeout
 	}
 	if timeoutOverride != 0 {
 		timeout = timeoutOverride
 	}
 	client := &http.Client{Transport: h.Transport, Timeout: timeout, CheckRedirect: func(next *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
-			return &ProviderError{Message: "Provider redirected too many times.", Failure: "address"}
+			return &ProviderError{Message: "Provider redirected too many times.", Failure: FailureClassAddress}
 		}
 		if method != "GET" && method != "HEAD" {
-			return &ProviderError{Message: "The address redirected a write request, which is not followed. Use the provider's direct API address.", Failure: "address"}
+			return &ProviderError{Message: "The address redirected a write request, which is not followed. Use the provider's direct API address.", Failure: FailureClassAddress}
 		}
 		if origin(next.URL) != origin(request.URL) {
-			return &ProviderError{Message: "The address redirected outside the API origin. Use the provider's direct API address.", Failure: "address"}
+			return &ProviderError{Message: "The address redirected outside the API origin. Use the provider's direct API address.", Failure: FailureClassAddress}
 		}
 		for name := range next.Header {
 			if !strings.EqualFold(name, "Accept") && !strings.EqualFold(name, "Content-Type") {
@@ -214,7 +214,7 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, MaxResponseBytes+1))
 	if err != nil {
-		return nil, nil, &ProviderError{Message: "Provider response could not be read.", Failure: "network"}
+		return nil, nil, &ProviderError{Message: "Provider response could not be read.", Failure: FailureClassNetwork}
 	}
 	if len(data) > MaxResponseBytes {
 		return nil, nil, &ProviderError{Message: "The provider answered with more than 32 MB."}
@@ -224,7 +224,7 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 	}
 	responseContentType := strings.ToLower(response.Header.Get("Content-Type"))
 	if strings.Contains(responseContentType, "text/html") || strings.Contains(responseContentType, "application/xhtml+xml") || bytes.HasPrefix(bytes.TrimSpace(data), []byte("<")) {
-		return nil, response.Header, &ProviderError{Message: "The address answered with a web page, not the API. Use the provider's direct API address.", Failure: "address"}
+		return nil, response.Header, &ProviderError{Message: "The address answered with a web page, not the API. Use the provider's direct API address.", Failure: FailureClassAddress}
 	}
 	var result json.RawMessage
 	decoder := json.NewDecoder(bytes.NewReader(data))

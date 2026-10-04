@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/providers/cfapi"
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // What a Cloudflare account holds beyond its DNS, each list read once per sweep.
@@ -103,7 +104,7 @@ func (r *Registry) cloudflareD1Databases(ctx context.Context) ([]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		databases, err := cloudflareAccountItems[cfapi.D1DatabaseResponse](ctx, r, ref, "/d1/database", 100)
+		databases, err := cloudflareAccountItems[cfapi.D1DatabaseResponse](ctx, r, ref, "/d1/database", cloudflarePerPage)
 		if err != nil {
 			return nil, err
 		}
@@ -201,7 +202,7 @@ func (r *Registry) cloudflareAccessApps(ctx context.Context) ([]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		apps, err := cloudflareAccountItems[cfAccessApp](ctx, r, ref, "/access/apps", 100)
+		apps, err := cloudflareAccountItems[cfAccessApp](ctx, r, ref, "/access/apps", cloudflarePerPage)
 		if err != nil {
 			return nil, err
 		}
@@ -279,11 +280,11 @@ func (r *Registry) cloudflareServiceTokens(ctx context.Context) ([]any, error) {
 			Name      json.RawMessage `json:"name"`
 			ExpiresAt json.RawMessage `json:"expires_at"`
 			CreatedAt json.RawMessage `json:"created_at"`
-		}](ctx, r, ref, "/access/service_tokens", 100)
+		}](ctx, r, ref, "/access/service_tokens", cloudflarePerPage)
 		if err != nil {
 			return nil, err
 		}
-		apps, appsErr := cloudflareAccountItems[cfAccessApp](ctx, r, ref, "/access/apps", 100)
+		apps, appsErr := cloudflareAccountItems[cfAccessApp](ctx, r, ref, "/access/apps", cloudflarePerPage)
 		if appsErr != nil {
 			refuse(ctx, "apps", ref, "", appsErr)
 		}
@@ -309,7 +310,7 @@ func (r *Registry) cloudflareTunnels(ctx context.Context) ([]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		tunnels, err := cloudflareAccountItems[cfapi.TunnelCfdTunnel](ctx, r, ref, "/cfd_tunnel?is_deleted=false", 100)
+		tunnels, err := cloudflareAccountItems[cfapi.TunnelCfdTunnel](ctx, r, ref, "/cfd_tunnel?is_deleted=false", cloudflarePerPage)
 		if err != nil {
 			return nil, err
 		}
@@ -371,7 +372,7 @@ func (r *Registry) cloudflareEdgeCertificates(ctx context.Context) ([]any, error
 		var refused []error
 		for _, zone := range named {
 			name := hostname(zone.Name)
-			items, err := r.cloudflareAPIList(ctx, "/zones/"+zone.ID+"/ssl/certificate_packs?status=all", ref, 50)
+			items, err := r.cloudflareAPIList(ctx, "/zones/"+zone.ID+"/ssl/certificate_packs?status=all", ref, cloudflareAccountPerPage)
 			if err != nil {
 				refused = append(refused, unreadError(err))
 				refuse(ctx, "", ref, name, err)
@@ -426,13 +427,9 @@ func earliestExpiry(pack cfapi.TLSCertificatesAndHostnamesCertificatePack) strin
 // unreadError is the refused read raised when every zone was refused: the
 // short reason, keeping the refusal and its words.
 func unreadError(err error) error {
-	reason := []rune(strings.TrimSpace(err.Error()))
-	if len(reason) > 200 {
-		reason = reason[:200]
-	}
-	refused := &ProviderError{Message: string(reason)}
+	refused := &ProviderError{Message: runtime.Clip(strings.TrimSpace(err.Error()), runtime.ReasonLimit)}
 	if provider, ok := err.(*ProviderError); ok {
-		refused.Refusal, refused.Failure, refused.Reason = provider.Refusal, provider.Refusal, provider.Reason
+		refused.Refusal, refused.Failure, refused.Reason = provider.Refusal, runtime.FailureClass(provider.Refusal), provider.Reason
 	}
 	return refused
 }
@@ -459,7 +456,7 @@ func (z cloudflareZoneReads) Zones(ctx context.Context, ref string) ([]RedirectZ
 }
 
 func (z cloudflareZoneReads) Listed(ctx context.Context, path, ref string) ([]json.RawMessage, error) {
-	return z.r.cloudflareAPIList(ctx, path, ref, 50)
+	return z.r.cloudflareAPIList(ctx, path, ref, cloudflareAccountPerPage)
 }
 
 func (z cloudflareZoneReads) Result(ctx context.Context, path, ref string) (json.RawMessage, error) {
