@@ -261,7 +261,7 @@ func (r *Registry) applyTLSReconcile(ctx context.Context, spec TLSCertificateSpe
 	if err != nil {
 		return Result{}, err
 	}
-	if fingerprintsAre(observed, expected) {
+	if consumersServe(spec, observed, expected) {
 		matchEvidence(observed, expected)
 		observed.ArtifactSource = "existing_lineage"
 		return Result{Changed: false, Status: observed, Conditions: []Condition{condition("Ready", "Verified", "All TLS consumers match.")}, Message: "Certificate consumers already match the managed lineage."}, nil

@@ -20,11 +20,13 @@ def connection_prefixes() -> dict[str, str]:
     """
 
     suffix = "_CONNECTION_REF"
-    return {
-        value: name[: -len(suffix)]
-        for name, value in os.environ.items()
-        if name.endswith(suffix) and value
-    }
+    found: dict[str, list[str]] = {}
+    for name, value in os.environ.items():
+        if name.endswith(suffix) and value:
+            found.setdefault(value, []).append(name[: -len(suffix)])
+    # A ref two items share names neither: which one answered would otherwise
+    # depend on environment order.
+    return {value: names[0] for value, names in found.items() if len(names) == 1}
 
 
 def connection_provider(connection_ref: str) -> str:
@@ -82,6 +84,12 @@ def connection_prefix(provider: str, connection_ref: str = "") -> str:
             raise ProviderError(
                 f"No connection named {connection_ref!r} was supplied to the "
                 "controller."
+            )
+        # A named connection still has to be one of these, or its credential
+        # goes to a vendor it was never issued for.
+        if connection_provider(connection_ref) != provider:
+            raise ProviderError(
+                f"{connection_ref} is not a {provider} connection, so it was not used."
             )
         return prefix
     candidates = sorted(

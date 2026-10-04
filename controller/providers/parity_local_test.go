@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -30,6 +31,7 @@ type localFixture struct {
 	Action     string                     `json:"action"`
 	Apply      bool                       `json:"apply"`
 	Only       []string                   `json:"only"`
+	Undeclared []string                   `json:"undeclared"`
 	Zones      map[string][]RedirectZone  `json:"zones"`
 	Portainer  struct {
 		URL          string            `json:"url"`
@@ -47,8 +49,15 @@ type localFixture struct {
 // in order, as the Python harness's LocalFixture does.
 type localRecorder struct {
 	fixture  localFixture
+	mu       sync.Mutex // inventory reads providers concurrently
 	requests []Object
 	refusals []Object
+}
+
+func (l *localRecorder) record(request Object) {
+	l.mu.Lock()
+	l.requests = append(l.requests, request)
+	l.mu.Unlock()
 }
 
 func (l *localRecorder) exec(_ context.Context, argv []string, stdin []byte, _ []string) ([]byte, []byte, int, error) {
@@ -56,7 +65,7 @@ func (l *localRecorder) exec(_ context.Context, argv []string, stdin []byte, _ [
 	if len(stdin) > 0 {
 		input = string(stdin)
 	}
-	l.requests = append(l.requests, Object{"kind": "command", "argv": argv, "input": input})
+	l.record(Object{"kind": "command", "argv": argv, "input": input})
 	ref := ""
 	for i, arg := range argv {
 		if arg == "-i" && i+1 < len(argv) {
@@ -66,6 +75,9 @@ func (l *localRecorder) exec(_ context.Context, argv []string, stdin []byte, _ [
 	answer := l.fixture.Commands[ref+" "+argv[len(argv)-1]]
 	if string(answer) == `"missing"` {
 		return nil, nil, 0, os.ErrNotExist
+	}
+	if string(answer) == `"overflow"` {
+		return nil, nil, 0, errOutputLimit
 	}
 	var reply struct {
 		Stdout string `json:"stdout"`
@@ -79,7 +91,7 @@ func (l *localRecorder) exec(_ context.Context, argv []string, stdin []byte, _ [
 }
 
 func (l *localRecorder) Request(_ context.Context, address, method string, _ map[string]string, _ any) (json.RawMessage, error) {
-	l.requests = append(l.requests, Object{"kind": "http", "url": address, "method": method})
+	l.record(Object{"kind": "http", "url": address, "method": method})
 	if message, ok := l.fixture.Failures[address]; ok {
 		return nil, &ProviderError{Message: message}
 	}
@@ -92,8 +104,9 @@ func (l *localRecorder) Request(_ context.Context, address, method string, _ map
 	return nil, errors.New("unexpected read: " + address)
 }
 
-func (l *localRecorder) Header(context.Context, string, map[string]string, string) (string, error) {
-	return "", errors.New("unexpected header read")
+func (l *localRecorder) RequestHeader(ctx context.Context, address string, headers map[string]string, _ string) (json.RawMessage, string, error) {
+	data, err := l.Request(ctx, address, "GET", headers, nil)
+	return data, "", err
 }
 
 func (l *localRecorder) zoneAnswer(path string) (json.RawMessage, error) {
@@ -131,7 +144,9 @@ func (l *localRecorder) Result(_ context.Context, path, _ string) (json.RawMessa
 func (l *localRecorder) Reason(err error) string { return err.Error() }
 
 func (l *localRecorder) Refuse(_ context.Context, part string, err error, scope, ref string) {
+	l.mu.Lock()
 	l.refusals = append(l.refusals, Object{"part": part, "reason": err.Error(), "scope": scope, "connection_ref": ref})
+	l.mu.Unlock()
 }
 
 func (l *localRecorder) URL(string) (string, error) { return l.fixture.Portainer.URL, nil }
@@ -190,6 +205,9 @@ func localParity(raw []byte) bool {
 		return false
 	}
 	recorder := &localRecorder{fixture: fixture}
+	for _, kind := range fixture.Undeclared {
+		delete(fixture.Registry.ConnectionProviders, kind)
+	}
 	env := runtime.Environment{"HQ_CONTROLLER_SSH_DIR": "/ssh"}
 	for name, value := range fixture.Env {
 		env[name] = value

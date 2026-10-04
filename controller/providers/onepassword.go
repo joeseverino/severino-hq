@@ -196,6 +196,10 @@ func (r *Registry) onePasswordCurrent(ctx context.Context, publication OnePasswo
 // publishFacts writes HQ's facts onto one item, and only when they changed.
 // It never deletes a field, the item, or a file, and never touches the note.
 func (r *Registry) publishFacts(ctx context.Context, publication OnePasswordPublication, desired map[string]string, material func() ([]byte, []byte, error)) (PublishedFact, error) {
+	// Both reach op's argv, where a leading dash is an option, not a name.
+	if strings.HasPrefix(publication.Item, "-") || strings.HasPrefix(publication.Vault, "-") {
+		return PublishedFact{}, &ProviderError{Message: "A 1Password item or vault name cannot start with a dash."}
+	}
 	token, err := r.onePasswordToken(publication.ConnectionRef)
 	if err != nil {
 		return PublishedFact{}, err

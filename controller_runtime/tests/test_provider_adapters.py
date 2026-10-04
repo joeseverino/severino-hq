@@ -1423,9 +1423,10 @@ class ProviderAdapterTests(TestCase):
             changed=False,
             status={
                 "consumers": [
-                    {"fingerprint_sha256": "new", "consumer_kind": "npm"},
-                    {"fingerprint_sha256": "new", "consumer_kind": "caddy"},
-                ]
+                    {"consumer": "proxy", "fingerprint_sha256": "new", "consumer_kind": "npm"},
+                    {"consumer": "edge", "fingerprint_sha256": "new", "consumer_kind": "caddy"},
+                ],
+                "unreachable_consumers": [],
             },
             conditions=[],
             message="observed",
@@ -1433,7 +1434,7 @@ class ProviderAdapterTests(TestCase):
         spec = {
             "domains": ["example.test"],
             "consumers": [
-                {"kind": "caddy", "connection_ref": "example-edge"},
+                {"name": "edge", "kind": "caddy", "connection_ref": "example-edge"},
             ],
         }
 
@@ -1465,7 +1466,8 @@ class ProviderAdapterTests(TestCase):
                         "domain": "hq.example.test",
                         "fingerprint_sha256": "new",
                     }
-                ]
+                ],
+                "unreachable_consumers": [],
             },
             conditions=[],
             message="observed",
@@ -1495,7 +1497,10 @@ class ProviderAdapterTests(TestCase):
         validate.side_effect = ["old", "pending"]
         reconcile.return_value = ProviderResult(
             changed=False,
-            status={"consumers": [{"fingerprint_sha256": "pending"}]},
+            status={
+                "consumers": [{"consumer": "edge", "fingerprint_sha256": "pending"}],
+                "unreachable_consumers": [],
+            },
             conditions=[],
             message="observed",
         )
@@ -1503,7 +1508,7 @@ class ProviderAdapterTests(TestCase):
             "certificate_name": "example",
             "domains": ["example.test"],
             "renewal_window_days": 30,
-            "consumers": [{"kind": "caddy", "connection_ref": "example-edge"}],
+            "consumers": [{"name": "edge", "kind": "caddy", "connection_ref": "example-edge"}],
         }
 
         result = tls.renew_tls(spec)
@@ -2330,6 +2335,34 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
         self.assertNotIn("OP_CONNECT_HOST", run.call_args.kwargs["env"])
         self.assertNotIn("OP_CONNECT_TOKEN", run.call_args.kwargs["env"])
 
+    def test_a_child_inherits_no_connection_credential(self):
+        with (
+            mock.patch.object(subprocess, "run") as run,
+            mock.patch.dict("os.environ", {
+                "PATH": "/an/example/path",
+                "CLOUDFLARE_DNS_API_TOKEN": "example-dns-token",
+                "NPM_PASSWORD": "example-password",
+            }, clear=True),
+        ):
+            run.return_value = mock.Mock(returncode=0, stdout=b"", stderr=b"")
+            commands.run_command(["certbot", "--version"], step="a step")
+
+        self.assertEqual(run.call_args.kwargs["env"], {"PATH": "/an/example/path"})
+
+    def test_output_past_the_limit_is_a_failed_step(self):
+        steps: list[dict[str, str]] = []
+        with (
+            mock.patch.object(subprocess, "run") as run,
+            mock.patch.object(commands, "_STEP_FAILURES", steps),
+            self.assertRaisesRegex(ProviderError, "^a step failed.$"),
+        ):
+            run.return_value = mock.Mock(
+                returncode=0, stdout=b"x" * (commands.OUTPUT_LIMIT + 1), stderr=b""
+            )
+            commands.run_command(["ssh", "host"], step="a step", subject="edge")
+
+        self.assertEqual(steps, [{"step": "a step", "subject": "edge", "reason": "output over limit"}])
+
     def test_the_connection_probe_proves_the_credential_without_naming_a_vault(self):
         """A vault is not a machine, and `reaches` everywhere else means one."""
 
@@ -2993,7 +3026,11 @@ class MissingSettingTests(TestCase):
 class ManagesGateTests(TestCase):
     """A write goes only through a connection whose item declares manages."""
 
-    OBSERVING = {"EDGE_CONNECTION_REF": "edge", "EDGE_HOST": "edge.example"}
+    OBSERVING = {
+        "EDGE_CONNECTION_REF": "edge",
+        "EDGE_HOST": "edge.example",
+        "EDGE_USER": "hq",
+    }
     ROUTE = {
         "kind": "caddy.route",
         "spec": {
@@ -3044,6 +3081,26 @@ class ManagesGateTests(TestCase):
 
         request.assert_not_called()
 
+    @mock.patch("controller_runtime.commands.run_ssh")
+    def test_a_named_connection_of_another_provider_is_refused(self, ssh):
+        env = {"CLOUDFLARE_DNS_CONNECTION_REF": "edge", "CLOUDFLARE_DNS_MANAGES": "1"}
+        with (
+            mock.patch.dict("os.environ", env, clear=True),
+            self.assertRaisesRegex(ProviderError, "edge is not a connection for this"),
+        ):
+            providers.execute(self.ROUTE, "reconcile")
+
+        ssh.assert_not_called()
+
+    def test_a_kind_declaring_no_connection_providers_is_refused(self):
+        undeclared = mock.Mock(connection_providers=())
+        with (
+            mock.patch.dict(providers.PROVIDERS, {"caddy.route": undeclared}),
+            mock.patch.dict("os.environ", {}, clear=True),
+            self.assertRaisesRegex(ProviderError, "Nothing declares which connections"),
+        ):
+            providers._refuse_unless_managed("caddy.route", self.ROUTE["spec"])
+
     def test_a_write_with_no_connection_at_all_is_refused(self):
         with (
             mock.patch.dict("os.environ", {}, clear=True),
@@ -3070,3 +3127,29 @@ class ManagesGateTests(TestCase):
             providers.execute({"kind": "cloudflare.zone", "spec": {}}, "reconcile")
 
         self.assertEqual(str(raised.exception), reason)
+
+
+class ConnectionBindingTests(TestCase):
+    """A named connection answers only for its own provider, and a ref two
+    items share answers for neither."""
+
+    def test_a_named_connection_of_another_provider_is_refused(self):
+        env = {"CLOUDFLARE_DNS_CONNECTION_REF": "dns", "CLOUDFLARE_DNS_API_TOKEN": "synthetic"}
+        with (
+            mock.patch.dict("os.environ", env, clear=True),
+            self.assertRaisesRegex(ProviderError, "dns is not a onepassword connection"),
+        ):
+            connection_env.connection_prefix("onepassword", "dns")
+
+    def test_a_named_connection_of_its_own_provider_resolves(self):
+        env = {"PORTAINER_HOME_CONNECTION_REF": "home", "PORTAINER_HOME_PROVIDER": "portainer"}
+        with mock.patch.dict("os.environ", env, clear=True):
+            self.assertEqual(connection_env.connection_prefix("portainer", "home"), "PORTAINER_HOME")
+
+    def test_a_shared_ref_names_no_connection(self):
+        env = {"NPM_CONNECTION_REF": "proxy", "NPM_HOME_CONNECTION_REF": "proxy"}
+        with (
+            mock.patch.dict("os.environ", env, clear=True),
+            self.assertRaisesRegex(ProviderError, "No connection named 'proxy'"),
+        ):
+            connection_env.connection_prefix("npm", "proxy")

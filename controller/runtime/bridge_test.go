@@ -27,6 +27,8 @@ func TestBridgeChild(t *testing.T) {
 		os.Exit(1)
 	case "wait":
 		time.Sleep(time.Minute)
+	case "flood":
+		os.Stdout.Write(make([]byte, maxBridgeOutput+1))
 	default:
 		data, _ := io.ReadAll(os.Stdin)
 		_ = json.NewEncoder(os.Stdout).Encode(Object{"args": os.Args, "bytes": len(data)})
@@ -74,6 +76,13 @@ func TestBridgeExplainsFailureAndBoundsExecution(t *testing.T) {
 	}
 	b.Timeout = 20 * time.Millisecond
 	if err := b.Call(context.Background(), []string{"wait"}, nil, nil); err == nil || !strings.Contains(err.Error(), "deadline") {
+		t.Fatal(err)
+	}
+}
+
+func TestBridgeOutputIsBounded(t *testing.T) {
+	b := childBridge(t)
+	if err := b.Call(context.Background(), []string{"flood"}, nil, nil); err == nil || !strings.Contains(err.Error(), "too much data") {
 		t.Fatal(err)
 	}
 }

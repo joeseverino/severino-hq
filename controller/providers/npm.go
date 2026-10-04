@@ -540,7 +540,7 @@ func (r *Registry) npmReconcile(ctx context.Context, rawSpec, rawObserved Object
 		return Result{}, err
 	}
 	observed, _ := decodePayload[NPMProxyHostObserved](rawObserved)
-	base, headers, err := r.npmSession(ctx, "")
+	base, headers, err := r.npmSession(ctx, namedRef(rawSpec))
 	if err != nil {
 		return Result{}, err
 	}
@@ -605,7 +605,7 @@ func (r *Registry) npmDelete(ctx context.Context, rawSpec, _ Object, apply bool)
 	if err != nil {
 		return Result{}, err
 	}
-	base, headers, err := r.npmSession(ctx, "")
+	base, headers, err := r.npmSession(ctx, namedRef(rawSpec))
 	if err != nil {
 		return Result{}, err
 	}

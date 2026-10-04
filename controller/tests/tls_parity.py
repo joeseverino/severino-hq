@@ -474,6 +474,18 @@ def tls_fixtures(pki):
     yield f("reconcile", apply=True, spec=_spec(CADDY, domains=("a.example", "b.example")), files=_lineage(pki, "new"),
             tls=[{EDGE: {"cert": "old"}}])
 
+    # One matching reading never vouches for a consumer that was not read: deploy, then roll back.
+    two = {**CADDY, "verify_domains": ["a.example", "www.a.example"]}
+    yield f("reconcile", apply=True, spec=_spec(two), files=_lineage(pki, "new"),
+            commands={"ssh snapshot": _snapshot(pki, "old"), "ssh deploy": {}}, tls=[{EDGE: {"cert": "new"}}])
+    yield f("reconcile", apply=True, spec=_spec(two), files=_lineage(pki, "new"),
+            commands={"ssh snapshot": _snapshot(pki, "old"), "ssh deploy": {}},
+            tls=[{EDGE: {"cert": "old"}}, {EDGE: {"cert": "new"}, "edge.example|www.a.example": {"error": "ConnectionRefusedError"}}])
+    yield f("reconcile", apply=True, spec=_spec(CADDY, {**CPANEL, "verify_domains": [], "install_domains": ["a.example"]}), files=_lineage(pki, "new"),
+            commands={"ssh snapshot": _snapshot(pki, "old"), "ssh deploy": {},
+                      "ssh sites": {"stdout": json.dumps({"sites": {"a.example": []}})}},
+            tls=[{EDGE: {"cert": "new"}}])
+
     # NPM as a consumer: create, reuse by id, refuse duplicates and foreign certificates.
     npm_hosts = {"/api/nginx/proxy-hosts": [
         {"id": 5, "domain_names": ["a.example"], "enabled": True},
@@ -538,9 +550,22 @@ def tls_fixtures(pki):
             files=_lineage(pki, "new"), tls=[{EDGE: {"cert": "new"}}],
             commands={"op item get": _item(tags=["hq-managed"]), "op item edit": {"fail": "missing"}})
 
+    # An item or vault that op would read as an option is refused before op runs.
+    for target in ({**VAULT, "item": "--vault=Other"}, {**VAULT, "vault": "-x"}):
+        yield f("reconcile", apply=True, spec=_spec(CADDY, publish=[target]), files=_lineage(pki, "new"),
+                tls=[{EDGE: {"cert": "new"}}], commands={"op item get": _item(), "op item edit": {}})
+    # A lineage name is checked before it becomes a path or a certbot argument.
+    escape = {**_spec(CADDY), "certificate_name": "../escape"}
+    yield f("reconcile", apply=True, spec=escape, files=_lineage(pki, "new"), tls=[{EDGE: {"cert": "old"}}])
+    yield f("renew", apply=True, spec=escape, commands={"ssh snapshot": _snapshot(pki, "old"), "ssh deploy": {}},
+            tls=[{EDGE: {"cert": "old"}}])
+
     # Renewal: resume a newer lineage, else issue; refuse what cannot be satisfied.
     yield f("renew", spec=_spec(CADDY))
     yield f("renew", apply=True, spec=_spec(CADDY), files=_lineage(pki, "next"),
+            commands={"ssh snapshot": _snapshot(pki, "old"), "ssh deploy": {}},
+            tls=[{EDGE: {"cert": "old"}}, {EDGE: {"cert": "next"}}])
+    yield f("renew", apply=True, spec=_spec(two), files=_lineage(pki, "next"),
             commands={"ssh snapshot": _snapshot(pki, "old"), "ssh deploy": {}},
             tls=[{EDGE: {"cert": "old"}}, {EDGE: {"cert": "next"}}])
     issue = {"ssh snapshot": _snapshot(pki, "old"), "ssh deploy": {}, "certbot certonly": {}}

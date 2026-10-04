@@ -10,11 +10,16 @@ from datetime import datetime, timedelta, timezone
 import io
 import os
 from pathlib import Path
+import re
 import tarfile
 import tempfile
 from typing import Any
 
 from control_plane.provider_adapters.contracts import ProviderError
+from control_plane.provider_adapters.tls import (
+    CERTIFICATE_DOMAIN_PATTERN,
+    CERTIFICATE_NAME_PATTERN,
+)
 from . import cloudflare_api, commands, provider_http
 
 
@@ -150,7 +155,27 @@ def _write_private(path: Path, text: str) -> None:
         handle.write(text)
 
 
+def lineage_path(spec: dict[str, Any]) -> Path:
+    """Where certbot keeps this certificate's lineage, for a name that is one."""
+
+    name = str(spec["certificate_name"])
+    if len(name) > 160 or not re.fullmatch(CERTIFICATE_NAME_PATTERN, name):
+        raise ProviderError("The certificate name is not a lineage name.")
+    return Path(provider_http.required("HQ", "ACME_DIR")) / "config" / "live" / name
+
+
+def _checked_domains(spec: dict[str, Any]) -> list[str]:
+    """The names certbot is asked for, each a domain name, never an option."""
+
+    domains = [str(domain) for domain in spec["domains"]]
+    if not all(re.fullmatch(CERTIFICATE_DOMAIN_PATTERN, domain) for domain in domains):
+        raise ProviderError("A certificate domain is not a domain name.")
+    return domains
+
+
 def issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
+    lineage = lineage_path(spec)
+    domains = _checked_domains(spec)
     acme_dir = Path(provider_http.required("HQ", "ACME_DIR"))
     if not acme_dir.is_dir() or not os.access(acme_dir, os.W_OK):
         raise ProviderError("ACME state directory is not writable.")
@@ -189,13 +214,12 @@ def issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
         spec["certificate_name"],
         "--force-renewal",
     ]
-    for domain in spec["domains"]:
+    for domain in domains:
         command.extend(("-d", domain))
     try:
         commands.run_command(command, step="certbot certonly")
     finally:
         credentials.unlink(missing_ok=True)
-    lineage = acme_dir / "config" / "live" / spec["certificate_name"]
     try:
         return (
             lineage.joinpath("fullchain.pem").read_bytes(),
@@ -209,9 +233,7 @@ def resumable_lineage(
     spec: dict[str, Any], deployed_fingerprint: str
 ) -> tuple[bytes, bytes] | None:
     """Reuse a newer failed-transaction artifact instead of issuing again."""
-    lineage = (
-        Path(provider_http.required("HQ", "ACME_DIR")) / "config" / "live" / spec["certificate_name"]
-    )
+    lineage = lineage_path(spec)
     try:
         fullchain = lineage.joinpath("fullchain.pem").read_bytes()
         private_key = lineage.joinpath("privkey.pem").read_bytes()
@@ -246,9 +268,7 @@ def resumable_lineage(
 
 
 def lineage(spec: dict[str, Any]) -> tuple[bytes, bytes]:
-    lineage = (
-        Path(provider_http.required("HQ", "ACME_DIR")) / "config" / "live" / spec["certificate_name"]
-    )
+    lineage = lineage_path(spec)
     try:
         return lineage.joinpath("fullchain.pem").read_bytes(), lineage.joinpath(
             "privkey.pem"
@@ -271,12 +291,7 @@ def lineage_material(spec: dict[str, Any]) -> Callable[[], tuple[bytes, bytes]]:
     """
 
     def read() -> tuple[bytes, bytes]:
-        lineage = (
-            Path(provider_http.required("HQ", "ACME_DIR"))
-            / "config"
-            / "live"
-            / spec["certificate_name"]
-        )
+        lineage = lineage_path(spec)
         return (
             lineage.joinpath("fullchain.pem").read_bytes(),
             lineage.joinpath("privkey.pem").read_bytes(),

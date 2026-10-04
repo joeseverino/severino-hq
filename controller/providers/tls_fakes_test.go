@@ -54,7 +54,7 @@ func (d *fakeDialer) deployments() int {
 }
 
 func (d *fakeDialer) Peer(_ context.Context, domain, connectHost string) ([]byte, error) {
-	d.http.requests = append(d.http.requests, request{"tls://" + connectHost + ":443", "TLS", Object{"sni": domain}})
+	d.http.requests = append(d.http.requests, request{"tls://" + connectHost + ":443", "TLS", Object{"sni": domain}, ""})
 	if len(d.phases) == 0 {
 		return nil, &tlsReadError{kind: "ConnectionRefusedError"}
 	}
@@ -152,7 +152,7 @@ func (c *fakeCommander) exec(_ context.Context, commandArgv []string, input []by
 			}
 		}
 	}
-	c.http.requests = append(c.http.requests, request{commandArgv[0], "RUN", record})
+	c.http.requests = append(c.http.requests, request{commandArgv[0], "RUN", record, ""})
 	outcome, ok := c.outcomes[key]
 	if !ok && key != "certbot --version" {
 		return nil, nil, 1, nil

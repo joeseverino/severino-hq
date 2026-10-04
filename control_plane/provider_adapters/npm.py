@@ -114,7 +114,8 @@ def reconcile(
     apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
-    base_url, headers = session(runtime)
+    # The connection the manages check approved, not whichever is the default.
+    base_url, headers = session(runtime, str(spec.get("connection_ref") or ""))
     hosts = runtime.request(f"{base_url}/nginx/proxy-hosts", headers=headers)
     domains = sorted(spec["domain_names"])
     matches = [
@@ -204,7 +205,8 @@ def delete(
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     del observed
-    base_url, headers = session(runtime)
+    # The connection the manages check approved, not whichever is the default.
+    base_url, headers = session(runtime, str(spec.get("connection_ref") or ""))
     hosts = runtime.request(f"{base_url}/nginx/proxy-hosts", headers=headers)
     domains = sorted(spec["domain_names"])
     matches = [

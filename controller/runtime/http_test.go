@@ -76,22 +76,31 @@ func TestProviderResponseFailures(t *testing.T) {
 		})
 	}
 }
-func TestHeaderReadsOneResponseHeader(t *testing.T) {
+func TestRequestHeaderReadsBodyAndHeaderFromOneAnswer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/gone" {
+		switch r.URL.Path {
+		case "/gone":
 			w.WriteHeader(412)
+			return
+		case "/broken":
+			w.Header().Set("ETag", `"v2"`)
+			_, _ = w.Write([]byte(`{"a": 1} trailing`))
 			return
 		}
 		w.Header().Set("ETag", `"v1"`)
-		_, _ = w.Write([]byte(`{"ignored": true}`))
+		_, _ = w.Write([]byte(`{"read": true}`))
 	}))
 	defer server.Close()
-	etag, err := (&HTTPClient{}).Header(context.Background(), server.URL, nil, "etag")
-	if err != nil || etag != `"v1"` {
+	data, etag, err := (&HTTPClient{}).RequestHeader(context.Background(), server.URL, nil, "etag")
+	if err != nil || etag != `"v1"` || string(data) != `{"read": true}` {
+		t.Fatalf("%s %q %v", data, etag, err)
+	}
+	// A body that fails its JSON check still says which version answered.
+	if _, etag, err := (&HTTPClient{}).RequestHeader(context.Background(), server.URL+"/broken", nil, "etag"); err == nil || etag != `"v2"` {
 		t.Fatalf("%q %v", etag, err)
 	}
 	var provider *ProviderError
-	if _, err := (&HTTPClient{}).Header(context.Background(), server.URL+"/gone", nil, "etag"); !errors.As(err, &provider) || provider.HTTPStatus != 412 {
+	if _, _, err := (&HTTPClient{}).RequestHeader(context.Background(), server.URL+"/gone", nil, "etag"); !errors.As(err, &provider) || provider.HTTPStatus != 412 {
 		t.Fatalf("%v", err)
 	}
 }

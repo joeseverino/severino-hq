@@ -42,8 +42,8 @@ fi
 echo "==> go vet"
 go vet ./...
 
-echo "==> go test"
-go test ./...
+echo "==> go test (race detector)"
+go test -race ./...
 
 echo "==> differential parity"
 go test -c -o providers.test ./providers

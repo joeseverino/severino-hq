@@ -210,8 +210,7 @@ def apply_tls_reconcile(
     fullchain, private_key = tls_issuance.lineage(spec)
     expected = tls_issuance.validate_certificate(fullchain, private_key, spec["domains"])
     observed = tls_verification.reconcile_tls(spec)
-    fingerprints = {item["fingerprint_sha256"] for item in observed.status["consumers"]}
-    if fingerprints == {expected}:
+    if tls_verification.tls_consumers_serve(spec, observed.status, expected):
         return ProviderResult(
             changed=False,
             status={

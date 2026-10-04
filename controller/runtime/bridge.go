@@ -17,6 +17,8 @@ import (
 type CommandBridge struct {
 	Prefix  []string
 	Timeout time.Duration
+	// Env is the bridge process's environment; nil inherits this one.
+	Env []string
 }
 
 type BridgeError struct{ Message string }
@@ -24,22 +26,6 @@ type BridgeError struct{ Message string }
 func (e *BridgeError) Error() string { return e.Message }
 
 const maxBridgeOutput = 64 << 20
-
-type boundedBuffer struct {
-	bytes.Buffer
-	overflow bool
-}
-
-func (b *boundedBuffer) Write(p []byte) (int, error) {
-	n := len(p)
-	remaining := maxBridgeOutput - b.Len()
-	if len(p) > remaining {
-		p = p[:remaining]
-		b.overflow = true
-	}
-	_, _ = b.Buffer.Write(p)
-	return n, nil
-}
 
 func (b CommandBridge) Call(ctx context.Context, args []string, payload any, result any) error {
 	if len(b.Prefix) == 0 {
@@ -63,7 +49,9 @@ func (b CommandBridge) Call(ctx context.Context, args []string, payload any, res
 	defer cancel()
 	cmd := exec.CommandContext(ctx, b.Prefix[0], argv...)
 	cmd.Stdin = bytes.NewReader(input)
-	var stdout, stderr boundedBuffer
+	cmd.Env = b.Env
+	cmd.WaitDelay = ProcessWaitDelay
+	stdout, stderr := BoundedBuffer{Limit: maxBridgeOutput}, BoundedBuffer{Limit: maxBridgeOutput}
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
@@ -80,13 +68,13 @@ func (b CommandBridge) Call(ctx context.Context, args []string, payload any, res
 		}
 		return &BridgeError{"HQ controller bridge command failed: " + string(said)}
 	}
-	if stdout.overflow {
+	if stdout.Overflow {
 		return &BridgeError{"HQ controller bridge returned too much data."}
 	}
 	if result == nil {
 		result = new(any)
 	}
-	decoder := json.NewDecoder(&stdout.Buffer)
+	decoder := json.NewDecoder(bytes.NewReader(stdout.Bytes()))
 	decoder.UseNumber()
 	if err := decoder.Decode(result); err != nil {
 		return &BridgeError{"HQ controller bridge returned invalid JSON."}

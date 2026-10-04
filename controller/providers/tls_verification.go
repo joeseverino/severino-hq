@@ -282,12 +282,66 @@ func tlsVerificationPolicy(ctx context.Context) (time.Duration, time.Duration, e
 	return time.Duration(timeout) * time.Second, time.Duration(interval) * time.Second, nil
 }
 
-func fingerprintsAre(status *TLSCertificateStatus, expected string) bool {
+// consumersServe is whether every consumer was read and every reading is the
+// expected certificate. One matching consumer never vouches for the rest.
+func consumersServe(spec TLSCertificateSpec, status *TLSCertificateStatus, expected string) bool {
+	if len(status.UnreachableConsumers) > 0 {
+		return false
+	}
+	read := map[string]bool{}
 	seen := map[string]bool{}
 	for _, item := range status.Consumers {
+		read[item.Consumer] = true
 		seen[item.FingerprintSHA256] = true
 	}
+	for _, consumer := range spec.Consumers {
+		if !read[consumer.Name] {
+			return false
+		}
+	}
 	return len(seen) == 1 && seen[expected]
+}
+
+// unserved is each consumer not shown serving the certificate, and what was found.
+func unserved(spec TLSCertificateSpec, status *TLSCertificateStatus, expected string) map[string][]string {
+	found := map[string][]string{}
+	stale := map[string][]string{}
+	read := map[string]bool{}
+	for _, item := range status.Consumers {
+		read[item.Consumer] = true
+		if item.FingerprintSHA256 != expected {
+			stale[item.Consumer] = append(stale[item.Consumer], item.Domain)
+		}
+	}
+	for consumer, names := range stale {
+		names = append([]string{}, names...)
+		sort.Strings(names)
+		found[consumer] = append(found[consumer], consumer+" still serves the previous certificate at "+strings.Join(names, ", "))
+	}
+	missed := map[string][]string{}
+	for _, item := range status.UnreachableConsumers {
+		if _, ok := missed[item.Consumer]; !ok {
+			missed[item.Consumer] = []string{}
+		}
+		if item.Domain != "" {
+			missed[item.Consumer] = append(missed[item.Consumer], item.Domain)
+		}
+	}
+	for consumer, names := range missed {
+		line := consumer + " could not be read"
+		if len(names) > 0 {
+			names = append([]string{}, names...)
+			sort.Strings(names)
+			line += " at " + strings.Join(names, ", ")
+		}
+		found[consumer] = append(found[consumer], line)
+	}
+	for _, consumer := range spec.Consumers {
+		if _, ok := missed[consumer.Name]; !read[consumer.Name] && !ok {
+			found[consumer.Name] = append(found[consumer.Name], consumer.Name+" has no verification domain")
+		}
+	}
+	return found
 }
 
 // verifyTLSDeployment reads every consumer until each serves the expected certificate.
@@ -302,32 +356,27 @@ func (r *Registry) verifyTLSDeployment(ctx context.Context, spec TLSCertificateS
 		if err != nil {
 			return Result{}, nil, err
 		}
-		if fingerprintsAre(status, expected) {
+		if consumersServe(spec, status, expected) {
 			return result, status, nil
 		}
 		if !r.Monotonic().Before(deadline) {
 			evidence := TLSVerificationEvidence{ExpectedFingerprint: expected, Consumers: []TLSConsumerEvidence{}}
-			stale := map[string][]string{}
 			for _, item := range status.Consumers {
 				matches := item.FingerprintSHA256 == expected
 				evidence.Consumers = append(evidence.Consumers, TLSConsumerEvidence{Consumer: item.Consumer, Kind: item.ConsumerKind, Domain: item.Domain, FingerprintSHA256: item.FingerprintSHA256, MatchesExpected: matches})
-				if !matches {
-					stale[item.Consumer] = append(stale[item.Consumer], item.Domain)
-				}
 			}
-			consumers := make([]string, 0, len(stale))
-			for consumer := range stale {
+			failing := unserved(spec, status, expected)
+			consumers := make([]string, 0, len(failing))
+			for consumer := range failing {
 				consumers = append(consumers, consumer)
 			}
 			sort.Strings(consumers)
-			details := make([]string, 0, len(consumers))
+			details := []string{}
 			for _, consumer := range consumers {
-				names := append([]string{}, stale[consumer]...)
-				sort.Strings(names)
-				details = append(details, consumer+" still serves the previous certificate at "+strings.Join(names, ", "))
+				details = append(details, failing[consumer]...)
 			}
 			return Result{}, nil, &ProviderError{
-				Message: fmt.Sprintf("%d of %d TLS consumers did not activate the certificate within %ds: %s.", len(stale), len(spec.Consumers), int(timeout.Seconds()), strings.Join(details, "; ")),
+				Message: fmt.Sprintf("%d of %d TLS consumers did not activate the certificate within %ds: %s.", len(failing), len(spec.Consumers), int(timeout.Seconds()), strings.Join(details, "; ")),
 				Status:  evidence,
 			}
 		}

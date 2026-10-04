@@ -23,7 +23,7 @@ from control_plane.provider_adapters.contracts import (
 )
 from control_plane.provider_adapters import onepassword
 from control_plane.provider_adapters.tailscale import TAILNET_KIND
-from control_plane.provider_adapters.parts import part_ledger
+from control_plane.provider_adapters.parts import part_ledger, report_text
 from control_plane.provider_adapters.together import read_each
 from . import (
     cloudflare,
@@ -163,7 +163,7 @@ def _probed(probe: Callable[[str], dict[str, Any]], connection_ref: str) -> dict
         result = probe(connection_ref)
         found = {"detail": result["detail"], "reaches": result["reaches"]}
     except (ProviderError, OSError, ValueError, KeyError) as exc:
-        return {"ok": False, "detail": str(exc), "failure": failure_of(exc)}
+        return {"ok": False, "detail": report_text(str(exc)), "failure": failure_of(exc)}
     if result.get("expires_at"):
         found["expires_at"] = result["expires_at"]
     return found
@@ -268,12 +268,12 @@ def _refused_report(exc: BaseException) -> dict[str, Any]:
     """A failed read, with whether the credential or one permission was refused."""
 
     refusal = getattr(exc, "refusal", "")
-    report: dict[str, Any] = {"ok": False, "records": [], "error": str(exc)}
+    report: dict[str, Any] = {"ok": False, "records": [], "error": report_text(str(exc))}
     if refusal:
         report["refusal"] = refusal
     reason = getattr(exc, "reason", "")
     if refusal == CREDENTIAL_REFUSAL and reason:
-        report["error"] = reason
+        report["error"] = report_text(reason)
     return report
 
 
@@ -372,12 +372,21 @@ def _refuse_unless_managed(kind: str, spec: dict[str, Any]) -> None:
 
     provider = PROVIDERS.get(kind)
     if provider is None or not provider.connection_providers:
-        return
+        # Fail closed: a write nothing declares a connection for has no
+        # manages switch an operator could have set.
+        raise ProviderError(
+            "Nothing declares which connections act for this, so no connection "
+            "manages it. It was not applied."
+        )
     named = str(spec.get("connection_ref") or "")
+    ssh_refs = set(connection_env.ssh_connection_refs())
     if named:
+        if connection_env.effective_provider(named, ssh_refs) not in provider.connection_providers:
+            raise ProviderError(
+                f"{named} is not a connection for this, so it was not used."
+            )
         refs: tuple[str, ...] = (named,)
     else:
-        ssh_refs = set(connection_env.ssh_connection_refs())
         refs = tuple(
             ref
             for ref in sorted(connection_env.connection_prefixes())

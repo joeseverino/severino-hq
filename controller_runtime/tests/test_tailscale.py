@@ -386,7 +386,7 @@ class TailnetPolicyGateTests(TestCase):
         spec = {"connection_ref": "a-tailnet", "document": json.dumps(declared)}
         with (
             mock.patch.object(tailnet_api, "tailnet_token", return_value="t"),
-            mock.patch.object(tailnet_policy, "_tailnet_policy", return_value=live),
+            mock.patch.object(tailnet_policy, "_tailnet_policy_version", return_value=(live, "")),
             mock.patch.object(urllib.request, "urlopen") as urlopen,
         ):
             urlopen.return_value.__enter__.return_value.read.return_value = b"{}"
@@ -657,12 +657,16 @@ class TailnetPolicyWriteTests(TestCase):
         except ValueError:
             return None
 
-    def reconcile(self, document, script=(), *, live=None, apply=True):
+    def reconcile(self, document, script=(), *, live=None, apply=True, etag='"v1"'):
         urlopen = _Scripted(script)
         with (
             mock.patch.object(tailnet_api, "tailnet_token", return_value="t"),
-            # Read before the write, and back after it.
-            mock.patch.object(tailnet_policy, "_tailnet_policy", side_effect=[live, self.parsed(document)]),
+            # Read before the write, with its version, and back after it.
+            mock.patch.object(
+                tailnet_policy,
+                "_tailnet_policy_version",
+                side_effect=[(live, etag), (self.parsed(document), "")],
+            ),
             mock.patch.object(urllib.request, "urlopen", urlopen),
         ):
             result = tailnet_policy.reconcile_tailnet_policy(
@@ -710,44 +714,34 @@ class TailnetPolicyWriteTests(TestCase):
             self.reconcile(json.dumps(self.WANTED), [_refused(500)], live=self.TESTED)
 
     def test_the_write_is_conditional_on_the_version_read(self):
-        result, sent = self.reconcile(
-            json.dumps(self.WANTED), [{}, ({}, '"v1"'), {}], live=self.TESTED
-        )
+        result, sent = self.reconcile(json.dumps(self.WANTED), [{}, {}], live=self.TESTED)
 
         self.assertTrue(result.changed)
         # What was read back, so the write confirms the document it made.
         self.assertEqual(json.loads(result.status["document"]), self.WANTED)
         self.assertEqual(result.message, "Tailnet policy applied after its own tests passed.")
+        # The version is the one the checks read: no second read for it.
         self.assertEqual(
             [request.full_url.rsplit("/", 1)[-1] for request in sent],
-            ["validate", "acl", "acl"],
+            ["validate", "acl"],
         )
-        self.assertEqual(sent[2].get_method(), "POST")
-        self.assertEqual(sent[2].get_header("If-match"), '"v1"')
-        self.assertEqual(json.loads(sent[2].data), self.WANTED)
+        self.assertEqual(sent[1].get_method(), "POST")
+        self.assertEqual(sent[1].get_header("If-match"), '"v1"')
+        self.assertEqual(json.loads(sent[1].data), self.WANTED)
 
-    def test_no_version_read_writes_without_a_condition(self):
-        _, sent = self.reconcile(
-            json.dumps(self.WANTED), [{}, _refused(500), {}], live=self.TESTED
-        )
-
-        self.assertIsNone(sent[2].get_header("If-match"))
+    def test_no_version_read_writes_nothing(self):
+        with self.assertRaisesRegex(ProviderError, "did not say which version"):
+            self.reconcile(json.dumps(self.WANTED), [{}], live=self.TESTED, etag="")
 
     def test_a_policy_changed_elsewhere_is_not_overwritten(self):
         with self.assertRaisesRegex(ProviderError, "changed somewhere else"):
-            self.reconcile(
-                json.dumps(self.WANTED), [{}, ({}, "v"), _refused(412)], live=self.TESTED
-            )
+            self.reconcile(json.dumps(self.WANTED), [{}, _refused(412)], live=self.TESTED)
 
     def test_other_write_failures_say_what_happened(self):
         with self.assertRaisesRegex(ProviderError, r"refused the policy \(403\)"):
-            self.reconcile(
-                json.dumps(self.WANTED), [{}, ({}, "v"), _refused(403)], live=self.TESTED
-            )
+            self.reconcile(json.dumps(self.WANTED), [{}, _refused(403)], live=self.TESTED)
         with self.assertRaisesRegex(ProviderError, "did not answer the policy"):
-            self.reconcile(
-                json.dumps(self.WANTED), [{}, ({}, "v"), OSError()], live=self.TESTED
-            )
+            self.reconcile(json.dumps(self.WANTED), [{}, OSError()], live=self.TESTED)
 
 
 class RouteApprovalFailureTests(TestCase):

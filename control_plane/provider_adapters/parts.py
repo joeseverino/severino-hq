@@ -18,6 +18,17 @@ _PART_REFUSALS: ContextVar[list[dict[str, str]] | None] = ContextVar(
 )
 
 
+# How much of a failure's text a report carries: remote and refusal text can be
+# long, and a report is read on a page.
+REPORT_TEXT_LIMIT = 500
+
+
+def report_text(text: str) -> str:
+    """Failure text as a report carries it, cut to REPORT_TEXT_LIMIT."""
+
+    return text[:REPORT_TEXT_LIMIT]
+
+
 def unread_reason(exc: BaseException) -> str:
     """Why an optional read failed, short enough to show on a page."""
 

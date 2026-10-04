@@ -23,8 +23,9 @@ type ProviderError = runtime.ProviderError
 // into its own response type. The payload is a provider request struct, url.Values or a string.
 type Transport interface {
 	Request(context.Context, string, string, map[string]string, any) (json.RawMessage, error)
-	// Header GETs an address for one response header, such as an ETag.
-	Header(ctx context.Context, address string, headers map[string]string, name string) (string, error)
+	// RequestHeader GETs an address for its JSON and one header of the same
+	// response, such as the ETag of the version read.
+	RequestHeader(ctx context.Context, address string, headers map[string]string, name string) (json.RawMessage, string, error)
 }
 
 // Action receives the resource's spec and observed payloads, opaque in the

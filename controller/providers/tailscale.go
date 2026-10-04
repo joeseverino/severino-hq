@@ -407,7 +407,7 @@ const (
 // readTailnetNodes reads the tailnet status file: Self first, then each
 // Peer in the order the file lists them.
 func (r *Registry) readTailnetNodes() ([]tailnetNode, tailnetReading) {
-	statusFile := os.Getenv("SEVERINO_TAILNET_STATUS")
+	statusFile := r.Env["SEVERINO_TAILNET_STATUS"]
 	if statusFile == "" {
 		return nil, readingAbsent
 	}
@@ -574,7 +574,7 @@ func (r *Registry) localTailnetDevices() ([]TailscaleDeviceRecord, error) {
 func (r *Registry) tailscaleDeviceInventory(ctx context.Context) ([]any, error) {
 	devices := []TailscaleDeviceRecord{}
 	identities := map[string]tailnetDevice{}
-	if os.Getenv("SEVERINO_TAILNET_STATUS") != "" {
+	if r.Env["SEVERINO_TAILNET_STATUS"] != "" {
 		local, err := r.localTailnetDevices()
 		if err != nil {
 			return nil, err

@@ -343,7 +343,12 @@ class CaddyRouteRenderingTests(TestCase):
 
     @mock.patch.dict(
         "os.environ",
-        {"EDGE_CONNECTION_REF": "edge", "EDGE_MANAGES": "1"},
+        {
+            "EDGE_CONNECTION_REF": "edge",
+            "EDGE_HOST": "edge.example",
+            "EDGE_USER": "hq",
+            "EDGE_MANAGES": "1",
+        },
         clear=True,
     )
     @mock.patch("controller_runtime.commands.run_ssh")

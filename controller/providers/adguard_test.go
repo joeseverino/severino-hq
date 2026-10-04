@@ -35,6 +35,7 @@ func encoded(v any) (json.RawMessage, error) { return json.Marshal(v) }
 type request struct {
 	path, method string
 	payload      any
+	ifMatch      string // the version a conditional write is held to
 }
 type fakeHTTP struct {
 	requests  []request
@@ -45,13 +46,14 @@ type fakeHTTP struct {
 	headers   map[string]map[string]any // response headers by path
 }
 
-func (h *fakeHTTP) Header(ctx context.Context, address string, headers map[string]string, name string) (string, error) {
-	if _, err := h.answer(ctx, address, "GET", headers, nil); err != nil {
-		return "", err
+func (h *fakeHTTP) RequestHeader(ctx context.Context, address string, headers map[string]string, name string) (json.RawMessage, string, error) {
+	data, err := h.Request(ctx, address, "GET", headers, nil)
+	if httpStatus(err) != 0 {
+		return nil, "", err
 	}
 	path := strings.TrimPrefix(strings.TrimPrefix(address, "https://example.invalid"), "https://api.tailscale.com/api/v2")
 	value, _ := h.headers[path][name].(string)
-	return value, nil
+	return data, value, err
 }
 
 // Request answers from routes, encoded as the real transport would return it.
@@ -72,10 +74,10 @@ func (h *fakeHTTP) Request(ctx context.Context, address, method string, headers 
 	return data, err
 }
 
-func (h *fakeHTTP) answer(_ context.Context, address, method string, _ map[string]string, payload any) (any, error) {
+func (h *fakeHTTP) answer(_ context.Context, address, method string, headers map[string]string, payload any) (any, error) {
 	path := strings.TrimPrefix(address, "https://example.invalid")
 	path = strings.TrimPrefix(path, "https://api.tailscale.com/api/v2")
-	h.requests = append(h.requests, request{path, method, payload})
+	h.requests = append(h.requests, request{path, method, payload, headers["If-Match"]})
 	if method != "GET" {
 		if err, ok := h.writeFail[path]; ok {
 			return nil, err
@@ -235,5 +237,16 @@ func TestDNSOptionalPartFailureDoesNotEraseReadableStatus(t *testing.T) {
 	found := asRecords(records)
 	if err != nil || len(found) != 1 || found[0]["running"] != true || len(ledger.entries) != 1 || ledger.entries[0].Part != "upstreams" {
 		t.Fatalf("%#v %#v %v", found, ledger, err)
+	}
+}
+
+func TestCommandOutputPastTheLimitIsAFailedStep(t *testing.T) {
+	commands := &Commands{Env: runtime.Environment{"PATH": "/usr/bin:/bin"}}
+	_, err := commands.Run(context.Background(), []string{"sh", "-c", "head -c 16777217 /dev/zero"}, nil, "a step", "edge", nil)
+	if err == nil || err.Error() != "a step failed." {
+		t.Fatalf("%v", err)
+	}
+	if failures := commands.StepFailures(); len(failures) != 1 || failures[0].Reason != "output over limit" {
+		t.Fatalf("%#v", failures)
 	}
 }

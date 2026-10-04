@@ -18,6 +18,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -170,12 +171,35 @@ func (r *Registry) acmeDir() (string, error) {
 	return r.Env.Required("HQ", "ACME_DIR")
 }
 
+// certificateName and certificateDomain are TLSCertificateSpec's
+// CERTIFICATE_NAME_PATTERN and CERTIFICATE_DOMAIN_PATTERN
+// (control_plane/provider_adapters/tls.py), checked again where they reach
+// certbot's argv and a path.
+var (
+	certificateName   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+	certificateDomain = regexp.MustCompile(`^(\*\.)?([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
+)
+
+// lineagePath is where certbot keeps this certificate's lineage, for a name that is one.
 func (r *Registry) lineagePath(spec TLSCertificateSpec) (string, error) {
+	if len([]rune(spec.CertificateName)) > 160 || !certificateName.MatchString(spec.CertificateName) {
+		return "", &ProviderError{Message: "The certificate name is not a lineage name."}
+	}
 	acme, err := r.acmeDir()
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(acme, "config", "live", spec.CertificateName), nil
+}
+
+// checkedDomains is the names certbot is asked for, each a domain name, never an option.
+func checkedDomains(spec TLSCertificateSpec) ([]string, error) {
+	for _, domain := range spec.Domains {
+		if !certificateDomain.MatchString(domain) {
+			return nil, &ProviderError{Message: "A certificate domain is not a domain name."}
+		}
+	}
+	return spec.Domains, nil
 }
 
 func readLineage(dir string) ([]byte, []byte, error) {
@@ -320,6 +344,14 @@ func (r *Registry) cloudflareToken() (string, error) {
 
 // issueCertificate runs certbot's DNS-01 issuance and returns the new lineage.
 func (r *Registry) issueCertificate(ctx context.Context, spec TLSCertificateSpec) ([]byte, []byte, error) {
+	lineage, err := r.lineagePath(spec)
+	if err != nil {
+		return nil, nil, err
+	}
+	domains, err := checkedDomains(spec)
+	if err != nil {
+		return nil, nil, err
+	}
 	acme, err := r.acmeDir()
 	if err != nil {
 		return nil, nil, err
@@ -368,13 +400,13 @@ func (r *Registry) issueCertificate(ctx context.Context, spec TLSCertificateSpec
 		"--cert-name", spec.CertificateName,
 		"--force-renewal",
 	}
-	for _, domain := range spec.Domains {
+	for _, domain := range domains {
 		argv = append(argv, "-d", domain)
 	}
 	if _, err := r.commands().Run(ctx, argv, nil, "certbot certonly", "", nil); err != nil {
 		return nil, nil, err
 	}
-	fullchain, privateKey, err := readLineage(filepath.Join(acme, "config", "live", spec.CertificateName))
+	fullchain, privateKey, err := readLineage(lineage)
 	if err != nil {
 		return nil, nil, &ProviderError{Message: "Certbot did not produce a complete lineage."}
 	}

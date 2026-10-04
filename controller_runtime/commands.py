@@ -111,6 +111,14 @@ def run_command(
         )
         _record_step_failure(step, subject, type(exc).__name__)
         raise ProviderError(f"{step} could not complete.") from exc
+    if len(result.stdout or b"") > OUTPUT_LIMIT or len(result.stderr or b"") > OUTPUT_LIMIT:
+        provider_http.logger.warning(
+            "controller step failed: %s (output over limit)",
+            step,
+            extra={"event": "controller.step.failed", "step": step},
+        )
+        _record_step_failure(step, subject, "output over limit")
+        raise ProviderError(f"{step} failed.")
     if result.returncode:
         stderr = _redacted(result.stderr.decode("utf-8", "replace"), env)
         said = _last_line(stderr)
@@ -131,6 +139,11 @@ def run_command(
         _record_step_failure(step, subject, f"exit {result.returncode}")
         raise ProviderError(f"{step} failed.")
     return result.stdout
+
+
+# What one tool or SSH call may print, per stream. More is a failed step. The
+# native controller bounds the read itself; here the capture is judged after.
+OUTPUT_LIMIT = 16 << 20
 
 
 # Long enough for a path and an errno; short enough to sit in a status line.

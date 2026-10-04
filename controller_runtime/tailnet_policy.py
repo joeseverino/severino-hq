@@ -111,25 +111,6 @@ def _tailnet_lock() -> dict[str, Any]:
     }
 
 
-def _tailnet_policy_etag(token: str) -> str:
-    """The version of the policy HQ read, so a write cannot clobber a newer one.
-
-    Without it, two people editing at once means the later save silently wins.
-    Tailscale takes this back as ``If-Match`` and refuses the write instead.
-    """
-
-    try:
-        with provider_http.open_url(
-            f"{tailnet_api.TAILNET_API}/tailnet/-/acl",
-            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-            timeout=30,
-        ) as response:
-            return response.headers.get("etag", "")
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError) as exc:
-        provider_http.release(exc)
-        return ""
-
-
 def _policy_passes_its_tests(token: str, document: dict[str, Any]) -> None:
     """The gate. Validation runs the tests the document carries, so a change
     that would break one is refused before anything is written."""
@@ -156,10 +137,19 @@ def _policy_passes_its_tests(token: str, document: dict[str, Any]) -> None:
         )
 
 
-def _write_tailnet_policy(token: str, document: dict[str, Any]) -> None:
-    """Write the policy, conditional on the version last read."""
+def _write_tailnet_policy(token: str, document: dict[str, Any], etag: str) -> None:
+    """Write the policy, conditional on the version the checks ran against.
 
-    etag = _tailnet_policy_etag(token)
+    ``etag`` comes from the same read the deny check judged, so a change made
+    in between refuses the write (412) instead of being overwritten. Without
+    one there is no version to hold the write to, so nothing is written.
+    """
+
+    if not etag:
+        raise ProviderError(
+            "Tailscale did not say which version of the policy it holds, so "
+            "the policy was not written."
+        )
     try:
         with provider_http.open_url(
             f"{tailnet_api.TAILNET_API}/tailnet/-/acl",
@@ -167,7 +157,7 @@ def _write_tailnet_policy(token: str, document: dict[str, Any]) -> None:
             headers={
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",
-                **({"If-Match": etag} if etag else {}),
+                "If-Match": etag,
             },
             method="POST",
             timeout=30,
@@ -251,7 +241,7 @@ def reconcile_tailnet_policy(
     if not isinstance(document, dict):
         raise ProviderError("The declared policy is not a JSON object.")
     token = tailnet_api.tailnet_token(spec.get("connection_ref", ""))
-    live = _tailnet_policy(token)
+    live, etag = _tailnet_policy_version(token)
     if live == document:
         return _current_policy(document)
     refuse_weaker_tests(live, document)
@@ -263,7 +253,7 @@ def reconcile_tailnet_policy(
             conditions=[],
             message="The policy passes its own tests and would be applied.",
         )
-    _write_tailnet_policy(token, document)
+    _write_tailnet_policy(token, document, etag)
     return ProviderResult(
         changed=True,
         status=_applied(_tailnet_policy(token)),
@@ -277,13 +267,20 @@ def reconcile_tailnet_policy(
 def _tailnet_policy(token: str) -> dict[str, Any]:
     """The tailnet's policy file, as Tailscale currently holds it."""
 
+    return _tailnet_policy_version(token)[0]
+
+
+def _tailnet_policy_version(token: str) -> tuple[dict[str, Any], str]:
+    """The policy file and its ETag, from one read."""
+
     try:
         with provider_http.open_url(
             f"{tailnet_api.TAILNET_API}/tailnet/-/acl",
             headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             timeout=30,
         ) as response:
-            return json.loads(response.read())
+            etag = response.headers.get("etag", "") or ""
+            return json.loads(response.read()), etag
     except urllib.error.HTTPError as exc:
         provider_http.release(exc)
         raise tailnet_api.tailnet_refused("the policy read", "policy_file:read", exc.code) from exc

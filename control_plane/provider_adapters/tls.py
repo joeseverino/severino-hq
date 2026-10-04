@@ -73,6 +73,15 @@ class OnePasswordPublication(ProviderModel):
     item: str = Field(min_length=1, max_length=160)
 
 
+# A certbot lineage name: it becomes --cert-name and a directory under live/.
+CERTIFICATE_NAME_PATTERN = r"^[a-z0-9][a-z0-9-]*$"
+# A domain certbot is asked for: DNS labels, optionally under one wildcard.
+CERTIFICATE_DOMAIN_PATTERN = (
+    r"^(\*\.)?([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+"
+    r"[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
+)
+
+
 class TLSCertificateSpec(ProviderModel):
     """One certificate HQ issues, deploys and keeps renewed.
 
@@ -85,7 +94,7 @@ class TLSCertificateSpec(ProviderModel):
 
     certificate_name: str = Field(
         max_length=160,
-        pattern=r"^[a-z0-9][a-z0-9-]*$",
+        pattern=CERTIFICATE_NAME_PATTERN,
         title="Certificate name",
         description="Lowercase, no spaces.",
     )

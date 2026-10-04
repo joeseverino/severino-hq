@@ -118,13 +118,15 @@ func (h *HTTPClient) Request(ctx context.Context, address, method string, header
 	return data, nil
 }
 
-// Header reads address and returns one response header, ignoring the body.
-func (h *HTTPClient) Header(ctx context.Context, address string, headers map[string]string, name string) (string, error) {
-	_, header, err := h.do(ctx, address, "GET", headers, nil)
-	if err != nil {
-		return "", err
+// RequestHeader GETs address and returns its validated JSON with one response
+// header from the same answer, such as the ETag of the version read. The header
+// is kept even when the body fails its checks.
+func (h *HTTPClient) RequestHeader(ctx context.Context, address string, headers map[string]string, name string) (json.RawMessage, string, error) {
+	data, header, err := h.do(ctx, address, "GET", headers, nil)
+	if len(data) == 0 {
+		data = nil
 	}
-	return header.Get(name), nil
+	return data, header.Get(name), err
 }
 
 func (h *HTTPClient) do(ctx context.Context, address, method string, headers map[string]string, payload any) (json.RawMessage, http.Header, error) {
@@ -222,15 +224,15 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 	}
 	responseContentType := strings.ToLower(response.Header.Get("Content-Type"))
 	if strings.Contains(responseContentType, "text/html") || strings.Contains(responseContentType, "application/xhtml+xml") || bytes.HasPrefix(bytes.TrimSpace(data), []byte("<")) {
-		return nil, nil, &ProviderError{Message: "The address answered with a web page, not the API. Use the provider's direct API address.", Failure: "address"}
+		return nil, response.Header, &ProviderError{Message: "The address answered with a web page, not the API. Use the provider's direct API address.", Failure: "address"}
 	}
 	var result json.RawMessage
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	if err := decoder.Decode(&result); err != nil {
-		return nil, nil, &ProviderError{Message: "Provider returned invalid JSON."}
+		return nil, response.Header, &ProviderError{Message: "Provider returned invalid JSON."}
 	}
 	if err := decoder.Decode(new(json.RawMessage)); err != io.EOF {
-		return nil, nil, &ProviderError{Message: "Provider returned invalid JSON."}
+		return nil, response.Header, &ProviderError{Message: "Provider returned invalid JSON."}
 	}
 	return result, response.Header, nil
 }

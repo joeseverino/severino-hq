@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 import subprocess
 import sys
 import tempfile
@@ -128,7 +129,10 @@ class TailnetFixture:
                 payload = urllib.parse.parse_qs(data.decode())
             else:
                 payload = json.loads(data)
-        self.requests.append({"path": path, "method": method, "payload": payload})
+        entry = {"path": path, "method": method, "payload": payload}
+        if (headers or {}).get("If-Match"):
+            entry["if_match"] = headers["If-Match"]
+        self.requests.append(entry)
         statuses = {**self.fixture.get("statuses", {})}
         routes = {"/oauth/token": {"access_token": "synthetic"}, **self.fixture["routes"]}
         if method != "GET":
@@ -186,7 +190,10 @@ class CloudflareFixture:
     def open_url(self, url, *, method="GET", headers=None, data=None, timeout=15):
         path = url.removeprefix("https://example.invalid")
         payload = None if data is None else json.loads(data)
-        self.requests.append({"path": path, "method": method, "payload": payload})
+        entry = {"path": path, "method": method, "payload": payload}
+        if (headers or {}).get("If-Match"):
+            entry["if_match"] = headers["If-Match"]
+        self.requests.append(entry)
         statuses = {**self.fixture.get("statuses", {})}
         routes = {**self.fixture["routes"]}
         if method != "GET":
@@ -689,7 +696,11 @@ def tailscale_mutation_fixtures():
                       headers={"/tailnet/-/acl": {"etag": "\"v1\""}})
     for code in (412, 500):
         yield tailnet("reconcile_policy", acl, apply=True, spec={"document": json.dumps(stronger)},
-                      write_statuses={"/tailnet/-/acl": code})
+                      write_statuses={"/tailnet/-/acl": code}, headers={"/tailnet/-/acl": {"etag": "\"v1\""}})
+    # No version came back with the live read, so nothing is written; there is no second read for one.
+    yield tailnet("reconcile_policy", acl, apply=True, spec={"document": json.dumps(stronger)})
+    yield tailnet("reconcile_policy", acl, apply=True, spec={"document": json.dumps(stronger)},
+                  headers={"/tailnet/-/acl": {"etag": ""}})
     yield tailnet("reconcile_policy", apply=True, spec={"document": live}, statuses={"/tailnet/-/acl": 403})
     # Python's == decides "already current": 1 == 1.0, True == 1, and key order is ignored.
     flagged = {**TAILNET_POLICY, "flag": True}
@@ -784,6 +795,8 @@ class LocalFixture:
         answer = self.fixture.get("commands", {}).get(f"{ref} {command[-1]}", {})
         if answer == "missing":
             raise FileNotFoundError(command[0])
+        if answer == "overflow":
+            return subprocess.CompletedProcess(command, 0, b"x" * (commands.OUTPUT_LIMIT + 1), b"")
         return subprocess.CompletedProcess(
             command, answer.get("exit", 0), answer.get("stdout", "").encode(), answer.get("stderr", "").encode(),
         )
@@ -843,7 +856,10 @@ class LocalFixture:
                     mock.patch.object(host_readings, "_answers_from_here",
                                       lambda address, port, timeout=3.0: f"{address}:{port}" in opened), \
                     mock.patch.object(host_readings.portainer, "list_portainer_containers", self.containers), \
-                    mock.patch.object(glance, "controller_id", lambda: "controller"):
+                    mock.patch.object(glance, "controller_id", lambda: "controller"), \
+                    mock.patch.dict(runtime_providers.PROVIDERS, {
+                        kind: SimpleNamespace(connection_providers=()) for kind in self.fixture.get("undeclared", [])
+                    }):
                 patches = self.portainer()
                 with patches[0], patches[1], patches[2]:
                     return self.surface()
@@ -916,6 +932,8 @@ def host_fixtures():
         {"firewall_unit": None, "read_at": 5, "public_addresses": None})}}}
     yield {**perimeter, "commands": {"edge perimeter": {"exit": 255, "stderr": "Permission denied (publickey)."}}}
     yield {**perimeter, "commands": {"edge perimeter": "missing"}}
+    # More output than a step may print is a failed step, whatever the exit code.
+    yield {**perimeter, "commands": {"edge perimeter": "overflow"}}
     yield {**perimeter, "env": {**EDGE, "EDGE_PORT": "70000"}}
     yield {**perimeter, "env": {**EDGE, "EDGE_USER": "-oProxyCommand=x"}}
     yield {**perimeter, "env": {key: value for key, value in EDGE.items() if key != "EDGE_ROLE"}}
@@ -1086,6 +1104,40 @@ def dispatch_fixtures():
     locked = next(entry for entry in registry["locked"])
     yield {**execute, "apply": True, "action": locked["action"], "resource": {**resource, "kind": locked["kind"]}}
     yield {**execute, "apply": False, "action": "reconcile", "resource": {**resource, "kind": "unknown.kind"}}
+    # A named connection of another provider passes no manages check, even one that manages.
+    managed = {**ADGUARD, **EDGE, "ADGUARD_MANAGES": "true", "EDGE_MANAGES": "true"}
+    yield {**execute, "apply": True, "env": managed,
+           "resource": {**resource, "spec": {**resource["spec"], "connection_ref": "edge"}}}
+    yield {**execute, "apply": True, "env": managed,
+           "resource": {**resource, "spec": {**resource["spec"], "connection_ref": "nowhere"}}}
+    # A kind the registry declares no connection for is refused, not waved through.
+    yield {**execute, "apply": True, "env": managed, "undeclared": ["adguard.rewrite"]}
+    yield {**execute, "apply": False, "env": managed, "undeclared": ["adguard.rewrite"]}
+    # Two items carrying one ref name neither.
+    yield {**execute, "apply": True, "env": {**managed, "DNS2_CONNECTION_REF": "dns", "DNS2_PROVIDER": "adguard"},
+           "routes": {rewrite: [], "https://adguard.example.invalid/control/rewrite/add": None}}
+    # NPM writes go through the connection the spec names, which is the one the gate checked.
+    npm_env = {
+        "NPM_CONNECTION_REF": "proxy", "NPM_URL": "https://npm.example.invalid", "NPM_USERNAME": "user",
+        "NPM_PASSWORD": "synthetic",
+        "NPM_HOME_CONNECTION_REF": "proxy-home", "NPM_HOME_PROVIDER": "npm", "NPM_HOME_MANAGES": "true",
+        "NPM_HOME_URL": "https://npm-home.example.invalid", "NPM_HOME_USERNAME": "user", "NPM_HOME_PASSWORD": "synthetic",
+    }
+    npm_spec = {
+        "domain_names": ["a.example.test"], "forward_scheme": "http", "forward_host": "192.0.2.5", "forward_port": 80,
+        "force_ssl": False, "http2": False, "websocket": False, "caching_enabled": False, "block_exploits": True,
+        "access_list_id": 0, "certificate_id": 0, "advanced_config": "", "hsts_enabled": False,
+        "hsts_subdomains": False, "trust_forwarded_proto": False, "serving": True, "connection_ref": "proxy-home",
+    }
+    home = "https://npm-home.example.invalid/api"
+    npm_resource = {"key": "proxy", "kind": "npm.proxy_host", "generation": 1, "enabled": True, "spec": npm_spec,
+                    "observed": None}
+    for action in ("reconcile", "delete"):
+        yield {**execute, "apply": True, "env": npm_env, "action": action, "resource": npm_resource,
+               "routes": {f"{home}/tokens": {"token": "synthetic"}, f"{home}/nginx/proxy-hosts": [],
+                          **({f"{home}/nginx/proxy-hosts": []} if action == "delete" else {})}}
+    yield {**execute, "apply": True, "env": npm_env, "action": "reconcile",
+           "resource": {**npm_resource, "spec": {**npm_spec, "connection_ref": "proxy"}}}
 
     inventory = {"provider": "local", "surface": "inventory", "registry": registry,
                  "only": ["adguard.rewrite", "host.firewall", "host.perimeter", "tailscale.device"]}
@@ -1094,6 +1146,9 @@ def dispatch_fixtures():
            "routes": {rewrite: [{"domain": "example.test", "answer": "192.0.2.1"}]},
            "commands": {"edge perimeter": {"stdout": json.dumps({"public_addresses": "", "firewall_unit": "active"})}}}
     yield {**inventory, "env": ADGUARD, "failures": {rewrite: "Provider request was refused."}}
+    # Failure text reaches a report cut to its limit, by characters.
+    yield {**inventory, "env": ADGUARD, "failures": {rewrite: "é" * 300 + "x" * 300}}
+    yield {**connections, "carry": ["srv"], "routes": {}, "failures": {status: "refused: " + "é" * 600}}
 
 
 PORTAINER_ENDPOINTS = [

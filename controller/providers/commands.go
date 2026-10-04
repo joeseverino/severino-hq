@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -35,17 +34,28 @@ type Commands struct {
 	failures []runtime.StepFailure
 }
 
+// CommandOutputLimit bounds what one local tool or SSH call may print, per
+// stream. More is a failed step, not a controller run out of memory.
+const CommandOutputLimit = 16 << 20
+
+// errOutputLimit is a child that printed more than CommandOutputLimit.
+var errOutputLimit = errors.New("output over limit")
+
 func execProcess(ctx context.Context, argv []string, stdin []byte, env []string) ([]byte, []byte, int, error) {
 	ctx, cancel := context.WithTimeout(ctx, CommandTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Stdin = bytes.NewReader(stdin)
 	cmd.Env = env
-	var stdout, stderr bytes.Buffer
+	cmd.WaitDelay = runtime.ProcessWaitDelay
+	stdout, stderr := runtime.BoundedBuffer{Limit: CommandOutputLimit}, runtime.BoundedBuffer{Limit: CommandOutputLimit}
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
 	if ctx.Err() != nil {
 		return nil, nil, 0, context.DeadlineExceeded
+	}
+	if stdout.Overflow || stderr.Overflow {
+		return nil, nil, 0, errOutputLimit
 	}
 	var exited *exec.ExitError
 	if errors.As(err, &exited) {
@@ -74,28 +84,10 @@ func (c *Commands) record(step, subject, reason string) {
 	c.mu.Unlock()
 }
 
-// environment is the process environment plus overrides, or nil to inherit it.
-// A 1Password service account outranks Connect, so Connect is dropped beside one.
-func environment(overrides map[string]string) []string {
-	if len(overrides) == 0 {
-		return nil
-	}
-	_, serviceAccount := overrides["OP_SERVICE_ACCOUNT_TOKEN"]
-	env := []string{}
-	for _, entry := range os.Environ() {
-		name, _, _ := strings.Cut(entry, "=")
-		if _, replaced := overrides[name]; replaced {
-			continue
-		}
-		if serviceAccount && (name == "OP_CONNECT_HOST" || name == "OP_CONNECT_TOKEN") {
-			continue
-		}
-		env = append(env, entry)
-	}
-	for name, value := range overrides {
-		env = append(env, name+"="+value)
-	}
-	return env
+// environment is what a child gets: the allowlisted variables plus this call's
+// overrides. Connection credentials are never inherited.
+func (c *Commands) environment(overrides map[string]string) []string {
+	return c.Env.ChildEnvironment(overrides)
 }
 
 func redacted(text string, overrides map[string]string) string {
@@ -146,7 +138,13 @@ func (c *Commands) Run(ctx context.Context, argv []string, input []byte, step, s
 	if run == nil {
 		run = execProcess
 	}
-	stdout, stderr, exit, err := run(ctx, argv, input, environment(env))
+	stdout, stderr, exit, err := run(ctx, argv, input, c.environment(env))
+	if errors.Is(err, errOutputLimit) {
+		c.logger().Warn(fmt.Sprintf("controller step failed: %s (output over limit)", step),
+			slog.String("event", "controller.step.failed"), slog.String("step", step))
+		c.record(step, subject, "output over limit")
+		return nil, &ProviderError{Message: step + " failed."}
+	}
 	if err != nil {
 		kind := startFailure(err)
 		c.logger().Warn(fmt.Sprintf("controller step failed: %s (%s)", step, kind),

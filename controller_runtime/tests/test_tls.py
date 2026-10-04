@@ -147,20 +147,55 @@ class CPanelSitePlanTests(TestCase):
                     {"consumer": "edge", "consumer_kind": "caddy", "domain": "a.example.test", "fingerprint_sha256": "new"},
                     {"consumer": "shared-hosting", "consumer_kind": "cpanel", "domain": "www.example.test", "fingerprint_sha256": "old"},
                     {"consumer": "shared-hosting", "consumer_kind": "cpanel", "domain": "example.test", "fingerprint_sha256": "old"},
-                ]
+                ],
+                "unreachable_consumers": [],
             },
             conditions=[],
             message="observed",
         )
 
         with self.assertRaises(ProviderError) as caught:
-            tls_verification.verify_tls_deployment({"consumers": [{}, {}]}, "new")
+            tls_verification.verify_tls_deployment(
+                {"consumers": [{"name": "edge"}, {"name": "shared-hosting"}]}, "new"
+            )
 
         self.assertEqual(
             str(caught.exception),
             "1 of 2 TLS consumers did not activate the certificate within 30s: "
             "shared-hosting still serves the previous certificate at "
             "example.test, www.example.test.",
+        )
+
+    @mock.patch("controller_runtime.tls_verification._tls_verification_policy", return_value=(30, 5))
+    @mock.patch("time.monotonic", side_effect=[0, 31])
+    @mock.patch("controller_runtime.tls_verification.reconcile_tls")
+    def test_one_match_does_not_vouch_for_consumers_that_were_not_read(
+        self, reconcile, _clock, _policy
+    ):
+        reconcile.return_value = ProviderResult(
+            changed=False,
+            status={
+                "consumers": [
+                    {"consumer": "edge", "consumer_kind": "caddy", "domain": "a.example.test", "fingerprint_sha256": "new"},
+                ],
+                "unreachable_consumers": [
+                    {"consumer": "edge", "domain": "b.example.test", "endpoint": "", "port": "443", "reason": "refused"},
+                    {"consumer": "proxy", "domain": "", "endpoint": "", "port": "443", "reason": "refused"},
+                ],
+            },
+            conditions=[],
+            message="observed",
+        )
+        spec = {"consumers": [{"name": "edge"}, {"name": "proxy"}, {"name": "unchecked"}]}
+
+        with self.assertRaises(ProviderError) as caught:
+            tls_verification.verify_tls_deployment(spec, "new")
+
+        self.assertEqual(
+            str(caught.exception),
+            "3 of 3 TLS consumers did not activate the certificate within 30s: "
+            "edge could not be read at b.example.test; proxy could not be read; "
+            "unchecked has no verification domain.",
         )
 
 
@@ -198,7 +233,9 @@ class AcmeOwnershipTests(TestCase):
                 with self.assertRaisesRegex(
                     ProviderError, "config/x is owned 1:2.*nothing was requested"
                 ):
-                    tls_issuance.issue_certificate({"domains": ["example.test"]})
+                    tls_issuance.issue_certificate(
+                        {"certificate_name": "example", "domains": ["example.test"]}
+                    )
 
         run.assert_not_called()
 
@@ -429,3 +466,21 @@ class RecordingTheFactsIsNeverTheCertificatesJobTests(TestCase):
             result = tls._tls_reconcile(spec, apply=True)
 
         self.assertNotIn("published_facts", result.status)
+
+
+class CertbotArgumentTests(TestCase):
+    """What reaches certbot's argv and the lineage path is checked first."""
+
+    @mock.patch("controller_runtime.commands.run_command")
+    def test_a_name_or_domain_that_is_not_one_never_reaches_certbot(self, run):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(
+            "os.environ", {"HQ_ACME_DIR": directory}
+        ):
+            for spec, said in (
+                ({"certificate_name": "../escape", "domains": ["a.example"]}, "not a lineage name"),
+                ({"certificate_name": "a", "domains": ["a.example", "--server=x"]}, "not a domain name"),
+            ):
+                with self.subTest(spec=spec), self.assertRaisesRegex(ProviderError, said):
+                    tls_issuance.issue_certificate(spec)
+
+        run.assert_not_called()

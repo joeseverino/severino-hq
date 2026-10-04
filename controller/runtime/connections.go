@@ -41,12 +41,21 @@ func (e Environment) Required(prefix, name string) (string, error) {
 	return value, nil
 }
 
+// Prefixes maps each connection ref to its env prefix. A ref two prefixes
+// share maps to neither, so which credential answers never depends on map order.
 func (e Environment) Prefixes() map[string]string {
 	found := map[string]string{}
+	shared := map[string]bool{}
 	for name, value := range e {
 		if strings.HasSuffix(name, "_CONNECTION_REF") && value != "" {
+			if _, seen := found[value]; seen {
+				shared[value] = true
+			}
 			found[value] = strings.TrimSuffix(name, "_CONNECTION_REF")
 		}
+	}
+	for ref := range shared {
+		delete(found, ref)
 	}
 	return found
 }
@@ -64,10 +73,16 @@ func (e Environment) Provider(ref string) string {
 
 func (e Environment) Prefix(provider, ref string) (string, error) {
 	if ref != "" {
-		if prefix := e.Prefixes()[ref]; prefix != "" {
-			return prefix, nil
+		prefix := e.Prefixes()[ref]
+		if prefix == "" {
+			return "", &ProviderError{Message: fmt.Sprintf("No connection named %q was supplied to the controller.", ref)}
 		}
-		return "", &ProviderError{Message: fmt.Sprintf("No connection named %q was supplied to the controller.", ref)}
+		// A named connection still has to be one of these, or its credential
+		// goes to a vendor it was never issued for.
+		if e.Provider(ref) != provider {
+			return "", &ProviderError{Message: fmt.Sprintf("%s is not a %s connection, so it was not used.", ref, provider)}
+		}
+		return prefix, nil
 	}
 	refs := e.Refs(provider)
 	if len(refs) > 1 {

@@ -66,6 +66,7 @@ class _Answer:
 
     def __init__(self, payload):
         self._payload = json.dumps(payload).encode()
+        self.headers: dict[str, str] = {}
 
     def read(self, amount=-1):
         return self._payload if amount is None or amount < 0 else self._payload[:amount]

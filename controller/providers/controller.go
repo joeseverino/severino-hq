@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -136,20 +137,42 @@ func sortedRefs(prefixes map[string]string) []string {
 	return refs
 }
 
+// reportTextLimit is how much of a failure's text a report carries
+// (parts.REPORT_TEXT_LIMIT): remote and refusal text can be long.
+const reportTextLimit = 500
+
+// reportText is failure text as a report carries it, cut by runes as Python
+// slices a str.
+func reportText(text string) string {
+	if runes := []rune(text); len(runes) > reportTextLimit {
+		return string(runes[:reportTextLimit])
+	}
+	return text
+}
+
+// namedRef is the connection a spec names, or "" for the kind's default. The
+// manages gate checks this one and the write uses it.
+func namedRef(spec Object) string {
+	value, _ := spec["connection_ref"].(string)
+	return value
+}
+
 func (c *Controller) refuseUnlessManaged(kind string, spec Object) error {
 	providers := c.Declared.ConnectionProviders[kind]
 	if len(providers) == 0 {
-		return nil
+		// Fail closed: a write nothing declares a connection for has no
+		// manages switch an operator could have set.
+		return &ProviderError{Message: "Nothing declares which connections act for this, so no connection manages it. It was not applied."}
 	}
-	named := ""
-	if value, ok := spec["connection_ref"].(string); ok {
-		named = value
-	}
+	named := namedRef(spec)
 	refs := []string{}
+	ssh := c.sshRefs()
 	if named != "" {
+		if !slices.Contains(providers, c.effectiveProvider(named, ssh)) {
+			return &ProviderError{Message: named + " is not a connection for this, so it was not used."}
+		}
 		refs = append(refs, named)
 	} else {
-		ssh := c.sshRefs()
 		for _, ref := range sortedRefs(c.Env.Prefixes()) {
 			for _, provider := range providers {
 				if c.effectiveProvider(ref, ssh) == provider {
@@ -257,7 +280,7 @@ func (c *Controller) Connections(ctx context.Context, carry []string) ([]runtime
 		default:
 			result, err := probe(ctx, ref)
 			if err != nil {
-				connection.OK, connection.Detail, connection.Failure = false, err.Error(), failureOf(err)
+				connection.OK, connection.Detail, connection.Failure = false, reportText(err.Error()), failureOf(err)
 			} else {
 				connection.Detail, connection.Reaches = result.Detail, result.Reaches
 				if result.ExpiresAt != nil {
@@ -322,12 +345,12 @@ func (c *Controller) readKind(ctx context.Context, reader Reader) runtime.KindRe
 	ledger := &refusals{}
 	records, err := reader(context.WithValue(ctx, refusalKey{}, ledger))
 	if err != nil {
-		report := runtime.KindReport{OK: false, Records: []any{}, Error: err.Error()}
+		report := runtime.KindReport{OK: false, Records: []any{}, Error: reportText(err.Error())}
 		var provider *ProviderError
 		if errors.As(err, &provider) {
 			report.Refusal = provider.Refusal
 			if provider.Refusal == "credential" && provider.Reason != "" {
-				report.Error = provider.Reason
+				report.Error = reportText(provider.Reason)
 			}
 		}
 		return report

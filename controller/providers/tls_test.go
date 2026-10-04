@@ -292,3 +292,20 @@ func TestSSHTargetMessages(t *testing.T) {
 		t.Fatalf("unknown: %v", err)
 	}
 }
+
+func TestCertbotNamesAreCheckedBeforeTheyReachArgv(t *testing.T) {
+	for _, domains := range [][]string{{"a.example", "--server=x"}, {"-d"}, {"a.example\n"}} {
+		if _, err := checkedDomains(TLSCertificateSpec{Domains: domains}); err == nil {
+			t.Fatalf("accepted %q", domains)
+		}
+	}
+	if got, err := checkedDomains(TLSCertificateSpec{Domains: []string{"a.example", "*.a.example"}}); err != nil || len(got) != 2 {
+		t.Fatalf("%v %v", got, err)
+	}
+	r := New(runtime.Environment{"HQ_ACME_DIR": "/acme"}, &fakeHTTP{})
+	for _, name := range []string{"../escape", "-x", "A", ""} {
+		if _, err := r.lineagePath(TLSCertificateSpec{CertificateName: name}); err == nil {
+			t.Fatalf("accepted %q", name)
+		}
+	}
+}

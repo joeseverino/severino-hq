@@ -58,29 +58,18 @@ func TestParityChild(t *testing.T) {
 	if input.Provider == "tls" {
 		runTLSParity(raw)
 	}
-	if input.TailnetStatus != "" {
-		tmpStatus, err := os.CreateTemp("", "parity-tailnet-status-*.json")
-		if err == nil {
-			tmpStatus.WriteString(input.TailnetStatus)
-			tmpStatus.Close()
-			defer os.Remove(tmpStatus.Name())
-			os.Setenv("SEVERINO_TAILNET_STATUS", tmpStatus.Name())
-			defer os.Unsetenv("SEVERINO_TAILNET_STATUS")
+	// The tailnet readings are configuration, read through the registry's Env.
+	fileEnv := map[string]string{}
+	for name, content := range map[string]string{"SEVERINO_TAILNET_STATUS": input.TailnetStatus, "SEVERINO_TAILNET_LOCK": input.TailnetLock} {
+		if content == "" {
+			continue
 		}
-	} else {
-		os.Unsetenv("SEVERINO_TAILNET_STATUS")
-	}
-	if input.TailnetLock != "" {
-		tmpLock, err := os.CreateTemp("", "parity-tailnet-lock-*.json")
-		if err == nil {
-			tmpLock.WriteString(input.TailnetLock)
-			tmpLock.Close()
-			defer os.Remove(tmpLock.Name())
-			os.Setenv("SEVERINO_TAILNET_LOCK", tmpLock.Name())
-			defer os.Unsetenv("SEVERINO_TAILNET_LOCK")
+		if file, err := os.CreateTemp("", "parity-tailnet-*.json"); err == nil {
+			file.WriteString(content)
+			file.Close()
+			defer os.Remove(file.Name())
+			fileEnv[name] = file.Name()
 		}
-	} else {
-		os.Unsetenv("SEVERINO_TAILNET_LOCK")
 	}
 	portainerEnv := runtime.Environment{
 		"PORTAINER_CONNECTION_REF": "portainer-example",
@@ -132,6 +121,9 @@ func TestParityChild(t *testing.T) {
 		}, &fakeHTTP{routes: map[string]any{}, fail: map[string]error{}})
 	} else {
 		r = adguardFixture()
+	}
+	for name, value := range fileEnv {
+		r.Env[name] = value
 	}
 	r.Resolve = func(string) (string, error) {
 		if input.Resolves != "" {
@@ -273,7 +265,11 @@ func TestParityChild(t *testing.T) {
 	}
 	requests := []Object{}
 	for _, request := range h.requests {
-		requests = append(requests, Object{"path": request.path, "method": request.method, "payload": request.payload})
+		entry := Object{"path": request.path, "method": request.method, "payload": request.payload}
+		if request.ifMatch != "" {
+			entry["if_match"] = request.ifMatch
+		}
+		requests = append(requests, entry)
 	}
 	output := Object{"result": value, "error": "", "requests": requests, "refused_parts": ledger.entries}
 	if ledger.entries == nil {

@@ -90,14 +90,23 @@ func (d tailnetPolicyDocument) pretty() string {
 }
 
 func (r *Registry) tailnetPolicy(ctx context.Context, token string) (tailnetPolicyDocument, error) {
-	raw, err := r.tailnetGet(ctx, token, "acl")
+	document, _, err := r.tailnetPolicyVersion(ctx, token)
+	return document, err
+}
+
+// tailnetPolicyVersion is the policy file and its ETag, from one read.
+func (r *Registry) tailnetPolicyVersion(ctx context.Context, token string) (tailnetPolicyDocument, string, error) {
+	raw, etag, err := r.HTTP.RequestHeader(ctx, tailnetAPI+"/tailnet/-/acl", map[string]string{
+		"Authorization": "Bearer " + token,
+		"Accept":        "application/json",
+	}, "etag")
 	if code := httpStatus(err); code != 0 {
-		return nil, tailnetRefused("the policy read", "policy_file:read", code)
+		return nil, "", tailnetRefused("the policy read", "policy_file:read", code)
 	}
 	if err != nil || len(raw) == 0 {
-		return nil, &ProviderError{Message: "Tailscale did not return a readable policy.", Failure: networkFailure(err)}
+		return nil, etag, &ProviderError{Message: "Tailscale did not return a readable policy.", Failure: networkFailure(err)}
 	}
-	return tailnetPolicyDocument(raw), nil
+	return tailnetPolicyDocument(raw), etag, nil
 }
 
 type testKey struct{ src, proto string }
@@ -202,15 +211,14 @@ func (r *Registry) policyPassesItsTests(ctx context.Context, token string, docum
 	return nil
 }
 
-// writeTailnetPolicy writes the policy, conditional on the version last read,
-// so a change made elsewhere in the meantime refuses the write.
-func (r *Registry) writeTailnetPolicy(ctx context.Context, token string, document tailnetPolicyDocument) error {
-	auth := map[string]string{"Authorization": "Bearer " + token, "Accept": "application/json"}
-	etag, _ := r.HTTP.Header(ctx, tailnetAPI+"/tailnet/-/acl", auth, "etag")
-	headers := map[string]string{"Authorization": "Bearer " + token, "Content-Type": "application/json"}
-	if etag != "" {
-		headers["If-Match"] = etag
+// writeTailnetPolicy writes the policy, conditional on the version the checks
+// ran against: etag comes from that same read, so a change made in between
+// refuses the write (412). Without one nothing is written.
+func (r *Registry) writeTailnetPolicy(ctx context.Context, token string, document tailnetPolicyDocument, etag string) error {
+	if etag == "" {
+		return &ProviderError{Message: "Tailscale did not say which version of the policy it holds, so the policy was not written."}
 	}
+	headers := map[string]string{"Authorization": "Bearer " + token, "Content-Type": "application/json", "If-Match": etag}
 	_, err := r.HTTP.Request(ctx, tailnetAPI+"/tailnet/-/acl", "POST", headers, json.RawMessage(document))
 	switch code := httpStatus(err); {
 	case code == 412:
@@ -261,7 +269,7 @@ func (r *Registry) tailnetPolicyReconcile(ctx context.Context, rawSpec, _ Object
 	if err != nil {
 		return Result{}, err
 	}
-	live, err := r.tailnetPolicy(ctx, token)
+	live, etag, err := r.tailnetPolicyVersion(ctx, token)
 	if err != nil {
 		return Result{}, err
 	}
@@ -277,7 +285,7 @@ func (r *Registry) tailnetPolicyReconcile(ctx context.Context, rawSpec, _ Object
 	if !apply {
 		return Result{Changed: true, Status: struct{}{}, Message: "The policy passes its own tests and would be applied."}, nil
 	}
-	if err := r.writeTailnetPolicy(ctx, token, document); err != nil {
+	if err := r.writeTailnetPolicy(ctx, token, document, etag); err != nil {
 		return Result{}, err
 	}
 	applied, err := r.tailnetPolicy(ctx, token)
@@ -321,7 +329,7 @@ func (l tailnetLockRef) MarshalJSON() ([]byte, error) {
 }
 
 func (r *Registry) tailnetLock() tailnetLockRef {
-	lockFile := os.Getenv("SEVERINO_TAILNET_LOCK")
+	lockFile := r.Env["SEVERINO_TAILNET_LOCK"]
 	if lockFile == "" {
 		return tailnetLockRef{}
 	}

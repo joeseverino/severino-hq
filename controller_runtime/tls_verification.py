@@ -290,6 +290,57 @@ def _tls_verification_policy() -> tuple[int, int]:
     return timeout, interval
 
 
+def tls_consumers_serve(
+    spec: dict[str, Any], status: dict[str, Any], expected_fingerprint: str
+) -> bool:
+    """Whether every consumer was read and every reading is the expected one.
+
+    A consumer that could not be read, or has nothing to read it on, is not
+    proof of anything: one matching consumer must not vouch for the rest.
+    """
+
+    read = {item["consumer"] for item in status["consumers"]}
+    fingerprints = {item["fingerprint_sha256"] for item in status["consumers"]}
+    return (
+        not status["unreachable_consumers"]
+        and all(consumer["name"] in read for consumer in spec["consumers"])
+        and fingerprints == {expected_fingerprint}
+    )
+
+
+def _unserved(
+    spec: dict[str, Any], status: dict[str, Any], expected_fingerprint: str
+) -> dict[str, list[str]]:
+    """Each consumer not shown serving the certificate, and what was found."""
+
+    found: dict[str, list[str]] = {}
+    stale: dict[str, list[str]] = {}
+    for item in status["consumers"]:
+        if item["fingerprint_sha256"] != expected_fingerprint:
+            stale.setdefault(item["consumer"], []).append(item["domain"])
+    for consumer, names in stale.items():
+        found.setdefault(consumer, []).append(
+            f"{consumer} still serves the previous certificate at " + ", ".join(sorted(names))
+        )
+    missed: dict[str, list[str]] = {}
+    for item in status["unreachable_consumers"]:
+        missed.setdefault(item["consumer"], [])
+        if item["domain"]:
+            missed[item["consumer"]].append(item["domain"])
+    for consumer, names in missed.items():
+        found.setdefault(consumer, []).append(
+            f"{consumer} could not be read at " + ", ".join(sorted(names))
+            if names
+            else f"{consumer} could not be read"
+        )
+    read = {item["consumer"] for item in status["consumers"]}
+    for consumer in spec["consumers"]:
+        name = consumer["name"]
+        if name not in read and name not in missed:
+            found.setdefault(name, []).append(f"{name} has no verification domain")
+    return found
+
+
 def verify_tls_deployment(
     spec: dict[str, Any], expected_fingerprint: str
 ) -> ProviderResult:
@@ -297,10 +348,7 @@ def verify_tls_deployment(
     deadline = time.monotonic() + timeout
     while True:
         result = reconcile_tls(spec)
-        fingerprints = {
-            item["fingerprint_sha256"] for item in result.status["consumers"]
-        }
-        if fingerprints == {expected_fingerprint}:
+        if tls_consumers_serve(spec, result.status, expected_fingerprint):
             return result
         if time.monotonic() >= deadline:
             evidence = [
@@ -315,18 +363,13 @@ def verify_tls_deployment(
                 }
                 for item in result.status["consumers"]
             ]
-            stale: dict[str, list[str]] = {}
-            for item in evidence:
-                if not item["matches_expected"]:
-                    stale.setdefault(item["consumer"], []).append(item["domain"])
+            unserved = _unserved(spec, result.status, expected_fingerprint)
             # Which consumer and which names, in the message itself.
             detail = "; ".join(
-                f"{consumer} still serves the previous certificate at "
-                + ", ".join(sorted(names))
-                for consumer, names in sorted(stale.items())
+                line for _, lines in sorted(unserved.items()) for line in lines
             )
             raise ProviderError(
-                f"{len(stale)} of {len(spec['consumers'])} TLS consumers "
+                f"{len(unserved)} of {len(spec['consumers'])} TLS consumers "
                 f"did not activate the certificate within {timeout}s: {detail}.",
                 status={
                     "expected_fingerprint_sha256": expected_fingerprint,

@@ -93,9 +93,9 @@ func TestTailnetDeviceReconcile(t *testing.T) {
 		},
 	}
 	path := writeTempTailnetStatus(t, status)
-	t.Setenv("SEVERINO_TAILNET_STATUS", path)
 
 	r := tailscaleFixture()
+	r.Env["SEVERINO_TAILNET_STATUS"] = path
 	cleanup := r.BeginSnapshot()
 	defer cleanup()
 	ctx := context.Background()
@@ -142,9 +142,9 @@ func TestTailscaleApproveRoutes(t *testing.T) {
 		"Self": Object{"HostName": "a-router", "ID": "node-1", "Online": true},
 	}
 	path := writeTempTailnetStatus(t, status)
-	t.Setenv("SEVERINO_TAILNET_STATUS", path)
 
 	r := tailscaleFixture()
+	r.Env["SEVERINO_TAILNET_STATUS"] = path
 	cleanup := r.BeginSnapshot()
 	defer cleanup()
 	ctx := context.Background()
@@ -317,10 +317,33 @@ func TestTailnetPolicyReconcile(t *testing.T) {
 		t.Fatalf("dry run update: %v, %#v", err, res)
 	}
 
-	// 6. Update policy with apply=true
+	// 6. Apply with no version from the live read: nothing is written.
+	writes := len(h.requests)
+	_, err = r.tailnetPolicyReconcile(ctx, Object{"document": string(updatedBytes), "connection_ref": "example-tailnet"}, nil, true)
+	if err == nil || !strings.Contains(err.Error(), "did not say which version") {
+		t.Fatalf("apply without etag: %v", err)
+	}
+	for _, request := range h.requests[writes:] {
+		if request.path == "/tailnet/-/acl" && request.method == "POST" {
+			t.Fatal("policy written without a version")
+		}
+	}
+
+	// 7. Apply with the live read's version: one read, held to it.
+	h.headers = map[string]map[string]any{"/tailnet/-/acl": {"etag": `"v1"`}}
+	writes = len(h.requests)
 	res, err = r.tailnetPolicyReconcile(ctx, Object{"document": string(updatedBytes), "connection_ref": "example-tailnet"}, nil, true)
 	if err != nil || !res.Changed || res.Message != "Tailnet policy applied after its own tests passed." {
 		t.Fatalf("apply update: %v, %#v", err, res)
+	}
+	reads := 0
+	for _, request := range h.requests[writes:] {
+		if request.path == "/tailnet/-/acl" && request.method == "GET" {
+			reads++
+		}
+	}
+	if reads != 2 { // the live read and the read-back, no separate version read
+		t.Fatalf("policy reads: %d", reads)
 	}
 }
 

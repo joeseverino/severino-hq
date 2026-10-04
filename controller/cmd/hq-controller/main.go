@@ -80,7 +80,8 @@ func run(ctx context.Context, args []string, env runtime.Environment, stdout, st
 	if err != nil {
 		return fail(err)
 	}
-	bridge := runtime.CommandBridge{Prefix: prefix}
+	// HQ's process gets no connection's credentials: it persists, it does not reach providers.
+	bridge := runtime.CommandBridge{Prefix: prefix, Env: env.WithoutConnections()}
 	var declared runtime.ControllerRegistry
 	if err := bridge.Call(ctx, []string{"registry"}, nil, &declared); err != nil {
 		if *apply {

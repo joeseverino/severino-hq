@@ -288,6 +288,9 @@ def publish(
     touches 1Password twice a year.
     """
 
+    # Both reach op's argv, where a leading dash is an option, not a name.
+    if str(publication["item"]).startswith("-") or str(publication["vault"]).startswith("-"):
+        raise ProviderError("A 1Password item or vault name cannot start with a dash.")
     token = _token(runtime, publication["connection_ref"])
     current, tags, files = _current(runtime, publication, token)
     changed = sorted(

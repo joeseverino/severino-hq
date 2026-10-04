@@ -56,3 +56,23 @@ func TestMissingSettingDoesNotExposeEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestNamedConnectionMustBeTheProvidersOwn(t *testing.T) {
+	env := Environment{"CLOUDFLARE_DNS_CONNECTION_REF": "dns", "PORTAINER_HOME_CONNECTION_REF": "home", "PORTAINER_HOME_PROVIDER": "portainer"}
+	if _, err := env.Prefix("onepassword", "dns"); err == nil || err.Error() != "dns is not a onepassword connection, so it was not used." {
+		t.Fatalf("cross-provider ref: %v", err)
+	}
+	if prefix, err := env.Prefix("portainer", "home"); err != nil || prefix != "PORTAINER_HOME" {
+		t.Fatalf("own ref: %q %v", prefix, err)
+	}
+}
+
+func TestSharedRefNamesNoConnection(t *testing.T) {
+	env := Environment{"NPM_CONNECTION_REF": "proxy", "NPM_HOME_CONNECTION_REF": "proxy"}
+	if _, ok := env.Prefixes()["proxy"]; ok {
+		t.Fatal("a shared ref resolved")
+	}
+	if _, err := env.Prefix("npm", "proxy"); err == nil {
+		t.Fatal("a shared ref was usable")
+	}
+}
