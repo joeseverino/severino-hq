@@ -299,7 +299,6 @@ class OperatorOwnedRouteTests(TestCase):
 
     def test_the_file_hq_writes_names_only_what_it_declares(self):
         from ..infrastructure import resolved_spec
-        from control_plane.provider_adapters.caddy import render_routes
 
         declared = ManagedResource.objects.create(
             key="app-example-com-caddy", kind=self.KIND,
@@ -308,9 +307,5 @@ class OperatorOwnedRouteTests(TestCase):
         self.sweep()
 
         resolved = resolved_spec(declared)
-        rendered = render_routes(resolved["routes"])
 
-        self.assertEqual([route["domain"] for route in resolved["routes"]], ["app.example.com"])
-        self.assertIn("app.example.com {", rendered)
-        for theirs in ("example.dev", "status.example.com", "http.request.host"):
-            self.assertNotIn(theirs, rendered)
+        self.assertEqual(resolved["routes"], [{"domain": "app.example.com", "upstream": "app:8080"}])

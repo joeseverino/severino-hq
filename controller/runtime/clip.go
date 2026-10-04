@@ -1,11 +1,10 @@
 package runtime
 
-// Limits on text that crosses into a report, a log line or an error. Python's
-// controller_runtime and control_plane/provider_adapters/parts.py hold the
-// same numbers, cut by characters as Python slices a str.
+// Limits on text that crosses into a report, a log line or an error, cut by
+// characters.
 const (
-	ReportTextLimit   = 500 // a failure's text in a report (parts.REPORT_TEXT_LIMIT)
-	ReasonLimit       = 200 // why one optional read or part was refused (parts.unread_reason)
+	ReportTextLimit   = 500 // a failure's text in a report
+	ReasonLimit       = 200 // why one optional read or part was refused
 	VerdictLimit      = 300 // a remote verdict quoted in an error
 	SaidLimit         = 240 // the last line a child printed
 	AnalyticsValueMax = 512 // an analytics dimension value; the contract's maxLength

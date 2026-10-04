@@ -1,22 +1,45 @@
 package providers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/runtime"
+	tsapi "tailscale.com/client/tailscale/v2"
 )
 
-// tailnetPolicyDocument is the tailnet policy file, an operator-authored
-// document: compared, validated and written back verbatim, so it travels as
-// raw JSON. view is the typed reading of the parts HQ looks at.
+// tailnetPolicyDocument is the tailnet policy file, an operator-authored JSON
+// object: compared, validated and written back verbatim, so it travels as raw
+// JSON. view is the typed reading of the parts HQ looks at.
 type tailnetPolicyDocument json.RawMessage
+
+// errPolicyNotObject refuses a policy that is valid JSON but not an object.
+var errPolicyNotObject = &ProviderError{Message: "the policy is not a JSON object"}
+
+// policyDocument checks raw is a JSON object and returns it as a policy.
+func policyDocument(raw []byte) (tailnetPolicyDocument, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		var syntax *json.SyntaxError
+		if errors.As(err, &syntax) {
+			return nil, &ProviderError{Message: "the policy is not readable JSON", Err: err}
+		}
+		return nil, errPolicyNotObject
+	}
+	if fields == nil {
+		return nil, errPolicyNotObject
+	}
+	return tailnetPolicyDocument(raw), nil
+}
 
 type tailnetPolicyTest struct {
 	Src    string   `json:"src"`
@@ -56,22 +79,13 @@ type tailnetPolicySSH struct {
 	Users  []string `json:"users"`
 }
 
-func (d tailnetPolicyDocument) view() tailnetPolicyView {
+// view reads the parts HQ looks at; a part of the wrong shape is an error.
+func (d tailnetPolicyDocument) view() (tailnetPolicyView, error) {
 	var view tailnetPolicyView
-	_ = json.Unmarshal(d, &view)
-	return view
-}
-
-// field is one top-level value of the document, parsed, or nil when absent.
-func (d tailnetPolicyDocument) field(name string) *pyValue {
-	value, err := parsePy(d)
-	if err != nil || !value.object {
-		return nil
+	if err := json.Unmarshal(d, &view); err != nil {
+		return view, &ProviderError{Message: "the policy does not have the shape HQ reads", Err: err}
 	}
-	if at := indexOf(value.keys, name); at >= 0 {
-		return &value.values[at]
-	}
-	return nil
+	return view, nil
 }
 
 // tests is the document's tests verbatim, or [] when it has none.
@@ -79,16 +93,46 @@ func (d tailnetPolicyDocument) tests() json.RawMessage {
 	var document struct {
 		Tests json.RawMessage `json:"tests"`
 	}
-	if tests := d.field("tests"); tests == nil || !tests.truthy() || json.Unmarshal(d, &document) != nil {
+	if json.Unmarshal(d, &document) != nil || !hasTests(document.Tests) {
 		return json.RawMessage("[]")
 	}
 	return document.Tests
 }
 
-// pretty is the document as HQ stores it: json.dumps(indent=2, sort_keys=True).
+// tested is whether the document carries at least one test.
+func (d tailnetPolicyDocument) tested() bool { return hasTests(d.tests()) }
+
+func hasTests(raw json.RawMessage) bool {
+	var tests []json.RawMessage
+	return json.Unmarshal(raw, &tests) == nil && len(tests) > 0
+}
+
+// pretty is the document as HQ stores it: keys sorted, two-space indent.
 func (d tailnetPolicyDocument) pretty() string {
-	out, _ := pyDumps(d, 2, true)
-	return out
+	var value any
+	decoder := json.NewDecoder(bytes.NewReader(d))
+	decoder.UseNumber()
+	if decoder.Decode(&value) != nil {
+		return string(d)
+	}
+	var out bytes.Buffer
+	encoder := json.NewEncoder(&out)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if encoder.Encode(value) != nil {
+		return string(d)
+	}
+	return strings.TrimSuffix(out.String(), "\n")
+}
+
+// samePolicy is whether two documents say the same thing, whatever their
+// formatting or key order.
+func samePolicy(a, b tailnetPolicyDocument) bool {
+	var left, right any
+	if json.Unmarshal(a, &left) != nil || json.Unmarshal(b, &right) != nil {
+		return false
+	}
+	return reflect.DeepEqual(left, right)
 }
 
 func (c tailnetClient) tailnetPolicy(ctx context.Context) (tailnetPolicyDocument, error) {
@@ -102,10 +146,11 @@ func (c tailnetClient) tailnetPolicyVersion(ctx context.Context) (tailnetPolicyD
 	if code := httpStatus(err); code != 0 {
 		return nil, "", tailnetRefused("the policy read", "policy_file:read", code)
 	}
-	if err != nil || len(raw) == 0 {
-		return nil, etag, &ProviderError{Message: "Tailscale did not return a readable policy.", Failure: networkFailure(err)}
+	if err != nil {
+		return nil, etag, fmt.Errorf("read the tailnet policy: %w", err)
 	}
-	return tailnetPolicyDocument(raw), etag, nil
+	document, err := policyDocument(raw)
+	return document, etag, err
 }
 
 type testKey struct{ src, proto string }
@@ -152,9 +197,7 @@ func refuseWeakerTests(live, document tailnetPolicyView) error {
 	wanted := policyTests(document)
 	held := policyTests(live)
 	if len(wanted) == 0 {
-		return &ProviderError{
-			Message: "The declared policy carries no tests, so Tailscale's check would pass it whatever it grants. It was not applied.",
-		}
+		return &ProviderError{Message: "the declared policy carries no tests, so tailscale's check would pass it whatever it grants; not applied"}
 	}
 	for _, pair := range sortedTestKeys(held) {
 		if _, ok := wanted[pair]; !ok {
@@ -162,9 +205,7 @@ func refuseWeakerTests(live, document tailnetPolicyView) error {
 			if pair.proto != "" {
 				overProto = " over " + pair.proto
 			}
-			return &ProviderError{
-				Message: fmt.Sprintf("The declared policy drops the tests for %s%s, which removes the check they made, so it was not applied.", pyRepr(pair.src), overProto),
-			}
+			return &ProviderError{Message: fmt.Sprintf("the declared policy drops the tests for %q%s, which removes the check they made; not applied", pair.src, overProto)}
 		}
 	}
 	for _, pair := range sortedTestKeys(held) {
@@ -176,34 +217,34 @@ func refuseWeakerTests(live, document tailnetPolicyView) error {
 		}
 		if len(dropped) > 0 {
 			sort.Strings(dropped)
-			return &ProviderError{
-				Message: fmt.Sprintf("The declared policy no longer tests that %s is denied %s. A live deny is kept, so it was not applied.", pyRepr(pair.src), pyRepr(dropped[0])),
-			}
+			return &ProviderError{Message: fmt.Sprintf("the declared policy no longer tests that %q is denied %q; a live deny is kept, so not applied", pair.src, dropped[0])}
 		}
 	}
 	return nil
 }
 
+// policyPassesItsTests asks Tailscale to run the document's tests. An empty
+// answer passes; anything else is Tailscale's account of what failed.
 func (c tailnetClient) policyPassesItsTests(ctx context.Context, document tailnetPolicyDocument) error {
-	raw, err := c.call(ctx, "POST", tailnet("acl/validate"), map[string]string{
-		"Content-Type": "application/json",
-	}, json.RawMessage(document))
+	raw, err := c.call(ctx, "POST", tailnet("acl/validate"), jsonBody, json.RawMessage(document))
 	if err != nil {
-		return &ProviderError{Message: "Tailscale could not check the policy.", Failure: networkFailure(err)}
+		return fmt.Errorf("check the policy: %w", err)
 	}
 	if len(raw) == 0 {
 		return nil
 	}
-	// An empty answer passes; anything else is Tailscale's account of what failed.
-	verdict, err := parsePy(raw)
-	if err != nil {
-		return &ProviderError{Message: "Tailscale could not check the policy."}
+	var verdict tsapi.APIError
+	if err := json.Unmarshal(raw, &verdict); err != nil {
+		return &ProviderError{Message: "tailscale's policy check is unreadable", Err: err}
 	}
-	if verdict.truthy() {
-		said, _ := pyDumps(raw, 0, false)
-		return &ProviderError{Message: "The declared policy does not pass its own tests, so it was not applied: " + runtime.Clip(said, runtime.VerdictLimit)}
+	if verdict.Message == "" && len(verdict.Data) == 0 {
+		return nil
 	}
-	return nil
+	said := verdict.Message
+	for _, data := range verdict.Data {
+		said += "; " + data.User + ": " + strings.Join(data.Errors, ", ")
+	}
+	return &ProviderError{Message: "the declared policy does not pass its own tests; not applied: " + runtime.Clip(strings.TrimPrefix(said, "; "), runtime.VerdictLimit)}
 }
 
 // writeTailnetPolicy writes the policy, conditional on the version the checks
@@ -211,24 +252,31 @@ func (c tailnetClient) policyPassesItsTests(ctx context.Context, document tailne
 // refuses the write (412). Without one nothing is written.
 func (c tailnetClient) writeTailnetPolicy(ctx context.Context, document tailnetPolicyDocument, etag string) error {
 	if etag == "" {
-		return &ProviderError{Message: "Tailscale did not say which version of the policy it holds, so the policy was not written."}
+		return errNoPolicyVersion
 	}
 	headers := map[string]string{"Content-Type": "application/json", "If-Match": etag}
 	_, err := c.call(ctx, "POST", tailnet("acl"), headers, json.RawMessage(document))
 	switch code := httpStatus(err); {
 	case code == 412:
-		return &ProviderError{Message: "The policy changed somewhere else since HQ read it, so this was not applied. Read it again and make the change on top."}
+		return errPolicyChanged
 	case code != 0:
-		return &ProviderError{Message: fmt.Sprintf("Tailscale refused the policy (%d).", code), Failure: runtime.StatusFailure(code)}
+		return &ProviderError{Message: fmt.Sprintf("tailscale refused the policy (%d)", code), Failure: runtime.StatusFailure(code), HTTPStatus: code}
 	case err != nil:
-		return &ProviderError{Message: "Tailscale did not answer the policy write.", Failure: networkFailure(err)}
+		return fmt.Errorf("write the tailnet policy: %w", err)
 	}
 	return nil
 }
 
+var (
+	// errNoPolicyVersion refuses a write when the read gave no ETag to hold it to.
+	errNoPolicyVersion = &ProviderError{Message: "tailscale did not say which version of the policy it holds, so the policy was not written"}
+	// errPolicyChanged is a write refused because the policy changed since the checked read.
+	errPolicyChanged = &ProviderError{Message: "the policy changed elsewhere since HQ read it; not applied, read it again and make the change on top"}
+)
+
 func currentPolicy(document tailnetPolicyDocument) Result {
 	status := TailnetPolicyStatus{Applied: true, Document: document.pretty()}
-	if tests := document.field("tests"); tests == nil || !tests.truthy() {
+	if !document.tested() {
 		return Result{
 			Status: status,
 			Conditions: []Condition{{
@@ -248,14 +296,14 @@ func (r *Registry) tailnetPolicyReconcile(ctx context.Context, spec TailnetPolic
 	if wanted == "" {
 		return Result{Status: struct{}{}, Message: "No policy is declared, so there is nothing to apply."}, nil
 	}
-	declared, err := parsePy([]byte(wanted))
+	document, err := policyDocument([]byte(wanted))
 	if err != nil {
-		return Result{}, &ProviderError{Message: "The declared policy is not readable JSON."}
+		return Result{}, fmt.Errorf("declared policy: %w", err)
 	}
-	if !declared.object {
-		return Result{}, &ProviderError{Message: "The declared policy is not a JSON object."}
+	declared, err := document.view()
+	if err != nil {
+		return Result{}, fmt.Errorf("declared policy: %w", err)
 	}
-	document := tailnetPolicyDocument(wanted)
 	client, err := r.tailnetClient(ctx, spec.ConnectionRef)
 	if err != nil {
 		return Result{}, err
@@ -264,10 +312,14 @@ func (r *Registry) tailnetPolicyReconcile(ctx context.Context, spec TailnetPolic
 	if err != nil {
 		return Result{}, err
 	}
-	if held, err := parsePy(live); err == nil && pyEqual(held, declared) {
+	if samePolicy(live, document) {
 		return currentPolicy(document), nil
 	}
-	if err := refuseWeakerTests(live.view(), document.view()); err != nil {
+	held, err := live.view()
+	if err != nil {
+		return Result{}, fmt.Errorf("live policy: %w", err)
+	}
+	if err := refuseWeakerTests(held, declared); err != nil {
 		return Result{}, err
 	}
 	if err := client.policyPassesItsTests(ctx, document); err != nil {
@@ -402,6 +454,19 @@ type tailnetServices struct {
 	} `json:"vipServices"`
 }
 
+// tailnetPart is one tailnet read for a declared part of the policy record:
+// an object, kept verbatim.
+func (c tailnetClient) tailnetPart(ctx context.Context, path string) (map[string]json.RawMessage, error) {
+	raw, err := c.call(ctx, "GET", tailnet(path), nil, nil)
+	if code := httpStatus(err); code != 0 {
+		return nil, &ProviderError{Message: fmt.Sprintf("/%s answered %d", path, code), Failure: runtime.StatusFailure(code), HTTPStatus: code}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read /%s: %w", path, err)
+	}
+	return decodeTailnet[map[string]json.RawMessage](raw, "/"+path)
+}
+
 func appConnectors(policy tailnetPolicyView) []TailnetAppConnector {
 	found := []TailnetAppConnector{}
 	for _, attr := range policy.NodeAttrs {
@@ -430,9 +495,12 @@ func (r *Registry) tailnetPolicyInventory(ctx context.Context) ([]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	policy := document.view()
+	policy, err := document.view()
+	if err != nil {
+		return nil, err
+	}
 
-	// Each part is what was read before any refusal, as the Python sweep keeps it.
+	// Each part keeps what was read before a refusal stopped it.
 	read := map[string]map[string]json.RawMessage{}
 	for _, part := range []struct {
 		name  string
@@ -459,7 +527,9 @@ func (r *Registry) tailnetPolicyInventory(ctx context.Context) ([]any, error) {
 	dnsPart, _ := json.Marshal(read["dns"])
 	var services tailnetServices
 	if raw, ok := read["services"]["vipServices"]; ok {
-		_ = json.Unmarshal(raw, &services.VIPServices)
+		if err := json.Unmarshal(raw, &services.VIPServices); err != nil {
+			refuse(ctx, "services", "", "", &ProviderError{Message: "the services answer is unreadable", Err: err})
+		}
 	}
 
 	hosts := map[string]string{}
@@ -523,7 +593,11 @@ func (r *Registry) reachByDevice(ctx context.Context, devices []TailscaleDeviceR
 	if err != nil {
 		return map[string][]TailnetReach{}
 	}
-	members := document.view().Groups
+	view, err := document.view()
+	if err != nil {
+		return map[string][]TailnetReach{}
+	}
+	members := view.Groups
 	flatten := func(names []string) []string {
 		set := map[string]bool{}
 		for _, name := range names {
@@ -553,13 +627,14 @@ func (r *Registry) reachByDevice(ctx context.Context, devices []TailscaleDeviceR
 		}
 		for _, port := range asking {
 			target := fmt.Sprintf("%s:%d", address, port)
-			raw, err := client.call(ctx, "POST", tailnet("acl/preview?type=ipport&previewFor="+url.QueryEscape(target)), map[string]string{
-				"Content-Type": "application/json",
-			}, json.RawMessage(document))
+			raw, err := client.call(ctx, "POST", tailnet("acl/preview?type=ipport&previewFor="+url.QueryEscape(target)), jsonBody, json.RawMessage(document))
 			if err != nil {
 				continue
 			}
-			preview, _ := decodeAs[tailnetPreview](raw, "")
+			preview, err := decodeTailnet[tailnetPreview](raw, "the policy preview")
+			if err != nil {
+				continue
+			}
 			who := map[string]bool{}
 			rules := []TailnetReachRule{}
 			for _, match := range preview.Matches {

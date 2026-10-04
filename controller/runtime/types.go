@@ -4,6 +4,8 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 )
 
 type Object = map[string]any
@@ -15,7 +17,7 @@ type Result struct {
 	Message    string      `json:"message"`
 }
 
-// MarshalJSON writes no conditions as [], as the Python controller reports them.
+// MarshalJSON writes no conditions as [], never null.
 func (r Result) MarshalJSON() ([]byte, error) {
 	type plain Result
 	if r.Conditions == nil {
@@ -24,22 +26,57 @@ func (r Result) MarshalJSON() ([]byte, error) {
 	return json.Marshal(plain(r))
 }
 
+// ProviderError is a failure a provider answered with, or one met reaching it.
+// Failure is the contract's class; a credential or permission failure is also
+// a refusal. Wrap it with context (fmt.Errorf("...: %w", err)); Classify reads
+// it back at the report boundary.
 type ProviderError struct {
 	Message    string
-	Status     any
 	Failure    FailureClass
-	Refusal    Refusal
-	Reason     string
+	Reason     string // the provider's own words for a refused credential
+	Status     any    // a partial status an action reports with its failure
 	HTTPStatus int    // the provider's non-2xx answer, when it gave one
 	Body       []byte // that answer's body, bounded; some providers explain a refusal there
+	Err        error  // the cause, when there is one
 }
 
-func (e *ProviderError) Error() string { return e.Message }
+func (e *ProviderError) Error() string {
+	switch {
+	case e.Err == nil:
+		return e.Message
+	case e.Message == "":
+		return e.Err.Error()
+	}
+	return e.Message + ": " + e.Err.Error()
+}
+
+func (e *ProviderError) Unwrap() error { return e.Err }
+
+// Refusal is the failure as a refusal, or unclassified when it is not one.
+func (e *ProviderError) Refusal() Refusal {
+	switch e.Failure {
+	case FailureClassCredential:
+		return RefusalCredential
+	case FailureClassPermission:
+		return RefusalPermission
+	}
+	return RefusalUnclassified
+}
+
+// Classify is the one place an error becomes the contract's failure fields:
+// its class, its refusal, and the provider's reason for a refused credential.
+// An error with no ProviderError in its chain is unclassified.
+func Classify(err error) (FailureClass, Refusal, string) {
+	var provider *ProviderError
+	if !errors.As(err, &provider) {
+		return FailureClassUnclassified, RefusalUnclassified, ""
+	}
+	return provider.Failure, provider.Refusal(), provider.Reason
+}
 
 // HTTPRefusal is a provider's non-2xx answer: 401 refuses the credential, 403 permission.
 func HTTPRefusal(code int) *ProviderError {
-	failure := StatusFailure(code)
-	return &ProviderError{Message: "Provider request failed: HTTPError.", Failure: failure, Refusal: Refusal(failure), HTTPStatus: code}
+	return &ProviderError{Message: fmt.Sprintf("provider answered %d", code), Failure: StatusFailure(code), HTTPStatus: code}
 }
 
 // StatusFailure is what a 401 or 403 from a provider says went wrong: 401
@@ -73,14 +110,6 @@ type Providers interface {
 	Glance(context.Context, GlancePlan) (GlanceObservations, error)
 	StepFailures() []StepFailure
 	BeginSnapshot() func()
-}
-
-func decodeObject(value any, into any) error {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(data, into)
 }
 
 func isNetworkFailure(c ConnectionRecord) bool { return !c.OK && c.Failure == FailureClassNetwork }

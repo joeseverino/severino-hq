@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -18,8 +19,7 @@ import (
 
 const cloudflareAPIURL = "https://api.cloudflare.com/client/v4"
 
-// List paging. The caps bound a loop a misbehaving endpoint could keep going;
-// Python's controller_runtime/cloudflare_api.py holds the same numbers.
+// List paging. The caps bound a loop a misbehaving endpoint could keep going.
 const (
 	cloudflarePerPage        = 100 // default and maximum page size
 	cloudflareAccountPerPage = 50  // account lists
@@ -33,17 +33,51 @@ var cloudflareCredentialRefusals = []string{"from location", "too many authentic
 
 const cloudflarePermissionRefusal = "authentication error"
 
+// cfMessage is one entry of an envelope's errors.
+type cfMessage struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
 // cfEnvelope is the shape every Cloudflare REST answer shares. The spec repeats
 // it per product family (iam_, zones_, d1_, ...), and success is checked before
 // the operation's result type is known.
 type cfEnvelope struct {
-	Success    json.RawMessage `json:"success"`
-	Errors     json.RawMessage `json:"errors"`
+	Success    bool            `json:"success"`
+	Errors     []cfMessage     `json:"errors"`
 	Result     json.RawMessage `json:"result"`
 	ResultInfo *struct {
-		TotalPages json.RawMessage `json:"total_pages"`
-		Cursor     json.RawMessage `json:"cursor"`
+		TotalPages int    `json:"total_pages"`
+		Cursor     string `json:"cursor"`
 	} `json:"result_info"`
+}
+
+// cloudflareDecode decodes one answer into T; an answer of another shape is an
+// error that names what was being read.
+func cloudflareDecode[T any](raw json.RawMessage, what string) (T, error) {
+	var target T
+	if err := json.Unmarshal(raw, &target); err != nil {
+		return target, &ProviderError{Message: "cloudflare returned an invalid " + what, Err: err}
+	}
+	return target, nil
+}
+
+// cloudflareItems decodes each list entry into T.
+func cloudflareItems[T any](items []json.RawMessage, what string) ([]T, error) {
+	found := make([]T, 0, len(items))
+	for _, item := range items {
+		decoded, err := cloudflareDecode[T](item, what)
+		if err != nil {
+			return nil, err
+		}
+		found = append(found, decoded)
+	}
+	return found, nil
+}
+
+// present is whether a raw result carries a value: absent and null do not.
+func present(raw json.RawMessage) bool {
+	return len(raw) > 0 && string(raw) != "null"
 }
 
 func (r *Registry) cloudflareURL(provider, ref string) (string, error) {
@@ -91,41 +125,25 @@ func (r *Registry) cloudflareEnvelope(ctx context.Context, provider, ref, path, 
 	}
 	raw, err := r.HTTP.Request(ctx, base+path, method, headers, payload)
 	if err != nil {
-		var refused *ProviderError
-		if errors.As(err, &refused) && refused.HTTPStatus != 0 {
-			detail := cloudflareErrors(refused.Body)
-			return cfEnvelope{}, r.cloudflareRefused(prefix, "Cloudflare refused the request: "+detail, detail, refused.HTTPStatus, func() bool {
+		var answered *ProviderError
+		if errors.As(err, &answered) && answered.HTTPStatus != 0 {
+			return cfEnvelope{}, r.cloudflareRefused(prefix, "cloudflare refused the request", cloudflareErrors(answered.Body), answered.HTTPStatus, func() bool {
 				return r.cloudflareVerified(ctx, provider, ref)
 			})
 		}
-		return cfEnvelope{}, cloudflareTransportError(err, "Cloudflare request failed", "Cloudflare returned invalid JSON.")
+		return cfEnvelope{}, fmt.Errorf("cloudflare: %w", err)
 	}
-	var envelope cfEnvelope
-	if len(raw) > 0 {
-		if err := json.Unmarshal(raw, &envelope); err != nil {
-			return cfEnvelope{}, &ProviderError{Message: "Cloudflare returned invalid JSON."}
-		}
+	if !present(raw) {
+		return cfEnvelope{}, &ProviderError{Message: "cloudflare answered with no body"}
 	}
-	if !pyTruthy(envelope.Success) {
-		detail := cloudflareErrors(raw)
-		return cfEnvelope{}, r.cloudflareRefused(prefix, "Cloudflare refused the request: "+detail, detail, 0, nil)
+	envelope, err := cloudflareDecode[cfEnvelope](raw, "answer")
+	if err != nil {
+		return cfEnvelope{}, err
+	}
+	if !envelope.Success {
+		return cfEnvelope{}, r.cloudflareRefused(prefix, "cloudflare refused the request", cloudflareErrors(raw), 0, nil)
 	}
 	return envelope, nil
-}
-
-// cloudflareTransportError words a failure that never reached Cloudflare the
-// way the Python controller does: urllib names the network failure URLError.
-func cloudflareTransportError(err error, failed, invalid string) error {
-	var provider *ProviderError
-	if errors.As(err, &provider) {
-		switch {
-		case provider.Failure == runtime.FailureClassNetwork:
-			return &ProviderError{Message: failed + ": URLError.", Failure: runtime.FailureClassNetwork}
-		case provider.Message == "Provider returned invalid JSON.":
-			return &ProviderError{Message: invalid}
-		}
-	}
-	return err
 }
 
 // cloudflareBreaker refuses without a call when this sweep already saw the
@@ -138,45 +156,45 @@ func (r *Registry) cloudflareBreaker(prefix string) error {
 	if !refused {
 		return nil
 	}
-	return &ProviderError{Message: "Cloudflare refused the request: " + reason + " Not retried for the rest of this sweep.", Refusal: runtime.RefusalCredential, Failure: runtime.FailureClassCredential, Reason: reason}
+	return &ProviderError{Message: "cloudflare refused the credential earlier this sweep: " + reason, Failure: runtime.FailureClassCredential, Reason: reason}
 }
 
+// cloudflareRefused is the error for a refusal, recording a refused credential
+// so the rest of the sweep does not call with it again.
 func (r *Registry) cloudflareRefused(prefix, message, detail string, status int, verified func() bool) error {
-	refusal := cloudflareRefusal(detail, status, verified)
-	if refusal == runtime.RefusalCredential {
+	failure := cloudflareRefusal(detail, status, verified)
+	refused := &ProviderError{Message: message + ": " + detail, Failure: failure, HTTPStatus: status}
+	if failure == runtime.FailureClassCredential {
+		refused.Reason = detail
 		r.snapshotMu.Lock()
 		if r.refusedCredentials != nil {
 			r.refusedCredentials[prefix] = detail
 		}
 		r.snapshotMu.Unlock()
-		return &ProviderError{Message: message, Refusal: refusal, Failure: runtime.FailureClass(refusal), Reason: detail}
 	}
-	return &ProviderError{Message: message, Refusal: refusal, Failure: runtime.FailureClass(refusal)}
+	return refused
 }
 
-// cloudflareRefusal names the refusal Cloudflare's text and status describe.
+// cloudflareRefusal classifies a refusal from Cloudflare's words and status.
 // Under 401 the words alone cannot tell a missing permission from a dead
 // credential, so whether the credential still verifies decides.
-func cloudflareRefusal(detail string, status int, verified func() bool) runtime.Refusal {
+func cloudflareRefusal(detail string, status int, verified func() bool) runtime.FailureClass {
 	lowered := strings.ToLower(detail)
 	for _, phrase := range cloudflareCredentialRefusals {
 		if strings.Contains(lowered, phrase) {
-			return runtime.RefusalCredential
+			return runtime.FailureClassCredential
 		}
 	}
-	if strings.Contains(lowered, cloudflarePermissionRefusal) && status != 401 {
-		return runtime.RefusalPermission
+	permissionWords := strings.Contains(lowered, cloudflarePermissionRefusal)
+	switch {
+	case status == 401 && permissionWords && verified != nil && verified():
+		return runtime.FailureClassPermission
+	case status == 401:
+		return runtime.FailureClassCredential
+	case permissionWords, status == 403:
+		return runtime.FailureClassPermission
 	}
-	if status == 401 {
-		if strings.Contains(lowered, cloudflarePermissionRefusal) && verified != nil && verified() {
-			return runtime.RefusalPermission
-		}
-		return runtime.RefusalCredential
-	}
-	if status == 403 {
-		return runtime.RefusalPermission
-	}
-	return runtime.RefusalUnclassified
+	return runtime.FailureClassUnclassified
 }
 
 // cloudflareVerification is /user/tokens/verify's result for one credential,
@@ -187,7 +205,7 @@ func (r *Registry) cloudflareVerification(ctx context.Context, provider, ref str
 	if err != nil {
 		return empty
 	}
-	raw, _ := r.cached(ctx, "cloudflare-verification:"+prefix, func() (json.RawMessage, error) {
+	raw, err := r.cached(ctx, "cloudflare-verification:"+prefix, func() (json.RawMessage, error) {
 		base, err := r.cloudflareURL(provider, ref)
 		if err != nil {
 			return nil, err
@@ -198,16 +216,16 @@ func (r *Registry) cloudflareVerification(ctx context.Context, provider, ref str
 		}
 		answer, err := r.HTTP.Request(ctx, base+"/user/tokens/verify", "GET", headers, nil)
 		if err != nil {
-			return json.RawMessage("{}"), nil
-		}
-		var envelope cfEnvelope
-		if json.Unmarshal(answer, &envelope) != nil || !pyTruthy(envelope.Success) || !isJSONObject(envelope.Result) {
-			return json.RawMessage("{}"), nil
+			// Kept as "does not verify" so the sweep asks once.
+			return json.RawMessage("null"), nil
 		}
 		return answer, nil
 	})
-	var verified cfapi.IamTokenVerifyResponseSingleSegment
-	if json.Unmarshal(raw, &verified) != nil {
+	if err != nil || !present(raw) {
+		return empty
+	}
+	verified, err := cloudflareDecode[cfapi.IamTokenVerifyResponseSingleSegment](raw, "token verification")
+	if err != nil || !verified.Success {
 		return empty
 	}
 	return verified
@@ -219,21 +237,18 @@ func (r *Registry) cloudflareVerified(ctx context.Context, provider, ref string)
 
 // cloudflareErrors joins the messages in an error envelope.
 func cloudflareErrors(raw []byte) string {
-	if len(raw) == 0 {
-		raw = []byte("{}")
+	if !present(raw) {
+		return "no reason given"
 	}
 	var parsed struct {
-		Errors []struct {
-			Message json.RawMessage `json:"message"`
-		} `json:"errors"`
+		Errors []cfMessage `json:"errors"`
 	}
-	if !json.Valid(raw) {
+	if json.Unmarshal(raw, &parsed) != nil {
 		return "an unreadable error"
 	}
-	_ = json.Unmarshal(raw, &parsed)
 	messages := []string{}
 	for _, item := range parsed.Errors {
-		if message := strings.TrimSpace(pyGetText(item.Message, "")); message != "" {
+		if message := strings.TrimSpace(item.Message); message != "" {
 			messages = append(messages, message)
 		}
 	}
@@ -247,11 +262,6 @@ func cloudflareErrors(raw []byte) string {
 func (r *Registry) cloudflareRequest(ctx context.Context, path, method string, payload any) (json.RawMessage, error) {
 	envelope, err := r.cloudflareEnvelope(ctx, "cloudflare_dns", "", path, method, payload)
 	return envelope.Result, err
-}
-
-// cloudflarePaged reads every page of a DNS-surface list through the shared primitive.
-func (r *Registry) cloudflarePaged(ctx context.Context, path string) ([]json.RawMessage, error) {
-	return r.cloudflareList(ctx, "cloudflare_dns", path, "", cloudflarePerPage)
 }
 
 // Account readings go through cloudflare_api. Every list is read once per sweep;
@@ -268,22 +278,17 @@ func (r *Registry) cloudflareAPIResult(ctx context.Context, path, ref string) (j
 	return envelope.Result, err
 }
 
-// cloudflareAPIList reads every page of an account list.
-func (r *Registry) cloudflareAPIList(ctx context.Context, path, ref string, perPage int) ([]json.RawMessage, error) {
-	return r.cloudflareList(ctx, "cloudflare_api", path, ref, perPage)
-}
-
 // cloudflareList is the one pagination loop for page-numbered lists, on either
 // credential. A tail silently missing would read as absent, and absent is what
-// the reconciler acts on, so every list is read to its last page. The account
-// surface reports total_pages and it decides when present: an endpoint may cap
-// per_page below what was asked, so a short page is not proof of the last one.
-// The DNS surface answers with its result only, so a short page ends it.
-// Non-object entries are dropped; a null or missing result is an empty page.
+// the reconciler acts on, so every list is read to its last page: total_pages
+// decides when the answer carries it (an endpoint may cap per_page below what
+// was asked, so a short page is not proof of the last one), else a short page
+// ends the list. A null or missing result is an empty page.
 func (r *Registry) cloudflareList(ctx context.Context, provider, path, ref string, perPage int) ([]json.RawMessage, error) {
 	collected := []json.RawMessage{}
 	for page := 1; page <= cloudflareMaxPages; page++ {
-		envelope, err := r.cloudflareEnvelope(ctx, provider, ref, fmt.Sprintf("%s%sper_page=%d&page=%d", path, querySeparator(path), perPage, page), "GET", nil)
+		query := url.Values{"per_page": {strconv.Itoa(perPage)}, "page": {strconv.Itoa(page)}}
+		envelope, err := r.cloudflareEnvelope(ctx, provider, ref, path+querySeparator(path)+query.Encode(), "GET", nil)
 		if err != nil {
 			return nil, err
 		}
@@ -291,16 +296,16 @@ func (r *Registry) cloudflareList(ctx context.Context, provider, path, ref strin
 		if err != nil {
 			return nil, err
 		}
-		collected = append(collected, objectsOnly(batch)...)
+		collected = append(collected, batch...)
 		totalPages := 0
-		if envelope.ResultInfo != nil && provider == "cloudflare_api" {
-			totalPages = rawInt(envelope.ResultInfo.TotalPages)
+		if envelope.ResultInfo != nil {
+			totalPages = envelope.ResultInfo.TotalPages
 		}
 		if (totalPages != 0 && page >= totalPages) || (totalPages == 0 && len(batch) < perPage) {
 			return collected, nil
 		}
 	}
-	return nil, &ProviderError{Message: "Cloudflare list did not terminate."}
+	return nil, &ProviderError{Message: fmt.Sprintf("cloudflare list %s ran past %d pages", path, cloudflareMaxPages)}
 }
 
 // cloudflareAPICursorList reads a cursor-paginated account list; an empty cursor ends it.
@@ -308,11 +313,11 @@ func (r *Registry) cloudflareAPICursorList(ctx context.Context, path, ref string
 	collected := []json.RawMessage{}
 	cursor := ""
 	for range cloudflareMaxCursorPages {
-		query := fmt.Sprintf("per_page=%d", perPage)
+		query := url.Values{"per_page": {strconv.Itoa(perPage)}}
 		if cursor != "" {
-			query += "&cursor=" + pyQuote(cursor)
+			query.Set("cursor", cursor)
 		}
-		envelope, err := r.cloudflareAPIRequest(ctx, path+querySeparator(path)+query, ref)
+		envelope, err := r.cloudflareAPIRequest(ctx, path+querySeparator(path)+query.Encode(), ref)
 		if err != nil {
 			return nil, err
 		}
@@ -320,33 +325,30 @@ func (r *Registry) cloudflareAPICursorList(ctx context.Context, path, ref string
 		if err != nil {
 			return nil, err
 		}
-		collected = append(collected, objectsOnly(batch)...)
+		collected = append(collected, batch...)
 		cursor = ""
 		if envelope.ResultInfo != nil {
-			cursor = pyOrText(envelope.ResultInfo.Cursor)
+			cursor = envelope.ResultInfo.Cursor
 		}
 		if cursor == "" {
 			return collected, nil
 		}
 	}
-	return nil, &ProviderError{Message: "Cloudflare list did not terminate."}
+	return nil, &ProviderError{Message: fmt.Sprintf("cloudflare list %s ran past %d pages", path, cloudflareMaxCursorPages)}
 }
 
 // cloudflareBatch is a list page's result: missing or null is empty, anything but a list is invalid.
 func cloudflareBatch(envelope cfEnvelope) ([]json.RawMessage, error) {
-	if envelope.Result == nil || string(envelope.Result) == "null" {
-		return []json.RawMessage{}, nil
+	if !present(envelope.Result) {
+		return nil, nil
 	}
-	batch := []json.RawMessage{}
-	if err := json.Unmarshal(envelope.Result, &batch); err != nil {
-		return nil, &ProviderError{Message: "Cloudflare list returned an invalid result."}
-	}
-	return batch, nil
+	return cloudflareDecode[[]json.RawMessage](envelope.Result, "list")
 }
 
-func (r *Registry) cloudflareAPIZones(ctx context.Context, ref string) ([]cfapi.ZonesZone, error) {
-	raw, err := r.cached(ctx, "cloudflare-api-zones:"+ref, func() (json.RawMessage, error) {
-		items, err := r.cloudflareAPIList(ctx, "/zones", ref, cloudflareAccountPerPage)
+// cloudflareCachedList reads one list once per sweep.
+func (r *Registry) cloudflareCachedList(ctx context.Context, key string, read func() ([]json.RawMessage, error)) ([]json.RawMessage, error) {
+	raw, err := r.cached(ctx, key, func() (json.RawMessage, error) {
+		items, err := read()
 		if err != nil {
 			return nil, err
 		}
@@ -355,7 +357,17 @@ func (r *Registry) cloudflareAPIZones(ctx context.Context, ref string) ([]cfapi.
 	if err != nil {
 		return nil, err
 	}
-	return decodeAs[[]cfapi.ZonesZone](raw, "Cloudflare returned an invalid zone list.")
+	return cloudflareDecode[[]json.RawMessage](raw, "list")
+}
+
+func (r *Registry) cloudflareAPIZones(ctx context.Context, ref string) ([]cfapi.ZonesZone, error) {
+	items, err := r.cloudflareCachedList(ctx, "cloudflare-api-zones:"+ref, func() ([]json.RawMessage, error) {
+		return r.cloudflareList(ctx, "cloudflare_api", "/zones", ref, cloudflareAccountPerPage)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return cloudflareItems[cfapi.ZonesZone](items, "zone")
 }
 
 func querySeparator(path string) string {
@@ -363,83 +375,4 @@ func querySeparator(path string) string {
 		return "&"
 	}
 	return "?"
-}
-
-func objectsOnly(items []json.RawMessage) []json.RawMessage {
-	found := []json.RawMessage{}
-	for _, item := range items {
-		if isJSONObject(item) {
-			found = append(found, item)
-		}
-	}
-	return found
-}
-
-func isJSONObject(raw json.RawMessage) bool {
-	trimmed := strings.TrimSpace(string(raw))
-	return strings.HasPrefix(trimmed, "{")
-}
-
-// pyQuote is urllib.parse.quote(value, safe=""): every byte but A-Z a-z 0-9 _.-~ escaped.
-func pyQuote(value string) string {
-	var out strings.Builder
-	for _, b := range []byte(value) {
-		if b >= 'A' && b <= 'Z' || b >= 'a' && b <= 'z' || b >= '0' && b <= '9' || strings.IndexByte("_.-~", b) >= 0 {
-			out.WriteByte(b)
-		} else {
-			fmt.Fprintf(&out, "%%%02X", b)
-		}
-	}
-	return out.String()
-}
-
-// Python truth and text of a raw JSON value, as the Python controller reads
-// loosely typed answers. An absent value is a zero-length raw.
-
-func pyTruthy(raw json.RawMessage) bool {
-	if len(raw) == 0 {
-		return false
-	}
-	value, err := parsePy(raw)
-	return err == nil && value.truthy()
-}
-
-// pyOrText is str(value or "").
-func pyOrText(raw json.RawMessage) string {
-	if !pyTruthy(raw) {
-		return ""
-	}
-	return rawText(raw)
-}
-
-// pyGetText is str(d.get(key, fallback)): absent is the fallback, null is "None".
-func pyGetText(raw json.RawMessage, fallback string) string {
-	if len(raw) == 0 {
-		return fallback
-	}
-	return rawText(raw)
-}
-
-// rawText is str() of a present JSON value.
-func rawText(raw json.RawMessage) string {
-	value, err := parsePy(raw)
-	if err != nil {
-		return ""
-	}
-	return value.str()
-}
-
-// rawInt is int(value or 0) for a number or numeric string.
-func rawInt(raw json.RawMessage) int {
-	if !pyTruthy(raw) {
-		return 0
-	}
-	text := rawText(raw)
-	if n, err := strconv.Atoi(strings.TrimSpace(text)); err == nil {
-		return n
-	}
-	if f, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil {
-		return int(f)
-	}
-	return 0
 }

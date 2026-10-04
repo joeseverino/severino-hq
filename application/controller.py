@@ -27,6 +27,7 @@ from .approvals import AGENT_SURFACES
 from .adoption import manages_through, observes_only
 from .conditions import stamped
 from .infrastructure import controller_contract, serialize_resource
+from .plugin_admission import admitted_sources
 from .resource_operations import serialize_operation
 
 _FORBIDDEN_STATUS_KEYS = ("private", "secret", "token", "password", "credential")
@@ -516,7 +517,8 @@ def controller_registry() -> dict[str, Any]:
 
     A controller that cannot import these declarations asks for them: which
     actions it may apply, which it must refuse and why, which kinds need material
-    HQ holds, and which connections can read each kind.
+    HQ holds, which connections can read each kind, and which extensions the
+    image composes.
     """
 
     registry = controller_capability_registry()
@@ -543,4 +545,5 @@ def controller_registry() -> dict[str, Any]:
             kind: reading.provider for kind, reading in sorted(OBSERVATIONS.items())
         },
         "connection_credentials": sorted(CONNECTION_CREDENTIALS),
+        "extensions": [dict(source) for source in admitted_sources()],
     }

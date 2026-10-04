@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/providers/adguardapi"
@@ -58,17 +59,30 @@ func (r *Registry) adguardRequest(ctx context.Context, ref, path, method string,
 	return r.HTTP.Request(ctx, strings.TrimRight(base, "/")+path, method, headers, payload)
 }
 
+// adguardDecode decodes one AdGuard answer into its generated type; an empty
+// answer is the zero value, a malformed one an error.
+func adguardDecode[T any](raw json.RawMessage, what string) (T, error) {
+	var answer T
+	if len(raw) == 0 {
+		return answer, nil
+	}
+	if err := json.Unmarshal(raw, &answer); err != nil {
+		return answer, &ProviderError{Message: "adguard " + what + " did not decode", Err: err}
+	}
+	return answer, nil
+}
+
 // adguardGet reads one AdGuard endpoint into its response type. A sweep reads
 // each endpoint once, whichever kinds need it.
-func adguardGet[T any](ctx context.Context, r *Registry, ref, path, invalid string) (T, error) {
+func adguardGet[T any](ctx context.Context, r *Registry, ref, path, what string) (T, error) {
 	raw, err := r.cached(ctx, "adguard-get:"+ref+":"+path, func() (json.RawMessage, error) {
 		return r.adguardRequest(ctx, ref, path, "GET", nil)
 	})
 	if err != nil {
 		var zero T
-		return zero, err
+		return zero, fmt.Errorf("adguard %s: %w", what, err)
 	}
-	return decodeAs[T](raw, invalid)
+	return adguardDecode[T](raw, what)
 }
 
 func (r *Registry) adguardRewrites(ctx context.Context, ref string, cached bool) ([]adguardapi.RewriteEntry, error) {
@@ -83,9 +97,9 @@ func (r *Registry) adguardRewrites(ctx context.Context, ref string, cached bool)
 		raw, err = load()
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("adguard rewrite list: %w", err)
 	}
-	rewrites, err := decodeAs[[]adguardapi.RewriteEntry](raw, "Provider returned an invalid record list.")
+	rewrites, err := adguardDecode[[]adguardapi.RewriteEntry](raw, "rewrite list")
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +120,7 @@ func (r *Registry) adguardReconcile(ctx context.Context, spec AdGuardRewriteSpec
 		matches = matchingRewrites(rewrites, observed.Domain)
 	}
 	if len(matches) > 1 {
-		return Result{}, &ProviderError{Message: "AdGuard contains duplicate rewrites for the domain."}
+		return Result{}, &ProviderError{Message: "adguard holds more than one rewrite for " + spec.Domain}
 	}
 	var live adguardapi.RewriteEntry
 	if len(matches) == 1 {
@@ -121,7 +135,7 @@ func (r *Registry) adguardReconcile(ctx context.Context, spec AdGuardRewriteSpec
 			payload = adguardapi.RewriteUpdate{Target: &target, Update: &desired}
 		}
 		if _, err := r.adguardRequest(ctx, "", path, method, payload); err != nil {
-			return Result{}, err
+			return Result{}, fmt.Errorf("adguard write rewrite: %w", err)
 		}
 	}
 	status := AdGuardRewriteStatus{Domain: spec.Domain, Answer: spec.Answer, Enabled: rewriteEnabled(live)}
@@ -158,7 +172,7 @@ func (r *Registry) adguardDelete(ctx context.Context, spec AdGuardRewriteSpec, _
 	if apply {
 		for _, match := range matches {
 			if _, err := r.adguardRequest(ctx, "", "/control/rewrite/delete", "POST", rewritePair(deref(match.Domain), deref(match.Answer))); err != nil {
-				return Result{}, err
+				return Result{}, fmt.Errorf("adguard delete rewrite: %w", err)
 			}
 		}
 	}
@@ -182,13 +196,16 @@ func (r *Registry) adguardInventory(ctx context.Context) ([]any, error) {
 	return found, nil
 }
 
+// adguardProbe reaches AdGuard with the connection's credential. An answer
+// with a version is AdGuard's status; dns_addresses may be null, which is
+// AdGuard listening on nothing yet, and says nothing about the credential.
 func (r *Registry) adguardProbe(ctx context.Context, ref string) (ProbeResult, error) {
-	status, err := adguardGet[adguardapi.ServerStatus](ctx, r, ref, "/control/status", "AdGuard did not return a status.")
+	status, err := adguardGet[adguardapi.ServerStatus](ctx, r, ref, "/control/status", "status")
 	if err != nil {
 		return ProbeResult{}, err
 	}
-	if status.DnsAddresses == nil {
-		return ProbeResult{}, &ProviderError{Message: "AdGuard did not return a status."}
+	if deref(status.Version) == "" {
+		return ProbeResult{}, &ProviderError{Message: "adguard status has no version, so it is not AdGuard's answer", Failure: runtime.FailureClassAddress}
 	}
-	return ProbeResult{Detail: strings.TrimSpace("AdGuard " + deref(status.Version)), Reaches: []string{}}, nil
+	return ProbeResult{Detail: "AdGuard " + *status.Version, Reaches: []string{}}, nil
 }

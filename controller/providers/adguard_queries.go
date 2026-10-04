@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/url"
 	"sort"
@@ -75,9 +76,9 @@ func (t *queryTally) add(entry adguardapi.QueryLogItem, when time.Time) {
 func (t *queryTally) record(domain, ref string, hours float64, anonymized bool) AdGuardQuerySummary {
 	last := ""
 	if !t.last.IsZero() {
-		last = t.last.Format("2006-01-02T15:04:05.999999-07:00")
+		last = t.last.Format(time.RFC3339Nano)
 	}
-	record := AdGuardQuerySummary{ConnectionRef: ref, Domain: domain, Queries: t.queries, Blocked: t.blocked, ClientCount: len(t.clients), LastSeen: last, WindowHours: math.RoundToEven(hours*10) / 10}
+	record := AdGuardQuerySummary{ConnectionRef: ref, Domain: domain, Queries: t.queries, Blocked: t.blocked, ClientCount: len(t.clients), LastSeen: last, WindowHours: roundTo(hours, 1)}
 	if !anonymized {
 		keys := []string{}
 		for key := range t.clients {
@@ -143,16 +144,16 @@ func summarizeQueries(get func(string) (json.RawMessage, error), domains []strin
 		}
 		raw, err := get(path)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("adguard query log: %w", err)
 		}
-		answer, err := decodeAs[adguardapi.QueryLog](raw, "AdGuard returned an invalid query log.")
+		answer, err := adguardDecode[adguardapi.QueryLog](raw, "query log")
 		if err != nil {
 			return nil, err
 		}
 		for _, entry := range deref(answer.Data) {
 			when, err := time.Parse(time.RFC3339Nano, deref(entry.Time))
 			if err != nil {
-				continue
+				return nil, &ProviderError{Message: "adguard query log entry has no valid time", Err: err}
 			}
 			if when.Before(cutoff) {
 				full = true
@@ -195,12 +196,12 @@ func (r *Registry) adguardQueries(ctx context.Context) ([]any, error) {
 	now := r.Now().UTC()
 	for _, ref := range r.refs("adguard") {
 		get := func(path string) (json.RawMessage, error) { return r.adguardRequest(ctx, ref, path, "GET", nil) }
-		config, err := adguardGet[adguardapi.GetQueryLogConfigResponse](ctx, r, ref, "/control/querylog/config", "AdGuard returned an invalid setting.")
+		config, err := adguardGet[adguardapi.GetQueryLogConfigResponse](ctx, r, ref, "/control/querylog/config", "query log settings")
 		if err != nil {
 			return nil, err
 		}
 		if config.Enabled != nil && !*config.Enabled {
-			return nil, &ProviderError{Message: "AdGuard's query log is off, so HQ cannot tell which names are used."}
+			return nil, &ProviderError{Message: "adguard query log is off, so which names are used is unknown"}
 		}
 		rewrites, err := r.adguardRewrites(ctx, ref, true)
 		if err != nil {
@@ -214,7 +215,7 @@ func (r *Registry) adguardQueries(ctx context.Context) ([]any, error) {
 		}
 		anonymized := config.AnonymizeClientIp != nil && *config.AnonymizeClientIp
 		if anonymized {
-			refuse(ctx, "clients", ref, "", &ProviderError{Message: "AdGuard anonymizes client addresses."})
+			refuse(ctx, "clients", ref, "", &ProviderError{Message: "adguard anonymizes client addresses"})
 		}
 		records, err := summarizeQueries(get, domains, ref, now, anonymized)
 		if err != nil {
@@ -223,4 +224,10 @@ func (r *Registry) adguardQueries(ctx context.Context) ([]any, error) {
 		found = append(found, records...)
 	}
 	return found, nil
+}
+
+// roundTo rounds x to places decimal places, halves away from zero.
+func roundTo(x float64, places int) float64 {
+	scale := math.Pow(10, float64(places))
+	return math.Round(x*scale) / scale
 }

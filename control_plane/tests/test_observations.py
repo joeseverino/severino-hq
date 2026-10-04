@@ -42,28 +42,9 @@ class ContractTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             registry((spec, spec))
 
-    def test_every_reading_has_a_reader_and_every_reader_a_home(self):
-        from controller_runtime.providers import PROVIDER_INVENTORY
-
-        from control_plane.providers import PROVIDERS
-
-        controller_read = {
-            kind for kind, spec in OBSERVATIONS.items() if spec.read_by == "controller"
-        }
-        self.assertEqual(sorted(controller_read - set(PROVIDER_INVENTORY)), [])
-        self.assertEqual(
-            sorted(set(PROVIDER_INVENTORY) - set(PROVIDERS) - controller_read), []
-        )
-        self.assertEqual(sorted(set(OBSERVATIONS) & set(PROVIDERS)), [])
-
-    def test_readers_and_readings_are_the_same_set(self):
+    def test_hq_readers_and_readings_are_the_same_set(self):
         from application.public_registry import READERS
-        from controller_runtime.handlers import OBSERVATION_READERS
 
-        self.assertEqual(
-            sorted(OBSERVATION_READERS),
-            sorted(k for k, s in OBSERVATIONS.items() if s.read_by == "controller"),
-        )
         self.assertEqual(
             sorted(READERS),
             sorted(k for k, s in OBSERVATIONS.items() if s.read_by == "hq"),

@@ -9,24 +9,6 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
-// Defines values for CertificateObjectMetaKeyType.
-const (
-	CertificateObjectMetaKeyTypeEcdsa CertificateObjectMetaKeyType = "ecdsa"
-	CertificateObjectMetaKeyTypeRsa   CertificateObjectMetaKeyType = "rsa"
-)
-
-// Valid indicates whether the value is a known member of the CertificateObjectMetaKeyType enum.
-func (e CertificateObjectMetaKeyType) Valid() bool {
-	switch e {
-	case CertificateObjectMetaKeyTypeEcdsa:
-		return true
-	case CertificateObjectMetaKeyTypeRsa:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for Directive.
 const (
 	Allow Directive = "allow"
@@ -86,16 +68,16 @@ func (e ForwardScheme2) Valid() bool {
 
 // Defines values for MetaKeyType.
 const (
-	MetaKeyTypeEcdsa MetaKeyType = "ecdsa"
-	MetaKeyTypeRsa   MetaKeyType = "rsa"
+	Ecdsa MetaKeyType = "ecdsa"
+	Rsa   MetaKeyType = "rsa"
 )
 
 // Valid indicates whether the value is a known member of the MetaKeyType enum.
 func (e MetaKeyType) Valid() bool {
 	switch e {
-	case MetaKeyTypeEcdsa:
+	case Ecdsa:
 		return true
-	case MetaKeyTypeRsa:
+	case Rsa:
 		return true
 	default:
 		return false
@@ -276,8 +258,8 @@ type AccessListObject struct {
 	CreatedOn *CreatedOn `json:"created_on,omitempty"`
 
 	// Id Unique identifier
-	Id   *Id                    `json:"id,omitempty"`
-	Meta map[string]interface{} `json:"meta"`
+	Id   *Id             `json:"id,omitempty"`
+	Meta json.RawMessage `json:"meta"`
 
 	// ModifiedOn Date and time of last update
 	ModifiedOn *ModifiedOn `json:"modified_on,omitempty"`
@@ -285,9 +267,9 @@ type AccessListObject struct {
 
 	// OwnerUserId User ID
 	OwnerUserId    UserId `json:"owner_user_id"`
-	PassAuth       bool   `json:"pass_auth"`
+	PassAuth       Flag   `json:"pass_auth"`
 	ProxyHostCount int    `json:"proxy_host_count"`
-	SatisfyAny     bool   `json:"satisfy_any"`
+	SatisfyAny     Flag   `json:"satisfy_any"`
 }
 
 // AccessClients defines model for access_clients.
@@ -303,33 +285,22 @@ type AccessItems = []struct {
 }
 
 // AccessListId Access List ID
-type AccessListId = int
+type AccessListId = ID
 
 // Address defines model for address.
-type Address struct {
-	union json.RawMessage
-}
-
-// Address0 defines model for Address.0.
-type Address0 = string
-
-// Address1 defines model for Address.1.
-type Address1 = string
-
-// Address2 defines model for Address.2.
-type Address2 = string
+type Address = string
 
 // AdvancedConfig defines model for advanced_config.
 type AdvancedConfig = string
 
 // AllowWebsocketUpgrade Allow Websocket Upgrade for all paths
-type AllowWebsocketUpgrade = bool
+type AllowWebsocketUpgrade = Flag
 
 // BlockExploits Should we block common exploits
-type BlockExploits = bool
+type BlockExploits = Flag
 
 // CachingEnabled Should we cache assets
-type CachingEnabled = bool
+type CachingEnabled = Flag
 
 // CertificateList Certificates list
 type CertificateList = []CertificateObject
@@ -346,17 +317,8 @@ type CertificateObject struct {
 	ExpiresOn *string `json:"expires_on,omitempty"`
 
 	// Id Unique identifier
-	Id   *Id `json:"id,omitempty"`
-	Meta struct {
-		Certificate            *string                       `json:"certificate,omitempty"`
-		CertificateKey         *string                       `json:"certificate_key,omitempty"`
-		DnsChallenge           *bool                         `json:"dns_challenge,omitempty"`
-		DnsProvider            *string                       `json:"dns_provider,omitempty"`
-		DnsProviderCredentials *string                       `json:"dns_provider_credentials,omitempty"`
-		KeyType                *CertificateObjectMetaKeyType `json:"key_type,omitempty"`
-		LetsencryptCertificate *map[string]interface{}       `json:"letsencrypt_certificate,omitempty"`
-		PropagationSeconds     *int                          `json:"propagation_seconds,omitempty"`
-	} `json:"meta"`
+	Id   *Id             `json:"id,omitempty"`
+	Meta json.RawMessage `json:"meta"`
 
 	// ModifiedOn Date and time of last update
 	ModifiedOn *ModifiedOn `json:"modified_on,omitempty"`
@@ -372,19 +334,8 @@ type CertificateObject struct {
 	Provider    SslProvider `json:"provider"`
 }
 
-// CertificateObjectMetaKeyType defines model for CertificateObject.Meta.KeyType.
-type CertificateObjectMetaKeyType string
-
 // CertificateId Certificate ID
-type CertificateId struct {
-	union json.RawMessage
-}
-
-// CertificateId0 defines model for CertificateId.0.
-type CertificateId0 = int
-
-// CertificateId1 defines model for CertificateId.1.
-type CertificateId1 = string
+type CertificateId = ID
 
 // CreatedOn Date and time of creation
 type CreatedOn = string
@@ -419,8 +370,8 @@ type DeadHostObject struct {
 	Http2Support Http2Support `json:"http2_support"`
 
 	// Id Unique identifier
-	Id   *Id                    `json:"id,omitempty"`
-	Meta map[string]interface{} `json:"meta"`
+	Id   *Id             `json:"id,omitempty"`
+	Meta json.RawMessage `json:"meta"`
 
 	// ModifiedOn Date and time of last update
 	ModifiedOn *ModifiedOn `json:"modified_on,omitempty"`
@@ -457,7 +408,7 @@ type DomainNames = []string
 type DomainNames2 = []string
 
 // Enabled Is Enabled
-type Enabled = bool
+type Enabled = Flag
 
 // Error Error
 type Error struct {
@@ -490,33 +441,22 @@ type ForwardScheme string
 type ForwardScheme2 string
 
 // ForwardingHost defines model for forwarding_host.
-type ForwardingHost struct {
-	union json.RawMessage
-}
-
-// ForwardingHost0 Domain Name
-type ForwardingHost0 = string
-
-// ForwardingHost1 defines model for ForwardingHost.1.
-type ForwardingHost1 = string
-
-// ForwardingHost2 defines model for ForwardingHost.2.
-type ForwardingHost2 = string
+type ForwardingHost = string
 
 // ForwardingPort defines model for forwarding_port.
 type ForwardingPort = int
 
 // HstsEnabled Is HSTS Enabled
-type HstsEnabled = bool
+type HstsEnabled = Flag
 
 // HstsSubdomains Is HSTS applicable to all subdomains
-type HstsSubdomains = bool
+type HstsSubdomains = Flag
 
 // Http2Support HTTP2 Protocol Support
-type Http2Support = bool
+type Http2Support = Flag
 
 // Id Unique identifier
-type Id = int
+type Id = ID
 
 // IncomingPort defines model for incoming_port.
 type IncomingPort = int
@@ -538,7 +478,7 @@ type Locations = []struct {
 type Meta struct {
 	Certificate            *string                 `json:"certificate,omitempty"`
 	CertificateKey         *string                 `json:"certificate_key,omitempty"`
-	DnsChallenge           *bool                   `json:"dns_challenge,omitempty"`
+	DnsChallenge           *Flag                   `json:"dns_challenge,omitempty"`
 	DnsProvider            *string                 `json:"dns_provider,omitempty"`
 	DnsProviderCredentials *string                 `json:"dns_provider_credentials,omitempty"`
 	KeyType                *MetaKeyType            `json:"key_type,omitempty"`
@@ -565,10 +505,10 @@ type Name = string
 type NiceName = string
 
 // PassAuth defines model for pass_auth.
-type PassAuth = bool
+type PassAuth = Flag
 
 // PreservePath Should the path be preserved
-type PreservePath = bool
+type PreservePath = Flag
 
 // ProxyHostList Proxy Hosts list
 type ProxyHostList = []ProxyHostObject
@@ -582,7 +522,7 @@ type ProxyHostObject struct {
 	AdvancedConfig string       `json:"advanced_config"`
 
 	// AllowWebsocketUpgrade Allow Websocket Upgrade for all paths
-	AllowWebsocketUpgrade bool `json:"allow_websocket_upgrade"`
+	AllowWebsocketUpgrade Flag `json:"allow_websocket_upgrade"`
 
 	// BlockExploits Should we block common exploits
 	BlockExploits BlockExploits `json:"block_exploits"`
@@ -616,19 +556,9 @@ type ProxyHostObject struct {
 	Http2Support Http2Support `json:"http2_support"`
 
 	// Id Unique identifier
-	Id        *Id `json:"id,omitempty"`
-	Locations []struct {
-		// AccessListId Access List ID
-		AccessListId   *AccessListId `json:"access_list_id,omitempty"`
-		AdvancedConfig *string       `json:"advanced_config,omitempty"`
-		ForwardHost    ForwardHost   `json:"forward_host"`
-		ForwardPath    *string       `json:"forward_path,omitempty"`
-		ForwardPort    ForwardPort   `json:"forward_port"`
-		ForwardScheme  ForwardScheme `json:"forward_scheme"`
-		Id             *int          `json:"id,omitempty"`
-		Path           string        `json:"path"`
-	} `json:"locations"`
-	Meta map[string]interface{} `json:"meta"`
+	Id        *Id             `json:"id,omitempty"`
+	Locations json.RawMessage `json:"locations"`
+	Meta      json.RawMessage `json:"meta"`
 
 	// ModifiedOn Date and time of last update
 	ModifiedOn *ModifiedOn `json:"modified_on,omitempty"`
@@ -643,7 +573,7 @@ type ProxyHostObject struct {
 	SslForced SslForced `json:"ssl_forced"`
 
 	// TrustForwardedProto Trust the forwarded headers
-	TrustForwardedProto bool `json:"trust_forwarded_proto"`
+	TrustForwardedProto Flag `json:"trust_forwarded_proto"`
 }
 
 // ProxyHostObjectForwardScheme defines model for ProxyHostObject.ForwardScheme.
@@ -689,8 +619,8 @@ type RedirectionHostObject struct {
 	Http2Support Http2Support `json:"http2_support"`
 
 	// Id Unique identifier
-	Id   *Id                    `json:"id,omitempty"`
-	Meta map[string]interface{} `json:"meta"`
+	Id   *Id             `json:"id,omitempty"`
+	Meta json.RawMessage `json:"meta"`
 
 	// ModifiedOn Date and time of last update
 	ModifiedOn *ModifiedOn `json:"modified_on,omitempty"`
@@ -702,7 +632,7 @@ type RedirectionHostObject struct {
 	OwnerUserId UserId `json:"owner_user_id"`
 
 	// PreservePath Should the path be preserved
-	PreservePath bool `json:"preserve_path"`
+	PreservePath Flag `json:"preserve_path"`
 
 	// SslForced Is SSL Forced
 	SslForced SslForced `json:"ssl_forced"`
@@ -712,10 +642,10 @@ type RedirectionHostObject struct {
 type RedirectionHostObjectForwardScheme string
 
 // SatisfyAny defines model for satisfy_any.
-type SatisfyAny = bool
+type SatisfyAny = Flag
 
 // SslForced Is SSL Forced
-type SslForced = bool
+type SslForced = Flag
 
 // SslProvider defines model for ssl_provider.
 type SslProvider = string
@@ -734,14 +664,14 @@ type StreamObject struct {
 	CreatedOn *CreatedOn `json:"created_on,omitempty"`
 
 	// Enabled Is Enabled
-	Enabled        Enabled                     `json:"enabled"`
-	ForwardingHost StreamObject_ForwardingHost `json:"forwarding_host"`
-	ForwardingPort int                         `json:"forwarding_port"`
+	Enabled        Enabled `json:"enabled"`
+	ForwardingHost string  `json:"forwarding_host"`
+	ForwardingPort int     `json:"forwarding_port"`
 
 	// Id Unique identifier
-	Id           *Id                    `json:"id,omitempty"`
-	IncomingPort int                    `json:"incoming_port"`
-	Meta         map[string]interface{} `json:"meta"`
+	Id           *Id             `json:"id,omitempty"`
+	IncomingPort int             `json:"incoming_port"`
+	Meta         json.RawMessage `json:"meta"`
 
 	// ModifiedOn Date and time of last update
 	ModifiedOn *ModifiedOn `json:"modified_on,omitempty"`
@@ -751,26 +681,12 @@ type StreamObject struct {
 
 	// OwnerUserId User ID
 	OwnerUserId   UserId `json:"owner_user_id"`
-	TcpForwarding bool   `json:"tcp_forwarding"`
-	UdpForwarding bool   `json:"udp_forwarding"`
-}
-
-// StreamObjectForwardingHost0 Domain Name
-type StreamObjectForwardingHost0 = string
-
-// StreamObjectForwardingHost1 defines model for StreamObject.ForwardingHost.1.
-type StreamObjectForwardingHost1 = string
-
-// StreamObjectForwardingHost2 defines model for StreamObject.ForwardingHost.2.
-type StreamObjectForwardingHost2 = string
-
-// StreamObject_ForwardingHost defines model for StreamObject.ForwardingHost.
-type StreamObject_ForwardingHost struct {
-	union json.RawMessage
+	TcpForwarding Flag   `json:"tcp_forwarding"`
+	UdpForwarding Flag   `json:"udp_forwarding"`
 }
 
 // TcpForwarding defines model for tcp_forwarding.
-type TcpForwarding = bool
+type TcpForwarding = Flag
 
 // TokenChallenge Token object
 type TokenChallenge struct {
@@ -778,7 +694,7 @@ type TokenChallenge struct {
 	ChallengeToken string `json:"challenge_token"`
 
 	// Requires2fa Whether this token request requires two-factor authentication
-	Requires2fa bool `json:"requires_2fa"`
+	Requires2fa Flag `json:"requires_2fa"`
 }
 
 // TokenObject Token object
@@ -791,10 +707,10 @@ type TokenObject struct {
 }
 
 // TrustForwardedProto Trust the forwarded headers
-type TrustForwardedProto = bool
+type TrustForwardedProto = Flag
 
 // UdpForwarding defines model for udp_forwarding.
-type UdpForwarding = bool
+type UdpForwarding = Flag
 
 // UserObject User object
 type UserObject struct {
@@ -811,7 +727,7 @@ type UserObject struct {
 	Id int `json:"id"`
 
 	// IsDisabled Is user Disabled
-	IsDisabled bool `json:"is_disabled"`
+	IsDisabled Flag `json:"is_disabled"`
 
 	// ModifiedOn Modified Date
 	ModifiedOn string `json:"modified_on"`
@@ -892,8 +808,8 @@ type GetCertificatesParamsExpand string
 // CreateCertificateJSONBody defines parameters for CreateCertificate.
 type CreateCertificateJSONBody struct {
 	// DomainNames Domain Names separated by a comma
-	DomainNames *DomainNames `json:"domain_names,omitempty"`
-	Meta        *Meta        `json:"meta,omitempty"`
+	DomainNames *DomainNames     `json:"domain_names,omitempty"`
+	Meta        *json.RawMessage `json:"meta,omitempty"`
 
 	// NiceName Nice Name for the custom certificate
 	NiceName *NiceName   `json:"nice_name,omitempty"`
@@ -946,8 +862,8 @@ type Create404HostJSONBody struct {
 	HstsSubdomains *HstsSubdomains `json:"hsts_subdomains,omitempty"`
 
 	// Http2Support HTTP2 Protocol Support
-	Http2Support *Http2Support `json:"http2_support,omitempty"`
-	Meta         *Meta3        `json:"meta,omitempty"`
+	Http2Support *Http2Support    `json:"http2_support,omitempty"`
+	Meta         *json.RawMessage `json:"meta,omitempty"`
 
 	// SslForced Is SSL Forced
 	SslForced *SslForced `json:"ssl_forced,omitempty"`
@@ -970,8 +886,8 @@ type UpdateDeadHostJSONBody struct {
 	HstsSubdomains *HstsSubdomains `json:"hsts_subdomains,omitempty"`
 
 	// Http2Support HTTP2 Protocol Support
-	Http2Support *Http2Support `json:"http2_support,omitempty"`
-	Meta         *Meta3        `json:"meta,omitempty"`
+	Http2Support *Http2Support    `json:"http2_support,omitempty"`
+	Meta         *json.RawMessage `json:"meta,omitempty"`
 
 	// SslForced Is SSL Forced
 	SslForced *SslForced `json:"ssl_forced,omitempty"`
@@ -1020,9 +936,9 @@ type CreateProxyHostJSONBody struct {
 	HstsSubdomains *HstsSubdomains `json:"hsts_subdomains,omitempty"`
 
 	// Http2Support HTTP2 Protocol Support
-	Http2Support *Http2Support `json:"http2_support,omitempty"`
-	Locations    *Locations    `json:"locations,omitempty"`
-	Meta         *Meta2        `json:"meta,omitempty"`
+	Http2Support *Http2Support    `json:"http2_support,omitempty"`
+	Locations    *Locations       `json:"locations,omitempty"`
+	Meta         *json.RawMessage `json:"meta,omitempty"`
 
 	// SslForced Is SSL Forced
 	SslForced *SslForced `json:"ssl_forced,omitempty"`
@@ -1065,9 +981,9 @@ type UpdateProxyHostJSONBody struct {
 	HstsSubdomains *HstsSubdomains `json:"hsts_subdomains,omitempty"`
 
 	// Http2Support HTTP2 Protocol Support
-	Http2Support *Http2Support `json:"http2_support,omitempty"`
-	Locations    *Locations    `json:"locations,omitempty"`
-	Meta         *Meta2        `json:"meta,omitempty"`
+	Http2Support *Http2Support    `json:"http2_support,omitempty"`
+	Locations    *Locations       `json:"locations,omitempty"`
+	Meta         *json.RawMessage `json:"meta,omitempty"`
 
 	// SslForced Is SSL Forced
 	SslForced *SslForced `json:"ssl_forced,omitempty"`
@@ -1112,8 +1028,8 @@ type CreateRedirectionHostJSONBody struct {
 	HstsSubdomains *HstsSubdomains `json:"hsts_subdomains,omitempty"`
 
 	// Http2Support HTTP2 Protocol Support
-	Http2Support *Http2Support `json:"http2_support,omitempty"`
-	Meta         *Meta2        `json:"meta,omitempty"`
+	Http2Support *Http2Support    `json:"http2_support,omitempty"`
+	Meta         *json.RawMessage `json:"meta,omitempty"`
 
 	// PreservePath Should the path be preserved
 	PreservePath *PreservePath `json:"preserve_path,omitempty"`
@@ -1149,8 +1065,8 @@ type UpdateRedirectionHostJSONBody struct {
 	HstsSubdomains *HstsSubdomains `json:"hsts_subdomains,omitempty"`
 
 	// Http2Support HTTP2 Protocol Support
-	Http2Support *Http2Support `json:"http2_support,omitempty"`
-	Meta         *Meta2        `json:"meta,omitempty"`
+	Http2Support *Http2Support    `json:"http2_support,omitempty"`
+	Meta         *json.RawMessage `json:"meta,omitempty"`
 
 	// PreservePath Should the path be preserved
 	PreservePath *PreservePath `json:"preserve_path,omitempty"`
@@ -1174,25 +1090,25 @@ type CreateStreamJSONBody struct {
 	CertificateId *CertificateId `json:"certificate_id,omitempty"`
 
 	// DomainNames Domain Names separated by a comma
-	DomainNames    *DomainNames2  `json:"domain_names,omitempty"`
-	ForwardingHost ForwardingHost `json:"forwarding_host"`
-	ForwardingPort ForwardingPort `json:"forwarding_port"`
-	IncomingPort   IncomingPort   `json:"incoming_port"`
-	Meta           *Meta3         `json:"meta,omitempty"`
-	TcpForwarding  *TcpForwarding `json:"tcp_forwarding,omitempty"`
-	UdpForwarding  *UdpForwarding `json:"udp_forwarding,omitempty"`
+	DomainNames    *DomainNames2    `json:"domain_names,omitempty"`
+	ForwardingHost ForwardingHost   `json:"forwarding_host"`
+	ForwardingPort ForwardingPort   `json:"forwarding_port"`
+	IncomingPort   IncomingPort     `json:"incoming_port"`
+	Meta           *json.RawMessage `json:"meta,omitempty"`
+	TcpForwarding  *TcpForwarding   `json:"tcp_forwarding,omitempty"`
+	UdpForwarding  *UdpForwarding   `json:"udp_forwarding,omitempty"`
 }
 
 // UpdateStreamJSONBody defines parameters for UpdateStream.
 type UpdateStreamJSONBody struct {
 	// CertificateId Certificate ID
-	CertificateId  *CertificateId  `json:"certificate_id,omitempty"`
-	ForwardingHost *ForwardingHost `json:"forwarding_host,omitempty"`
-	ForwardingPort *ForwardingPort `json:"forwarding_port,omitempty"`
-	IncomingPort   *IncomingPort   `json:"incoming_port,omitempty"`
-	Meta           *Meta3          `json:"meta,omitempty"`
-	TcpForwarding  *TcpForwarding  `json:"tcp_forwarding,omitempty"`
-	UdpForwarding  *UdpForwarding  `json:"udp_forwarding,omitempty"`
+	CertificateId  *CertificateId   `json:"certificate_id,omitempty"`
+	ForwardingHost *ForwardingHost  `json:"forwarding_host,omitempty"`
+	ForwardingPort *ForwardingPort  `json:"forwarding_port,omitempty"`
+	IncomingPort   *IncomingPort    `json:"incoming_port,omitempty"`
+	Meta           *json.RawMessage `json:"meta,omitempty"`
+	TcpForwarding  *TcpForwarding   `json:"tcp_forwarding,omitempty"`
+	UdpForwarding  *UdpForwarding   `json:"udp_forwarding,omitempty"`
 }
 
 // RequestTokenJSONBody defines parameters for RequestToken.
@@ -1263,332 +1179,6 @@ type RequestTokenJSONRequestBody RequestTokenJSONBody
 
 // LoginWith2FAJSONRequestBody defines body for LoginWith2FA for application/json ContentType.
 type LoginWith2FAJSONRequestBody LoginWith2FAJSONBody
-
-// AsAddress0 returns the union data inside the Address as a Address0
-func (t Address) AsAddress0() (Address0, error) {
-	var body Address0
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromAddress0 overwrites any union data inside the Address as the provided Address0
-func (t *Address) FromAddress0(v Address0) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeAddress0 performs a merge with any union data inside the Address, using the provided Address0
-func (t *Address) MergeAddress0(v Address0) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsAddress1 returns the union data inside the Address as a Address1
-func (t Address) AsAddress1() (Address1, error) {
-	var body Address1
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromAddress1 overwrites any union data inside the Address as the provided Address1
-func (t *Address) FromAddress1(v Address1) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeAddress1 performs a merge with any union data inside the Address, using the provided Address1
-func (t *Address) MergeAddress1(v Address1) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsAddress2 returns the union data inside the Address as a Address2
-func (t Address) AsAddress2() (Address2, error) {
-	var body Address2
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromAddress2 overwrites any union data inside the Address as the provided Address2
-func (t *Address) FromAddress2(v Address2) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeAddress2 performs a merge with any union data inside the Address, using the provided Address2
-func (t *Address) MergeAddress2(v Address2) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t Address) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *Address) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
-
-// AsCertificateId0 returns the union data inside the CertificateId as a CertificateId0
-func (t CertificateId) AsCertificateId0() (CertificateId0, error) {
-	var body CertificateId0
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromCertificateId0 overwrites any union data inside the CertificateId as the provided CertificateId0
-func (t *CertificateId) FromCertificateId0(v CertificateId0) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeCertificateId0 performs a merge with any union data inside the CertificateId, using the provided CertificateId0
-func (t *CertificateId) MergeCertificateId0(v CertificateId0) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsCertificateId1 returns the union data inside the CertificateId as a CertificateId1
-func (t CertificateId) AsCertificateId1() (CertificateId1, error) {
-	var body CertificateId1
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromCertificateId1 overwrites any union data inside the CertificateId as the provided CertificateId1
-func (t *CertificateId) FromCertificateId1(v CertificateId1) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeCertificateId1 performs a merge with any union data inside the CertificateId, using the provided CertificateId1
-func (t *CertificateId) MergeCertificateId1(v CertificateId1) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t CertificateId) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *CertificateId) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
-
-// AsForwardingHost0 returns the union data inside the ForwardingHost as a ForwardingHost0
-func (t ForwardingHost) AsForwardingHost0() (ForwardingHost0, error) {
-	var body ForwardingHost0
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromForwardingHost0 overwrites any union data inside the ForwardingHost as the provided ForwardingHost0
-func (t *ForwardingHost) FromForwardingHost0(v ForwardingHost0) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeForwardingHost0 performs a merge with any union data inside the ForwardingHost, using the provided ForwardingHost0
-func (t *ForwardingHost) MergeForwardingHost0(v ForwardingHost0) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsForwardingHost1 returns the union data inside the ForwardingHost as a ForwardingHost1
-func (t ForwardingHost) AsForwardingHost1() (ForwardingHost1, error) {
-	var body ForwardingHost1
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromForwardingHost1 overwrites any union data inside the ForwardingHost as the provided ForwardingHost1
-func (t *ForwardingHost) FromForwardingHost1(v ForwardingHost1) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeForwardingHost1 performs a merge with any union data inside the ForwardingHost, using the provided ForwardingHost1
-func (t *ForwardingHost) MergeForwardingHost1(v ForwardingHost1) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsForwardingHost2 returns the union data inside the ForwardingHost as a ForwardingHost2
-func (t ForwardingHost) AsForwardingHost2() (ForwardingHost2, error) {
-	var body ForwardingHost2
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromForwardingHost2 overwrites any union data inside the ForwardingHost as the provided ForwardingHost2
-func (t *ForwardingHost) FromForwardingHost2(v ForwardingHost2) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeForwardingHost2 performs a merge with any union data inside the ForwardingHost, using the provided ForwardingHost2
-func (t *ForwardingHost) MergeForwardingHost2(v ForwardingHost2) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t ForwardingHost) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *ForwardingHost) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
-
-// AsStreamObjectForwardingHost0 returns the union data inside the StreamObject_ForwardingHost as a StreamObjectForwardingHost0
-func (t StreamObject_ForwardingHost) AsStreamObjectForwardingHost0() (StreamObjectForwardingHost0, error) {
-	var body StreamObjectForwardingHost0
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromStreamObjectForwardingHost0 overwrites any union data inside the StreamObject_ForwardingHost as the provided StreamObjectForwardingHost0
-func (t *StreamObject_ForwardingHost) FromStreamObjectForwardingHost0(v StreamObjectForwardingHost0) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeStreamObjectForwardingHost0 performs a merge with any union data inside the StreamObject_ForwardingHost, using the provided StreamObjectForwardingHost0
-func (t *StreamObject_ForwardingHost) MergeStreamObjectForwardingHost0(v StreamObjectForwardingHost0) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsStreamObjectForwardingHost1 returns the union data inside the StreamObject_ForwardingHost as a StreamObjectForwardingHost1
-func (t StreamObject_ForwardingHost) AsStreamObjectForwardingHost1() (StreamObjectForwardingHost1, error) {
-	var body StreamObjectForwardingHost1
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromStreamObjectForwardingHost1 overwrites any union data inside the StreamObject_ForwardingHost as the provided StreamObjectForwardingHost1
-func (t *StreamObject_ForwardingHost) FromStreamObjectForwardingHost1(v StreamObjectForwardingHost1) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeStreamObjectForwardingHost1 performs a merge with any union data inside the StreamObject_ForwardingHost, using the provided StreamObjectForwardingHost1
-func (t *StreamObject_ForwardingHost) MergeStreamObjectForwardingHost1(v StreamObjectForwardingHost1) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsStreamObjectForwardingHost2 returns the union data inside the StreamObject_ForwardingHost as a StreamObjectForwardingHost2
-func (t StreamObject_ForwardingHost) AsStreamObjectForwardingHost2() (StreamObjectForwardingHost2, error) {
-	var body StreamObjectForwardingHost2
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromStreamObjectForwardingHost2 overwrites any union data inside the StreamObject_ForwardingHost as the provided StreamObjectForwardingHost2
-func (t *StreamObject_ForwardingHost) FromStreamObjectForwardingHost2(v StreamObjectForwardingHost2) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeStreamObjectForwardingHost2 performs a merge with any union data inside the StreamObject_ForwardingHost, using the provided StreamObjectForwardingHost2
-func (t *StreamObject_ForwardingHost) MergeStreamObjectForwardingHost2(v StreamObjectForwardingHost2) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t StreamObject_ForwardingHost) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *StreamObject_ForwardingHost) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
 
 // AsTokenObject returns the union data inside the RequestToken200JSONResponseBody as a TokenObject
 func (t RequestToken200JSONResponseBody) AsTokenObject() (TokenObject, error) {

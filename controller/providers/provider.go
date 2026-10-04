@@ -5,7 +5,6 @@ package providers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"sort"
 	"strings"
 	"sync"
@@ -111,11 +110,13 @@ type Registry struct {
 	Portainer PortainerSource
 	// ControllerID names this installation; empty uses HQ_CONTROLLER_ID or the host name.
 	ControllerID string
-	actions      map[actionKey]Action
-	readers      map[string]Reader
-	probes       map[string]Probe
-	snapshotMu   sync.Mutex
-	snapshot     map[string]*cachedRead
+	// Extensions is each admitted extension the running image composes, from HQ's registry.
+	Extensions []runtime.AdmittedExtension
+	actions    map[actionKey]Action
+	readers    map[string]Reader
+	probes     map[string]Probe
+	snapshotMu sync.Mutex
+	snapshot   map[string]*cachedRead
 	// refusedCredentials holds, for this sweep, each Cloudflare credential prefix
 	// refused outright and why; nil outside a sweep.
 	refusedCredentials map[string]string
@@ -144,6 +145,8 @@ func New(env runtime.Environment, transport Transport) *Registry {
 	r.admitPortainer()
 	r.admitCloudflare()
 	r.admitTLS()
+	r.admitCaddy()
+	r.admitGitHub()
 	return r
 }
 
@@ -236,7 +239,13 @@ func (r *Registry) cached(ctx context.Context, key string, load func() (json.Raw
 }
 
 type refusalKey struct{}
-type refusals struct{ entries []runtime.RefusedPart }
+
+// refusals is one kind's ledger of refused parts. A reader may refuse from
+// several goroutines at once, so appends are locked.
+type refusals struct {
+	mu      sync.Mutex
+	entries []runtime.RefusedPart
+}
 
 func refuse(ctx context.Context, part, ref, scope string, err error) {
 	refuseAt(ctx, part, ref, scope, "", err)
@@ -248,14 +257,9 @@ func refuseAt(ctx context.Context, part, ref, scope, address string, err error) 
 	if ledger == nil {
 		return
 	}
-	failure := runtime.FailureClassUnclassified
-	var provider *ProviderError
-	if errors.As(err, &provider) {
-		failure = provider.Failure
-		if provider.Refusal != runtime.RefusalUnclassified {
-			failure = runtime.FailureClass(provider.Refusal)
-		}
-	}
+	failure, _, _ := runtime.Classify(err)
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
 	ledger.entries = append(ledger.entries, runtime.RefusedPart{Part: part, ConnectionRef: ref, Scope: scope, Refusal: failure, Reason: runtime.Clip(err.Error(), runtime.ReasonLimit), Address: address})
 }
 
@@ -282,19 +286,6 @@ func decodePayload[T any](src Object) (T, error) {
 	}
 	err = json.Unmarshal(data, &target)
 	return target, err
-}
-
-// decodeAs decodes one provider answer into its response type. An empty or
-// null answer is the zero value; one of the wrong shape fails with invalid.
-func decodeAs[T any](raw json.RawMessage, invalid string) (T, error) {
-	var target T
-	if len(raw) == 0 || string(raw) == "null" {
-		return target, nil
-	}
-	if err := json.Unmarshal(raw, &target); err != nil {
-		return target, &ProviderError{Message: invalid}
-	}
-	return target, nil
 }
 
 // deref reads an optional field, or the zero value when it is absent.

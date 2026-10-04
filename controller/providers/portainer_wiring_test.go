@@ -41,7 +41,7 @@ func TestPortainerFeedsGlanceAndPublishedPorts(t *testing.T) {
 	}
 
 	environments, err := r.Portainer.Environments(ctx, "portainer-example")
-	if err != nil || len(environments) != 1 || environments[0].ID.str() != "1" || !environments[0].Reachable || !environments[0].Local {
+	if err != nil || len(environments) != 1 || environments[0].ID != 1 || !environments[0].Reachable || !environments[0].Local {
 		t.Fatalf("glance environments = %+v, %v", environments, err)
 	}
 
@@ -95,7 +95,7 @@ func inspectFixture(count int, failOn string) (*Registry, *inspectCounting) {
 
 func TestPortainerInspectsRunConcurrentlyInOrder(t *testing.T) {
 	r, h := inspectFixture(40, "")
-	site := portainerSite{ConnectionRef: "portainer-example", EnvironmentID: pyText("1")}
+	site := portainerSite{ConnectionRef: "portainer-example", EnvironmentID: 1}
 	found, err := r.portainerRuntime(context.Background(), site)
 	if err != nil || len(found) != 40 {
 		t.Fatalf("%d records, %v", len(found), err)
@@ -112,7 +112,7 @@ func TestPortainerInspectsRunConcurrentlyInOrder(t *testing.T) {
 
 func TestPortainerInspectFailureKeepsTheRecordsBeforeIt(t *testing.T) {
 	r, _ := inspectFixture(40, "/containers/c05/json")
-	site := portainerSite{ConnectionRef: "portainer-example", EnvironmentID: pyText("1")}
+	site := portainerSite{ConnectionRef: "portainer-example", EnvironmentID: 1}
 	found, err := r.portainerRuntime(context.Background(), site)
 	if err == nil || len(found) != 5 {
 		t.Fatalf("%d records, %v; want the 5 before c05 and its error", len(found), err)

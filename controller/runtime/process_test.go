@@ -1,6 +1,8 @@
 package runtime
 
 import (
+	"bytes"
+	"io"
 	"slices"
 	"testing"
 )
@@ -12,6 +14,21 @@ func TestBoundedBufferKeepsTheLimitAndNotesTheRest(t *testing.T) {
 	}
 	if buffer.String() != "abcd" || !buffer.Overflow {
 		t.Fatalf("%q %v", buffer.String(), buffer.Overflow)
+	}
+}
+
+// Regression: an embedded bytes.Buffer lent io.Copy its ReadFrom, which
+// skipped Write and with it the limit on the bridge's output.
+func TestBoundedBufferCapHoldsUnderIOCopy(t *testing.T) {
+	buffer := BoundedBuffer{Limit: 1024}
+	if _, ok := any(&buffer).(io.ReaderFrom); ok {
+		t.Fatal("BoundedBuffer must not implement io.ReaderFrom")
+	}
+	if _, err := io.Copy(&buffer, bytes.NewReader(make([]byte, 1<<20))); err != nil {
+		t.Fatal(err)
+	}
+	if len(buffer.Bytes()) != 1024 || !buffer.Overflow {
+		t.Fatalf("kept %d bytes, overflow %v", len(buffer.Bytes()), buffer.Overflow)
 	}
 }
 

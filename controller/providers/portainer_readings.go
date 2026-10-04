@@ -2,13 +2,17 @@ package providers
 
 import (
 	"context"
+	"fmt"
+	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"unicode"
 	"unicode/utf8"
+
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // The readings the Portainer adapter declares: environments, and each Docker
@@ -17,28 +21,28 @@ import (
 
 // PortainerEnvironmentRecord is one environment a Portainer connection reaches, up or down.
 type PortainerEnvironmentRecord struct {
-	ConnectionRef     string  `json:"connection_ref"`
-	Host              string  `json:"host"`
-	ID                pyValue `json:"id"`
-	Name              string  `json:"name"`
-	Address           string  `json:"address"`
-	Local             bool    `json:"local"`
-	Type              string  `json:"type"`
-	Status            string  `json:"status"`
-	AgentVersion      string  `json:"agent_version"`
-	DockerVersion     string  `json:"docker_version"`
-	ContainersRunning pyValue `json:"containers_running"`
-	ContainersTotal   pyValue `json:"containers_total"`
-	SnapshotAt        string  `json:"snapshot_at"`
+	ConnectionRef     string `json:"connection_ref"`
+	Host              string `json:"host"`
+	ID                int64  `json:"id"`
+	Name              string `json:"name"`
+	Address           string `json:"address"`
+	Local             bool   `json:"local"`
+	Type              string `json:"type"`
+	Status            string `json:"status"`
+	AgentVersion      string `json:"agent_version"`
+	DockerVersion     string `json:"docker_version"`
+	ContainersRunning *int64 `json:"containers_running"`
+	ContainersTotal   *int64 `json:"containers_total"`
+	SnapshotAt        string `json:"snapshot_at"`
 }
 
 // portainerSite is a reachable environment and the machine it is; every
 // per-environment record carries it.
 type portainerSite struct {
-	ConnectionRef string  `json:"connection_ref"`
-	EnvironmentID pyValue `json:"environment_id"`
-	Host          string  `json:"host"`
-	HostAddress   string  `json:"host_address"`
+	ConnectionRef string `json:"connection_ref"`
+	EnvironmentID int64  `json:"environment_id"`
+	Host          string `json:"host"`
+	HostAddress   string `json:"host_address"`
 }
 
 type PortainerNetworkRecord struct {
@@ -85,10 +89,10 @@ type PortainerImageUser struct {
 type PortainerImageRecord struct {
 	portainerSite
 	ID         string               `json:"id"`
-	Tags       []pyValue            `json:"tags"`
-	Digests    []pyValue            `json:"digests"`
+	Tags       []string             `json:"tags"`
+	Digests    []string             `json:"digests"`
 	CreatedAt  string               `json:"created_at"`
-	Size       pyValue              `json:"size"`
+	Size       int64                `json:"size"`
 	Containers []PortainerImageUser `json:"containers"`
 }
 
@@ -123,7 +127,7 @@ type PortainerRuntimeRecord struct {
 	Devices        []string                `json:"devices"`
 	Mounts         []PortainerRuntimeMount `json:"mounts"`
 	PortBindings   []PortainerPortBinding  `json:"port_bindings"`
-	ExposedPorts   []int64                 `json:"exposed_ports"`
+	ExposedPorts   []int                   `json:"exposed_ports"`
 	MemoryLimit    int64                   `json:"memory_limit"`
 	CPULimit       float64                 `json:"cpu_limit"`
 	PidsLimit      int64                   `json:"pids_limit"`
@@ -148,10 +152,21 @@ type PortainerComposeProject struct {
 	Containers  []string  `json:"containers"`
 }
 
+// portainerRefused names the read that failed and, for a refusal, what it needs.
+func portainerRefused(err error, what string) error {
+	switch failure, _, _ := runtime.Classify(err); failure {
+	case runtime.FailureClassCredential:
+		return &ProviderError{Message: what + ": credential refused", Failure: failure, Err: err}
+	case runtime.FailureClassPermission:
+		return &ProviderError{Message: what + " needs " + portainerNeeds, Failure: failure, Err: err}
+	}
+	return fmt.Errorf("%s: %w", what, err)
+}
+
 func (r *Registry) portainerListed(ctx context.Context, ref string) ([]PortainerEnvironment, error) {
 	environments, err := r.portainerEnvironments(ctx, ref)
 	if err != nil {
-		return nil, npmRefused(err, "The environment list", portainerNeeds)
+		return nil, portainerRefused(err, "environment list")
 	}
 	return environments, nil
 }
@@ -177,7 +192,7 @@ func (r *Registry) portainerEnvironmentReading(ctx context.Context) ([]any, erro
 }
 
 // portainerBuild reads one environment's records. It returns what it read
-// before failing, as a generator extended into the result keeps its earlier items.
+// before failing, with the failure.
 type portainerBuild func(context.Context, portainerSite) ([]any, error)
 
 // portainerEach reads every reachable environment. One that cannot be read is
@@ -203,7 +218,7 @@ func (r *Registry) portainerEach(what string, build portainerBuild) Reader {
 			records, err := build(ctx, at)
 			found = append(found, records...)
 			if err != nil {
-				refusal := npmRefused(err, what, portainerNeeds)
+				refusal := portainerRefused(err, what)
 				failures = append(failures, refusal)
 				refuseAt(ctx, "", at.ConnectionRef, at.Host, at.HostAddress, refusal)
 			}
@@ -216,40 +231,35 @@ func (r *Registry) portainerEach(what string, build portainerBuild) Reader {
 }
 
 // siteContainers is an environment's containers, never this controller's own run.
-func (r *Registry) siteContainers(ctx context.Context, at portainerSite) ([]pyValue, error) {
-	listed, err := r.portainerDocker(ctx, at.ConnectionRef, at.EnvironmentID, "/containers/json?all=1")
+func (r *Registry) siteContainers(ctx context.Context, at portainerSite) ([]dockerContainer, error) {
+	listed, err := r.portainerContainers(ctx, at.ConnectionRef, at.EnvironmentID)
 	if err != nil {
 		return nil, err
 	}
-	found := []pyValue{}
-	for _, item := range items(listed.or(pyEmptyList)) {
-		if item.object && !r.isThisRun(item) {
-			found = append(found, item)
+	found := []dockerContainer{}
+	for _, container := range listed {
+		if !r.isThisRun(container.Labels) {
+			found = append(found, container)
 		}
 	}
 	return found, nil
-}
-
-func (r *Registry) siteDocker(ctx context.Context, at portainerSite, path string) (pyValue, error) {
-	return r.portainerDocker(ctx, at.ConnectionRef, at.EnvironmentID, path)
-}
-
-// keysOf iterates a decoded mapping's keys, or a list's items as text.
-func keysOf(value pyValue) []string {
-	if value.object {
-		return value.keys
-	}
-	names := []string{}
-	for _, item := range items(value) {
-		names = append(names, item.str())
-	}
-	return names
 }
 
 func sortedStrings(values []string) []string {
 	out := append([]string{}, values...)
 	sort.Strings(out)
 	return out
+}
+
+// nonEmpty is the values that are not blank.
+func nonEmpty(values []string) []string {
+	found := []string{}
+	for _, value := range values {
+		if value != "" {
+			found = append(found, value)
+		}
+	}
+	return found
 }
 
 func (r *Registry) portainerNetworks(ctx context.Context, at portainerSite) ([]any, error) {
@@ -259,72 +269,52 @@ func (r *Registry) portainerNetworks(ctx context.Context, at portainerSite) ([]a
 	}
 	attached := map[string][]string{}
 	for _, container := range containers {
-		networks := container.get("NetworkSettings").or(pyEmptyObject).get("Networks").or(pyEmptyObject)
-		for _, name := range keysOf(networks) {
-			attached[name] = append(attached[name], containerName(container))
+		for name := range container.NetworkSettings.Networks {
+			attached[name] = append(attached[name], container.name())
 		}
 	}
-	listed, err := r.siteDocker(ctx, at, "/networks")
+	listed, err := portainerDocker[[]dockerNetwork](ctx, r, at.ConnectionRef, at.EnvironmentID, "/networks", "network list")
 	if err != nil {
 		return nil, err
 	}
 	found := []any{}
-	for _, network := range items(listed.or(pyEmptyList)) {
-		name := strOr(network.get("Name"))
-		if name == "" {
+	for _, network := range listed {
+		if network.Name == "" {
 			continue
 		}
 		subnets := []string{}
-		for _, entry := range items(network.get("IPAM").or(pyEmptyObject).get("Config").or(pyEmptyList)) {
-			if entry.object && entry.get("Subnet").truthy() {
-				subnets = append(subnets, entry.get("Subnet").str())
+		for _, entry := range network.IPAM.Config {
+			if entry.Subnet != "" {
+				subnets = append(subnets, entry.Subnet)
 			}
 		}
 		found = append(found, PortainerNetworkRecord{
-			portainerSite: at,
-			ID:            strOr(network.get("Id")), Name: name,
-			Driver: strOr(network.get("Driver")), Scope: strOr(network.get("Scope")),
-			Internal: network.get("Internal").truthy(), Subnets: subnets,
-			Containers: sortedStrings(attached[name]),
+			portainerSite: at, ID: network.ID, Name: network.Name,
+			Driver: network.Driver, Scope: network.Scope, Internal: network.Internal, Subnets: subnets,
+			Containers: sortedStrings(attached[network.Name]),
 		})
 	}
 	return found, nil
 }
 
-// mountUsers is each mount of kind by its name (a volume) or source (a bind), and who mounts it.
-func mountUsers(containers []pyValue, kind string) (map[string][]PortainerMountUser, []string) {
+// mountUsers is each mount of one type by its key, who mounts it, and the keys
+// in the order first seen.
+func mountUsers(containers []dockerContainer, kind string) (map[string][]PortainerMountUser, []string) {
 	users := map[string][]PortainerMountUser{}
 	order := []string{}
 	for _, container := range containers {
-		for _, mount := range items(container.get("Mounts").or(pyEmptyList)) {
-			if !mount.get("Type").eqText(kind) {
-				continue
-			}
-			key := mount.get("Source").or(pyText("")).str()
-			if kind == "volume" {
-				key = mount.get("Name").str()
-			}
-			if key == "" {
+		for _, mount := range container.Mounts {
+			key := mount.key()
+			if mount.Type != kind || key == "" {
 				continue
 			}
 			if _, seen := users[key]; !seen {
 				order = append(order, key)
 			}
-			users[key] = append(users[key], PortainerMountUser{
-				Container:   containerName(container),
-				Destination: strOr(mount.get("Destination")),
-				ReadOnly:    mount.get("RW").literal == "false",
-			})
+			users[key] = append(users[key], PortainerMountUser{Container: container.name(), Destination: mount.Destination, ReadOnly: mount.readOnly()})
 		}
 	}
 	return users, order
-}
-
-func usersOf(users map[string][]PortainerMountUser, key string) []PortainerMountUser {
-	if found, ok := users[key]; ok {
-		return found
-	}
-	return []PortainerMountUser{}
 }
 
 func (r *Registry) portainerVolumes(ctx context.Context, at portainerSite) ([]any, error) {
@@ -333,21 +323,22 @@ func (r *Registry) portainerVolumes(ctx context.Context, at portainerSite) ([]an
 		return nil, err
 	}
 	named, _ := mountUsers(containers, "volume")
-	listed, err := r.siteDocker(ctx, at, "/volumes")
+	listed, err := portainerDocker[dockerVolumes](ctx, r, at.ConnectionRef, at.EnvironmentID, "/volumes", "volume list")
 	if err != nil {
 		return nil, err
 	}
 	found := []any{}
-	for _, volume := range items(listed.or(pyEmptyObject).get("Volumes").or(pyEmptyList)) {
-		name := strOr(volume.get("Name"))
-		if name == "" {
+	for _, volume := range listed.Volumes {
+		if volume.Name == "" {
 			continue
 		}
+		users := named[volume.Name]
+		if users == nil {
+			users = []PortainerMountUser{}
+		}
 		found = append(found, PortainerVolumeRecord{
-			portainerSite: at, Type: "volume", Name: name,
-			Driver: strOr(volume.get("Driver")), Source: strOr(volume.get("Mountpoint")),
-			Stack:     strOr(volume.get("Labels").or(pyEmptyObject).get(composeProject)),
-			CreatedAt: strOr(volume.get("CreatedAt")), UsedBy: usersOf(named, name),
+			portainerSite: at, Type: "volume", Name: volume.Name, Driver: volume.Driver, Source: volume.Mountpoint,
+			Stack: volume.Labels[composeProject], CreatedAt: volume.CreatedAt, UsedBy: users,
 		})
 	}
 	binds, sources := mountUsers(containers, "bind")
@@ -365,95 +356,42 @@ func (r *Registry) portainerImages(ctx context.Context, at portainerSite) ([]any
 	}
 	running := map[string][]PortainerImageUser{}
 	for _, container := range containers {
-		if imageID := strOr(container.get("ImageID")); imageID != "" {
-			running[imageID] = append(running[imageID], PortainerImageUser{
-				Container: containerName(container),
-				Reference: strOr(container.get("Image")),
-				Service:   strOr(container.get("Labels").or(pyEmptyObject).get(composeService)),
+		if container.ImageID != "" {
+			running[container.ImageID] = append(running[container.ImageID], PortainerImageUser{
+				Container: container.name(), Reference: container.Image, Service: container.Labels[composeService],
 			})
 		}
 	}
-	listed, err := r.siteDocker(ctx, at, "/images/json")
+	listed, err := portainerDocker[[]dockerImage](ctx, r, at.ConnectionRef, at.EnvironmentID, "/images/json", "image list")
 	if err != nil {
 		return nil, err
 	}
 	found := []any{}
-	for _, image := range items(listed.or(pyEmptyList)) {
-		imageID := strOr(image.get("Id"))
-		if imageID == "" {
+	for _, image := range listed {
+		if image.ID == "" {
 			continue
 		}
-		tags := []pyValue{}
-		for _, tag := range items(image.get("RepoTags").or(pyEmptyList)) {
-			if tag.truthy() && !tag.eqText("<none>:<none>") {
-				tags = append(tags, tag)
-			}
-		}
-		digests := []pyValue{}
-		for _, digest := range items(image.get("RepoDigests").or(pyEmptyList)) {
-			if digest.truthy() && !strings.Contains(digest.str(), "<none>") {
-				digests = append(digests, digest)
-			}
-		}
-		size := pyValue{}
-		if image.get("Size").isInt() {
-			size = image.get("Size")
-		}
-		users := running[imageID]
+		tags := slices.DeleteFunc(nonEmpty(image.RepoTags), func(tag string) bool { return tag == "<none>:<none>" })
+		digests := slices.DeleteFunc(nonEmpty(image.RepoDigests), func(digest string) bool { return strings.Contains(digest, "<none>") })
+		users := running[image.ID]
 		if users == nil {
 			users = []PortainerImageUser{}
 		}
 		found = append(found, PortainerImageRecord{
-			portainerSite: at, ID: imageID, Tags: tags, Digests: digests,
-			CreatedAt: pyStamp(image.get("Created")), Size: size, Containers: users,
+			portainerSite: at, ID: image.ID, Tags: tags, Digests: digests,
+			CreatedAt: unixStamp(image.Created), Size: image.Size, Containers: users,
 		})
 	}
 	return found, nil
 }
 
-// securityOptMax keeps a short option, which names a mode; a longer one can be a whole seccomp profile.
+// securityOptMax keeps a short option, which names a mode; a longer one can be
+// a whole seccomp profile, which is never copied out.
 const securityOptMax = 64
 
-func truthyStrings(value pyValue) []string {
-	found := []string{}
-	for _, item := range items(value.or(pyEmptyList)) {
-		if item.truthy() {
-			found = append(found, item.str())
-		}
-	}
-	return found
-}
-
-func intOf(value pyValue) (int64, error) {
-	n, ok := value.or(pyValue{literal: "0"}).toInt()
-	if !ok {
-		return 0, &ProviderError{Message: "Portainer returned an invalid inspect document."}
-	}
-	return n, nil
-}
-
-// roundTwo is Python's round(x, 2).
-func roundTwo(x float64) float64 {
-	rounded, _ := strconv.ParseFloat(strconv.FormatFloat(x, 'f', 2, 64), 64)
-	return rounded
-}
-
-func isDigits(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, c := range s {
-		if !unicode.IsDigit(c) {
-			return false
-		}
-	}
-	return true
-}
-
 // portainerInspectLimit bounds the inspects in flight against one Portainer
-// site when HQ_PORTAINER_INSPECT_CONCURRENCY does not say. Python reads them
-// one at a time; 8 is well under what Docker's API takes, so a large site is
-// not the sweep's critical path.
+// site when HQ_PORTAINER_INSPECT_CONCURRENCY does not say; 8 is well under what
+// Docker's API takes, so a large site is not the sweep's critical path.
 const (
 	portainerInspectLimit    = 8
 	portainerInspectMaxLimit = 64
@@ -470,14 +408,13 @@ func (r *Registry) inspectLimit() int {
 }
 
 type containerInspect struct {
-	doc pyValue
+	doc dockerInspect
 	err error
 }
 
 // inspectContainers inspects each container, inspectLimit at a time.
 // The answers are in the order of ids, and the first failure in that order is
-// the one the caller reports, as when they were read one by one. After a
-// failure no further inspect is started.
+// the one the caller reports. After a failure no further inspect is started.
 func (r *Registry) inspectContainers(ctx context.Context, at portainerSite, ids []string) []containerInspect {
 	out := make([]containerInspect, len(ids))
 	var failed atomic.Bool
@@ -492,7 +429,7 @@ func (r *Registry) inspectContainers(ctx context.Context, at portainerSite, ids 
 		wg.Add(1)
 		go func() {
 			defer func() { <-slots; wg.Done() }()
-			out[i].doc, out[i].err = r.siteDocker(ctx, at, "/containers/"+id+"/json")
+			out[i].doc, out[i].err = portainerDocker[dockerInspect](ctx, r, at.ConnectionRef, at.EnvironmentID, "/containers/"+id+"/json", "container inspect")
 			if out[i].err != nil {
 				failed.Store(true)
 			}
@@ -502,128 +439,107 @@ func (r *Registry) inspectContainers(ctx context.Context, at portainerSite, ids 
 	return out
 }
 
-// portainerRuntime is how each container is run, one inspect per container,
-// built field by field so the inspect's environment is never copied out.
+// runtimeRecord is how one container is run, built field by field so the
+// inspect's environment is never copied out.
+func runtimeRecord(at portainerSite, container dockerContainer, inspect dockerInspect) PortainerRuntimeRecord {
+	config, host := inspect.Config, inspect.HostConfig
+	securityOpt := []string{}
+	for _, option := range nonEmpty(host.SecurityOpt) {
+		if utf8.RuneCountInString(option) > securityOptMax {
+			option = strings.SplitN(option, "=", 2)[0] + "=(profile)"
+		}
+		securityOpt = append(securityOpt, option)
+	}
+	devices := []string{}
+	for _, device := range host.Devices {
+		devices = append(devices, device.PathOnHost)
+	}
+	mounts := []PortainerRuntimeMount{}
+	for _, mount := range inspect.Mounts {
+		mounts = append(mounts, PortainerRuntimeMount{Type: mount.Type, Source: mount.key(), Destination: mount.Destination, ReadOnly: mount.readOnly()})
+	}
+	bindings := []PortainerPortBinding{}
+	for _, port := range sortedStrings(mapKeys(host.PortBindings)) {
+		for _, bound := range host.PortBindings[port] {
+			bindings = append(bindings, PortainerPortBinding{ContainerPort: port, HostIP: bound.HostIP, HostPort: bound.HostPort})
+		}
+	}
+	exposed := []int{}
+	for port := range config.ExposedPorts {
+		number, _, _ := strings.Cut(port, "/")
+		if n, err := strconv.Atoi(number); err == nil && n > 0 {
+			exposed = append(exposed, n)
+		}
+	}
+	sort.Ints(exposed)
+	healthcheck := false
+	if check := config.Healthcheck; check != nil {
+		healthcheck = len(check.Test) > 0 && !slices.Equal(check.Test, []string{"NONE"})
+	}
+	health := ""
+	if inspect.State.Health != nil {
+		health = inspect.State.Health.Status
+	}
+	pids := int64(0)
+	if host.PidsLimit != nil {
+		pids = *host.PidsLimit
+	}
+	return PortainerRuntimeRecord{
+		portainerSite:  at,
+		Container:      container.name(),
+		Stack:          config.Labels[composeProject],
+		Service:        config.Labels[composeService],
+		ImageID:        inspect.Image,
+		User:           config.User,
+		Privileged:     host.Privileged,
+		ReadOnlyRootfs: host.ReadonlyRootfs,
+		NetworkMode:    host.NetworkMode,
+		PidMode:        host.PidMode,
+		IpcMode:        host.IpcMode,
+		CapAdd:         nonEmpty(host.CapAdd),
+		CapDrop:        nonEmpty(host.CapDrop),
+		SecurityOpt:    securityOpt,
+		Devices:        devices,
+		Mounts:         mounts,
+		PortBindings:   bindings,
+		ExposedPorts:   exposed,
+		MemoryLimit:    host.Memory,
+		CPULimit:       math.Round(float64(host.NanoCpus)/1e7) / 100,
+		PidsLimit:      pids,
+		RestartPolicy:  host.RestartPolicy.Name,
+		Healthcheck:    healthcheck,
+		Health:         health,
+		RestartCount:   inspect.RestartCount,
+		StartedAt:      inspect.State.StartedAt,
+	}
+}
+
+func mapKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+// portainerRuntime is how each container is run, one inspect per container.
 func (r *Registry) portainerRuntime(ctx context.Context, at portainerSite) ([]any, error) {
 	containers, err := r.siteContainers(ctx, at)
 	if err != nil {
 		return nil, err
 	}
-	found := []any{}
-	none := pyValue{array: []pyValue{pyText("NONE")}}
-	identified := []pyValue{}
-	identifiers := []string{}
-	for _, container := range containers {
-		if identifier := strOr(container.get("Id")); identifier != "" {
-			identified = append(identified, container)
-			identifiers = append(identifiers, identifier)
-		}
-	}
-	inspects := r.inspectContainers(ctx, at, identifiers)
+	identified := slices.DeleteFunc(containers, func(c dockerContainer) bool { return c.ID == "" })
+	ids := make([]string, len(identified))
 	for i, container := range identified {
-		inspect, err := inspects[i].doc, inspects[i].err
-		if err != nil {
+		ids[i] = container.ID
+	}
+	inspects := r.inspectContainers(ctx, at, ids)
+	found := []any{}
+	for i, container := range identified {
+		if err := inspects[i].err; err != nil {
 			return found, err
 		}
-		inspect = inspect.or(pyEmptyObject)
-		config := inspect.get("Config").or(pyEmptyObject)
-		host := inspect.get("HostConfig").or(pyEmptyObject)
-		state := inspect.get("State").or(pyEmptyObject)
-		labels := config.get("Labels").or(pyEmptyObject)
-
-		securityOpt := []string{}
-		for _, item := range items(host.get("SecurityOpt").or(pyEmptyList)) {
-			if !item.truthy() {
-				continue
-			}
-			text := item.str()
-			if utf8.RuneCountInString(text) > securityOptMax {
-				text = strings.SplitN(text, "=", 2)[0] + "=(profile)"
-			}
-			securityOpt = append(securityOpt, text)
-		}
-		devices := []string{}
-		for _, item := range items(host.get("Devices").or(pyEmptyList)) {
-			if item.object {
-				devices = append(devices, strOr(item.get("PathOnHost")))
-			}
-		}
-		mounts := []PortainerRuntimeMount{}
-		for _, item := range items(inspect.get("Mounts").or(pyEmptyList)) {
-			if !item.object {
-				continue
-			}
-			source := item.get("Source").or(pyText("")).str()
-			if item.get("Type").eqText("volume") {
-				source = item.get("Name").str()
-			}
-			mounts = append(mounts, PortainerRuntimeMount{Type: strOr(item.get("Type")), Source: source, Destination: strOr(item.get("Destination")), ReadOnly: item.get("RW").literal == "false"})
-		}
-		bindings := []PortainerPortBinding{}
-		portBindings := host.get("PortBindings").or(pyEmptyObject)
-		for _, port := range sortedStrings(keysOf(portBindings)) {
-			for _, bound := range items(portBindings.get(port).or(pyEmptyList)) {
-				if bound.object {
-					bindings = append(bindings, PortainerPortBinding{ContainerPort: port, HostIP: strOr(bound.get("HostIp")), HostPort: strOr(bound.get("HostPort"))})
-				}
-			}
-		}
-		exposed := []int64{}
-		for _, port := range keysOf(config.get("ExposedPorts").or(pyEmptyObject)) {
-			if head := strings.SplitN(port, "/", 2)[0]; isDigits(head) {
-				n, err := strconv.ParseInt(head, 10, 64)
-				if err != nil {
-					return found, &ProviderError{Message: "Portainer returned an invalid inspect document."}
-				}
-				exposed = append(exposed, n)
-			}
-		}
-		sort.Slice(exposed, func(a, b int) bool { return exposed[a] < exposed[b] })
-		memory, err := intOf(host.get("Memory"))
-		if err != nil {
-			return found, err
-		}
-		nanoCPUs, err := intOf(host.get("NanoCpus"))
-		if err != nil {
-			return found, err
-		}
-		pids, err := intOf(host.get("PidsLimit"))
-		if err != nil {
-			return found, err
-		}
-		restarts, err := intOf(inspect.get("RestartCount"))
-		if err != nil {
-			return found, err
-		}
-		test := config.get("Healthcheck").or(pyEmptyObject).get("Test")
-		found = append(found, PortainerRuntimeRecord{
-			portainerSite:  at,
-			Container:      containerName(container),
-			Stack:          strOr(labels.get(composeProject)),
-			Service:        strOr(labels.get(composeService)),
-			ImageID:        strOr(inspect.get("Image")),
-			User:           strOr(config.get("User")),
-			Privileged:     host.get("Privileged").truthy(),
-			ReadOnlyRootfs: host.get("ReadonlyRootfs").truthy(),
-			NetworkMode:    strOr(host.get("NetworkMode")),
-			PidMode:        strOr(host.get("PidMode")),
-			IpcMode:        strOr(host.get("IpcMode")),
-			CapAdd:         truthyStrings(host.get("CapAdd")),
-			CapDrop:        truthyStrings(host.get("CapDrop")),
-			SecurityOpt:    securityOpt,
-			Devices:        devices,
-			Mounts:         mounts,
-			PortBindings:   bindings,
-			ExposedPorts:   exposed,
-			MemoryLimit:    memory,
-			CPULimit:       roundTwo(float64(nanoCPUs) / 1e9),
-			PidsLimit:      pids,
-			RestartPolicy:  strOr(host.get("RestartPolicy").or(pyEmptyObject).get("Name")),
-			Healthcheck:    test.truthy() && !test.eq(none),
-			Health:         strOr(state.get("Health").or(pyEmptyObject).get("Status")),
-			RestartCount:   restarts,
-			StartedAt:      strOr(state.get("StartedAt")),
-		})
+		found = append(found, runtimeRecord(at, container, inspects[i].doc))
 	}
 	return found, nil
 }
@@ -635,53 +551,41 @@ func (r *Registry) portainerStacksReading(ctx context.Context, at portainerSite)
 	}
 	projects := map[string]*PortainerComposeProject{}
 	for _, container := range containers {
-		labels := container.get("Labels").or(pyEmptyObject)
-		name := strOr(labels.get(composeProject))
+		name := container.Labels[composeProject]
 		if name == "" {
 			continue
 		}
 		project := projects[name]
 		if project == nil {
 			files := []string{}
-			for _, part := range strings.Split(strOr(labels.get(composeConfigFiles)), ",") {
+			for _, part := range strings.Split(container.Labels[composeConfigFiles], ",") {
 				if part = strings.TrimSpace(part); part != "" {
 					files = append(files, part)
 				}
 			}
-			project = &PortainerComposeProject{portainerSite: at, Name: name, Source: "compose", WorkingDir: strOr(labels.get(composeWorkingDir)), ConfigFiles: &files}
+			project = &PortainerComposeProject{portainerSite: at, Name: name, Source: "compose", WorkingDir: container.Labels[composeWorkingDir], ConfigFiles: &files}
 			projects[name] = project
 		}
-		project.Containers = append(project.Containers, containerName(container))
+		project.Containers = append(project.Containers, container.name())
 	}
-	stacks, err := r.portainerStackList(ctx, at.ConnectionRef)
+	stacks, err := r.portainerStacksOn(ctx, at.ConnectionRef, at.EnvironmentID, "")
 	if err != nil {
 		return nil, err
 	}
 	for _, stack := range stacks {
-		if !stack.get("EndpointId").eq(at.EnvironmentID) || !stack.get("Name").truthy() {
+		if stack.Name == "" {
 			continue
 		}
-		name := stack.get("Name").str()
-		project := projects[name]
-		fresh := project == nil
-		if fresh {
-			project = &PortainerComposeProject{portainerSite: at, Name: name}
-			projects[name] = project
+		project := projects[stack.Name]
+		if project == nil {
+			project = &PortainerComposeProject{portainerSite: at, Name: stack.Name, WorkingDir: stack.ProjectPath}
+			projects[stack.Name] = project
 		}
-		status, _ := pyLookup(portainerStackState, stack.get("Status"))
-		entry := strOr(stack.get("EntryPoint"))
+		status, entry := portainerStackState[stack.Status], stack.EntryPoint
 		project.Source, project.Status, project.EntryPoint = "portainer", &status, &entry
-		if fresh {
-			project.WorkingDir = strOr(stack.get("ProjectPath"))
-		}
 	}
-	names := []string{}
-	for name := range projects {
-		names = append(names, name)
-	}
-	sort.Strings(names)
 	found := []any{}
-	for _, name := range names {
+	for _, name := range sortedStrings(mapKeys(projects)) {
 		project := *projects[name]
 		project.Containers = sortedStrings(project.Containers)
 		found = append(found, project)

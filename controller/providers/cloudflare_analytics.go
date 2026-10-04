@@ -17,31 +17,75 @@ import (
 // Site analytics read through Cloudflare's GraphQL API.
 
 // analyticsDimensions: which Cloudflare dimension answers each breakdown HQ
-// stores. The query and the payload are both generated from this.
-var analyticsDimensions = []struct{ name, field string }{
-	{"path", "requestPath"},
-	{"referrer", "refererHost"},
-	{"country", "countryName"},
-	{"device", "deviceType"},
-	{"browser", "userAgentBrowser"},
-	{"os", "userAgentOS"},
+// stores, keyed by the contract's dimension. The query and the payload are
+// both generated from this.
+var analyticsDimensions = []struct {
+	name  runtime.AnalyticsRowDimension
+	field string
+}{
+	{runtime.Path, "requestPath"},
+	{runtime.Referrer, "refererHost"},
+	{runtime.Country, "countryName"},
+	{runtime.Device, "deviceType"},
+	{runtime.Browser, "userAgentBrowser"},
+	{runtime.Os, "userAgentOS"},
 }
 
 // analyticsVitals: the p75 percentiles HQ keeps, p75 being where Core Web
 // Vitals is judged.
-var analyticsVitals = []struct{ column, field string }{
-	{"largest_contentful_paint_ms", "largestContentfulPaintP75"},
-	{"interaction_to_next_paint_ms", "interactionToNextPaintP75"},
-	{"first_contentful_paint_ms", "firstContentfulPaintP75"},
-	{"time_to_first_byte_ms", "timeToFirstByteP75"},
+var analyticsVitals = []struct {
+	field  string
+	column func(*runtime.AnalyticsVitals) **int
+}{
+	{"largestContentfulPaintP75", func(v *runtime.AnalyticsVitals) **int { return &v.LargestContentfulPaintMs }},
+	{"interactionToNextPaintP75", func(v *runtime.AnalyticsVitals) **int { return &v.InteractionToNextPaintMs }},
+	{"firstContentfulPaintP75", func(v *runtime.AnalyticsVitals) **int { return &v.FirstContentfulPaintMs }},
+	{"timeToFirstByteP75", func(v *runtime.AnalyticsVitals) **int { return &v.TimeToFirstByteMs }},
 }
 
-var analyticsBuckets = []string{"lcp", "inp", "cls"}
+const cumulativeLayoutShiftP75 = "cumulativeLayoutShiftP75"
 
-var analyticsBucketSuffixes = []struct{ suffix, column string }{{"Good", "good"}, {"NeedsImprovement", "needs_improvement"}, {"Poor", "poor"}}
+// analyticsBuckets: how many page loads fell in each Core Web Vitals band.
+var analyticsBuckets = []struct {
+	field  string
+	column func(*runtime.AnalyticsVitals) *int
+}{
+	{"lcpGood", func(v *runtime.AnalyticsVitals) *int { return &v.LcpGood }},
+	{"lcpNeedsImprovement", func(v *runtime.AnalyticsVitals) *int { return &v.LcpNeedsImprovement }},
+	{"lcpPoor", func(v *runtime.AnalyticsVitals) *int { return &v.LcpPoor }},
+	{"inpGood", func(v *runtime.AnalyticsVitals) *int { return &v.InpGood }},
+	{"inpNeedsImprovement", func(v *runtime.AnalyticsVitals) *int { return &v.InpNeedsImprovement }},
+	{"inpPoor", func(v *runtime.AnalyticsVitals) *int { return &v.InpPoor }},
+	{"clsGood", func(v *runtime.AnalyticsVitals) *int { return &v.ClsGood }},
+	{"clsNeedsImprovement", func(v *runtime.AnalyticsVitals) *int { return &v.ClsNeedsImprovement }},
+	{"clsPoor", func(v *runtime.AnalyticsVitals) *int { return &v.ClsPoor }},
+}
+
+// analyticsVitalsAlias names the vitals group in the query's answer.
+const analyticsVitalsAlias = "vitals"
 
 // maxQueryDays is Cloudflare's widest accepted query (13w2d).
 const maxQueryDays = 93
+
+// analyticsGroup is one row of an adaptive-groups answer.
+type analyticsGroup struct {
+	Count int            `json:"count"`
+	Sum   map[string]int `json:"sum"`
+	Avg   struct {
+		SampleInterval float64 `json:"sampleInterval"`
+	} `json:"avg"`
+	Quantiles  map[string]*float64 `json:"quantiles"`
+	Dimensions map[string]string   `json:"dimensions"`
+}
+
+// analyticsAccount is one account's answer: each alias in the query, a list of groups.
+type analyticsAccount map[string][]analyticsGroup
+
+type analyticsAnswer struct {
+	Viewer struct {
+		Accounts []analyticsAccount `json:"accounts"`
+	} `json:"viewer"`
+}
 
 // cloudflareGraphQL answers 200 with an errors array rather than a status, so a
 // failed query must not read as a site nobody visited.
@@ -67,37 +111,27 @@ func (r *Registry) cloudflareGraphQL(ctx context.Context, query string, variable
 		Variables any    `json:"variables"`
 	}{query, variables})
 	if err != nil {
-		var refused *ProviderError
-		if errors.As(err, &refused) && refused.HTTPStatus != 0 {
-			detail := cloudflareErrors(refused.Body)
-			return nil, r.cloudflareRefused(prefix, fmt.Sprintf("Cloudflare analytics refused the query: HTTP %d.", refused.HTTPStatus), detail, refused.HTTPStatus, func() bool {
+		var answered *ProviderError
+		if errors.As(err, &answered) && answered.HTTPStatus != 0 {
+			return nil, r.cloudflareRefused(prefix, fmt.Sprintf("cloudflare analytics refused the query (HTTP %d)", answered.HTTPStatus), cloudflareErrors(answered.Body), answered.HTTPStatus, func() bool {
 				return r.cloudflareVerified(ctx, "cloudflare_api", ref)
 			})
 		}
-		if errors.As(err, &refused) && refused.Failure == runtime.FailureClassNetwork {
-			return nil, &ProviderError{Message: "Cloudflare analytics was unreachable: URLError.", Failure: runtime.FailureClassNetwork}
-		}
-		return nil, cloudflareTransportError(err, "Cloudflare analytics was unreachable", "Cloudflare analytics returned invalid JSON.")
+		return nil, fmt.Errorf("cloudflare analytics: %w", err)
 	}
-	var payload struct {
-		Errors []json.RawMessage `json:"errors"`
-		Data   json.RawMessage   `json:"data"`
+	if !present(raw) {
+		return nil, &ProviderError{Message: "cloudflare analytics answered with no body"}
 	}
-	if len(raw) == 0 || json.Unmarshal(raw, &payload) != nil {
-		return nil, &ProviderError{Message: "Cloudflare analytics returned invalid JSON."}
+	payload, err := cloudflareDecode[struct {
+		Errors []cfMessage     `json:"errors"`
+		Data   json.RawMessage `json:"data"`
+	}](raw, "analytics answer")
+	if err != nil {
+		return nil, err
 	}
 	if len(payload.Errors) > 0 {
-		var first struct {
-			Message json.RawMessage `json:"message"`
-		}
-		message := ""
-		if isJSONObject(payload.Errors[0]) && json.Unmarshal(payload.Errors[0], &first) == nil {
-			message = pyGetText(first.Message, "")
-		}
-		return nil, r.cloudflareRefused(prefix, "Cloudflare analytics rejected the query: "+message, message, 0, nil)
-	}
-	if !pyTruthy(payload.Data) {
-		return json.RawMessage("{}"), nil
+		message := payload.Errors[0].Message
+		return nil, r.cloudflareRefused(prefix, "cloudflare analytics rejected the query", message, 0, nil)
 	}
 	return payload.Data, nil
 }
@@ -105,34 +139,34 @@ func (r *Registry) cloudflareGraphQL(ctx context.Context, query string, variable
 // cloudflareAnalyticsAccount is the one account this credential reads,
 // discovered rather than configured.
 func (r *Registry) cloudflareAnalyticsAccount(ctx context.Context, ref string) (string, error) {
-	items, err := r.cloudflareAPIList(ctx, "/accounts", ref, cloudflareAccountPerPage)
+	items, err := r.cloudflareList(ctx, "cloudflare_api", "/accounts", ref, cloudflareAccountPerPage)
 	if err != nil {
 		return "", err
 	}
-	tags := []string{}
-	for _, item := range items {
-		var account cfapi.IamAccount
-		if json.Unmarshal(item, &account) == nil && account.ID != "" {
-			tags = append(tags, account.ID)
-		}
+	accounts, err := cloudflareItems[cfapi.IamAccount](items, "account")
+	if err != nil {
+		return "", err
 	}
-	if len(tags) != 1 {
-		return "", &ProviderError{Message: fmt.Sprintf("The Cloudflare credential sees %d accounts; it has to see one.", len(tags))}
+	if len(accounts) != 1 || accounts[0].ID == "" {
+		return "", &ProviderError{Message: fmt.Sprintf("the cloudflare credential sees %d accounts; it has to see one", len(accounts))}
 	}
-	return tags[0], nil
+	return accounts[0].ID, nil
 }
 
 // cloudflareAccountSites are Web Analytics sites that still describe something:
 // a site whose ruleset names no hostname measures nothing.
 func (r *Registry) cloudflareAccountSites(ctx context.Context, account, ref string) ([]CloudflareAnalyticsSite, error) {
-	items, err := r.cloudflareAPIList(ctx, "/accounts/"+account+"/rum/site_info/list", ref, cloudflarePerPage)
+	items, err := r.cloudflareList(ctx, "cloudflare_api", "/accounts/"+account+"/rum/site_info/list", ref, cloudflarePerPage)
+	if err != nil {
+		return nil, err
+	}
+	listed, err := cloudflareItems[cfapi.RumSite](items, "analytics site")
 	if err != nil {
 		return nil, err
 	}
 	sites := []CloudflareAnalyticsSite{}
-	for _, item := range items {
-		var site cfapi.RumSite
-		if json.Unmarshal(item, &site) != nil || site.SiteTag == "" {
+	for _, site := range listed {
+		if site.SiteTag == "" {
 			continue
 		}
 		host := strings.ToLower(strings.TrimRight(strings.TrimSpace(site.Ruleset.ZoneName), "."))
@@ -147,141 +181,93 @@ func (r *Registry) cloudflareAccountSites(ctx context.Context, account, ref stri
 // analyticsQuery carries every breakdown in one query: they share a filter and
 // a window, and asking six times would spend six times the quota.
 func analyticsQuery() string {
-	breakdowns := make([]string, len(analyticsDimensions))
-	for i, dimension := range analyticsDimensions {
-		breakdowns[i] = dimension.name + ": rumPageloadEventsAdaptiveGroups(\n" +
-			"             filter: $filter, limit: 5000, orderBy: [count_DESC]\n" +
-			"           ) {\n" +
-			"             count\n" +
-			"             sum { visits }\n" +
-			"             avg { sampleInterval }\n" +
-			"             dimensions { date " + dimension.field + " }\n" +
-			"           }"
+	var query strings.Builder
+	query.WriteString(`query($account: String!, $filter: ZoneRumPageloadEventsAdaptiveGroupsFilter_InputObject!,
+      $vitalsFilter: ZoneRumWebVitalsEventsAdaptiveGroupsFilter_InputObject!) {
+  viewer {
+    accounts(filter: { accountTag: $account }) {
+`)
+	for _, dimension := range analyticsDimensions {
+		fmt.Fprintf(&query, `      %s: rumPageloadEventsAdaptiveGroups(filter: $filter, limit: 5000, orderBy: [count_DESC]) {
+        count
+        sum { visits }
+        avg { sampleInterval }
+        dimensions { date %s }
+      }
+`, dimension.name, dimension.field)
 	}
-	quantiles := make([]string, len(analyticsVitals))
-	for i, vital := range analyticsVitals {
-		quantiles[i] = vital.field
+	quantiles := []string{}
+	for _, vital := range analyticsVitals {
+		quantiles = append(quantiles, vital.field)
 	}
 	buckets := []string{}
-	for _, metric := range analyticsBuckets {
-		for _, bucket := range analyticsBucketSuffixes {
-			buckets = append(buckets, metric+bucket.suffix)
-		}
+	for _, bucket := range analyticsBuckets {
+		buckets = append(buckets, bucket.field)
 	}
-	return "\n      query($account: String!, $filter: ZoneRumPageloadEventsAdaptiveGroupsFilter_InputObject!,\n" +
-		"            $vitalsFilter: ZoneRumWebVitalsEventsAdaptiveGroupsFilter_InputObject!) {\n" +
-		"        viewer {\n" +
-		"          accounts(filter: { accountTag: $account }) {\n" +
-		"            " + strings.Join(breakdowns, "\n") + "\n" +
-		"            vitals: rumWebVitalsEventsAdaptiveGroups(\n" +
-		"              filter: $vitalsFilter, limit: 5000, orderBy: [date_ASC]\n" +
-		"            ) {\n" +
-		"              count\n" +
-		"              avg { sampleInterval }\n" +
-		"              quantiles { " + strings.Join(quantiles, " ") + " cumulativeLayoutShiftP75 }\n" +
-		"              sum { " + strings.Join(buckets, " ") + " }\n" +
-		"              dimensions { date }\n" +
-		"            }\n" +
-		"          }\n" +
-		"        }\n" +
-		"      }\n" +
-		"    "
+	fmt.Fprintf(&query, `      %s: rumWebVitalsEventsAdaptiveGroups(filter: $vitalsFilter, limit: 5000, orderBy: [date_ASC]) {
+        count
+        avg { sampleInterval }
+        quantiles { %s %s }
+        sum { %s }
+        dimensions { date }
+      }
+    }
+  }
+}
+`, analyticsVitalsAlias, strings.Join(quantiles, " "), cumulativeLayoutShiftP75, strings.Join(buckets, " "))
+	return query.String()
 }
 
 // milliseconds is Cloudflare's microseconds as milliseconds; its -1 for no
 // samples is absence, not a negative load time.
-func milliseconds(raw json.RawMessage) *int {
-	var n json.Number
-	if len(raw) == 0 || string(raw) == "null" || json.Unmarshal(raw, &n) != nil {
-		var s string
-		if json.Unmarshal(raw, &s) != nil {
-			return nil
-		}
-		n = json.Number(strings.TrimSpace(s))
-	}
-	micros, err := n.Float64()
-	if err != nil || micros < 0 {
+func milliseconds(micros *float64) *int {
+	if micros == nil || *micros < 0 {
 		return nil
 	}
-	ms := int(math.RoundToEven(micros / 1000))
+	ms := int(math.Round(*micros / 1000))
 	return &ms
 }
 
-type analyticsGroup struct {
-	Count json.RawMessage            `json:"count"`
-	Sum   map[string]json.RawMessage `json:"sum"`
-	Avg   struct {
-		SampleInterval json.RawMessage `json:"sampleInterval"`
-	} `json:"avg"`
-	Quantiles  map[string]json.RawMessage `json:"quantiles"`
-	Dimensions map[string]json.RawMessage `json:"dimensions"`
+// sampleInterval is a group's average sampling interval as the whole number HQ
+// stores; at least 1, which is every event counted.
+func sampleInterval(group analyticsGroup) int {
+	return max(1, int(math.Round(group.Avg.SampleInterval)))
 }
 
-func dateOrNull(raw json.RawMessage) *string {
-	var date string
-	if json.Unmarshal(raw, &date) != nil {
-		return nil
+func groupDate(group analyticsGroup) *string {
+	if date := group.Dimensions["date"]; date != "" {
+		return &date
 	}
-	return &date
+	return nil
 }
 
-func analyticsRows(account map[string]json.RawMessage) []runtime.AnalyticsRow {
+func analyticsRows(account analyticsAccount) []runtime.AnalyticsRow {
 	rows := []runtime.AnalyticsRow{}
 	for _, dimension := range analyticsDimensions {
-		var groups []analyticsGroup
-		if pyTruthy(account[dimension.name]) {
-			_ = json.Unmarshal(account[dimension.name], &groups)
-		}
-		for _, group := range groups {
-			value := strings.TrimSpace(pyOrText(group.Dimensions[dimension.field]))
+		for _, group := range account[string(dimension.name)] {
+			value := strings.TrimSpace(group.Dimensions[dimension.field])
 			if value == "" {
 				continue
 			}
-			value = runtime.Clip(value, runtime.AnalyticsValueMax)
 			rows = append(rows, runtime.AnalyticsRow{
-				Dimension: runtime.AnalyticsRowDimension(dimension.name), Value: value, Date: dateOrNull(group.Dimensions["date"]),
-				Pageviews: rawInt(group.Count), Visits: rawInt(group.Sum["visits"]), SampleInterval: intOr(group.Avg.SampleInterval, 1),
+				Dimension: dimension.name, Value: runtime.Clip(value, runtime.AnalyticsValueMax), Date: groupDate(group),
+				Pageviews: group.Count, Visits: group.Sum["visits"], SampleInterval: sampleInterval(group),
 			})
 		}
 	}
 	return rows
 }
 
-func intOr(raw json.RawMessage, fallback int) int {
-	if n := rawInt(raw); n != 0 {
-		return n
-	}
-	return fallback
-}
-
-func analyticsVitalsReadings(account map[string]json.RawMessage) []runtime.AnalyticsVitals {
+func analyticsVitalsReadings(account analyticsAccount) []runtime.AnalyticsVitals {
 	vitals := []runtime.AnalyticsVitals{}
-	var groups []analyticsGroup
-	if pyTruthy(account["vitals"]) {
-		_ = json.Unmarshal(account["vitals"], &groups)
-	}
-	for _, group := range groups {
-		reading := runtime.AnalyticsVitals{Date: dateOrNull(group.Dimensions["date"]), SampleInterval: intOr(group.Avg.SampleInterval, 1)}
-		var shift float64
-		if raw := group.Quantiles["cumulativeLayoutShiftP75"]; len(raw) > 0 && string(raw) != "null" && json.Unmarshal(raw, &shift) == nil {
-			reading.CumulativeLayoutShift = &shift
-		}
-		columns := map[string]**int{
-			"largest_contentful_paint_ms":  &reading.LargestContentfulPaintMs,
-			"interaction_to_next_paint_ms": &reading.InteractionToNextPaintMs,
-			"first_contentful_paint_ms":    &reading.FirstContentfulPaintMs,
-			"time_to_first_byte_ms":        &reading.TimeToFirstByteMs,
-		}
+	for _, group := range account[analyticsVitalsAlias] {
+		reading := runtime.AnalyticsVitals{Date: groupDate(group), SampleInterval: sampleInterval(group)}
+		reading.CumulativeLayoutShift = group.Quantiles[cumulativeLayoutShiftP75]
 		for _, vital := range analyticsVitals {
-			*columns[vital.column] = milliseconds(group.Quantiles[vital.field])
+			*vital.column(&reading) = milliseconds(group.Quantiles[vital.field])
 		}
-		buckets := map[string]*int{
-			"lcpGood": &reading.LcpGood, "lcpNeedsImprovement": &reading.LcpNeedsImprovement, "lcpPoor": &reading.LcpPoor,
-			"inpGood": &reading.InpGood, "inpNeedsImprovement": &reading.InpNeedsImprovement, "inpPoor": &reading.InpPoor,
-			"clsGood": &reading.ClsGood, "clsNeedsImprovement": &reading.ClsNeedsImprovement, "clsPoor": &reading.ClsPoor,
-		}
-		for field, target := range buckets {
-			*target = rawInt(group.Sum[field])
+		for _, bucket := range analyticsBuckets {
+			*bucket.column(&reading) = group.Sum[bucket.field]
 		}
 		vitals = append(vitals, reading)
 	}
@@ -298,20 +284,16 @@ func (r *Registry) analyticsSiteReading(ctx context.Context, site CloudflareAnal
 	if err != nil {
 		return runtime.AnalyticsSiteReading{}, err
 	}
-	var answer struct {
-		Viewer *struct {
-			Accounts []json.RawMessage `json:"accounts"`
-		} `json:"viewer"`
+	var answer analyticsAnswer
+	if present(data) {
+		if answer, err = cloudflareDecode[analyticsAnswer](data, "analytics answer"); err != nil {
+			return runtime.AnalyticsSiteReading{}, err
+		}
 	}
-	_ = json.Unmarshal(data, &answer)
-	var accounts []json.RawMessage
-	if answer.Viewer != nil {
-		accounts = answer.Viewer.Accounts
+	if len(answer.Viewer.Accounts) != 1 {
+		return runtime.AnalyticsSiteReading{}, &ProviderError{Message: "cloudflare analytics returned no matching account"}
 	}
-	var account map[string]json.RawMessage
-	if len(accounts) != 1 || !isJSONObject(accounts[0]) || json.Unmarshal(accounts[0], &account) != nil {
-		return runtime.AnalyticsSiteReading{}, &ProviderError{Message: "Cloudflare analytics returned no matching account."}
-	}
+	account := answer.Viewer.Accounts[0]
 	return runtime.AnalyticsSiteReading{
 		SiteTag: site.SiteTag, Host: site.Host, ConnectionRef: site.ConnectionRef,
 		Start: start.Format(time.DateOnly), End: end.Format(time.DateOnly),

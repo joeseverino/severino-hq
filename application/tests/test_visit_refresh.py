@@ -258,24 +258,22 @@ class AskableTests(TestCase):
         """
 
         root = Path(__file__).resolve().parents[2]
-        opens_a_shell = re.compile(r"\brun_ssh\(|\bruntime\.ssh\(|\.ssh_run\(")
+        opens_a_shell = re.compile(r"\.SSH\(ctx")
         found = sorted(
             str(path.relative_to(root))
-            for package in ("controller_runtime", "control_plane/provider_adapters", "control_plane/observations")
-            for path in (root / package).glob("*.py")
-            if opens_a_shell.search(path.read_text(encoding="utf-8"))
+            for path in (root / "controller" / "providers").glob("*.go")
+            if not path.name.endswith("_test.go")
+            and opens_a_shell.search(path.read_text(encoding="utf-8"))
         )
 
         self.assertEqual(
             found,
             [
-                "control_plane/provider_adapters/caddy.py",
-                "controller_runtime/commands.py",
-                "controller_runtime/glance.py",
-                "controller_runtime/host_readings.py",
-                "controller_runtime/provider_runtime.py",
-                "controller_runtime/providers.py",
-                "controller_runtime/tls.py",
+                "controller/providers/caddy.go",
+                "controller/providers/controller.go",
+                "controller/providers/glance.go",
+                "controller/providers/host_readings.go",
+                "controller/providers/tls.go",
             ],
         )
 

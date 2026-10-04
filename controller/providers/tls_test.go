@@ -2,19 +2,20 @@ package providers
 
 import (
 	"context"
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/ed25519"
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -66,17 +67,17 @@ func TestValidateCertificate(t *testing.T) {
 	if err != nil || got != strings.ToLower(base16(digest[:])) {
 		t.Fatalf("fingerprint %q, %v", got, err)
 	}
-	if _, err := validateCertificate(chain, key, []string{"a.example", "b.example", "c.example"}); err == nil || err.Error() != "Issued certificate is missing names: b.example, c.example." {
+	if _, err := validateCertificate(chain, key, []string{"a.example", "b.example", "c.example"}); err == nil || err.Error() != "issued certificate is missing names: b.example, c.example" {
 		t.Fatalf("missing names: %v", err)
 	}
 	_, other, _ := pki.leaf(3, tlsNow.AddDate(0, 3, 0), "a.example")
-	if _, err := validateCertificate(chain, other, []string{"a.example"}); err == nil || err.Error() != "Certificate and private key do not match." {
+	if _, err := validateCertificate(chain, other, []string{"a.example"}); err == nil || err.Error() != "certificate and private key do not match" {
 		t.Fatalf("mismatch: %v", err)
 	}
-	if _, err := validateCertificate([]byte("not a certificate"), key, nil); err == nil || err.Error() != "reading the certificate failed." {
+	if _, err := validateCertificate([]byte("not a certificate"), key, nil); err == nil || !strings.HasPrefix(err.Error(), "certificate unreadable") {
 		t.Fatalf("bad certificate: %v", err)
 	}
-	if _, err := validateCertificate(chain, []byte("not a key"), nil); err == nil || err.Error() != "reading the private key failed." {
+	if _, err := validateCertificate(chain, []byte("not a key"), nil); err == nil || !strings.HasPrefix(err.Error(), "private key unreadable") {
 		t.Fatalf("bad key: %v", err)
 	}
 }
@@ -96,56 +97,12 @@ func TestBundleRoundTrip(t *testing.T) {
 		t.Fatalf("round trip: %q %q %v", fullchain, key, err)
 	}
 	for payload, want := range map[string]string{
-		"":          "Certificate snapshot was invalid.",
-		"not a tar": "Certificate snapshot was invalid.",
+		"":          "certificate snapshot was invalid",
+		"not a tar": "certificate snapshot was invalid",
 	} {
 		if _, _, err := readBundle([]byte(payload)); err == nil || err.Error() != want {
 			t.Fatalf("%q: %v", payload, err)
 		}
-	}
-}
-
-func TestSigningMatchesOpenSSLSemantics(t *testing.T) {
-	env := tlsEnv(t)
-	env["GITHUB_CONNECTION_REF"] = "app"
-	sshDir := env["HQ_CONTROLLER_SSH_DIR"]
-	_ = os.MkdirAll(sshDir, 0o700)
-	r := New(env, &fakeHTTP{routes: map[string]any{}, fail: map[string]error{}})
-	data := []byte("header.payload")
-	digest := sha256.Sum256(data)
-
-	rsaKey, _ := rsa.GenerateKey(rand.Reader, 2048)
-	rsaDER, _ := x509.MarshalPKCS8PrivateKey(rsaKey)
-	_ = os.WriteFile(filepath.Join(sshDir, "app.key"), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: rsaDER}), 0o600)
-	signature, err := r.Sign(context.Background(), "app", data)
-	if err != nil || rsa.VerifyPKCS1v15(&rsaKey.PublicKey, crypto.SHA256, digest[:], signature) != nil {
-		t.Fatalf("rsa: %v", err)
-	}
-
-	ecKey, _ := ecdsa.GenerateKey(newTestPKI(t).caKey.Curve, rand.Reader)
-	ecDER, _ := x509.MarshalECPrivateKey(ecKey)
-	_ = os.WriteFile(filepath.Join(sshDir, "app.key"), pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: ecDER}), 0o600)
-	signature, err = r.Sign(context.Background(), "app", data)
-	if err != nil || !ecdsa.VerifyASN1(&ecKey.PublicKey, digest[:], signature) {
-		t.Fatalf("ecdsa: %v", err)
-	}
-
-	_, edKey, _ := ed25519.GenerateKey(rand.Reader)
-	edDER, _ := x509.MarshalPKCS8PrivateKey(edKey)
-	_ = os.WriteFile(filepath.Join(sshDir, "app.key"), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: edDER}), 0o600)
-	if _, err := r.Sign(context.Background(), "app", data); err == nil || err.Error() != "sign for app failed." {
-		t.Fatalf("ed25519 must fail like openssl dgst: %v", err)
-	}
-	if steps := r.commands().StepFailures(); len(steps) != 1 || steps[0].Step != "sign for app" || steps[0].Subject != "app" {
-		t.Fatalf("step failures: %+v", steps)
-	}
-	for ref, want := range map[string]string{"": "Invalid signing connection.", "a/b": "Invalid signing connection.", ".hidden": "Invalid signing connection.", "nope": "No connection named 'nope' was supplied to the controller."} {
-		if _, err := r.Sign(context.Background(), ref, data); err == nil || err.Error() != want {
-			t.Fatalf("%q: %v", ref, err)
-		}
-	}
-	if _, err := r.SigningPublicKey("app"); err == nil || err.Error() != "No signing key was rendered for 'app'." {
-		t.Fatalf("public key: %v", err)
 	}
 }
 
@@ -172,7 +129,7 @@ func TestReconcileTLSReadsEveryConsumer(t *testing.T) {
 	h.dialer.certs = map[string][]byte{"current": current, "stale": stale}
 	h.dialer.phases = []map[string]fakeServe{{
 		"edge.example|a.example":    {Cert: "current"},
-		"edge.example|b.example":    {Error: "ConnectionRefusedError"},
+		"edge.example|b.example":    {Error: "connection refused"},
 		"example.invalid|a.example": {Cert: "stale"},
 	}}
 	spec := Object{"certificate_name": "a", "domains": []any{"a.example"}, "renewal_window_days": 30, "consumers": []any{
@@ -192,7 +149,7 @@ func TestReconcileTLSReadsEveryConsumer(t *testing.T) {
 		t.Fatalf("conditions: %v", reasons)
 	}
 	status := result.Status.(*TLSCertificateStatus)
-	if len(status.UnreachableConsumers) != 1 || status.UnreachableConsumers[0].Reason != "TLS observation failed for b.example: ConnectionRefusedError." {
+	if len(status.UnreachableConsumers) != 1 || status.UnreachableConsumers[0].Reason != "TLS read of b.example: connection refused" {
 		t.Fatalf("unreachable: %+v", status.UnreachableConsumers)
 	}
 	data, _ := json.Marshal(status)
@@ -236,7 +193,7 @@ func TestRenewalDeploysVerifiesAndRollsBack(t *testing.T) {
 	_ = os.RemoveAll(filepath.Join(env["HQ_ACME_DIR"], "config"))
 	h2.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}}}
 	_, err = h2.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(context.Background()), spec, nil, true)
-	want := "Certificate deployment failed: 1 of 1 TLS consumers did not activate the certificate within 30s: edge still serves the previous certificate at a.example. Rollback succeeded."
+	want := "certificate deployment failed, rollback succeeded: 1 of 1 TLS consumers did not activate the certificate within 30s: edge still serves the previous certificate at a.example"
 	if err == nil || err.Error() != want {
 		t.Fatalf("rollback: %v", err)
 	}
@@ -252,7 +209,7 @@ func TestCPanelPlanRefusesUnservedNames(t *testing.T) {
 	h.command.outcomes["ssh sites"] = fakeOutcome{Stdout: `{"sites":{"a.example":["www.a.example"],"b.example":null}}`}
 	consumer := TLSConsumer{Kind: "cpanel", Name: "host", ConnectionRef: "cpanel", VerifyDomains: []string{"WWW.a.example", "b.example"}, InstallDomains: []string{"a.example"}}
 	_, err := h.r.cpanelSitesFor(context.Background(), consumer)
-	want := "host would be checked at b.example but installs only on a.example. Add those names to the target's install list, or leave the list empty to install on every site that serves a checked name."
+	want := "host would be checked at b.example but installs only on a.example; add those names to the target's install list, or leave it empty to install on every site that serves a checked name"
 	if err == nil || err.Error() != want {
 		t.Fatalf("plan: %v", err)
 	}
@@ -284,20 +241,6 @@ func TestNPMCertificateIDs(t *testing.T) {
 	}
 }
 
-func TestSSHTargetMessages(t *testing.T) {
-	env := runtime.Environment{"X_CONNECTION_REF": "x", "X_HOST": "-oProxyCommand=evil", "X_USER": "deploy", "X_PORT": "22", "X_HOST_KEY": "k"}
-	if _, err := env.SSH("x"); err == nil || err.Error() != "The host configured for x is not a host name or address." {
-		t.Fatalf("host: %v", err)
-	}
-	env["X_HOST"], env["X_PORT"] = "edge.example", "+22"
-	if _, err := env.SSH("x"); err == nil || err.Error() != "The port configured for x is not a port number." {
-		t.Fatalf("port: %v", err)
-	}
-	if _, err := env.SSH("missing"); err == nil || err.Error() != "Unknown certificate transport: missing." {
-		t.Fatalf("unknown: %v", err)
-	}
-}
-
 func TestCertbotNamesAreCheckedBeforeTheyReachArgv(t *testing.T) {
 	for _, domains := range [][]string{{"a.example", "--server=x"}, {"-d"}, {"a.example\n"}} {
 		if _, err := checkedDomains(TLSCertificateSpec{Domains: domains}); err == nil {
@@ -312,5 +255,118 @@ func TestCertbotNamesAreCheckedBeforeTheyReachArgv(t *testing.T) {
 		if _, err := r.lineagePath(TLSCertificateSpec{CertificateName: name}); err == nil {
 			t.Fatalf("accepted %q", name)
 		}
+	}
+}
+
+// Stage 1 M2: a renewal is verified only when every consumer was read and
+// serves the new certificate. One matching consumer never vouches for another
+// that was unreachable or had nothing to check.
+func TestRenewalNotVerifiedWhileAConsumerIsUnreadOrUnchecked(t *testing.T) {
+	edge := Object{"kind": "caddy", "name": "edge", "connection_ref": "caddy", "verify_domains": []any{"a.example"}}
+	cases := []struct {
+		name   string
+		second Object
+		served map[string]fakeServe
+		reason string
+	}{
+		{"unreachable consumer", Object{"kind": "caddy", "name": "mirror", "connection_ref": "caddy", "verify_domains": []any{"b.example"}},
+			map[string]fakeServe{"edge.example|a.example": {Cert: "new"}}, "mirror could not be read at b.example"},
+		{"unchecked consumer", Object{"kind": "caddy", "name": "mirror", "connection_ref": "caddy", "verify_domains": []any{}},
+			map[string]fakeServe{"edge.example|a.example": {Cert: "new"}}, "mirror has no verification domain"},
+		{"stale consumer", Object{"kind": "caddy", "name": "mirror", "connection_ref": "caddy", "verify_domains": []any{"b.example"}},
+			map[string]fakeServe{"edge.example|a.example": {Cert: "new"}, "edge.example|b.example": {Cert: "old"}}, "mirror still serves the previous certificate at b.example"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			env := tlsEnv(t)
+			h := newTLSHarness(t, env)
+			pki := newTestPKI(t)
+			oldChain, oldKey, oldDER := pki.leaf(2, tlsNow.AddDate(0, 0, 5), "a.example", "b.example")
+			newChain, newKey, newDER := pki.leaf(3, tlsNow.AddDate(0, 3, 0), "a.example", "b.example")
+			h.dialer.certs = map[string][]byte{"old": oldDER, "new": newDER}
+			h.command.outcomes = map[string]fakeOutcome{
+				"ssh snapshot":     {StdoutB64: base64.StdEncoding.EncodeToString(certificateBundle(oldChain, oldKey))},
+				"ssh deploy":       {},
+				"certbot certonly": {},
+			}
+			h.command.lineage = map[string]string{"fullchain.pem": string(newChain), "privkey.pem": string(newKey)}
+			env["CLOUDFLARE_DNS_API_TOKEN"], env["ACME_EMAIL"], env["ACME_DIRECTORY_URL"] = "synthetic", "ops@example.test", "https://acme.example/directory"
+			_ = os.MkdirAll(env["HQ_ACME_DIR"], 0o700)
+			h.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}, "edge.example|b.example": {Cert: "old"}}, c.served}
+			spec := Object{"certificate_name": "a", "domains": []any{"a.example", "b.example"}, "renewal_window_days": 30, "consumers": []any{edge, c.second}}
+			_, err := h.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(context.Background()), spec, nil, true)
+			if err == nil || !strings.Contains(err.Error(), "rollback succeeded") || !strings.Contains(err.Error(), c.reason) {
+				t.Fatalf("%v", err)
+			}
+		})
+	}
+}
+
+func TestConsumersServe(t *testing.T) {
+	spec := TLSCertificateSpec{Consumers: []TLSConsumer{{Name: "edge"}, {Name: "mirror"}}}
+	read := func(consumer, fingerprint string) TLSObservation {
+		return TLSObservation{Consumer: consumer, FingerprintSHA256: fingerprint}
+	}
+	cases := []struct {
+		name   string
+		status TLSCertificateStatus
+		want   bool
+	}{
+		{"every consumer serves it", TLSCertificateStatus{Consumers: []TLSObservation{read("edge", "new"), read("mirror", "new")}}, true},
+		{"one unread", TLSCertificateStatus{Consumers: []TLSObservation{read("edge", "new")}}, false},
+		{"one unreachable", TLSCertificateStatus{Consumers: []TLSObservation{read("edge", "new"), read("mirror", "new")}, UnreachableConsumers: []TLSUnreachable{{Consumer: "mirror", Domain: "c.example"}}}, false},
+		{"one stale", TLSCertificateStatus{Consumers: []TLSObservation{read("edge", "new"), read("mirror", "old")}}, false},
+		{"all serve another", TLSCertificateStatus{Consumers: []TLSObservation{read("edge", "old"), read("mirror", "old")}}, false},
+	}
+	for _, c := range cases {
+		if got := consumersServe(spec, &c.status, "new"); got != c.want {
+			t.Errorf("%s: %v", c.name, got)
+		}
+	}
+}
+
+// A TLS read that fails says why in Go's words, never with an exception name.
+func TestTLSReadFailuresAreClassified(t *testing.T) {
+	cases := []struct {
+		err  error
+		want string
+	}{
+		{&net.DNSError{Err: "no such host", Name: "x"}, "name does not resolve"},
+		{&net.OpError{Op: "dial", Err: syscall.ECONNREFUSED}, "connection refused"},
+		{context.DeadlineExceeded, "timed out"},
+		{errors.New("other"), "connection failed"},
+	}
+	for _, c := range cases {
+		if got := dialFailure(c.err); got.Error() != c.want || !errors.Is(got, c.err) {
+			t.Errorf("%v: %q", c.err, got)
+		}
+	}
+	if got := handshakeFailure(x509.UnknownAuthorityError{}); got.Error() != "certificate not trusted for this name" {
+		t.Errorf("%q", got)
+	}
+	if got := handshakeFailure(io.EOF); got.Error() != "connection closed during handshake" {
+		t.Errorf("%q", got)
+	}
+}
+
+// The TLS observer verifies chain and name against the configured roots: a
+// certificate the controller does not trust is refused, one it does is read.
+func TestTLSObserverVerifiesTheServedCertificate(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer server.Close()
+	address := server.Listener.Addr().String()
+	_, err := NetTLSDialer{}.peerAt(context.Background(), "example.com", address)
+	var read *tlsReadError
+	if !errors.As(err, &read) || read.reason != "certificate not trusted for this name" {
+		t.Fatalf("untrusted: %v", err)
+	}
+	caFile := filepath.Join(t.TempDir(), "ca.pem")
+	_ = os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}), 0o600)
+	der, err := NetTLSDialer{CAFile: caFile}.peerAt(context.Background(), "example.com", address)
+	if err != nil || len(der) == 0 {
+		t.Fatalf("trusted: %v", err)
+	}
+	if _, err := (NetTLSDialer{CAFile: caFile}).peerAt(context.Background(), "other.example", address); !errors.As(err, &read) {
+		t.Fatalf("a name the certificate does not cover is refused: %v", err)
 	}
 }

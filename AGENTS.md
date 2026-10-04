@@ -114,11 +114,13 @@ domain until a genuine shared contract appears.
 
 A provider emits itself: nothing outside its own modules names it except one
 entry in `ADMITTED` (`control_plane/provider_adapters/__init__.py`). Its adapter
-module declares its kinds, its `ADAPTER` and its `CONNECTIONS`; its readings are
-a module in `control_plane/observations/`, found by discovery. Registries,
-connection labels, credential policy, the controller's dispatch and the
+module declares its kinds (`DEFINITIONS`) and its `CONNECTIONS`; its readings
+are a module in `control_plane/observations/`, found by discovery. Registries,
+connection labels, credential policy, the controller's registry and the
 topology edges its readings declare are all derived from those, and admission
-fails at import on a duplicate or undeclared name.
+fails at import on a duplicate or undeclared name. The controller half (its
+readers, actions and probe) is Go, in `controller/providers/`, registered in
+`providers.New`; the contract's `SweptKind` names every kind it reads.
 `control_plane/provider_adapters/tests/test_admission.py` shows the contract;
 `docs/APPLICATION_ARCHITECTURE.md` has the detail.
 

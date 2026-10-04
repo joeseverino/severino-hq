@@ -1,376 +1,22 @@
 package providers
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
+	"reflect"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/providers/npmapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
-// npmRecord is one record from an NPM list endpoint, field by field and
-// undecoded. NPM is not consistent about types across releases (flags come
-// as true or 1, ids as numbers or strings), so each field is read through an
-// accessor below that states how it is interpreted. The field names are the
-// ones the vendored spec gives the record (npm_spec_test.go holds them to it).
-type npmRecord map[string]json.RawMessage
-
-// npmKind is the JSON type of one field.
-type npmKind int
-
-const (
-	npmAbsent npmKind = iota
-	npmString
-	npmNumber
-	npmBool
-	npmList
-	npmObject
-)
-
-// kindOf classifies a field's JSON text; null reads as absent.
-func kindOf(raw json.RawMessage) npmKind {
-	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 {
-		return npmAbsent
-	}
-	switch raw[0] {
-	case '"':
-		return npmString
-	case 't', 'f':
-		return npmBool
-	case '[':
-		return npmList
-	case '{':
-		return npmObject
-	case 'n':
-		return npmAbsent
-	}
-	return npmNumber
-}
-
-// raw is the field verbatim, or null when absent.
-func (n npmRecord) raw(key string) json.RawMessage {
-	if value, ok := n[key]; ok && len(value) > 0 {
-		return value
-	}
-	return json.RawMessage("null")
-}
-
-func (n npmRecord) kind(key string) npmKind { return kindOf(n[key]) }
-
-func (n npmRecord) present(key string) bool { return n.kind(key) != npmAbsent }
-
-// literal is a JSON value as text: a string as written, anything else as its
-// JSON spelling (a number keeps its digits, a flag reads true or false).
-func literal(raw json.RawMessage) string {
-	switch kindOf(raw) {
-	case npmAbsent:
-		return ""
-	case npmString:
-		var text string
-		_ = json.Unmarshal(raw, &text)
-		return text
-	}
-	return string(bytes.TrimSpace(raw))
-}
-
-// text is a string field as written; a number or flag as its literal.
-func (n npmRecord) text(key string) string { return literal(n[key]) }
-
-// integer reports a whole-number field.
-func (n npmRecord) integer(key string) bool {
-	if n.kind(key) != npmNumber {
-		return false
-	}
-	_, err := strconv.ParseInt(n.text(key), 10, 64)
-	return err == nil
-}
-
-// int reads a whole number, or a numeric string; anything else is 0.
-func (n npmRecord) int(key string) int {
-	switch n.kind(key) {
-	case npmNumber:
-		i, _ := strconv.ParseInt(n.text(key), 10, 64)
-		return int(i)
-	case npmString:
-		i, _ := strconv.Atoi(n.text(key))
-		return i
-	}
-	return 0
-}
-
-// flag reads NPM's booleans: true/false, 1/0, "1"/"0"/"false", or a
-// non-empty list or object.
-func (n npmRecord) flag(key string) bool {
-	value := n.text(key)
-	switch n.kind(key) {
-	case npmAbsent:
-		return false
-	case npmBool:
-		return value == "true"
-	case npmString:
-		return value != "" && value != "0" && strings.ToLower(value) != "false"
-	case npmNumber:
-		if i, err := strconv.ParseInt(value, 10, 64); err == nil {
-			return i != 0
-		}
-		f, _ := strconv.ParseFloat(value, 64)
-		return f != 0
-	case npmList:
-		var items []json.RawMessage
-		_ = json.Unmarshal(n[key], &items)
-		return len(items) > 0
-	case npmObject:
-		var fields map[string]json.RawMessage
-		_ = json.Unmarshal(n[key], &fields)
-		return len(fields) > 0
-	}
-	return true
-}
-
-// flagOr is flag, with fallback for an absent or null field.
-func (n npmRecord) flagOr(key string, fallback bool) bool {
-	if !n.present(key) {
-		return fallback
-	}
-	return n.flag(key)
-}
-
-// names reads a list of host names, each as text.
-func (n npmRecord) names(key string) []string {
-	out := []string{}
-	if n.kind(key) != npmList {
-		return out
-	}
-	var items []json.RawMessage
-	_ = json.Unmarshal(n[key], &items)
-	for _, item := range items {
-		out = append(out, literal(item))
-	}
-	return out
-}
-
-// children decodes a nested list of records (access list clients and logins).
-// An entry that is not an object reads as an empty record, so counts hold.
-func (n npmRecord) children(key string) []npmRecord {
-	var items []json.RawMessage
-	if json.Unmarshal(n.raw(key), &items) != nil {
-		return []npmRecord{}
-	}
-	out := make([]npmRecord, 0, len(items))
-	for _, item := range items {
-		var record npmRecord
-		if json.Unmarshal(item, &record) != nil || record == nil {
-			record = npmRecord{}
-		}
-		out = append(out, record)
-	}
-	return out
-}
-
-// canonical re-encodes a JSON value with sorted keys and json.Marshal's string
-// escaping, so two spellings of one value compare equal. Numbers keep their
-// digits.
-func canonical(raw json.RawMessage) string {
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	out, err := canonicalValue(decoder)
-	if err != nil || decoder.More() {
-		return string(raw)
-	}
-	return out
-}
-
-func canonicalValue(decoder *json.Decoder) (string, error) {
-	token, err := decoder.Token()
-	if err != nil {
-		return "", err
-	}
-	switch token := token.(type) {
-	case json.Delim:
-		if token == '[' {
-			items := []string{}
-			for decoder.More() {
-				item, err := canonicalValue(decoder)
-				if err != nil {
-					return "", err
-				}
-				items = append(items, item)
-			}
-			_, err := decoder.Token()
-			return "[" + strings.Join(items, ",") + "]", err
-		}
-		fields := map[string]string{}
-		for decoder.More() {
-			key, err := decoder.Token()
-			if err != nil {
-				return "", err
-			}
-			value, err := canonicalValue(decoder)
-			if err != nil {
-				return "", err
-			}
-			fields[key.(string)] = value
-		}
-		_, err := decoder.Token()
-		keys := make([]string, 0, len(fields))
-		for key := range fields {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		parts := make([]string, 0, len(keys))
-		for _, key := range keys {
-			name, _ := json.Marshal(key)
-			parts = append(parts, string(name)+":"+fields[key])
-		}
-		return "{" + strings.Join(parts, ",") + "}", err
-	case json.Number:
-		return token.String(), nil
-	}
-	out, err := json.Marshal(token)
-	return string(out), err
-}
-
-// npmProxyHostRequest is the body NPM takes to create or update a proxy host.
-// CertificateID, Locations and Meta carry NPM's own values forward on update.
-type npmProxyHostRequest struct {
-	DomainNames           []string        `json:"domain_names"`
-	CertificateID         json.RawMessage `json:"certificate_id"`
-	Locations             json.RawMessage `json:"locations"`
-	Meta                  json.RawMessage `json:"meta"`
-	ForwardScheme         string          `json:"forward_scheme"`
-	ForwardHost           string          `json:"forward_host"`
-	ForwardPort           int             `json:"forward_port"`
-	CachingEnabled        bool            `json:"caching_enabled"`
-	BlockExploits         bool            `json:"block_exploits"`
-	AccessListID          int             `json:"access_list_id"`
-	HSTSEnabled           bool            `json:"hsts_enabled"`
-	HSTSSubdomains        bool            `json:"hsts_subdomains"`
-	TrustForwardedProto   bool            `json:"trust_forwarded_proto"`
-	AdvancedConfig        string          `json:"advanced_config"`
-	AllowWebsocketUpgrade bool            `json:"allow_websocket_upgrade"`
-	SSLForced             bool            `json:"ssl_forced"`
-	HTTP2Support          bool            `json:"http2_support"`
-	Enabled               bool            `json:"enabled"`
-}
-
-// Records the NPM readers report.
-type NPMCertificateSummary struct {
-	Name      string   `json:"name"`
-	Domains   []string `json:"domains"`
-	ExpiresOn string   `json:"expires_on"`
-	Provider  string   `json:"provider"`
-}
-
-// npmCertificateRef is a proxy host's certificate: its summary, or {} when
-// NPM lists none for the host.
-type npmCertificateRef struct{ *NPMCertificateSummary }
-
-func (c npmCertificateRef) MarshalJSON() ([]byte, error) {
-	if c.NPMCertificateSummary == nil {
-		return []byte("{}"), nil
-	}
-	return json.Marshal(c.NPMCertificateSummary)
-}
-
-type NPMAccessRule struct {
-	Directive string `json:"directive"`
-	Address   string `json:"address"`
-}
-
-type NPMAccessPolicy struct {
-	Name               string          `json:"name"`
-	SatisfyAny         bool            `json:"satisfy_any"`
-	PassAuth           bool            `json:"pass_auth"`
-	AuthorizationCount int             `json:"authorization_count"`
-	Clients            []NPMAccessRule `json:"clients"`
-	ImplicitDeny       bool            `json:"implicit_deny"`
-}
-
-// NPMProxyHostRecord carries NPM's own values for the host verbatim; HQ
-// compares and adopts them as NPM wrote them.
-type NPMProxyHostRecord struct {
-	DomainNames           json.RawMessage   `json:"domain_names"`
-	ForwardScheme         json.RawMessage   `json:"forward_scheme"`
-	ForwardHost           json.RawMessage   `json:"forward_host"`
-	ForwardPort           json.RawMessage   `json:"forward_port"`
-	SSLForced             json.RawMessage   `json:"ssl_forced"`
-	HTTP2Support          json.RawMessage   `json:"http2_support"`
-	AllowWebsocketUpgrade json.RawMessage   `json:"allow_websocket_upgrade"`
-	CachingEnabled        json.RawMessage   `json:"caching_enabled"`
-	BlockExploits         json.RawMessage   `json:"block_exploits"`
-	AccessListID          json.RawMessage   `json:"access_list_id"`
-	AdvancedConfig        json.RawMessage   `json:"advanced_config"`
-	HSTSEnabled           json.RawMessage   `json:"hsts_enabled"`
-	HSTSSubdomains        json.RawMessage   `json:"hsts_subdomains"`
-	TrustForwardedProto   json.RawMessage   `json:"trust_forwarded_proto"`
-	Enabled               json.RawMessage   `json:"enabled"`
-	Certificate           npmCertificateRef `json:"certificate"`
-	AccessPolicy          *NPMAccessPolicy  `json:"access_policy"`
-}
-
-// The per-connection readers below leave ConnectionRef unset; the kind's
-// reader sets it when it gathers every connection.
-type NPMCertificateRecord struct {
-	ConnectionRef *string  `json:"connection_ref,omitempty"`
-	ID            int      `json:"id"`
-	Name          string   `json:"name"`
-	Provider      string   `json:"provider"`
-	Domains       []string `json:"domains"`
-	ExpiresOn     string   `json:"expires_on"`
-	Serves        []string `json:"serves"`
-}
-
-type NPMRedirectRecord struct {
-	ConnectionRef *string  `json:"connection_ref,omitempty"`
-	ID            int      `json:"id"`
-	Hostnames     []string `json:"hostnames"`
-	Target        string   `json:"target"`
-	TargetHost    string   `json:"target_host"`
-	StatusCode    *int     `json:"status_code"`
-	PreservePath  bool     `json:"preserve_path"`
-	SSLForced     bool     `json:"ssl_forced"`
-	Certificate   string   `json:"certificate"`
-	Enabled       bool     `json:"enabled"`
-}
-
-type NPMDeadHostRecord struct {
-	ConnectionRef *string  `json:"connection_ref,omitempty"`
-	ID            int      `json:"id"`
-	Hostnames     []string `json:"hostnames"`
-	Certificate   string   `json:"certificate"`
-	SSLForced     bool     `json:"ssl_forced"`
-	Enabled       bool     `json:"enabled"`
-}
-
-type NPMStreamRecord struct {
-	ConnectionRef  *string `json:"connection_ref,omitempty"`
-	ID             int     `json:"id"`
-	IncomingPort   int     `json:"incoming_port"`
-	ForwardingHost string  `json:"forwarding_host"`
-	ForwardingPort *int    `json:"forwarding_port"`
-	TCP            bool    `json:"tcp"`
-	UDP            bool    `json:"udp"`
-	Enabled        bool    `json:"enabled"`
-}
-
-type NPMAccessListRecord struct {
-	ConnectionRef *string         `json:"connection_ref,omitempty"`
-	ID            int             `json:"id"`
-	Name          string          `json:"name"`
-	SatisfyAny    bool            `json:"satisfy_any"`
-	PassAuth      bool            `json:"pass_auth"`
-	Clients       []NPMAccessRule `json:"clients"`
-	Logins        []string        `json:"logins"`
-	Protects      []string        `json:"protects"`
-}
+// NPM's records decode into the vendored spec's models (npmapi), corrected to
+// NPM's wire types by api/vendor/npm/overlay.yaml. A record that does not
+// decode fails the read; nothing is coerced.
 
 func (r *Registry) admitNPM() {
 	act(r, runtime.ResourceKindNPMProxyHost, "reconcile", r.npmReconcile)
@@ -420,7 +66,7 @@ func (r *Registry) npmSession(ctx context.Context, ref string) (string, map[stri
 	}
 	base, err := url.Parse(strings.TrimRight(configured, "/"))
 	if err != nil {
-		return "", nil, &ProviderError{Message: "Invalid NPM API address."}
+		return "", nil, &ProviderError{Message: "npm API address is not a URL", Failure: runtime.FailureClassAddress}
 	}
 	base.Path = strings.TrimRight(base.Path, "/")
 	if !strings.HasSuffix(base.Path, "/api") {
@@ -437,11 +83,14 @@ func (r *Registry) npmSession(ctx context.Context, ref string) (string, map[stri
 		}
 		answer, err := r.HTTP.Request(ctx, base.String()+"/tokens", "POST", nil, npmapi.RequestTokenJSONBody{Identity: user, Secret: password})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("npm sign-in: %w", err)
 		}
-		token, _ := decodeAs[npmapi.TokenObject](answer, "")
+		var token npmapi.TokenObject
+		if err := json.Unmarshal(answer, &token); err != nil {
+			return nil, &ProviderError{Message: "npm sign-in answer did not decode", Err: err}
+		}
 		if token.Token == "" {
-			return nil, &ProviderError{Message: "NPM authentication did not return a token."}
+			return nil, &ProviderError{Message: "npm sign-in returned no token"}
 		}
 		return json.Marshal(token.Token)
 	})
@@ -449,70 +98,63 @@ func (r *Registry) npmSession(ctx context.Context, ref string) (string, map[stri
 		return "", nil, err
 	}
 	var token string
-	_ = json.Unmarshal(raw, &token)
+	if err := json.Unmarshal(raw, &token); err != nil {
+		return "", nil, err
+	}
 	return base.String(), map[string]string{"Authorization": "Bearer " + token}, nil
 }
 
-type npmSource struct {
+// npmSource is one NPM list endpoint, the model its records decode into, and
+// what NPM's permission for it is called.
+type npmSource[T any] struct {
 	path  string
 	needs string
 	what  string
 }
 
 var (
-	npmProxyHosts         = npmSource{path: "/nginx/proxy-hosts", needs: "proxy_hosts: view", what: "The proxy host list"}
-	npmRedirectionHosts   = npmSource{path: "/nginx/redirection-hosts", needs: "redirection_hosts: view", what: "The redirection host list"}
-	npmDeadHostsSource    = npmSource{path: "/nginx/dead-hosts", needs: "dead_hosts: view", what: "The 404 host list"}
-	npmStreamsSource      = npmSource{path: "/nginx/streams", needs: "streams: view", what: "The stream list"}
-	npmCertificatesSource = npmSource{path: "/nginx/certificates", needs: "certificates: view", what: "The certificate list"}
-	npmAccessListsSource  = npmSource{path: "/nginx/access-lists?expand=items,clients", needs: "access_lists: view", what: "The access list list"}
+	npmProxyHosts         = npmSource[npmapi.ProxyHostObject]{path: "/nginx/proxy-hosts", needs: "proxy_hosts: view", what: "proxy host list"}
+	npmRedirectionHosts   = npmSource[npmapi.RedirectionHostObject]{path: "/nginx/redirection-hosts", needs: "redirection_hosts: view", what: "redirection host list"}
+	npmDeadHostsSource    = npmSource[npmapi.DeadHostObject]{path: "/nginx/dead-hosts", needs: "dead_hosts: view", what: "404 host list"}
+	npmStreamsSource      = npmSource[npmapi.StreamObject]{path: "/nginx/streams", needs: "streams: view", what: "stream list"}
+	npmCertificatesSource = npmSource[npmapi.CertificateObject]{path: "/nginx/certificates", needs: "certificates: view", what: "certificate list"}
+	npmAccessListsSource  = npmSource[npmAccessList]{path: "/nginx/access-lists?expand=items,clients", needs: "access_lists: view", what: "access list list"}
 )
 
+// npmRefused says which list NPM refused and, for a missing permission, which
+// one the credential needs.
 func npmRefused(err error, what, needs string) error {
+	failure, _, _ := runtime.Classify(err)
+	switch failure {
+	case runtime.FailureClassCredential:
+		return &ProviderError{Message: what + ": credential refused", Failure: failure, Reason: "credential refused"}
+	case runtime.FailureClassPermission:
+		return &ProviderError{Message: what + " needs " + needs, Failure: failure}
+	}
 	var provider *ProviderError
 	if errors.As(err, &provider) {
-		if provider.Refusal == runtime.RefusalCredential || provider.Failure == runtime.FailureClassCredential {
-			return &ProviderError{
-				Message: what + ": the credential was refused.",
-				Failure: runtime.FailureClassCredential,
-				Refusal: runtime.RefusalCredential,
-				Reason:  "The credential was refused.",
-			}
-		}
-		if provider.Refusal == runtime.RefusalPermission || provider.Failure == runtime.FailureClassPermission {
-			return &ProviderError{
-				Message: what + " needs " + needs + ".",
-				Failure: runtime.FailureClassPermission,
-				Refusal: runtime.RefusalPermission,
-			}
-		}
-		return provider
+		return fmt.Errorf("%s: %w", what, err)
 	}
-	return &ProviderError{Message: what + " failed."}
+	return &ProviderError{Message: what, Err: err}
 }
 
-// npmRecords decodes an NPM list answer.
-func npmRecords(raw json.RawMessage) ([]npmRecord, error) {
-	if len(raw) == 0 || string(raw) == "null" {
-		return []npmRecord{}, nil
+// npmDecode decodes one NPM list answer; an empty answer is an empty list.
+func npmDecode[T any](raw json.RawMessage, what string) ([]T, error) {
+	items := []T{}
+	if len(raw) == 0 {
+		return items, nil
 	}
-	var items []json.RawMessage
-	if json.Unmarshal(raw, &items) != nil {
-		return nil, &ProviderError{Message: "Provider returned an invalid record list."}
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, &ProviderError{Message: what + " did not decode", Err: err}
 	}
-	out := make([]npmRecord, 0, len(items))
-	for _, item := range items {
-		var record npmRecord
-		if json.Unmarshal(item, &record) != nil || record == nil {
-			return nil, &ProviderError{Message: "Provider returned an invalid record."}
-		}
-		out = append(out, record)
+	if items == nil {
+		items = []T{}
 	}
-	return out, nil
+	return items, nil
 }
 
 // npmSessionFailed marks an error from signing in, as opposed to one from the
-// list endpoint, which npmListed words differently.
+// list endpoint, which npmRead words with the list's name.
 type npmSessionFailed struct{ error }
 
 func (e npmSessionFailed) Unwrap() error { return e.error }
@@ -533,26 +175,40 @@ func (r *Registry) npmFetched(ctx context.Context, ref, path string) (json.RawMe
 	})
 }
 
-func (r *Registry) npmListed(ctx context.Context, ref string, src npmSource) ([]npmRecord, error) {
+// npmFetchFailure is a list read's failure as the reader reports it.
+func npmFetchFailure(err error, what, needs string) error {
+	var session npmSessionFailed
+	if errors.As(err, &session) {
+		return session.error
+	}
+	return npmRefused(err, what, needs)
+}
+
+// npmRead is one list endpoint's records, read through the sweep's snapshot.
+func npmRead[T any](ctx context.Context, r *Registry, ref string, src npmSource[T]) ([]T, error) {
 	raw, err := r.npmFetched(ctx, ref, src.path)
 	if err != nil {
-		var session npmSessionFailed
-		if errors.As(err, &session) {
-			return nil, session.error
-		}
-		return nil, npmRefused(err, src.what, src.needs)
+		return nil, npmFetchFailure(err, src.what, src.needs)
 	}
-	return npmRecords(raw)
+	return npmDecode[T](raw, "npm "+src.what)
 }
 
 // npmProxyHostList reads the proxy hosts fresh: the actions that write decide
 // from the live list, never from the sweep's snapshot.
-func (r *Registry) npmProxyHostList(ctx context.Context, base string, headers map[string]string) ([]npmRecord, error) {
+func (r *Registry) npmProxyHostList(ctx context.Context, base string, headers map[string]string) ([]npmapi.ProxyHostObject, error) {
 	raw, err := r.HTTP.Request(ctx, base+npmProxyHosts.path, "GET", headers, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("npm %s: %w", npmProxyHosts.what, err)
 	}
-	return npmRecords(raw)
+	return npmDecode[npmapi.ProxyHostObject](raw, "npm "+npmProxyHosts.what)
+}
+
+// npmID is a record's id; NPM always gives one, so a record without it is malformed.
+func npmID(id *npmapi.Id, what string) (int, error) {
+	if id == nil {
+		return 0, &ProviderError{Message: "npm " + what + " record has no id"}
+	}
+	return int(*id), nil
 }
 
 func sortedNames(names []string) []string {
@@ -561,22 +217,10 @@ func sortedNames(names []string) []string {
 	return out
 }
 
-func equalStrings(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func matchingHosts(hosts []npmRecord, domains []string) []npmRecord {
-	out := []npmRecord{}
+func matchingHosts(hosts []npmapi.ProxyHostObject, domains []string) []npmapi.ProxyHostObject {
+	out := []npmapi.ProxyHostObject{}
 	for _, host := range hosts {
-		if equalStrings(sortedNames(host.names("domain_names")), domains) {
+		if reflect.DeepEqual(sortedNames(host.DomainNames), domains) {
 			out = append(out, host)
 		}
 	}
@@ -584,10 +228,9 @@ func matchingHosts(hosts []npmRecord, domains []string) []npmRecord {
 }
 
 func npmDesired(spec NPMProxyHostSpec, domains []string) npmProxyHostRequest {
-	certificate, _ := json.Marshal(spec.CertificateID)
 	return npmProxyHostRequest{
 		DomainNames:           domains,
-		CertificateID:         certificate,
+		CertificateID:         spec.CertificateID,
 		Locations:             json.RawMessage("[]"),
 		Meta:                  json.RawMessage("{}"),
 		ForwardScheme:         spec.ForwardScheme,
@@ -607,22 +250,42 @@ func npmDesired(spec NPMProxyHostSpec, domains []string) npmProxyHostRequest {
 	}
 }
 
-// npmDiffers compares the desired body with what NPM holds, field by field
-// as JSON, so a value NPM writes differently (1 for true) counts as a change.
-func npmDiffers(current npmRecord, desired npmProxyHostRequest) bool {
-	body, _ := json.Marshal(desired)
-	var fields map[string]json.RawMessage
-	_ = json.Unmarshal(body, &fields)
-	for key, want := range fields {
-		if canonical(current.raw(key)) != canonical(want) {
-			return true
-		}
+// npmHeld is the request that would leave a proxy host as NPM holds it.
+func npmHeld(host npmapi.ProxyHostObject) npmProxyHostRequest {
+	return npmProxyHostRequest{
+		DomainNames:           sortedNames(host.DomainNames),
+		CertificateID:         int(host.CertificateId),
+		Locations:             host.Locations,
+		Meta:                  host.Meta,
+		ForwardScheme:         string(host.ForwardScheme),
+		ForwardHost:           host.ForwardHost,
+		ForwardPort:           host.ForwardPort,
+		CachingEnabled:        bool(host.CachingEnabled),
+		BlockExploits:         bool(host.BlockExploits),
+		AccessListID:          int(host.AccessListId),
+		HSTSEnabled:           bool(host.HstsEnabled),
+		HSTSSubdomains:        bool(host.HstsSubdomains),
+		TrustForwardedProto:   bool(host.TrustForwardedProto),
+		AdvancedConfig:        host.AdvancedConfig,
+		AllowWebsocketUpgrade: bool(host.AllowWebsocketUpgrade),
+		SSLForced:             bool(host.SslForced),
+		HTTP2Support:          bool(host.Http2Support),
+		Enabled:               bool(host.Enabled),
 	}
-	return false
 }
 
+// npmDiffers is whether NPM holds anything HQ decides differently from
+// desired. Locations and meta are NPM's own and never compared.
+func npmDiffers(held, desired npmProxyHostRequest) bool {
+	held.Locations, held.Meta = nil, nil
+	desired.Locations, desired.Meta = nil, nil
+	return !reflect.DeepEqual(held, desired)
+}
+
+const npmDuplicateHosts = "npm holds more than one proxy host for the domain set"
+
 func (r *Registry) npmReconcile(ctx context.Context, spec NPMProxyHostSpec, observed NPMProxyHostObserved, apply bool) (Result, error) {
-	base, headers, err := r.npmSession(ctx, string(spec.ConnectionRef))
+	base, headers, err := r.npmSession(ctx, spec.ConnectionRef)
 	if err != nil {
 		return Result{}, err
 	}
@@ -634,42 +297,42 @@ func (r *Registry) npmReconcile(ctx context.Context, spec NPMProxyHostSpec, obse
 	matches := matchingHosts(hosts, domains)
 	if len(matches) == 0 {
 		previous := sortedNames(observed.DomainNames)
-		if len(previous) > 0 && !equalStrings(previous, domains) {
+		if len(previous) > 0 && !reflect.DeepEqual(previous, domains) {
 			matches = matchingHosts(hosts, previous)
 		}
 	}
 	if len(matches) > 1 {
-		return Result{}, &ProviderError{Message: "NPM contains duplicate proxy hosts for the domain set."}
+		return Result{}, &ProviderError{Message: npmDuplicateHosts}
 	}
 	desired := npmDesired(spec, domains)
 	changed := true
-	path, method := "/nginx/proxy-hosts", "POST"
+	path, method := npmProxyHosts.path, "POST"
 	if len(matches) == 1 {
 		current := matches[0]
-		if spec.ForceSSL && current.int("certificate_id") == 0 {
-			return Result{}, &ProviderError{Message: "The proxy host forces HTTPS but has no certificate. Attach one, then reconcile."}
+		id, err := npmID(current.Id, "proxy host")
+		if err != nil {
+			return Result{}, err
+		}
+		if spec.ForceSSL && current.CertificateId == 0 {
+			return Result{}, &ProviderError{Message: "proxy host forces HTTPS but has no certificate; attach one, then reconcile"}
 		}
 		if spec.CertificateID == 0 {
-			desired.CertificateID = json.RawMessage("0")
-			if current.present("certificate_id") {
-				desired.CertificateID = current.raw("certificate_id")
-			}
+			desired.CertificateID = int(current.CertificateId)
 		}
-		if _, ok := current["locations"]; ok {
-			desired.Locations = current.raw("locations")
+		if len(current.Locations) > 0 {
+			desired.Locations = current.Locations
 		}
-		if _, ok := current["meta"]; ok {
-			desired.Meta = current.raw("meta")
+		if len(current.Meta) > 0 {
+			desired.Meta = current.Meta
 		}
-		changed = npmDiffers(current, desired)
-		path += "/" + current.text("id")
-		method = "PUT"
+		changed = npmDiffers(npmHeld(current), desired)
+		path, method = fmt.Sprintf("%s/%d", path, id), "PUT"
 	} else if spec.ForceSSL && spec.CertificateID == 0 {
-		return Result{}, &ProviderError{Message: "An HTTPS proxy host needs an issued certificate. None is set yet."}
+		return Result{}, &ProviderError{Message: "an HTTPS proxy host needs an issued certificate and none is set yet"}
 	}
 	if changed && apply {
 		if _, err := r.HTTP.Request(ctx, base+path, method, headers, desired); err != nil {
-			return Result{}, err
+			return Result{}, fmt.Errorf("npm write proxy host: %w", err)
 		}
 	}
 	message := "NPM proxy host unchanged."
@@ -683,7 +346,7 @@ func (r *Registry) npmReconcile(ctx context.Context, spec NPMProxyHostSpec, obse
 }
 
 func (r *Registry) npmDelete(ctx context.Context, spec NPMProxyHostSpec, _ struct{}, apply bool) (Result, error) {
-	base, headers, err := r.npmSession(ctx, string(spec.ConnectionRef))
+	base, headers, err := r.npmSession(ctx, spec.ConnectionRef)
 	if err != nil {
 		return Result{}, err
 	}
@@ -695,23 +358,27 @@ func (r *Registry) npmDelete(ctx context.Context, spec NPMProxyHostSpec, _ struc
 	matches := matchingHosts(hosts, domains)
 	status := NPMProxyHostDeleteStatus{DomainNames: domains, Removed: true}
 	if len(matches) > 1 {
-		return Result{}, &ProviderError{Message: "NPM contains duplicate proxy hosts for the domain set."}
+		return Result{}, &ProviderError{Message: npmDuplicateHosts}
 	}
 	if len(matches) == 0 {
 		return result(false, status, "Absent", "No such proxy host in NPM.", "NPM proxy host was already absent."), nil
 	}
+	id, err := npmID(matches[0].Id, "proxy host")
+	if err != nil {
+		return Result{}, err
+	}
 	if apply {
-		if _, err := r.HTTP.Request(ctx, base+"/nginx/proxy-hosts/"+matches[0].text("id"), "DELETE", headers, nil); err != nil {
-			return Result{}, err
+		if _, err := r.HTTP.Request(ctx, fmt.Sprintf("%s%s/%d", base, npmProxyHosts.path, id), "DELETE", headers, nil); err != nil {
+			return Result{}, fmt.Errorf("npm delete proxy host: %w", err)
 		}
 	}
 	return result(true, status, "Removed", "NPM proxy host was removed.", "NPM proxy host removed."), nil
 }
 
-func npmClients(record npmRecord) []NPMAccessRule {
+func npmClients(list npmAccessList) []NPMAccessRule {
 	clients := []NPMAccessRule{}
-	for _, rule := range record.children("clients") {
-		directive, address := rule.text("directive"), rule.text("address")
+	for _, rule := range list.Clients {
+		directive, address := string(deref(rule.Directive)), deref(rule.Address)
 		if directive != "" && address != "" {
 			clients = append(clients, NPMAccessRule{Directive: directive, Address: address})
 		}
@@ -719,74 +386,84 @@ func npmClients(record npmRecord) []NPMAccessRule {
 	return clients
 }
 
+// npmEnrichment is an optional list the proxy host inventory joins: a refused
+// or unreachable read leaves it out, a malformed one fails the inventory.
+func npmEnrichment[T any](ctx context.Context, r *Registry, src npmSource[T]) ([]T, error) {
+	raw, err := r.npmFetched(ctx, "", src.path)
+	if err != nil {
+		return []T{}, nil
+	}
+	return npmDecode[T](raw, "npm "+src.what)
+}
+
 func (r *Registry) npmInventory(ctx context.Context) ([]any, error) {
-	hosts, err := r.npmFetched(ctx, "", npmProxyHosts.path)
+	raw, err := r.npmFetched(ctx, "", npmProxyHosts.path)
 	if err != nil {
 		var session npmSessionFailed
 		if errors.As(err, &session) {
 			return nil, session.error
 		}
-		return nil, err
+		return nil, fmt.Errorf("npm %s: %w", npmProxyHosts.what, err)
 	}
-	hostRecords, err := npmRecords(hosts)
+	hosts, err := npmDecode[npmapi.ProxyHostObject](raw, "npm "+npmProxyHosts.what)
 	if err != nil {
 		return nil, err
 	}
-	policies := map[string]*NPMAccessPolicy{}
-	certificates := map[string]*NPMCertificateSummary{}
-	if raw, err := r.npmFetched(ctx, "", npmAccessListsSource.path); err == nil {
-		items, _ := npmRecords(raw)
-		for _, item := range items {
-			if !item.integer("id") {
-				continue
-			}
-			clients := npmClients(item)
-			policies[item.text("id")] = &NPMAccessPolicy{
-				Name:               item.text("name"),
-				SatisfyAny:         item.flag("satisfy_any"),
-				PassAuth:           item.flag("pass_auth"),
-				AuthorizationCount: len(item.children("items")),
-				Clients:            clients,
-				ImplicitDeny:       len(clients) > 0,
-			}
+	lists, err := npmEnrichment(ctx, r, npmAccessListsSource)
+	if err != nil {
+		return nil, err
+	}
+	policies := map[int]*NPMAccessPolicy{}
+	for _, list := range lists {
+		id, err := npmID(list.Id, "access list")
+		if err != nil {
+			return nil, err
+		}
+		clients := npmClients(list)
+		policies[id] = &NPMAccessPolicy{
+			Name:               list.Name,
+			SatisfyAny:         bool(list.SatisfyAny),
+			PassAuth:           bool(list.PassAuth),
+			AuthorizationCount: len(list.Items),
+			Clients:            clients,
+			ImplicitDeny:       len(clients) > 0,
 		}
 	}
-	if raw, err := r.npmFetched(ctx, "", npmCertificatesSource.path); err == nil {
-		items, _ := npmRecords(raw)
-		for _, item := range items {
-			if item.flag("id") {
-				certificates[item.text("id")] = &NPMCertificateSummary{
-					Name:      item.text("nice_name"),
-					Domains:   item.names("domain_names"),
-					ExpiresOn: item.text("expires_on"),
-					Provider:  item.text("provider"),
-				}
-			}
+	certs, err := npmEnrichment(ctx, r, npmCertificatesSource)
+	if err != nil {
+		return nil, err
+	}
+	certificates := map[int]*NPMCertificateSummary{}
+	for _, cert := range certs {
+		id, err := npmID(cert.Id, "certificate")
+		if err != nil {
+			return nil, err
 		}
+		certificates[id] = &NPMCertificateSummary{Name: cert.NiceName, Domains: cert.DomainNames, ExpiresOn: deref(cert.ExpiresOn), Provider: cert.Provider}
 	}
 	found := []any{}
-	for _, host := range hostRecords {
-		if !host.flag("domain_names") {
+	for _, host := range hosts {
+		if len(host.DomainNames) == 0 {
 			continue
 		}
 		found = append(found, NPMProxyHostRecord{
-			DomainNames:           host.raw("domain_names"),
-			ForwardScheme:         host.raw("forward_scheme"),
-			ForwardHost:           host.raw("forward_host"),
-			ForwardPort:           host.raw("forward_port"),
-			SSLForced:             host.raw("ssl_forced"),
-			HTTP2Support:          host.raw("http2_support"),
-			AllowWebsocketUpgrade: host.raw("allow_websocket_upgrade"),
-			CachingEnabled:        host.raw("caching_enabled"),
-			BlockExploits:         host.raw("block_exploits"),
-			AccessListID:          host.raw("access_list_id"),
-			AdvancedConfig:        host.raw("advanced_config"),
-			HSTSEnabled:           host.raw("hsts_enabled"),
-			HSTSSubdomains:        host.raw("hsts_subdomains"),
-			TrustForwardedProto:   host.raw("trust_forwarded_proto"),
-			Enabled:               host.raw("enabled"),
-			Certificate:           npmCertificateRef{certificates[host.text("certificate_id")]},
-			AccessPolicy:          policies[host.text("access_list_id")],
+			DomainNames:           host.DomainNames,
+			ForwardScheme:         string(host.ForwardScheme),
+			ForwardHost:           host.ForwardHost,
+			ForwardPort:           host.ForwardPort,
+			SSLForced:             bool(host.SslForced),
+			HTTP2Support:          bool(host.Http2Support),
+			AllowWebsocketUpgrade: bool(host.AllowWebsocketUpgrade),
+			CachingEnabled:        bool(host.CachingEnabled),
+			BlockExploits:         bool(host.BlockExploits),
+			AccessListID:          int(host.AccessListId),
+			AdvancedConfig:        host.AdvancedConfig,
+			HSTSEnabled:           bool(host.HstsEnabled),
+			HSTSSubdomains:        bool(host.HstsSubdomains),
+			TrustForwardedProto:   bool(host.TrustForwardedProto),
+			Enabled:               bool(host.Enabled),
+			Certificate:           npmCertificateRef{certificates[int(host.CertificateId)]},
+			AccessPolicy:          policies[int(host.AccessListId)],
 		})
 	}
 	return found, nil
@@ -805,65 +482,73 @@ func npmNames(values []string) []string {
 	return out
 }
 
+// npmCertificateNames names each certificate by id for the readers that show
+// one. Best effort: the certificate kind reports its own read's failure.
 func (r *Registry) npmCertificateNames(ctx context.Context, ref string) map[int]string {
 	names := map[int]string{}
-	certs, err := r.npmListed(ctx, ref, npmCertificatesSource)
+	certs, err := npmRead(ctx, r, ref, npmCertificatesSource)
 	if err != nil {
 		return names
 	}
-	for _, item := range certs {
-		if item.integer("id") {
-			names[item.int("id")] = item.text("nice_name")
+	for _, cert := range certs {
+		if cert.Id != nil {
+			names[int(*cert.Id)] = cert.NiceName
 		}
 	}
 	return names
 }
 
+// npmServes is the names each certificate serves through an enabled host. A
+// refused list is a refused part; the others still count.
 func (r *Registry) npmServes(ctx context.Context, ref string) map[int][]string {
 	serves := map[int][]string{}
-	servingSources := []struct {
-		src  npmSource
-		part string
-	}{
-		{npmProxyHosts, "proxy_hosts"},
-		{npmRedirectionHosts, "redirection_hosts"},
-		{npmDeadHostsSource, "dead_hosts"},
-		{npmStreamsSource, "streams"},
-	}
-	for _, s := range servingSources {
-		hosts, err := r.npmListed(ctx, ref, s.src)
-		if err != nil {
-			refuse(ctx, s.part, ref, "", err)
-			continue
+	add := func(certificate npmapi.CertificateId, enabled npmapi.Flag, names []string) {
+		if certificate > 0 && bool(enabled) {
+			serves[int(certificate)] = append(serves[int(certificate)], names...)
 		}
+	}
+	if hosts, err := npmRead(ctx, r, ref, npmProxyHosts); err != nil {
+		refuse(ctx, "proxy_hosts", ref, "", err)
+	} else {
 		for _, host := range hosts {
-			certID := host.int("certificate_id")
-			if certID > 0 && host.flagOr("enabled", true) {
-				serves[certID] = append(serves[certID], host.names("domain_names")...)
-			}
+			add(host.CertificateId, host.Enabled, host.DomainNames)
+		}
+	}
+	if hosts, err := npmRead(ctx, r, ref, npmRedirectionHosts); err != nil {
+		refuse(ctx, "redirection_hosts", ref, "", err)
+	} else {
+		for _, host := range hosts {
+			add(host.CertificateId, host.Enabled, host.DomainNames)
+		}
+	}
+	if hosts, err := npmRead(ctx, r, ref, npmDeadHostsSource); err != nil {
+		refuse(ctx, "dead_hosts", ref, "", err)
+	} else {
+		for _, host := range hosts {
+			add(host.CertificateId, host.Enabled, host.DomainNames)
 		}
 	}
 	return serves
 }
 
 func (r *Registry) npmCertificates(ctx context.Context, ref string) ([]NPMCertificateRecord, error) {
-	listedCerts, err := r.npmListed(ctx, ref, npmCertificatesSource)
+	certs, err := npmRead(ctx, r, ref, npmCertificatesSource)
 	if err != nil {
 		return nil, err
 	}
 	serves := r.npmServes(ctx, ref)
 	out := []NPMCertificateRecord{}
-	for _, item := range listedCerts {
-		if !item.integer("id") {
-			continue
+	for _, cert := range certs {
+		id, err := npmID(cert.Id, "certificate")
+		if err != nil {
+			return nil, err
 		}
-		id := item.int("id")
 		out = append(out, NPMCertificateRecord{
 			ID:        id,
-			Name:      item.text("nice_name"),
-			Provider:  item.text("provider"),
-			Domains:   item.names("domain_names"),
-			ExpiresOn: item.text("expires_on"),
+			Name:      cert.NiceName,
+			Provider:  cert.Provider,
+			Domains:   cert.DomainNames,
+			ExpiresOn: deref(cert.ExpiresOn),
 			Serves:    npmNames(serves[id]),
 		})
 	}
@@ -880,36 +565,36 @@ func npmTarget(scheme, host string) string {
 	return host
 }
 
-// optionalInt is a whole-number field, or nil when it is absent or not whole.
-func optionalInt(record npmRecord, key string) *int {
-	if !record.integer(key) {
+// optionalPort is a port or status code, nil when NPM gave none.
+func optionalPort(value int) *int {
+	if value == 0 {
 		return nil
 	}
-	value := record.int(key)
 	return &value
 }
 
 func (r *Registry) npmRedirects(ctx context.Context, ref string) ([]NPMRedirectRecord, error) {
 	names := r.npmCertificateNames(ctx, ref)
-	hosts, err := r.npmListed(ctx, ref, npmRedirectionHosts)
+	hosts, err := npmRead(ctx, r, ref, npmRedirectionHosts)
 	if err != nil {
 		return nil, err
 	}
 	out := []NPMRedirectRecord{}
-	for _, item := range hosts {
-		if !item.integer("id") {
-			continue
+	for _, host := range hosts {
+		id, err := npmID(host.Id, "redirection host")
+		if err != nil {
+			return nil, err
 		}
 		out = append(out, NPMRedirectRecord{
-			ID:           item.int("id"),
-			Hostnames:    npmNames(item.names("domain_names")),
-			Target:       npmTarget(item.text("forward_scheme"), item.text("forward_domain_name")),
-			TargetHost:   hostname(item.text("forward_domain_name")),
-			StatusCode:   optionalInt(item, "forward_http_code"),
-			PreservePath: item.flag("preserve_path"),
-			SSLForced:    item.flag("ssl_forced"),
-			Certificate:  names[item.int("certificate_id")],
-			Enabled:      item.flagOr("enabled", true),
+			ID:           id,
+			Hostnames:    npmNames(host.DomainNames),
+			Target:       npmTarget(string(host.ForwardScheme), host.ForwardDomainName),
+			TargetHost:   hostname(host.ForwardDomainName),
+			StatusCode:   optionalPort(host.ForwardHttpCode),
+			PreservePath: bool(host.PreservePath),
+			SSLForced:    bool(host.SslForced),
+			Certificate:  names[int(host.CertificateId)],
+			Enabled:      bool(host.Enabled),
 		})
 	}
 	return out, nil
@@ -917,83 +602,84 @@ func (r *Registry) npmRedirects(ctx context.Context, ref string) ([]NPMRedirectR
 
 func (r *Registry) npmDeadHosts(ctx context.Context, ref string) ([]NPMDeadHostRecord, error) {
 	names := r.npmCertificateNames(ctx, ref)
-	hosts, err := r.npmListed(ctx, ref, npmDeadHostsSource)
+	hosts, err := npmRead(ctx, r, ref, npmDeadHostsSource)
 	if err != nil {
 		return nil, err
 	}
 	out := []NPMDeadHostRecord{}
-	for _, item := range hosts {
-		if !item.integer("id") {
-			continue
+	for _, host := range hosts {
+		id, err := npmID(host.Id, "404 host")
+		if err != nil {
+			return nil, err
 		}
 		out = append(out, NPMDeadHostRecord{
-			ID:          item.int("id"),
-			Hostnames:   npmNames(item.names("domain_names")),
-			Certificate: names[item.int("certificate_id")],
-			SSLForced:   item.flag("ssl_forced"),
-			Enabled:     item.flagOr("enabled", true),
+			ID:          id,
+			Hostnames:   npmNames(host.DomainNames),
+			Certificate: names[int(host.CertificateId)],
+			SSLForced:   bool(host.SslForced),
+			Enabled:     bool(host.Enabled),
 		})
 	}
 	return out, nil
 }
 
 func (r *Registry) npmStreams(ctx context.Context, ref string) ([]NPMStreamRecord, error) {
-	hosts, err := r.npmListed(ctx, ref, npmStreamsSource)
+	streams, err := npmRead(ctx, r, ref, npmStreamsSource)
 	if err != nil {
 		return nil, err
 	}
 	out := []NPMStreamRecord{}
-	for _, item := range hosts {
-		if !item.integer("id") || !item.integer("incoming_port") {
-			continue
+	for _, stream := range streams {
+		id, err := npmID(stream.Id, "stream")
+		if err != nil {
+			return nil, err
 		}
 		out = append(out, NPMStreamRecord{
-			ID:             item.int("id"),
-			IncomingPort:   item.int("incoming_port"),
-			ForwardingHost: item.text("forwarding_host"),
-			ForwardingPort: optionalInt(item, "forwarding_port"),
-			TCP:            item.flag("tcp_forwarding"),
-			UDP:            item.flag("udp_forwarding"),
-			Enabled:        item.flagOr("enabled", true),
+			ID:             id,
+			IncomingPort:   stream.IncomingPort,
+			ForwardingHost: stream.ForwardingHost,
+			ForwardingPort: optionalPort(stream.ForwardingPort),
+			TCP:            bool(stream.TcpForwarding),
+			UDP:            bool(stream.UdpForwarding),
+			Enabled:        bool(stream.Enabled),
 		})
 	}
 	return out, nil
 }
 
 func (r *Registry) npmAccessLists(ctx context.Context, ref string) ([]NPMAccessListRecord, error) {
-	listedLists, err := r.npmListed(ctx, ref, npmAccessListsSource)
+	lists, err := npmRead(ctx, r, ref, npmAccessListsSource)
 	if err != nil {
 		return nil, err
 	}
 	protects := map[int][]string{}
-	proxyHosts, err := r.npmListed(ctx, ref, npmProxyHosts)
-	if err != nil {
+	if hosts, err := npmRead(ctx, r, ref, npmProxyHosts); err != nil {
 		refuse(ctx, "proxy_hosts", ref, "", err)
 	} else {
-		for _, host := range proxyHosts {
-			if id := host.int("access_list_id"); id > 0 {
-				protects[id] = append(protects[id], host.names("domain_names")...)
+		for _, host := range hosts {
+			if id := int(host.AccessListId); id > 0 {
+				protects[id] = append(protects[id], host.DomainNames...)
 			}
 		}
 	}
 	out := []NPMAccessListRecord{}
-	for _, item := range listedLists {
-		if !item.integer("id") {
-			continue
+	for _, list := range lists {
+		id, err := npmID(list.Id, "access list")
+		if err != nil {
+			return nil, err
 		}
-		id := item.int("id")
 		logins := []string{}
-		for _, login := range item.children("items") {
-			if name := login.text("username"); name != "" {
+		for _, login := range list.Items {
+			if name := deref(login.Username); name != "" {
 				logins = append(logins, name)
 			}
 		}
 		out = append(out, NPMAccessListRecord{
 			ID:         id,
-			Name:       item.text("name"),
-			SatisfyAny: item.flag("satisfy_any"),
-			PassAuth:   item.flag("pass_auth"),
-			Clients:    npmClients(item),
+			Name:       list.Name,
+			SatisfyAny: bool(list.SatisfyAny),
+			PassAuth:   bool(list.PassAuth),
+			Clients:    npmClients(list),
 			Logins:     logins,
 			Protects:   npmNames(protects[id]),
 		})

@@ -1,7 +1,8 @@
 # Severino HQ: homelab container image.
-# Multi-stage: build wheel deps, then a slim runtime as a non-root user.
+# Multi-stage: build wheel deps and the controller binary, then a slim runtime
+# as a non-root user.
 
-# Both stages pin the base by digest; Dependabot bumps it on these lines.
+# Every stage pins its base by digest; Dependabot bumps it on these lines.
 FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS build
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -12,6 +13,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
 RUN pip install --require-hashes --prefix=/install -r requirements.txt
+
+
+# The controller, one static binary: CGO off, -trimpath, so the runtime image
+# carries no Go toolchain and the binary no build paths. Its Go is go.mod's go
+# directive; the build fails if this pinned image drifts from it.
+FROM golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195 AS controller
+ENV CGO_ENABLED=0 \
+    GOTOOLCHAIN=local \
+    GOFLAGS=-mod=readonly
+WORKDIR /src
+COPY controller/go.mod controller/go.sum ./
+RUN want="$(sed -n 's/^go \([0-9.]*\)$/\1/p' go.mod)" \
+    && case "$(go env GOVERSION)" in \
+        "go${want}" | "go${want}."*) ;; \
+        *) echo "$(go env GOVERSION) is not go.mod's go ${want}" >&2; exit 1 ;; \
+    esac \
+    && go mod download
+COPY controller/ ./
+RUN go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-controller ./cmd/hq-controller
 
 
 FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS runtime
@@ -48,6 +68,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Install Python deps from the build stage.
 COPY --from=build /install /usr/local
+# The controller run-controller.sh starts in a container of this image.
+COPY --from=controller /out/hq-controller /usr/local/bin/hq-controller
 
 WORKDIR /app
 COPY . /app

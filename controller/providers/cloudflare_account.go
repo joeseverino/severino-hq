@@ -3,11 +3,12 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/providers/cfapi"
-	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // What a Cloudflare account holds beyond its DNS, each list read once per sweep.
@@ -28,41 +29,20 @@ func (r *Registry) cloudflareAccount(ctx context.Context, ref string) (string, e
 	return account, err
 }
 
-func (r *Registry) cloudflareAccountList(ctx context.Context, ref, path string, perPage int) ([]json.RawMessage, error) {
+// cloudflareAccountItems reads one account list once per sweep and decodes
+// each entry into T.
+func cloudflareAccountItems[T any](ctx context.Context, r *Registry, ref, path string, perPage int) ([]T, error) {
 	account, err := r.cloudflareAccount(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
-	raw, err := r.cached(ctx, "cloudflare-account-list:"+ref+":"+path, func() (json.RawMessage, error) {
-		items, err := r.cloudflareAPIList(ctx, "/accounts/"+account+path, ref, perPage)
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(items)
+	items, err := r.cloudflareCachedList(ctx, "cloudflare-account-list:"+ref+":"+path, func() ([]json.RawMessage, error) {
+		return r.cloudflareList(ctx, "cloudflare_api", "/accounts/"+account+path, ref, perPage)
 	})
 	if err != nil {
 		return nil, err
 	}
-	var items []json.RawMessage
-	err = json.Unmarshal(raw, &items)
-	return items, err
-}
-
-// cloudflareAccountItems decodes one account list into its generated item type.
-func cloudflareAccountItems[T any](ctx context.Context, r *Registry, ref, path string, perPage int) ([]T, error) {
-	items, err := r.cloudflareAccountList(ctx, ref, path, perPage)
-	if err != nil {
-		return nil, err
-	}
-	found := make([]T, 0, len(items))
-	for _, item := range items {
-		var decoded T
-		if err := json.Unmarshal(item, &decoded); err != nil {
-			return nil, &ProviderError{Message: "Cloudflare account list returned an invalid result."}
-		}
-		found = append(found, decoded)
-	}
-	return found, nil
+	return cloudflareItems[T](items, path+" entry")
 }
 
 func (r *Registry) cloudflarePagesProjects(ctx context.Context) ([]any, error) {
@@ -110,87 +90,53 @@ func (r *Registry) cloudflareD1Databases(ctx context.Context) ([]any, error) {
 		}
 		for _, database := range databases {
 			record := CloudflareD1DatabaseRecord{ConnectionRef: ref, AccountID: account, Name: database.Name, UUID: database.UUID, CreatedAt: database.CreatedAt, Version: database.Version}
-			detail, err := r.cloudflareAPIResult(ctx, "/accounts/"+account+"/d1/database/"+database.UUID, ref)
+			size, err := r.cloudflareD1Size(ctx, account, database.UUID, ref)
 			if err != nil {
 				refuse(ctx, "file_size", ref, record.Name, err)
-			} else {
-				// file_size is a number in the spec; HQ keeps it only when Cloudflare sent an integer.
-				var size struct {
-					FileSize json.RawMessage `json:"file_size"`
-				}
-				if isJSONObject(detail) && json.Unmarshal(detail, &size) == nil && isJSONInteger(size.FileSize) {
-					n := json.Number(strings.TrimSpace(string(size.FileSize)))
-					record.FileSize = &n
-				}
 			}
+			record.FileSize = size
 			found = append(found, record)
 		}
 	}
 	return found, nil
 }
 
-func isJSONInteger(raw json.RawMessage) bool {
-	text := strings.TrimSpace(string(raw))
-	if text == "" || strings.ContainsAny(text, ".eE") {
-		return false
+// cloudflareD1Size is a database's size in bytes; the list omits it.
+func (r *Registry) cloudflareD1Size(ctx context.Context, account, uuid, ref string) (*int64, error) {
+	raw, err := r.cloudflareAPIResult(ctx, "/accounts/"+account+"/d1/database/"+uuid, ref)
+	if err != nil || !present(raw) {
+		return nil, err
 	}
-	var n json.Number
-	return json.Unmarshal(raw, &n) == nil
+	detail, err := cloudflareDecode[struct {
+		FileSize *int64 `json:"file_size"`
+	}](raw, "D1 database")
+	return detail.FileSize, err
 }
 
 // accessDestinationHosts are hostnames from an application's destinations,
 // without paths or CIDRs.
-func accessDestinationHosts(raw json.RawMessage) []string {
+func accessDestinationHosts(app cfAccessApp) []string {
 	hosts := []string{}
-	var destinations []json.RawMessage
-	if !pyTruthy(raw) || json.Unmarshal(raw, &destinations) != nil {
-		return hosts
-	}
-	for _, item := range destinations {
-		var destination struct {
-			Type     json.RawMessage `json:"type"`
-			URI      json.RawMessage `json:"uri"`
-			Hostname json.RawMessage `json:"hostname"`
-		}
-		if !isJSONObject(item) || json.Unmarshal(item, &destination) != nil {
-			continue
-		}
-		var host string
-		if pyStringEquals(destination.Type, "public") {
-			uri := pyOrText(destination.URI)
-			if at := strings.Index(uri, "://"); at >= 0 {
-				uri = uri[at+3:]
+	for _, destination := range app.Destinations {
+		host := destination.Hostname
+		if destination.Type == "public" {
+			uri := destination.URI
+			if _, after, found := strings.Cut(uri, "://"); found {
+				uri = after
 			}
 			host, _, _ = strings.Cut(uri, "/")
-		} else {
-			host = pyOrText(destination.Hostname)
 		}
-		host = hostname(host)
-		if host != "" && !contains(hosts, host) {
+		if host = hostname(host); host != "" && !slices.Contains(hosts, host) {
 			hosts = append(hosts, host)
 		}
 	}
 	return hosts
 }
 
-func contains(values []string, want string) bool {
-	return indexOf(values, want) >= 0
-}
-
-func accessPolicies(raw json.RawMessage) []CloudflareNamedRef {
+func accessPolicies(app cfAccessApp) []CloudflareNamedRef {
 	found := []CloudflareNamedRef{}
-	var policies []json.RawMessage
-	if !pyTruthy(raw) || json.Unmarshal(raw, &policies) != nil {
-		return found
-	}
-	for _, item := range policies {
-		var policy struct {
-			ID   json.RawMessage `json:"id"`
-			Name json.RawMessage `json:"name"`
-		}
-		if isJSONObject(item) && json.Unmarshal(item, &policy) == nil {
-			found = append(found, CloudflareNamedRef{ID: pyOrText(policy.ID), Name: pyOrText(policy.Name)})
-		}
+	for _, policy := range app.Policies {
+		found = append(found, CloudflareNamedRef{ID: policy.ID, Name: policy.Name})
 	}
 	return found
 }
@@ -208,9 +154,8 @@ func (r *Registry) cloudflareAccessApps(ctx context.Context) ([]any, error) {
 		}
 		for _, app := range apps {
 			found = append(found, CloudflareAccessAppRecord{
-				ConnectionRef: ref, AccountID: account, ID: pyGetText(app.ID, ""), Name: pyOrText(app.Name),
-				Type: pyOrText(app.Type), Domain: pyOrText(app.Domain), Destinations: accessDestinationHosts(app.Destinations),
-				SessionDuration: pyOrText(app.SessionDuration), Policies: accessPolicies(app.Policies),
+				ConnectionRef: ref, AccountID: account, ID: app.ID, Name: app.Name, Type: app.Type, Domain: app.Domain,
+				Destinations: accessDestinationHosts(app), SessionDuration: app.SessionDuration, Policies: accessPolicies(app),
 			})
 		}
 	}
@@ -222,30 +167,16 @@ func appsAdmitting(apps []cfAccessApp, tokenID string) []CloudflareNamedRef {
 	found := []CloudflareNamedRef{}
 	for _, app := range apps {
 		if appAdmits(app, tokenID) {
-			found = append(found, CloudflareNamedRef{ID: pyOrText(app.ID), Name: pyOrText(app.Name)})
+			found = append(found, CloudflareNamedRef{ID: app.ID, Name: app.Name})
 		}
 	}
 	return found
 }
 
 func appAdmits(app cfAccessApp, tokenID string) bool {
-	var policies []json.RawMessage
-	if !pyTruthy(app.Policies) || json.Unmarshal(app.Policies, &policies) != nil {
-		return false
-	}
-	for _, item := range policies {
-		var policy struct {
-			Include json.RawMessage `json:"include"`
-		}
-		if !isJSONObject(item) || json.Unmarshal(item, &policy) != nil {
-			continue
-		}
-		var rules []json.RawMessage
-		if !pyTruthy(policy.Include) || json.Unmarshal(policy.Include, &rules) != nil {
-			continue
-		}
-		for _, rule := range rules {
-			if admitsToken(rule, tokenID) {
+	for _, policy := range app.Policies {
+		for _, rule := range policy.Include {
+			if rule.AnyValidServiceToken != nil || (rule.ServiceToken != nil && rule.ServiceToken.TokenID == tokenID) {
 				return true
 			}
 		}
@@ -253,34 +184,12 @@ func appAdmits(app cfAccessApp, tokenID string) bool {
 	return false
 }
 
-func admitsToken(raw json.RawMessage, tokenID string) bool {
-	var rule map[string]json.RawMessage
-	if !isJSONObject(raw) || json.Unmarshal(raw, &rule) != nil {
-		return false
-	}
-	if _, any := rule["any_valid_service_token"]; any {
-		return true
-	}
-	var token struct {
-		TokenID json.RawMessage `json:"token_id"`
-	}
-	if serviceToken := rule["service_token"]; pyTruthy(serviceToken) && isJSONObject(serviceToken) {
-		_ = json.Unmarshal(serviceToken, &token)
-	}
-	return pyOrText(token.TokenID) == tokenID
-}
-
 // cloudflareServiceTokens reads service tokens and the applications that admit
 // them. The client ID is never read into a record.
 func (r *Registry) cloudflareServiceTokens(ctx context.Context) ([]any, error) {
 	found := []any{}
 	for _, ref := range r.cloudflareAPIRefs() {
-		tokens, err := cloudflareAccountItems[struct {
-			ID        json.RawMessage `json:"id"`
-			Name      json.RawMessage `json:"name"`
-			ExpiresAt json.RawMessage `json:"expires_at"`
-			CreatedAt json.RawMessage `json:"created_at"`
-		}](ctx, r, ref, "/access/service_tokens", cloudflarePerPage)
+		tokens, err := cloudflareAccountItems[cfapi.AccessServiceTokens](ctx, r, ref, "/access/service_tokens", cloudflarePerPage)
 		if err != nil {
 			return nil, err
 		}
@@ -289,10 +198,9 @@ func (r *Registry) cloudflareServiceTokens(ctx context.Context) ([]any, error) {
 			refuse(ctx, "apps", ref, "", appsErr)
 		}
 		for _, token := range tokens {
-			tokenID := pyGetText(token.ID, "")
-			record := CloudflareServiceTokenRecord{ConnectionRef: ref, ID: tokenID, Name: pyOrText(token.Name), ExpiresAt: pyOrText(token.ExpiresAt), CreatedAt: pyOrText(token.CreatedAt)}
+			record := CloudflareServiceTokenRecord{ConnectionRef: ref, ID: token.ID, Name: token.Name, ExpiresAt: token.ExpiresAt, CreatedAt: token.CreatedAt}
 			if appsErr == nil {
-				admitting := appsAdmitting(apps, tokenID)
+				admitting := appsAdmitting(apps, token.ID)
 				record.Apps = &admitting
 			}
 			found = append(found, record)
@@ -317,13 +225,9 @@ func (r *Registry) cloudflareTunnels(ctx context.Context) ([]any, error) {
 		for _, tunnel := range tunnels {
 			base := "/accounts/" + account + "/cfd_tunnel/" + tunnel.ID
 			record := CloudflareTunnelRecord{ConnectionRef: ref, AccountID: account, ID: tunnel.ID, Name: tunnel.Name, Status: string(tunnel.Status), CreatedAt: tunnel.CreatedAt, ConnsActiveAt: tunnel.ConnsActiveAt}
-			if raw, err := r.cloudflareAPIResult(ctx, base+"/configurations", ref); err != nil {
+			if config, err := cloudflareOptional[cfapi.TunnelConfiguration](r.cloudflareAPIResult(ctx, base+"/configurations", ref)); err != nil {
 				refuse(ctx, "configuration", ref, record.Name, err)
 			} else {
-				var config cfapi.TunnelConfiguration
-				if pyTruthy(raw) {
-					_ = json.Unmarshal(raw, &config)
-				}
 				source := string(config.Source)
 				ingress := []CloudflareTunnelIngress{}
 				for _, rule := range config.Config.Ingress {
@@ -333,13 +237,9 @@ func (r *Registry) cloudflareTunnels(ctx context.Context) ([]any, error) {
 				}
 				record.ConfigSource, record.Ingress = &source, &ingress
 			}
-			if raw, err := r.cloudflareAPIResult(ctx, base+"/connections", ref); err != nil {
+			if clients, err := cloudflareOptional[[]cfapi.TunnelTunnelClient](r.cloudflareAPIResult(ctx, base+"/connections", ref)); err != nil {
 				refuse(ctx, "connections", ref, record.Name, err)
 			} else {
-				var clients []cfapi.TunnelTunnelClient
-				if pyTruthy(raw) {
-					_ = json.Unmarshal(raw, &clients)
-				}
 				connections := []CloudflareTunnelConnection{}
 				for _, client := range clients {
 					for _, connection := range client.Conns {
@@ -372,17 +272,13 @@ func (r *Registry) cloudflareEdgeCertificates(ctx context.Context) ([]any, error
 		var refused []error
 		for _, zone := range named {
 			name := hostname(zone.Name)
-			items, err := r.cloudflareAPIList(ctx, "/zones/"+zone.ID+"/ssl/certificate_packs?status=all", ref, cloudflareAccountPerPage)
+			packs, err := r.cloudflareCertificatePacks(ctx, zone.ID, ref)
 			if err != nil {
-				refused = append(refused, unreadError(err))
+				refused = append(refused, err)
 				refuse(ctx, "", ref, name, err)
 				continue
 			}
-			for _, item := range items {
-				var pack cfapi.TLSCertificatesAndHostnamesCertificatePack
-				if json.Unmarshal(item, &pack) != nil {
-					return nil, &ProviderError{Message: "Cloudflare account list returned an invalid result."}
-				}
+			for _, pack := range packs {
 				hosts := []string(pack.Hosts)
 				if hosts == nil {
 					hosts = []string{}
@@ -394,10 +290,28 @@ func (r *Registry) cloudflareEdgeCertificates(ctx context.Context) ([]any, error
 			}
 		}
 		if len(named) > 0 && len(refused) == len(named) {
-			return nil, refused[0]
+			return nil, fmt.Errorf("every zone refused its certificate packs: %w", refused[0])
 		}
 	}
 	return found, nil
+}
+
+func (r *Registry) cloudflareCertificatePacks(ctx context.Context, zoneID, ref string) ([]cfapi.TLSCertificatesAndHostnamesCertificatePack, error) {
+	items, err := r.cloudflareList(ctx, "cloudflare_api", "/zones/"+zoneID+"/ssl/certificate_packs?status=all", ref, cloudflareAccountPerPage)
+	if err != nil {
+		return nil, err
+	}
+	return cloudflareItems[cfapi.TLSCertificatesAndHostnamesCertificatePack](items, "certificate pack")
+}
+
+// cloudflareOptional decodes a result that may be absent or null, which reads
+// as the zero value.
+func cloudflareOptional[T any](raw json.RawMessage, err error) (T, error) {
+	var zero T
+	if err != nil || !present(raw) {
+		return zero, err
+	}
+	return cloudflareDecode[T](raw, "result")
 }
 
 func namedZones(zones []cfapi.ZonesZone) []cfapi.ZonesZone {
@@ -422,49 +336,4 @@ func earliestExpiry(pack cfapi.TLSCertificatesAndHostnamesCertificatePack) strin
 		return ""
 	}
 	return dates[0]
-}
-
-// unreadError is the refused read raised when every zone was refused: the
-// short reason, keeping the refusal and its words.
-func unreadError(err error) error {
-	refused := &ProviderError{Message: runtime.Clip(strings.TrimSpace(err.Error()), runtime.ReasonLimit)}
-	if provider, ok := err.(*ProviderError); ok {
-		refused.Refusal, refused.Failure, refused.Reason = provider.Refusal, runtime.FailureClass(provider.Refusal), provider.Reason
-	}
-	return refused
-}
-
-func (r *Registry) cloudflareRedirects(ctx context.Context) ([]any, error) {
-	return ReadRedirects(ctx, r.cloudflareAPIRefs(), cloudflareZoneReads{r})
-}
-
-// cloudflareZoneReads is the Cloudflare API a redirect read goes through.
-type cloudflareZoneReads struct{ r *Registry }
-
-func (z cloudflareZoneReads) Zones(ctx context.Context, ref string) ([]RedirectZone, error) {
-	listed, err := z.r.cloudflareAPIZones(ctx, ref)
-	if err != nil {
-		return nil, err
-	}
-	zones := make([]RedirectZone, 0, len(listed))
-	for _, zone := range listed {
-		found := RedirectZone{ID: zone.ID, Name: zone.Name}
-		found.Account.ID = zone.Account.ID
-		zones = append(zones, found)
-	}
-	return zones, nil
-}
-
-func (z cloudflareZoneReads) Listed(ctx context.Context, path, ref string) ([]json.RawMessage, error) {
-	return z.r.cloudflareAPIList(ctx, path, ref, cloudflareAccountPerPage)
-}
-
-func (z cloudflareZoneReads) Result(ctx context.Context, path, ref string) (json.RawMessage, error) {
-	return z.r.cloudflareAPIResult(ctx, path, ref)
-}
-
-func (z cloudflareZoneReads) Reason(err error) string { return unreadError(err).Error() }
-
-func (z cloudflareZoneReads) Refuse(ctx context.Context, part string, err error, scope, ref string) {
-	refuse(ctx, part, ref, scope, err)
 }

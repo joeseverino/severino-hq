@@ -41,7 +41,7 @@ var responses = map[string]any{
 		OK: true,
 		Capabilities: []runtime.Capability{
 			{Kind: "adguard.rewrite", Action: "reconcile"},
-			{Kind: "caddy.route", Action: "reconcile"},
+			{Kind: "pki.authority", Action: "reconcile"},
 		},
 		Locked:                []runtime.LockedAction{{Kind: "portainer.container", Action: "reconcile", Reason: "Defined outside HQ."}},
 		MaterialKinds:         []runtime.ResourceKind{"tls.uploaded_certificate"},
@@ -139,7 +139,7 @@ func TestOneApplyCycle(t *testing.T) {
 	if !strings.Contains(claim, "--controller-id e2e") || !strings.Contains(claim, "--capability adguard.rewrite:reconcile") {
 		t.Fatalf("claim %q", claim)
 	}
-	if strings.Contains(claim, "caddy.route") {
+	if strings.Contains(claim, "pki.authority") {
 		t.Fatalf("claimed an action this controller has no handler for: %q", claim)
 	}
 	var final map[string]any

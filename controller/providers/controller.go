@@ -24,7 +24,19 @@ type Controller struct {
 
 var _ runtime.Providers = (*Controller)(nil)
 
+// Why Execute refused; match with errors.Is.
+var (
+	ErrUnsupported = errors.New("no handler for this kind and action")
+	// ErrUndeclared fails closed: a write nothing declares a connection for
+	// has no manages switch an operator could have set.
+	ErrUndeclared        = errors.New("nothing declares which connections act for this kind")
+	ErrForeignConnection = errors.New("not a connection for this kind")
+	ErrNoManager         = errors.New("no connection this controller holds acts for this kind")
+	ErrObserveOnly       = errors.New("only observes; set manages on the connection to act through it")
+)
+
 func NewController(r *Registry, declared runtime.ControllerRegistry) *Controller {
+	r.Extensions = declared.Extensions
 	return &Controller{Registry: r, Declared: declared}
 }
 
@@ -84,7 +96,7 @@ func (c *Controller) Execute(ctx context.Context, resource runtime.Resource, act
 	}
 	handler, ok := c.actions[actionKey{resource.Kind, action}]
 	if !ok {
-		return runtime.Result{}, &ProviderError{Message: fmt.Sprintf("Unsupported provider/action: %s/%s.", resource.Kind, action)}
+		return runtime.Result{}, &ProviderError{Message: string(resource.Kind) + "/" + action, Err: ErrUnsupported}
 	}
 	if apply {
 		if err := c.refuseUnlessManaged(resource.Kind, resource.Spec); err != nil {
@@ -141,16 +153,14 @@ func namedRef(spec Object) string {
 func (c *Controller) refuseUnlessManaged(kind runtime.ResourceKind, spec Object) error {
 	providers := c.Declared.ConnectionProviders[string(kind)]
 	if len(providers) == 0 {
-		// Fail closed: a write nothing declares a connection for has no
-		// manages switch an operator could have set.
-		return &ProviderError{Message: "Nothing declares which connections act for this, so no connection manages it. It was not applied."}
+		return &ProviderError{Message: string(kind), Err: ErrUndeclared}
 	}
 	named := namedRef(spec)
 	refs := []string{}
 	ssh := c.sshRefs()
 	if named != "" {
 		if !slices.Contains(providers, c.effectiveProvider(named, ssh)) {
-			return &ProviderError{Message: named + " is not a connection for this, so it was not used."}
+			return &ProviderError{Message: named, Err: ErrForeignConnection}
 		}
 		refs = append(refs, named)
 	} else {
@@ -164,7 +174,7 @@ func (c *Controller) refuseUnlessManaged(kind runtime.ResourceKind, spec Object)
 		}
 	}
 	if len(refs) == 0 {
-		return &ProviderError{Message: "No connection this controller holds manages this. Set manages on the connection to act through it."}
+		return &ProviderError{Message: string(kind), Err: ErrNoManager}
 	}
 	observing := []string{}
 	for _, ref := range refs {
@@ -173,7 +183,7 @@ func (c *Controller) refuseUnlessManaged(kind runtime.ResourceKind, spec Object)
 		}
 	}
 	if len(observing) > 0 {
-		return &ProviderError{Message: strings.Join(observing, ", ") + " only observes. Set manages on the connection to act through it."}
+		return &ProviderError{Message: strings.Join(observing, ", "), Err: ErrObserveOnly}
 	}
 	return nil
 }
@@ -220,11 +230,8 @@ func (c *Controller) probeSSH(ctx context.Context, ref string) (ProbeResult, err
 }
 
 func failureOf(err error) runtime.FailureClass {
-	var provider *ProviderError
-	if errors.As(err, &provider) {
-		return provider.Failure
-	}
-	return runtime.FailureClassUnclassified
+	failure, _, _ := runtime.Classify(err)
+	return failure
 }
 
 // Connections is every connection the environment carries and whether it
@@ -326,13 +333,10 @@ func (c *Controller) readKind(ctx context.Context, reader Reader) runtime.KindRe
 	ledger := &refusals{}
 	records, err := reader(context.WithValue(ctx, refusalKey{}, ledger))
 	if err != nil {
-		report := runtime.KindReport{OK: false, Records: []any{}, Error: runtime.ReportText(err.Error())}
-		var provider *ProviderError
-		if errors.As(err, &provider) {
-			report.Refusal = provider.Refusal
-			if provider.Refusal == runtime.RefusalCredential && provider.Reason != "" {
-				report.Error = runtime.ReportText(provider.Reason)
-			}
+		_, refusal, reason := runtime.Classify(err)
+		report := runtime.KindReport{OK: false, Records: []any{}, Error: runtime.ReportText(err.Error()), Refusal: refusal}
+		if refusal == runtime.RefusalCredential && reason != "" {
+			report.Error = runtime.ReportText(reason)
 		}
 		return report
 	}

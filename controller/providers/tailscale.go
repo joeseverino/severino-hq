@@ -10,6 +10,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/joeseverino/severino-hq/controller/runtime"
 	tsapi "tailscale.com/client/tailscale/v2"
@@ -66,6 +67,8 @@ func (c tailnetClient) headers(extra map[string]string) map[string]string {
 	return headers
 }
 
+var jsonBody = map[string]string{"Content-Type": "application/json"}
+
 // tailnet is a path under the tailnet this credential belongs to.
 func tailnet(path string) string { return "/tailnet/-/" + path }
 
@@ -74,7 +77,8 @@ func tailnetDevicePath(identifier, tail string) string {
 	return "/device/" + url.PathEscape(identifier) + "/" + tail
 }
 
-// tailnetNode is one node of `tailscale status --json` (Self, or a Peer).
+// tailnetNode is one node of the local daemon's status (Self, or a Peer). The
+// official API client does not model the daemon's local API.
 type tailnetNode struct {
 	ID             string   `json:"ID"`
 	HostName       string   `json:"HostName"`
@@ -96,102 +100,58 @@ type tailnetNode struct {
 	TxBytes        int64    `json:"TxBytes"`
 }
 
-// tailnetDevice is one device of the API's /devices?fields=all.
-type tailnetDevice struct {
-	ID                 string   `json:"id"`
-	Hostname           string   `json:"hostname"`
-	Name               string   `json:"name"`
-	NodeKey            string   `json:"nodeKey"`
-	ConnectedToControl bool     `json:"connectedToControl"`
-	LastSeen           string   `json:"lastSeen"`
-	Expires            string   `json:"expires"`
-	KeyExpiryDisabled  bool     `json:"keyExpiryDisabled"`
-	Addresses          []string `json:"addresses"`
-	OS                 string   `json:"os"`
-	ClientConnectivity struct {
-		Endpoints []string `json:"endpoints"`
-	} `json:"clientConnectivity"`
-	AdvertisedRoutes []string  `json:"advertisedRoutes"`
-	EnabledRoutes    []string  `json:"enabledRoutes"`
-	Tags             []string  `json:"tags"`
-	User             string    `json:"user"`
-	Authorized       pyOptBool `json:"authorized"`
-	TailnetLockError string    `json:"tailnetLockError"`
-	UpdateAvailable  bool      `json:"updateAvailable"`
-	ClientVersion    string    `json:"clientVersion"`
-	SSHEnabled       bool      `json:"sshEnabled"`
-	BlocksIncoming   bool      `json:"blocksIncomingConnections"`
-	IsExternal       bool      `json:"isExternal"`
-}
-
-type tailnetRoutes struct {
-	AdvertisedRoutes []string `json:"advertisedRoutes"`
-	EnabledRoutes    []string `json:"enabledRoutes"`
-}
-type tailnetRoutesRequest struct {
-	Routes []string `json:"routes"`
-}
-type tailnetKeyRequest struct {
-	KeyExpiryDisabled bool `json:"keyExpiryDisabled"`
-}
 type tailnetToken struct {
 	AccessToken string `json:"access_token"`
 }
 
-// tailnetResolvers is a nameserver list; Tailscale writes each entry as an
-// address string or as {"address": ...}.
-type tailnetResolvers []json.RawMessage
+// tailnetResolver is one nameserver: Tailscale writes it as an address string
+// or as the official resolver object.
+type tailnetResolver tsapi.DNSConfigurationResolver
 
-func (list tailnetResolvers) addresses() []string {
+func (r *tailnetResolver) UnmarshalJSON(data []byte) error {
+	var address string
+	if json.Unmarshal(data, &address) == nil {
+		*r = tailnetResolver{Address: address}
+		return nil
+	}
+	var resolver tsapi.DNSConfigurationResolver
+	if err := json.Unmarshal(data, &resolver); err != nil {
+		return fmt.Errorf("a resolver is an address or an object: %w", err)
+	}
+	*r = tailnetResolver(resolver)
+	return nil
+}
+
+func resolverAddresses(list []tailnetResolver) []string {
 	found := []string{}
-	for _, entry := range list {
-		var address string
-		if json.Unmarshal(entry, &address) != nil {
-			var resolver struct {
-				Address string `json:"address"`
-			}
-			if json.Unmarshal(entry, &resolver) != nil {
-				continue
-			}
-			address = resolver.Address
-		}
-		if address != "" {
-			found = append(found, address)
+	for _, resolver := range list {
+		if resolver.Address != "" {
+			found = append(found, resolver.Address)
 		}
 	}
 	return found
 }
 
+// tailnetDNSConfiguration is tsapi.DNSConfiguration with resolvers that accept
+// either shape.
 type tailnetDNSConfiguration struct {
-	Nameservers tailnetResolvers                  `json:"nameservers"`
+	Nameservers []tailnetResolver                 `json:"nameservers"`
 	Preferences tsapi.DNSConfigurationPreferences `json:"preferences"`
 	SearchPaths []string                          `json:"searchPaths"`
-	SplitDNS    map[string]tailnetResolvers       `json:"splitDNS"`
+	SplitDNS    map[string][]tailnetResolver      `json:"splitDNS"`
 }
 
-// tailnetSettings carries Tailscale's settings verbatim: HQ stores what
-// Tailscale said, and a field Tailscale withholds stays null.
+// tailnetSettings is tsapi.TailnetSettings with every field optional: a
+// setting the credential may not see is withheld (null or absent), not false.
 type tailnetSettings struct {
-	DevicesApprovalOn           json.RawMessage `json:"devicesApprovalOn"`
-	DevicesKeyDurationDays      json.RawMessage `json:"devicesKeyDurationDays"`
-	DevicesAutoUpdatesOn        json.RawMessage `json:"devicesAutoUpdatesOn"`
-	UsersApprovalOn             json.RawMessage `json:"usersApprovalOn"`
-	RegionalRoutingOn           json.RawMessage `json:"regionalRoutingOn"`
-	PostureIdentityCollectionOn json.RawMessage `json:"postureIdentityCollectionOn"`
-	HTTPSEnabled                json.RawMessage `json:"httpsEnabled"`
-	ACLsExternallyManagedOn     json.RawMessage `json:"aclsExternallyManagedOn"`
-}
-
-type tailnetUsers struct {
-	Users []struct {
-		ID          string `json:"id"`
-		DisplayName string `json:"displayName"`
-		LoginName   string `json:"loginName"`
-		Role        string `json:"role"`
-		Status      string `json:"status"`
-		Created     string `json:"created"`
-		LastSeen    string `json:"lastSeen"`
-	} `json:"users"`
+	DevicesApprovalOn           *bool `json:"devicesApprovalOn"`
+	DevicesKeyDurationDays      *int  `json:"devicesKeyDurationDays"`
+	DevicesAutoUpdatesOn        *bool `json:"devicesAutoUpdatesOn"`
+	UsersApprovalOn             *bool `json:"usersApprovalOn"`
+	RegionalRoutingOn           *bool `json:"regionalRoutingOn"`
+	PostureIdentityCollectionOn *bool `json:"postureIdentityCollectionOn"`
+	HTTPSEnabled                *bool `json:"httpsEnabled"`
+	ACLsExternallyManagedOn     *bool `json:"aclsExternallyManagedOn"`
 }
 
 // Records the Tailscale readers report.
@@ -252,16 +212,17 @@ type TailscaleDNSRecord struct {
 	SplitDNS         map[string][]string `json:"split_dns"`
 }
 
+// TailscaleSettingsRecord is the tailnet's settings; a withheld one is null.
 type TailscaleSettingsRecord struct {
-	Record                      string          `json:"record"`
-	DevicesApprovalOn           json.RawMessage `json:"devices_approval_on"`
-	DevicesKeyDurationDays      json.RawMessage `json:"devices_key_duration_days"`
-	DevicesAutoUpdatesOn        json.RawMessage `json:"devices_auto_updates_on"`
-	UsersApprovalOn             json.RawMessage `json:"users_approval_on"`
-	RegionalRoutingOn           json.RawMessage `json:"regional_routing_on"`
-	PostureIdentityCollectionOn json.RawMessage `json:"posture_identity_collection_on"`
-	HTTPSEnabled                json.RawMessage `json:"https_enabled"`
-	ACLsExternallyManagedOn     json.RawMessage `json:"acls_externally_managed_on"`
+	Record                      string `json:"record"`
+	DevicesApprovalOn           *bool  `json:"devices_approval_on"`
+	DevicesKeyDurationDays      *int   `json:"devices_key_duration_days"`
+	DevicesAutoUpdatesOn        *bool  `json:"devices_auto_updates_on"`
+	UsersApprovalOn             *bool  `json:"users_approval_on"`
+	RegionalRoutingOn           *bool  `json:"regional_routing_on"`
+	PostureIdentityCollectionOn *bool  `json:"posture_identity_collection_on"`
+	HTTPSEnabled                *bool  `json:"https_enabled"`
+	ACLsExternallyManagedOn     *bool  `json:"acls_externally_managed_on"`
 }
 
 type TailscaleUserRecord struct {
@@ -308,15 +269,18 @@ func (r *Registry) tailnetToken(ctx context.Context, connectionRef string) (stri
 			"Content-Type": "application/x-www-form-urlencoded",
 		}, data)
 		if code := httpStatus(err); code != 0 {
-			reason := fmt.Sprintf("Tailscale refused the credential for %s (%d). It has to be an OAuth client, not an API key.", connectionRef, code)
-			return nil, &ProviderError{Message: reason, Refusal: runtime.RefusalCredential, Failure: runtime.FailureClassCredential, Reason: reason}
+			reason := fmt.Sprintf("tailscale refused the credential for %s (%d): it must be an OAuth client, not an API key", connectionRef, code)
+			return nil, &ProviderError{Message: reason, Failure: runtime.FailureClassCredential, Reason: reason, HTTPStatus: code}
 		}
-		if err != nil || !isObject(answer) {
-			return nil, &ProviderError{Message: "Tailscale did not answer the token request.", Failure: networkFailure(err)}
+		if err != nil {
+			return nil, fmt.Errorf("tailscale token request: %w", err)
 		}
-		token, _ := decodeAs[tailnetToken](answer, "")
+		token, err := decodeTailnet[tailnetToken](answer, "tailscale token answer")
+		if err != nil {
+			return nil, err
+		}
 		if token.AccessToken == "" {
-			return nil, &ProviderError{Message: "Tailscale returned no access token."}
+			return nil, &ProviderError{Message: "tailscale returned no access token"}
 		}
 		return json.Marshal(token.AccessToken)
 	})
@@ -324,7 +288,9 @@ func (r *Registry) tailnetToken(ctx context.Context, connectionRef string) (stri
 		return "", err
 	}
 	var token string
-	_ = json.Unmarshal(raw, &token)
+	if err := json.Unmarshal(raw, &token); err != nil {
+		return "", err
+	}
 	return token, nil
 }
 
@@ -337,142 +303,96 @@ func httpStatus(err error) int {
 	return 0
 }
 
-// networkFailure keeps a network failure's classification on the error that wraps it.
-func networkFailure(err error) runtime.FailureClass {
-	var provider *ProviderError
-	if errors.As(err, &provider) && provider.Failure == runtime.FailureClassNetwork {
-		return runtime.FailureClassNetwork
+// decodeTailnet decodes one answer strictly: an empty answer or one of the
+// wrong shape is an error naming what was read.
+func decodeTailnet[T any](raw json.RawMessage, what string) (T, error) {
+	var target T
+	if len(raw) == 0 || string(raw) == "null" {
+		return target, &ProviderError{Message: what + " is empty"}
 	}
-	return runtime.FailureClassUnclassified
-}
-
-// unreadable names what went wrong with an answer that was not an HTTP
-// refusal, in the words the Python controller reports it with.
-func unreadable(err error) string {
-	if networkFailure(err) != "" {
-		return "URLError"
+	if err := json.Unmarshal(raw, &target); err != nil {
+		return target, &ProviderError{Message: what + " is unreadable", Err: err}
 	}
-	return "JSONDecodeError"
+	return target, nil
 }
 
-func isObject(raw json.RawMessage) bool {
-	var fields map[string]json.RawMessage
-	return json.Unmarshal(raw, &fields) == nil && fields != nil
-}
-
-// tailnetRefused classifies one refused tailnet read. The token was just
+// tailnetRefused classifies one refused tailnet request. The token was just
 // exchanged, so 403, and 404 on some endpoints, is a missing scope; 401 is the
 // token refused.
 func tailnetRefused(what, scope string, code int) error {
 	switch code {
 	case 403, 404:
 		return &ProviderError{
-			Message: fmt.Sprintf("Tailscale refused %s (%d). The credential needs the %s scope.", what, code, scope),
-			Failure: runtime.FailureClassPermission,
-			Refusal: runtime.RefusalPermission,
+			Message:    fmt.Sprintf("tailscale refused %s (%d): the credential needs the %s scope", what, code, scope),
+			Failure:    runtime.FailureClassPermission,
+			HTTPStatus: code,
 		}
 	case 401:
 		return &ProviderError{
-			Message: fmt.Sprintf("Tailscale refused %s (%d).", what, code),
-			Failure: runtime.FailureClassCredential,
-			Refusal: runtime.RefusalCredential,
-			Reason:  fmt.Sprintf("Tailscale refused the access token (%d).", code),
+			Message:    fmt.Sprintf("tailscale refused %s (%d)", what, code),
+			Failure:    runtime.FailureClassCredential,
+			Reason:     fmt.Sprintf("tailscale refused the access token (%d)", code),
+			HTTPStatus: code,
 		}
 	}
-	return &ProviderError{Message: fmt.Sprintf("Tailscale refused %s (%d).", what, code)}
+	return &ProviderError{Message: fmt.Sprintf("tailscale refused %s (%d)", what, code), HTTPStatus: code}
 }
 
-// tailnetGet reads one tailnet endpoint, undecoded.
-func (c tailnetClient) tailnetGet(ctx context.Context, path string) (json.RawMessage, error) {
-	return c.call(ctx, "GET", tailnet(path), map[string]string{"Accept": "application/json"}, nil)
+// tailnetGet reads one endpoint of the client's tailnet into its response
+// type. A refusal names the scope the read needs.
+func tailnetGet[T any](ctx context.Context, c tailnetClient, path, what, scope string) (T, error) {
+	raw, err := c.call(ctx, "GET", tailnet(path), map[string]string{"Accept": "application/json"}, nil)
+	if code := httpStatus(err); code != 0 {
+		var zero T
+		return zero, tailnetRefused(what, scope, code)
+	}
+	if err != nil {
+		var zero T
+		return zero, fmt.Errorf("read %s: %w", what, err)
+	}
+	return decodeTailnet[T](raw, what)
 }
 
-// tailnetRead reads one tailnet endpoint into its response type. A refusal
-// names the scope the read needs.
+// tailnetRead is tailnetGet through the default tailscale connection.
 func tailnetRead[T any](ctx context.Context, r *Registry, path, what, scope string) (T, error) {
-	var zero T
 	client, err := r.tailnetClient(ctx, "")
 	if err != nil {
+		var zero T
 		return zero, err
 	}
-	raw, err := client.tailnetGet(ctx, path)
-	if code := httpStatus(err); code != 0 {
-		return zero, tailnetRefused("the "+what+" read", scope, code)
-	}
-	invalid := fmt.Sprintf("Tailscale did not return readable %s.", what)
-	if err != nil || !isObject(raw) {
-		return zero, &ProviderError{Message: invalid, Failure: networkFailure(err)}
-	}
-	return decodeAs[T](raw, invalid)
+	return tailnetGet[T](ctx, client, path, what, scope)
 }
 
-// tailnetPart is one tailnet read for a declared part of a record.
-func (c tailnetClient) tailnetPart(ctx context.Context, path string) (map[string]json.RawMessage, error) {
-	raw, err := c.call(ctx, "GET", tailnet(path), nil, nil)
-	if code := httpStatus(err); code != 0 {
-		return nil, &ProviderError{Message: fmt.Sprintf("/%s answered HTTP %d.", path, code)}
+func (c tailnetClient) tailnetAPIDevices(ctx context.Context) ([]tsapi.Device, error) {
+	answer, err := tailnetGet[struct {
+		Devices []tsapi.Device `json:"devices"`
+	}](ctx, c, "devices?fields=all", "the tailnet device list", "devices:core:read")
+	if err != nil {
+		return nil, err
 	}
-	if err != nil || len(raw) == 0 {
-		return nil, &ProviderError{Message: fmt.Sprintf("/%s could not be read: %s.", path, unreadable(err))}
-	}
-	var fields map[string]json.RawMessage
-	if json.Unmarshal(raw, &fields) != nil || fields == nil {
-		return nil, &ProviderError{Message: fmt.Sprintf("/%s did not answer with an object.", path)}
-	}
-	return fields, nil
+	return answer.Devices, nil
 }
 
-func (c tailnetClient) tailnetAPIDevices(ctx context.Context) ([]tailnetDevice, error) {
-	raw, err := c.call(ctx, "GET", tailnet("devices?fields=all"), nil, nil)
-	if code := httpStatus(err); code != 0 {
-		return nil, tailnetRefused("the tailnet device list", "devices:core:read", code)
-	}
-	if err != nil || len(raw) == 0 {
-		return nil, &ProviderError{Message: fmt.Sprintf("The tailnet device list could not be read: %s.", unreadable(err))}
-	}
-	var answer struct {
-		Devices []json.RawMessage `json:"devices"`
-	}
-	if !isObject(raw) || json.Unmarshal(raw, &answer) != nil {
-		return nil, &ProviderError{Message: "The tailnet device list did not answer with an object."}
-	}
-	devices := []tailnetDevice{}
-	for _, entry := range answer.Devices {
-		var device tailnetDevice
-		if isObject(entry) && json.Unmarshal(entry, &device) == nil {
-			devices = append(devices, device)
-		}
-	}
-	return devices, nil
-}
+// errNoTailnetReading is a controller started without the local daemon's status.
+var errNoTailnetReading = &ProviderError{Message: "this controller was not given a tailnet reading"}
 
-// tailnetReading is how reading the local status file went.
-type tailnetReading int
-
-const (
-	readingOK tailnetReading = iota
-	readingAbsent
-	readingMissing
-	readingInvalid
-)
-
-// readTailnetNodes reads the tailnet status file: Self first, then each
-// Peer in the order the file lists them.
-func (r *Registry) readTailnetNodes() ([]tailnetNode, tailnetReading) {
+// readTailnetNodes reads the tailnet status file: Self first, then each Peer
+// in the order the file lists them.
+func (r *Registry) readTailnetNodes() ([]tailnetNode, error) {
 	statusFile := r.Env["SEVERINO_TAILNET_STATUS"]
 	if statusFile == "" {
-		return nil, readingAbsent
+		return nil, errNoTailnetReading
 	}
 	data, err := os.ReadFile(statusFile)
 	if err != nil {
-		return nil, readingMissing
+		return nil, &ProviderError{Message: "the tailnet reading is missing; it is taken from the local daemon before this container starts", Err: err}
 	}
 	var status struct {
 		Self *tailnetNode    `json:"Self"`
 		Peer json.RawMessage `json:"Peer"`
 	}
 	if err := json.Unmarshal(data, &status); err != nil {
-		return nil, readingInvalid
+		return nil, &ProviderError{Message: "the tailnet reading is not readable status", Err: err}
 	}
 	nodes := []tailnetNode{}
 	if status.Self != nil {
@@ -480,21 +400,9 @@ func (r *Registry) readTailnetNodes() ([]tailnetNode, tailnetReading) {
 	}
 	peers, err := orderedValues[tailnetNode](status.Peer)
 	if err != nil {
-		return nil, readingInvalid
+		return nil, &ProviderError{Message: "the tailnet reading is not readable status", Err: err}
 	}
-	return append(nodes, peers...), readingOK
-}
-
-// localTailnetNodes is the raw reading, for the fields a record does not carry.
-func (r *Registry) localTailnetNodes() ([]tailnetNode, error) {
-	nodes, reading := r.readTailnetNodes()
-	switch reading {
-	case readingAbsent:
-		return nil, &ProviderError{Message: "This controller was not given a tailnet reading."}
-	case readingMissing, readingInvalid:
-		return nil, &ProviderError{Message: "The tailnet reading is missing or unreadable."}
-	}
-	return nodes, nil
+	return append(nodes, peers...), nil
 }
 
 // orderedValues decodes a JSON object's values in the order they appear.
@@ -533,6 +441,14 @@ func sortedCopy(values []string) []string {
 	return out
 }
 
+// stamp is a moment as a record carries it: RFC 3339 in UTC, or "" for none.
+func stamp(moment time.Time) string {
+	if moment.IsZero() {
+		return ""
+	}
+	return moment.UTC().Format(time.RFC3339)
+}
+
 func tailnetRecord(node tailnetNode) (TailscaleDeviceRecord, bool) {
 	name := strings.TrimSpace(node.HostName)
 	if name == "" {
@@ -559,25 +475,33 @@ func tailnetRecord(node tailnetNode) (TailscaleDeviceRecord, bool) {
 	}, true
 }
 
-func apiDeviceRecord(device tailnetDevice) (TailscaleDeviceRecord, bool) {
+func apiDeviceRecord(device tsapi.Device) (TailscaleDeviceRecord, bool) {
 	name := strings.TrimSpace(device.Hostname)
 	if name == "" {
 		return TailscaleDeviceRecord{}, false
 	}
-	keyExpires := device.Expires
+	keyExpires := stamp(device.Expires.Time)
 	if device.KeyExpiryDisabled {
 		keyExpires = ""
+	}
+	lastSeen := ""
+	if device.LastSeen != nil {
+		lastSeen = stamp(device.LastSeen.Time)
+	}
+	endpoints := []string{}
+	if device.ClientConnectivity != nil {
+		endpoints = nonNil(device.ClientConnectivity.Endpoints)
 	}
 	return TailscaleDeviceRecord{
 		Name:       name,
 		PublicKey:  device.NodeKey,
 		DNSName:    strings.TrimRight(device.Name, "."),
 		Online:     device.ConnectedToControl,
-		LastSeen:   device.LastSeen,
+		LastSeen:   lastSeen,
 		KeyExpires: keyExpires,
 		Addresses:  nonNil(device.Addresses),
 		OS:         device.OS,
-		Endpoints:  nonNil(device.ClientConnectivity.Endpoints),
+		Endpoints:  endpoints,
 	}, true
 }
 
@@ -590,8 +514,8 @@ func exitRoute(routes []string) bool {
 	return false
 }
 
-func identitiesFrom(devices []tailnetDevice) map[string]tailnetDevice {
-	found := map[string]tailnetDevice{}
+func identitiesFrom(devices []tsapi.Device) map[string]tsapi.Device {
+	found := map[string]tsapi.Device{}
 	for _, device := range devices {
 		if device.Hostname != "" {
 			found[device.Hostname] = device
@@ -600,16 +524,12 @@ func identitiesFrom(devices []tailnetDevice) map[string]tailnetDevice {
 	return found
 }
 
-// localTailnetDevices is the tailnet as the local daemon sees it.
+// localTailnetDevices is the tailnet as the local daemon sees it; the first
+// record is this machine.
 func (r *Registry) localTailnetDevices() ([]TailscaleDeviceRecord, error) {
-	nodes, reading := r.readTailnetNodes()
-	switch reading {
-	case readingAbsent:
-		return nil, &ProviderError{Message: "This controller was not given a tailnet reading, so it cannot say which machines are up."}
-	case readingMissing:
-		return nil, &ProviderError{Message: "The tailnet reading is missing. It is taken from the local daemon before this container starts, and only when there is one."}
-	case readingInvalid:
-		return nil, &ProviderError{Message: "The tailnet reading is not readable status."}
+	nodes, err := r.readTailnetNodes()
+	if err != nil {
+		return nil, err
 	}
 	found := []TailscaleDeviceRecord{}
 	for _, node := range nodes {
@@ -623,9 +543,12 @@ func (r *Registry) localTailnetDevices() ([]TailscaleDeviceRecord, error) {
 	return found, nil
 }
 
+// tailscaleDeviceInventory reads the tailnet from the local daemon when this
+// controller has its status, else from the API. The API, when it answers,
+// adds each device's identity and routes either way.
 func (r *Registry) tailscaleDeviceInventory(ctx context.Context) ([]any, error) {
 	devices := []TailscaleDeviceRecord{}
-	identities := map[string]tailnetDevice{}
+	identities := map[string]tsapi.Device{}
 	if r.Env["SEVERINO_TAILNET_STATUS"] != "" {
 		local, err := r.localTailnetDevices()
 		if err != nil {
@@ -640,9 +563,7 @@ func (r *Registry) tailscaleDeviceInventory(ctx context.Context) ([]any, error) 
 	} else {
 		client, err := r.tailnetClient(ctx, "")
 		if err != nil {
-			return nil, &ProviderError{
-				Message: "This controller was not given a tailnet reading or a tailnet credential, so it cannot say which machines are up. " + err.Error(),
-			}
+			return nil, fmt.Errorf("no tailnet reading and no tailnet credential: %w", err)
 		}
 		apiDevices, err := client.tailnetAPIDevices(ctx)
 		if err != nil {
@@ -668,19 +589,21 @@ func (r *Registry) tailscaleDeviceInventory(ctx context.Context) ([]any, error) 
 		device.Tags = sortedCopy(identity.Tags)
 		device.AdvertisedRoutes = sortedCopy(identity.AdvertisedRoutes)
 		device.EnabledRoutes = sortedCopy(identity.EnabledRoutes)
-		device.Authorized = identity.Authorized.orTrue()
 		device.LockError = identity.TailnetLockError
 		device.UpdateAvailable = identity.UpdateAvailable
 		device.ClientVersion = identity.ClientVersion
 		device.SSHEnabled = identity.SSHEnabled
-		device.BlocksIncoming = identity.BlocksIncoming
+		device.BlocksIncoming = identity.BlocksIncomingConnections
 		device.External = identity.IsExternal
 		if known {
 			disabled := identity.KeyExpiryDisabled
 			device.KeyExpiryDisabled = &disabled
+			device.Authorized = identity.Authorized
 			device.OffersExitNode = exitRoute(identity.AdvertisedRoutes)
 			device.ExitNodeApproved = exitRoute(identity.EnabledRoutes)
 		} else {
+			// The local daemon lists only devices the tailnet admitted.
+			device.Authorized = true
 			device.ExitNodeApproved = device.OffersExitNode
 		}
 		found = append(found, device)
@@ -688,9 +611,13 @@ func (r *Registry) tailscaleDeviceInventory(ctx context.Context) ([]any, error) 
 	return found, nil
 }
 
+func noDevice(name string) error {
+	return &ProviderError{Message: fmt.Sprintf("no device called %q is on the tailnet this machine can see", name)}
+}
+
 // tailnetDeviceID is the device's stable id, from the local reading rather than the API.
 func (r *Registry) tailnetDeviceID(name string) (string, error) {
-	nodes, err := r.localTailnetNodes()
+	nodes, err := r.readTailnetNodes()
 	if err != nil {
 		return "", err
 	}
@@ -699,7 +626,7 @@ func (r *Registry) tailnetDeviceID(name string) (string, error) {
 			return node.ID, nil
 		}
 	}
-	return "", &ProviderError{Message: fmt.Sprintf("No device called %s is on the tailnet this machine can see.", pyRepr(name))}
+	return "", noDevice(name)
 }
 
 // tailnetDeviceState is what the local reading says about one device now.
@@ -713,12 +640,26 @@ func (r *Registry) tailnetDeviceState(name string) (TailnetDeviceStatus, error) 
 			return TailnetDeviceStatus{Name: name, Online: record.Online, KeyExpires: record.KeyExpires, KeyExpiryDisabled: record.KeyExpires == ""}, nil
 		}
 	}
-	return TailnetDeviceStatus{}, &ProviderError{Message: fmt.Sprintf("No device called %s is on the tailnet this machine can see.", pyRepr(name))}
+	return TailnetDeviceStatus{}, noDevice(name)
+}
+
+// tailnetWriteFailed classifies a refused or unanswered device change.
+func tailnetWriteFailed(what, scope string, err error) error {
+	switch code := httpStatus(err); {
+	case code == 401 || code == 403:
+		return &ProviderError{
+			Message:    fmt.Sprintf("tailscale refused %s (%d): the credential needs the %s scope", what, code, scope),
+			Failure:    runtime.StatusFailure(code),
+			HTTPStatus: code,
+		}
+	case code != 0:
+		return &ProviderError{Message: fmt.Sprintf("tailscale refused %s (%d)", what, code), HTTPStatus: code}
+	}
+	return fmt.Errorf("%s: %w", what, err)
 }
 
 func (r *Registry) tailscaleDeviceReconcile(ctx context.Context, spec TailnetDeviceSpec, _ struct{}, apply bool) (Result, error) {
-	name := spec.Name
-	wanted := spec.KeyExpiryDisabled
+	name, wanted := spec.Name, spec.KeyExpiryDisabled
 	current, err := r.tailnetDeviceState(name)
 	if err != nil {
 		return Result{}, err
@@ -727,8 +668,11 @@ func (r *Registry) tailscaleDeviceReconcile(ctx context.Context, spec TailnetDev
 		return result(false, current, "Reconciled", "The device is as declared.", "Tailnet device is current."), nil
 	}
 	if !apply {
-		msg := fmt.Sprintf("Key expiry would be %s for %s.", map[bool]string{true: "disabled", false: "enabled"}[wanted], name)
-		return Result{Changed: true, Status: current, Message: msg}, nil
+		verb := "enabled"
+		if wanted {
+			verb = "disabled"
+		}
+		return Result{Changed: true, Status: current, Message: fmt.Sprintf("Key expiry would be %s for %s.", verb, name)}, nil
 	}
 	identifier, err := r.tailnetDeviceID(name)
 	if err != nil {
@@ -738,18 +682,10 @@ func (r *Registry) tailscaleDeviceReconcile(ctx context.Context, spec TailnetDev
 	if err != nil {
 		return Result{}, err
 	}
-	_, err = client.call(ctx, "POST", tailnetDevicePath(identifier, "key"), map[string]string{
-		"Content-Type": "application/json",
-	}, tailnetKeyRequest{KeyExpiryDisabled: wanted})
-	switch code := httpStatus(err); {
-	case code == 403:
-		return Result{}, &ProviderError{Message: "This Tailscale credential may not change devices. It needs the devices:core scope.", Failure: runtime.FailureClassPermission}
-	case code != 0:
-		return Result{}, &ProviderError{Message: fmt.Sprintf("Tailscale refused the change to %s (%d).", name, code), Failure: runtime.StatusFailure(code)}
-	case err != nil:
-		return Result{}, &ProviderError{Message: "Tailscale did not answer the change request.", Failure: networkFailure(err)}
+	if _, err := client.call(ctx, "POST", tailnetDevicePath(identifier, "key"), jsonBody, tsapi.DeviceKey{KeyExpiryDisabled: wanted}); err != nil {
+		return Result{}, tailnetWriteFailed("the key change for "+name, "devices:core", err)
 	}
-	status := TailnetDeviceStatus{Name: name, Online: current.Online, KeyExpires: "", KeyExpiryDisabled: wanted}
+	status := TailnetDeviceStatus{Name: name, Online: current.Online, KeyExpiryDisabled: wanted}
 	message := fmt.Sprintf("%s has an expiry date again.", name)
 	if wanted {
 		message = fmt.Sprintf("%s now stays on the tailnet.", name)
@@ -769,19 +705,15 @@ func (r *Registry) tailscaleApproveRoutes(ctx context.Context, spec TailnetDevic
 	}
 	routesPath := tailnetDevicePath(identifier, "routes")
 	raw, err := client.call(ctx, "GET", routesPath, nil, nil)
-	unreported := fmt.Sprintf("Tailscale did not report the routes for %s.", name)
-	if code := httpStatus(err); code == 401 || code == 403 {
-		return Result{}, &ProviderError{Message: "This Tailscale credential may not read routes. It needs the devices:routes:read scope, or devices:routes to approve them.", Failure: runtime.StatusFailure(code)}
+	if err != nil {
+		return Result{}, tailnetWriteFailed("the route read for "+name, "devices:routes:read", err)
 	}
-	if err != nil || len(raw) == 0 {
-		return Result{}, &ProviderError{Message: unreported, Failure: networkFailure(err)}
-	}
-	current, err := decodeAs[tailnetRoutes](raw, unreported)
+	current, err := decodeTailnet[tsapi.DeviceRoutes](raw, "the routes of "+name)
 	if err != nil {
 		return Result{}, err
 	}
-	advertised := sortedCopy(current.AdvertisedRoutes)
-	enabled := sortedCopy(current.EnabledRoutes)
+	advertised := sortedCopy(current.Advertised)
+	enabled := sortedCopy(current.Enabled)
 	enabledSet := map[string]bool{}
 	for _, route := range enabled {
 		enabledSet[route] = true
@@ -803,37 +735,30 @@ func (r *Registry) tailscaleApproveRoutes(ctx context.Context, spec TailnetDevic
 	if !apply {
 		return Result{Changed: true, Status: status, Message: fmt.Sprintf("Would approve %s for %s.", strings.Join(pending, ", "), name)}, nil
 	}
-	answer, err := client.call(ctx, "POST", routesPath, map[string]string{
-		"Content-Type": "application/json",
-	}, tailnetRoutesRequest{Routes: advertised})
-	switch code := httpStatus(err); {
-	case code == 401 || code == 403:
-		return Result{}, &ProviderError{Message: "This Tailscale credential may not approve routes. It needs the devices:routes scope.", Failure: runtime.StatusFailure(code)}
-	case code != 0:
-		return Result{}, &ProviderError{Message: fmt.Sprintf("Tailscale refused the route approval for %s.", name)}
-	case err != nil || len(answer) == 0:
-		return Result{}, &ProviderError{Message: fmt.Sprintf("Tailscale did not answer for %s.", name), Failure: networkFailure(err)}
+	answer, err := client.call(ctx, "POST", routesPath, jsonBody, map[string][]string{"routes": advertised})
+	if err != nil {
+		return Result{}, tailnetWriteFailed("the route approval for "+name, "devices:routes", err)
 	}
-	approved, err := decodeAs[tailnetRoutes](answer, fmt.Sprintf("Tailscale did not answer for %s.", name))
+	approved, err := decodeTailnet[tsapi.DeviceRoutes](answer, "the approved routes of "+name)
 	if err != nil {
 		return Result{}, err
 	}
-	status.EnabledRoutes = sortedCopy(approved.EnabledRoutes)
+	status.EnabledRoutes = sortedCopy(approved.Enabled)
 	return result(true, status, "Reconciled", "The advertised routes are approved.", fmt.Sprintf("Approved %s for %s.", strings.Join(pending, ", "), name)), nil
 }
 
 func (r *Registry) tailscaleDNS(ctx context.Context) ([]any, error) {
-	found, err := tailnetRead[tailnetDNSConfiguration](ctx, r, "dns/configuration", "DNS configuration", "dns:read")
+	found, err := tailnetRead[tailnetDNSConfiguration](ctx, r, "dns/configuration", "the DNS configuration", "dns:read")
 	if err != nil {
 		return nil, err
 	}
 	splitDNS := map[string][]string{}
 	for domain, resolvers := range found.SplitDNS {
-		splitDNS[domain] = resolvers.addresses()
+		splitDNS[domain] = resolverAddresses(resolvers)
 	}
 	return []any{TailscaleDNSRecord{
 		Record:           "dns",
-		Nameservers:      found.Nameservers.addresses(),
+		Nameservers:      resolverAddresses(found.Nameservers),
 		OverrideLocalDNS: found.Preferences.OverrideLocalDNS,
 		MagicDNS:         found.Preferences.MagicDNS,
 		SearchPaths:      nonNil(found.SearchPaths),
@@ -841,43 +766,36 @@ func (r *Registry) tailscaleDNS(ctx context.Context) ([]any, error) {
 	}}, nil
 }
 
-func withheld(raw json.RawMessage) bool { return len(raw) == 0 || string(raw) == "null" }
-
-func orNull(raw json.RawMessage) json.RawMessage {
-	if withheld(raw) {
-		return json.RawMessage("null")
-	}
-	return raw
-}
-
 func (r *Registry) tailscaleSettings(ctx context.Context) ([]any, error) {
-	found, err := tailnetRead[tailnetSettings](ctx, r, "settings", "settings", "feature_settings:read")
+	found, err := tailnetRead[tailnetSettings](ctx, r, "settings", "the settings", "feature_settings:read")
 	if err != nil {
 		return nil, err
 	}
 	for _, part := range []struct {
 		key, name string
-		raw       json.RawMessage
+		value     *bool
 	}{{"httpsEnabled", "https", found.HTTPSEnabled}, {"aclsExternallyManagedOn", "acl_management", found.ACLsExternallyManagedOn}} {
-		if withheld(part.raw) {
-			refuse(ctx, part.name, "", "", &ProviderError{Message: fmt.Sprintf("Tailscale withheld %s.", part.key), Failure: runtime.FailureClassPermission, Refusal: runtime.RefusalPermission})
+		if part.value == nil {
+			refuse(ctx, part.name, "", "", &ProviderError{Message: "tailscale withheld " + part.key, Failure: runtime.FailureClassPermission})
 		}
 	}
 	return []any{TailscaleSettingsRecord{
 		Record:                      "settings",
-		DevicesApprovalOn:           orNull(found.DevicesApprovalOn),
-		DevicesKeyDurationDays:      orNull(found.DevicesKeyDurationDays),
-		DevicesAutoUpdatesOn:        orNull(found.DevicesAutoUpdatesOn),
-		UsersApprovalOn:             orNull(found.UsersApprovalOn),
-		RegionalRoutingOn:           orNull(found.RegionalRoutingOn),
-		PostureIdentityCollectionOn: orNull(found.PostureIdentityCollectionOn),
-		HTTPSEnabled:                orNull(found.HTTPSEnabled),
-		ACLsExternallyManagedOn:     orNull(found.ACLsExternallyManagedOn),
+		DevicesApprovalOn:           found.DevicesApprovalOn,
+		DevicesKeyDurationDays:      found.DevicesKeyDurationDays,
+		DevicesAutoUpdatesOn:        found.DevicesAutoUpdatesOn,
+		UsersApprovalOn:             found.UsersApprovalOn,
+		RegionalRoutingOn:           found.RegionalRoutingOn,
+		PostureIdentityCollectionOn: found.PostureIdentityCollectionOn,
+		HTTPSEnabled:                found.HTTPSEnabled,
+		ACLsExternallyManagedOn:     found.ACLsExternallyManagedOn,
 	}}, nil
 }
 
 func (r *Registry) tailscaleUsers(ctx context.Context) ([]any, error) {
-	found, err := tailnetRead[tailnetUsers](ctx, r, "users", "users", "users:read")
+	found, err := tailnetRead[struct {
+		Users []tsapi.User `json:"users"`
+	}](ctx, r, "users", "the users", "users:read")
 	if err != nil {
 		return nil, err
 	}
@@ -886,7 +804,11 @@ func (r *Registry) tailscaleUsers(ctx context.Context) ([]any, error) {
 		if user.ID == "" {
 			continue
 		}
-		out = append(out, TailscaleUserRecord{ID: user.ID, DisplayName: user.DisplayName, LoginName: user.LoginName, Role: user.Role, Status: user.Status, Created: user.Created, LastSeen: user.LastSeen})
+		out = append(out, TailscaleUserRecord{
+			ID: user.ID, DisplayName: user.DisplayName, LoginName: user.LoginName,
+			Role: string(user.Role), Status: string(user.Status),
+			Created: stamp(user.Created), LastSeen: stamp(user.LastSeen),
+		})
 	}
 	return out, nil
 }

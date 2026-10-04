@@ -6,30 +6,30 @@ import "encoding/json"
 // contract; statuses and records are what HQ stores for the kind.
 
 type CloudflareDNSRecordSpec struct {
-	Zone       string      `json:"zone"`
-	Name       string      `json:"name"`
-	RecordType string      `json:"record_type"`
-	Content    string      `json:"content"`
-	TTL        json.Number `json:"ttl"`
-	Priority   json.Number `json:"priority"`
-	Proxied    bool        `json:"proxied"`
+	Zone       string `json:"zone"`
+	Name       string `json:"name"`
+	RecordType string `json:"record_type"`
+	Content    string `json:"content"`
+	TTL        int    `json:"ttl"` // 1 is automatic
+	Priority   *int   `json:"priority"`
+	Proxied    bool   `json:"proxied"`
 }
 
 type CloudflareDNSRecordObserved struct {
 	RecordID string `json:"record_id"`
 }
 
-// CloudflareDNSRecordStatus carries the live record. Priority and TTL are the
-// values Cloudflare returned: absent priority is null, as HQ stores it.
+// CloudflareDNSRecordStatus carries the live record: priority is null on a
+// record type that has none.
 type CloudflareDNSRecordStatus struct {
-	Zone       string          `json:"zone"`
-	RecordID   string          `json:"record_id"`
-	Name       string          `json:"name"`
-	RecordType string          `json:"record_type"`
-	Content    string          `json:"content"`
-	Priority   json.RawMessage `json:"priority"`
-	Proxied    bool            `json:"proxied"`
-	TTL        json.RawMessage `json:"ttl"`
+	Zone       string `json:"zone"`
+	RecordID   string `json:"record_id"`
+	Name       string `json:"name"`
+	RecordType string `json:"record_type"`
+	Content    string `json:"content"`
+	Priority   *int   `json:"priority"`
+	Proxied    bool   `json:"proxied"`
+	TTL        int    `json:"ttl"`
 }
 
 type CloudflareDNSDeleteStatus struct {
@@ -84,13 +84,13 @@ type CloudflarePagesProjectRecord struct {
 }
 
 type CloudflareD1DatabaseRecord struct {
-	ConnectionRef string       `json:"connection_ref"`
-	AccountID     string       `json:"account_id"`
-	Name          string       `json:"name"`
-	UUID          string       `json:"uuid"`
-	CreatedAt     string       `json:"created_at"`
-	Version       string       `json:"version"`
-	FileSize      *json.Number `json:"file_size,omitempty"`
+	ConnectionRef string `json:"connection_ref"`
+	AccountID     string `json:"account_id"`
+	Name          string `json:"name"`
+	UUID          string `json:"uuid"`
+	CreatedAt     string `json:"created_at"`
+	Version       string `json:"version"`
+	FileSize      *int64 `json:"file_size,omitempty"`
 }
 
 type CloudflareNamedRef struct {
@@ -155,19 +155,22 @@ type CloudflareEdgeCertificateRecord struct {
 	ExpiresOn            string   `json:"expires_on"`
 }
 
+// CloudflareRedirectRecord is one redirect: a Single Redirect rule (source
+// "rule") or a forwarding page rule (source "page_rule"). Description and
+// preserve_query_string exist on rules only.
 type CloudflareRedirectRecord struct {
-	ConnectionRef       string          `json:"connection_ref"`
-	AccountID           string          `json:"account_id"`
-	Zone                string          `json:"zone"`
-	Source              string          `json:"source"`
-	ID                  string          `json:"id"`
-	Description         *string         `json:"description,omitempty"` // rules only
-	Hostnames           []string        `json:"hostnames"`
-	Target              string          `json:"target"`
-	TargetHost          string          `json:"target_host"`
-	StatusCode          json.RawMessage `json:"status_code"`
-	PreserveQueryString *bool           `json:"preserve_query_string,omitempty"` // rules only
-	Enabled             bool            `json:"enabled"`
+	ConnectionRef       string   `json:"connection_ref"`
+	AccountID           string   `json:"account_id"`
+	Zone                string   `json:"zone"`
+	Source              string   `json:"source"`
+	ID                  string   `json:"id"`
+	Description         *string  `json:"description,omitempty"`
+	Hostnames           []string `json:"hostnames"`
+	Target              string   `json:"target"`
+	TargetHost          string   `json:"target_host"`
+	StatusCode          *int     `json:"status_code"`
+	PreserveQueryString *bool    `json:"preserve_query_string,omitempty"`
+	Enabled             bool     `json:"enabled"`
 }
 
 type CloudflareAnalyticsSite struct {
@@ -177,61 +180,90 @@ type CloudflareAnalyticsSite struct {
 	ConnectionRef string `json:"connection_ref,omitempty"`
 }
 
-// Presence-aware views of Cloudflare answers the generated cfapi types cannot
-// carry faithfully. Each names why.
+// Cloudflare answers the generated cfapi types cannot decode, each typed here
+// with the fields read. Each names why.
 
-// cfRecordFields: the spec models a DNS record as a 20-way oneOf whose
-// priority and ttl are plain numbers, so an absent priority would read as 0;
-// HQ stores the value Cloudflare returned, null included.
-type cfRecordFields struct {
-	ID       string          `json:"id"`
-	Type     string          `json:"type"`
-	Name     string          `json:"name"`
-	Content  json.RawMessage `json:"content"`
-	Priority json.RawMessage `json:"priority"`
-	TTL      json.RawMessage `json:"ttl"`
-	Proxied  json.RawMessage `json:"proxied"`
-	Data     *struct {
-		Flags json.RawMessage `json:"flags"`
-		Tag   json.RawMessage `json:"tag"`
-		Value json.RawMessage `json:"value"`
-	} `json:"data"`
+// cfRecord: the spec models a DNS record as a 20-way oneOf with no accessor
+// for the fields every variant shares.
+type cfRecord struct {
+	ID       string     `json:"id"`
+	Type     string     `json:"type"`
+	Name     string     `json:"name"`
+	Content  string     `json:"content"`
+	Priority *int       `json:"priority"`
+	TTL      int        `json:"ttl"`
+	Proxied  bool       `json:"proxied"`
+	Data     *cfCAAData `json:"data"`
 }
 
-// cfSettingValue: a zone setting's value is a 60-way oneOf of strings,
-// numbers, booleans and objects, carried as the text Python's str() gives it.
-type cfSettingValue struct {
-	Value json.RawMessage `json:"value"`
+// cfStringSetting: a zone setting's value is a 60-way oneOf; every posture
+// setting read (zonePostureSettings) is a string.
+type cfStringSetting struct {
+	Value string `json:"value"`
 }
 
 // cfAccessApp: the spec's application list is 11 anonymous oneOf variants with
 // no discriminator; these are the fields every variant shares.
 type cfAccessApp struct {
-	ID              json.RawMessage `json:"id"`
-	Name            json.RawMessage `json:"name"`
-	Type            json.RawMessage `json:"type"`
-	Domain          json.RawMessage `json:"domain"`
-	SessionDuration json.RawMessage `json:"session_duration"`
-	Destinations    json.RawMessage `json:"destinations"`
-	Policies        json.RawMessage `json:"policies"`
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Type            string `json:"type"`
+	Domain          string `json:"domain"`
+	SessionDuration string `json:"session_duration"`
+	Destinations    []struct {
+		Type     string `json:"type"`
+		URI      string `json:"uri"`
+		Hostname string `json:"hostname"`
+	} `json:"destinations"`
+	Policies []struct {
+		ID      string `json:"id"`
+		Name    string `json:"name"`
+		Include []struct {
+			AnyValidServiceToken *struct{} `json:"any_valid_service_token"`
+			ServiceToken         *struct {
+				TokenID string `json:"token_id"`
+			} `json:"service_token"`
+		} `json:"include"`
+	} `json:"policies"`
 }
 
-// cfRule: ruleset rules are a oneOf over every action, and the redirect
-// variant's enabled is a plain bool, but an absent enabled means enabled.
-type cfRule struct {
-	ID               json.RawMessage `json:"id"`
-	Action           json.RawMessage `json:"action"`
-	Description      json.RawMessage `json:"description"`
-	Expression       json.RawMessage `json:"expression"`
-	Enabled          json.RawMessage `json:"enabled"`
+// cfRuleset is a ruleset as listed and as read: rules are a oneOf over every
+// action, so each is decoded as a redirect only when its action is one.
+type cfRuleset struct {
+	ID    string          `json:"id"`
+	Phase string          `json:"phase"`
+	Rules []cfRulesetRule `json:"rules"`
+}
+
+type cfRulesetRule struct {
+	ID               string          `json:"id"`
+	Action           string          `json:"action"`
+	Description      string          `json:"description"`
+	Expression       string          `json:"expression"`
+	Enabled          *bool           `json:"enabled"` // absent means enabled
 	ActionParameters json.RawMessage `json:"action_parameters"`
 }
 
 // cfPageRule: page rule actions are a oneOf of about thirty settings with no
-// accessor for the id that tells them apart.
+// accessor for the id that tells them apart; only forwarding_url is decoded.
 type cfPageRule struct {
-	ID      json.RawMessage `json:"id"`
-	Status  json.RawMessage `json:"status"`
-	Actions json.RawMessage `json:"actions"`
-	Targets json.RawMessage `json:"targets"`
+	ID      string             `json:"id"`
+	Status  string             `json:"status"`
+	Actions []cfPageRuleAction `json:"actions"`
+	Targets []struct {
+		Target     string `json:"target"`
+		Constraint struct {
+			Value string `json:"value"`
+		} `json:"constraint"`
+	} `json:"targets"`
+}
+
+type cfPageRuleAction struct {
+	ID    string          `json:"id"`
+	Value json.RawMessage `json:"value"`
+}
+
+type cfForwardingURL struct {
+	URL        string `json:"url"`
+	StatusCode *int   `json:"status_code"`
 }

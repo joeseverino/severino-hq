@@ -2,11 +2,13 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
+	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
+
+	"github.com/joeseverino/severino-hq/controller/providers/cfapi"
 )
 
 // Cloudflare redirects as records: which names a rule matches and where it sends
@@ -14,63 +16,22 @@ import (
 // literals); a page rule's from its URL pattern. A target is a static URL or an
 // expression; its host is the first URL literal it names.
 
-// RedirectPhase is the dynamic redirect phase: zone Single Redirects.
-const RedirectPhase = "http_request_dynamic_redirect"
+// redirectPhase is the dynamic redirect phase: zone Single Redirects.
+const redirectPhase = "http_request_dynamic_redirect"
+
+const (
+	redirectSourceRule     = "rule"
+	redirectSourcePageRule = "page_rule"
+	pageRuleForwarding     = "forwarding_url"
+	pageRuleActive         = "active"
+	redirectAction         = "redirect"
+)
 
 var (
 	redirectHostField = regexp.MustCompile(`http\.host\s*(?:eq|==|in|contains|wildcard|strict\s+wildcard)\s*(\{[^}]*\}|r?"[^"]*")`)
 	redirectQuoted    = regexp.MustCompile(`"([^"]*)"`)
 	redirectURL       = regexp.MustCompile(`https?://([A-Za-z0-9*.-]+)`)
 )
-
-// ZoneReads is the Cloudflare calls a redirect read makes, supplied by the caller.
-type ZoneReads interface {
-	Zones(ctx context.Context, ref string) ([]RedirectZone, error)
-	Listed(ctx context.Context, path, ref string) ([]json.RawMessage, error)
-	Result(ctx context.Context, path, ref string) (json.RawMessage, error)
-	// Reason is what an error that is not a provider refusal says.
-	Reason(err error) string
-	// Refuse reports one declared part refused on a zone.
-	Refuse(ctx context.Context, part string, err error, scope, ref string)
-}
-
-type RedirectZone struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Account struct {
-		ID string `json:"id"`
-	} `json:"account"`
-}
-
-// RedirectRuleRecord is one Single Redirect rule.
-type RedirectRuleRecord struct {
-	ConnectionRef       string          `json:"connection_ref"`
-	AccountID           string          `json:"account_id"`
-	Zone                string          `json:"zone"`
-	Source              string          `json:"source"`
-	ID                  string          `json:"id"`
-	Description         string          `json:"description"`
-	Hostnames           []string        `json:"hostnames"`
-	Target              string          `json:"target"`
-	TargetHost          string          `json:"target_host"`
-	StatusCode          json.RawMessage `json:"status_code"`
-	PreserveQueryString bool            `json:"preserve_query_string"`
-	Enabled             bool            `json:"enabled"`
-}
-
-// RedirectPageRuleRecord is one forwarding page rule.
-type RedirectPageRuleRecord struct {
-	ConnectionRef string          `json:"connection_ref"`
-	AccountID     string          `json:"account_id"`
-	Zone          string          `json:"zone"`
-	Source        string          `json:"source"`
-	ID            string          `json:"id"`
-	Hostnames     []string        `json:"hostnames"`
-	Target        string          `json:"target"`
-	TargetHost    string          `json:"target_host"`
-	StatusCode    json.RawMessage `json:"status_code"`
-	Enabled       bool            `json:"enabled"`
-}
 
 // redirectHost is a hostname from a pattern: scheme, path, port and a leading
 // "*" or "*." removed, kept as "*.name" when it was a wildcard.
@@ -83,7 +44,7 @@ func redirectHost(text string) string {
 	value, _, _ = strings.Cut(value, ":")
 	wildcard := strings.HasPrefix(value, "*.")
 	value = strings.TrimLeft(strings.TrimLeft(value, "*"), ".")
-	name := normalizedHostname(value)
+	name := hostname(value)
 	if name == "" || strings.Contains(name, "*") {
 		return ""
 	}
@@ -91,11 +52,6 @@ func redirectHost(text string) string {
 		return "*." + name
 	}
 	return name
-}
-
-// normalizedHostname is control_plane.names.normalized_hostname.
-func normalizedHostname(name string) string {
-	return strings.TrimRight(strings.ToLower(strings.TrimSpace(name)), ".")
 }
 
 func uniqueNames(values []string) []string {
@@ -140,155 +96,90 @@ func targetHost(target string) string {
 	return ""
 }
 
-func rawOrNull(value *pyValue) json.RawMessage {
-	if value == nil {
-		return json.RawMessage("null")
+// ruleRecord is a Single Redirect rule as a record; false for any other action.
+func ruleRecord(rule cfRulesetRule, zone string) (CloudflareRedirectRecord, bool, error) {
+	if rule.Action != redirectAction {
+		return CloudflareRedirectRecord{}, false, nil
 	}
-	var out strings.Builder
-	value.write(&out, 0, false, 0)
-	return json.RawMessage(out.String())
-}
-
-// strField is str(d.get(key).opt() or "").
-func strField(v *pyValue, key string) string {
-	if v == nil {
-		return ""
+	parameters, err := cloudflareOptional[struct {
+		FromValue *cfapi.RulesetsRedirectFromValue `json:"from_value"`
+	}](rule.ActionParameters, nil)
+	if err != nil {
+		return CloudflareRedirectRecord{}, false, err
 	}
-	field := v.get(key).opt()
-	if field == nil || !field.truthy() {
-		return ""
+	var from cfapi.RulesetsRedirectFromValue
+	var status *int
+	if parameters.FromValue != nil {
+		from = *parameters.FromValue
+		if from.StatusCode != 0 {
+			code := int(from.StatusCode)
+			status = &code
+		}
 	}
-	return field.str()
-}
-
-func objectField(v *pyValue, key string) *pyValue {
-	if v == nil {
-		return nil
-	}
-	field := v.get(key).opt()
-	if field == nil || !field.truthy() {
-		return nil
-	}
-	return field
-}
-
-func ruleRecord(rule pyValue, zone string) (RedirectRuleRecord, bool) {
-	if action := rule.get("action").opt(); action == nil || action.text == nil || *action.text != "redirect" {
-		return RedirectRuleRecord{}, false
-	}
-	parameters := objectField(objectField(&rule, "action_parameters"), "from_value")
-	targetURL := objectField(parameters, "target_url")
-	target := strField(targetURL, "value")
+	target := from.TargetURL.Value
 	if target == "" {
-		target = strField(targetURL, "expression")
+		target = from.TargetURL.Expression
 	}
-	var status *pyValue
-	if parameters != nil {
-		status = parameters.get("status_code").opt()
-	}
-	preserve := false
-	if parameters != nil {
-		if field := parameters.get("preserve_query_string").opt(); field != nil {
-			preserve = field.truthy()
-		}
-	}
-	enabled := true
-	if field := rule.get("enabled").opt(); field != nil {
-		enabled = field.truthy()
-	}
-	return RedirectRuleRecord{
-		Zone: zone, Source: "rule",
-		ID:                  strField(&rule, "id"),
-		Description:         strField(&rule, "description"),
-		Hostnames:           expressionHosts(strField(&rule, "expression")),
-		Target:              target,
-		TargetHost:          targetHost(target),
-		StatusCode:          rawOrNull(status),
-		PreserveQueryString: preserve,
-		Enabled:             enabled,
-	}, true
+	description, preserve, enabled := rule.Description, from.PreserveQueryString, rule.Enabled == nil || *rule.Enabled
+	return CloudflareRedirectRecord{
+		Zone: zone, Source: redirectSourceRule, ID: rule.ID, Description: &description,
+		Hostnames: expressionHosts(rule.Expression), Target: target, TargetHost: targetHost(target),
+		StatusCode: status, PreserveQueryString: &preserve, Enabled: enabled,
+	}, true, nil
 }
 
-func pageRuleRecord(rule pyValue, zone string) (RedirectPageRuleRecord, bool) {
-	var forwarding *pyValue
-	if actions := rule.get("actions").opt(); actions != nil && actions.truthy() {
-		for i := range actions.array {
-			action := &actions.array[i]
-			if id := action.get("id").opt(); id != nil && id.text != nil && *id.text == "forwarding_url" {
-				if value := objectField(action, "value"); value != nil {
-					forwarding = value
-				} else {
-					forwarding = &pyValue{object: true}
-				}
-				break
-			}
-		}
+// pageRuleRecord is a forwarding page rule as a record; false for any other.
+func pageRuleRecord(rule cfPageRule, zone string) (CloudflareRedirectRecord, bool, error) {
+	index := slices.IndexFunc(rule.Actions, func(action cfPageRuleAction) bool { return action.ID == pageRuleForwarding })
+	if index < 0 {
+		return CloudflareRedirectRecord{}, false, nil
 	}
-	if forwarding == nil {
-		return RedirectPageRuleRecord{}, false
-	}
-	patterns := []string{}
-	if targets := rule.get("targets").opt(); targets != nil && targets.truthy() {
-		for i := range targets.array {
-			target := &targets.array[i]
-			if kind := target.get("target").opt(); kind != nil && kind.text != nil && *kind.text == "url" {
-				patterns = append(patterns, strField(objectField(target, "constraint"), "value"))
-			}
-		}
+	forwarding, err := cloudflareOptional[cfForwardingURL](rule.Actions[index].Value, nil)
+	if err != nil {
+		return CloudflareRedirectRecord{}, false, err
 	}
 	hosts := []string{}
-	for _, pattern := range patterns {
-		hosts = append(hosts, redirectHost(pattern))
+	for _, target := range rule.Targets {
+		if target.Target == "url" {
+			hosts = append(hosts, redirectHost(target.Constraint.Value))
+		}
 	}
-	target := strField(forwarding, "url")
-	status := "active"
-	if field := rule.get("status").opt(); field != nil && field.truthy() {
-		status = field.str()
+	status := rule.Status
+	if status == "" {
+		status = pageRuleActive
 	}
-	return RedirectPageRuleRecord{
-		Zone: zone, Source: "page_rule",
-		ID:         strField(&rule, "id"),
-		Hostnames:  uniqueNames(hosts),
-		Target:     target,
-		TargetHost: targetHost(target),
-		StatusCode: rawOrNull(forwarding.get("status_code").opt()),
-		Enabled:    status == "active",
-	}, true
+	return CloudflareRedirectRecord{
+		Zone: zone, Source: redirectSourcePageRule, ID: rule.ID, Hostnames: uniqueNames(hosts),
+		Target: forwarding.URL, TargetHost: targetHost(forwarding.URL), StatusCode: forwarding.StatusCode,
+		Enabled: status == pageRuleActive,
+	}, true, nil
 }
 
-// redirectRules is the redirect rules in the zone's dynamic redirect rulesets.
-func redirectRules(ctx context.Context, api ZoneReads, zoneID, zone, ref string) ([]any, error) {
-	found := []any{}
-	rulesets, err := api.Listed(ctx, "/zones/"+zoneID+"/rulesets", ref)
+// cloudflareRedirectRules is the redirect rules in the zone's dynamic redirect rulesets.
+func (r *Registry) cloudflareRedirectRules(ctx context.Context, zoneID, zone, ref string) ([]CloudflareRedirectRecord, error) {
+	items, err := r.cloudflareList(ctx, "cloudflare_api", "/zones/"+zoneID+"/rulesets", ref, cloudflareAccountPerPage)
 	if err != nil {
 		return nil, err
 	}
-	for _, raw := range rulesets {
-		ruleset, err := parsePy(raw)
-		if err != nil {
-			return nil, err
-		}
-		if phase := ruleset.get("phase").opt(); phase == nil || phase.text == nil || *phase.text != RedirectPhase {
+	rulesets, err := cloudflareItems[cfRuleset](items, "ruleset")
+	if err != nil {
+		return nil, err
+	}
+	found := []CloudflareRedirectRecord{}
+	for _, listed := range rulesets {
+		if listed.Phase != redirectPhase {
 			continue
 		}
-		id := ""
-		if field := ruleset.get("id").opt(); field != nil {
-			id = field.str()
-		}
-		detailRaw, err := api.Result(ctx, "/zones/"+zoneID+"/rulesets/"+id, ref)
+		ruleset, err := cloudflareOptional[cfRuleset](r.cloudflareAPIResult(ctx, "/zones/"+zoneID+"/rulesets/"+listed.ID, ref))
 		if err != nil {
 			return nil, err
 		}
-		detail, err := parsePy(orEmpty(detailRaw))
-		if err != nil {
-			return nil, err
-		}
-		rules := objectField(&detail, "rules")
-		if rules == nil {
-			continue
-		}
-		for _, rule := range rules.array {
-			if record, ok := ruleRecord(rule, zone); ok {
+		for _, rule := range ruleset.Rules {
+			record, ok, err := ruleRecord(rule, zone)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
 				found = append(found, record)
 			}
 		}
@@ -296,87 +187,58 @@ func redirectRules(ctx context.Context, api ZoneReads, zoneID, zone, ref string)
 	return found, nil
 }
 
-func orEmpty(raw json.RawMessage) []byte {
-	if len(raw) == 0 {
-		return []byte("null")
-	}
-	return raw
-}
-
-// redirectPageRules is the zone's forwarding page rules.
-func redirectPageRules(ctx context.Context, api ZoneReads, zoneID, zone, ref string) ([]any, error) {
-	raw, err := api.Result(ctx, "/zones/"+zoneID+"/pagerules", ref)
+// cloudflarePageRedirects is the zone's forwarding page rules.
+func (r *Registry) cloudflarePageRedirects(ctx context.Context, zoneID, zone, ref string) ([]CloudflareRedirectRecord, error) {
+	rules, err := cloudflareOptional[[]cfPageRule](r.cloudflareAPIResult(ctx, "/zones/"+zoneID+"/pagerules", ref))
 	if err != nil {
 		return nil, err
 	}
-	rules, err := parsePy(orEmpty(raw))
-	if err != nil {
-		return nil, err
-	}
-	found := []any{}
-	for _, rule := range rules.array {
-		if !rule.object {
-			continue
+	found := []CloudflareRedirectRecord{}
+	for _, rule := range rules {
+		record, ok, err := pageRuleRecord(rule, zone)
+		if err != nil {
+			return nil, err
 		}
-		if record, ok := pageRuleRecord(rule, zone); ok {
+		if ok {
 			found = append(found, record)
 		}
 	}
 	return found, nil
 }
 
-type redirectPart struct {
-	name string
-	read func(context.Context, ZoneReads, string, string, string) ([]any, error)
-}
-
-// redirectParts is the reading's declared parts (cloudflare.redirect).
-var redirectParts = []redirectPart{{"rules", redirectRules}, {"page_rules", redirectPageRules}}
-
-// ReadRedirects is every redirect on every zone each credential sees. A part
-// refused on one zone is reported through Refuse on that zone; every part
-// refused on every zone is a refused read.
-func ReadRedirects(ctx context.Context, refs []string, api ZoneReads) ([]any, error) {
+// cloudflareRedirects is every redirect on every zone each credential sees. A
+// part refused on one zone is a refused part on that zone; every part refused
+// on every zone is a refused read.
+func (r *Registry) cloudflareRedirects(ctx context.Context) ([]any, error) {
+	parts := []struct {
+		name string
+		read func(context.Context, string, string, string) ([]CloudflareRedirectRecord, error)
+	}{{"rules", r.cloudflareRedirectRules}, {"page_rules", r.cloudflarePageRedirects}}
 	found := []any{}
-	for _, ref := range refs {
-		listed, err := api.Zones(ctx, ref)
+	for _, ref := range r.cloudflareAPIRefs() {
+		zones, err := r.cloudflareAPIZones(ctx, ref)
 		if err != nil {
 			return nil, err
 		}
-		zones := []RedirectZone{}
-		for _, zone := range listed {
-			if zone.Name != "" {
-				zones = append(zones, zone)
-			}
-		}
-		refused := []error{}
-		for _, zone := range zones {
-			name := normalizedHostname(zone.Name)
-			for _, part := range redirectParts {
-				records, err := part.read(ctx, api, zone.ID, name, ref)
+		named := namedZones(zones)
+		var refused []error
+		for _, zone := range named {
+			name := hostname(zone.Name)
+			for _, part := range parts {
+				records, err := part.read(ctx, zone.ID, name, ref)
 				if err != nil {
-					api.Refuse(ctx, part.name, err, name, ref)
-					var provider *ProviderError
-					if !errors.As(err, &provider) {
-						err = &ProviderError{Message: api.Reason(err)}
-					}
+					refuse(ctx, part.name, ref, name, err)
 					refused = append(refused, err)
 					continue
 				}
 				for _, record := range records {
-					switch r := record.(type) {
-					case RedirectRuleRecord:
-						r.ConnectionRef, r.AccountID = ref, zone.Account.ID
-						found = append(found, r)
-					case RedirectPageRuleRecord:
-						r.ConnectionRef, r.AccountID = ref, zone.Account.ID
-						found = append(found, r)
-					}
+					record.ConnectionRef, record.AccountID = ref, zone.Account.ID
+					found = append(found, record)
 				}
 			}
 		}
-		if len(zones) > 0 && len(refused) == len(redirectParts)*len(zones) {
-			return nil, refused[0]
+		if len(named) > 0 && len(refused) == len(parts)*len(named) {
+			return nil, fmt.Errorf("every zone refused its redirects: %w", refused[0])
 		}
 	}
 	return found, nil

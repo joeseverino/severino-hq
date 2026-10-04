@@ -321,7 +321,7 @@ func TestNPMReadingRefusals(t *testing.T) {
 	}
 	h.routes["/api/nginx/redirection-hosts"] = []Object{}
 	h.routes["/api/nginx/streams"] = []Object{}
-	h.fail["/api/nginx/dead-hosts"] = &ProviderError{Message: "Forbidden", Failure: "permission", Refusal: "permission"}
+	h.fail["/api/nginx/dead-hosts"] = &ProviderError{Message: "Forbidden", Failure: "permission"}
 
 	ledger := &refusals{}
 	ctx := context.WithValue(context.Background(), refusalKey{}, ledger)

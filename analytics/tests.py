@@ -453,30 +453,10 @@ class WindowTests(TestCase):
 
         self.assertEqual(service.measured_path_count(), 2)
 
-    def test_every_dimension_the_reader_collects_can_be_stored(self):
-        """The reader's registry and the model's enum have to stay in step."""
-
-        from controller_runtime.cloudflare_analytics import ANALYTICS_DIMENSIONS
-
-        self.assertEqual(
-            sorted(ANALYTICS_DIMENSIONS), sorted(RumDaily.Dimension.values)
-        )
-
     def test_nothing_recorded_reads_as_nothing_rather_than_failing(self):
         self.assertIsNone(service.latest_reading())
         self.assertEqual(service.site_totals()["pageviews"], 0)
         self.assertEqual(service.breakdown(RumDaily.Dimension.PATH), [])
-
-
-class UnitTests(TestCase):
-    def test_microseconds_become_milliseconds_and_minus_one_becomes_absence(self):
-        from controller_runtime.cloudflare_analytics import _milliseconds
-
-        self.assertEqual(_milliseconds(2888000), 2888)
-        self.assertEqual(_milliseconds(0), 0)
-        self.assertIsNone(_milliseconds(-1))
-        self.assertIsNone(_milliseconds(None))
-        self.assertIsNone(_milliseconds("not a number"))
 
 
 class OverviewPageTests(TestCase):

@@ -1,0 +1,6 @@
+repository: https://github.com/github/rest-api-description
+file: descriptions/api.github.com/api.github.com.json
+commit: 836ce198db13a6fb194547e53eea99c6ddae495b
+sha256: f3efa055b46b43f5f133ecf792a36a7f50cf8a4378cbd177390bc2bf8c6097cd
+slice: python3 ../slice.py api.github.com.json > openapi.slice.json
+overlay: overlay.yaml corrects the description to the wire: the check-run request bodies and the actions_variables permission

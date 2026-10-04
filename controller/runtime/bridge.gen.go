@@ -303,6 +303,126 @@ func (e ResourceKind) Valid() bool {
 	}
 }
 
+// Defines values for SweptKind.
+const (
+	SweptAdGuardClient                SweptKind = "adguard.client"
+	SweptAdGuardDNS                   SweptKind = "adguard.dns"
+	SweptAdGuardQuerySummary          SweptKind = "adguard.query_summary"
+	SweptAdGuardRewrite               SweptKind = "adguard.rewrite"
+	SweptCaddyRoute                   SweptKind = "caddy.route"
+	SweptCloudflareAccessApp          SweptKind = "cloudflare.access_app"
+	SweptCloudflareAccessServiceToken SweptKind = "cloudflare.access_service_token"
+	SweptCloudflareD1Database         SweptKind = "cloudflare.d1_database"
+	SweptCloudflareDNSRecord          SweptKind = "cloudflare.dns_record"
+	SweptCloudflareEdgeCertificate    SweptKind = "cloudflare.edge_certificate"
+	SweptCloudflarePagesProject       SweptKind = "cloudflare.pages_project"
+	SweptCloudflareRedirect           SweptKind = "cloudflare.redirect"
+	SweptCloudflareTunnel             SweptKind = "cloudflare.tunnel"
+	SweptCloudflareZone               SweptKind = "cloudflare.zone"
+	SweptGitHubDelivery               SweptKind = "github.delivery"
+	SweptGitHubRepository             SweptKind = "github.repository"
+	SweptHostFirewall                 SweptKind = "host.firewall"
+	SweptHostPerimeter                SweptKind = "host.perimeter"
+	SweptNPMAccessList                SweptKind = "npm.access_list"
+	SweptNPMCertificate               SweptKind = "npm.certificate"
+	SweptNPMDeadHost                  SweptKind = "npm.dead_host"
+	SweptNPMProxyHost                 SweptKind = "npm.proxy_host"
+	SweptNPMRedirect                  SweptKind = "npm.redirect"
+	SweptNPMStream                    SweptKind = "npm.stream"
+	SweptPortainerComposeProject      SweptKind = "portainer.compose_project"
+	SweptPortainerContainer           SweptKind = "portainer.container"
+	SweptPortainerEnvironment         SweptKind = "portainer.environment"
+	SweptPortainerImage               SweptKind = "portainer.image"
+	SweptPortainerNetwork             SweptKind = "portainer.network"
+	SweptPortainerRuntime             SweptKind = "portainer.runtime"
+	SweptPortainerVolume              SweptKind = "portainer.volume"
+	SweptTailscaleDNS                 SweptKind = "tailscale.dns"
+	SweptTailscaleDevice              SweptKind = "tailscale.device"
+	SweptTailscalePolicy              SweptKind = "tailscale.policy"
+	SweptTailscaleSettings            SweptKind = "tailscale.settings"
+	SweptTailscaleUser                SweptKind = "tailscale.user"
+)
+
+// Valid indicates whether the value is a known member of the SweptKind enum.
+func (e SweptKind) Valid() bool {
+	switch e {
+	case SweptAdGuardClient:
+		return true
+	case SweptAdGuardDNS:
+		return true
+	case SweptAdGuardQuerySummary:
+		return true
+	case SweptAdGuardRewrite:
+		return true
+	case SweptCaddyRoute:
+		return true
+	case SweptCloudflareAccessApp:
+		return true
+	case SweptCloudflareAccessServiceToken:
+		return true
+	case SweptCloudflareD1Database:
+		return true
+	case SweptCloudflareDNSRecord:
+		return true
+	case SweptCloudflareEdgeCertificate:
+		return true
+	case SweptCloudflarePagesProject:
+		return true
+	case SweptCloudflareRedirect:
+		return true
+	case SweptCloudflareTunnel:
+		return true
+	case SweptCloudflareZone:
+		return true
+	case SweptGitHubDelivery:
+		return true
+	case SweptGitHubRepository:
+		return true
+	case SweptHostFirewall:
+		return true
+	case SweptHostPerimeter:
+		return true
+	case SweptNPMAccessList:
+		return true
+	case SweptNPMCertificate:
+		return true
+	case SweptNPMDeadHost:
+		return true
+	case SweptNPMProxyHost:
+		return true
+	case SweptNPMRedirect:
+		return true
+	case SweptNPMStream:
+		return true
+	case SweptPortainerComposeProject:
+		return true
+	case SweptPortainerContainer:
+		return true
+	case SweptPortainerEnvironment:
+		return true
+	case SweptPortainerImage:
+		return true
+	case SweptPortainerNetwork:
+		return true
+	case SweptPortainerRuntime:
+		return true
+	case SweptPortainerVolume:
+		return true
+	case SweptTailscaleDNS:
+		return true
+	case SweptTailscaleDevice:
+		return true
+	case SweptTailscalePolicy:
+		return true
+	case SweptTailscaleSettings:
+		return true
+	case SweptTailscaleUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TLSConsumerKind.
 const (
 	TLSConsumerKindCPanel TLSConsumerKind = "cpanel"
@@ -328,6 +448,20 @@ func (e TLSConsumerKind) Valid() bool {
 type Acknowledgement struct {
 	OK                   bool                   `json:"ok"`
 	AdditionalProperties map[string]interface{} `json:"-"`
+}
+
+// AdmittedExtension One admitted extension's source, from the plugin lock the image carries.
+type AdmittedExtension struct {
+	Plugin string `json:"plugin"`
+
+	// SourceCommit The commit the image runs.
+	SourceCommit string `json:"source_commit"`
+
+	// SourceRepository owner/name of the repository the extension is built from.
+	SourceRepository string `json:"source_repository"`
+
+	// SourceWorkflow The workflow whose successful run on main admits it.
+	SourceWorkflow string `json:"source_workflow"`
 }
 
 // AnalyticsPlan defines model for AnalyticsPlan.
@@ -473,7 +607,10 @@ type ControllerRegistry struct {
 
 	// ConnectionProviders Each resource kind's connection providers.
 	ConnectionProviders map[string][]string `json:"connection_providers"`
-	Locked              []LockedAction      `json:"locked"`
+
+	// Extensions Each admitted extension the running image composes, which delivery follows.
+	Extensions []AdmittedExtension `json:"extensions"`
+	Locked     []LockedAction      `json:"locked"`
 
 	// MaterialKinds Kinds whose work needs material HQ holds.
 	MaterialKinds []ResourceKind `json:"material_kinds"`
@@ -613,7 +750,7 @@ type Pending struct {
 	Verification *Verification `json:"verification,omitempty"`
 }
 
-// PlanPassOutput The line a plan pass prints on stdout. The Python worker prints the same shape.
+// PlanPassOutput The line a plan pass prints on stdout.
 type PlanPassOutput struct {
 	Claimed     bool               `json:"claimed"`
 	Connections []ConnectionRecord `json:"connections"`
@@ -695,6 +832,9 @@ type SweepVerdict struct {
 	OnlyKinds       []ResourceKind `json:"only_kinds"`
 	Reason          string         `json:"reason"`
 }
+
+// SweptKind A kind the controller reads in a sweep: exactly the kinds it registers a reader for.
+type SweptKind string
 
 // TLSConsumerKind Where a certificate is served from: the kinds of TLS consumer a certificate spec declares.
 type TLSConsumerKind string

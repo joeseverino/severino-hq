@@ -4,6 +4,8 @@ output: npm.gen.go
 generate:
   models: true
 output-options:
+  overlay:
+    path: ../../api/vendor/npm/overlay.yaml
   skip-prune: false
   include-operation-ids:
     - create404Host

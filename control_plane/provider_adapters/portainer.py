@@ -1,7 +1,7 @@
-"""Portainer: container stacks HQ runs, containers it watches, and what it reads.
+"""Portainer: container stacks HQ runs and containers it watches, as declared.
 
-The kinds' actions, inventory and connection probe are still the controller
-core's; what is declared about them, and the readings, are here.
+The controller (controller/providers) reads and acts on them; what is declared
+about them is here.
 """
 
 from __future__ import annotations
@@ -22,8 +22,6 @@ from ..provider_spec import (
     key_from,
     locked,
 )
-from .contracts import ControllerIntegrationAdapter
-from .portainer_readings import PROVIDER, READINGS
 
 
 CONTAINER_KIND = "portainer.container"
@@ -392,18 +390,7 @@ CONTAINER = ProviderSpec(
 )
 
 
-# Declarations only: the controller half is still the core's, so the readings
-# go through the connection these declare.
 DEFINITIONS = (STACK, CONTAINER)
-
-ADAPTER = ControllerIntegrationAdapter(
-    definitions=(),
-    inventory={},
-    connection_probes={},
-    actions={},
-    readings=READINGS,
-    reads_through=(PROVIDER,),
-)
 
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.

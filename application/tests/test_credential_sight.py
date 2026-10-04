@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import io
-import urllib.error
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -33,8 +31,6 @@ from ..credential_sight import (
 )
 from ..inventory import record_inventory
 from ..security import cli_principal
-from controller_runtime import handlers
-import urllib.request
 
 
 class ExampleRecord(ObservationRecord):
@@ -317,49 +313,21 @@ class CanDoTests(TestCase):
         self.assertEqual(len(names), len(set(names)))
 
 
-def _http_error(code: int, error_code: int, message: str):
-    body = (
-        f'{{"success": false, "errors": [{{"code": {error_code}, '
-        f'"message": "{message}"}}]}}'
-    ).encode()
-    return urllib.error.HTTPError("u", code, "Forbidden", {}, io.BytesIO(body))
-
-
 class RefusalEndToEndTests(TestCase):
     """Controller report, then record_inventory, then what the page is given."""
 
-    ENV = {
-        "CF_CONNECTION_REF": "example-api",
-        "CF_PROVIDER": "cloudflare_api",
-        "CF_API_TOKEN": "t",
-    }
-
-    def _sweep(self, error):
-        from controller_runtime import providers
-
-        readers = {
-            kind: reader
-            for kind, reader in handlers.OBSERVATION_READERS.items()
-            if OBSERVATIONS[kind].provider == "cloudflare_api"
+    def _sweep(self, refusal: str, error: str):
+        report = {
+            kind: {"ok": False, "records": [], "error": error, "refusal": refusal}
+            for kind, spec in OBSERVATIONS.items()
+            if spec.provider == "cloudflare_api" and spec.read_by == "controller"
         }
-
-        def refuse(*args, **kwargs):
-            raise error()
-
-        with (
-            mock.patch.dict("os.environ", self.ENV, clear=True),
-            mock.patch.dict(providers.PROVIDER_INVENTORY, readers, clear=True),
-            mock.patch.object(urllib.request, "urlopen", side_effect=refuse),
-        ):
-            report = providers.inventory()
         record_inventory(report, principal=cli_principal())
         return report, by_provider()["cloudflare_api"]
 
     def test_a_refused_credential_reaches_the_page_as_one_refusal(self):
         report, provider = self._sweep(
-            lambda: _http_error(
-                403, 9109, "Cannot use the access token from location: 192.0.2.1"
-            )
+            CREDENTIAL_REFUSAL, "Cannot use the access token from location: 192.0.2.1"
         )
 
         self.assertTrue(report)
@@ -376,9 +344,7 @@ class RefusalEndToEndTests(TestCase):
             self.assertEqual(sight.remedy, "")
 
     def test_a_missing_permission_reaches_the_page_as_its_remedy(self):
-        report, provider = self._sweep(
-            lambda: _http_error(403, 10000, "Authentication error")
-        )
+        report, provider = self._sweep(PERMISSION_REFUSAL, "Authentication error")
 
         for kind, found in report.items():
             self.assertEqual(found.get("refusal"), PERMISSION_REFUSAL, kind)

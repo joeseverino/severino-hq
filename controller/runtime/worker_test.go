@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"reflect"
@@ -43,7 +44,11 @@ func (b *fakeBridge) Call(_ context.Context, args []string, payload, into any) e
 	if into == nil {
 		return nil
 	}
-	return decodeObject(result, into)
+	data, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, into)
 }
 func (b *fakeBridge) actions() []string {
 	a := []string{}
@@ -165,6 +170,25 @@ func TestProviderFailureReportsGenerationAndStillSweeps(t *testing.T) {
 		t.Fatal(b.actions())
 	}
 }
+
+// A provider failure wrapped with context is still a refused operation, and
+// its report says the whole chain.
+func TestWrappedProviderFailureIsReportedWithItsContext(t *testing.T) {
+	w, b, p, _ := newWorker()
+	b.Pending = []Pending{pending("first")}
+	p.ExecErr = fmt.Errorf("reconcile rewrite: %w", &ProviderError{Message: "provider answered 403", Failure: FailureClassPermission})
+	if code, err := w.Run(context.Background(), true); err != nil || code != 1 {
+		t.Fatalf("%d %v", code, err)
+	}
+	for _, call := range b.Calls {
+		if call.Args[0] == "report" {
+			report := call.Payload.(ControllerReport)
+			if report.Success || report.Message != "reconcile rewrite: provider answered 403" {
+				t.Fatalf("%#v", report)
+			}
+		}
+	}
+}
 func TestFailedReportDoesNotPreventSweepOrBecomeSuccess(t *testing.T) {
 	w, b, _, _ := newWorker()
 	b.Pending = []Pending{pending("first")}
@@ -232,8 +256,8 @@ func TestAnalyticsPlanContainsNoProviderAccountIdentity(t *testing.T) {
 	}
 }
 
-// The passes print the lines the Python worker prints, key for key.
-func TestPassOutputKeysMatchThePythonWorker(t *testing.T) {
+// Each pass prints its contract line, key for key.
+func TestPassOutputKeysAreTheContracts(t *testing.T) {
 	keys := func(value any) []string {
 		raw, err := json.Marshal(value)
 		if err != nil {

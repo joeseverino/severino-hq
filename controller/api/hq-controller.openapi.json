@@ -1258,6 +1258,34 @@
           "reason"
         ]
       },
+      "AdmittedExtension": {
+        "type": "object",
+        "description": "One admitted extension's source, from the plugin lock the image carries.",
+        "properties": {
+          "plugin": {
+            "type": "string"
+          },
+          "source_repository": {
+            "type": "string",
+            "description": "owner/name of the repository the extension is built from."
+          },
+          "source_workflow": {
+            "type": "string",
+            "description": "The workflow whose successful run on main admits it."
+          },
+          "source_commit": {
+            "type": "string",
+            "description": "The commit the image runs."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "plugin",
+          "source_repository",
+          "source_workflow",
+          "source_commit"
+        ]
+      },
       "ControllerRegistry": {
         "type": "object",
         "description": "What the controller may do and where each kind is read, from HQ's provider declarations.",
@@ -1308,6 +1336,13 @@
               "type": "string"
             },
             "description": "Providers a connection credential is modelled for."
+          },
+          "extensions": {
+            "type": "array",
+            "description": "Each admitted extension the running image composes, which delivery follows.",
+            "items": {
+              "$ref": "#/components/schemas/AdmittedExtension"
+            }
           }
         },
         "additionalProperties": false,
@@ -1318,7 +1353,8 @@
           "material_kinds",
           "connection_providers",
           "observations",
-          "connection_credentials"
+          "connection_credentials",
+          "extensions"
         ]
       },
       "AnalyticsSiteReading": {
@@ -1641,6 +1677,86 @@
           "ResourceKindTLSUploadedCertificate"
         ]
       },
+      "SweptKind": {
+        "type": "string",
+        "description": "A kind the controller reads in a sweep: exactly the kinds it registers a reader for.",
+        "enum": [
+          "adguard.client",
+          "adguard.dns",
+          "adguard.query_summary",
+          "adguard.rewrite",
+          "caddy.route",
+          "cloudflare.access_app",
+          "cloudflare.access_service_token",
+          "cloudflare.d1_database",
+          "cloudflare.dns_record",
+          "cloudflare.edge_certificate",
+          "cloudflare.pages_project",
+          "cloudflare.redirect",
+          "cloudflare.tunnel",
+          "cloudflare.zone",
+          "github.delivery",
+          "github.repository",
+          "host.firewall",
+          "host.perimeter",
+          "npm.access_list",
+          "npm.certificate",
+          "npm.dead_host",
+          "npm.proxy_host",
+          "npm.redirect",
+          "npm.stream",
+          "portainer.compose_project",
+          "portainer.container",
+          "portainer.environment",
+          "portainer.image",
+          "portainer.network",
+          "portainer.runtime",
+          "portainer.volume",
+          "tailscale.device",
+          "tailscale.dns",
+          "tailscale.policy",
+          "tailscale.settings",
+          "tailscale.user"
+        ],
+        "x-enum-varnames": [
+          "SweptAdGuardClient",
+          "SweptAdGuardDNS",
+          "SweptAdGuardQuerySummary",
+          "SweptAdGuardRewrite",
+          "SweptCaddyRoute",
+          "SweptCloudflareAccessApp",
+          "SweptCloudflareAccessServiceToken",
+          "SweptCloudflareD1Database",
+          "SweptCloudflareDNSRecord",
+          "SweptCloudflareEdgeCertificate",
+          "SweptCloudflarePagesProject",
+          "SweptCloudflareRedirect",
+          "SweptCloudflareTunnel",
+          "SweptCloudflareZone",
+          "SweptGitHubDelivery",
+          "SweptGitHubRepository",
+          "SweptHostFirewall",
+          "SweptHostPerimeter",
+          "SweptNPMAccessList",
+          "SweptNPMCertificate",
+          "SweptNPMDeadHost",
+          "SweptNPMProxyHost",
+          "SweptNPMRedirect",
+          "SweptNPMStream",
+          "SweptPortainerComposeProject",
+          "SweptPortainerContainer",
+          "SweptPortainerEnvironment",
+          "SweptPortainerImage",
+          "SweptPortainerNetwork",
+          "SweptPortainerRuntime",
+          "SweptPortainerVolume",
+          "SweptTailscaleDevice",
+          "SweptTailscaleDNS",
+          "SweptTailscalePolicy",
+          "SweptTailscaleSettings",
+          "SweptTailscaleUser"
+        ]
+      },
       "Refusal": {
         "type": "string",
         "description": "Why a provider refused a read: the credential itself, or one permission it lacks. Empty when the reason is unclassified.",
@@ -1716,7 +1832,7 @@
       },
       "PlanPassOutput": {
         "type": "object",
-        "description": "The line a plan pass prints on stdout. The Python worker prints the same shape.",
+        "description": "The line a plan pass prints on stdout.",
         "properties": {
           "ok": {
             "type": "boolean"

@@ -56,15 +56,15 @@ func (d *fakeDialer) deployments() int {
 func (d *fakeDialer) Peer(_ context.Context, domain, connectHost string) ([]byte, error) {
 	d.http.requests = append(d.http.requests, request{"tls://" + connectHost + ":443", "TLS", Object{"sni": domain}, ""})
 	if len(d.phases) == 0 {
-		return nil, &tlsReadError{kind: "ConnectionRefusedError"}
+		return nil, &tlsReadError{reason: "connection refused"}
 	}
 	phase := d.phases[min(d.deployments(), len(d.phases)-1)]
 	serve, ok := phase[connectHost+"|"+domain]
 	if !ok {
-		return nil, &tlsReadError{kind: "ConnectionRefusedError"}
+		return nil, &tlsReadError{reason: "connection refused"}
 	}
 	if serve.Error != "" {
-		return nil, &tlsReadError{kind: serve.Error}
+		return nil, &tlsReadError{reason: serve.Error}
 	}
 	return d.certs[serve.Cert], nil
 }
@@ -84,7 +84,7 @@ type fakeOutcome struct {
 
 var stagedPath = regexp.MustCompile(`/[^\s=]*hq-tls-[^/\s]+`)
 
-// commandKey names a command the way fixtures and the Python harness do.
+// commandKey names a command the way fixtures do.
 func commandKey(argv []string) string {
 	switch argv[0] {
 	case "ssh":

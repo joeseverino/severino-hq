@@ -27,7 +27,7 @@ func (e *BridgeError) Error() string { return e.Message }
 
 func (b CommandBridge) Call(ctx context.Context, args []string, payload any, result any) error {
 	if len(b.Prefix) == 0 {
-		return &BridgeError{"Controller bridge command is not configured."}
+		return &BridgeError{"bridge command is not configured"}
 	}
 	argv := append(append([]string{}, b.Prefix[1:]...), args...)
 	var input []byte
@@ -53,28 +53,31 @@ func (b CommandBridge) Call(ctx context.Context, args []string, payload any, res
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return &BridgeError{"HQ controller bridge did not complete before its deadline."}
+			return &BridgeError{"bridge did not complete before its deadline"}
 		}
 		var exited *exec.ExitError
 		if !errors.As(err, &exited) {
-			return &BridgeError{"HQ controller bridge could not start."}
+			return &BridgeError{"bridge could not start"}
 		}
 		lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
-		return &BridgeError{"HQ controller bridge command failed: " + Clip(lines[len(lines)-1], VerdictLimit)}
+		return &BridgeError{"bridge failed: " + Clip(lines[len(lines)-1], VerdictLimit)}
 	}
 	if stdout.Overflow {
-		return &BridgeError{"HQ controller bridge returned too much data."}
+		return &BridgeError{"bridge returned too much data"}
 	}
 	if result == nil {
 		result = new(any)
 	}
+	// Strict: a field the contract does not declare is drift, refused here
+	// rather than dropped.
 	decoder := json.NewDecoder(bytes.NewReader(stdout.Bytes()))
 	decoder.UseNumber()
+	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(result); err != nil {
-		return &BridgeError{"HQ controller bridge returned invalid JSON."}
+		return &BridgeError{"bridge answer does not match the contract: " + err.Error()}
 	}
 	if err := decoder.Decode(new(any)); err != io.EOF {
-		return &BridgeError{"HQ controller bridge returned trailing data."}
+		return &BridgeError{"bridge returned trailing data"}
 	}
 	return nil
 }

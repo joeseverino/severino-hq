@@ -34,18 +34,17 @@ func (r *Registry) admitCloudflare() {
 	r.probe("cloudflare_api", r.cloudflareAPIProbe)
 }
 
+// cloudflareAutoTTL is the TTL Cloudflare reads as automatic.
+const cloudflareAutoTTL = 1
+
 func (r *Registry) cloudflareZones(ctx context.Context) ([]cfapi.ZonesZone, error) {
-	raw, err := r.cached(ctx, "cloudflare-zones", func() (json.RawMessage, error) {
-		items, err := r.cloudflarePaged(ctx, "/zones")
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(items)
+	items, err := r.cloudflareCachedList(ctx, "cloudflare-zones", func() ([]json.RawMessage, error) {
+		return r.cloudflareList(ctx, "cloudflare_dns", "/zones", "", cloudflarePerPage)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return decodeAs[[]cfapi.ZonesZone](raw, "Cloudflare returned an invalid zone list.")
+	return cloudflareItems[cfapi.ZonesZone](items, "zone")
 }
 
 // cloudflareZoneID resolves a zone name once per controller; ids do not change.
@@ -71,23 +70,15 @@ func (r *Registry) cloudflareZoneID(ctx context.Context, zone string) (string, e
 	if id, found := r.zoneIDs[wanted]; found {
 		return id, nil
 	}
-	return "", &ProviderError{Message: fmt.Sprintf("The Cloudflare credential cannot see a zone called %s.", pyRepr(wanted))}
+	return "", &ProviderError{Message: fmt.Sprintf("the cloudflare credential cannot see zone %q", wanted)}
 }
 
-func (r *Registry) cloudflareRecords(ctx context.Context, zoneID string) ([]cfRecordFields, error) {
-	items, err := r.cloudflarePaged(ctx, "/zones/"+zoneID+"/dns_records")
+func (r *Registry) cloudflareRecords(ctx context.Context, zoneID string) ([]cfRecord, error) {
+	items, err := r.cloudflareList(ctx, "cloudflare_dns", "/zones/"+zoneID+"/dns_records", "", cloudflarePerPage)
 	if err != nil {
 		return nil, err
 	}
-	records := make([]cfRecordFields, 0, len(items))
-	for _, item := range items {
-		var record cfRecordFields
-		if err := json.Unmarshal(item, &record); err != nil {
-			return nil, &ProviderError{Message: "Cloudflare returned an invalid record list."}
-		}
-		records = append(records, record)
-	}
-	return records, nil
+	return cloudflareItems[cfRecord](items, "DNS record")
 }
 
 // caaParts splits a CAA value by the rule the spec validates with.
@@ -139,11 +130,15 @@ type cfRecordPayload struct {
 
 func cloudflarePayload(spec CloudflareDNSRecordSpec) (cfRecordPayload, error) {
 	recordType := strings.ToUpper(spec.RecordType)
-	payload := cfRecordPayload{Type: recordType, Name: hostname(spec.Name), TTL: numberOr(spec.TTL, 1)}
+	ttl := spec.TTL
+	if ttl == 0 {
+		ttl = cloudflareAutoTTL
+	}
+	payload := cfRecordPayload{Type: recordType, Name: hostname(spec.Name), TTL: ttl}
 	if recordType == "CAA" {
 		flags, tag, value, ok := caaParts(spec.Content)
 		if !ok {
-			return payload, &ProviderError{Message: `A CAA value must look like: 0 issue "letsencrypt.org".`}
+			return payload, &ProviderError{Message: `a CAA value must look like: 0 issue "letsencrypt.org"`}
 		}
 		payload.Data = &cfCAAData{Flags: flags, Tag: tag, Value: value}
 	} else {
@@ -151,8 +146,10 @@ func cloudflarePayload(spec CloudflareDNSRecordSpec) (cfRecordPayload, error) {
 		payload.Content = &content
 	}
 	if recordType == "MX" {
-		priority := numberOr(spec.Priority, 0)
-		payload.Priority = &priority
+		if spec.Priority == nil {
+			return payload, &ProviderError{Message: "an MX record needs a priority"}
+		}
+		payload.Priority = spec.Priority
 	}
 	if recordType == "A" || recordType == "AAAA" || recordType == "CNAME" {
 		proxied := spec.Proxied
@@ -161,51 +158,26 @@ func cloudflarePayload(spec CloudflareDNSRecordSpec) (cfRecordPayload, error) {
 	return payload, nil
 }
 
-// numberOr is int(value or fallback).
-func numberOr(value json.Number, fallback int) int {
-	if f, err := value.Float64(); err == nil && f != 0 {
-		return int(f)
-	}
-	return fallback
-}
-
-func rawNumberOr(raw json.RawMessage, fallback int) int {
-	var n json.Number
-	if !pyTruthy(raw) || json.Unmarshal(raw, &n) != nil {
-		return fallback
-	}
-	return numberOr(n, fallback)
-}
-
-func recordMatches(live cfRecordFields, spec CloudflareDNSRecordSpec) bool {
+func recordMatches(live cfRecord, spec CloudflareDNSRecordSpec) bool {
 	recordType := strings.ToUpper(spec.RecordType)
 	return strings.ToUpper(live.Type) == recordType &&
 		hostname(live.Name) == hostname(spec.Name) &&
-		normalizedRecordContent(recordType, pyGetText(live.Content, "")) == normalizedRecordContent(recordType, spec.Content)
+		normalizedRecordContent(recordType, live.Content) == normalizedRecordContent(recordType, spec.Content)
 }
 
-func recordStatus(zone string, live *cfRecordFields) CloudflareDNSRecordStatus {
-	status := CloudflareDNSRecordStatus{Zone: zone, Content: "", Priority: json.RawMessage("null"), TTL: json.RawMessage("1")}
+func recordStatus(zone string, live *cfRecord) CloudflareDNSRecordStatus {
 	if live == nil {
-		return status
+		return CloudflareDNSRecordStatus{Zone: zone, TTL: cloudflareAutoTTL}
 	}
-	status.RecordID = live.ID
-	status.Name = live.Name
-	status.RecordType = strings.ToUpper(live.Type)
-	status.Content = pyGetText(live.Content, "")
-	if len(live.Priority) > 0 {
-		status.Priority = live.Priority
+	return CloudflareDNSRecordStatus{
+		Zone: zone, RecordID: live.ID, Name: live.Name, RecordType: strings.ToUpper(live.Type),
+		Content: live.Content, Priority: live.Priority, Proxied: live.Proxied, TTL: live.TTL,
 	}
-	status.Proxied = pyTruthy(live.Proxied)
-	if len(live.TTL) > 0 {
-		status.TTL = live.TTL
-	}
-	return status
 }
 
 // findRecord is identity: the recorded id first, then name/type/value. A zone
 // apex commonly holds several records of one type.
-func findRecord(records []cfRecordFields, observed CloudflareDNSRecordObserved, spec CloudflareDNSRecordSpec) *cfRecordFields {
+func findRecord(records []cfRecord, observed CloudflareDNSRecordObserved, spec CloudflareDNSRecordSpec) *cfRecord {
 	recordID := strings.TrimSpace(observed.RecordID)
 	for i := range records {
 		if recordID != "" && records[i].ID == recordID {
@@ -220,7 +192,7 @@ func findRecord(records []cfRecordFields, observed CloudflareDNSRecordObserved, 
 	return nil
 }
 
-func (r *Registry) cloudflareRecordTarget(ctx context.Context, spec CloudflareDNSRecordSpec, observed CloudflareDNSRecordObserved) (string, string, *cfRecordFields, error) {
+func (r *Registry) cloudflareRecordTarget(ctx context.Context, spec CloudflareDNSRecordSpec, observed CloudflareDNSRecordObserved) (string, string, *cfRecord, error) {
 	zone := hostname(spec.Zone)
 	zoneID, err := r.cloudflareZoneID(ctx, zone)
 	if err != nil {
@@ -233,12 +205,16 @@ func (r *Registry) cloudflareRecordTarget(ctx context.Context, spec CloudflareDN
 	return zone, zoneID, findRecord(records, observed, spec), nil
 }
 
-func decodeRecord(raw json.RawMessage) *cfRecordFields {
-	var record cfRecordFields
-	if !pyTruthy(raw) || json.Unmarshal(raw, &record) != nil {
-		return nil
+// writtenRecord is the record a create or update answered with.
+func writtenRecord(raw json.RawMessage, err error) (*cfRecord, error) {
+	if err != nil {
+		return nil, err
 	}
-	return &record
+	record, err := cloudflareDecode[cfRecord](raw, "DNS record")
+	if err != nil {
+		return nil, err
+	}
+	return &record, nil
 }
 
 // cloudflareRecordReconcile makes one public DNS record match its declaration.
@@ -253,11 +229,9 @@ func (r *Registry) cloudflareRecordReconcile(ctx context.Context, spec Cloudflar
 	}
 	if live == nil {
 		if apply {
-			created, err := r.cloudflareRequest(ctx, "/zones/"+zoneID+"/dns_records", "POST", desired)
-			if err != nil {
+			if live, err = writtenRecord(r.cloudflareRequest(ctx, "/zones/"+zoneID+"/dns_records", "POST", desired)); err != nil {
 				return Result{}, err
 			}
-			live = decodeRecord(created)
 		}
 		return result(true, recordStatus(zone, live), "Created", "DNS record was created.", "Public DNS record created."), nil
 	}
@@ -265,48 +239,29 @@ func (r *Registry) cloudflareRecordReconcile(ctx context.Context, spec Cloudflar
 		return result(false, recordStatus(zone, live), "Reconciled", "DNS record is current.", "Public DNS record unchanged."), nil
 	}
 	if apply {
-		updated, err := r.cloudflareRequest(ctx, "/zones/"+zoneID+"/dns_records/"+live.ID, "PUT", desired)
-		if err != nil {
+		if live, err = writtenRecord(r.cloudflareRequest(ctx, "/zones/"+zoneID+"/dns_records/"+live.ID, "PUT", desired)); err != nil {
 			return Result{}, err
 		}
-		live = decodeRecord(updated)
 	}
 	return result(true, recordStatus(zone, live), "Reconciled", "DNS record was updated.", "Public DNS record updated."), nil
 }
 
 // recordCurrent compares the live record in the shape of the desired payload.
-func recordCurrent(live cfRecordFields, desired cfRecordPayload) bool {
-	if strings.ToUpper(live.Type) != desired.Type || hostname(live.Name) != desired.Name || rawNumberOr(live.TTL, 1) != desired.TTL {
+func recordCurrent(live cfRecord, desired cfRecordPayload) bool {
+	if strings.ToUpper(live.Type) != desired.Type || hostname(live.Name) != desired.Name || live.TTL != desired.TTL {
 		return false
 	}
 	if desired.Data != nil {
-		if live.Data == nil || !pyNumberEquals(live.Data.Flags, desired.Data.Flags) || !pyStringEquals(live.Data.Tag, desired.Data.Tag) || !pyStringEquals(live.Data.Value, desired.Data.Value) {
+		if live.Data == nil || *live.Data != *desired.Data {
 			return false
 		}
-	} else if normalizedRecordContent(desired.Type, pyGetText(live.Content, "")) != *desired.Content {
+	} else if normalizedRecordContent(desired.Type, live.Content) != *desired.Content {
 		return false
 	}
-	if desired.Priority != nil && rawNumberOr(live.Priority, 0) != *desired.Priority {
+	if desired.Priority != nil && (live.Priority == nil || *live.Priority != *desired.Priority) {
 		return false
 	}
-	if desired.Proxied != nil && pyTruthy(live.Proxied) != *desired.Proxied {
-		return false
-	}
-	return true
-}
-
-func pyNumberEquals(raw json.RawMessage, want int) bool {
-	var n json.Number
-	if json.Unmarshal(raw, &n) != nil {
-		return false
-	}
-	f, err := n.Float64()
-	return err == nil && f == float64(want)
-}
-
-func pyStringEquals(raw json.RawMessage, want string) bool {
-	var s string
-	return json.Unmarshal(raw, &s) == nil && s == want
+	return desired.Proxied == nil || live.Proxied == *desired.Proxied
 }
 
 // cloudflareRecordDelete removes only the record this declaration owns, by id.
@@ -330,30 +285,33 @@ func (r *Registry) cloudflareRecordDelete(ctx context.Context, spec CloudflareDN
 // cloudflareRegistrarDomains is what the registrar holds for every domain on the
 // account, by name. A refusal is the zone sweep's refused registration part.
 func (r *Registry) cloudflareRegistrarDomains(ctx context.Context) map[string]CloudflareRegistration {
-	account, err := r.cloudflareAnalyticsAccount(ctx, "")
-	var items []json.RawMessage
-	if err == nil {
-		items, err = r.cloudflareAPICursorList(ctx, "/accounts/"+account+"/registrar/registrations", "", cloudflareAccountPerPage)
-	}
+	domains, err := r.cloudflareRegistrations(ctx)
 	if err != nil {
 		refuse(ctx, "registration", "", "", err)
 		return map[string]CloudflareRegistration{}
 	}
 	found := map[string]CloudflareRegistration{}
-	for _, item := range items {
-		var domain cfapi.RegistrarAPIRegistration
-		if json.Unmarshal(item, &domain) != nil {
-			continue
+	for _, domain := range domains {
+		if name := hostname(domain.DomainName); name != "" {
+			found[name] = CloudflareRegistration{
+				ExpiresAt: runtime.ISODate(domain.ExpiresAt), AutoRenew: domain.AutoRenew, Locked: domain.Locked,
+				Status: string(domain.Status), Registrar: "Cloudflare", known: true,
+			}
 		}
-		name := hostname(domain.DomainName)
-		if name == "" {
-			continue
-		}
-		expires := domain.ExpiresAt
-		expires = runtime.ISODate(expires)
-		found[name] = CloudflareRegistration{ExpiresAt: expires, AutoRenew: domain.AutoRenew, Locked: domain.Locked, Status: string(domain.Status), Registrar: "Cloudflare", known: true}
 	}
 	return found
+}
+
+func (r *Registry) cloudflareRegistrations(ctx context.Context) ([]cfapi.RegistrarAPIRegistration, error) {
+	account, err := r.cloudflareAnalyticsAccount(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	items, err := r.cloudflareAPICursorList(ctx, "/accounts/"+account+"/registrar/registrations", "", cloudflareAccountPerPage)
+	if err != nil {
+		return nil, err
+	}
+	return cloudflareItems[cfapi.RegistrarAPIRegistration](items, "registration")
 }
 
 // cloudflareZonePosture reads how a zone answers over TLS through the account
@@ -365,17 +323,17 @@ func (r *Registry) cloudflareZonePosture(ctx context.Context, zoneID, zone strin
 		return found
 	}
 	for _, setting := range zonePostureSettings {
-		envelope, err := r.cloudflareAPIRequest(ctx, "/zones/"+zoneID+"/settings/"+setting, "")
+		raw, err := r.cloudflareAPIResult(ctx, "/zones/"+zoneID+"/settings/"+setting, "")
+		var item cfStringSetting
+		if err == nil && present(raw) {
+			item, err = cloudflareDecode[cfStringSetting](raw, setting+" setting")
+		}
 		if err != nil {
 			refuse(ctx, "posture", "", zone, err)
 			return map[string]string{}
 		}
-		var item cfSettingValue
-		if !isJSONObject(envelope.Result) || json.Unmarshal(envelope.Result, &item) != nil {
-			continue
-		}
-		if len(item.Value) > 0 && string(item.Value) != "null" && string(item.Value) != `""` {
-			found[setting] = rawText(item.Value)
+		if item.Value != "" {
+			found[setting] = item.Value
 		}
 	}
 	return found
@@ -450,15 +408,19 @@ func (r *Registry) cloudflareDNSProbe(ctx context.Context, ref string) (ProbeRes
 	if err != nil {
 		return ProbeResult{}, err
 	}
+	zones, err := cloudflareItems[cfapi.ZonesZone](items, "zone")
+	if err != nil {
+		return ProbeResult{}, err
+	}
 	names := []string{}
-	for _, item := range items {
-		var zone cfapi.ZonesZone
-		if json.Unmarshal(item, &zone) == nil && zone.Name != "" {
-			names = append(names, zone.Name)
-		}
+	for _, zone := range namedZones(zones) {
+		names = append(names, zone.Name)
 	}
 	sort.Strings(names)
-	expires := tokenExpiry(verification)
+	expires, err := tokenExpiry(verification)
+	if err != nil {
+		return ProbeResult{}, err
+	}
 	return ProbeResult{Detail: fmt.Sprintf("%d zones.", len(names)), Reaches: names, ExpiresAt: &expires}, nil
 }
 
@@ -486,16 +448,20 @@ func (r *Registry) cloudflareAPIProbe(ctx context.Context, ref string) (ProbeRes
 	if len(hosts) == 1 {
 		measured = "site"
 	}
-	expires := tokenExpiry(verification)
+	expires, err := tokenExpiry(verification)
+	if err != nil {
+		return ProbeResult{}, err
+	}
 	return ProbeResult{Detail: fmt.Sprintf("%d analytics %s.", len(hosts), measured), Reaches: hosts, ExpiresAt: &expires}, nil
 }
 
-func tokenExpiry(verification cfEnvelope) string {
-	var result struct {
-		ExpiresOn json.RawMessage `json:"expires_on"`
+// tokenExpiry is when a verified credential expires; empty when it does not.
+func tokenExpiry(verification cfEnvelope) (string, error) {
+	if !present(verification.Result) {
+		return "", nil
 	}
-	if !isJSONObject(verification.Result) || json.Unmarshal(verification.Result, &result) != nil {
-		return ""
-	}
-	return pyOrText(result.ExpiresOn)
+	result, err := cloudflareDecode[struct {
+		ExpiresOn string `json:"expires_on"`
+	}](verification.Result, "token verification")
+	return result.ExpiresOn, err
 }

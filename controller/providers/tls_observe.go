@@ -31,18 +31,23 @@ type NetTLSDialer struct {
 func (d NetTLSDialer) roots() (*x509.CertPool, error) {
 	roots, err := x509.SystemCertPool()
 	if err != nil {
-		return nil, &ProviderError{Message: "Controller CA bundle could not be loaded."}
+		return nil, &ProviderError{Message: "controller CA bundle could not be loaded"}
 	}
 	if d.CAFile != "" {
 		data, err := os.ReadFile(d.CAFile)
 		if err != nil || !roots.AppendCertsFromPEM(data) {
-			return nil, &ProviderError{Message: "Controller CA bundle could not be loaded."}
+			return nil, &ProviderError{Message: "controller CA bundle could not be loaded"}
 		}
 	}
 	return roots, nil
 }
 
 func (d NetTLSDialer) Peer(ctx context.Context, domain, connectHost string) ([]byte, error) {
+	return d.peerAt(ctx, domain, net.JoinHostPort(connectHost, strconv.Itoa(tlsPort)))
+}
+
+// peerAt reads the leaf address serves for domain, verified chain and name.
+func (d NetTLSDialer) peerAt(ctx context.Context, domain, address string) ([]byte, error) {
 	roots, err := d.roots()
 	if err != nil {
 		return nil, err
@@ -50,14 +55,14 @@ func (d NetTLSDialer) Peer(ctx context.Context, domain, connectHost string) ([]b
 	dialer := &net.Dialer{Timeout: tlsDialTimeout}
 	ctx, cancel := context.WithTimeout(ctx, tlsDialTimeout)
 	defer cancel()
-	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(connectHost, strconv.Itoa(tlsPort)))
+	conn, err := dialer.DialContext(ctx, "tcp", address)
 	if err != nil {
-		return nil, &tlsReadError{kind: socketErrorName(err)}
+		return nil, dialFailure(err)
 	}
 	defer conn.Close()
 	client := tls.Client(conn, &tls.Config{ServerName: domain, RootCAs: roots, MinVersion: tls.VersionTLS12})
 	if err := client.HandshakeContext(ctx); err != nil {
-		return nil, &tlsReadError{kind: handshakeErrorName(err)}
+		return nil, handshakeFailure(err)
 	}
 	peers := client.ConnectionState().PeerCertificates
 	if len(peers) == 0 {
@@ -66,48 +71,52 @@ func (d NetTLSDialer) Peer(ctx context.Context, domain, connectHost string) ([]b
 	return peers[0].Raw, nil
 }
 
-// tlsReadError is a failed TLS reading, named by the Python exception class the
-// Python controller reports for the same failure.
-type tlsReadError struct{ kind string }
-
-func (e *tlsReadError) Error() string { return e.kind }
-
-func socketErrorName(err error) string {
-	var dnsErr *net.DNSError
-	var netErr net.Error
-	switch {
-	case errors.As(err, &dnsErr):
-		return "gaierror"
-	case errors.Is(err, syscall.ECONNREFUSED):
-		return "ConnectionRefusedError"
-	case errors.Is(err, syscall.ECONNRESET):
-		return "ConnectionResetError"
-	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &netErr) && netErr.Timeout():
-		return "TimeoutError"
-	}
-	return "OSError"
+// tlsReadError is a failed TLS reading: why, in a few words, with the cause.
+type tlsReadError struct {
+	reason string
+	err    error
 }
 
-func handshakeErrorName(err error) string {
+func (e *tlsReadError) Error() string { return e.reason }
+func (e *tlsReadError) Unwrap() error { return e.err }
+
+// dialFailure names why a TCP connection to a consumer failed.
+func dialFailure(err error) *tlsReadError {
+	var dnsErr *net.DNSError
+	var netErr net.Error
+	reason := "connection failed"
+	switch {
+	case errors.As(err, &dnsErr):
+		reason = "name does not resolve"
+	case errors.Is(err, syscall.ECONNREFUSED):
+		reason = "connection refused"
+	case errors.Is(err, syscall.ECONNRESET):
+		reason = "connection reset"
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &netErr) && netErr.Timeout():
+		reason = "timed out"
+	}
+	return &tlsReadError{reason: reason, err: err}
+}
+
+// handshakeFailure names why a TLS handshake with a consumer failed.
+func handshakeFailure(err error) *tlsReadError {
 	var verify *tls.CertificateVerificationError
 	var hostname x509.HostnameError
 	var authority x509.UnknownAuthorityError
 	var invalid x509.CertificateInvalidError
+	var netErr net.Error
+	reason := "handshake failed"
 	switch {
 	case errors.As(err, &verify), errors.As(err, &hostname), errors.As(err, &authority), errors.As(err, &invalid):
-		return "SSLCertVerificationError"
+		reason = "certificate not trusted for this name"
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
-		return "SSLEOFError"
+		reason = "connection closed during handshake"
 	case errors.Is(err, syscall.ECONNRESET):
-		return "ConnectionResetError"
-	case errors.Is(err, context.DeadlineExceeded):
-		return "TimeoutError"
+		reason = "connection reset"
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &netErr) && netErr.Timeout():
+		reason = "timed out"
 	}
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
-		return "TimeoutError"
-	}
-	return "SSLError"
+	return &tlsReadError{reason: reason, err: err}
 }
 
 // observeTLS reads what connectHost serves for domain.
@@ -117,29 +126,24 @@ func (r *Registry) observeTLS(ctx context.Context, domain, connectHost string) (
 	}
 	der, err := r.TLS.Peer(ctx, domain, connectHost)
 	if err != nil {
-		var read *tlsReadError
-		if errors.As(err, &read) {
-			return TLSObservation{}, &ProviderError{Message: "TLS observation failed for " + domain + ": " + read.kind + "."}
+		if isProviderError(err) {
+			return TLSObservation{}, err
 		}
-		var provider *ProviderError
-		if errors.As(err, &provider) {
-			return TLSObservation{}, provider
-		}
-		return TLSObservation{}, &ProviderError{Message: "TLS observation failed for " + domain + ": OSError."}
+		return TLSObservation{}, &ProviderError{Message: "TLS read of " + domain, Err: err}
 	}
 	if len(der) == 0 {
-		return TLSObservation{}, &ProviderError{Message: "TLS observation returned no certificate for " + domain + "."}
+		return TLSObservation{}, &ProviderError{Message: "TLS read of " + domain + " returned no certificate"}
 	}
 	certificate, err := x509.ParseCertificate(der)
 	if err != nil {
-		return TLSObservation{}, &ProviderError{Message: "TLS expiry was invalid for " + domain + "."}
+		return TLSObservation{}, &ProviderError{Message: "TLS read of " + domain + ": certificate unreadable", Err: err}
 	}
 	digest := sha256.Sum256(der)
 	sans := append([]string{}, certificate.DNSNames...)
 	sort.Strings(sans)
 	return TLSObservation{
 		Domain:            domain,
-		NotAfter:          isoUTC(certificate.NotAfter),
+		NotAfter:          stamp(certificate.NotAfter.Truncate(time.Second)),
 		FingerprintSHA256: hex.EncodeToString(digest[:]),
 		Issuer:            issuerName(certificate),
 		SANs:              sans,
@@ -158,9 +162,4 @@ func issuerName(certificate *x509.Certificate) string {
 		return certificate.Issuer.CommonName
 	}
 	return "Unknown"
-}
-
-// isoUTC is a moment as Python's datetime.isoformat() writes a whole-second UTC time.
-func isoUTC(moment time.Time) string {
-	return moment.UTC().Truncate(time.Second).Format("2006-01-02T15:04:05+00:00")
 }

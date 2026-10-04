@@ -27,6 +27,8 @@ func TestBridgeChild(t *testing.T) {
 		os.Exit(1)
 	case "wait":
 		time.Sleep(time.Minute)
+	case "drift":
+		fmt.Print(`{"ok": true, "undeclared": 1}`)
 	case "flood":
 		os.Stdout.Write(make([]byte, MaxBridgeOutput+1))
 	default:
@@ -84,5 +86,14 @@ func TestBridgeOutputIsBounded(t *testing.T) {
 	b := childBridge(t)
 	if err := b.Call(context.Background(), []string{"flood"}, nil, nil); err == nil || !strings.Contains(err.Error(), "too much data") {
 		t.Fatal(err)
+	}
+}
+
+// A field the contract does not declare is refused, not silently dropped.
+func TestBridgeRefusesFieldsTheContractDoesNotDeclare(t *testing.T) {
+	b := childBridge(t)
+	var into IdlePassOutput
+	if err := b.Call(context.Background(), []string{"drift"}, nil, &into); err == nil || !strings.Contains(err.Error(), "undeclared") {
+		t.Fatalf("%v", err)
 	}
 }

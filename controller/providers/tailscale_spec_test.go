@@ -8,20 +8,17 @@ import (
 	tsapi "tailscale.com/client/tailscale/v2"
 )
 
-// The provider reads Tailscale's API through its own tolerant structs (a
-// withheld setting stays null, timestamps stay as written, a resolver is a
-// string or an object), so the official client's strict types cannot decode
-// for it. Every field it reads still has to exist on the official model, so a
-// client upgrade that renames one fails here.
+// Devices, users and routes decode into the official client's types. Settings
+// (a withheld one is null) and DNS (a resolver is a string or an object) use
+// small local types; every field they read must exist on the official model,
+// so a client upgrade that renames one fails here.
 func TestTailnetFieldsExistInTheOfficialClient(t *testing.T) {
 	reads := []struct {
 		read, official reflect.Type
 	}{
-		{reflect.TypeOf(tailnetDevice{}), reflect.TypeOf(tsapi.Device{})},
-		{reflect.TypeOf(tailnetDevice{}.ClientConnectivity), reflect.TypeOf(tsapi.ClientConnectivity{})},
 		{reflect.TypeOf(tailnetSettings{}), reflect.TypeOf(tsapi.TailnetSettings{})},
-		{reflect.TypeOf(tailnetUsers{}.Users).Elem(), reflect.TypeOf(tsapi.User{})},
 		{reflect.TypeOf(tailnetDNSConfiguration{}), reflect.TypeOf(tsapi.DNSConfiguration{})},
+		{reflect.TypeOf(tailnetResolver{}), reflect.TypeOf(tsapi.DNSConfigurationResolver{})},
 	}
 	for _, pair := range reads {
 		known := map[string]bool{}

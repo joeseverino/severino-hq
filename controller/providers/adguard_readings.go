@@ -2,10 +2,10 @@ package providers
 
 import (
 	"context"
-	"math"
 	"net/netip"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/joeseverino/severino-hq/controller/providers/adguardapi"
 )
@@ -71,7 +71,7 @@ func clientRecords(payload adguardapi.Clients, ref string) []any {
 func (r *Registry) adguardClients(ctx context.Context) ([]any, error) {
 	found := []any{}
 	for _, ref := range r.refs("adguard") {
-		payload, err := adguardGet[adguardapi.Clients](ctx, r, ref, "/control/clients", "AdGuard returned an invalid client list.")
+		payload, err := adguardGet[adguardapi.Clients](ctx, r, ref, "/control/clients", "client list")
 		if err != nil {
 			return nil, err
 		}
@@ -159,17 +159,17 @@ type AdGuardDNSRecord struct {
 func (r *Registry) adguardDNS(ctx context.Context) ([]any, error) {
 	found := []any{}
 	for _, ref := range r.refs("adguard") {
-		status, err := adguardGet[adguardapi.ServerStatus](ctx, r, ref, "/control/status", "AdGuard did not return a status.")
+		status, err := adguardGet[adguardapi.ServerStatus](ctx, r, ref, "/control/status", "status")
 		if err != nil {
 			return nil, err
 		}
+		// Null, absent and [] all mean AdGuard listens on no address.
 		addresses := deref(status.DnsAddresses)
 		if addresses == nil {
 			addresses = []string{}
 		}
 		record := AdGuardDNSRecord{ConnectionRef: ref, Version: deref(status.Version), Running: status.Running, ProtectionEnabled: status.ProtectionEnabled, DNSAddresses: addresses}
-		const invalid = "AdGuard returned an invalid setting."
-		if info, err := adguardGet[adguardapi.DNSConfig](ctx, r, ref, "/control/dns_info", invalid); err != nil {
+		if info, err := adguardGet[adguardapi.DNSConfig](ctx, r, ref, "/control/dns_info", "dns settings"); err != nil {
 			refuse(ctx, "upstreams", ref, "", err)
 		} else {
 			upstreams := []AdGuardUpstream{}
@@ -180,7 +180,7 @@ func (r *Registry) adguardDNS(ctx context.Context) ([]any, error) {
 			}
 			record.AdGuardUpstreamsPart = &AdGuardUpstreamsPart{Upstreams: upstreams, UpstreamMode: string(deref(info.UpstreamMode)), DNSSECEnabled: info.DnssecEnabled}
 		}
-		if info, err := adguardGet[adguardapi.FilterStatus](ctx, r, ref, "/control/filtering/status", invalid); err != nil {
+		if info, err := adguardGet[adguardapi.FilterStatus](ctx, r, ref, "/control/filtering/status", "filtering settings"); err != nil {
 			refuse(ctx, "filtering", ref, "", err)
 		} else {
 			part := &AdGuardFilteringPart{FilteringEnabled: info.Enabled}
@@ -192,17 +192,17 @@ func (r *Registry) adguardDNS(ctx context.Context) ([]any, error) {
 			}
 			record.AdGuardFilteringPart = part
 		}
-		if info, err := adguardGet[adguardapi.GetQueryLogConfigResponse](ctx, r, ref, "/control/querylog/config", invalid); err != nil {
+		if info, err := adguardGet[adguardapi.GetQueryLogConfigResponse](ctx, r, ref, "/control/querylog/config", "query log settings"); err != nil {
 			refuse(ctx, "querylog", ref, "", err)
 		} else {
 			part := &AdGuardQuerylogPart{QuerylogEnabled: info.Enabled, AnonymizeClientIP: info.AnonymizeClientIp}
 			if info.Interval != nil {
-				hours := math.RoundToEven(*info.Interval/3600000*100) / 100
+				hours := roundTo(*info.Interval/float64(time.Hour/time.Millisecond), 2)
 				part.QuerylogRetentionHours = &hours
 			}
 			record.AdGuardQuerylogPart = part
 		}
-		if info, err := adguardGet[adguardapi.RewriteSettings](ctx, r, ref, "/control/rewrite/settings", invalid); err != nil {
+		if info, err := adguardGet[adguardapi.RewriteSettings](ctx, r, ref, "/control/rewrite/settings", "rewrite settings"); err != nil {
 			refuse(ctx, "rewrites", ref, "", err)
 		} else {
 			record.AdGuardRewritesPart = &AdGuardRewritesPart{RewritesEnabled: info.Enabled}

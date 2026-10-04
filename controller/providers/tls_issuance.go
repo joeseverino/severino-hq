@@ -5,10 +5,6 @@ import (
 	"bytes"
 	"context"
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/ed25519"
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
@@ -31,7 +27,7 @@ var certificateEnd = []byte("-----END CERTIFICATE-----")
 func splitChain(fullchain []byte) ([]byte, []byte, error) {
 	leaf, chain, found := bytes.Cut(fullchain, certificateEnd)
 	if !found {
-		return nil, nil, &ProviderError{Message: "Certificate chain does not contain a leaf certificate."}
+		return nil, nil, &ProviderError{Message: "certificate chain does not contain a leaf certificate"}
 	}
 	out := append(append(append([]byte{}, leaf...), certificateEnd...), '\n')
 	return out, bytes.TrimLeft(chain, " \t\n\r\x0b\x0c"), nil
@@ -64,31 +60,31 @@ func readBundle(payload []byte) ([]byte, []byte, error) {
 			break
 		}
 		if err != nil {
-			return nil, nil, &ProviderError{Message: "Certificate snapshot was invalid."}
+			return nil, nil, &ProviderError{Message: "certificate snapshot was invalid"}
 		}
 		names[header.Name] = true
 		regular[header.Name] = header.Typeflag == tar.TypeReg
 		if header.Typeflag == tar.TypeReg {
 			data, err := io.ReadAll(reader)
 			if err != nil {
-				return nil, nil, &ProviderError{Message: "Certificate snapshot was invalid."}
+				return nil, nil, &ProviderError{Message: "certificate snapshot was invalid"}
 			}
 			files[header.Name] = data
 		}
 	}
 	if len(names) == 0 {
-		return nil, nil, &ProviderError{Message: "Certificate snapshot was invalid."}
+		return nil, nil, &ProviderError{Message: "certificate snapshot was invalid"}
 	}
 	if len(names) != 2 || !names["fullchain.pem"] || !names["privkey.pem"] {
-		return nil, nil, &ProviderError{Message: "Certificate snapshot contained unexpected files."}
+		return nil, nil, &ProviderError{Message: "certificate snapshot contained unexpected files"}
 	}
 	if !regular["fullchain.pem"] || !regular["privkey.pem"] {
-		return nil, nil, &ProviderError{Message: "Certificate snapshot was incomplete."}
+		return nil, nil, &ProviderError{Message: "certificate snapshot was incomplete"}
 	}
 	return files["fullchain.pem"], files["privkey.pem"], nil
 }
 
-// firstCertificate is the first certificate block, as openssl x509 reads one.
+// firstCertificate is the first certificate block in data.
 func firstCertificate(data []byte) (*x509.Certificate, error) {
 	for {
 		block, rest := pem.Decode(data)
@@ -102,7 +98,7 @@ func firstCertificate(data []byte) (*x509.Certificate, error) {
 	}
 }
 
-// firstPrivateKey is the first private key block, as openssl pkey reads one.
+// firstPrivateKey is the first private key block in data.
 func firstPrivateKey(data []byte) (crypto.Signer, error) {
 	for {
 		block, rest := pem.Decode(data)
@@ -136,22 +132,22 @@ func firstPrivateKey(data []byte) (crypto.Signer, error) {
 func validateCertificate(fullchain, privateKey []byte, domains []string) (string, error) {
 	leaf, err := firstCertificate(fullchain)
 	if err != nil {
-		return "", &ProviderError{Message: "reading the certificate failed."}
+		return "", &ProviderError{Message: "certificate unreadable", Err: err}
 	}
 	key, err := firstPrivateKey(privateKey)
 	if err != nil {
-		return "", &ProviderError{Message: "reading the private key failed."}
+		return "", &ProviderError{Message: "private key unreadable", Err: err}
 	}
 	certificatePublic, err := x509.MarshalPKIXPublicKey(leaf.PublicKey)
 	if err != nil {
-		return "", &ProviderError{Message: "reading the certificate failed."}
+		return "", &ProviderError{Message: "certificate unreadable", Err: err}
 	}
 	keyPublic, err := x509.MarshalPKIXPublicKey(key.Public())
 	if err != nil {
-		return "", &ProviderError{Message: "reading the private key failed."}
+		return "", &ProviderError{Message: "private key unreadable", Err: err}
 	}
 	if !bytes.Equal(certificatePublic, keyPublic) {
-		return "", &ProviderError{Message: "Certificate and private key do not match."}
+		return "", &ProviderError{Message: "certificate and private key do not match"}
 	}
 	digest := sha256.Sum256(leaf.Raw)
 	sans := nameSet(leaf.DNSNames)
@@ -162,7 +158,7 @@ func validateCertificate(fullchain, privateKey []byte, domains []string) (string
 		}
 	}
 	if len(missing) > 0 {
-		return "", &ProviderError{Message: "Issued certificate is missing names: " + strings.Join(missing, ", ") + "."}
+		return "", &ProviderError{Message: "issued certificate is missing names: " + strings.Join(missing, ", ")}
 	}
 	return hex.EncodeToString(digest[:]), nil
 }
@@ -183,7 +179,7 @@ var (
 // lineagePath is where certbot keeps this certificate's lineage, for a name that is one.
 func (r *Registry) lineagePath(spec TLSCertificateSpec) (string, error) {
 	if len([]rune(spec.CertificateName)) > 160 || !certificateName.MatchString(spec.CertificateName) {
-		return "", &ProviderError{Message: "The certificate name is not a lineage name."}
+		return "", &ProviderError{Message: "the certificate name is not a lineage name"}
 	}
 	acme, err := r.acmeDir()
 	if err != nil {
@@ -196,7 +192,7 @@ func (r *Registry) lineagePath(spec TLSCertificateSpec) (string, error) {
 func checkedDomains(spec TLSCertificateSpec) ([]string, error) {
 	for _, domain := range spec.Domains {
 		if !certificateDomain.MatchString(domain) {
-			return nil, &ProviderError{Message: "A certificate domain is not a domain name."}
+			return nil, &ProviderError{Message: "a certificate domain is not a domain name"}
 		}
 	}
 	return spec.Domains, nil
@@ -222,7 +218,7 @@ func (r *Registry) lineage(spec TLSCertificateSpec) ([]byte, []byte, error) {
 	}
 	fullchain, privateKey, err := readLineage(dir)
 	if err != nil {
-		return nil, nil, &ProviderError{Message: "Certbot lineage is unavailable for reconciliation."}
+		return nil, nil, &ProviderError{Message: "certbot lineage is unavailable for reconciliation"}
 	}
 	return fullchain, privateKey, nil
 }
@@ -257,7 +253,7 @@ func (r *Registry) resumableLineage(spec TLSCertificateSpec, deployedFingerprint
 	}
 	leaf, err := firstCertificate(fullchain)
 	if err != nil {
-		return nil, nil, false, &ProviderError{Message: "openssl read lineage expiry failed."}
+		return nil, nil, false, &ProviderError{Message: "lineage certificate unreadable", Err: err}
 	}
 	minimum := r.Now().UTC().Add(time.Duration(spec.RenewalWindowDays) * 24 * time.Hour)
 	if !leaf.NotAfter.UTC().Truncate(time.Second).After(minimum) {
@@ -358,7 +354,7 @@ func (r *Registry) issueCertificate(ctx context.Context, spec TLSCertificateSpec
 	}
 	info, err := os.Stat(acme)
 	if err != nil || !info.IsDir() || syscall.Access(acme, 2) != nil {
-		return nil, nil, &ProviderError{Message: "ACME state directory is not writable."}
+		return nil, nil, &ProviderError{Message: "ACME state directory is not writable"}
 	}
 	if foreign := foreignACMEEntry(acme); foreign != "" {
 		return nil, nil, &ProviderError{Message: "ACME state is not wholly the controller's: " + foreign + ". Certbot would be issued a certificate it cannot save, so nothing was requested."}
@@ -372,7 +368,7 @@ func (r *Registry) issueCertificate(ctx context.Context, spec TLSCertificateSpec
 	}
 	credentials := filepath.Join(acme, "cloudflare.ini")
 	if err := writePrivate(credentials, "dns_cloudflare_api_token = "+token+"\n"); err != nil {
-		return nil, nil, &ProviderError{Message: "ACME credentials could not be written."}
+		return nil, nil, &ProviderError{Message: "ACME credentials could not be written"}
 	}
 	defer os.Remove(credentials)
 	email, err := r.Env.Required("ACME", "EMAIL")
@@ -408,19 +404,7 @@ func (r *Registry) issueCertificate(ctx context.Context, spec TLSCertificateSpec
 	}
 	fullchain, privateKey, err := readLineage(lineage)
 	if err != nil {
-		return nil, nil, &ProviderError{Message: "Certbot did not produce a complete lineage."}
+		return nil, nil, &ProviderError{Message: "certbot did not produce a complete lineage", Err: err}
 	}
 	return fullchain, privateKey, nil
-}
-
-// signDigest signs data with SHA-256 the way openssl dgst -sha256 -sign does.
-func signDigest(key crypto.Signer, data []byte) ([]byte, error) {
-	digest := sha256.Sum256(data)
-	switch key.(type) {
-	case *rsa.PrivateKey, *ecdsa.PrivateKey:
-		return key.Sign(rand.Reader, digest[:], crypto.SHA256)
-	case ed25519.PrivateKey:
-		return nil, errors.New("digest signing is not defined for Ed25519")
-	}
-	return nil, errors.New("unsupported key")
 }

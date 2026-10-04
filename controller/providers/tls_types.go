@@ -45,8 +45,8 @@ type TLSCertificateSpec struct {
 // the NPM certificate id installed for each NPM consumer (the single id is the
 // older form, for a resource with one such consumer).
 type TLSCertificateObserved struct {
-	NPMCertificateIDs map[string]json.RawMessage `json:"npm_certificate_ids"`
-	NPMCertificateID  json.RawMessage            `json:"npm_certificate_id"`
+	NPMCertificateIDs map[string]int `json:"npm_certificate_ids"`
+	NPMCertificateID  *int           `json:"npm_certificate_id"`
 }
 
 // TLSObservation is what one consumer served for one name.

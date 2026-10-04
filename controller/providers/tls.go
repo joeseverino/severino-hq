@@ -2,7 +2,9 @@ package providers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -17,19 +19,11 @@ func (r *Registry) admitTLS() {
 	r.probe("onepassword", r.probeOnePassword)
 }
 
-const certificateSpecInvalid = "Certificate spec was invalid."
+const certificateSpecInvalid = "certificate spec is invalid"
 
 // NeedsMaterial says whether an action on kind needs HQ's stored certificate material.
 func (r *Registry) NeedsMaterial(kind runtime.ResourceKind) bool {
 	return kind == runtime.ResourceKindTLSUploadedCertificate
-}
-
-func errorText(err error) string {
-	var provider *ProviderError
-	if errors.As(err, &provider) {
-		return provider.Message
-	}
-	return err.Error()
 }
 
 // cpanelSites is the cPanel sites a consumer installs on, decided before anything is
@@ -39,31 +33,21 @@ func (r *Registry) cpanelSitesFor(ctx context.Context, consumer TLSConsumer) ([]
 	if err != nil {
 		return nil, err
 	}
-	if len(raw) == 0 {
-		raw = []byte("{}")
+	var answer struct {
+		Sites map[string][]string `json:"sites"`
 	}
-	answer, err := parsePy(raw)
-	if err != nil {
-		return nil, &ProviderError{Message: consumer.Name + " returned a site list HQ could not read."}
-	}
-	var sites *pyValue
-	if answer.object {
-		if at := indexOf(answer.keys, "sites"); at >= 0 {
-			sites = &answer.values[at]
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &answer); err != nil {
+			return nil, &ProviderError{Message: consumer.Name + " returned an unreadable site list", Err: err}
 		}
 	}
-	if sites == nil || !sites.object || len(sites.keys) == 0 {
-		return nil, &ProviderError{Message: consumer.Name + " reported no sites."}
+	if len(answer.Sites) == 0 {
+		return nil, &ProviderError{Message: consumer.Name + " reported no sites"}
 	}
 	namesOf := map[string][]string{}
 	siteOf := map[string]string{}
-	for i, site := range sites.keys {
-		names := []string{site}
-		for _, name := range sites.values[i].array {
-			if name.text != nil {
-				names = append(names, *name.text)
-			}
-		}
+	for site, aliases := range answer.Sites {
+		names := append([]string{site}, aliases...)
 		namesOf[site] = names
 		for _, name := range names {
 			siteOf[strings.ToLower(name)] = site
@@ -85,7 +69,7 @@ func (r *Registry) cpanelSitesFor(ctx context.Context, consumer TLSConsumer) ([]
 	}
 	sort.Strings(notHosted)
 	if len(notHosted) > 0 {
-		return nil, &ProviderError{Message: consumer.Name + " does not serve " + strings.Join(notHosted, ", ") + ". Remove the name from the target, or add it to the hosting account."}
+		return nil, &ProviderError{Message: consumer.Name + " does not serve " + strings.Join(notHosted, ", ") + "; remove the name from the target, or add it to the hosting account"}
 	}
 	wanted := declared
 	if len(wanted) == 0 {
@@ -109,10 +93,10 @@ func (r *Registry) cpanelSitesFor(ctx context.Context, consumer TLSConsumer) ([]
 		}
 	}
 	if len(unserved) > 0 {
-		return nil, &ProviderError{Message: consumer.Name + " would be checked at " + strings.Join(unserved, ", ") + " but installs only on " + strings.Join(chosen, ", ") + ". Add those names to the target's install list, or leave the list empty to install on every site that serves a checked name."}
+		return nil, &ProviderError{Message: consumer.Name + " would be checked at " + strings.Join(unserved, ", ") + " but installs only on " + strings.Join(chosen, ", ") + "; add those names to the target's install list, or leave it empty to install on every site that serves a checked name"}
 	}
 	if len(chosen) == 0 {
-		return nil, &ProviderError{Message: consumer.Name + " has no site to install on."}
+		return nil, &ProviderError{Message: consumer.Name + " has no site to install on"}
 	}
 	return chosen, nil
 }
@@ -135,24 +119,12 @@ func (r *Registry) planDeployment(ctx context.Context, spec TLSCertificateSpec) 
 	return plan, nil
 }
 
-// cpanelPayload is the deploy command's JSON, compact and ASCII-escaped as json.dumps writes it.
-func cpanelPayload(sites []string, leaf, privateKey, chain []byte) []byte {
-	var out strings.Builder
-	out.WriteString(`{"sites":[`)
-	for i, site := range sites {
-		if i > 0 {
-			out.WriteByte(',')
-		}
-		writePyString(&out, site)
-	}
-	out.WriteString(`],"cert":`)
-	writePyString(&out, string(leaf))
-	out.WriteString(`,"key":`)
-	writePyString(&out, string(privateKey))
-	out.WriteString(`,"cabundle":`)
-	writePyString(&out, string(chain))
-	out.WriteByte('}')
-	return []byte(out.String())
+// cpanelDeploy is the cPanel deploy command's input.
+type cpanelDeploy struct {
+	Sites    []string `json:"sites"`
+	Cert     string   `json:"cert"`
+	Key      string   `json:"key"`
+	CABundle string   `json:"cabundle"`
 }
 
 func (r *Registry) deployCertificate(ctx context.Context, spec TLSCertificateSpec, fullchain, privateKey []byte, plan deploymentPlan, known npmCertificateIDs) (TLSDeployment, error) {
@@ -185,7 +157,11 @@ func (r *Registry) deployCertificate(ctx context.Context, spec TLSCertificateSpe
 			_, err = r.commands().SSH(ctx, consumer.ConnectionRef, "deploy", bundle)
 		case runtime.TLSConsumerKindCPanel:
 			sites := plan[consumer.Name]
-			_, err = r.commands().SSH(ctx, consumer.ConnectionRef, "deploy", cpanelPayload(sites, leaf, privateKey, chain))
+			var payload []byte
+			payload, err = json.Marshal(cpanelDeploy{Sites: sites, Cert: string(leaf), Key: string(privateKey), CABundle: string(chain)})
+			if err == nil {
+				_, err = r.commands().SSH(ctx, consumer.ConnectionRef, "deploy", payload)
+			}
 			if err == nil {
 				if deployment.CPanelSites == nil {
 					deployment.CPanelSites = &cpanelSites{sites: map[string][]string{}}
@@ -197,10 +173,7 @@ func (r *Registry) deployCertificate(ctx context.Context, spec TLSCertificateSpe
 			}
 		}
 		if err != nil {
-			if !isProviderError(err) {
-				return deployment, err
-			}
-			return deployment, &ProviderError{Message: "TLS deployment failed for " + consumer.Name + " (" + string(consumer.Kind) + "): " + errorText(err)}
+			return deployment, fmt.Errorf("deploy to %s (%s): %w", consumer.Name, consumer.Kind, err)
 		}
 	}
 	return deployment, nil
@@ -224,9 +197,9 @@ func (r *Registry) deployTransaction(ctx context.Context, spec TLSCertificateSpe
 			return Result{}, err
 		}
 		if _, rollback := r.deployCertificate(ctx, spec, previousFullchain, previousKey, plan, known); rollback != nil {
-			return Result{}, &ProviderError{Message: "Certificate deployment failed (" + failure.Message + "); rollback also failed (" + errorText(rollback) + ")."}
+			return Result{}, &ProviderError{Message: fmt.Sprintf("certificate deployment failed (%v); rollback also failed (%v)", err, rollback)}
 		}
-		return Result{}, &ProviderError{Message: "Certificate deployment failed: " + failure.Message + " Rollback succeeded.", Status: failure.Status}
+		return Result{}, &ProviderError{Message: "certificate deployment failed, rollback succeeded", Err: err, Status: failure.Status}
 	}
 	matchEvidence(status, expected)
 	status.TLSDeployment = deployment
@@ -272,7 +245,7 @@ func (r *Registry) applyTLSReconcile(ctx context.Context, spec TLSCertificateSpe
 	}
 	caddy, ok := rollbackSource(spec)
 	if !ok {
-		return Result{}, &ProviderError{Message: "Certificate reconciliation requires a rollback source."}
+		return Result{}, &ProviderError{Message: "certificate reconciliation requires a rollback source"}
 	}
 	plan, err := r.planDeployment(ctx, spec)
 	if err != nil {
@@ -288,7 +261,7 @@ func (r *Registry) applyTLSReconcile(ctx context.Context, spec TLSCertificateSpe
 func (r *Registry) renewTLS(ctx context.Context, spec TLSCertificateSpec, known npmCertificateIDs) (Result, error) {
 	caddy, ok := rollbackSource(spec)
 	if !ok {
-		return Result{}, &ProviderError{Message: "Certificate renewal requires a rollback source."}
+		return Result{}, &ProviderError{Message: "certificate renewal requires a rollback source"}
 	}
 	// Before the CA is asked for anything: a target that cannot be satisfied costs nothing.
 	plan, err := r.planDeployment(ctx, spec)
@@ -334,7 +307,7 @@ func (r *Registry) publishTLSFacts(ctx context.Context, spec TLSCertificateSpec,
 		}
 		fact, err := r.publishFacts(ctx, publication, desired, r.lineageMaterial(spec))
 		if err != nil {
-			fact = PublishedFact{Target: publication.Name, Written: false, Detail: errorText(err)}
+			fact = PublishedFact{Target: publication.Name, Written: false, Detail: err.Error()}
 		}
 		published = append(published, fact)
 	}
@@ -387,7 +360,7 @@ func (r *Registry) uploadedReconcile(ctx context.Context, spec TLSCertificateSpe
 		material = *spec.Material
 	}
 	if material.Fullchain == "" || material.PrivateKey == "" {
-		return Result{}, &ProviderError{Message: "HQ did not supply the stored certificate. Upload it again."}
+		return Result{}, &ProviderError{Message: "HQ did not supply the stored certificate; upload it again"}
 	}
 	domains := append([]string{}, material.Domains...)
 	if !apply {
@@ -416,7 +389,7 @@ func (r *Registry) uploadedDelete(ctx context.Context, spec TLSCertificateSpec, 
 	}
 	sort.Strings(elsewhere)
 	if len(elsewhere) > 0 {
-		return Result{}, &ProviderError{Message: "HQ can only remove this from Nginx Proxy Manager. Take it off " + strings.Join(elsewhere, ", ") + " by hand first, then remove those targets from this resource."}
+		return Result{}, &ProviderError{Message: "HQ can only remove this from Nginx Proxy Manager; take it off " + strings.Join(elsewhere, ", ") + " by hand first, then remove those targets from this resource"}
 	}
 	base, headers, err := r.npmSession(ctx, "")
 	if err != nil {
@@ -432,8 +405,8 @@ func (r *Registry) uploadedDelete(ctx context.Context, spec TLSCertificateSpec, 
 	}
 	matches := []int{}
 	for _, item := range certificates {
-		if id, ok := jsonInt(item.ID); ok && installed[id] {
-			matches = append(matches, id)
+		if installed[item.ID] {
+			matches = append(matches, item.ID)
 		}
 	}
 	if len(matches) == 0 {
@@ -443,17 +416,17 @@ func (r *Registry) uploadedDelete(ctx context.Context, spec TLSCertificateSpec, 
 		}
 		named := []string{}
 		for _, item := range certificates {
-			if name, ok := item.niceName(); ok && wanted[name] {
-				named = append(named, name)
+			if wanted[item.NiceName] {
+				named = append(named, item.NiceName)
 			}
 		}
 		sort.Strings(named)
 		if len(named) > 0 {
-			return Result{}, &ProviderError{Message: "NPM holds " + strings.Join(named, ", ") + ", but HQ has no record of installing it, so it was not removed. Remove it in NPM if it is HQ's, then remove this again."}
+			return Result{}, &ProviderError{Message: "NPM holds " + strings.Join(named, ", ") + ", but HQ has no record of installing it, so it was not removed; remove it in NPM if it is HQ's, then remove this again"}
 		}
 		return Result{Changed: false, Status: CertificateRemoval{Removed: true}, Conditions: []Condition{condition("Ready", "Absent", "No such certificate in NPM.")}, Message: "Certificate was already absent from NPM."}, nil
 	}
-	hosts, err := r.npmCertificateHosts(ctx, base, headers)
+	hosts, err := r.npmProxyHostList(ctx, base, headers)
 	if err != nil {
 		return Result{}, err
 	}
@@ -463,13 +436,13 @@ func (r *Registry) uploadedDelete(ctx context.Context, spec TLSCertificateSpec, 
 	}
 	stillBound := []string{}
 	for _, host := range hosts {
-		if id, ok := jsonInt(host.CertificateID); ok && identifiers[id] {
+		if identifiers[int(host.CertificateId)] {
 			stillBound = append(stillBound, host.DomainNames...)
 		}
 	}
 	sort.Strings(stillBound)
 	if len(stillBound) > 0 {
-		return Result{}, &ProviderError{Message: "Still serving " + strings.Join(stillBound, ", ") + ". Point those at another certificate before removing this one."}
+		return Result{}, &ProviderError{Message: "still serving " + strings.Join(stillBound, ", ") + "; point those at another certificate before removing this one"}
 	}
 	if apply {
 		for _, id := range matches {

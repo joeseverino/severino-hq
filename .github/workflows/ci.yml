@@ -450,30 +450,21 @@ jobs:
       - name: Browser layout gate
         run: python manage.py test core.browser_tests --noinput --parallel 1
 
-  # The Go controller: format, generated bridge types against the contract,
-  # vet, unit tests, and differential parity against the Python controller.
-  # Parity imports HQ's provider code, so it runs on the toolchain's Python.
+  # The Go controller: format, generated types against their specs, vet, and
+  # the unit tests under the race detector.
   controller:
     name: Controller
     needs: proven
     if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    env:
-      DJANGO_SECRET_KEY: ci-only-secret-key-not-for-production
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/toolchain
-        with:
-          cache: pip
-      - run: pip install --require-hashes -r requirements.txt
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: controller/go.mod
           cache-dependency-path: controller/go.sum
       - name: Controller checks
-        env:
-          CHECK_PYTHON: python
         run: controller/scripts/check.sh
 
   image:
@@ -574,6 +565,16 @@ jobs:
           docker run --rm --entrypoint python "$IMAGE" -c \
             "import importlib.util, sys; sys.exit(importlib.util.find_spec('debug_toolbar') is not None)"
           echo "the image does not contain debug_toolbar"
+      - name: It carries the controller
+        if: env.PROVEN == ''
+        env:
+          IMAGE: ${{ steps.build.outputs.image }}
+        run: |
+          usage="$(docker run --rm --entrypoint /usr/local/bin/hq-controller "$IMAGE" -help 2>&1 || true)"
+          case "$usage" in
+            *-apply*) echo "the image carries hq-controller" ;;
+            *) echo "$usage" >&2; exit 1 ;;
+          esac
       # Scans the exact artifact about to be published: a fixable HIGH or
       # CRITICAL in the image stops it here.
       - name: Scan

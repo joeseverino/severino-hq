@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -14,8 +13,8 @@ import (
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
-// The dashboard glance: host, container and weather readings on demand. Text is
-// formatted as the Python controller formats it, because HQ shows it verbatim.
+// The dashboard glance: host, container and weather readings on demand. HQ
+// shows the text as it is written here.
 
 // missing is application.ui.MISSING.
 const missing = "–"
@@ -116,20 +115,13 @@ type weatherFailure struct {
 	RefreshFailed string         `json:"refresh_failed"`
 }
 
-// pyFailure names a failure as the Python glance reports it: the exception's type.
-type pyFailure struct {
-	kind    string
-	message string
-}
-
-func (e *pyFailure) Error() string { return e.message }
-
-func failureKind(err error) string {
-	var named *pyFailure
-	if errors.As(err, &named) {
-		return named.kind
+// glanceFailed is the token HQ shows for a failed refresh: the contract's
+// failure class when the error carries one.
+func glanceFailed(err error) string {
+	if failure, _, _ := runtime.Classify(err); failure != runtime.FailureClassUnclassified {
+		return string(failure)
 	}
-	return "ProviderError"
+	return "unclassified"
 }
 
 // humanBytes is application.labels.human_bytes.
@@ -145,51 +137,6 @@ func humanBytes(value float64) string {
 		amount /= 1024
 	}
 	return "0 B"
-}
-
-// pyFloat is float(v or 0) for a decoded value.
-func pyFloat(v *pyValue) (float64, error) {
-	if v == nil || !v.truthy() {
-		return 0, nil
-	}
-	if v.text != nil {
-		f, err := strconv.ParseFloat(strings.TrimSpace(*v.text), 64)
-		if err != nil {
-			return 0, &pyFailure{"ValueError", "could not convert string to float"}
-		}
-		return f, nil
-	}
-	if n, ok := v.number(); ok {
-		if n.inf != 0 {
-			return math.Inf(n.inf), nil
-		}
-		f, _ := n.value.Float64()
-		return f, nil
-	}
-	return 0, &pyFailure{"TypeError", "float() argument must be a string or a real number"}
-}
-
-// pyInt is int(v or 0) for a decoded value: a float truncates.
-func pyInt(v *pyValue) (int64, error) {
-	if v == nil || !v.truthy() {
-		return 0, nil
-	}
-	if v.text != nil {
-		i, err := strconv.ParseInt(strings.TrimSpace(*v.text), 10, 64)
-		if err != nil {
-			return 0, &pyFailure{"ValueError", "invalid literal for int()"}
-		}
-		return i, nil
-	}
-	f, err := pyFloat(v)
-	return int64(f), err
-}
-
-func field(v *pyValue, key string) *pyValue {
-	if v == nil {
-		return nil
-	}
-	return v.get(key).opt()
 }
 
 func (r *Registry) controllerID() string {
@@ -215,8 +162,8 @@ func (r *Registry) Glance(ctx context.Context, plan runtime.GlancePlan) (runtime
 			continue
 		}
 		if err != nil {
-			kind := failureKind(err)
-			slog.Warn(fmt.Sprintf("dashboard glance failed: %s (%s): %s", string(panel), kind, runtime.Clip(err.Error(), runtime.ReasonLimit)),
+			kind := glanceFailed(err)
+			slog.Warn(fmt.Sprintf("dashboard glance failed: %s (%s): %s", panel, kind, runtime.Clip(err.Error(), runtime.ReasonLimit)),
 				slog.String("event", "controller.glance.failed"), slog.String("panel", string(panel)))
 			summary := "Refresh failed (" + kind + ")."
 			if panel == runtime.GlancePanelIDInfrastructure {
@@ -290,55 +237,46 @@ func percent(part, whole int64) float64 {
 	return float64(part) / float64(whole) * 100
 }
 
+// hostReading is what hostGlanceScript prints.
+type hostReading struct {
+	CPUPercent   float64 `json:"cpu_percent"`
+	Cores        int64   `json:"cores"`
+	Load1m       float64 `json:"load_1m"`
+	MemoryUsed   int64   `json:"memory_used"`
+	MemoryTotal  int64   `json:"memory_total"`
+	StorageUsed  int64   `json:"storage_used"`
+	StorageTotal int64   `json:"storage_total"`
+}
+
 func (r *Registry) hostGlance(ctx context.Context, key, ref string) (GlanceMachine, error) {
 	output, err := r.commands().SSH(ctx, ref, "python3 -", []byte(hostGlanceScript))
 	if err != nil {
 		return GlanceMachine{}, err
 	}
-	reading, err := parsePy(output)
-	if err != nil {
-		return GlanceMachine{}, &pyFailure{"JSONDecodeError", "The host reading is not JSON."}
-	}
-	if !reading.object {
-		return GlanceMachine{}, &pyFailure{"AttributeError", "The host reading is not an object."}
-	}
-	ints := map[string]int64{}
-	for _, name := range []string{"memory_used", "memory_total", "storage_used", "storage_total", "cores"} {
-		if ints[name], err = pyInt(reading.get(name).opt()); err != nil {
-			return GlanceMachine{}, err
-		}
-	}
-	load, err := pyFloat(reading.get("load_1m").opt())
-	if err != nil {
-		return GlanceMachine{}, err
-	}
-	cpu, err := pyFloat(reading.get("cpu_percent").opt())
-	if err != nil {
-		return GlanceMachine{}, err
+	var reading hostReading
+	if err := json.Unmarshal(output, &reading); err != nil {
+		return GlanceMachine{}, fmt.Errorf("host reading from %s: %w", ref, err)
 	}
 	return GlanceMachine{
-		Key: key, Status: "good", Summary: fmt.Sprintf("Host load %.2f", load),
+		Key: key, Status: "good", Summary: fmt.Sprintf("Host load %.2f", reading.Load1m),
 		Metrics: []GlanceMetric{
-			{Label: "CPU", Value: fmt.Sprintf("%.0f%%", cpu), Detail: fmt.Sprintf("%d cores", ints["cores"])},
-			{Label: "Memory", Value: fmt.Sprintf("%.0f%%", percent(ints["memory_used"], ints["memory_total"])),
-				Detail: humanBytes(float64(ints["memory_used"])) + " of " + humanBytes(float64(ints["memory_total"])) + " used"},
-			{Label: "Storage", Value: fmt.Sprintf("%.0f%%", percent(ints["storage_used"], ints["storage_total"])),
-				Detail: humanBytes(float64(ints["storage_used"])) + " of " + humanBytes(float64(ints["storage_total"])) + " used on /"},
+			{Label: "CPU", Value: fmt.Sprintf("%.0f%%", reading.CPUPercent), Detail: fmt.Sprintf("%d cores", reading.Cores)},
+			{Label: "Memory", Value: fmt.Sprintf("%.0f%%", percent(reading.MemoryUsed, reading.MemoryTotal)),
+				Detail: humanBytes(float64(reading.MemoryUsed)) + " of " + humanBytes(float64(reading.MemoryTotal)) + " used"},
+			{Label: "Storage", Value: fmt.Sprintf("%.0f%%", percent(reading.StorageUsed, reading.StorageTotal)),
+				Detail: humanBytes(float64(reading.StorageUsed)) + " of " + humanBytes(float64(reading.StorageTotal)) + " used on /"},
 		},
 	}, nil
 }
 
 // containerCPUPercent is Docker's share-of-one-core CPU for a stats sample.
-func containerCPUPercent(stats *pyValue) float64 {
-	cpu, previous := field(stats, "cpu_stats"), field(stats, "precpu_stats")
-	f := func(v *pyValue) float64 { x, _ := pyFloat(v); return x }
-	cpuDelta := f(field(field(cpu, "cpu_usage"), "total_usage")) - f(field(field(previous, "cpu_usage"), "total_usage"))
-	systemDelta := f(field(cpu, "system_cpu_usage")) - f(field(previous, "system_cpu_usage"))
-	online := f(field(cpu, "online_cpus"))
+func containerCPUPercent(stats dockerStats) float64 {
+	cpu, previous := stats.CPUStats, stats.PreCPUStats
+	cpuDelta := float64(cpu.CPUUsage.TotalUsage) - float64(previous.CPUUsage.TotalUsage)
+	systemDelta := float64(cpu.SystemUsage) - float64(previous.SystemUsage)
+	online := float64(cpu.OnlineCPUs)
 	if online == 0 {
-		if percpu := field(field(cpu, "cpu_usage"), "percpu_usage"); percpu != nil {
-			online = float64(len(percpu.array))
-		}
+		online = float64(len(cpu.CPUUsage.PercpuUsage))
 	}
 	if online == 0 {
 		online = 1
@@ -349,15 +287,29 @@ func containerCPUPercent(stats *pyValue) float64 {
 	return 0
 }
 
-func (r *Registry) getJSON(ctx context.Context, address string, headers map[string]string) (pyValue, error) {
+// getAnswer GETs address and decodes the answer into T.
+func getAnswer[T any](ctx context.Context, r *Registry, address string, headers map[string]string, what string) (T, error) {
 	raw, err := r.HTTP.Request(ctx, address, "GET", headers, nil)
 	if err != nil {
-		return pyValue{}, err
+		var zero T
+		return zero, fmt.Errorf("%s: %w", what, err)
 	}
-	if len(raw) == 0 {
-		return pyValue{literal: "null"}, nil
+	return decodeAnswer[T](raw, what)
+}
+
+// dockerStorage is what Docker holds on disk: layers, volumes and build cache.
+// A size Docker did not compute (-1) counts as nothing.
+func dockerStorage(disk dockerDiskUsage) int64 {
+	total := max(disk.LayersSize, 0)
+	for _, volume := range disk.Volumes {
+		if volume.UsageData != nil {
+			total += max(volume.UsageData.Size, 0)
+		}
 	}
-	return parsePy(raw)
+	for _, cache := range disk.BuildCache {
+		total += max(cache.Size, 0)
+	}
+	return total
 }
 
 // portainerGlance is each reachable Portainer environment's containers measured
@@ -365,10 +317,10 @@ func (r *Registry) getJSON(ctx context.Context, address string, headers map[stri
 func (r *Registry) portainerGlance(ctx context.Context) ([]GlanceMachine, error) {
 	refs := r.Env.Refs("portainer")
 	if len(refs) == 0 {
-		return nil, &ProviderError{Message: "No Portainer connection was supplied."}
+		return nil, &ProviderError{Message: "no Portainer connection was supplied"}
 	}
 	if r.Portainer == nil {
-		return nil, &ProviderError{Message: "Portainer is not available to this controller."}
+		return nil, &ProviderError{Message: "Portainer is not available to this controller"}
 	}
 	machines := []GlanceMachine{}
 	for _, ref := range refs {
@@ -388,84 +340,49 @@ func (r *Registry) portainerGlance(ctx context.Context) ([]GlanceMachine, error)
 			if !environment.Reachable {
 				continue
 			}
-			prefix := base + "/endpoints/" + environment.ID.str() + "/docker"
-			info, err := r.getJSON(ctx, prefix+"/info", headers)
+			machine, err := r.environmentGlance(ctx, base+"/endpoints/"+itoa(environment.ID)+"/docker", headers)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("environment %s: %w", environment.Name, err)
 			}
-			disk, err := r.getJSON(ctx, prefix+"/system/df", headers)
-			if err != nil {
-				return nil, err
-			}
-			containers, err := r.getJSON(ctx, prefix+"/containers/json?all=false", headers)
-			if err != nil {
-				return nil, err
-			}
-			cores, err := pyInt(info.get("NCPU").opt())
-			if err != nil {
-				return nil, err
-			}
-			memoryTotal, err := pyInt(info.get("MemTotal").opt())
-			if err != nil {
-				return nil, err
-			}
-			storage, err := pyInt(disk.get("LayersSize").opt())
-			if err != nil {
-				return nil, err
-			}
-			for _, list := range []string{"Volumes", "BuildCache"} {
-				items := disk.get(list).opt()
-				if items == nil {
-					continue
-				}
-				for i := range items.array {
-					size := field(&items.array[i], "Size")
-					if list == "Volumes" {
-						size = field(field(&items.array[i], "UsageData"), "Size")
-					}
-					n, err := pyInt(size)
-					if err != nil {
-						return nil, err
-					}
-					storage += n
-				}
-			}
-			var cpu float64
-			var memoryUsed, running int64
-			for i := range containers.array {
-				id := containers.array[i].get("Id").opt()
-				if id == nil {
-					return nil, &pyFailure{"KeyError", "Id"}
-				}
-				stats, err := r.getJSON(ctx, prefix+"/containers/"+id.str()+"/stats?stream=false&one-shot=true", headers)
-				if err != nil {
-					return nil, err
-				}
-				memory := field(&stats, "memory_stats")
-				cache, err := pyInt(field(field(memory, "stats"), "inactive_file"))
-				if err != nil {
-					return nil, err
-				}
-				usage, err := pyInt(field(memory, "usage"))
-				if err != nil {
-					return nil, err
-				}
-				memoryUsed += max(0, usage-cache)
-				cpu += containerCPUPercent(&stats)
-				running++
-			}
-			key := environment.Name
-			if environment.Local && r.controllerID() != "" {
-				key = r.controllerID()
-			}
-			machines = append(machines, GlanceMachine{
-				Key: key, Status: "good",
-				Summary: fmt.Sprintf("%d cores · %s memory", cores, humanBytes(float64(memoryTotal))),
-				Metrics: containerMetrics(running, cpu, cores, memoryUsed, memoryTotal, storage),
-			})
+			machine.Key = machineName(environment, r.controllerID())
+			machines = append(machines, machine)
 		}
 	}
 	return machines, nil
+}
+
+// environmentGlance measures one Docker environment's running containers.
+func (r *Registry) environmentGlance(ctx context.Context, docker string, headers map[string]string) (GlanceMachine, error) {
+	info, err := getAnswer[dockerInfo](ctx, r, docker+"/info", headers, "docker info")
+	if err != nil {
+		return GlanceMachine{}, err
+	}
+	disk, err := getAnswer[dockerDiskUsage](ctx, r, docker+"/system/df", headers, "docker disk usage")
+	if err != nil {
+		return GlanceMachine{}, err
+	}
+	containers, err := getAnswer[[]dockerContainer](ctx, r, docker+"/containers/json?all=false", headers, "running containers")
+	if err != nil {
+		return GlanceMachine{}, err
+	}
+	var cpu float64
+	var memoryUsed int64
+	for _, container := range containers {
+		if container.ID == "" {
+			return GlanceMachine{}, &ProviderError{Message: "running containers: a container has no id"}
+		}
+		stats, err := getAnswer[dockerStats](ctx, r, docker+"/containers/"+container.ID+"/stats?stream=false&one-shot=true", headers, "container stats")
+		if err != nil {
+			return GlanceMachine{}, err
+		}
+		memoryUsed += max(0, stats.MemoryStats.Usage-stats.MemoryStats.Stats.InactiveFile)
+		cpu += containerCPUPercent(stats)
+	}
+	return GlanceMachine{
+		Status:  "good",
+		Summary: fmt.Sprintf("%d cores · %s memory", info.NCPU, humanBytes(float64(info.MemTotal))),
+		Metrics: containerMetrics(int64(len(containers)), cpu, info.NCPU, memoryUsed, info.MemTotal, dockerStorage(disk)),
+	}, nil
 }
 
 // containerMetrics is what the containers take of their machine. Docker states
@@ -484,6 +401,55 @@ func containerMetrics(running int64, cpu float64, cores, memoryUsed, memoryTotal
 	}
 }
 
+// nwsAPI is the National Weather Service API; SEVERINO_NWS_URL points elsewhere.
+const nwsAPI = "https://api.weather.gov"
+
+// nwsUserAgent is the contact NWS asks every client to send.
+const nwsUserAgent = "Severino-HQ/1.0 (https://github.com/joeseverino/severino-hq)"
+
+// nwsPoint is GET /points/{lat},{lon}.
+type nwsPoint struct {
+	Properties struct {
+		ForecastHourly   string `json:"forecastHourly"`
+		RelativeLocation struct {
+			Properties struct {
+				City  string `json:"city"`
+				State string `json:"state"`
+			} `json:"properties"`
+		} `json:"relativeLocation"`
+	} `json:"properties"`
+}
+
+// nwsForecast is the hourly forecast the point names.
+type nwsForecast struct {
+	Properties struct {
+		Periods []nwsPeriod `json:"periods"`
+	} `json:"properties"`
+}
+
+type nwsPeriod struct {
+	Name                       string   `json:"name"`
+	StartTime                  string   `json:"startTime"`
+	Temperature                *float64 `json:"temperature"`
+	TemperatureUnit            string   `json:"temperatureUnit"`
+	WindSpeed                  string   `json:"windSpeed"`
+	WindDirection              string   `json:"windDirection"`
+	ShortForecast              string   `json:"shortForecast"`
+	ProbabilityOfPrecipitation struct {
+		Value *float64 `json:"value"`
+	} `json:"probabilityOfPrecipitation"`
+}
+
+// nwsAlerts is GET /alerts/active.
+type nwsAlerts struct {
+	Features []struct {
+		Properties struct {
+			Event    string `json:"event"`
+			Headline string `json:"headline"`
+		} `json:"properties"`
+	} `json:"features"`
+}
+
 // isoMoment is application.timestamps.moment(stamp, naive="keep").
 func isoMoment(stamp string) (time.Time, bool) {
 	text := strings.TrimSpace(stamp)
@@ -496,12 +462,9 @@ func isoMoment(stamp string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func periodHour(period *pyValue) string {
-	start := field(period, "startTime")
-	if start == nil {
-		return ""
-	}
-	found, ok := isoMoment(start.str())
+// hour is the period's start as a 12-hour clock reading, "" when it has none.
+func (p nwsPeriod) hour() string {
+	found, ok := isoMoment(p.StartTime)
 	if !ok {
 		return ""
 	}
@@ -516,163 +479,143 @@ func periodHour(period *pyValue) string {
 	return fmt.Sprintf("%d %s", hour, meridiem)
 }
 
-func periodChance(period *pyValue) int64 {
-	value := field(field(period, "probabilityOfPrecipitation"), "value")
-	if value == nil || value.text != nil || value.object || value.array != nil || value.literal == "null" {
-		return 0
+// chance is the period's chance of rain in whole percent.
+func (p nwsPeriod) chance() int {
+	if value := p.ProbabilityOfPrecipitation.Value; value != nil {
+		return int(*value)
 	}
-	n, _ := pyInt(value)
-	return n
+	return 0
 }
 
-// pyFormatOr is f"{d.get(key, fallback)}".
-func pyFormatOr(v *pyValue, key, fallback string) string {
-	if found := field(v, key); found != nil {
-		return found.str()
+// temperature is the period's temperature as written, or missing.
+func (p nwsPeriod) temperature() string {
+	if p.Temperature == nil {
+		return missing
 	}
-	return fallback
+	return degrees(*p.Temperature)
 }
 
-func (r *Registry) weatherGlance(ctx context.Context, rawPoint string) (weatherPanel, error) {
-	point := strings.TrimSpace(rawPoint)
-	parts := strings.Split(point, ",")
+func degrees(value float64) string { return strconv.FormatFloat(value, 'f', -1, 64) }
+
+func orDefault(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+// weatherPoint is the configured point as latitude and longitude.
+func weatherPoint(raw string) (string, error) {
+	parts := strings.Split(strings.TrimSpace(raw), ",")
 	if len(parts) != 2 {
-		return weatherPanel{}, &ProviderError{Message: "SEVERINO_NWS_POINT must be latitude,longitude."}
+		return "", &ProviderError{Message: "SEVERINO_NWS_POINT must be latitude,longitude"}
 	}
 	latitude, errLat := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
 	longitude, errLon := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
 	if errLat != nil || errLon != nil {
-		return weatherPanel{}, &ProviderError{Message: "SEVERINO_NWS_POINT is not numeric."}
+		return "", &ProviderError{Message: "SEVERINO_NWS_POINT is not numeric"}
 	}
 	if !(latitude >= -90 && latitude <= 90) || !(longitude >= -180 && longitude <= 180) {
-		return weatherPanel{}, &ProviderError{Message: "SEVERINO_NWS_POINT is outside valid coordinates."}
+		return "", &ProviderError{Message: "SEVERINO_NWS_POINT is outside valid coordinates"}
 	}
-	headers := map[string]string{
-		"Accept":     "application/geo+json",
-		"User-Agent": "Severino-HQ/1.0 (https://github.com/joeseverino/severino-hq)",
-	}
-	located := fmt.Sprintf("%.4f,%.4f", latitude, longitude)
-	pointData, err := r.getJSON(ctx, "https://api.weather.gov/points/"+located, headers)
+	return fmt.Sprintf("%.4f,%.4f", latitude, longitude), nil
+}
+
+func (r *Registry) weatherGlance(ctx context.Context, rawPoint string) (weatherPanel, error) {
+	located, err := weatherPoint(rawPoint)
 	if err != nil {
 		return weatherPanel{}, err
 	}
-	properties := objectField(&pointData, "properties")
-	hourly, err := r.getJSON(ctx, strField(properties, "forecastHourly"), headers)
+	api := strings.TrimRight(orDefault(strings.TrimSpace(r.Env["SEVERINO_NWS_URL"]), nwsAPI), "/")
+	headers := map[string]string{"Accept": "application/geo+json", "User-Agent": nwsUserAgent}
+	point, err := getAnswer[nwsPoint](ctx, r, api+"/points/"+located, headers, "weather point")
 	if err != nil {
 		return weatherPanel{}, err
 	}
-	periods := []*pyValue{}
-	if listed := objectField(objectField(&hourly, "properties"), "periods"); listed != nil {
-		for i := range listed.array {
-			if listed.array[i].object && len(periods) < lookaheadHours {
-				periods = append(periods, &listed.array[i])
-			}
-		}
+	forecast, err := getAnswer[nwsForecast](ctx, r, point.Properties.ForecastHourly, headers, "hourly forecast")
+	if err != nil {
+		return weatherPanel{}, err
 	}
-	current := &pyValue{object: true}
+	periods := forecast.Properties.Periods
+	if len(periods) > lookaheadHours {
+		periods = periods[:lookaheadHours]
+	}
+	var current nwsPeriod
 	if len(periods) > 0 {
 		current = periods[0]
 	}
-	alerts, err := r.getJSON(ctx, "https://api.weather.gov/alerts/active?point="+located, headers)
+	alerts, err := getAnswer[nwsAlerts](ctx, r, api+"/alerts/active?point="+located, headers, "weather alerts")
 	if err != nil {
 		return weatherPanel{}, err
 	}
-	active := []pyValue{}
-	if features := objectField(&alerts, "features"); features != nil {
-		active = features.array
-	}
-	place := objectField(objectField(properties, "relativeLocation"), "properties")
-	location := []string{}
-	for _, key := range []string{"city", "state"} {
-		if part := field(place, key); part != nil && part.truthy() {
-			location = append(location, part.str())
-		}
-	}
+	place := point.Properties.RelativeLocation.Properties
 	status := "good"
-	if len(active) > 0 {
+	if len(alerts.Features) > 0 {
 		status = "serious"
 	}
-	now := strField(current, "shortForecast")
-	if now == "" {
-		now = "Unavailable"
-	}
 	metrics := []GlanceMetric{
-		{Label: "Now", Value: now, Detail: strField(current, "name")},
-		{Label: "Temperature", Value: pyFormatOr(current, "temperature", missing) + "°" + pyFormatOr(current, "temperatureUnit", "F"),
-			Detail: strField(current, "windChill")},
+		{Label: "Now", Value: orDefault(current.ShortForecast, "Unavailable"), Detail: current.Name},
+		{Label: "Temperature", Value: current.temperature() + "°" + orDefault(current.TemperatureUnit, "F")},
 	}
 	metrics = append(metrics, outlook(periods)...)
 	metrics = append(metrics, GlanceMetric{Label: "Wind",
-		Value:  strings.TrimSpace(pyFormatOr(current, "windDirection", "") + " " + pyFormatOr(current, "windSpeed", missing)),
+		Value:  strings.TrimSpace(current.WindDirection + " " + orDefault(current.WindSpeed, missing)),
 		Detail: "NWS hourly forecast"})
-	metrics = append(metrics, alertMetric(active)...)
-	summary := strings.Join(location, ", ")
-	if summary == "" {
-		summary = "National Weather Service"
-	}
+	metrics = append(metrics, alertMetric(alerts)...)
 	hours := []GlanceHour{}
 	for _, period := range periods {
 		hours = append(hours, GlanceHour{
-			Time: periodHour(period), Temperature: pyFormatOr(period, "temperature", missing) + "°",
-			Forecast: strField(period, "shortForecast"), Precipitation: fmt.Sprintf("%d%%", periodChance(period)),
+			Time: period.hour(), Temperature: period.temperature() + "°",
+			Forecast: period.ShortForecast, Precipitation: fmt.Sprintf("%d%%", period.chance()),
 		})
 	}
-	return weatherPanel{PanelID: string(runtime.GlancePanelIDWeather), Point: located, Status: status, Summary: summary, Metrics: metrics, Hours: hours}, nil
+	summary := strings.Join(nonEmpty([]string{place.City, place.State}), ", ")
+	return weatherPanel{PanelID: string(runtime.GlancePanelIDWeather), Point: located, Status: status,
+		Summary: orDefault(summary, "National Weather Service"), Metrics: metrics, Hours: hours}, nil
 }
 
 // outlook is the range ahead and when rain next comes, from the hourly periods.
-func outlook(periods []*pyValue) []GlanceMetric {
+func outlook(periods []nwsPeriod) []GlanceMetric {
 	found := []GlanceMetric{}
-	var low, high *pyValue
-	var lowN, highN pyNum
+	var low, high *float64
 	for _, period := range periods {
-		temperature := period.get("temperature").opt()
-		if temperature == nil || temperature.text != nil || temperature.object || temperature.array != nil || temperature.literal == "null" {
-			continue
-		}
-		n, ok := temperature.number()
-		if !ok {
-			continue
-		}
-		if low == nil || n.less(lowN) {
-			low, lowN = temperature, n
-		}
-		if high == nil || highN.less(n) {
-			high, highN = temperature, n
+		if t := period.Temperature; t != nil {
+			if low == nil || *t < *low {
+				low = t
+			}
+			if high == nil || *t > *high {
+				high = t
+			}
 		}
 	}
 	if low != nil {
-		found = append(found, GlanceMetric{Label: "Range", Value: low.str() + "–" + high.str() + "°",
+		found = append(found, GlanceMetric{Label: "Range", Value: degrees(*low) + "–" + degrees(*high) + "°",
 			Detail: fmt.Sprintf("next %d hours", len(periods))})
 	}
 	for i, period := range periods {
-		if periodChance(period) < rainChance {
+		if period.chance() < rainChance {
 			continue
 		}
-		when := periodHour(period)
+		when := period.hour()
 		if i == 0 {
 			when = "Now"
 		}
-		found = append(found, GlanceMetric{Label: "Rain", Value: fmt.Sprintf("%s · %d%%", when, periodChance(period)),
-			Detail: strField(period, "shortForecast")})
+		found = append(found, GlanceMetric{Label: "Rain", Value: fmt.Sprintf("%s · %d%%", when, period.chance()),
+			Detail: period.ShortForecast})
 		break
 	}
 	return found
 }
 
 // alertMetric is the active alert by name, with how many more there are.
-func alertMetric(features []pyValue) []GlanceMetric {
-	if len(features) == 0 {
+func alertMetric(alerts nwsAlerts) []GlanceMetric {
+	if len(alerts.Features) == 0 {
 		return []GlanceMetric{}
 	}
-	first := objectField(&features[0], "properties")
+	first := alerts.Features[0].Properties
 	more := ""
-	if len(features) > 1 {
-		more = fmt.Sprintf(" +%d", len(features)-1)
+	if n := len(alerts.Features); n > 1 {
+		more = fmt.Sprintf(" +%d", n-1)
 	}
-	event := strField(first, "event")
-	if event == "" {
-		event = "Weather alert"
-	}
-	return []GlanceMetric{{Label: "Alerts", Value: event + more, Detail: strField(first, "headline")}}
+	return []GlanceMetric{{Label: "Alerts", Value: orDefault(first.Event, "Weather alert") + more, Detail: first.Headline}}
 }

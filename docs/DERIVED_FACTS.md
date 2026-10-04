@@ -36,29 +36,16 @@ ObservationSpec(
 )
 ```
 
-and read by one function registered one of two ways, and no other
-(`controller_runtime/tests/test_reader_registration.py` holds it): a core reader in
-one of the controller's integration modules
-(`controller_runtime/cloudflare_account.py`, `tailscale.py`,
-`host_readings.py`), registered beside its definition:
+and read by one Go reader in the controller's integration
+(`controller/providers/`), registered in its `admit` function:
 
-```python
-@reads("cloudflare.pages_project")
-def list_pages_projects() -> list[dict[str, Any]]:
-    ...
+```go
+r.reader(runtime.ResourceKindCloudflarePagesProject, r.cloudflarePagesProjects)
 ```
 
-or, for an integration with a controller adapter, in the adapter's `readings`
-map (`control_plane/provider_adapters/`), which admits only a registered kind
-read through a connection the integration holds (its definitions' connections,
-or `reads_through` for an integration whose resource kinds the controller core
-holds). A reading through such a connection is always the adapter's:
-
-```python
-ControllerIntegrationAdapter(..., readings={"adguard.client": read_clients})
-```
-
-A reader iterates the provider's connections (`runtime.connection_refs`) and
+The contract's `SweptKind` names every kind read this way; a Go test holds it
+equal to the registered readers and Django's contract test holds it to the
+registry. A reader iterates the provider's connections (`r.Env.Refs`) and
 stamps each record with its `connection_ref`, so a reading is attributed to the
 connection that took it.
 
@@ -68,14 +55,14 @@ Rules:
   stored. A provider response is never stored whole. Fields that carry secret
   material (tokens, client secrets, environment values, private keys) are never
   named.
-- **A refused read raises.** The sweep stores the kind as unreachable with the
-  reason, and the page shows the reason with `requires`. Returning `[]` means
-  the provider has none.
+- **A refused read is an error.** The sweep stores the kind as unreachable
+  with the reason, and the page shows the reason with `requires`. Returning no
+  records means the provider has none.
 - **A partial read says so, as a part.** A reading read in pieces declares
   them in `parts` (`ReadingPart(name, label, requires)`, each `requires` a
   subset of the reading's). A reader that cannot read one calls
-  `refuse_part(part, exc, scope=..., connection_ref=..., address=...)`
-  (`control_plane/provider_adapters/parts.py`); the sweep reports
+  `refuse(ctx, part, connectionRef, scope, err)` or `refuseAt(..., address, err)`
+  (`controller/providers/provider.go`); the sweep reports
   the kind's `refused_parts` beside its records and HQ stores them
   (`control_plane.reading_parts`). A refused part is never a record or a record
   field, so a count never includes it. The whole kind on one zone, or on one
@@ -157,8 +144,7 @@ and the containers running each, with the reference each was started from) and
 `portainer.compose_project` (Portainer stacks and compose labels). Each record
 names `host` and `host_address`, so it joins the machine by either. One
 container list per environment feeds all of them within a sweep
-(`control_plane/provider_adapters/portainer_readings.py`, declared by the
-Portainer adapter). An environment that cannot be read is the whole reading
+(`controller/providers/portainer_readings.go`). An environment that cannot be read is the whole reading
 refused on that machine (`scope` the machine, `address` its address), so it
 shows on that machine's page; every environment refusing raises.
 
@@ -166,12 +152,11 @@ The NPM login feeds `npm.certificate` (joined to the names NPM serves with it,
 not every name it covers), `npm.redirect` (the same `redirects_to` as
 `cloudflare.redirect`, answered at the ingress: `facet` `proxy`),
 `npm.stream`, `npm.access_list` (address rules and login names, never
-passwords) and `npm.dead_host` (`control_plane/provider_adapters/npm_readings.py`,
-declared by the NPM adapter). `requires` names NPM's own permission areas
+passwords) and `npm.dead_host` (`controller/providers/npm.go`). `requires` names NPM's own permission areas
 (`certificates: view`). A host list the login may not see is a refused part:
 of `npm.certificate` (which names each certificate serves) and of
 `npm.access_list` (which names it guards). A 401 is a refused credential and a
-403 a missing permission (`control_plane/provider_adapters/refusals.py`).
+403 a missing permission (`runtime.StatusFailure`).
 
 ## Facts about a subject
 

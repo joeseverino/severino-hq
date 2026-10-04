@@ -28,7 +28,6 @@ _FLOOR = frozenset(
         "contacts",
         "content",
         "control_plane",
-        "controller_runtime",
         "core",
         "docs_index",
         "example_hq_plugin",

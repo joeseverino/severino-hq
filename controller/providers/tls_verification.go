@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -12,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/providers/npmapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -45,42 +45,20 @@ func daysUntil(when, now time.Time) int {
 	return 0
 }
 
-// npmProxyHost is the part of an NPM proxy host certificate work reads.
-type npmProxyHost struct {
-	ID            json.RawMessage `json:"id"`
-	DomainNames   []string        `json:"domain_names"`
-	Enabled       json.RawMessage `json:"enabled"`
-	CertificateID json.RawMessage `json:"certificate_id"`
-}
-
-// serving is false only for an explicit false: NPM's 0 still counts, as in the Python controller.
-func (h npmProxyHost) serving() bool { return strings.TrimSpace(string(h.Enabled)) != "false" }
-
-func (r *Registry) npmCertificateHosts(ctx context.Context, base string, headers map[string]string) ([]npmProxyHost, error) {
-	raw, err := r.HTTP.Request(ctx, base+"/nginx/proxy-hosts", "GET", headers, nil)
-	if err != nil {
-		return nil, err
-	}
-	hosts, err := decodeAs[[]npmProxyHost](raw, "Provider returned an invalid record list.")
-	if hosts == nil && err == nil {
-		hosts = []npmProxyHost{}
-	}
-	return hosts, err
-}
-
-func (r *Registry) npmCoveredHosts(ctx context.Context, certificateDomains []string) ([]npmProxyHost, error) {
+// npmCoveredHosts is the serving proxy hosts with a name the certificate covers.
+func (r *Registry) npmCoveredHosts(ctx context.Context, certificateDomains []string) ([]npmapi.ProxyHostObject, error) {
 	base, headers, err := r.npmSession(ctx, "")
 	if err != nil {
 		return nil, err
 	}
-	hosts, err := r.npmCertificateHosts(ctx, base, headers)
+	hosts, err := r.npmProxyHostList(ctx, base, headers)
 	if err != nil {
 		return nil, err
 	}
 	names := nameSet(certificateDomains)
-	covered := []npmProxyHost{}
+	covered := []npmapi.ProxyHostObject{}
 	for _, host := range hosts {
-		if !host.serving() {
+		if !host.Enabled {
 			continue
 		}
 		for _, domain := range host.DomainNames {
@@ -126,7 +104,7 @@ func (r *Registry) consumerTLSEndpoint(consumer TLSConsumer) (string, error) {
 		}
 		parsed, err := url.Parse(configured)
 		if err != nil || parsed.Hostname() == "" {
-			return "", &ProviderError{Message: "NPM origin verification endpoint is missing."}
+			return "", &ProviderError{Message: "NPM origin verification endpoint is missing"}
 		}
 		return strings.ToLower(parsed.Hostname()), nil
 	case runtime.TLSConsumerKindCaddy, runtime.TLSConsumerKindCPanel:
@@ -135,7 +113,7 @@ func (r *Registry) consumerTLSEndpoint(consumer TLSConsumer) (string, error) {
 			return "", err
 		}
 		if target.Host == "" {
-			return "", &ProviderError{Message: string(consumer.Kind) + " origin verification endpoint is missing."}
+			return "", &ProviderError{Message: string(consumer.Kind) + " origin verification endpoint is missing"}
 		}
 		return target.Host, nil
 	}
@@ -149,9 +127,6 @@ func tlsUnreachable(consumer TLSConsumer, domain, endpoint string, err error) TL
 func (r *Registry) readTLSConsumer(ctx context.Context, consumer TLSConsumer, domains []string) ([]TLSObservation, []TLSUnreachable) {
 	connectHost, err := r.consumerTLSEndpoint(consumer)
 	if err != nil {
-		if !isProviderError(err) {
-			err = &ProviderError{Message: err.Error()}
-		}
 		return nil, []TLSUnreachable{tlsUnreachable(consumer, "", "", err)}
 	}
 	observations := []TLSObservation{}
@@ -233,9 +208,9 @@ func (r *Registry) reconcileTLS(ctx context.Context, spec TLSCertificateSpec) (R
 			for _, item := range unreachable {
 				reasons = append(reasons, item.Reason)
 			}
-			return Result{}, nil, &ProviderError{Message: "No TLS consumer could be reached: " + strings.Join(reasons, "; ")}
+			return Result{}, nil, &ProviderError{Message: "no TLS consumer could be reached: " + strings.Join(reasons, "; ")}
 		}
-		return Result{}, nil, &ProviderError{Message: "No TLS verification domains were declared."}
+		return Result{}, nil, &ProviderError{Message: "no TLS verification domains were declared"}
 	}
 	soonest, newest := observations[0], observations[0]
 	for _, item := range observations[1:] {
@@ -246,7 +221,10 @@ func (r *Registry) reconcileTLS(ctx context.Context, spec TLSCertificateSpec) (R
 			newest = item
 		}
 	}
-	expiry, _ := time.Parse("2006-01-02T15:04:05-07:00", soonest.NotAfter)
+	expiry, err := time.Parse(time.RFC3339, soonest.NotAfter)
+	if err != nil {
+		return Result{}, nil, &ProviderError{Message: "certificate expiry unreadable", Err: err}
+	}
 	verified := make([]string, 0, len(observations))
 	for _, item := range observations {
 		verified = append(verified, item.Domain)
@@ -273,11 +251,11 @@ func (r *Registry) reconcileTLS(ctx context.Context, spec TLSCertificateSpec) (R
 func tlsVerificationPolicy(ctx context.Context) (time.Duration, time.Duration, error) {
 	policy, ok := runtime.VerificationFrom(ctx)
 	if !ok {
-		return 0, 0, &ProviderError{Message: "TLS renewal declares no verification policy."}
+		return 0, 0, &ProviderError{Message: "TLS renewal declares no verification policy"}
 	}
 	timeout, interval := policy.TimeoutSeconds, policy.IntervalSeconds
 	if timeout < verificationTimeoutMin || timeout > verificationTimeoutMax || interval < verificationIntervalMin || interval > verificationIntervalMax || interval > timeout {
-		return 0, 0, &ProviderError{Message: "TLS renewal verification policy is out of bounds."}
+		return 0, 0, &ProviderError{Message: "TLS renewal verification policy is out of bounds"}
 	}
 	return time.Duration(timeout) * time.Second, time.Duration(interval) * time.Second, nil
 }
@@ -376,7 +354,7 @@ func (r *Registry) verifyTLSDeployment(ctx context.Context, spec TLSCertificateS
 				details = append(details, failing[consumer]...)
 			}
 			return Result{}, nil, &ProviderError{
-				Message: fmt.Sprintf("%d of %d TLS consumers did not activate the certificate within %ds: %s.", len(failing), len(spec.Consumers), int(timeout.Seconds()), strings.Join(details, "; ")),
+				Message: fmt.Sprintf("%d of %d TLS consumers did not activate the certificate within %ds: %s", len(failing), len(spec.Consumers), int(timeout.Seconds()), strings.Join(details, "; ")),
 				Status:  evidence,
 			}
 		}

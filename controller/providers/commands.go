@@ -95,17 +95,18 @@ func redacted(text string, overrides map[string]string) string {
 	return text
 }
 
-// startFailure names a process that never ran as Python's subprocess would.
+// startFailure names why a process did not run to an exit code, never with
+// its argv or output.
 func startFailure(err error) string {
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
-		return "TimeoutExpired"
+		return "timed out"
 	case errors.Is(err, exec.ErrNotFound), errors.Is(err, fs.ErrNotExist):
-		return "FileNotFoundError"
+		return "not found"
 	case errors.Is(err, fs.ErrPermission):
-		return "PermissionError"
+		return "permission denied"
 	}
-	return "OSError"
+	return "could not start"
 }
 
 func lastLine(stderr string) string {
@@ -137,14 +138,14 @@ func (c *Commands) Run(ctx context.Context, argv []string, input []byte, step, s
 		c.logger().Warn(fmt.Sprintf("controller step failed: %s (output over limit)", step),
 			slog.String("event", "controller.step.failed"), slog.String("step", step))
 		c.record(step, subject, "output over limit")
-		return nil, &ProviderError{Message: step + " failed."}
+		return nil, &ProviderError{Message: step + ": output over limit"}
 	}
 	if err != nil {
 		kind := startFailure(err)
 		c.logger().Warn(fmt.Sprintf("controller step failed: %s (%s)", step, kind),
 			slog.String("event", "controller.step.failed"), slog.String("step", step), slog.String("exception", kind))
 		c.record(step, subject, kind)
-		return nil, &ProviderError{Message: step + " could not complete."}
+		return nil, &ProviderError{Message: step + ": " + kind}
 	}
 	if exit != 0 {
 		said := lastLine(redacted(string(stderr), env))
@@ -155,7 +156,7 @@ func (c *Commands) Run(ctx context.Context, argv []string, input []byte, step, s
 		c.logger().Warn(fmt.Sprintf("controller step failed: %s (exit %d)%s", step, exit, suffix),
 			slog.String("event", "controller.step.failed"), slog.String("step", step), slog.Int("exit_code", exit))
 		c.record(step, subject, "exit "+strconv.Itoa(exit))
-		return nil, &ProviderError{Message: step + " failed."}
+		return nil, &ProviderError{Message: step + ": exit " + strconv.Itoa(exit)}
 	}
 	return stdout, nil
 }

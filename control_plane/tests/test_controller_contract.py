@@ -33,6 +33,7 @@ from application.resource_operations import (
 from application.security import cli_principal
 from control_plane.management.commands.infrastructure_controller import ACTIONS
 from control_plane.models import DashboardConfiguration, ManagedResource
+from control_plane.observations import OBSERVATIONS
 from control_plane.provider_adapters.contracts import FAILURES, REFUSALS
 from control_plane.provider_adapters.tls import TLSConsumer
 from control_plane.providers import OBSERVATION_KINDS, PROVIDERS
@@ -44,6 +45,7 @@ CONTRACT_PATH = (
 )
 CONTRACT_URI = "urn:hq:controller-bridge"
 CONTRACT = json.loads(CONTRACT_PATH.read_text())
+SWEPT = set(CONTRACT["components"]["schemas"]["SweptKind"]["enum"])
 REGISTRY = Registry().with_resource(
     CONTRACT_URI, Resource.from_contents(CONTRACT, default_specification=DRAFT202012)
 )
@@ -109,6 +111,34 @@ class ControllerContractTests(TestCase):
             set(schemas["ResourceKind"]["enum"]),
             set(PROVIDERS) | set(OBSERVATION_KINDS),
         )
+
+    def test_every_controller_reading_is_swept(self):
+        controller_read = {
+            kind for kind, spec in OBSERVATIONS.items() if spec.read_by == "controller"
+        }
+        self.assertEqual(sorted(controller_read - SWEPT), [])
+        self.assertEqual(sorted(SWEPT - set(PROVIDERS) - controller_read), [])
+
+    def test_a_kind_nothing_sweeps_says_why(self):
+        for kind, provider in sorted(PROVIDERS.items()):
+            if kind in SWEPT:
+                continue
+            with self.subTest(kind=kind):
+                self.assertTrue(
+                    provider.unobserved_reason,
+                    f"nothing sweeps {kind!r} and its provider does not say why",
+                )
+
+    def test_a_swept_kind_does_not_claim_otherwise(self):
+        for kind in sorted(SWEPT & set(PROVIDERS)):
+            with self.subTest(kind=kind):
+                self.assertFalse(PROVIDERS[kind].unobserved_reason)
+
+    def test_the_contract_names_every_analytics_dimension(self):
+        from analytics.models import RumDaily
+
+        dimension = CONTRACT["components"]["schemas"]["AnalyticsRow"]["properties"]["dimension"]
+        self.assertEqual(sorted(dimension["enum"]), sorted(RumDaily.Dimension.values))
 
     def test_the_contract_names_every_failure_class(self):
         schemas = CONTRACT["components"]["schemas"]
@@ -226,6 +256,16 @@ class ControllerContractTests(TestCase):
         self.assertIn({"kind": "adguard.rewrite", "action": "reconcile"}, registry["capabilities"])
         self.assertIn("tls.uploaded_certificate", registry["material_kinds"])
         self.assertTrue(all(entry["reason"] for entry in registry["locked"]))
+        self.assertEqual(registry["extensions"], [])
+
+    def test_the_registry_names_the_extensions_the_image_composes(self):
+        source = {
+            "plugin": "example", "source_repository": "example/ext",
+            "source_workflow": ".github/workflows/admit.yml", "source_commit": "0" * 40,
+        }
+        with patch("application.controller.admitted_sources", return_value=(source,)):
+            registry = bridge("registry")
+        self.assertEqual(registry["extensions"], [source])
 
     def test_glance_plan(self):
         bridge("glance-plan", controller_id="example-controller")
@@ -237,20 +277,20 @@ class ControllerContractTests(TestCase):
         self.assertEqual(len(plan["windows"]), 1)
 
     def test_analytics_readings_are_held_to_the_contract(self):
-        from controller_runtime import cloudflare_analytics
-
-        data = {"viewer": {"accounts": [{
-            "path": [{"count": 12, "sum": {"visits": 9}, "avg": {"sampleInterval": 1},
-                      "dimensions": {"date": "2026-01-01", "requestPath": "/"}}],
-            "vitals": [{"count": 3, "avg": {"sampleInterval": 1},
-                        "quantiles": {"largestContentfulPaintP75": 1800000, "interactionToNextPaintP75": -1,
-                                      "firstContentfulPaintP75": 900000, "timeToFirstByteP75": 120000,
-                                      "cumulativeLayoutShiftP75": 0.05},
-                        "sum": {"lcpGood": 2, "lcpPoor": 1}, "dimensions": {"date": "2026-01-01"}}],
-        }]}}
-        site = {"site_tag": "site", "host": "example.com", "account": "account", "connection_ref": "cloudflare"}
-        with patch.object(cloudflare_analytics, "_cloudflare_graphql", return_value=data):
-            readings = cloudflare_analytics.analytics(sites=[site], windows=[])
+        vitals = {
+            "date": "2026-01-01", "sample_interval": 1, "cumulative_layout_shift": 0.05,
+            "largest_contentful_paint_ms": 1800, "interaction_to_next_paint_ms": None,
+            "first_contentful_paint_ms": 900, "time_to_first_byte_ms": 120,
+            **{f"{metric}_{band}": 0 for metric in ("lcp", "inp", "cls")
+               for band in ("good", "needs_improvement", "poor")},
+        }
+        readings = {"sites": [{
+            "site_tag": "site", "host": "example.com", "connection_ref": "cloudflare",
+            "start": "2026-01-01", "end": "2026-01-01",
+            "rows": [{"dimension": "path", "value": "/", "date": "2026-01-01",
+                      "pageviews": 12, "visits": 9, "sample_interval": 1}],
+            "vitals": [vitals],
+        }]}
         bridge("analytics", readings, controller_id="example-controller")
 
     def test_reports_are_acknowledged(self):

@@ -2,26 +2,22 @@ package providers
 
 import "time"
 
-// Policy constants of the providers, each defined once. Where Python's
-// controller_runtime holds the same value its source is cited.
+// Policy constants of the providers, each defined once.
 
 const (
 	// standardSSHPort is checked on every host perimeter and asked about on
 	// every tailnet device, besides the port the connection says it uses.
 	standardSSHPort = 22
 	// tlsPort is the port every TLS reading is taken on, named because a failed
-	// reading reports it (tls_verification.py TLS_PORT).
+	// reading reports it.
 	tlsPort = 443
-	// tlsDialTimeout bounds one TLS handshake reading a served certificate
-	// (tls_verification.py, timeout=15).
+	// tlsDialTimeout bounds one TLS handshake reading a served certificate.
 	tlsDialTimeout = 15 * time.Second
-	// perimeterDialTimeout bounds one "does this port answer" dial
-	// (host_readings.py _answers_from_here, timeout=3.0).
+	// perimeterDialTimeout bounds one "does this port answer" dial.
 	perimeterDialTimeout = 3 * time.Second
 )
 
-// A renewal's verification policy must fall inside these, in seconds
-// (tls_verification.py, 30 <= timeout <= 600 and 1 <= interval <= 30).
+// A renewal's verification policy must fall inside these, in seconds.
 const (
 	verificationTimeoutMin  = 30
 	verificationTimeoutMax  = 600

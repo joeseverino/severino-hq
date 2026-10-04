@@ -122,12 +122,13 @@ set -- run --rm --network host --user 10001:10001 --cap-drop ALL \
     --env "HQ_CONTROLLER_RUN=${run_nonce}" \
     --security-opt no-new-privileges:true \
     --tmpfs /tmp:size=64m,noexec,nosuid,nodev \
-    --entrypoint python \
+    --entrypoint /usr/local/bin/hq-controller \
     --mount "type=volume,source=${data_volume},target=/data" \
     --mount "type=bind,source=${runtime_app_env},target=/run/secrets/severino_hq_env,readonly" \
     --mount "type=bind,source=${runtime_ssh_dir},target=/run/secrets/controller-ssh,readonly" \
     --mount "type=bind,source=${acme_dir},target=/var/lib/severino-hq/acme" \
     --env HQ_IN_PROCESS=1 \
+    --env HQ_MANAGE_PY=/app/manage.py \
     --env HQ_CONTROLLER_SSH_DIR=/run/secrets/controller-ssh \
     --env HQ_ACME_DIR=/var/lib/severino-hq/acme \
     --env "HQ_CONTROLLER_IMAGE=${image}" \
@@ -264,7 +265,7 @@ while IFS= read -r env_name; do
 done <<EOF
 $(sed -nE 's/^([A-Z][A-Z0-9_]*)=.*/\1/p' "${env_file}")
 EOF
-set -- "$@" "${image}" -m controller_runtime.worker
+set -- "$@" "${image}"
 if [ "${mode}" = "--apply" ]; then
     set -- "$@" --apply
 fi

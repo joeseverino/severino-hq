@@ -62,10 +62,6 @@ func (h *fakeHTTP) RequestHeader(ctx context.Context, address string, headers ma
 // Request answers from routes, encoded as the real transport would return it.
 func (h *fakeHTTP) Request(ctx context.Context, address, method string, headers map[string]string, payload any) (json.RawMessage, error) {
 	value, err := h.answer(ctx, address, method, headers, payload)
-	var provider *ProviderError
-	if _, multipart := payload.(runtime.Multipart); multipart && errors.As(err, &provider) {
-		return nil, runtime.AsMultipartFailure(provider)
-	}
 	if err != nil || value == nil {
 		return nil, err
 	}
@@ -235,7 +231,7 @@ func TestDNSOptionalPartFailureDoesNotEraseReadableStatus(t *testing.T) {
 	for _, path := range []string{"/control/dns_info", "/control/filtering/status", "/control/querylog/config", "/control/rewrite/settings"} {
 		h.routes[path] = Object{}
 	}
-	h.fail["/control/dns_info"] = &ProviderError{Message: "Refused.", Refusal: "permission"}
+	h.fail["/control/dns_info"] = &ProviderError{Message: "Refused.", Failure: runtime.FailureClassPermission}
 	ledger := &refusals{}
 	ctx := context.WithValue(context.Background(), refusalKey{}, ledger)
 	records, err := r.adguardDNS(ctx)
@@ -248,7 +244,7 @@ func TestDNSOptionalPartFailureDoesNotEraseReadableStatus(t *testing.T) {
 func TestCommandOutputPastTheLimitIsAFailedStep(t *testing.T) {
 	commands := &Commands{Env: runtime.Environment{"PATH": "/usr/bin:/bin"}}
 	_, err := commands.Run(context.Background(), []string{"sh", "-c", "head -c 16777217 /dev/zero"}, nil, "a step", "edge", nil)
-	if err == nil || err.Error() != "a step failed." {
+	if err == nil || err.Error() != "a step: output over limit" {
 		t.Fatalf("%v", err)
 	}
 	if failures := commands.StepFailures(); len(failures) != 1 || failures[0].Reason != "output over limit" {

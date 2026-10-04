@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net"
@@ -34,9 +35,25 @@ type HostPerimeterRecord struct {
 	ReadAt           string   `json:"read_at"`
 }
 
+// perimeterReading is what the perimeter operation prints on the edge.
+type perimeterReading struct {
+	PublicAddresses string `json:"public_addresses"`
+	FirewallUnit    string `json:"firewall_unit"`
+	ReadAt          string `json:"read_at"`
+}
+
 func (r *Registry) admitHostReadings() {
 	r.reader(runtime.ResourceKindHostFirewall, r.hostFirewall)
 	r.reader(runtime.ResourceKindHostPerimeter, r.hostPerimeter)
+}
+
+// HostFirewallRecord is the distilled firewall answer run-controller.sh mounts.
+type HostFirewallRecord struct {
+	Record                  string `json:"record"`
+	Interface               string `json:"interface"`
+	AcceptRequiresInterface bool   `json:"accept_requires_interface"`
+	ForeignInterfaceDropped bool   `json:"foreign_interface_dropped"`
+	ReadAt                  string `json:"read_at"`
 }
 
 // hostFirewall is whether HQ's port must arrive on the tailnet interface. Root
@@ -44,16 +61,22 @@ func (r *Registry) admitHostReadings() {
 func (r *Registry) hostFirewall(context.Context) ([]any, error) {
 	path := r.Env["SEVERINO_HOST_FIREWALL"]
 	if path == "" {
-		return nil, &ProviderError{Message: "No host firewall reading was mounted; this host does not report one."}
+		return nil, &ProviderError{Message: "no host firewall reading was mounted"}
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, &ProviderError{Message: "The host firewall reading could not be read."}
+		return nil, &ProviderError{Message: "read host firewall reading", Err: err}
 	}
-	if !json.Valid(data) {
-		return nil, &ProviderError{Message: "The host firewall reading is not JSON."}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	var record HostFirewallRecord
+	if err := decoder.Decode(&record); err != nil {
+		return nil, &ProviderError{Message: "decode host firewall reading", Err: err}
 	}
-	return []any{json.RawMessage(data)}, nil
+	if record.Record == "" {
+		return nil, &ProviderError{Message: "host firewall reading names no record"}
+	}
+	return []any{record}, nil
 }
 
 // hostPerimeter asks each Caddy host for its firewall unit and public addresses,
@@ -66,15 +89,14 @@ func (r *Registry) hostPerimeter(ctx context.Context) ([]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if len(output) == 0 {
-			output = []byte("{}")
-		}
-		reading, err := parsePy(output)
-		if err != nil || !reading.object {
-			return nil, &ProviderError{Message: "SSH perimeter for " + ref + " did not answer with a reading."}
+		var reading perimeterReading
+		if len(output) > 0 {
+			if err := json.Unmarshal(output, &reading); err != nil {
+				return nil, &ProviderError{Message: "SSH perimeter for " + ref + ": decode reading", Err: err}
+			}
 		}
 		addresses := []string{}
-		for _, address := range strings.Split(reading.strOr("public_addresses", ""), ",") {
+		for _, address := range strings.Split(reading.PublicAddresses, ",") {
 			if address = strings.TrimSpace(address); address != "" {
 				addresses = append(addresses, address)
 			}
@@ -93,11 +115,11 @@ func (r *Registry) hostPerimeter(ctx context.Context) ([]any, error) {
 		found = append(found, HostPerimeterRecord{
 			Record:           "perimeter",
 			ConnectionRef:    ref,
-			FirewallUnit:     reading.strOr("firewall_unit", "unknown"),
+			FirewallUnit:     orDefault(reading.FirewallUnit, "unknown"),
 			PublicAddresses:  addresses,
 			PortsChecked:     checked,
 			AnsweredPublicly: r.answered(ctx, addresses, checked),
-			ReadAt:           reading.strOr("read_at", ""),
+			ReadAt:           reading.ReadAt,
 		})
 	}
 	return found, nil

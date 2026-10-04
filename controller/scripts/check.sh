@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run Go formatting, the generated-code check, vet, unit tests, and differential parity checks.
+# Run Go formatting, the generated-code check, vet, and the unit tests under the race detector.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -18,6 +18,7 @@ generated=(
     "providers/cfapi/cloudflare.gen.go:api/vendor/cloudflare/openapi.slice.json"
     "providers/adguardapi/adguard.gen.go:api/vendor/adguard/openapi.yaml"
     "providers/npmapi/npm.gen.go:api/vendor/npm/openapi.bundled.json"
+    "providers/githubapi/github.gen.go:api/vendor/github/openapi.slice.json"
 )
 snapshot=$(mktemp -d)
 for pair in "${generated[@]}"; do
@@ -46,41 +47,5 @@ go vet ./...
 
 echo "==> go test (race detector)"
 go test -race ./...
-
-echo "==> differential parity"
-go test -c -o providers.test ./providers
-
-# Discover Python interpreter
-python=""
-if [ -n "${CHECK_PYTHON:-}" ]; then
-    python="$CHECK_PYTHON"
-elif [ -n "${PYTHON:-}" ]; then
-    python="$PYTHON"
-elif [ -x ../.venv/bin/python ]; then
-    python="../.venv/bin/python"
-else
-    common_dir=$(git rev-parse --git-common-dir 2>/dev/null || true)
-    if [ -n "$common_dir" ]; then
-        main_root=$(dirname "$common_dir")
-        if [ -x "$main_root/.venv/bin/python" ]; then
-            python="$main_root/.venv/bin/python"
-        fi
-    fi
-fi
-
-if [ -z "$python" ]; then
-    if command -v python3 >/dev/null 2>&1; then
-        python="$(command -v python3)"
-    elif command -v python >/dev/null 2>&1; then
-        python="$(command -v python)"
-    else
-        echo "Python is required for differential parity checks." >&2
-        rm -f providers.test
-        exit 1
-    fi
-fi
-
-"$python" tests/parity.py ./providers.test
-rm -f providers.test
 
 echo "All controller checks passed cleanly."

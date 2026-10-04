@@ -154,7 +154,6 @@ class OneParserTests(SimpleTestCase):
     # introduced it.
     KEPT = {
         "application/timestamps.py",
-        "controller_runtime/tls_verification.py",
         "docs_index/importer.py",
     }
 

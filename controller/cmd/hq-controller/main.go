@@ -32,7 +32,7 @@ func bridgeCommand(env runtime.Environment) ([]string, error) {
 	if env["HQ_IN_PROCESS"] == "1" {
 		manage := strings.TrimSpace(env["HQ_MANAGE_PY"])
 		if manage == "" {
-			return nil, &runtime.BridgeError{Message: "HQ_MANAGE_PY must name manage.py when HQ_IN_PROCESS is set."}
+			return nil, &runtime.BridgeError{Message: "HQ_MANAGE_PY must name manage.py when HQ_IN_PROCESS is set"}
 		}
 		python := strings.TrimSpace(env["HQ_PYTHON"])
 		if python == "" {
@@ -44,7 +44,7 @@ func bridgeCommand(env runtime.Environment) ([]string, error) {
 	if docker == "" {
 		found, err := exec.LookPath("docker")
 		if err != nil {
-			return nil, &runtime.BridgeError{Message: "Docker CLI was not found."}
+			return nil, &runtime.BridgeError{Message: "docker CLI not found"}
 		}
 		docker = found
 	}

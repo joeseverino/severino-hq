@@ -201,7 +201,7 @@ func (w *Worker) applyOne(ctx context.Context) (bool, bool, error) {
 		return true, false, err
 	}
 	if refusal != nil {
-		message := ReportText(refusal.Message)
+		message := ReportText(err.Error())
 		result = Result{Status: refusal.Status, Message: message, Conditions: []Condition{
 			{Type: "Degraded", Status: true, Reason: "ProviderError", Message: message},
 		}}
@@ -224,7 +224,7 @@ func (w *Worker) applyOne(ctx context.Context) (bool, bool, error) {
 	}
 	var output any = AppliedOperationOutput{OK: true, Operation: pending.Operation.ID, Resource: resource.Key, Changed: result.Changed}
 	if refusal != nil {
-		output = RefusedOperationOutput{OK: false, Operation: pending.Operation.ID, Resource: resource.Key, Message: ReportText(refusal.Message)}
+		output = RefusedOperationOutput{OK: false, Operation: pending.Operation.ID, Resource: resource.Key, Message: ReportText(err.Error())}
 	}
 	return true, refusal == nil, w.emit(output)
 }

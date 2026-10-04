@@ -6,8 +6,6 @@ from django.test import SimpleTestCase
 
 from control_plane.providers import validate_spec
 
-from .. import caddy
-from ..contracts import ProviderError
 
 # Each would close the route's block and open another: a second site serving
 # the edge's filesystem, or an import of a file on the edge.
@@ -46,22 +44,3 @@ class RouteValueTests(SimpleTestCase):
         for domain in INJECTED_DOMAINS:
             with self.subTest(domain=domain), self.assertRaises(ValueError):
                 validate_spec("caddy.route", {"connection_ref": "example-edge", "domain": domain, "upstream": "app:8080"})
-
-    def test_the_file_writer_refuses_what_the_models_refuse(self):
-        """The last line of defence: a value that reached the renderer some
-        other way is still not written."""
-
-        for spec in (
-            {"domain": "a.example.com", "upstream": INJECTED_UPSTREAMS[0]},
-            {"domain": INJECTED_DOMAINS[0], "upstream": "app:8080"},
-        ):
-            with self.subTest(spec=spec), self.assertRaises(ProviderError):
-                caddy.render_routes([spec])
-        with self.assertRaises(ProviderError):
-            caddy.render_routes([{"domain": "a.example.com", "upstream": "app:8080"}], "/certs\n}\n:1 {")
-
-    def test_a_clean_route_renders_one_block(self):
-        rendered = caddy.render_routes([{"domain": "a.example.com", "upstream": "app:8080"}], "/data/certs")
-
-        self.assertEqual(rendered.count("{"), rendered.count("}"))
-        self.assertIn("\treverse_proxy app:8080\n", rendered)

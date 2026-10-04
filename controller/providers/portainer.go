@@ -3,9 +3,11 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/netip"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,11 +18,7 @@ import (
 
 // Portainer holds one credential and reaches every Docker host registered with
 // it, so a machine becomes available to HQ by being an environment there.
-//
-// Portainer publishes Swagger 2.0 and most answers here are Docker Engine
-// documents proxied through it, which that spec does not describe; the
-// Python reads are lenient field by field, so answers decode into pyValue and
-// are read through the accessors below.
+// Answers decode into the wire types in portainer_types.go.
 
 const (
 	portainerRunLabel  = "severino-hq.run"
@@ -29,86 +27,66 @@ const (
 	composeWorkingDir  = "com.docker.compose.project.working_dir"
 	composeConfigFiles = "com.docker.compose.project.config_files"
 	composeService     = "com.docker.compose.service"
+	imageSourceLabel   = "org.opencontainers.image.source"
+	imageRevisionLabel = "org.opencontainers.image.revision"
+	// portainerReachable is the Status Portainer gives an environment it can reach.
+	portainerReachable = 1
+	// dockerIDLength is the short container id Docker itself prints.
+	dockerIDLength = 12
 )
 
 var (
-	portainerEnvironmentTypes = map[int64]string{1: "docker", 2: "agent", 3: "azure", 4: "edge agent", 5: "kubernetes", 6: "kubernetes agent", 7: "kubernetes edge agent"}
-	portainerEnvironmentState = map[int64]string{1: "up", 2: "down"}
-	portainerStackState       = map[int64]string{1: "active", 2: "inactive"}
-	pyEmptyObject             = pyValue{object: true}
-	pyEmptyList               = pyValue{array: []pyValue{}}
+	portainerEnvironmentTypes = map[int]string{1: "docker", 2: "agent", 3: "azure", 4: "edge agent", 5: "kubernetes", 6: "kubernetes agent", 7: "kubernetes edge agent"}
+	portainerEnvironmentState = map[int]string{1: "up", 2: "down"}
+	portainerStackState       = map[int]string{1: "active", 2: "inactive"}
 )
-
-// pyLookup is dict.get(value, "") on a table keyed by integers.
-func pyLookup(table map[int64]string, value pyValue) (string, bool) {
-	for key, name := range table {
-		if value.eq(pyValue{literal: itoa(key)}) {
-			return name, true
-		}
-	}
-	return "", false
-}
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 
-// strOr is Python's str(x or "").
-func strOr(value pyValue) string { return value.or(pyText("")).str() }
-
-// items iterates a decoded list; any other value has none.
-func items(value pyValue) []pyValue {
-	if value.array == nil {
-		return nil
-	}
-	return value.array
-}
-
 // PortainerEnvironment is one environment from GET /endpoints, as HQ files it.
 type PortainerEnvironment struct {
-	ID                pyValue `json:"id"`
-	Name              string  `json:"name"`
-	Address           string  `json:"address"`
-	Local             bool    `json:"local"`
-	Reachable         bool    `json:"reachable"`
-	Type              string  `json:"type"`
-	Status            string  `json:"status"`
-	AgentVersion      string  `json:"agent_version"`
-	DockerVersion     string  `json:"docker_version"`
-	ContainersRunning pyValue `json:"containers_running"`
-	ContainersTotal   pyValue `json:"containers_total"`
-	SnapshotAt        string  `json:"snapshot_at"`
+	ID                int64  `json:"id"`
+	Name              string `json:"name"`
+	Address           string `json:"address"`
+	Local             bool   `json:"local"`
+	Reachable         bool   `json:"reachable"`
+	Type              string `json:"type"`
+	Status            string `json:"status"`
+	AgentVersion      string `json:"agent_version"`
+	DockerVersion     string `json:"docker_version"`
+	ContainersRunning *int64 `json:"containers_running"`
+	ContainersTotal   *int64 `json:"containers_total"`
+	SnapshotAt        string `json:"snapshot_at"`
 }
 
 // PortainerContainerRecord is what Portainer knows about one container.
 type PortainerContainerRecord struct {
-	PortainerManaged bool    `json:"portainer_managed"`
-	Name             string  `json:"name"`
-	ID               string  `json:"id"`
-	Stack            pyValue `json:"stack"`
-	WorkingDir       pyValue `json:"working_dir"`
-	Image            pyValue `json:"image"`
-	Source           pyValue `json:"source"`
-	Revision         pyValue `json:"revision"`
-	NetworkMode      pyValue `json:"network_mode"`
-	State            pyValue `json:"state"`
-	Status           pyValue `json:"status"`
-	Ports            []int64 `json:"ports"`
-	Port             *int64  `json:"port"`
-	Reachable        bool    `json:"reachable"`
-	Host             string  `json:"host"`
-	HostAddress      string  `json:"host_address"`
-	ConnectionRef    string  `json:"connection_ref"`
+	PortainerManaged bool   `json:"portainer_managed"`
+	Name             string `json:"name"`
+	ID               string `json:"id"`
+	Stack            string `json:"stack"`
+	WorkingDir       string `json:"working_dir"`
+	Image            string `json:"image"`
+	Source           string `json:"source"`
+	Revision         string `json:"revision"`
+	NetworkMode      string `json:"network_mode"`
+	State            string `json:"state"`
+	Status           string `json:"status"`
+	Ports            []int  `json:"ports"`
+	Port             *int   `json:"port"`
+	Reachable        bool   `json:"reachable"`
+	Host             string `json:"host"`
+	HostAddress      string `json:"host_address"`
+	ConnectionRef    string `json:"connection_ref"`
 }
 
 type PortainerStackSpec struct {
-	ConnectionRef string `json:"connection_ref"`
-	Host          string `json:"host"`
-	Name          string `json:"name"`
-	Compose       string `json:"compose"`
-	Environment   []struct {
-		Name  pyValue `json:"name"`
-		Value pyValue `json:"value"`
-	} `json:"environment"`
-	Port pyValue `json:"port"`
+	ConnectionRef string            `json:"connection_ref"`
+	Host          string            `json:"host"`
+	Name          string            `json:"name"`
+	Compose       string            `json:"compose"`
+	Environment   []portainerEnvVar `json:"environment"`
+	Port          *int              `json:"port"`
 }
 
 type PortainerStackStatus struct {
@@ -128,13 +106,15 @@ type PortainerContainerSpec struct {
 type PortainerContainerStatus struct {
 	Host       string                     `json:"host"`
 	Container  string                     `json:"container"`
-	State      pyValue                    `json:"state"`
+	State      string                     `json:"state"`
 	Containers []PortainerContainerRecord `json:"containers"`
 }
 
+// portainerEnvVar is one value a stack's compose file reads, in the spec and in
+// Portainer's Env list alike.
 type portainerEnvVar struct {
-	Name  pyValue `json:"name"`
-	Value pyValue `json:"value"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 // portainerStackPayload is the body of a stack create; an update adds PullImage.
@@ -153,11 +133,11 @@ func (r *Registry) admitPortainer() {
 	act(r, runtime.ResourceKindPortainerContainer, "stop", r.portainerCycler("stop"))
 	r.reader(runtime.ResourceKindPortainerContainer, r.portainerInventory)
 	r.reader(runtime.ResourceKindPortainerEnvironment, r.portainerEnvironmentReading)
-	r.reader(runtime.ResourceKindPortainerNetwork, r.portainerEach("The network list", r.portainerNetworks))
-	r.reader(runtime.ResourceKindPortainerVolume, r.portainerEach("The volume list", r.portainerVolumes))
-	r.reader(runtime.ResourceKindPortainerImage, r.portainerEach("The image list", r.portainerImages))
-	r.reader(runtime.ResourceKindPortainerRuntime, r.portainerEach("Each container's inspect", r.portainerRuntime))
-	r.reader(runtime.ResourceKindPortainerComposeProject, r.portainerEach("The stack list", r.portainerStacksReading))
+	r.reader(runtime.ResourceKindPortainerNetwork, r.portainerEach("network list", r.portainerNetworks))
+	r.reader(runtime.ResourceKindPortainerVolume, r.portainerEach("volume list", r.portainerVolumes))
+	r.reader(runtime.ResourceKindPortainerImage, r.portainerEach("image list", r.portainerImages))
+	r.reader(runtime.ResourceKindPortainerRuntime, r.portainerEach("container inspect", r.portainerRuntime))
+	r.reader(runtime.ResourceKindPortainerComposeProject, r.portainerEach("stack list", r.portainerStacksReading))
 	r.probe("portainer", r.portainerProbe)
 	if r.Portainer == nil {
 		r.Portainer = registryPortainer{r}
@@ -189,20 +169,16 @@ func (r *Registry) portainerPublished(ctx context.Context) ([]PublishedContainer
 	}
 	out := make([]PublishedContainer, 0, len(records))
 	for _, record := range records {
-		ports := make([]int, 0, len(record.Ports))
-		for _, port := range record.Ports {
-			ports = append(ports, int(port))
-		}
-		out = append(out, PublishedContainer{Host: record.Host, HostAddress: record.HostAddress, Ports: ports})
+		out = append(out, PublishedContainer{Host: record.Host, HostAddress: record.HostAddress, Ports: record.Ports})
 	}
 	return out, nil
 }
 
 // isThisRun matches the per-run nonce the launcher sets as a label and as
 // HQ_CONTROLLER_RUN; a fixed label would let any container hide from the sweep.
-func (r *Registry) isThisRun(container pyValue) bool {
+func (r *Registry) isThisRun(labels map[string]string) bool {
 	nonce := strings.TrimSpace(r.Env["HQ_CONTROLLER_RUN"])
-	return nonce != "" && container.get("Labels").or(pyEmptyObject).get(portainerRunLabel).eqText(nonce)
+	return nonce != "" && labels[portainerRunLabel] == nonce
 }
 
 func (r *Registry) portainerURL(ref string) (string, error) {
@@ -246,32 +222,28 @@ func (r *Registry) portainerCall(ctx context.Context, ref, path, method string, 
 	return r.HTTP.Request(ctx, base+path, method, headers, payload)
 }
 
-func (r *Registry) portainerGet(ctx context.Context, ref, path, key string) (pyValue, error) {
+// portainerGet GETs path and decodes it into T. A non-empty cache key shares
+// the answer across the sweep.
+func portainerGet[T any](ctx context.Context, r *Registry, ref, path, cacheKey, what string) (T, error) {
 	load := func() (json.RawMessage, error) { return r.portainerCall(ctx, ref, path, "GET", nil) }
 	var raw json.RawMessage
 	var err error
-	if key == "" {
+	if cacheKey == "" {
 		raw, err = load()
 	} else {
-		raw, err = r.cached(ctx, key, load)
+		raw, err = r.cached(ctx, cacheKey, load)
 	}
 	if err != nil {
-		return pyValue{}, err
+		var zero T
+		return zero, err
 	}
-	if len(raw) == 0 || string(raw) == "null" {
-		return pyValue{literal: "null"}, nil
-	}
-	value, err := parsePy(raw)
-	if err != nil {
-		return pyValue{}, &ProviderError{Message: "Portainer returned an invalid answer."}
-	}
-	return value, nil
+	return decodeAnswer[T](raw, "Portainer "+what)
 }
 
 // anAddress is a name resolved to the address it answers at, or the name when
 // it does not resolve: an address is what every other source of a machine reports.
 func (r *Registry) anAddress(host string) string {
-	if host == "" || pyParseIP(host) {
+	if host == "" || isIPAddress(host) {
 		return host
 	}
 	resolve := r.Resolve
@@ -297,8 +269,8 @@ func lookupIPv4(host string) (string, error) {
 	return "", &net.DNSError{Err: "no IPv4 address", Name: host}
 }
 
-// pyParseIP is core.network.parse_ip: a bare or bracketed address, with or without a port.
-func pyParseIP(value string) bool {
+// isIPAddress is a bare or bracketed address, with or without a port.
+func isIPAddress(value string) bool {
 	host := strings.TrimSpace(value)
 	if strings.HasPrefix(host, "[") {
 		host = strings.TrimPrefix(strings.SplitN(host, "]", 2)[0], "[")
@@ -309,7 +281,7 @@ func pyParseIP(value string) bool {
 	return host != "" && err == nil
 }
 
-// urlHostname is urllib.parse.urlsplit(value).hostname, or "" for none.
+// urlHostname is the lowercased host of a URL, or "" for none.
 func urlHostname(value string) string {
 	parsed, err := url.Parse(value)
 	if err != nil {
@@ -322,7 +294,7 @@ func urlHostname(value string) string {
 // Portainer names its own local environment `local`; an agent carries the
 // machine's address in its URL, and a unix socket is the machine Portainer runs on.
 func (r *Registry) portainerEnvironments(ctx context.Context, ref string) ([]PortainerEnvironment, error) {
-	listed, err := r.portainerGet(ctx, ref, "/endpoints", "portainer-environments:"+ref)
+	listed, err := portainerGet[[]portainerEndpoint](ctx, r, ref, "/endpoints", "portainer-environments:"+ref, "environment list")
 	if err != nil {
 		return nil, err
 	}
@@ -331,56 +303,55 @@ func (r *Registry) portainerEnvironments(ctx context.Context, ref string) ([]Por
 		return nil, err
 	}
 	portainerAt := r.anAddress(urlHostname(base))
-	found := []PortainerEnvironment{}
-	for _, raw := range items(listed.or(pyEmptyList)) {
-		at := raw.get("URL").orText("").str()
+	found := make([]PortainerEnvironment, 0, len(listed))
+	for _, endpoint := range listed {
 		address := ""
-		if strings.Contains(at, "://") {
-			address = urlHostname(at)
+		if strings.Contains(endpoint.URL, "://") {
+			address = urlHostname(endpoint.URL)
 		}
-		found = append(found, portainerEnvironment(raw, address, portainerAt))
+		found = append(found, portainerEnvironment(endpoint, address, portainerAt))
 	}
 	return found, nil
 }
 
-func portainerEnvironment(raw pyValue, address, portainerAt string) PortainerEnvironment {
-	snapshot := pyEmptyObject
-	if snapshots := items(raw.get("Snapshots").or(pyEmptyList)); len(snapshots) > 0 && snapshots[len(snapshots)-1].object {
-		snapshot = snapshots[len(snapshots)-1]
+func portainerEnvironment(endpoint portainerEndpoint, address, portainerAt string) PortainerEnvironment {
+	var snapshot portainerSnapshot
+	if n := len(endpoint.Snapshots); n > 0 {
+		snapshot = endpoint.Snapshots[n-1]
 	}
-	kind := raw.get("Type")
-	typeName, ok := pyLookup(portainerEnvironmentTypes, kind)
+	typeName, ok := portainerEnvironmentTypes[endpoint.Type]
 	if !ok {
-		typeName = strOr(kind)
+		typeName = strconv.Itoa(endpoint.Type)
 	}
-	status, _ := pyLookup(portainerEnvironmentState, raw.get("Status"))
 	located := address
 	if located == "" {
 		located = portainerAt
 	}
-	return PortainerEnvironment{
-		ID:                raw.get("Id"),
-		Name:              strOr(raw.get("Name")),
+	environment := PortainerEnvironment{
+		ID:                endpoint.ID,
+		Name:              endpoint.Name,
 		Address:           located,
 		Local:             address == "",
-		Reachable:         raw.get("Status").eq(pyValue{literal: "1"}),
+		Reachable:         endpoint.Status == portainerReachable,
 		Type:              typeName,
-		Status:            status,
-		AgentVersion:      strOr(raw.get("Agent").or(pyEmptyObject).get("Version")),
-		DockerVersion:     strOr(snapshot.get("DockerVersion")),
-		ContainersRunning: snapshot.get("RunningContainerCount"),
-		ContainersTotal:   snapshot.get("ContainerCount"),
-		SnapshotAt:        pyStamp(snapshot.get("Time")),
+		Status:            portainerEnvironmentState[endpoint.Status],
+		DockerVersion:     snapshot.DockerVersion,
+		ContainersRunning: snapshot.RunningContainerCount,
+		ContainersTotal:   snapshot.ContainerCount,
+		SnapshotAt:        unixStamp(snapshot.Time),
 	}
+	if endpoint.Agent != nil {
+		environment.AgentVersion = endpoint.Agent.Version
+	}
+	return environment
 }
 
-// pyStamp is a Unix time in seconds as ISO 8601 in UTC, "" for none or nonsense.
-func pyStamp(seconds pyValue) string {
-	value, ok := seconds.or(pyValue{literal: "0"}).toInt()
-	if !ok || value <= 0 {
+// unixStamp is a Unix time in seconds as RFC 3339 in UTC, "" for none.
+func unixStamp(seconds int64) string {
+	if seconds <= 0 {
 		return ""
 	}
-	return time.Unix(value, 0).UTC().Format("2006-01-02T15:04:05+00:00")
+	return time.Unix(seconds, 0).UTC().Format(time.RFC3339)
 }
 
 // machineName is the name HQ files an environment's machine under: a local
@@ -400,158 +371,122 @@ func (r *Registry) portainerEnvironmentFor(ctx context.Context, host, ref string
 		return PortainerEnvironment{}, err
 	}
 	for _, environment := range environments {
-		if environment.Address != "" && environment.Address == host {
-			return environment, nil
-		}
-		if environment.Name == host {
+		if (environment.Address != "" && environment.Address == host) || environment.Name == host {
 			return environment, nil
 		}
 	}
-	local := r.controllerID()
-	for _, environment := range environments {
-		if environment.Local && local != "" && local == host {
-			return environment, nil
+	if local := r.controllerID(); local != "" && local == host {
+		for _, environment := range environments {
+			if environment.Local {
+				return environment, nil
+			}
 		}
 	}
-	return PortainerEnvironment{}, &ProviderError{Message: "No Portainer environment is " + pyRepr(host) + "."}
+	return PortainerEnvironment{}, &ProviderError{Message: fmt.Sprintf("no Portainer environment is %q", host)}
 }
 
-func (r *Registry) portainerStackList(ctx context.Context, ref string) ([]pyValue, error) {
-	listed, err := r.portainerGet(ctx, ref, "/stacks", "portainer-stacks:"+ref)
-	if err != nil {
-		return nil, err
-	}
-	return items(listed.or(pyEmptyList)), nil
+func (r *Registry) portainerStackList(ctx context.Context, ref string) ([]portainerStack, error) {
+	return portainerGet[[]portainerStack](ctx, r, ref, "/stacks", "portainer-stacks:"+ref, "stack list")
 }
 
-func (r *Registry) portainerStacksOn(ctx context.Context, ref string, environment pyValue) ([]pyValue, error) {
+// portainerStacksOn is the stacks Portainer created in one environment, optionally of one name.
+func (r *Registry) portainerStacksOn(ctx context.Context, ref string, environment int64, name string) ([]portainerStack, error) {
 	stacks, err := r.portainerStackList(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
-	found := []pyValue{}
+	found := []portainerStack{}
 	for _, stack := range stacks {
-		if stack.get("EndpointId").eq(environment) {
+		if stack.EndpointID == environment && (name == "" || stack.Name == name) {
 			found = append(found, stack)
 		}
 	}
 	return found, nil
 }
 
-// portainerDocker is one Docker API call through Portainer, shared across a sweep.
-func (r *Registry) portainerDocker(ctx context.Context, ref string, environment pyValue, path string) (pyValue, error) {
-	id := environment.str()
-	return r.portainerGet(ctx, ref, "/endpoints/"+id+"/docker"+path, "portainer-docker:"+ref+":"+id+":"+path)
+// portainerDocker is one Docker API GET through Portainer, shared across a sweep.
+func portainerDocker[T any](ctx context.Context, r *Registry, ref string, environment int64, path, what string) (T, error) {
+	id := itoa(environment)
+	return portainerGet[T](ctx, r, ref, "/endpoints/"+id+"/docker"+path, "portainer-docker:"+ref+":"+id+":"+path, what)
 }
 
-func (r *Registry) portainerContainers(ctx context.Context, ref string, environment pyValue) ([]pyValue, error) {
-	listed, err := r.portainerDocker(ctx, ref, environment, "/containers/json?all=1")
-	if err != nil {
-		return nil, err
-	}
-	return items(listed.or(pyEmptyList)), nil
+func (r *Registry) portainerContainers(ctx context.Context, ref string, environment int64) ([]dockerContainer, error) {
+	return portainerDocker[[]dockerContainer](ctx, r, ref, environment, "/containers/json?all=1", "container list")
 }
 
-// containerName is the container's first name without its leading slash.
-func containerName(container pyValue) string {
-	names := items(container.get("Names").or(pyValue{array: []pyValue{pyText("/")}}))
-	if len(names) == 0 {
+// name is the container's first name without its leading slash.
+func (c dockerContainer) name() string {
+	if len(c.Names) == 0 {
 		return ""
 	}
-	return strings.TrimLeft(names[0].str(), "/")
+	return strings.TrimLeft(c.Names[0], "/")
 }
 
-func containerNames(container pyValue) []string {
-	names := []string{}
-	for _, name := range items(container.get("Names").or(pyEmptyList)) {
-		names = append(names, strings.TrimLeft(name.str(), "/"))
-	}
-	return names
+// named is whether any of the container's names is name.
+func (c dockerContainer) named(name string) bool {
+	return slices.ContainsFunc(c.Names, func(n string) bool { return strings.TrimLeft(n, "/") == name })
 }
 
 // published is every port a container answers on, the one that is
 // unambiguous, and whether a loopback binding hides it from other machines.
-func published(container pyValue) ([]int64, *int64, bool, error) {
-	seen := map[int64]bool{}
+func (c dockerContainer) published() ([]int, *int, bool) {
+	seen := map[int]bool{}
 	reachable := true
-	for _, port := range items(container.get("Ports").or(pyEmptyList)) {
-		public := port.get("PublicPort")
-		if !public.truthy() {
+	for _, port := range c.Ports {
+		if port.PublicPort == 0 {
 			continue
 		}
-		number, ok := public.toInt()
-		if !ok {
-			return nil, nil, false, &ProviderError{Message: "Portainer returned an invalid port."}
-		}
-		seen[number] = true
-		if ip := port.get("IP").orText("").str(); ip == "127.0.0.1" || ip == "::1" {
+		seen[port.PublicPort] = true
+		if port.IP == "127.0.0.1" || port.IP == "::1" {
 			reachable = false
 		}
 	}
-	listed := []int64{}
+	listed := make([]int, 0, len(seen))
 	for number := range seen {
 		listed = append(listed, number)
 	}
-	sort.Slice(listed, func(a, b int) bool { return listed[a] < listed[b] })
-	var single *int64
+	sort.Ints(listed)
+	var single *int
 	if len(listed) == 1 {
 		single = &listed[0]
 	}
-	return listed, single, reachable, nil
+	return listed, single, reachable
 }
 
-func containerRecord(container pyValue, host, ref string, createdHere map[string]bool, hostAddress string) (PortainerContainerRecord, error) {
-	labels := container.get("Labels").or(pyEmptyObject)
-	ports, port, reachable, err := published(container)
-	if err != nil {
-		return PortainerContainerRecord{}, err
-	}
-	stack := labels.get(composeProject).orText("")
-	id := []rune(container.get("Id").orText("").str())
-	if len(id) > 12 {
-		id = id[:12]
+func containerRecord(container dockerContainer, host, ref string, createdHere map[string]bool, hostAddress string) PortainerContainerRecord {
+	ports, port, reachable := container.published()
+	stack := container.Labels[composeProject]
+	id := container.ID
+	if len(id) > dockerIDLength {
+		id = id[:dockerIDLength]
 	}
 	return PortainerContainerRecord{
-		PortainerManaged: stack.truthy() && stack.text != nil && createdHere[*stack.text],
-		Name:             containerName(container),
-		ID:               string(id),
+		PortainerManaged: stack != "" && createdHere[stack],
+		Name:             container.name(),
+		ID:               id,
 		Stack:            stack,
-		WorkingDir:       labels.get(composeWorkingDir).orText(""),
-		Image:            container.get("Image").orText(""),
-		Source:           labels.get("org.opencontainers.image.source").orText(""),
-		Revision:         labels.get("org.opencontainers.image.revision").orText(""),
-		NetworkMode:      container.get("HostConfig").or(pyEmptyObject).get("NetworkMode").orText(""),
-		State:            container.get("State").orText(""),
-		Status:           container.get("Status").orText(""),
+		WorkingDir:       container.Labels[composeWorkingDir],
+		Image:            container.Image,
+		Source:           container.Labels[imageSourceLabel],
+		Revision:         container.Labels[imageRevisionLabel],
+		NetworkMode:      container.HostConfig.NetworkMode,
+		State:            container.State,
+		Status:           container.Status,
 		Ports:            ports,
 		Port:             port,
 		Reachable:        reachable,
 		Host:             host,
 		HostAddress:      hostAddress,
 		ConnectionRef:    ref,
-	}, nil
+	}
 }
 
 func stackPayload(spec PortainerStackSpec) portainerStackPayload {
-	env := []portainerEnvVar{}
-	for _, item := range spec.Environment {
-		env = append(env, portainerEnvVar{Name: item.Name.orText(""), Value: item.Value.orText("")})
+	env := spec.Environment
+	if env == nil {
+		env = []portainerEnvVar{}
 	}
 	return portainerStackPayload{Name: spec.Name, StackFileContent: spec.Compose, Env: env}
-}
-
-func (r *Registry) namedStacks(ctx context.Context, ref string, environment pyValue, name string) ([]pyValue, error) {
-	stacks, err := r.portainerStacksOn(ctx, ref, environment)
-	if err != nil {
-		return nil, err
-	}
-	found := []pyValue{}
-	for _, stack := range stacks {
-		if stack.get("Name").eqText(name) {
-			found = append(found, stack)
-		}
-	}
-	return found, nil
 }
 
 func (r *Registry) portainerReconcile(ctx context.Context, spec PortainerStackSpec, _ struct{}, apply bool) (Result, error) {
@@ -561,36 +496,36 @@ func (r *Registry) portainerReconcile(ctx context.Context, spec PortainerStackSp
 		return Result{}, err
 	}
 	if !environment.Reachable {
-		return Result{}, &ProviderError{Message: "Portainer cannot currently reach " + spec.Host + "."}
+		return Result{}, &ProviderError{Message: "Portainer cannot reach " + spec.Host}
 	}
-	existing, err := r.namedStacks(ctx, ref, environment.ID, spec.Name)
+	existing, err := r.portainerStacksOn(ctx, ref, environment.ID, spec.Name)
 	if err != nil {
 		return Result{}, err
 	}
 	if len(existing) > 1 {
-		return Result{}, &ProviderError{Message: "Portainer holds more than one stack of that name."}
+		return Result{}, &ProviderError{Message: fmt.Sprintf("Portainer holds more than one stack named %q", spec.Name)}
 	}
-	envID := environment.ID.str()
+	envID := itoa(environment.ID)
 	changed := true
 	if len(existing) == 1 {
-		stackID := existing[0].get("Id").str()
-		current, err := r.portainerGet(ctx, ref, "/stacks/"+stackID+"/file", "")
+		stackID := itoa(existing[0].ID)
+		current, err := portainerGet[portainerStackFile](ctx, r, ref, "/stacks/"+stackID+"/file", "", "stack file")
 		if err != nil {
 			return Result{}, err
 		}
-		if current.or(pyEmptyObject).get("StackFileContent").eqText(spec.Compose) {
+		if current.StackFileContent == spec.Compose {
 			changed = false
 		} else if apply {
 			payload := stackPayload(spec)
 			pull := false
 			payload.PullImage = &pull
 			if _, err := r.portainerCall(ctx, ref, "/stacks/"+stackID+"?endpointId="+envID, "PUT", payload); err != nil {
-				return Result{}, err
+				return Result{}, fmt.Errorf("update stack %s: %w", spec.Name, err)
 			}
 		}
 	} else if apply {
 		if _, err := r.portainerCall(ctx, ref, "/stacks/create/standalone/string?endpointId="+envID, "POST", stackPayload(spec)); err != nil {
-			return Result{}, err
+			return Result{}, fmt.Errorf("create stack %s: %w", spec.Name, err)
 		}
 	}
 
@@ -602,18 +537,13 @@ func (r *Registry) portainerReconcile(ctx context.Context, spec PortainerStackSp
 	}
 	containers := []PortainerContainerRecord{}
 	for _, container := range listed {
-		if !container.get("Labels").or(pyEmptyObject).get(composeProject).eqText(spec.Name) {
-			continue
+		if container.Labels[composeProject] == spec.Name {
+			containers = append(containers, containerRecord(container, spec.Host, ref, nil, ""))
 		}
-		record, err := containerRecord(container, spec.Host, ref, nil, "")
-		if err != nil {
-			return Result{}, err
-		}
-		containers = append(containers, record)
 	}
 	running, unreachable := 0, []string{}
 	for _, item := range containers {
-		if item.State.eqText("running") {
+		if item.State == "running" {
 			running++
 		}
 		if !item.Reachable {
@@ -621,8 +551,8 @@ func (r *Registry) portainerReconcile(ctx context.Context, spec PortainerStackSp
 		}
 	}
 	status := PortainerStackStatus{Environment: environment.Name, Host: spec.Host, Containers: containers}
-	if spec.Port.truthy() {
-		status.Origin = spec.Host + ":" + spec.Port.str()
+	if spec.Port != nil && *spec.Port > 0 {
+		status.Origin = spec.Host + ":" + strconv.Itoa(*spec.Port)
 	}
 	if running > 0 && running == len(containers) {
 		status.State = "running"
@@ -648,7 +578,7 @@ func (r *Registry) portainerDelete(ctx context.Context, spec PortainerStackSpec,
 	if err != nil {
 		return Result{}, err
 	}
-	existing, err := r.namedStacks(ctx, ref, environment.ID, spec.Name)
+	existing, err := r.portainerStacksOn(ctx, ref, environment.ID, spec.Name)
 	if err != nil {
 		return Result{}, err
 	}
@@ -656,9 +586,9 @@ func (r *Registry) portainerDelete(ctx context.Context, spec PortainerStackSpec,
 		return result(false, struct{}{}, "Absent", "Stack is already gone.", "Stack was already absent."), nil
 	}
 	if apply {
-		path := "/stacks/" + existing[0].get("Id").str() + "?endpointId=" + environment.ID.str()
+		path := "/stacks/" + itoa(existing[0].ID) + "?endpointId=" + itoa(environment.ID)
 		if _, err := r.portainerCall(ctx, ref, path, "DELETE", nil); err != nil {
-			return Result{}, err
+			return Result{}, fmt.Errorf("delete stack %s: %w", spec.Name, err)
 		}
 	}
 	return result(true, struct{}{}, "Deleted", "Stack removed.", "Stack removed."), nil
@@ -680,14 +610,14 @@ func (r *Registry) portainerContainerRecords(ctx context.Context) ([]PortainerCo
 				continue
 			}
 			host := machineName(environment, local)
-			stacks, err := r.portainerStacksOn(ctx, ref, environment.ID)
+			stacks, err := r.portainerStacksOn(ctx, ref, environment.ID, "")
 			if err != nil {
 				return nil, err
 			}
 			createdHere := map[string]bool{}
 			for _, stack := range stacks {
-				if stack.get("Name").truthy() {
-					createdHere[stack.get("Name").str()] = true
+				if stack.Name != "" {
+					createdHere[stack.Name] = true
 				}
 			}
 			containers, err := r.portainerContainers(ctx, ref, environment.ID)
@@ -695,14 +625,9 @@ func (r *Registry) portainerContainerRecords(ctx context.Context) ([]PortainerCo
 				return nil, err
 			}
 			for _, container := range containers {
-				if r.isThisRun(container) {
-					continue
+				if !r.isThisRun(container.Labels) {
+					records = append(records, containerRecord(container, host, ref, createdHere, environment.Address))
 				}
-				record, err := containerRecord(container, host, ref, createdHere, environment.Address)
-				if err != nil {
-					return nil, err
-				}
-				records = append(records, record)
 			}
 		}
 	}
@@ -733,11 +658,11 @@ func (r *Registry) portainerContainerID(ctx context.Context, spec PortainerConta
 		return "", PortainerEnvironment{}, err
 	}
 	for _, container := range containers {
-		if indexOf(containerNames(container), spec.Name) >= 0 {
-			return container.get("Id").orText("").str(), environment, nil
+		if container.named(spec.Name) {
+			return container.ID, environment, nil
 		}
 	}
-	return "", PortainerEnvironment{}, &ProviderError{Message: "No container named " + pyRepr(spec.Name) + " on " + spec.Host + "."}
+	return "", PortainerEnvironment{}, &ProviderError{Message: fmt.Sprintf("no container named %q on %s", spec.Name, spec.Host)}
 }
 
 // portainerCycler starts, stops or restarts one container and reports what it
@@ -749,9 +674,9 @@ func (r *Registry) portainerCycler(verb string) func(context.Context, PortainerC
 			return Result{}, err
 		}
 		if apply {
-			path := "/endpoints/" + environment.ID.str() + "/docker/containers/" + containerID + "/" + verb
+			path := "/endpoints/" + itoa(environment.ID) + "/docker/containers/" + containerID + "/" + verb
 			if _, err := r.portainerCall(ctx, spec.ConnectionRef, path, "POST", struct{}{}); err != nil {
-				return Result{}, err
+				return Result{}, fmt.Errorf("%s %s: %w", verb, spec.Name, err)
 			}
 		}
 		// Read back rather than trusting the call: a restart that exits two
@@ -762,16 +687,11 @@ func (r *Registry) portainerCycler(verb string) func(context.Context, PortainerC
 		}
 		observed := []PortainerContainerRecord{}
 		for _, container := range containers {
-			if indexOf(containerNames(container), spec.Name) < 0 {
-				continue
+			if container.named(spec.Name) {
+				observed = append(observed, containerRecord(container, spec.Host, spec.ConnectionRef, nil, ""))
 			}
-			record, err := containerRecord(container, spec.Host, spec.ConnectionRef, nil, "")
-			if err != nil {
-				return Result{}, err
-			}
-			observed = append(observed, record)
 		}
-		state := pyText("")
+		state := ""
 		if len(observed) > 0 {
 			state = observed[0].State
 		}
@@ -780,10 +700,14 @@ func (r *Registry) portainerCycler(verb string) func(context.Context, PortainerC
 			want = "exited"
 		}
 		kind := "Degraded"
-		if state.eqText(want) {
+		if state == want {
 			kind = "Ready"
 		}
-		said := spec.Name + " is " + state.or(pyText("in an unknown state")).str() + "."
+		shown := state
+		if shown == "" {
+			shown = "in an unknown state"
+		}
+		said := spec.Name + " is " + shown + "."
 		status := PortainerContainerStatus{Host: spec.Host, Container: spec.Name, State: state, Containers: observed}
 		return Result{Changed: apply, Status: status, Conditions: []Condition{condition(kind, strings.ToUpper(verb[:1])+verb[1:]+"ed", said)}, Message: said}, nil
 	}
@@ -797,15 +721,10 @@ func (r *Registry) portainerProbe(ctx context.Context, ref string) (ProbeResult,
 	local := r.controllerID()
 	reaches := []string{}
 	for _, environment := range environments {
-		if !environment.Reachable {
-			continue
-		}
-		if environment.Local && local != "" {
-			reaches = append(reaches, local)
-		} else {
-			reaches = append(reaches, environment.Name)
+		if environment.Reachable {
+			reaches = append(reaches, machineName(environment, local))
 		}
 	}
 	sort.Strings(reaches)
-	return ProbeResult{Detail: itoa(int64(len(reaches))) + " of " + itoa(int64(len(environments))) + " environments reachable.", Reaches: reaches}, nil
+	return ProbeResult{Detail: fmt.Sprintf("%d of %d environments reachable.", len(reaches), len(environments)), Reaches: reaches}, nil
 }

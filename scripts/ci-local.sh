@@ -171,9 +171,8 @@ fi
 # ---------------------------------------------------------- controller job
 step "controller"
 if command -v go >/dev/null; then
-  run "controller/scripts/check.sh (Go checks and parity)" env \
-    CHECK_PYTHON="$PY" DJANGO_SECRET_KEY=ci-only-secret-key-not-for-production \
-    controller/scripts/check.sh
+  pinned go "$GO_VERSION" "go env GOVERSION | sed -E 's/^go([0-9]+[.][0-9]+).*/\\1/'"
+  run "controller/scripts/check.sh (Go checks)" controller/scripts/check.sh
 else
   skip "go is not installed: controller checks not run"
 fi
@@ -229,6 +228,8 @@ if docker info >/dev/null 2>&1; then
   run "image: no development layer (debug_toolbar) is importable" docker run --rm \
     --entrypoint python severino-hq:ci-local -c \
     "import importlib.util, sys; sys.exit(importlib.util.find_spec('debug_toolbar') is not None)"
+  run "image: carries the controller" sh -c \
+    'docker run --rm --entrypoint /usr/local/bin/hq-controller severino-hq:ci-local -help 2>&1 | grep -q -- -apply'
   run "image: manage.py test" docker run --rm --entrypoint python \
     --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
     --env DJANGO_ALLOWED_HOSTS=localhost severino-hq:ci-local manage.py test --verbosity 0

@@ -86,53 +86,23 @@ func certificateFacts(spec TLSCertificateSpec, status *TLSCertificateStatus) map
 	}
 }
 
+// opField, opItem and opVault are the parts of `op --format json` read here.
 type opField struct {
-	Label json.RawMessage `json:"label"`
-	Type  json.RawMessage `json:"type"`
-	Value json.RawMessage `json:"value"`
+	Label string `json:"label"`
+	Type  string `json:"type"`
+	Value string `json:"value"`
 }
 
 type opItem struct {
-	Fields []opField         `json:"fields"`
-	Tags   []json.RawMessage `json:"tags"`
+	Fields []opField `json:"fields"`
+	Tags   []string  `json:"tags"`
 	Files  []struct {
-		Name json.RawMessage `json:"name"` // only a string names a file
+		Name string `json:"name"`
 	} `json:"files"`
 }
 
-// pyStr is Python's str() of a decoded JSON value; a missing value is "".
-func pyStr(raw json.RawMessage) string {
-	text := strings.TrimSpace(string(raw))
-	switch text {
-	case "":
-		return ""
-	case "null":
-		return "None"
-	case "true":
-		return "True"
-	case "false":
-		return "False"
-	}
-	var value string
-	if json.Unmarshal(raw, &value) == nil {
-		return value
-	}
-	if text[0] == '-' || (text[0] >= '0' && text[0] <= '9') {
-		return pyNumber(text)
-	}
-	return text
-}
-
-// opText is Python's str(value or "") of a decoded JSON value.
-func opText(raw json.RawMessage) string {
-	switch strings.TrimSpace(string(raw)) {
-	case "", "null", "false", `""`, "[]", "{}":
-		return ""
-	}
-	if number := pyStr(raw); number == "0" || number == "0.0" || number == "-0.0" {
-		return ""
-	}
-	return pyStr(raw)
+type opVault struct {
+	ID string `json:"id"`
 }
 
 type writtenField struct{ kind, value string }
@@ -140,7 +110,7 @@ type writtenField struct{ kind, value string }
 // asWritten is one field's stored type beside its value in the form it was
 // written in: op stores a date as epoch seconds at local midnight.
 func asWritten(field opField) writtenField {
-	kind, value := opText(field.Type), opText(field.Value)
+	kind, value := field.Type, field.Value
 	if kind == "DATE" && value != "" {
 		if seconds, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64); err == nil {
 			value = time.Unix(seconds, 0).Local().Format("2006-01-02")
@@ -164,33 +134,26 @@ func (r *Registry) onePasswordCurrent(ctx context.Context, publication OnePasswo
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if len(strings.TrimSpace(string(raw))) == 0 {
-		raw = []byte("{}")
-	}
-	var document map[string]json.RawMessage
-	if json.Unmarshal(raw, &document) != nil || document == nil {
-		return nil, nil, nil, &ProviderError{Message: "1Password returned an item HQ could not read."}
-	}
 	var item opItem
-	_ = json.Unmarshal(raw, &item)
+	if err := json.Unmarshal(raw, &item); err != nil {
+		return nil, nil, nil, &ProviderError{Message: "1Password returned an unreadable item", Err: err}
+	}
 	fields := map[string]writtenField{}
 	for _, field := range item.Fields {
-		label := pyStr(field.Label)
-		if _, owned := publishedKind(label); owned {
-			fields[label] = asWritten(field)
+		if _, owned := publishedKind(field.Label); owned {
+			fields[field.Label] = asWritten(field)
 		}
 	}
 	tags := []string{}
 	for _, tag := range item.Tags {
-		if text := pyStr(tag); strings.TrimSpace(text) != "" {
-			tags = append(tags, text)
+		if strings.TrimSpace(tag) != "" {
+			tags = append(tags, tag)
 		}
 	}
 	files := map[string]bool{}
 	for _, entry := range item.Files {
-		var name string
-		if json.Unmarshal(entry.Name, &name) == nil && name != "" {
-			files[name] = true
+		if entry.Name != "" {
+			files[entry.Name] = true
 		}
 	}
 	return fields, tags, files, nil
@@ -201,7 +164,7 @@ func (r *Registry) onePasswordCurrent(ctx context.Context, publication OnePasswo
 func (r *Registry) publishFacts(ctx context.Context, publication OnePasswordPublication, desired map[string]string, material func() ([]byte, []byte, error)) (PublishedFact, error) {
 	// Both reach op's argv, where a leading dash is an option, not a name.
 	if strings.HasPrefix(publication.Item, "-") || strings.HasPrefix(publication.Vault, "-") {
-		return PublishedFact{}, &ProviderError{Message: "A 1Password item or vault name cannot start with a dash."}
+		return PublishedFact{}, &ProviderError{Message: "a 1Password item or vault name cannot start with a dash"}
 	}
 	token, err := r.onePasswordToken(publication.ConnectionRef)
 	if err != nil {
@@ -301,12 +264,9 @@ func (r *Registry) probeOnePassword(ctx context.Context, ref string) (ProbeResul
 	if err != nil {
 		return ProbeResult{}, err
 	}
-	if len(strings.TrimSpace(string(raw))) == 0 {
-		raw = []byte("[]")
-	}
-	var vaults []json.RawMessage
-	if json.Unmarshal(raw, &vaults) != nil || vaults == nil {
-		return ProbeResult{}, &ProviderError{Message: "1Password returned a vault list HQ could not read."}
+	var vaults []opVault
+	if err := json.Unmarshal(raw, &vaults); err != nil {
+		return ProbeResult{}, &ProviderError{Message: "1Password returned an unreadable vault list", Err: err}
 	}
 	return ProbeResult{Detail: fmt.Sprintf("Service account accepted. It can access %d vaults.", len(vaults)), Reaches: []string{}}, nil
 }

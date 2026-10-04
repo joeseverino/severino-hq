@@ -1100,47 +1100,6 @@ class ObservationIsNotAnEventTests(TestCase):
         self.assertIn("last_observed_at", changed)
 
 
-class EveryKindIsWatchedOrSaysWhyNotTests(TestCase):
-    """Every adoptable kind has a collector that sweeps it.
-
-    The collector registry is a dict in the controller and the provider list is
-    a list of kinds. Unjoined, a kind can be declared and swept by nothing,
-    with the only symptom a staleness finding no sweep can clear.
-    """
-
-    def _collected(self):
-        try:
-            from controller_runtime.providers import PROVIDER_INVENTORY
-        except Exception:  # pragma: no cover - controller extras absent
-            self.skipTest("the controller runtime is not importable here")
-        return set(PROVIDER_INVENTORY)
-
-    def test_a_kind_nothing_collects_says_why(self):
-        collected = self._collected()
-        for kind, provider in sorted(PROVIDERS.items()):
-            if kind in collected:
-                continue
-            with self.subTest(kind=kind):
-                self.assertTrue(
-                    provider.unobserved_reason,
-                    f"nothing sweeps {kind!r} and its provider does not say why. "
-                    "Either add a collector or state what cannot be reached.",
-                )
-
-    def test_a_kind_that_is_collected_does_not_claim_otherwise(self):
-        """Exemptions rot: a collector arriving must retire the excuse."""
-
-        for kind in sorted(self._collected()):
-            provider = PROVIDERS.get(kind)
-            if provider is None:
-                continue
-            with self.subTest(kind=kind):
-                self.assertFalse(
-                    provider.unobserved_reason,
-                    f"{kind!r} is swept but still claims nothing observes it",
-                )
-
-
 class LineEndingsAreNotDriftTests(TestCase):
     """A document saved through a form is the same document the API returns.
 
@@ -1353,17 +1312,6 @@ class ObservationKindTests(TestCase):
         )
 
         self.assertNotIn("host.firewall", {item.kind for item in unmanaged()})
-
-    def test_every_kind_the_controller_sweeps_is_kept(self):
-        from controller_runtime.providers import PROVIDER_INVENTORY
-
-        from control_plane.providers import OBSERVATION_KINDS, PROVIDERS
-
-        dropped = sorted(
-            kind for kind in PROVIDER_INVENTORY
-            if kind not in PROVIDERS and kind not in OBSERVATION_KINDS
-        )
-        self.assertEqual(dropped, [])
 
     def test_a_kind_this_hq_has_never_heard_of_is_still_dropped(self):
         record_inventory(

@@ -1,393 +1,23 @@
 """Continuous delivery: every extension's latest admission runs in production.
 
-The running image's lock says which commit of each extension production runs;
-GitHub says which commit each extension last admitted on its main branch, and
-which composition run started after that. Anything between the two is drift,
-worded by stage, so each new stage is a new reconcile and the same stage is
-never acted on twice.
-
-GitHub holds the record of what happened. A check run on each admitted commit
-is the delivery's status where the change was made, and the compose run that
-carries it is found by time rather than remembered.
-
-HQ starts nothing here. An extension's admission dispatches the composition
-itself, the moment it has signed a wheel (the host's ``admit-plugin`` action),
-and the deploy waits for a person. HQ reports: each stage on the extension's
-commit, and one comment on its merged pull request once production runs it,
-read when HQ boots on a new image and whenever it sweeps while in use. The
-controller never asks its app for a token that can start a workflow.
+The declaration. The controller (controller/providers/github_delivery.go)
+compares the running image's lock with each extension's latest admission on
+GitHub and reports each stage there; HQ starts nothing.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from pydantic import Field
 
-from application.timestamps import moment
-
-from . import github_app, github_readings
+from ..observations.github import PROVIDER
 from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, applies
-from .contracts import ControllerIntegrationAdapter, ProviderResult, ProviderRuntime
 
 KIND = "github.delivery"
-# What reporting delivery writes: a check run on each extension commit, and one
-# comment on its merged pull request. With ``github_readings.READ`` and the
-# admission's Actions write, this is every permission HQ's app is registered
-# with (``deploy/github-apps.json``).
-REPORTS = {"checks": "write", "pull_requests": "write"}
-CHECK_NAME = "Severino HQ · Production"
 CURRENT = "Every extension's latest admission, confirmed on GitHub"
 COMPOSE_WORKFLOW = ".github/workflows/compose.yml"
-# Where a composition goes after Compose publishes it: approval, then the host.
-DEPLOY_WORKFLOW = ".github/workflows/deploy.yml"
-_MARKER = "<!-- severino-hq-delivery:{sha} -->"
-_RUNNING = frozenset({"queued", "in_progress", "requested", "pending"})
-
-
-@dataclass(frozen=True)
-class Extension:
-    plugin: str
-    repository: str
-    workflow: str
-    running: str
-    admitted: str = ""
-    admitted_at: str = ""
-    # The newest Compose or Deploy run that started after the admission.
-    run: Mapping[str, Any] | None = None
-    # HQ's check run on the running commit, when it does not yet say so: still
-    # open, or closed as not delivered by a sweep that ran before the new image.
-    unreported: Mapping[str, Any] | None = None
-
-    @property
-    def behind(self) -> bool:
-        return bool(self.admitted) and self.admitted != self.running
-
-    @property
-    def stage(self) -> str:
-        run = self.run
-        if run is None:
-            return "no composition has started"
-        which = f"{run.get('name') or 'Compose'} run {run.get('id')}"
-        status = str(run.get("status", ""))
-        if status == "waiting":
-            return f"{which} is waiting for deploy approval"
-        if status in _RUNNING:
-            return f"{which} is running"
-        conclusion = str(run.get("conclusion") or "ended")
-        if conclusion == "success":
-            return f"{which} finished without deploying it"
-        return f"{which} {'failed' if conclusion == 'failure' else conclusion}"
-
-    def says(self) -> str:
-        if self.behind:
-            return (
-                f"{self.plugin} {self.admitted[:7]} is admitted and production runs "
-                f"{self.running[:7]}: {self.stage}"
-            )
-        return f"{self.plugin} {self.running[:7]} is live, not yet confirmed on GitHub"
-
-
-def _basename(workflow: str) -> str:
-    return str(workflow).rsplit("/", 1)[-1]
-
-
-def _latest_admission(runtime: ProviderRuntime, extension: Extension, every: tuple[str, ...]):
-    owner, repo = github_app.repository(extension.repository)
-    answer = github_app.call(
-        runtime,
-        f"/repos/{owner}/{repo}/actions/workflows/{_basename(extension.workflow)}/runs"
-        "?branch=main&status=success&per_page=1",
-        repositories=every,
-        permissions={"actions": "read"},
-    )
-    runs = (answer or {}).get("workflow_runs") or []
-    return runs[0] if runs else None
-
-
-def _pipeline_runs(runtime: ProviderRuntime, spec: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-    """Compose's and Deploy's recent runs on the branch: a composition is one
-    until it publishes, then the other until it is live."""
-
-    owner, repo = github_app.repository(spec["repository"])
-    found: list[Mapping[str, Any]] = []
-    for workflow in (spec["workflow"], DEPLOY_WORKFLOW):
-        answer = github_app.call(
-            runtime,
-            f"/repos/{owner}/{repo}/actions/workflows/{_basename(workflow)}/runs"
-            f"?branch={spec['branch']}&per_page=20",
-            repositories=(spec["repository"],),
-            permissions={"actions": "read"},
-        )
-        found.extend((answer or {}).get("workflow_runs") or [])
-    return found
-
-
-def _run_after(runs: list[Mapping[str, Any]], since: str) -> Mapping[str, Any] | None:
-    """The newest run created at or after ``since``."""
-
-    start = moment(since, naive="keep")
-    if start is None:
-        return None
-    later = [run for run in runs if (moment(run.get("created_at"), naive="keep") or start) >= start]
-    return max(later, key=lambda run: str(run.get("created_at", "")), default=None)
-
-
-def _check_run(runtime: ProviderRuntime, repository: str, sha: str) -> Mapping[str, Any] | None:
-    owner, repo = github_app.repository(repository)
-    answer = github_app.call(
-        runtime,
-        f"/repos/{owner}/{repo}/commits/{sha}/check-runs"
-        f"?check_name={github_app.quote(CHECK_NAME)}&app_id={github_app.app_id(runtime)}&filter=latest",
-        repositories=(repository,),
-        permissions={"checks": "read"},
-    )
-    runs = (answer or {}).get("check_runs") or []
-    return runs[0] if runs else None
-
-
-def delivery(runtime: ProviderRuntime, spec: Mapping[str, Any]) -> tuple[Extension, ...]:
-    """Every extension, with how far its latest admission is from production."""
-
-    found = tuple(
-        Extension(
-            plugin=item["plugin"],
-            repository=item["source_repository"],
-            workflow=item["source_workflow"],
-            running=item["source_commit"],
-        )
-        for item in runtime.composition().get("extensions") or ()
-    )
-    if not found:
-        return ()
-    every = tuple(sorted({item.repository for item in found}))
-    runs: list[Mapping[str, Any]] | None = None
-    settled: list[Extension] = []
-    for extension in found:
-        admission = _latest_admission(runtime, extension, every)
-        admitted = str((admission or {}).get("head_sha", ""))
-        admitted_at = str((admission or {}).get("updated_at", ""))
-        if admitted and admitted != extension.running:
-            if runs is None:
-                runs = _pipeline_runs(runtime, spec)
-            settled.append(
-                replace(
-                    extension,
-                    admitted=admitted,
-                    admitted_at=admitted_at,
-                    run=_run_after(runs, admitted_at),
-                )
-            )
-            continue
-        check = _check_run(runtime, extension.repository, extension.running)
-        unreported = check if check and check.get("conclusion") != "success" else None
-        settled.append(replace(extension, admitted=admitted, unreported=unreported))
-    return tuple(settled)
-
-
-def production(extensions: tuple[Extension, ...]) -> str:
-    """``CURRENT``, or what stands between production and it, stage by stage."""
-
-    pending = [item for item in extensions if item.behind or item.unreported]
-    return "; ".join(item.says() for item in pending) if pending else CURRENT
-
-
-def _record(spec: Mapping[str, Any], extensions: tuple[Extension, ...]) -> dict[str, Any]:
-    return {
-        "repository": spec["repository"],
-        "workflow": spec["workflow"],
-        "branch": spec["branch"],
-        "production": production(extensions),
-        "extensions": [
-            {
-                "plugin": item.plugin,
-                "running": item.running,
-                "admitted": item.admitted,
-                "stage": item.stage if item.behind else "live",
-                "run_url": str((item.run or {}).get("html_url", "")),
-            }
-            for item in extensions
-        ],
-    }
-
-
-def _host_spec(runtime: ProviderRuntime) -> dict[str, Any] | None:
-    repository = str(runtime.composition().get("repository") or "")
-    if not repository:
-        return None
-    return {
-        "repository": repository,
-        "workflow": COMPOSE_WORKFLOW,
-        "branch": "main",
-        "production": CURRENT,
-    }
-
-
-def inventory(runtime: ProviderRuntime) -> list[dict[str, Any]]:
-    spec = _host_spec(runtime)
-    if spec is None:
-        return []
-    return [_record(spec, delivery(runtime, spec))]
-
-
-# ----- Reporting on GitHub ---------------------------------------------------
-
-
-def _checks_page(spec: Mapping[str, Any]) -> str:
-    return f"https://github.com/{spec['repository']}/actions/workflows/{_basename(spec['workflow'])}"
-
-
-def _report(extension: Extension, spec: Mapping[str, Any], image: str) -> dict[str, Any]:
-    """The check run for one extension's admitted or live commit."""
-
-    run = extension.run
-    if not extension.behind:
-        return {
-            "status": "completed",
-            "conclusion": "success",
-            "output": {
-                "title": "Live in production",
-                "summary": f"Production runs `{extension.running[:12]}` in `{image or 'the composed image'}`.",
-            },
-        }
-    details = str((run or {}).get("html_url") or _checks_page(spec))
-    body = {"details_url": details, "external_id": str((run or {}).get("id", ""))}
-    status = str((run or {}).get("status", ""))
-    if run is None:
-        return {
-            **body,
-            "status": "queued",
-            "output": {
-                "title": "Waiting for its composition",
-                "summary": "Its admission starts the composition. If that admission failed, re-run it.",
-            },
-        }
-    if status == "waiting":
-        return {**body, "status": "in_progress", "output": {"title": "Waiting for deploy approval", "summary": extension.stage}}
-    if status == "queued":
-        return {**body, "status": "queued", "output": {"title": "Composition queued", "summary": extension.stage}}
-    if status in _RUNNING:
-        return {**body, "status": "in_progress", "output": {"title": "Composing", "summary": extension.stage}}
-    return {
-        **body,
-        "status": "completed",
-        "conclusion": "failure",
-        "output": {"title": "Not delivered", "summary": f"{extension.stage}. Re-run it from the run page."},
-    }
-
-
-def _sha(extension: Extension) -> str:
-    return extension.admitted if extension.behind else extension.running
-
-
-def _upsert_check(runtime: ProviderRuntime, extension: Extension, report: dict[str, Any]) -> None:
-    owner, repo = github_app.repository(extension.repository)
-    grant = {"repositories": (extension.repository,), "permissions": {"checks": REPORTS["checks"]}}
-    existing = _check_run(runtime, extension.repository, _sha(extension))
-    if existing and existing.get("id"):
-        github_app.call(
-            runtime,
-            f"/repos/{owner}/{repo}/check-runs/{existing['id']}",
-            method="PATCH",
-            payload=report,
-            **grant,
-        )
-        return
-    github_app.call(
-        runtime,
-        f"/repos/{owner}/{repo}/check-runs",
-        method="POST",
-        payload={"name": CHECK_NAME, "head_sha": _sha(extension), **report},
-        **grant,
-    )
-
-
-def _announce(runtime: ProviderRuntime, extension: Extension, image: str) -> None:
-    """One comment on the merged pull request, the first time its commit is live."""
-
-    owner, repo = github_app.repository(extension.repository)
-    read = {"repositories": (extension.repository,), "permissions": {"pull_requests": "read"}}
-    pulls = github_app.call(
-        runtime, f"/repos/{owner}/{repo}/commits/{extension.running}/pulls", **read
-    )
-    merged = next(
-        (pull for pull in pulls or () if isinstance(pull, Mapping) and pull.get("merged_at")),
-        None,
-    )
-    if merged is None:
-        return
-    marker = _MARKER.format(sha=extension.running)
-    comments = github_app.call(
-        runtime, f"/repos/{owner}/{repo}/issues/{merged['number']}/comments?per_page=100", **read
-    )
-    if any(marker in str((comment or {}).get("body", "")) for comment in comments or ()):
-        return
-    github_app.call(
-        runtime,
-        f"/repos/{owner}/{repo}/issues/{merged['number']}/comments",
-        method="POST",
-        payload={
-            "body": f"{marker}\nLive in production: `{extension.running[:12]}` in "
-            f"`{image or 'the composed image'}`."
-        },
-        repositories=(extension.repository,),
-        permissions={"pull_requests": REPORTS["pull_requests"]},
-    )
-
-
-def reconcile(
-    runtime: ProviderRuntime,
-    spec: dict[str, Any],
-    *,
-    apply: bool = True,
-    observed: dict[str, Any] | None = None,
-) -> ProviderResult:
-    del observed
-    extensions = delivery(runtime, spec)
-    image = str(runtime.composition().get("image") or "")
-    reporting = [item for item in extensions if item.behind or item.unreported]
-    if apply:
-        for item in reporting:
-            _upsert_check(runtime, item, _report(item, spec, image))
-            if not item.behind:
-                _announce(runtime, item, image)
-    status = _record(spec, extensions)
-    failed = [
-        item
-        for item in extensions
-        if item.behind and item.run is not None and str(item.run.get("status")) == "completed"
-    ]
-    if failed:
-        conditions = [
-            runtime.condition(
-                "Degraded",
-                True,
-                "NotDelivered",
-                "; ".join(item.says() for item in failed)
-                + ". Re-run the composition from its run page.",
-            )
-        ]
-    else:
-        conditions = [
-            runtime.condition(
-                "Ready",
-                True,
-                "Delivering" if reporting else "Current",
-                status["production"] + ".",
-            )
-        ]
-    return ProviderResult(
-        changed=bool(reporting),
-        status=status,
-        conditions=conditions,
-        message="Delivery reported.",
-    )
-
-
-def probe(runtime: ProviderRuntime, connection_ref: str) -> dict[str, Any]:
-    return github_app.probe(runtime, connection_ref)
 
 
 def _from_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -432,7 +62,7 @@ DEFINITION = ProviderSpec(
     GitHubDeliverySpec,
     actions={"reconcile": applies(automatic=True)},
     label="Continuous delivery",
-    connection_providers=(github_app.PROVIDER,),
+    connection_providers=(PROVIDER,),
     from_record=_from_record,
     identity=lambda spec: (spec["repository"],),
     key_hint=lambda record: "delivery",
@@ -452,18 +82,12 @@ DEFINITION = ProviderSpec(
         f"start the composition in {spec.get('repository', 'the host repository')}."
     ),
 )
-ADAPTER = ControllerIntegrationAdapter(
-    definitions=(DEFINITION,),
-    inventory={KIND: inventory},
-    readings=github_readings.READINGS,
-    connection_probes={github_app.PROVIDER: probe},
-    actions={(KIND, "reconcile"): reconcile},
-)
+DEFINITIONS = (DEFINITION,)
 
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.
 CONNECTIONS = {
     # An app's permissions are fine-grained and each token HQ mints is
     # narrowed again to one call's repositories and permissions.
-    "github_app": ConnectionKind("GitHub App", "scoped"),
+    PROVIDER: ConnectionKind("GitHub App", "scoped"),
 }

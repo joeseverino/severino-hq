@@ -677,34 +677,27 @@ references, executes provider adapters, verifies each declared consumer, and
 reports only public status and conditions. Expired claims return to the queue;
 only one queued or claimed operation may exist for a resource/action pair.
 
-A controller provider is admitted as one immutable adapter contribution: its
-typed resource definition, inventory reader, connection probes, actions, and
-verification policy travel together. The compiler rejects a contribution whose
-implemented actions or probes disagree with its declaration, and rejects
-duplicate kinds, probes, or dispatch identities before the worker can run.
-Admission remains a closed tuple owned by HQ; this is modular composition, not
-arbitrary runtime registration. AdGuard is admitted this way, and so is Caddy,
-an SSH-backed provider whose one resource resolves into a shared file.
-
-The kinds the controller core implements directly follow the same rule from the
-other side. Each integration lives in `controller_runtime/` (`tls`,
-`cloudflare`, `portainer`, `tailscale`, `host_readings`), split further by
-concern (`tls_issuance`, `tls_verification`, `npm_certificates`,
-`tailnet_api`, `tailnet_policy`, `cloudflare_api`, `cloudflare_account`). A sibling is called as `module.name`, so a
-patch on the owner reaches every caller. Each handler registers itself beside
-its definition: `@lists(kind)` for inventory,
-`@acts(kind, action)` for an action, `@probes(provider)` for a connection probe
-and `@reads(kind)` for a reading, all in `controller_runtime/handlers.py`. An
-admitted adapter's handlers are registered into the same tables. The dispatch
-tables in `controller_runtime/providers.py` are those registries plus a
-generated refusal for every locked action, and its `REGISTRANTS` tuple is the
-closed set of modules admitted to register; an architecture test rejects a
-handler written into a table by hand.
+A provider's declaration (its typed resource definitions and connections) is
+Django's, admitted as a closed tuple in `control_plane/provider_adapters/`. Its
+controller half is Go, in `controller/providers/`: one file set per
+integration (`adguard`, `npm`, `caddy`, `cloudflare`, `github_app`,
+`github_readings`, `github_delivery`, `portainer`, `tailscale`,
+`tailnet_policy`, `tls`, `host_readings`, `glance`, `redirects`), each
+registering its readers, actions and probes in `providers.New`. The controller
+asks HQ for its declarations through the bridge's `registry` action, claims only
+the declared actions it has a handler for, and refuses a locked action with the
+registry's reason. Vendor responses decode into types generated from each
+vendor's OpenAPI description (`controller/api/vendor/`); bridge messages into
+types generated from `controller/api/hq-controller.openapi.json`. A Go test holds
+the registered readers equal to the contract's `SweptKind`, and Django's contract
+test holds `SweptKind` to the kinds HQ expects a sweep to read.
 
 The homelab controller is a separate root-owned systemd oneshot, not a web
 process. It starts a disposable, capability-dropped container from the exact
-scanned HQ image, so the host needs no parallel Python environment and cannot
-drift from the deployed application. Provider variables, the ACME lineage, and
+scanned HQ image, whose `/usr/local/bin/hq-controller` is the static Go binary
+built in the image's `controller` stage, so the host needs no toolchain and
+cannot drift from the deployed application. The binary reaches HQ through the
+same image's `manage.py infrastructure_controller` (`HQ_IN_PROCESS=1`). Provider variables, the ACME lineage, and
 deployment identities enter only that short-lived container; they never enter
 the web container. The disposable container runs as the same unprivileged UID
 as the application data owner; the root-owned systemd launcher projects
@@ -713,9 +706,9 @@ mode authenticates and peeks without leasing work.
 Apply mode first schedules due work, then claims only explicitly supported
 kind/action pairs. The validated capability document declares which actions are
 automatic; a generic scheduler derives reconciliation for generation/health
-drift, while the TLS provider adds expiry-window renewal policy. The worker
-imports the same validated registry and dispatches every declared action through
-one provider/action map. AdGuard and NPM reconcile in apply mode. TLS reconciliation reuses the
+drift, while the TLS provider adds expiry-window renewal policy. The controller
+reads the same validated registry through the bridge and dispatches every
+declared action through one kind/action map. AdGuard and NPM reconcile in apply mode. TLS reconciliation reuses the
 existing lineage without contacting ACME. For NPM, one managed certificate is
 uploaded once and every enabled proxy host covered by its SANs is discovered,
 rebound, reloaded, and live-verified. TLS renewal issues through DNS-01 only

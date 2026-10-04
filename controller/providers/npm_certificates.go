@@ -3,34 +3,16 @@ package providers
 import (
 	"context"
 	"encoding/json"
-	"strconv"
+	"fmt"
 	"strings"
 
+	"github.com/joeseverino/severino-hq/controller/providers/npmapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // npmCertificateName is the display name HQ gives the NPM certificate it installs for a consumer.
 func npmCertificateName(consumer TLSConsumer) string {
 	return "Severino HQ - " + consumer.Name
-}
-
-// jsonInt is an integer literal; a float, bool or string is not an id.
-func jsonInt(raw json.RawMessage) (int, bool) {
-	text := strings.TrimSpace(string(raw))
-	if text == "" || strings.ContainsAny(text, ".eE") {
-		return 0, false
-	}
-	value, err := strconv.Atoi(text)
-	return value, err == nil
-}
-
-// idText is an id as Python's str() writes it into a path.
-func idText(raw json.RawMessage) string {
-	var text string
-	if json.Unmarshal(raw, &text) == nil {
-		return text
-	}
-	return strings.TrimSpace(string(raw))
 }
 
 // npmCertificateIDs is the NPM certificate id HQ installed for each NPM consumer, as last reported.
@@ -42,13 +24,11 @@ func npmCertificateIDsOf(spec TLSCertificateSpec, observed TLSCertificateObserve
 		}
 	}
 	ids := map[string]int{}
-	for name, raw := range observed.NPMCertificateIDs {
-		if value, ok := jsonInt(raw); ok {
-			ids[name] = value
-		}
+	for name, id := range observed.NPMCertificateIDs {
+		ids[name] = id
 	}
-	if single, ok := jsonInt(observed.NPMCertificateID); len(ids) == 0 && len(consumers) == 1 && ok {
-		ids[consumers[0]] = single
+	if single := observed.NPMCertificateID; len(ids) == 0 && len(consumers) == 1 && single != nil {
+		ids[consumers[0]] = *single
 	}
 	known := npmCertificateIDs{}
 	for _, name := range consumers {
@@ -73,18 +53,13 @@ func withNPMCertificateIDs(result Result, known npmCertificateIDs) Result {
 
 // npmCertificateSummary is the part of an NPM certificate HQ reads.
 type npmCertificateSummary struct {
-	ID       json.RawMessage `json:"id"`
-	NiceName json.RawMessage `json:"nice_name"`
-	Provider json.RawMessage `json:"provider"`
+	ID       int
+	NiceName string
+	Provider string
 }
 
-func (c npmCertificateSummary) niceName() (string, bool) {
-	var value string
-	if json.Unmarshal(c.NiceName, &value) != nil {
-		return "", false
-	}
-	return value, true
-}
+// npmCustomProvider is NPM's provider for a certificate uploaded rather than issued.
+const npmCustomProvider = "other"
 
 type npmCertificateCreate struct {
 	Provider string `json:"provider"`
@@ -95,16 +70,25 @@ type npmHostCertificate struct {
 	CertificateID int `json:"certificate_id"`
 }
 
+// npmCertificateList reads NPM's certificates fresh, for the actions that write.
 func (r *Registry) npmCertificateList(ctx context.Context, base string, headers map[string]string) ([]npmCertificateSummary, error) {
-	raw, err := r.HTTP.Request(ctx, base+"/nginx/certificates", "GET", headers, nil)
+	raw, err := r.HTTP.Request(ctx, base+npmCertificatesSource.path, "GET", headers, nil)
+	if err != nil {
+		return nil, fmt.Errorf("npm %s: %w", npmCertificatesSource.what, err)
+	}
+	certificates, err := npmDecode[npmapi.CertificateObject](raw, "npm "+npmCertificatesSource.what)
 	if err != nil {
 		return nil, err
 	}
-	list, err := decodeAs[[]npmCertificateSummary](raw, "Provider returned an invalid record list.")
-	if list == nil && err == nil {
-		list = []npmCertificateSummary{}
+	list := make([]npmCertificateSummary, 0, len(certificates))
+	for _, certificate := range certificates {
+		id, err := npmID(certificate.Id, "certificate")
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, npmCertificateSummary{ID: id, NiceName: certificate.NiceName, Provider: certificate.Provider})
 	}
-	return list, err
+	return list, nil
 }
 
 // npmManagedCertificate uploads into the certificate HQ installed for this
@@ -122,43 +106,39 @@ func (r *Registry) npmManagedCertificate(ctx context.Context, consumer TLSConsum
 	matches := []npmCertificateSummary{}
 	if knownID != nil {
 		for _, item := range certificates {
-			if id, ok := jsonInt(item.ID); ok && id == *knownID {
+			if item.ID == *knownID {
 				matches = append(matches, item)
 			}
 		}
 	}
 	if len(matches) == 0 {
 		for _, item := range certificates {
-			if name, ok := item.niceName(); ok && name == niceName {
+			if item.NiceName == niceName {
 				matches = append(matches, item)
 			}
 		}
 	}
 	if len(matches) > 1 {
-		return 0, NPMCertificateIdentity{}, &ProviderError{Message: "NPM contains duplicate HQ-managed certificates."}
+		return 0, NPMCertificateIdentity{}, &ProviderError{Message: "npm holds more than one HQ-managed certificate for " + niceName}
 	}
-	var idRaw json.RawMessage
+	var certificateID int
 	if len(matches) == 1 {
-		var provider string
-		if json.Unmarshal(matches[0].Provider, &provider) != nil || provider != "other" {
-			return 0, NPMCertificateIdentity{}, &ProviderError{Message: "The HQ-managed NPM certificate is not a custom certificate."}
+		if matches[0].Provider != npmCustomProvider {
+			return 0, NPMCertificateIdentity{}, &ProviderError{Message: "the HQ-managed npm certificate is not a custom certificate"}
 		}
-		idRaw = matches[0].ID
+		certificateID = matches[0].ID
 	} else {
-		created, err := r.HTTP.Request(ctx, base+"/nginx/certificates", "POST", headers, npmCertificateCreate{Provider: "other", NiceName: niceName})
+		created, err := r.HTTP.Request(ctx, base+npmCertificatesSource.path, "POST", headers, npmCertificateCreate{Provider: npmCustomProvider, NiceName: niceName})
 		if err != nil {
+			return 0, NPMCertificateIdentity{}, fmt.Errorf("npm create certificate: %w", err)
+		}
+		var answer npmapi.CertificateObject
+		if err := json.Unmarshal(created, &answer); err != nil {
+			return 0, NPMCertificateIdentity{}, &ProviderError{Message: "npm create certificate answer did not decode", Err: err}
+		}
+		if certificateID, err = npmID(answer.Id, "created certificate"); err != nil {
 			return 0, NPMCertificateIdentity{}, err
 		}
-		var answer struct {
-			ID json.RawMessage `json:"id"`
-		}
-		if json.Unmarshal(created, &answer) == nil {
-			idRaw = answer.ID
-		}
-	}
-	certificateID, ok := jsonInt(idRaw)
-	if !ok {
-		return 0, NPMCertificateIdentity{}, &ProviderError{Message: "NPM did not return a managed certificate ID."}
 	}
 	leaf, chain, err := splitChain(fullchain)
 	if err != nil {
@@ -169,19 +149,19 @@ func (r *Registry) npmManagedCertificate(ctx context.Context, consumer TLSConsum
 		{Field: "certificate_key", Filename: "certificate_key.pem", Content: privateKey},
 		{Field: "intermediate_certificate", Filename: "intermediate_certificate.pem", Content: chain},
 	}
-	if _, err := r.HTTP.Request(ctx, base+"/nginx/certificates/validate", "POST", headers, files); err != nil {
-		return 0, NPMCertificateIdentity{}, err
+	if _, err := r.HTTP.Request(ctx, base+npmCertificatesSource.path+"/validate", "POST", headers, files); err != nil {
+		return 0, NPMCertificateIdentity{}, fmt.Errorf("npm validate certificate: %w", err)
 	}
-	if _, err := r.HTTP.Request(ctx, base+"/nginx/certificates/"+strconv.Itoa(certificateID)+"/upload", "POST", headers, files); err != nil {
-		return 0, NPMCertificateIdentity{}, err
+	if _, err := r.HTTP.Request(ctx, fmt.Sprintf("%s%s/%d/upload", base, npmCertificatesSource.path, certificateID), "POST", headers, files); err != nil {
+		return 0, NPMCertificateIdentity{}, fmt.Errorf("npm upload certificate: %w", err)
 	}
-	hosts, err := r.npmCertificateHosts(ctx, base, headers)
+	hosts, err := r.npmProxyHostList(ctx, base, headers)
 	if err != nil {
 		return 0, NPMCertificateIdentity{}, err
 	}
 	verify := nameSet(consumer.VerifyDomains)
 	certificateNames := nameSet(certificateDomains)
-	matching := []npmProxyHost{}
+	matching := []npmapi.ProxyHostObject{}
 	for _, host := range hosts {
 		selected, discovered := false, false
 		for _, domain := range host.DomainNames {
@@ -192,7 +172,7 @@ func (r *Registry) npmManagedCertificate(ctx context.Context, consumer TLSConsum
 				discovered = true
 			}
 		}
-		if host.serving() && (selected || discovered) {
+		if bool(host.Enabled) && (selected || discovered) {
 			matching = append(matching, host)
 		}
 	}
@@ -211,12 +191,16 @@ func (r *Registry) npmManagedCertificate(ctx context.Context, consumer TLSConsum
 		}
 	}
 	if len(missing) > 0 {
-		return 0, NPMCertificateIdentity{}, &ProviderError{Message: "NPM has no proxy host for managed verification names: " + strings.Join(missing, ", ") + "."}
+		return 0, NPMCertificateIdentity{}, &ProviderError{Message: "npm has no enabled proxy host for verification names " + strings.Join(missing, ", ")}
 	}
 	for _, host := range matching {
-		// Uploading replaces NPM's files but does not reload nginx; re-applying each host does.
-		if _, err := r.HTTP.Request(ctx, base+"/nginx/proxy-hosts/"+idText(host.ID), "PUT", headers, npmHostCertificate{CertificateID: certificateID}); err != nil {
+		id, err := npmID(host.Id, "proxy host")
+		if err != nil {
 			return 0, NPMCertificateIdentity{}, err
+		}
+		// Uploading replaces NPM's files but does not reload nginx; re-applying each host does.
+		if _, err := r.HTTP.Request(ctx, fmt.Sprintf("%s%s/%d", base, npmProxyHosts.path, id), "PUT", headers, npmHostCertificate{CertificateID: certificateID}); err != nil {
+			return 0, NPMCertificateIdentity{}, fmt.Errorf("npm attach certificate to proxy host %d: %w", id, err)
 		}
 	}
 	return certificateID, NPMCertificateIdentity{NiceName: niceName}, nil

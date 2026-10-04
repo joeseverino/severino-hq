@@ -714,15 +714,6 @@ class NamingTests(TestCase):
         self.assertEqual(ended("Via Example"), "Via Example.")
         self.assertEqual(ended(""), "")
 
-    def test_cloudflare_refusals_are_classified_once(self):
-        from control_plane.provider_adapters.contracts import cloudflare_refusal
-
-        self.assertEqual(cloudflare_refusal("Authentication error"), "permission")
-        self.assertEqual(cloudflare_refusal("Invalid API Token"), "credential")
-        self.assertEqual(cloudflare_refusal("", status=401), "credential")
-        self.assertEqual(cloudflare_refusal("", status=403), "permission")
-        self.assertEqual(cloudflare_refusal("Rate limited"), "")
-
     def test_the_facts_panel_names_the_issuer(self):
         from ..facts import facts_about
 

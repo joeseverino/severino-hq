@@ -2,6 +2,9 @@ package providers
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -24,6 +27,32 @@ func TestRegisteredKindsAreContractKinds(t *testing.T) {
 		if !runtime.ResourceKind(kind).Valid() {
 			t.Errorf("%q is registered but is not a ResourceKind in the contract", kind)
 		}
+	}
+}
+
+// The readers registered are exactly the contract's SweptKind, which Django
+// holds to the kinds HQ expects a sweep to read.
+func TestReadersAreTheContractsSweptKinds(t *testing.T) {
+	data, err := os.ReadFile("../api/hq-controller.openapi.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contract struct {
+		Components struct {
+			Schemas struct {
+				SweptKind struct {
+					Enum []string `json:"enum"`
+				} `json:"SweptKind"`
+			} `json:"schemas"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(data, &contract); err != nil {
+		t.Fatal(err)
+	}
+	swept := slices.Sorted(slices.Values(contract.Components.Schemas.SweptKind.Enum))
+	readers := New(runtime.Environment{}, &fakeHTTP{}).Coverage().Readers
+	if !slices.Equal(readers, swept) {
+		t.Errorf("readers %v\nSweptKind %v", readers, swept)
 	}
 }
 
@@ -56,8 +85,7 @@ func TestActionsDecodeOnceAtTheBoundary(t *testing.T) {
 	if _, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "reconcile", ctx, Object{"domain": 5}, nil, true); err == nil {
 		t.Error("an AdGuard spec that does not decode is refused with the decoder's error")
 	}
-	spec, _ := decodePayload[NPMProxyHostSpec](Object{"connection_ref": 7})
-	if spec.ConnectionRef != "" {
-		t.Errorf("a connection_ref that is not text names no connection, got %q", spec.ConnectionRef)
+	if _, err := decodePayload[NPMProxyHostSpec](Object{"connection_ref": 7}); err == nil {
+		t.Error("a connection_ref that is not text is refused, never read as no connection")
 	}
 }

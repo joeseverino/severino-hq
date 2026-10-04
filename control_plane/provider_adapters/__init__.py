@@ -1,12 +1,11 @@
 """The provider modules HQ admits, and every declaration they emit.
 
-Each module declares everything it brings: its kinds and the connection its
-credential arrives through (``CONNECTIONS``). One whose controller half lives
-here emits its kinds as
-``ADAPTER``; one whose actions are still the controller core's emits them as
-``DEFINITIONS``. Admission is this one closed tuple, owned by HQ, and its order
-is the registries' order: a module outside it contributes nothing, and adding a
-provider is writing its module and naming it here.
+Each module declares everything it brings: its kinds (``DEFINITIONS``) and the
+connection its credential arrives through (``CONNECTIONS``). The controller
+(controller/providers) reads and acts on them. Admission is this one closed
+tuple, owned by HQ, and its order is the registries' order: a module outside it
+contributes nothing, and adding a provider is writing its module and naming it
+here.
 """
 
 from . import (
@@ -24,18 +23,7 @@ from ..provider_spec import ConnectionKind
 
 ADMITTED = (tls, npm, github, portainer, tailscale, declarations, caddy, adguard, cloudflare)
 
-CONTROLLER_PROVIDER_ADAPTERS = tuple(
-    module.ADAPTER for module in ADMITTED if hasattr(module, "ADAPTER")
-)
-
-DECLARATIONS = tuple(
-    definition
-    for module in ADMITTED
-    for definition in (
-        *getattr(module, "DEFINITIONS", ()),
-        *(module.ADAPTER.definitions if hasattr(module, "ADAPTER") else ()),
-    )
-)
+DECLARATIONS = tuple(definition for module in ADMITTED for definition in module.DEFINITIONS)
 
 
 def admitted_connections(modules) -> dict[str, ConnectionKind]:
@@ -72,7 +60,6 @@ if undeclared := undeclared_connections(DECLARATIONS, CONNECTIONS):
 __all__ = [
     "ADMITTED",
     "CONNECTIONS",
-    "CONTROLLER_PROVIDER_ADAPTERS",
     "DECLARATIONS",
     "admitted_connections",
     "undeclared_connections",

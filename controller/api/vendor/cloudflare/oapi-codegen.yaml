@@ -4,6 +4,7 @@ output: cloudflare.gen.go
 generate:
   models: true
 output-options:
+  skip-prune: true
   prefer-skip-optional-pointer: true
   name-normalizer: ToCamelCaseWithInitialisms
   include-operation-ids:
