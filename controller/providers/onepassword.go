@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/runtime"
@@ -130,7 +131,7 @@ func (r *Registry) onePasswordToken(ref string) (string, error) {
 func (r *Registry) onePasswordCurrent(ctx context.Context, publication OnePasswordPublication, token string) (map[string]writtenField, []string, map[string]bool, error) {
 	raw, err := r.commands().Run(ctx,
 		[]string{"op", "item", "get", publication.Item, "--vault", publication.Vault, "--format", "json"},
-		nil, "1Password read for "+publication.Name, "", map[string]string{"OP_SERVICE_ACCOUNT_TOKEN": token})
+		nil, "1Password read for "+publication.Name, "", opEnvironment(token))
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -243,7 +244,7 @@ func (r *Registry) publishFacts(ctx context.Context, publication OnePasswordPubl
 		union[tag] = true
 	}
 	argv := append([]string{"op", "item", "edit", publication.Item, "--vault", publication.Vault, "--tags", strings.Join(sortedKeys(union), ",")}, assignments...)
-	if _, err := r.commands().Run(ctx, argv, nil, "1Password write for "+publication.Name, "", map[string]string{"OP_SERVICE_ACCOUNT_TOKEN": token}); err != nil {
+	if _, err := r.commands().Run(ctx, argv, nil, "1Password write for "+publication.Name, "", opEnvironment(token)); err != nil {
 		return PublishedFact{}, err
 	}
 	written := "current"
@@ -260,7 +261,7 @@ func (r *Registry) probeOnePassword(ctx context.Context, ref string) (ProbeResul
 		return ProbeResult{}, err
 	}
 	raw, err := r.commands().Run(ctx, []string{"op", "vault", "list", "--format", "json"},
-		nil, "1Password preflight for "+ref, "", map[string]string{"OP_SERVICE_ACCOUNT_TOKEN": token})
+		nil, "1Password preflight for "+ref, "", opEnvironment(token))
 	if err != nil {
 		return ProbeResult{}, err
 	}
@@ -269,4 +270,21 @@ func (r *Registry) probeOnePassword(ctx context.Context, ref string) (ProbeResul
 		return ProbeResult{}, &ProviderError{Message: "1Password returned an unreadable vault list", Err: err}
 	}
 	return ProbeResult{Detail: fmt.Sprintf("Service account accepted. It can access %d vaults.", len(vaults)), Reaches: []string{}}, nil
+}
+
+// opState is a directory of this run's own for the op CLI's state. The CLI
+// wants one it can write, and the image's tree is root's; the temporary
+// directory is memory in the controller's container.
+var opState = sync.OnceValue(func() string {
+	dir, err := os.MkdirTemp("", "hq-op-")
+	if err != nil {
+		return ""
+	}
+	return dir
+})
+
+// opEnvironment is all the op CLI is given: the publisher's token and where to
+// keep its state. With nowhere to keep it, op says so and the step fails.
+func opEnvironment(token string) map[string]string {
+	return map[string]string{"OP_SERVICE_ACCOUNT_TOKEN": token, "OP_CONFIG_DIR": opState()}
 }
