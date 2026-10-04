@@ -106,8 +106,8 @@ jobs:
       # The runtime pins too: django-stubs loads the host's settings for mypy.
       - name: Install the hashed runtime and tool pins
         run: |
-          pip install --require-hashes -r requirements.txt
-          pip install --require-hashes --no-deps -r requirements-tools.txt
+          uv export --locked --no-default-groups --group tools --no-emit-project --output-file "$RUNNER_TEMP/hq-checks.txt" > /dev/null
+          pip install --require-hashes -r "$RUNNER_TEMP/hq-checks.txt"
       - name: Install the pinned shellcheck
         # The runner image ships its own, at a version the local gate does
         # not run.
@@ -126,7 +126,7 @@ jobs:
         run: ruff check . && echo "no findings under $(ruff --version)" | tee "$RUNNER_TEMP/gate-ruff"
       - name: mypy
         id: mypy
-        # The architectural seams, typed strictly. mypy.ini names them and says
+        # The architectural seams, typed strictly. pyproject.toml names them and says
         # how to widen the set.
         run: python -m mypy && echo "the typed seams pass $(python -m mypy --version)" | tee "$RUNNER_TEMP/gate-mypy"
       - name: The test matrix and the README badges state the toolchain
@@ -164,32 +164,12 @@ jobs:
         run: |
           scripts/check-openapi.sh
           echo "both OpenAPI descriptions pass specification lint" | tee "$RUNNER_TEMP/gate-openapi"
-      - name: Each lockfile is what its .in file compiles to
+      - name: The dependency lock matches the project
         id: lockfile
-        # Each header names the command that produces its lockfile. Regenerated
-        # here with the pinned uv and compared, so the committed pins are always
-        # the command's output and nothing else.
         run: |
-          set -euo pipefail
-          for lock in requirements.txt requirements-tools.txt requirements-browser.txt requirements-dev.txt; do
-            command="$(sed -n 's/^#    uv pip compile /uv pip compile /p' "$lock")"
-            case "$command" in
-              *"--output-file $lock "*) ;;
-              *) echo "::error::$lock does not name a command that writes it"; exit 1 ;;
-            esac
-            # Compiled on top of a copy, so uv keeps the committed pins: this
-            # asks whether the file is the command's output, not whether newer
-            # releases exist. That is Dependabot's job, not a red build's.
-            fresh="$(mktemp)"
-            cp "$lock" "$fresh"
-            # shellcheck disable=SC2086  # the recorded command is meant to split
-            ${command/--output-file $lock /--output-file $fresh } --quiet
-            if ! diff -u <(grep -v '^#' "$lock") <(grep -v '^#' "$fresh"); then
-              echo "::error::$lock differs from what its header command produces. Rerun: $command"
-              exit 1
-            fi
-          done
-          echo "every requirements lockfile is the output of its header command" | tee "$RUNNER_TEMP/gate-lockfile"
+          uv lock --check
+          echo "uv.lock matches pyproject.toml" | tee "$RUNNER_TEMP/gate-lockfile"
+
       - name: The workflows are valid
         id: workflows
         # The version toolchain.env pins, so CI and the local gate agree. With
@@ -299,11 +279,13 @@ jobs:
         run: |
           python manage.py check --deploy --fail-level WARNING
           echo "production settings raise no security warning" | tee "$RUNNER_TEMP/gate-deploycheck"
+      - name: Export all audited dependency groups
+        run: uv export --locked --all-groups --no-emit-project --output-file "$RUNNER_TEMP/hq-audit.txt" > /dev/null
       - name: pip-audit
         id: audit
         uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
         with:
-          inputs: requirements.txt requirements-tools.txt requirements-browser.txt requirements-dev.txt
+          inputs: ${{ runner.temp }}/hq-audit.txt
       - name: Dependency review
         id: dependencies
         if: github.event_name == 'pull_request'
@@ -382,24 +364,27 @@ jobs:
         with:
           python: ${{ matrix.python }}
           cache: pip
-      - run: pip install --require-hashes -r requirements.txt
-      - run: pip install --require-hashes --no-deps -r requirements-tools.txt
+      - run: |
+          uv export --locked --no-default-groups --group tools --no-emit-project --output-file "$RUNNER_TEMP/hq-tests.txt" > /dev/null
+          pip install --require-hashes -r "$RUNNER_TEMP/hq-tests.txt"
       - name: Public plugin contract
         env:
-          SEVERINO_HQ_PLUGINS: example_hq_plugin.plugin:plugin
+          SEVERINO_HQ_PLUGINS: tests.fixtures.example_hq_plugin.plugin:plugin
         run: |
           python manage.py check
           python manage.py plugins
       - run: python manage.py makemigrations --check --dry-run
       - run: python manage.py api_openapi --check
+      - name: Generated API cases through the real WSGI middleware
+        run: python manage.py test tests.fuzz.api_properties --noinput --parallel 1
       - name: Tests with coverage gate
         env:
           COVERAGE_FLOOR: ${{ steps.toolchain.outputs.coverage-floor }}
           OLDEST: ${{ steps.toolchain.outputs.oldest-python }}
           PYTHON: ${{ matrix.python }}
         # Parallel across the runner's cores, as scripts/check.sh runs it
-        # locally; core/test_runner.py is what makes workers safe on the WAL
-        # database. Coverage follows the workers (.coveragerc) and is combined
+        # locally; hq/platform/core/test_runner.py is what makes workers safe on the WAL
+        # database. Coverage follows the workers (pyproject.toml) and is combined
         # before it is judged. Each test's logs are shown only if it fails, and
         # the ten slowest tests are named so a slow one is noticed, not endured.
         run: |
@@ -431,7 +416,7 @@ jobs:
         run: scripts/coverage-badge.sh
 
   # Real-browser layout invariants over synthetic example.* pages
-  # (core/browser_tests.py). Every request the page makes is answered in
+  # (hq/platform/core/browser_tests.py). Every request the page makes is answered in
   # process; the browser reaches nothing. scripts/ci-local.sh runs the same.
   browser:
     name: Browser
@@ -449,18 +434,19 @@ jobs:
       - uses: ./.github/actions/toolchain
         with:
           cache: pip
-      - run: pip install --require-hashes -r requirements.txt
-      - run: pip install --require-hashes -r requirements-browser.txt
+      - run: |
+          uv export --locked --no-default-groups --group browser --no-emit-project --output-file "$RUNNER_TEMP/hq-browser.txt" > /dev/null
+          pip install --require-hashes -r "$RUNNER_TEMP/hq-browser.txt"
       # Keyed on the hashed lock: Playwright pins its Chromium build, so a new
       # pin is a new browser and a new cache entry.
       - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('requirements-browser.txt') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
       - name: Install Chromium and its system libraries
         run: python -m playwright install --with-deps --only-shell chromium
       - name: Browser layout gate
-        run: python manage.py test core.browser_tests --noinput --parallel 1
+        run: python manage.py test hq.platform.core.browser_tests --noinput --parallel 1
 
   # The Go controller: format, generated types against their specs, vet, and
   # the unit tests under the race detector.
@@ -570,7 +556,7 @@ jobs:
         run: scripts/image-health.sh "$IMAGE"
       - name: It cannot import development layers
         if: env.PROVEN == ''
-        # requirements-dev.txt is never installed in the image; this proves it.
+        # the dev group is never installed in the image; this proves it.
         env:
           IMAGE: ${{ steps.build.outputs.image }}
         run: |

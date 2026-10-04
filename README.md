@@ -33,7 +33,7 @@ them, and derives the rest.
 
 - **Readings.** Each kind (a DNS record, a tailnet device, an Access
   application, a registration) is declared once in
-  [`control_plane/observations/`](control_plane/observations/). Its schema is
+  [`hq/domains/control_plane/observations/`](hq/domains/control_plane/observations/). Its schema is
   the allowlist for what is stored, and a refused read says which permission
   would allow it.
 - **Joins.** Readings are matched to machines, services and domains by
@@ -119,7 +119,7 @@ implements is [`docs/PLUGINS.md`](docs/PLUGINS.md).
 
 The web UI, the HTTP API, MCP, the management CLI and the extension SDK share
 the same application services.
-Adapters parse and render; `application/` owns validation, transactions,
+Adapters parse and render; `hq/platform/application/` owns validation, transactions,
 persistence, audit attribution, and canonical results. The reference project
 slice and documentation sync mutation are described in
 [`docs/APPLICATION_ARCHITECTURE.md`](docs/APPLICATION_ARCHITECTURE.md).
@@ -256,7 +256,7 @@ server to emit one JSON manifest, then sends it to HQ through one authenticated
 `hq.sync` MCP capability call. HQ validates and commits it atomically, with no SSH,
 temporary server payload, or partial sync. The
 importer validates every record against
-[`docs_index/schema.json`](docs_index/schema.json): the frontmatter enum
+[`hq/domains/docs_index/schema.json`](hq/domains/docs_index/schema.json): the frontmatter enum
 contract single-sourced from the MCP and committed here, so HQ can never accept
 a value the MCP wouldn't emit, and vice-versa. Records upsert by `doc_id`;
 runbook bodies and secrets never enter HQ.
@@ -302,10 +302,12 @@ boundary, frontend standards, and definition of done.
 git clone <your-mirror> severino-hq
 cd severino-hq
 
-# 2. Virtualenv + deps
+# 2. Bootstrap the pinned resolver, then runtime + development tools
 python3 -m venv .venv
+python3 scripts/dependency_config.py uv-requirements > /tmp/hq-uv-bootstrap.txt
+.venv/bin/python -m pip install --require-hashes --no-deps --ignore-installed -r /tmp/hq-uv-bootstrap.txt
+.venv/bin/uv sync --locked
 source .venv/bin/activate
-pip install -r requirements.txt
 
 # 3. Environment
 cp .env.example .env
@@ -364,11 +366,21 @@ and fill it in. Without it both commands still run, but quietly cover less:
 `check.sh` skips the composed pass, which is the one that catches what public
 CI cannot, because the host and its extensions first meet there.
 
+`uv sync` manages a dedicated host environment exactly. Do not run it on an
+assembled environment containing extension wheels: it can remove packages the
+host lock does not name. For those environments, export runtime dependencies
+with `uv export --locked --no-default-groups --no-emit-project` and install the
+hashed export additively, then run the gates with their explicit interpreter.
+
+The [repository layout guide](docs/REPOSITORY_LAYOUT.md) explains the package
+roots, stable database identities and local runtime paths. Existing local databases
+require an explicit path choice; the layout move does not move their data.
+
 ### What the gates need
 
 `check.sh` needs only the steps above plus the pinned tools:
-`pip install --require-hashes -r requirements-tools.txt` (ruff and mypy) and
-`-r requirements-dev.txt`. `ci-local.sh` covers what CI runs, so it needs what
+`uv sync --locked` installs the default dev and tools groups. Add browser tools
+with `uv sync --locked --group browser`. `ci-local.sh` covers what CI runs, so it needs what
 CI's runner has. Versions are pinned in [`scripts/toolchain.env`](scripts/toolchain.env);
 the list below says what, never which version, so it cannot drift from the pins.
 
@@ -377,7 +389,7 @@ the list below says what, never which version, so it cannot drift from the pins.
   account, and the host refuses a runner that is root, so the contract test
   does too.
 - **A checkout that account can write.** The readiness probe's tests require
-  `var/`, `data/` and `staticfiles/` to be writable and fail with a bare 503
+  `var/` and configured runtime volume paths to be writable and fail with a bare 503
   when they are not; `.mypy_cache/` has the same need. A tree once touched as
   root needs its ownership fixed first.
 - **One interpreter per supported Python** (`PYTHON_VERSIONS`), each with the
@@ -404,9 +416,9 @@ missing Playwright fails the run); in `check.sh` they are opt-in. Playwright is
 a development dependency, pinned by hash and never installed in the image:
 
 ```bash
-.venv/bin/python -m pip install --require-hashes -r requirements-browser.txt
+uv sync --locked --group browser
 .venv/bin/python -m playwright install chromium
-DJANGO_DEBUG=true .venv/bin/python manage.py test core.browser_tests --parallel=1
+DJANGO_DEBUG=true .venv/bin/python manage.py test hq.platform.core.browser_tests --parallel=1
 # Or include browser checks in the full gate:
 CHECK_BROWSER=1 ./scripts/check.sh
 ```
@@ -421,7 +433,7 @@ and the structural rules of `scripts/layout-audit.js` hold. At 375, 820 and
 1360px it checks that only a `.table-scroll` scrolls sideways and that nothing
 runs out of its table cell. JavaScript is disabled to protect the
 server-rendered baseline. Failures save a synthetic screenshot to an OS
-temporary directory. `core/tests/test_browser_selectors.py`, in the normal suite, fails when a selector the gate or the audit uses names
+temporary directory. `hq/platform/core/tests/test_browser_selectors.py`, in the normal suite, fails when a selector the gate or the audit uses names
 nothing a template renders, so a redesign cannot leave the gate waiting for an
 element that no longer exists.
 Set `HQ_BROWSER_ENGINE=webkit` or `firefox` after installing that engine to run
@@ -432,13 +444,13 @@ the same assertions there. An existing Edge installation can be selected with
 ### Django Debug Toolbar
 
 The Django Debug Toolbar is a development layer, pinned by hash in
-`requirements-dev.txt` and never installed in the image (`ci-local.sh` and CI's
+the `dev` dependency group and never installed in the image (`ci-local.sh` and CI's
 container job both prove the built image cannot import it). It is on only when
 `DJANGO_DEBUG` is on, `SEVERINO_DEBUG_TOOLBAR=1` is set, the package is
 importable, and the suite is not running:
 
 ```bash
-.venv/bin/python -m pip install --require-hashes -r requirements-dev.txt
+uv sync --locked --group dev
 SEVERINO_DEBUG_TOOLBAR=1 ./scripts/dev.sh
 ```
 
@@ -447,7 +459,7 @@ It shows to loopback clients; behind a proxy, name the proxy's address in
 response's CSP nonce, so `script-src` stays as production sends it. Its panels
 insert fetched HTML through `innerHTML`, which Trusted Types refuses, so while
 it is on the two Trusted Types directives are dropped
-(`config/devtools.py`). Nothing else in the policy changes, and with the flag
+(`hq/config/devtools.py`). Nothing else in the policy changes, and with the flag
 off (always, in production) the policy is the full one.
 
 ### Importing a documentation manifest
@@ -460,7 +472,7 @@ python manage.py import_docs_manifest path/to/docs_manifest.json
 ```
 
 Or upload the file through the UI at **Docs → Import manifest**. See
-`docs_index/importer.py` for the schema.
+`hq/domains/docs_index/importer.py` for the schema.
 
 ---
 

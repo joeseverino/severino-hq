@@ -12,15 +12,15 @@ selected test modules and stops.
 from __future__ import annotations
 
 import ast
-import configparser
 import os
 import re
 import subprocess
 import sys
 import time
+import tomllib
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[1]
 # Never part of the Django suite: other languages, vendored trees, the browser
 # pass that check.sh also leaves to CHECK_BROWSER.
 SKIP_PARTS = {"node_modules", "controller", "browser_tests", ".venv", "staticfiles"}
@@ -72,7 +72,7 @@ def python_files() -> list[Path]:
 
 
 def is_test(path: Path) -> bool:
-    return path.name.startswith("test") and path.suffix == ".py"
+    return path.suffix == ".py" and path.name != "__init__.py" and (path.name.startswith("test") or "fuzz" in path.parts)
 
 
 def imports(path: Path, modules: set[str]) -> set[str]:
@@ -133,19 +133,40 @@ def importers(files: list[Path]) -> dict[str, set[str]]:
     return reverse
 
 
-def django_apps() -> set[str]:
-    """Top-level packages that are Django apps: the ones with an apps.py."""
+def django_apps() -> dict[str, str]:
+    """Actual AppConfig source prefixes mapped to their stable Django labels."""
 
-    return {Path(f).parts[0] for f in git("ls-files", "--cached", "--others", "--exclude-standard", "*/apps.py") if len(Path(f).parts) == 2}
+    apps: dict[str, str] = {}
+    for path in python_files():
+        if path.name != "apps.py" or path.parts[0] != "hq":
+            continue
+        tree = ast.parse((ROOT / path).read_text(encoding="utf-8"))
+        for node in tree.body:
+            if not isinstance(node, ast.ClassDef):
+                continue
+            values = {
+                target.id: assignment.value.value
+                for assignment in node.body if isinstance(assignment, ast.Assign)
+                for target in assignment.targets if isinstance(target, ast.Name)
+                if isinstance(assignment.value, ast.Constant)
+                and isinstance(assignment.value.value, str)
+            }
+            name = values.get("name")
+            if name:
+                apps[name.replace(".", "/")] = values.get("label", name.rsplit(".", 1)[-1])
+    return apps
 
 
-def owner(path: str, apps: set[str]) -> str | None:
-    """The app a changed file belongs to: by directory, or by its template folder."""
+def owner(path: str, apps: dict[str, str]) -> str | None:
+    """Map source directories and shared asset namespaces to app labels."""
 
     parts = Path(path).parts
-    if parts[0] in ("templates", "static") and len(parts) > 2 and parts[1] in apps:
-        return parts[1]
-    return parts[0] if parts[0] in apps else None
+    if parts and parts[0] in ("templates", "static") and len(parts) > 2:
+        return parts[1] if parts[1] in apps.values() else None
+    for prefix, label in apps.items():
+        if path == prefix or path.startswith(prefix + "/"):
+            return label
+    return None
 
 
 def affected(changed: list[str], deleted: list[str], files: list[Path]) -> tuple[set[str], set[str]]:
@@ -170,7 +191,8 @@ def affected(changed: list[str], deleted: list[str], files: list[Path]) -> tuple
             touched.add(pkg)
             # One hop only: a test that imports the app. Following importers
             # further would reach every module through the shared layers.
-            members = {m for m in modules if m == pkg or m.startswith(pkg + ".")}
+            prefixes = [prefix.replace("/", ".") for prefix, label in apps.items() if label == pkg]
+            members = {m for m in modules if any(m == prefix or m.startswith(prefix + ".") for prefix in prefixes)}
             seen.update(i for m in members for i in reverse[m])
     visited: set[str] = set()
     stack = list(seeds)
@@ -199,16 +221,11 @@ def test_labels(files: list[Path], reached: set[str], touched: set[str]) -> tupl
 
 
 def mypy_targets(changed: list[str]) -> list[str]:
-    config = configparser.ConfigParser()
-    config.read(ROOT / "mypy.ini")
-    listed = [
-        entry.strip().rstrip(",")
-        for entry in config.get("mypy", "files", fallback="").split("\n")
-        if entry.strip()
-    ]
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["mypy"]
+    listed = config["files"]
     roots = [entry.rstrip("/") + "/" for entry in listed]
     # Files named on the command line skip mypy's own exclude, so apply it here.
-    exclude = re.compile(config.get("mypy", "exclude", fallback="(?!)"))
+    exclude = re.compile(config.get("exclude", "(?!)"))
     return [
         c
         for c in changed

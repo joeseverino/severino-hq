@@ -17,7 +17,7 @@ set -eu
 readonly vault="${1:?usage: render-controller-env.sh VAULT [REGISTRY]}"
 script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 readonly script_dir
-readonly registry="${2:-${script_dir}/../config/controller-connections.json}"
+readonly registry="${2:-${script_dir}/../hq/config/controller-connections.json}"
 
 jq -e '
     .schema_version == 1

@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-CATALOG = Path(__file__).resolve().parent.parent / "deploy" / "diagnoses.json"
+CATALOG = Path(__file__).resolve().parents[1] / "deploy" / "diagnoses.json"
 UNKNOWN = {
     "id": "unknown",
     "title": "A step failed",

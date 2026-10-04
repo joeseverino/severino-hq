@@ -370,3 +370,29 @@ func TestTLSObserverVerifiesTheServedCertificate(t *testing.T) {
 		t.Fatalf("a name the certificate does not cover is refused: %v", err)
 	}
 }
+
+func TestTLSFailureStagePrecedence(t *testing.T) {
+	cases := []struct {
+		name     string
+		classify func(error) *tlsReadError
+		cause    error
+		want     string
+	}{
+		{"DNS before timeout", dialFailure, errors.Join(&net.DNSError{Err: "missing", Name: "example.com"}, context.DeadlineExceeded), "name does not resolve"},
+		{"refused before reset", dialFailure, errors.Join(syscall.ECONNREFUSED, syscall.ECONNRESET), "connection refused"},
+		{"certificate before reset", handshakeFailure, errors.Join(x509.UnknownAuthorityError{}, syscall.ECONNRESET), "certificate not trusted for this name"},
+		{"closed before timeout", handshakeFailure, errors.Join(io.EOF, context.DeadlineExceeded), "connection closed during handshake"},
+		{"TCP reset before timeout", dialFailure, errors.Join(syscall.ECONNRESET, context.DeadlineExceeded), "connection reset"},
+		{"TLS reset before timeout", handshakeFailure, errors.Join(syscall.ECONNRESET, context.DeadlineExceeded), "connection reset"},
+		{"TLS timeout", handshakeFailure, context.DeadlineExceeded, "timed out"},
+		{"TLS fallback", handshakeFailure, errors.New("unknown"), "handshake failed"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := c.classify(c.cause)
+			if got.Error() != c.want || !errors.Is(got, c.cause) {
+				t.Fatalf("classification = %q, want %q with preserved cause", got, c.want)
+			}
+		})
+	}
+}

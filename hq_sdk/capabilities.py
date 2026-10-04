@@ -2,13 +2,13 @@
 
 from pydantic import BaseModel, ConfigDict
 
-from application.capabilities import (
+from hq.platform.application.capabilities import (
     CapabilitySpec,
     capability_registry,
     describe_capabilities,
     execute_capability,
 )
-from application.security import (
+from hq.platform.application.security import (
     AuthorizationError,
     Capability,
     Principal,

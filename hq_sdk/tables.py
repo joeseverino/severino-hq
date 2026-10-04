@@ -1,6 +1,6 @@
 """Declarative list and table primitives."""
 
-from application.tables import (
+from hq.platform.application.tables import (
     TableColumn,
     TableFilter,
     TableListMixin,

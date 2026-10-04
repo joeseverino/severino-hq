@@ -60,7 +60,7 @@
   XSS sink cannot execute even if one is introduced, and `trusted-types 'none'`
   means no policy can be declared to opt back out. It costs nothing today
   because every dynamic node HQ builds uses `createElement`/`textContent`.
-  Django admin's bundled jQuery cannot meet it, so `core.admin_site` puts
+  Django admin's bundled jQuery cannot meet it, so `hq.platform.core.admin_site` puts
   every admin view under `csp_override` with that one directive dropped and
   nothing else; a test asserts the relaxation stays that narrow. The API
   reference at `/api/docs/` is the other exception, for the same reason: the
@@ -78,7 +78,7 @@
 - HSTS on by default for a year, including subdomains. Preload stays opt-in:
   it is slow to undo and meaningless for a name the public internet cannot
   resolve.
-- Django's `LoginRequiredMiddleware` (`core.middleware` adds extensions'
+- Django's `LoginRequiredMiddleware` (`hq.platform.core.middleware` adds extensions'
   token routes) redirects anonymous users to login for every view not marked
   `@login_not_required`. `AnonymousSweepTests` asks for every route without a
   session and holds the public ones to a reviewed list.
@@ -89,7 +89,7 @@
   - The `receipts:file` view requires authentication, streams the file, sets
     `X-Content-Type-Options: nosniff` and `Cache-Control: private, no-store`,
     and audits the view.
-- Uploads are content-type-filtered (`receipts/forms.py`) and size-capped
+- Uploads are content-type-filtered (`hq/domains/receipts/forms.py`) and size-capped
   (15 MB by default).
 - Audit log on every create / update / delete (via signals), plus login,
   failed login, logout, upload, export, and import events, and refusals. An
@@ -98,7 +98,7 @@
   recorded.
 - Routine machine events (a connection probed by a sweep) are deleted after
   `SEVERINO_AUDIT_ROUTINE_DAYS` (30 by default) by the daily `prune_audit`
-  timer. Only the types listed in `core.audit.ROUTINE_EVENTS` are eligible, and
+  timer. Only the types listed in `hq.platform.core.audit.ROUTINE_EVENTS` are eligible, and
   only when no user is attached. Logins, refusals, settings changes, deletions
   and every change to a resource or credential are kept indefinitely.
 - Request-user attribution uses an ASGI-safe context variable, preventing one

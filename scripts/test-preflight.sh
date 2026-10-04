@@ -18,7 +18,9 @@ fail() { echo "FAIL $1" >&2; failures=$((failures + 1)); }
 repo="${work}/repo"
 mkdir -p "${repo}/scripts/lib"
 cd "${repo_dir}"
-cp -R config deploy docker-compose.yml "${repo}/"
+mkdir -p "${repo}/hq"
+cp -R hq/config "${repo}/hq/"
+cp -R deploy docker-compose.yml "${repo}/"
 find "${repo}" -name __pycache__ -prune -exec rm -rf {} +
 for f in preflight.sh preflight-host.sh root-tree-manifest.sh deploy-image.sh \
     severino-hq-sync-scripts lib/checkout.sh lib/systemd-units.sh upgrade-container.sh; do
@@ -52,7 +54,7 @@ git_ commit -q -m release
 host="${work}/host"
 lib="${host}/lib"
 mkdir -p "${lib}" "${host}/sbin" "${host}/app/.git/objects" "${host}/etc" "${host}/bin"
-git_ archive HEAD~1 scripts config deploy docker-compose.yml | tar -x -C "${lib}"
+git_ archive HEAD~1 scripts hq/config deploy docker-compose.yml | tar -x -C "${lib}"
 sh "${lib}/scripts/root-tree-manifest.sh" "${lib}" >"${lib}/root-tree.sha256"
 cp "${lib}/scripts/severino-hq-sync-scripts" "${host}/sbin/"
 : >"${host}/app/.git/HEAD"
@@ -206,9 +208,9 @@ rm "${host}/etc/severino-hq-controller.timer"
 host_fault "an established unit missing" "severino-hq-controller.timer is not installed"
 cp "${lib}/deploy/systemd/severino-hq-controller.timer" "${host}/etc/"
 
-printf '\n' >>"${lib}/config/controller-connections.json"
+printf '\n' >>"${lib}/hq/config/controller-connections.json"
 host_fault "a root tree changed on the host" "does not reproduce its own root-tree.sha256"
-git_ show HEAD~1:config/controller-connections.json >"${lib}/config/controller-connections.json"
+git_ show HEAD~1:hq/config/controller-connections.json >"${lib}/hq/config/controller-connections.json"
 
 : >"${host}/sbin/severino-hq-check-scripts"
 host_fault "a hand-installed program no release updates" "severino-hq-check-scripts is not shipped by this release"

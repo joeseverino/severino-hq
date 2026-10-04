@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from django.db.models import Manager
 
-from application.demo import demo_scope
-from application.plugin_testing import (
+from hq.platform.application.demo import demo_scope
+from hq.platform.application.plugin_testing import (
     ComposedPluginTestCase,
     sibling,
     undefined_style_classes,
 )
-from core.models import AuditLog
+from hq.platform.core.models import AuditLog
 from hq_sdk.validation import unsupported_hq_imports
 
 

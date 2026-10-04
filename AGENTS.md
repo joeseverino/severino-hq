@@ -63,7 +63,7 @@ Local development uses `./scripts/dev.sh`. It collects assets and runs the same
 ASGI/Uvicorn path as production with reload enabled.
 
 `check.sh` runs the suite in parallel, which roughly halves the gate's time.
-`core/test_runner.py` is what makes that safe on WAL SQLite: read
+`hq/platform/core/test_runner.py` is what makes that safe on WAL SQLite: read
 it before changing anything about the test database. `CHECK_PARALLEL=1` rules
 parallelism out when a failure looks order- or isolation-dependent.
 
@@ -72,14 +72,14 @@ replaced by `cannot pickle 'traceback' object`. `--parallel=1` also works.
 
 ## Architecture in one minute
 
-- `application/` owns use cases, authorization, transactions, projections,
+- `hq/platform/application/` owns use cases, authorization, transactions, projections,
   capability execution, and plugin internals.
 - Django apps own persistence and domain-specific models. Adapters may query
   for rendering; they do not mutate models directly.
 - Web, CLI, MCP, and HTTP API are delivery adapters over the same application
   behavior. Never reimplement a business rule in an adapter.
 - `hq_sdk/` is the only supported Python import surface for plugins.
-- `templates/partials/`, `application/ui.py`, `application/tables.py`, and the
+- `templates/partials/`, `hq/platform/application/ui.py`, `hq/platform/application/tables.py`, and the
   matching `hq_sdk.*` modules are the shared frontend contract.
 - The machine API's current contract is `/api/v2/`. Writes are capability
   authorized, schema validated, transactionally audited, and idempotent.
@@ -104,7 +104,7 @@ synthetic `example.*` namespace so the host can demonstrate a contract without
 acquiring a consumer.
 
 Runtime-supplied composition metadata is the only place the real installed set
-meets the host, and two tests keep it that way (`application/tests/test_plugins.py`).
+meets the host, and two tests keep it that way (`hq/platform/application/tests/test_plugins.py`).
 When one of them fails it has found a coupling, not a secret.
 
 Generic integration policy belongs here. Domain meaning belongs in its own
@@ -125,15 +125,15 @@ domain until a genuine shared contract appears.
 ### Adding a provider
 
 A provider emits itself: nothing outside its own modules names it except one
-entry in `ADMITTED` (`control_plane/provider_adapters/__init__.py`). Its adapter
+entry in `ADMITTED` (`hq/domains/control_plane/provider_adapters/__init__.py`). Its adapter
 module declares its kinds (`DEFINITIONS`) and its `CONNECTIONS`; its readings
-are a module in `control_plane/observations/`, found by discovery. Registries,
+are a module in `hq/domains/control_plane/observations/`, found by discovery. Registries,
 connection labels, credential policy, the controller's registry and the
 topology edges its readings declare are all derived from those, and admission
 fails at import on a duplicate or undeclared name. The controller half (its
 readers, actions and probe) is Go, in `controller/providers/`, registered in
 `providers.New`; the contract's `SweptKind` names every kind it reads.
-`control_plane/provider_adapters/tests/test_admission.py` shows the contract;
+`hq/domains/control_plane/provider_adapters/tests/test_admission.py` shows the contract;
 `docs/APPLICATION_ARCHITECTURE.md` has the detail.
 
 ### Moving code
@@ -159,8 +159,8 @@ same review, and should fail when its path matches nothing rather than pass.
   the exports to it. A change there is a fleet change: regenerate with
   `manage.py sdk_contract`, review the diff, and decide whether
   `PLUGIN_API_VERSION` moves.
-- The machine API's OpenAPI 3.2 document is derived (`hq_api/openapi.py`) and
-  served at `/api/v2/openapi.json`; `hq_api/hq-api.openapi.json` is the host's
+- The machine API's OpenAPI 3.2 document is derived (`hq/platform/api/openapi.py`) and
+  served at `/api/v2/openapi.json`; `hq/platform/api/hq-api.openapi.json` is the host's
   copy for clients. Regenerate it with `manage.py api_openapi` after changing a
   route, capability, resource or domain; `--check` fails the gate on drift.
   The signed-in operator reads it rendered at `/api/docs/` (System > API), a
@@ -168,9 +168,9 @@ same review, and should fail when its path matches nothing rather than pass.
   `static/vendor/scalar/standalone.js` and update `UPSTREAM`.
 - List views use `TableListMixin`; direct view mutations and MCP model access
   are rejected by architecture tests.
-- A link to a command's form is built by `application.action_links.command_url`
+- A link to a command's form is built by `hq.platform.application.action_links.command_url`
   and nothing else, so its target is encoded the way the form reads it back.
-  `application/tests/test_remedy_links.py` follows every remedy the findings, the
+  `hq/platform/application/tests/test_remedy_links.py` follows every remedy the findings, the
   action queue and the pages emit, and fails on one that opens with no target
   chosen or on the "replaces the whole record" form.
 - An href built from data HQ did not write (a reading, an attestation, a
@@ -208,21 +208,21 @@ than styling a page.
 
 Function complexity is part of the gate. Ruff's C901 fails any function whose
 cyclomatic complexity exceeds 15, and `CognitiveComplexityTests` in
-`application/tests/test_architecture.py` fails any non-test function whose cognitive
+`hq/platform/application/tests/test_architecture.py` fails any non-test function whose cognitive
 complexity exceeds 20. There is no allowance list: a function over either
 limit is split into named steps.
 
 The architectural seams are type checked. `python -m mypy` (a gate in
 `ci-local.sh` and CI's Checks job) runs mypy with django-stubs over the modules
-`mypy.ini` names: the security, capability, plugin, resource and
+`pyproject.toml` names: the security, capability, plugin, resource and
 integration-spec contracts, the provider vocabulary and registry with the
 provider modules split out of it, the controller's handler registry and
 connection plumbing, `hq_sdk`, `hq_api` and `hq_mcp`, with every function in
-them fully annotated. It loads `config/settings_typecheck.py`, the
+them fully annotated. It loads `hq/config/settings_typecheck.py`, the
 host's settings without extensions. Fix what it reports rather than silencing
 it; a `# type: ignore[code]` is for a stub that is wrong, with the reason beside
 it. To widen it, add a module to `files` and to the strict section in
-`mypy.ini` and fix what it finds.
+`pyproject.toml` and fix what it finds.
 
 Tests answer "does this behave?". They do not answer "is this still one system?":
 duplication and tangling are green all the way down. Those are graph questions,
@@ -230,7 +230,7 @@ so ask a graph. With the repository indexed in a code knowledge graph, ask:
 
 | Question | Query | Bar |
 | --- | --- | --- |
-| Did I re-implement something? | `MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name` | no new pair outside tests |
+| Did I re-implement something? | `MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name` | no new executable pair outside tests; AST classifications below |
 | Hidden O(n²)? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.linear_scan_in_loop >= 1 RETURN f.qualified_name, f.linear_scan_in_loop` | every hit bounded by a fixed or small input |
 | Did I tangle the call graph? | `get_architecture(aspects: ["cycles"])` | no new confirmed cycle |
 | Is one file becoming the system? | `git ls-files '*.py' \| grep -v test \| xargs wc -l \| sort -n \| tail -4` | the largest files do not grow; split by provider before adding one |
@@ -284,7 +284,7 @@ exits 2, never 0.
   gates (no CodeQL alert and every file-based Scorecard check at 10) and the
   browser layout gate, which it always runs.
 - A browser check selects markup only through `SELECTORS` in
-  `core/browser_tests.py`; `core/tests/test_browser_selectors.py` holds every one
+  `hq/platform/core/browser_tests.py`; `hq/platform/core/tests/test_browser_selectors.py` holds every one
   to a template that renders it.
 - The structural bar above did not move the wrong way.
 - Docs change when a supported contract changes.
@@ -292,3 +292,5 @@ exits 2, never 0.
   enter the diff.
 - Do not commit, push, deploy, or modify private repositories unless the user
   explicitly asks for that operation.
+
+Structural similarity classifications are derived from parsed source, never symbol/path allowances. `scripts/structural_classify.py` distinguishes tracked generated provenance, immutable ResourceSpec/SearchDefinition declarations, and tiny typed delegation to distinct local credential producers. Unknown/malformed/unreadable source fails the gate; ambiguous executable similarities remain gated. Generated classification requires the controller regeneration/no-diff gate independently. See `docs/STRUCTURAL_GATE.md` for exact criteria and limitations.

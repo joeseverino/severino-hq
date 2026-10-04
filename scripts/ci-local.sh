@@ -77,13 +77,13 @@ else
   skip "ruff is not installed"
 fi
 
-# The typed seams (mypy.ini). Run on the interpreter with the requirements
+# The typed seams (pyproject.toml). Run on the interpreter with the requirements
 # installed, because django-stubs loads the host's settings.
 if "$PY" -c "import mypy, mypy_django_plugin" 2>/dev/null; then
   pinned mypy "$MYPY_VERSION" "'$PY' -m mypy --version | awk '{print \$2}'"
-  run "mypy (the typed seams in mypy.ini)" "$PY" -m mypy
+  run "mypy (the typed seams in pyproject.toml)" "$PY" -m mypy
 else
-  skip "mypy is not installed on $PY (run: $PY -m pip install --require-hashes --no-deps -r requirements-tools.txt)"
+  skip "mypy is not installed on $PY (run: uv sync --locked --group tools)"
 fi
 
 # shellcheck disable=SC2086  # both lists are meant to split
@@ -114,7 +114,7 @@ fi
 # ------------------------------------------------------------- contracts
 step "OpenAPI"
 run "OpenAPI specification lint" scripts/check-openapi.sh
-run "Generated API cases through WSGI" env -u SEVERINO_HQ_PLUGINS DJANGO_DEBUG=true "$PY" manage.py test fuzz.api_properties --noinput --parallel 1
+run "Generated API cases through WSGI" env -u SEVERINO_HQ_PLUGINS DJANGO_DEBUG=true "$PY" manage.py test tests.fuzz.api_properties --noinput --parallel 1
 
 # ---------------------------------------------------------------- tests
 # The badge quotes the oldest interpreter's coverage, so it is compared on that
@@ -132,7 +132,7 @@ for python_bin in ${SEVERINO_CI_PYTHONS:-$PY}; do
   export DJANGO_DEBUG=1 DJANGO_SECRET_KEY=ci-only-secret-key-not-for-production
   export DJANGO_ALLOWED_HOSTS="127.0.0.1,testserver"
   run "manage.py check" "$python_bin" manage.py check
-  SEVERINO_HQ_PLUGINS=example_hq_plugin.plugin:plugin \
+  SEVERINO_HQ_PLUGINS=tests.fixtures.example_hq_plugin.plugin:plugin \
     run "public plugin contract" "$python_bin" manage.py check
   run "makemigrations --check" "$python_bin" manage.py makemigrations --check --dry-run
   run "api_openapi --check" env -u SEVERINO_HQ_PLUGINS "$python_bin" manage.py api_openapi --check
@@ -156,11 +156,11 @@ if [ "$badge_checked" -eq 0 ]; then
 fi
 
 # ------------------------------------------------------------- browser job
-# Real-browser layout invariants over synthetic pages (core/browser_tests.py).
+# Real-browser layout invariants over synthetic pages (hq/platform/core/browser_tests.py).
 # Optional for check.sh, required here: a gate nobody runs rots.
 step "browser"
-browser_pin="$(sed -n 's/^playwright==\([^ ]*\).*/\1/p' requirements-browser.txt)"
-browser_install="$PY -m pip install --require-hashes -r requirements-browser.txt && $PY -m playwright install chromium"
+browser_pin="$(python3 scripts/dependency_config.py pin playwright)"
+browser_install="uv sync --locked --group browser && $PY -m playwright install chromium"
 if ! "$PY" -c "import playwright" 2>/dev/null; then
   skip "playwright is not installed on $PY (run: $browser_install)"
 elif ! "$PY" -c "from playwright.sync_api import sync_playwright as p
@@ -168,10 +168,10 @@ with p() as run: run.chromium.launch().close()" >/dev/null 2>&1; then
   skip "Chromium for playwright is not installed (run: $PY -m playwright install chromium)"
 else
   pinned playwright "$browser_pin" "'$PY' -c 'import importlib.metadata as m; print(m.version(\"playwright\"))'"
-  run "browser layout gate (core.browser_tests)" env \
+  run "browser layout gate (hq.platform.core.browser_tests)" env \
     DJANGO_DEBUG=1 DJANGO_SECRET_KEY=ci-only-secret-key-not-for-production \
     DJANGO_ALLOWED_HOSTS="127.0.0.1,testserver" SEVERINO_LOG_LEVEL=CRITICAL \
-    "$PY" manage.py test core.browser_tests --noinput --parallel 1
+    "$PY" manage.py test hq.platform.core.browser_tests --noinput --parallel 1
 fi
 
 # ---------------------------------------------------------- controller job
@@ -195,7 +195,14 @@ run "manage.py check --deploy --fail-level WARNING" env \
   "$PY" manage.py check --deploy --fail-level WARNING
 if command -v pip-audit >/dev/null; then
   pinned pip-audit "$PIP_AUDIT_VERSION" "pip-audit --version | awk '{print \$2}'"
-  run "pip-audit" pip-audit -r requirements.txt -r requirements-tools.txt -r requirements-browser.txt -r requirements-dev.txt
+  pinned uv "$UV_VERSION" "uv --version | awk '{print $2}'"
+  audit_export=$(mktemp)
+  if uv export --locked --all-groups --no-emit-project --output-file "$audit_export" > /dev/null; then
+    run "pip-audit" pip-audit -r "$audit_export"
+  else
+    bad "dependency export for pip-audit"
+  fi
+  rm -f "$audit_export"
 else
   skip "pip-audit is not installed"
 fi
@@ -230,7 +237,7 @@ if docker info >/dev/null 2>&1; then
   run "image: manage.py check" docker run --rm --entrypoint python \
     --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
     --env DJANGO_ALLOWED_HOSTS=localhost severino-hq:ci-local manage.py check
-  # requirements-dev.txt is never installed in the image.
+  # the dev dependency group is never installed in the image.
   run "image: no development layer (debug_toolbar) is importable" docker run --rm \
     --entrypoint python severino-hq:ci-local -c \
     "import importlib.util, sys; sys.exit(importlib.util.find_spec('debug_toolbar') is not None)"

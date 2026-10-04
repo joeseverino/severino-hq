@@ -11,7 +11,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 from django.http import HttpRequest, HttpResponseBase
 
-from application.security import AuthorizationError, safe_next, web_principal
+from hq.platform.application.security import AuthorizationError, safe_next, web_principal
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser

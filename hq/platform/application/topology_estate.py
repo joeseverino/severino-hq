@@ -1,0 +1,615 @@
+"""Machines, services and domains as nodes of their own, and the readings between them.
+
+The estate is the hub of the topology. A controller or a reached target that
+names a machine, a service or a domain folds into that node. Every stored
+reading joined to an estate node through ``application.facts`` becomes an edge
+from the connection that read it, labelled with the reading's relation phrase,
+and exists only while the reading does.
+
+Resolution is the machine catalogue's own index, the service catalogue and the
+zone inventory: never a match on labels alone. What an extension reaches that
+is none of these stays a target.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field, replace
+from datetime import datetime
+from itertools import combinations
+from typing import Any
+
+
+from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.domains.control_plane.providers import PROVIDERS
+
+
+from hq.domains.control_plane.names import normalized_hostname
+
+from .action_links import ActionLink as TopologyAction
+from .entity_links import entity_link
+from .facts import Joined, Subject, inventory_records, readings
+from .inventory import record_identity
+from .locate import Machines, index_of
+from .paths import path_to
+from .connections import machines_once
+from .topology_model import (
+    derived_id,
+    edge_between,
+    newest_stamp,
+    TopologyEdge,
+    TopologyNode,
+)
+
+
+# Derived node kinds that only stand for a machine something mentioned: a
+# controller is the machine it runs on, a target is the machine it reaches.
+_FOLDS_INTO_MACHINE = {"controller": "Runs the controller", "target": "Reached as"}
+
+_SERVICE_STATUS = {"good": "good", "attention": "attention", "serious": "serious"}
+
+
+@dataclass
+class _Estate:
+    subjects: dict[str, Subject]
+    machine_ids: dict[str, str]
+    index: Machines
+    # When a reading or an inventory record describing each node was taken.
+    seen: dict[str, list[str]] = field(default_factory=dict)
+
+    def saw(self, node_id: str, *moments: Any) -> None:
+        """Record when something describing ``node_id`` was read."""
+
+        stamps = self.seen.setdefault(node_id, [])
+        for moment in moments:
+            if isinstance(moment, datetime):
+                stamps.append(moment.isoformat())
+            elif moment:
+                stamps.append(str(moment))
+
+    def machine(self, value: Any) -> str:
+        """The machine node a name or address stands for, or ""."""
+
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        return self.machine_ids.get(text) or self.machine_ids.get(
+            self.index.resolve(text), ""
+        )
+
+
+def add_estate(
+    nodes: dict[str, TopologyNode],
+    edges: dict[str, TopologyEdge],
+    resources: tuple[Any, ...],
+) -> dict[str, Subject]:
+    """Add estate nodes, fold what names them, and draw reading edges.
+
+    Returns each estate node's join keys, by node id.
+    """
+
+    estate = _machines(nodes, edges, resources)
+    zones = _zones(nodes, edges, resources, estate)
+    _services(nodes, edges, estate, zones)
+    _fold(nodes, edges, estate)
+    _hosted(nodes, edges, resources, estate)
+    _reading_edges(nodes, edges, estate)
+    _connects_edges(nodes, edges, estate)
+    _derived_from_readings(nodes, edges, resources, estate)
+    _observed(nodes, edges, estate)
+    return dict(estate.subjects)
+
+
+def _observed(nodes, edges, estate: _Estate) -> None:
+    """Each estate node's newest reading, record or declaration observation."""
+
+    for edge in edges.values():
+        if edge.kind == "declared_by" and edge.target in nodes:
+            estate.saw(edge.source, nodes[edge.target].observed_at)
+    for node_id, stamps in estate.seen.items():
+        node = nodes.get(node_id)
+        if node is None:
+            continue
+        stamp = newest_stamp(node.observed_at, *stamps)
+        if stamp != node.observed_at:
+            nodes[node_id] = replace(node, observed_at=stamp)
+
+
+def _open(url: str) -> tuple[TopologyAction, ...]:
+    return (TopologyAction("open", "Open", "read", url),) if url else ()
+
+
+def _declared_by(edges, node_id: str, resource_id: str, nodes) -> None:
+    if resource_id in nodes:
+        relation = edge_between(node_id, resource_id, "declared_by", "Declared by")
+        edges[relation.id] = relation
+
+
+def _machines(nodes, edges, resources) -> _Estate:
+    catalog = machines_once()
+    connections: dict[str, list[str]] = {}
+    for node in nodes.values():
+        if node.kind == "connection":
+            connections.setdefault(node.connection_ref, []).append(node.id)
+    subjects: dict[str, Subject] = {}
+    machine_ids: dict[str, str] = {}
+    for machine in catalog:
+        node_id = f"machine:{machine.name}"
+        nodes[node_id] = TopologyNode(
+            id=node_id,
+            kind="machine",
+            label=machine.name,
+            subtitle=machine.role or "Machine",
+            status="good" if machine.reachable else "neutral",
+            status_label="Reachable" if machine.reachable else "",
+            url=machine.url,
+            kind_key="machine",
+            actions=_open(machine.url),
+        )
+        for name in (machine.name, *machine.aliases):
+            machine_ids.setdefault(name, node_id)
+        if machine.declaration:
+            _declared_by(edges, node_id, f"resource:{machine.declaration}", nodes)
+        # The connections the catalogue says reach it, the same answer as the
+        # machine list's "Reached through".
+        for ref in machine.reached_by:
+            for connection_id in connections.get(ref, ()):
+                relation = edge_between(connection_id, node_id, "reaches")
+                edges[relation.id] = relation
+        subjects[node_id] = Subject.of(
+            hostnames=(machine.name, *machine.aliases), addresses=machine.addresses
+        )
+    index = index_of(
+        declared=[{"name": item.name, "addresses": item.addresses} for item in catalog]
+    )
+    estate = _Estate(subjects=subjects, machine_ids=machine_ids, index=index)
+    # Its device reading, its telemetry and its containers.
+    for machine in catalog:
+        estate.saw(
+            f"machine:{machine.name}",
+            getattr(machine.presence, "observed_at", None),
+            machine.telemetry_observed_at,
+            *(item.observed_at for item in machine.containers),
+        )
+    return estate
+
+
+def _zones(nodes, edges, resources, estate: _Estate) -> tuple[str, ...]:
+    from .zones import ZONE_KIND, zone_reads
+
+    names, read = zone_reads(resources)
+    for name in names:
+        estate.saw(f"zone:{name}", *read.get(name, ()))
+        node_id = f"zone:{name}"
+        url = entity_link("zone", name).url
+        nodes[node_id] = TopologyNode(
+            id=node_id,
+            kind="zone",
+            label=name,
+            subtitle="Domain",
+            url=url,
+            kind_key="zone",
+            actions=_open(url),
+        )
+        # Every name under the domain: its Access applications and edge
+        # certificates are the domain's as much as any one service's.
+        estate.subjects[node_id] = Subject.of(zones=(name,))
+    for resource in resources:
+        if resource.kind != ZONE_KIND:
+            continue
+        name = normalized_hostname(str((resource.spec or {}).get("zone", "")))
+        if name:
+            _declared_by(edges, f"zone:{name}", f"resource:{resource.key}", nodes)
+    return names
+
+
+# What a service node is called under its name, by the service's mark.
+_SERVICE_SUBTITLES = {"observed": "Observed service"}
+
+
+def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
+    from .hq_self import hq_service
+    from .service_list import listed_services
+    from .service_facets import zone_holding
+
+    own = hq_service(catalog=machines_once())
+    for service in listed_services():
+        node_id = f"service:{service.hostname}"
+        nodes[node_id] = TopologyNode(
+            id=node_id,
+            kind="service",
+            label=service.hostname,
+            subtitle=(
+                own.label
+                if service.is_hq and own is not None
+                else _SERVICE_SUBTITLES.get(service.mark, "Service")
+            ),
+            status=_SERVICE_STATUS.get(service.base_health.state, "neutral"),
+            status_label=service.base_health.label,
+            detail=service.faults[0] if service.faults else "",
+            url=service.url,
+            kind_key="service",
+            actions=_open(service.url),
+        )
+        estate.subjects[node_id] = Subject.of(
+            hostnames=(
+                service.hostname,
+                *service.aliases,
+                *(own.hostnames if service.is_hq and own is not None else ()),
+            )
+        )
+        estate.saw(
+            node_id,
+            *(facet.observed.observed_at for facet in service.facets if facet.observed),
+        )
+        for claim in service.declared_claims:
+            _declared_by(edges, node_id, f"resource:{claim.resource_key}", nodes)
+        machine = estate.machine(_runs_on(service, own))
+        if machine:
+            relation = edge_between(node_id, machine, "runs_on", "Runs on")
+            edges[relation.id] = relation
+        zone = zone_holding(service.hostname, zones)
+        if zone:
+            relation = edge_between(f"zone:{zone}", node_id, "contains", "Contains")
+            edges[relation.id] = relation
+    _redirect_edges(nodes, edges)
+
+
+def _runs_on(service, own) -> str:
+    """The machine a service runs on: its origin's, or HQ's own for HQ."""
+
+    if service.origin is not None and service.origin.host:
+        return service.origin.host
+    return own.machine if service.is_hq and own is not None else ""
+
+
+def _redirect_edges(nodes, edges) -> None:
+    """A service whose name a reading redirects to another service's name."""
+
+    for node_id in [key for key, node in nodes.items() if node.kind == "service"]:
+        target = path_to(nodes[node_id].label).redirects_to
+        if target and f"service:{target}" in nodes:
+            relation = edge_between(node_id, f"service:{target}", "redirects_to", "Redirects to")
+            edges[relation.id] = relation
+
+
+def _fold(nodes, edges, estate: _Estate) -> None:
+    """Move controllers and targets that name an estate node onto it."""
+
+    folded: dict[str, str] = {}
+    for node_id, node in nodes.items():
+        if node.kind not in _FOLDS_INTO_MACHINE:
+            continue
+        machine = estate.machine(node.label)
+        if machine:
+            folded[node_id] = machine
+            continue
+        if node.kind != "target":
+            continue
+        name = normalized_hostname(node.label)
+        for candidate in (f"service:{name}", f"zone:{name}"):
+            if candidate in nodes:
+                folded[node_id] = candidate
+                break
+    for node_id, into in folded.items():
+        node, host = nodes[node_id], nodes[into]
+        estate.saw(into, node.observed_at)
+        facts = host.facts
+        if host.kind == "machine":
+            fact = (_FOLDS_INTO_MACHINE[node.kind], node.label)
+            facts = facts + ((fact,) if fact not in facts else ())
+        nodes[into] = replace(
+            host,
+            facts=facts,
+            actions=host.actions
+            + tuple(
+                action
+                for action in node.actions
+                if all(existing.url != action.url for existing in host.actions)
+            ),
+        )
+    if not folded:
+        return
+    moved: dict[str, TopologyEdge] = {}
+    for edge in edges.values():
+        source = folded.get(edge.source, edge.source)
+        target = folded.get(edge.target, edge.target)
+        if source == target:
+            continue
+        relation = replace(
+            edge,
+            id=derived_id("edge", source, target, edge.kind),
+            source=source,
+            target=target,
+        )
+        moved[relation.id] = relation
+    edges.clear()
+    edges.update(moved)
+    for node_id in folded:
+        del nodes[node_id]
+
+
+def _hosted(nodes, edges, resources, estate: _Estate) -> None:
+    """What declares the machine it runs on, a machine's tailnet device, and
+    the connection holding each declaration's live record."""
+
+    _runs_edges(nodes, edges, resources, estate)
+    _container_subjects(nodes, resources, estate)
+    _tailnet_edges(nodes, edges, resources, estate)
+    _holder_edges(nodes, edges, resources)
+
+
+def _container_subjects(nodes, resources, estate: _Estate) -> None:
+    """A declared container's join key, so every reading that names it (its
+    networks, mounts, image, runtime, compose project) joins to it as it
+    joins to its machine."""
+
+    from hq.domains.control_plane.observations.contract import container_key
+    from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+
+    for resource in resources:
+        node_id = f"resource:{resource.key}"
+        if resource.kind != CONTAINER_KIND or node_id not in nodes:
+            continue
+        spec = resource.spec or {}
+        host = estate.machine(spec.get("host"))
+        names = {spec.get("host"), nodes[host].label if host in nodes else ""}
+        estate.subjects[node_id] = Subject.of(
+            containers=(container_key(name, spec.get("name")) for name in names if name)
+        )
+
+
+def _runs_edges(nodes, edges, resources, estate: _Estate) -> None:
+    from .machines import declares_host
+
+    for resource in resources:
+        resource_id = f"resource:{resource.key}"
+        if resource_id not in nodes or not declares_host(resource.kind):
+            continue
+        host = estate.machine((resource.spec or {}).get("host"))
+        if host:
+            relation = edge_between(host, resource_id, "runs", "Runs")
+            edges[relation.id] = relation
+
+
+def _tailnet_edges(nodes, edges, resources, estate: _Estate) -> None:
+    from . import tailnet
+
+    devices = None
+    for resource in resources:
+        device_id = f"resource:{resource.key}"
+        if resource.kind != tailnet.TAILNET_KIND or device_id not in nodes:
+            continue
+        devices = tailnet.devices() if devices is None else devices
+        name = str((resource.spec or {}).get("name") or "")
+        device = devices.get(name)
+        # A device is a subject by its addresses, so a reading about an address
+        # (its DNS client identity) reaches the device's own page.
+        if device is not None and device.addresses:
+            estate.subjects[device_id] = Subject.of(addresses=device.addresses)
+        for host in _device_hosts(device, estate):
+            relation = edge_between(host, device_id, "on_tailnet", "On the tailnet as")
+            edges[relation.id] = relation
+
+
+def _device_hosts(device, estate: _Estate) -> set[str]:
+    """The machines holding any of a tailnet device's addresses."""
+
+    return {
+        estate.machine_ids.get(estate.index.at(address), "")
+        for address in (device.addresses if device else ())
+    } - {""}
+
+
+def _holder_edges(nodes, edges, resources) -> None:
+    """The connection holding a declaration's live record uses that declaration.
+
+    Derived for every kind that mirrors a provider's records (``from_record``),
+    matched by the same identity adoption uses, so a kind is joined to its
+    connection by declaring those two and nothing here. The record's
+    ``connection_ref`` names the connection; a record without one was read by
+    the connections of the kind's providers.
+    """
+
+    declared: dict[tuple[str, tuple[str, ...]], list[str]] = {}
+    for resource in resources:
+        node_id = f"resource:{resource.key}"
+        provider = PROVIDERS.get(resource.kind)
+        if node_id in nodes and provider is not None and provider.from_record is not None:
+            identity = record_identity(resource.kind, resource.spec or {})
+            if identity:
+                declared.setdefault((resource.kind, identity), []).append(node_id)
+    by_ref, by_provider = _reader_index(nodes)
+    for kind in {kind for kind, _identity in declared}:
+        provider = PROVIDERS[kind]
+        for _snapshot, record in inventory_records(kind):
+            holders = _holders(provider, record, by_ref, by_provider)
+            for resource_id in declared.get((kind, _mirrored_identity(kind, record)), ()):
+                for holder in holders:
+                    relation = edge_between(holder, resource_id, "used_by")
+                    # The connection may already use this declaration by name,
+                    # with its own status: that edge says more, so it stays.
+                    edges.setdefault(relation.id, relation)
+
+
+def _mirrored_identity(kind: str, record) -> tuple[str, ...]:
+    try:
+        spec = PROVIDERS[kind].from_record(dict(record))
+    except (KeyError, TypeError, ValueError):
+        return ()
+    return record_identity(kind, spec)
+
+
+def _holders(provider, record, by_ref, by_provider) -> list[str]:
+    ref = str(record.get("connection_ref", "") or "")
+    if ref:
+        return by_ref.get(ref, [])
+    return [
+        node_id
+        for name in provider.connection_providers
+        for node_id in by_provider.get(name, [])
+    ]
+
+
+def _connects_edges(nodes, edges, estate: _Estate) -> None:
+    """Declared containers a connecting record names together talk to each other.
+
+    Any reading whose spec says it ``connects`` draws them, a Docker network or
+    anything else that groups containers.
+    """
+
+    declared = {
+        key: node_id
+        for node_id, subject in estate.subjects.items()
+        if node_id in nodes
+        for key in subject.containers
+    }
+    if not declared:
+        return
+    for spec in OBSERVATIONS.values():
+        if spec.connects is None:
+            continue
+        for _snapshot, record in inventory_records(spec.kind):
+            if not spec.connects(record):
+                continue
+            members = sorted({declared[key] for key in spec.containers(record) if key in declared})
+            detail = f"{spec.label} {spec.title(record)}".strip()
+            for one, other in combinations(members, 2):
+                relation = replace(edge_between(one, other, "talks_to"), detail=detail)
+                edges[relation.id] = relation
+
+
+def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """Connection nodes by ref and by provider."""
+
+    by_ref: dict[str, list[str]] = {}
+    by_provider: dict[str, list[str]] = {}
+    for node in nodes.values():
+        if node.kind != "connection":
+            continue
+        by_ref.setdefault(node.connection_ref, []).append(node.id)
+        by_provider.setdefault(node.provider, []).append(node.id)
+    return by_ref, by_provider
+
+
+def _derived_from_readings(nodes, edges, resources, estate: _Estate) -> None:
+    """What provider-specific joins add: container edges, image and certificate facts."""
+
+    from . import certificate_expiry, docker_estate
+
+    if estate.machine_ids:
+        docker_estate.add(nodes, edges, resources, estate.machine)
+    by_ref, by_provider = _reader_index(nodes)
+    certificate_expiry.add(
+        nodes,
+        lambda joined: _readers(joined, by_ref, by_provider, nodes),
+        lambda provider, record: _holding(provider, record, by_ref, by_provider, nodes),
+    )
+
+
+def _reading_edges(nodes, edges, estate: _Estate) -> None:
+    """One edge per reading kind from the connection that read it to its subject."""
+
+    by_ref, by_provider = _reader_index(nodes)
+    index = readings()
+    grouped: dict[tuple[str, str, str], list[Joined]] = {}
+    for node_id, subject in estate.subjects.items():
+        for joined in index.about(subject):
+            for source in _readers(joined, by_ref, by_provider, nodes):
+                grouped.setdefault((source, node_id, joined.kind), []).append(joined)
+    for (source, target, kind), items in grouped.items():
+        moments = [item.observed_at for item in items if item.observed_at]
+        oldest = min(moments, default=None)
+        estate.saw(target, *moments)
+        # A registry, or a connection no controller reports, is seen only
+        # through what it read.
+        if not nodes[source].observed_at:
+            estate.saw(source, *moments)
+        titles = tuple(dict.fromkeys(item.title for item in items if item.title))
+        entities = tuple(
+            dict.fromkeys(entity_link(item.kind, "", record=item.record) for item in items)
+        )
+        relation = TopologyEdge(
+            id=derived_id("edge", source, target, kind),
+            source=source,
+            target=target,
+            kind="reading",
+            label=items[0].relation,
+            status="attention" if any(item.stale for item in items) else "neutral",
+            source_kind=kind,
+            detail=", ".join(titles),
+            observed_at=oldest.isoformat() if oldest else "",
+            entities=entities,
+            facet=items[0].facet,
+        )
+        edges[relation.id] = relation
+
+
+def _readers(joined: Joined, by_ref, by_provider, nodes) -> tuple[str, ...]:
+    """The nodes that took this reading.
+
+    A reading HQ takes itself comes from its public registry's node. Otherwise
+    the record's ``connection_ref`` where it names one; otherwise the
+    connections of the reading's provider, narrowed to the controller that
+    stored it.
+    """
+
+    if joined.spec.read_by == "hq":
+        node_id = f"registry:{joined.spec.provider}"
+        nodes.setdefault(
+            node_id,
+            TopologyNode(
+                id=node_id,
+                kind="registry",
+                label=joined.spec.provider.upper(),
+                subtitle="Public registry",
+                kind_key="registry",
+            ),
+        )
+        return (node_id,)
+    if joined.connection_ref and joined.connection_ref in by_ref:
+        return tuple(by_ref[joined.connection_ref])
+    found = by_provider.get(joined.spec.provider, [])
+    if joined.controller_id:
+        narrowed = [
+            node_id for node_id in found if nodes[node_id].controller_id == joined.controller_id
+        ]
+        found = narrowed or found
+    if found:
+        return tuple(found)
+    return _unreported(
+        nodes, by_ref, joined.connection_ref or joined.spec.provider, joined.spec.provider
+    )
+
+
+def _holding(provider, record, by_ref, by_provider, nodes) -> tuple[str, ...]:
+    """The connection nodes a provider's stored record was read through."""
+
+    found = _holders(provider, record, by_ref, by_provider)
+    if found:
+        return tuple(found)
+    name = next(iter(provider.connection_providers), provider.kind)
+    return _unreported(nodes, by_ref, str(record.get("connection_ref", "") or name), name)
+
+
+def _unreported(nodes, by_ref, name: str, provider: str) -> tuple[str, ...]:
+    """A node for a connection no controller reports now.
+
+    What was read through it stays, from a node naming that connection, rather
+    than vanishing.
+    """
+
+    node_id = f"connection:unreported:{name}"
+    nodes.setdefault(
+        node_id,
+        TopologyNode(
+            id=node_id,
+            kind="connection",
+            label=name,
+            subtitle=provider,
+            status_label="Not reported",
+            detail="No controller reports this connection now.",
+            kind_key=provider,
+        ),
+    )
+    by_ref.setdefault(name, []).append(node_id)
+    return (node_id,)

@@ -11,8 +11,14 @@ WORKDIR /build
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
-COPY requirements.txt .
-RUN pip install --require-hashes --prefix=/install -r requirements.txt
+COPY pyproject.toml uv.lock ./
+COPY scripts/dependency_config.py scripts/dependency_config.py
+# Bootstrap uv from the same approved artifact hashes the lock records.
+RUN python scripts/dependency_config.py uv-requirements > /tmp/uv-bootstrap.txt \
+    && pip install --require-hashes --no-deps --ignore-installed --prefix=/uv-bootstrap -r /tmp/uv-bootstrap.txt \
+    && /uv-bootstrap/bin/uv export --locked --no-default-groups --no-emit-project \
+        --format requirements-txt --output-file /tmp/hq-runtime.txt > /dev/null \
+    && pip install --require-hashes --prefix=/install -r /tmp/hq-runtime.txt
 
 
 # The controller, one static binary: CGO off, -trimpath, so the runtime image
@@ -60,7 +66,7 @@ RUN python -m pip uninstall --yes pip \
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONHASHSEED=random \
-    DJANGO_SETTINGS_MODULE=config.settings \
+    DJANGO_SETTINGS_MODULE=hq.config.settings \
     SEVERINO_DATABASE_PATH=/data/severino.sqlite3 \
     SEVERINO_MEDIA_ROOT=/media \
     SEVERINO_EXPORTS_ROOT=/exports \
@@ -94,7 +100,7 @@ ENTRYPOINT ["/entrypoint.sh"]
 #
 # Held above the proxy's 90s deliberately: whichever side hangs up first
 # decides, and it should be the one that knows a request is not in flight.
-CMD ["uvicorn", "config.asgi:application", "--host", "0.0.0.0", "--port", "8000", \
+CMD ["uvicorn", "hq.config.asgi:application", "--host", "0.0.0.0", "--port", "8000", \
      "--no-proxy-headers", "--access-log", "--timeout-keep-alive", "120"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

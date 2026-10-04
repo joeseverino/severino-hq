@@ -1,6 +1,6 @@
 """Safe, discoverable connection contracts shared by HQ and plugins."""
 
-from application.connections import (
+from hq.platform.application.connections import (
     ConnectionAbility,
     ConnectionFact,
     ConnectionInstance,

@@ -10,7 +10,7 @@ fi
 # Specification rules cover wire contracts. HTTP style recommendations do not
 # apply to Django's canonical trailing slashes or the stdin/stdout bridge.
 node "$cli" lint --extends=spec --format=summary \
-    hq_api/hq-api.openapi.json controller/api/hq-controller.openapi.json
+    hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json
 
 ./scripts/generate-clients.sh --check
 node --test scripts/openapi/test-client.mjs

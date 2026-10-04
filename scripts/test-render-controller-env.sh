@@ -242,7 +242,7 @@ for script in "${script_dir}"/*.sh "${script_dir}"/lib/*.sh \
     fi
 done
 present="$(jq -r '[.projections | keys[]] | join(",")' \
-    "${script_dir}/../config/controller-connections.json")"
+    "${script_dir}/../hq/config/controller-connections.json")"
 case "${present}" in
     *acme*|*api_token*|*login*|*ssh_transport*) echo "ok   registry declares projections" ;;
     *) echo "FAIL registry declares no projections" >&2; failures=$((failures + 1)) ;;

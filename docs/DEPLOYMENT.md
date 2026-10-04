@@ -94,7 +94,7 @@ rather than returning an empty secret. Rotate only when you are willing to
 re-upload every stored certificate.
 
 Connection projections are declared once in
-`config/controller-connections.json`. Both secret rendering and runtime
+`hq/config/controller-connections.json`. Both secret rendering and runtime
 forwarding derive their variable names from that registry; a new credential
 shape is added as a projection profile instead of duplicated shell logic.
 Built-in 1Password fields may be selected by stable ID. Custom fields must be
@@ -164,7 +164,7 @@ TAILSCALE_BOOTSTRAP_TOKEN=... scripts/mint-tailscale-client.sh --print-secret
   credential with write scopes.
 
 Both lists are the `requires` of every reading for that provider plus
-`control_plane.credential_reads`, and a test fails when they differ.
+`hq.domains.control_plane.credential_reads`, and a test fails when they differ.
 
 The controller trusts internal provider TLS through the host trust store or a
 deployment-provided `HQ_CONTROLLER_CA_FILE`. The internal CA certificate
@@ -185,7 +185,7 @@ credentials, untrusted TLS, and API failures stop activation. The HQ web
 container never receives the provider environment.
 
 Each release installs itself. Root runs units out of
-`/usr/local/lib/severino-hq`, a root-owned copy of `scripts/`, `config/`,
+`/usr/local/lib/severino-hq`, a root-owned copy of `scripts/`, `hq/config/`,
 `deploy/` and `docker-compose.yml` taken from the running image. Once the new
 image is healthy, `deploy-image.sh` runs the `severino-hq-sync-scripts` that
 image ships (never the host's copy), which replaces the tree and refuses it
@@ -240,7 +240,7 @@ belongs exclusively to the D1 contact-submission path. DNS-01 uses the separate
 `Cloudflare DNS - HQ Controller` API Credential item in the `Severino HQ
 Production` vault. Its stable `connection_ref` is
 `cloudflare-dns-example`; the controller resolves that reference through
-`config/controller-connections.json`. The token is restricted to Zone Read and
+`hq/config/controller-connections.json`. The token is restricted to Zone Read and
 DNS Edit for `example.com`, `example.net`, `example.org`, and
 `example.test`. Controller activation verifies the token and proves all four
 zones are readable without performing a DNS mutation.
@@ -599,7 +599,10 @@ sudo chown severino:severino /opt/severino-hq
 sudo -u severino git clone <your-mirror> /opt/severino-hq
 cd /opt/severino-hq
 sudo -u severino python3 -m venv .venv
-sudo -u severino .venv/bin/pip install -r requirements.txt
+python3 scripts/dependency_config.py uv-requirements > /tmp/hq-uv-bootstrap.txt
+sudo -u severino .venv/bin/python -m pip install --require-hashes --no-deps --ignore-installed -r /tmp/hq-uv-bootstrap.txt
+sudo -u severino .venv/bin/uv export --locked --no-default-groups --no-emit-project --output-file /tmp/hq-runtime.txt > /dev/null
+sudo -u severino .venv/bin/python -m pip install --require-hashes -r /tmp/hq-runtime.txt
 sudo -u severino cp .env.example /etc/severino-hq.env
 sudoedit /etc/severino-hq.env   # fill in real values
 ```
@@ -629,7 +632,7 @@ User=severino
 Group=severino
 WorkingDirectory=/opt/severino-hq
 EnvironmentFile=/etc/severino-hq.env
-ExecStart=/opt/severino-hq/.venv/bin/uvicorn config.asgi:application \
+ExecStart=/opt/severino-hq/.venv/bin/uvicorn hq.config.asgi:application \
   --host 127.0.0.1 --port 8000 --no-proxy-headers
 Restart=on-failure
 RestartSec=5

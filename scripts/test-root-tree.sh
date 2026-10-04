@@ -19,7 +19,7 @@ make_image() {
     rm -rf "${image}"
     mkdir -p "${image}"
     tar --exclude=node_modules --exclude=__pycache__ \
-        -cf "${work}/root-tree.tar" scripts config deploy docker-compose.yml
+        -cf "${work}/root-tree.tar" scripts hq/config deploy docker-compose.yml
     tar -xf "${work}/root-tree.tar" -C "${image}"
     sh scripts/root-tree-manifest.sh "${image}" >"${image}/root-tree.sha256"
 }
@@ -33,8 +33,8 @@ mkdir -p "${image}/scripts/openapi/node_modules/example/nested"
 printf 'local dependency\n' >"${image}/scripts/openapi/node_modules/example/nested/index.js"
 [ "$(sh scripts/root-tree-manifest.sh "${image}")" = "${manifest}" ] ||
     fail "the manifest listed local Node dependencies"
-mkdir -p "${image}/config/__pycache__"
-: >"${image}/config/__pycache__/settings.cpython-312.pyc"
+mkdir -p "${image}/hq/config/__pycache__"
+: >"${image}/hq/config/__pycache__/settings.cpython-312.pyc"
 [ "$(sh scripts/root-tree-manifest.sh "${image}")" = "${manifest}" ] ||
     fail "the manifest listed a bytecode cache"
 printf '%s\n' "${manifest}" | grep '  scripts/severino-hq-sync-scripts$' >/dev/null ||

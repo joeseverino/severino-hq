@@ -36,7 +36,7 @@ if [ -z "${DJANGO_SECRET_KEY:-}" ] && command -v op >/dev/null 2>&1; then
     export DJANGO_SECRET_KEY
 fi
 if [ -z "${DJANGO_SECRET_KEY:-}" ]; then
-    echo "No signing key: sessions will use the constant in config/settings.py." >&2
+    echo "No signing key: sessions will use the constant in hq/config/settings.py." >&2
 fi
 
 export DJANGO_DEBUG="${DJANGO_DEBUG:-1}"
@@ -74,7 +74,7 @@ if command -v lsof >/dev/null 2>&1 \
 fi
 
 "$python" manage.py collectstatic --noinput --verbosity 0
-exec "$python" -m uvicorn config.asgi:application \
+exec "$python" -m uvicorn hq.config.asgi:application \
     --host "$host" \
     --port "$port" \
     --reload

@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"maps"
 	"net"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -111,7 +112,7 @@ func (r *Registry) hostPerimeter(ctx context.Context) ([]any, error) {
 		}
 		ports := r.publishedPortsAt(ctx, ref, at)
 		ports[standardSSHPort], ports[target.Port] = true, true
-		checked := sortedPorts(ports)
+		checked := append([]int{}, slices.Sorted(maps.Keys(ports))...)
 		found = append(found, HostPerimeterRecord{
 			Record:           "perimeter",
 			ConnectionRef:    ref,
@@ -155,15 +156,6 @@ func (r *Registry) publishedPortsAt(ctx context.Context, ref string, addresses m
 	return ports
 }
 
-func sortedPorts(ports map[int]bool) []int {
-	out := make([]int, 0, len(ports))
-	for port := range ports {
-		out = append(out, port)
-	}
-	sort.Ints(out)
-	return out
-}
-
 // answered is which ports accepted a TCP connection on any of the addresses.
 func (r *Registry) answered(ctx context.Context, addresses []string, ports []int) []int {
 	dial := r.Dial
@@ -187,7 +179,7 @@ func (r *Registry) answered(ctx context.Context, addresses []string, ports []int
 		}
 	}
 	wg.Wait()
-	return sortedPorts(open)
+	return append([]int{}, slices.Sorted(maps.Keys(open))...)
 }
 
 // dialFromHere is whether a TCP connection is accepted, asked from this machine,

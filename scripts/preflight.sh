@@ -107,7 +107,7 @@ gate "check.sh, composed pass required" env CHECK_REQUIRE_COMPOSED=1 scripts/che
 host_payload() {
     work="$1"
     mkdir -p "${work}/release" "${work}/main"
-    git archive HEAD scripts config deploy docker-compose.yml | tar -x -C "${work}/release"
+    git archive HEAD scripts hq/config deploy docker-compose.yml | tar -x -C "${work}/release"
     git archive "${PREFLIGHT_BASE_REF:-origin/main}" deploy/systemd | tar -x -C "${work}/main"
     units_shipped "${work}/release/deploy/systemd" >"${work}/release-units"
     # Shipped by main and by this release: already installed, if the host is current.

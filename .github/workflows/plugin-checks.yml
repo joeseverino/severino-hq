@@ -117,10 +117,14 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
+      - name: Read the host resolver pin
+        id: host-uv
+        run: echo "version=$(python host/scripts/dependency_config.py pin uv)" >> "$GITHUB_OUTPUT"
       - name: Set up uv
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
+          version: ${{ steps.host-uv.outputs.version }}
       - name: Verify package and host contract
         # The identity comes from the package itself (scripts/plugin-identity.py).
         id: contract

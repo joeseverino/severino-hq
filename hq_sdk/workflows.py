@@ -1,7 +1,7 @@
 """Domain-neutral claim resolution primitives for trusted HQ plugins."""
 
-from application.action_links import ActionLink
-from application.workflows import (
+from hq.platform.application.action_links import ActionLink
+from hq.platform.application.workflows import (
     WorkflowOutcome,
     WorkflowPlan,
     WorkflowStep,

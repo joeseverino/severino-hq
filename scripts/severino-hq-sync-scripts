@@ -41,11 +41,13 @@ trap cleanup EXIT HUP INT TERM
 
 abort() { echo "sync aborted: $*" >&2; exit 1; }
 
+mkdir -p "$stage/hq"
+
 if [ "$SOURCE" = image ]; then
     image_id="$(docker inspect --format '{{.Image}}' "$CONTAINER")"
     [ -n "$image_id" ] || abort "could not resolve the running image"
     cid="$(docker create "$image_id" true)"
-    for item in scripts config deploy docker-compose.yml "$MANIFEST"; do
+    for item in scripts hq/config deploy docker-compose.yml "$MANIFEST"; do
         docker cp "$cid:/app/$item" "$stage/$item" || abort "the image ships no /app/$item"
     done
     docker rm -f "$cid" >/dev/null; cid=""
@@ -53,7 +55,7 @@ if [ "$SOURCE" = image ]; then
 else
     echo "WARNING: syncing from ${APP_DIR}, which is writable by an" >&2
     echo "WARNING: unprivileged user. Root will execute whatever is there." >&2
-    for item in scripts config deploy docker-compose.yml; do
+    for item in scripts hq/config deploy docker-compose.yml; do
         cp -a "$APP_DIR/$item" "$stage/$item"
     done
     sh "$APP_DIR/scripts/root-tree-manifest.sh" "$APP_DIR" >"$stage/$MANIFEST"

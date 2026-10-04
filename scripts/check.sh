@@ -54,7 +54,7 @@ export SEVERINO_LOG_LEVEL=CRITICAL
 
 # The suite runs three times here, so its cost is the gate's cost. Workers get
 # their own database file rather than the shared in-memory one Django would
-# reach for (see core/test_runner.py) which is what makes this safe as well
+# reach for (see hq/platform/core/test_runner.py) which is what makes this safe as well
 # as roughly twice as fast. Set CHECK_PARALLEL=1 to rule it out when a failure
 # looks order- or isolation-dependent.
 parallel=${CHECK_PARALLEL:-auto}
@@ -86,7 +86,7 @@ echo "[check] OpenAPI contracts"
 scripts/check-openapi.sh
 
 echo "[check] Generated API cases through WSGI"
-env -u SEVERINO_HQ_PLUGINS "$python" manage.py test fuzz.api_properties --noinput --parallel 1
+env -u SEVERINO_HQ_PLUGINS "$python" manage.py test tests.fuzz.api_properties --noinput --parallel 1
 
 echo "[check] Complete test suite"
 "$python" manage.py test --noinput --parallel "$parallel"
@@ -127,10 +127,10 @@ fi
 if [ "${CHECK_BROWSER:-0}" = "1" ]; then
     echo "[check] Browser layout regressions (synthetic host fixtures)"
     if ! "$python" -c "import playwright" 2>/dev/null; then
-        echo "[check] Playwright is not installed. Run: $python -m pip install --require-hashes -r requirements-browser.txt && $python -m playwright install chromium" >&2
+        echo "[check] Playwright is not installed. Run: uv sync --locked --group browser && $python -m playwright install chromium" >&2
         exit 1
     fi
-    env -u SEVERINO_HQ_PLUGINS "$python" manage.py test core.browser_tests --noinput --parallel 1
+    env -u SEVERINO_HQ_PLUGINS "$python" manage.py test hq.platform.core.browser_tests --noinput --parallel 1
 else
     echo "[check] Browser layout checks skipped (set CHECK_BROWSER=1; ci-local.sh always runs them)"
 fi

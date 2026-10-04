@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -134,15 +135,6 @@ func (c *Controller) effectiveProvider(ref string, ssh map[string]bool) string {
 	return provider
 }
 
-func sortedRefs(prefixes map[string]string) []string {
-	refs := make([]string, 0, len(prefixes))
-	for ref := range prefixes {
-		refs = append(refs, ref)
-	}
-	sort.Strings(refs)
-	return refs
-}
-
 // namedRef is the connection a spec names, or "" for the kind's default. The
 // manages gate checks this one and the write uses it.
 func namedRef(spec Object) string {
@@ -164,7 +156,7 @@ func (c *Controller) refuseUnlessManaged(kind runtime.ResourceKind, spec Object)
 		}
 		refs = append(refs, named)
 	} else {
-		for _, ref := range sortedRefs(c.Env.Prefixes()) {
+		for _, ref := range slices.Sorted(maps.Keys(c.Env.Prefixes())) {
 			for _, provider := range providers {
 				if c.effectiveProvider(ref, ssh) == provider {
 					refs = append(refs, ref)
@@ -245,7 +237,7 @@ func (c *Controller) Connections(ctx context.Context, carry []string) ([]runtime
 	ssh := c.sshRefs()
 	prefixes := c.Env.Prefixes()
 	reported := []runtime.ConnectionRecord{}
-	for _, ref := range sortedRefs(prefixes) {
+	for _, ref := range slices.Sorted(maps.Keys(prefixes)) {
 		prefix := prefixes[ref]
 		provider := c.effectiveProvider(ref, ssh)
 		probe := c.probes[provider]

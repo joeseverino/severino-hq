@@ -80,20 +80,30 @@ type tlsReadError struct {
 func (e *tlsReadError) Error() string { return e.reason }
 func (e *tlsReadError) Unwrap() error { return e.err }
 
+// transportFailureReason is the reset/timeout policy shared by TCP and TLS.
+func transportFailureReason(err error, fallback string) string {
+	var netErr net.Error
+	switch {
+	case errors.Is(err, syscall.ECONNRESET):
+		return "connection reset"
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &netErr) && netErr.Timeout():
+		return "timed out"
+	default:
+		return fallback
+	}
+}
+
 // dialFailure names why a TCP connection to a consumer failed.
 func dialFailure(err error) *tlsReadError {
 	var dnsErr *net.DNSError
-	var netErr net.Error
-	reason := "connection failed"
+	reason := ""
 	switch {
 	case errors.As(err, &dnsErr):
 		reason = "name does not resolve"
 	case errors.Is(err, syscall.ECONNREFUSED):
 		reason = "connection refused"
-	case errors.Is(err, syscall.ECONNRESET):
-		reason = "connection reset"
-	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &netErr) && netErr.Timeout():
-		reason = "timed out"
+	default:
+		reason = transportFailureReason(err, "connection failed")
 	}
 	return &tlsReadError{reason: reason, err: err}
 }
@@ -104,17 +114,14 @@ func handshakeFailure(err error) *tlsReadError {
 	var hostname x509.HostnameError
 	var authority x509.UnknownAuthorityError
 	var invalid x509.CertificateInvalidError
-	var netErr net.Error
-	reason := "handshake failed"
+	reason := ""
 	switch {
 	case errors.As(err, &verify), errors.As(err, &hostname), errors.As(err, &authority), errors.As(err, &invalid):
 		reason = "certificate not trusted for this name"
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
 		reason = "connection closed during handshake"
-	case errors.Is(err, syscall.ECONNRESET):
-		reason = "connection reset"
-	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &netErr) && netErr.Timeout():
-		reason = "timed out"
+	default:
+		reason = transportFailureReason(err, "handshake failed")
 	}
 	return &tlsReadError{reason: reason, err: err}
 }

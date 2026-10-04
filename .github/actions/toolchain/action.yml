@@ -69,3 +69,9 @@ runs:
       with:
         python-version: ${{ inputs.python || steps.read.outputs.oldest-python }}
         cache: ${{ inputs.cache }}
+        cache-dependency-path: uv.lock
+    - name: Bootstrap the hash-pinned uv resolver
+      shell: bash
+      run: |
+        python scripts/dependency_config.py uv-requirements > "$RUNNER_TEMP/uv-bootstrap.txt"
+        pip install --require-hashes --no-deps --ignore-installed -r "$RUNNER_TEMP/uv-bootstrap.txt"

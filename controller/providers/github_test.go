@@ -719,7 +719,7 @@ func TestDeliveryNamesAgreeWithThePipelineAndTheDeclaration(t *testing.T) {
 	if !strings.Contains(read("scripts/hq-report.sh"), `marker="`+marker+"${COMMIT") {
 		t.Errorf("hq-report.sh does not write the marker %q", marker)
 	}
-	declaration := read("control_plane/provider_adapters/github.py")
+	declaration := read("hq/domains/control_plane/provider_adapters/github.py")
 	for _, line := range []string{`CURRENT = "` + githubCurrent + `"`, `COMPOSE_WORKFLOW = "` + githubCompose + `"`} {
 		if !strings.Contains(declaration, line) {
 			t.Errorf("github.py does not declare %s", line)

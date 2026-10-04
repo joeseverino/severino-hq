@@ -4,13 +4,13 @@ The fourth delivery adapter, after the web UI, the CLI, and MCP. It exists so a
 phone, a Shortcut, or a cron job can run an HQ capability over HTTP.
 
 It adds **no capability, no domain model, and no business rule**. Every command
-comes from `application/capabilities.py`, and every read comes from
-`application/resources.py`. That keeps four adapters from drifting into four
+comes from `hq/platform/application/capabilities.py`, and every read comes from
+`hq/platform/application/resources.py`. That keeps four adapters from drifting into four
 behaviours.
 
 ```
-hq_api/security.py   verify a token HQ did not issue
-hq_api/views.py      the transport
+hq/platform/api/security.py   verify a token HQ did not issue
+hq/platform/api/views.py      the transport
 ```
 
 ## HQ verifies; it does not issue
@@ -177,7 +177,7 @@ operations, and insufficient grants fail before a domain query runs.
 
 ### What each surface exposes
 
-Every derived read is a `ResourceSpec` in `application/resources.py`. One
+Every derived read is a `ResourceSpec` in `hq/platform/application/resources.py`. One
 registration serves the API (`/api/v2/resources/<name>/`), MCP (`list_resource`,
 `get_resource`), the CLI (`manage.py hq_call` over those tools) and the SDK
 (`hq_sdk.resources.list_resource` / `get_resource`). Each handler calls the
@@ -196,7 +196,7 @@ the `SEVERINO_MCP_ENABLE_*` switches gate writes, not these reads.
 | Request path per hostname (`paths.path_to`) | Service page, connections | `paths` (`get <hostname>`), inside `services` get | yes | yes | yes | yes |
 | How the calling request reached HQ (`request_path.request_path`) | This connection | `request.path` (the caller's own request; empty, saying why, without one) | yes | yes | no | no |
 | `relationships_for`, with `entity_link` names | Entity pages | `relationships` (`get <node id>`) | yes | yes | yes | yes |
-| Readings, schema-filtered (`control_plane/observations`) | Connections, entity pages | `readings` (`get <kind>`) | yes | yes | yes | yes |
+| Readings, schema-filtered (`hq/domains/control_plane/observations`) | Connections, entity pages | `readings` (`get <kind>`) | yes | yes | yes | yes |
 | Join engine (`facts.readings`) | Entity pages | inside `relationships`, `services`, `domains` | yes | yes | yes | yes |
 | Credential sight | Connections | `credentials` (`get <provider>`) | yes | yes | yes | yes |
 | Connections page (`connection_context.connections_context`): rows with sight, freshness, refusals, what more scope would show, credential fix, reach (network, machine, tailnet peering), last activity, pending read now; summary counts; estate posture; HQ's path | Connections | `connection.standing` (`get <connection_ref>`) | yes | yes | yes | yes |
@@ -386,14 +386,25 @@ client and CLI are generated from the host description. Redocly currently marks
 its client generator experimental; generated artifacts are pinned and checked
 rather than assumed compatible across upgrades.
 
-`manage.py test fuzz.api_properties` generates bounded requests through Django's
+`manage.py test tests.fuzz.api_properties` generates bounded requests through Django's
 real WSGI middleware using Schemathesis from the tools dependency set. Host cases
 have read authority; a synthetic capability tests authorized writes and durable
 retry without provider effects. Each case rolls back database changes and blocks
 outbound connections. These tooling tests run explicitly in the contributor
 gates; production test discovery does not require development dependencies.
 
-MCP resource names, identifiers and catalogue descriptions derive from the live
-deployment's OpenAPI document after Django initialization. Other MCP tools keep
-their application-service signatures: tools without an HTTP operation are not
-claimed to be generated HTTP clients.
+All MCP tool input schemas and descriptions consume the live deployment's
+OpenAPI document after Django initialization. `x-hq-mcp-tools` records MCP-only
+metadata; it does not invent HTTP operations for those tools. Argument types
+and defaults are emitted from the declared service signatures with the MCP
+SDK and Pydantic. Resource names, identifiers and catalogues consume the
+already-emitted resource paths. Registration fails if the document disagrees
+with the execution signature, and calls validate against the documented
+constraints before entering application code. Unknown arguments, mistyped
+values and stringified JSON objects are rejected; validation errors do not
+include rejected input values. Authorization and thread-sensitive execution
+remain on the shared service path.
+
+The input-schema override uses a narrow, tested FastMCP Tool metadata seam in
+`hq/platform/mcp/binding.py`; an MCP SDK upgrade must retain those registration
+and validation tests.

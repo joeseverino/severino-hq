@@ -42,8 +42,9 @@ bin="${fixture}/bin"
 sbin="${fixture}/sbin"
 app="${fixture}/app"
 mkdir -p "${lib}" "${etc}" "${bin}" "${sbin}" "${app}/.git"
-cp -R scripts config deploy docker-compose.yml "${lib}/"
-find "${lib}" -name __pycache__ -prune -exec rm -rf {} +
+tar --exclude=node_modules --exclude=__pycache__ \
+    -cf "${fixture}/root-tree.tar" scripts hq/config deploy docker-compose.yml
+tar -xf "${fixture}/root-tree.tar" -C "${lib}"
 sh scripts/root-tree-manifest.sh "${lib}" >"${lib}/root-tree.sha256"
 cp scripts/severino-hq-sync-scripts "${sbin}/"
 # Relocate fixed host paths in the test copy, not in the production interface.

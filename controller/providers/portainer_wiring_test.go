@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -50,7 +52,7 @@ func TestPortainerFeedsGlanceAndPublishedPorts(t *testing.T) {
 		t.Fatalf("published containers = %+v, %v", containers, err)
 	}
 	host := containers[0].Host
-	if got := sortedPorts(r.publishedPortsAt(ctx, "portainer-example", map[string]bool{host: true})); !reflect.DeepEqual(got, []int{8080}) {
+	if got := slices.Sorted(maps.Keys(r.publishedPortsAt(ctx, "portainer-example", map[string]bool{host: true}))); !reflect.DeepEqual(got, []int{8080}) {
 		t.Fatalf("host readings ports = %v", got)
 	}
 	if got := r.portsWorthAsking(ctx); !reflect.DeepEqual(got, []int{22, 53, 80, 443, 8080}) {

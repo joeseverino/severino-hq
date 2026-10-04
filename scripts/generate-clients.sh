@@ -14,7 +14,7 @@ if [ ! -f "$cli" ]; then
 fi
 temporary=$(mktemp -d)
 trap 'rm -rf "$temporary"' EXIT HUP INT TERM
-node "$cli" generate-client hq_api/hq-api.openapi.json \
+node "$cli" generate-client hq/platform/api/hq-api.openapi.json \
     --output "$temporary/hq.ts" --generator typescript --generator cli \
     --server-url / --import-ext ts --args-style grouped \
     --setup scripts/openapi/setup.ts

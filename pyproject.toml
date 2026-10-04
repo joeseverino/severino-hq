@@ -1,0 +1,90 @@
+[project]
+name = "severino-hq"
+version = "0.0.0"
+requires-python = ">=3.13,<3.15"
+# Host-owned plugin libraries stay here: admitted wheels install with --no-deps.
+# tblib lets composed parallel suites report real tracebacks.
+dependencies = [
+    "argon2-cffi>=25.1,<26",
+    "cryptography>=50.0.1,<51",
+    "defusedxml>=0.7,<0.8",
+    "django>=6.1.1,<6.2",
+    "httpx>=0.28,<1",
+    "mcp>=1.30.0,<2",
+    "mozilla-django-oidc>=5.0.2,<6.0",
+    "pydantic>=2.13.5,<3",
+    "pyjwt>=2.15.1,<3",
+    "tblib>=3,<4",
+    "uvicorn>=0.54.0,<1",
+    "whitenoise>=6.12.0",
+]
+
+[tool.uv]
+package = false
+default-groups = ["dev", "tools"]
+
+[dependency-groups]
+dev = [
+    "django-debug-toolbar==8.0.0",
+]
+tools = [
+    "coverage==7.16.2",
+    "django-stubs==6.1.1",
+    "hypothesis==6.168.3",
+    "mypy==2.3.1",
+    "openapi-spec-validator==0.9.0",
+    "ruff==0.16.9",
+    "schemathesis==4.29.1",
+    "uv==0.12.20",
+]
+browser = [
+    "playwright==1.63.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+# Python without a .py name: the forced command HQ's key runs on shared hosting.
+extend-include = ["deploy/targets/severino-hq-cpanel-controller"]
+
+[tool.ruff.lint]
+# Keep the contract explicit and stable across developer machines and CI.
+select = ["E4", "E7", "E9", "F", "C90"]
+
+[tool.ruff.lint.mccabe]
+# A function past this many paths is split into named steps.
+max-complexity = 15
+
+[tool.mypy]
+python_version = "3.13"
+files = ["hq/platform/application/security.py", "hq/platform/application/integration_specs.py", "hq/platform/application/plugins.py", "hq/platform/application/capabilities.py", "hq/platform/application/resources.py", "hq/platform/application/sensitivity.py", "hq/platform/application/domains.py", "hq/platform/application/records.py", "hq/domains/control_plane/connection_kinds.py", "hq/domains/control_plane/credential_reads.py", "hq/domains/control_plane/names.py", "hq/domains/control_plane/provider_adapters/cloudflare.py", "hq/domains/control_plane/provider_adapters/declarations.py", "hq/domains/control_plane/provider_adapters/portainer.py", "hq/domains/control_plane/provider_adapters/tailscale.py", "hq/domains/control_plane/provider_adapters/tls.py", "hq/domains/control_plane/provider_spec.py", "hq/domains/control_plane/providers.py", "hq_sdk", "hq/platform/api", "hq/platform/mcp"]
+exclude = "(^|/)(tests\\.py|test_[^/]*\\.py|migrations/)"
+follow_imports = "silent"
+plugins = ["mypy_django_plugin.main"]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+strict_equality = true
+check_untyped_defs = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+
+[tool.django-stubs]
+django_settings_module = "hq.config.settings_typecheck"
+
+[[tool.mypy.overrides]]
+module = ["hq.platform.application.security", "hq.platform.application.integration_specs", "hq.platform.application.plugins", "hq.platform.application.capabilities", "hq.platform.application.resources", "hq.platform.application.sensitivity", "hq.platform.application.domains", "hq.platform.application.records", "hq.domains.control_plane.connection_kinds", "hq.domains.control_plane.credential_reads", "hq.domains.control_plane.names", "hq.domains.control_plane.provider_adapters.cloudflare", "hq.domains.control_plane.provider_adapters.declarations", "hq.domains.control_plane.provider_adapters.portainer", "hq.domains.control_plane.provider_adapters.tailscale", "hq.domains.control_plane.provider_adapters.tls", "hq.domains.control_plane.provider_spec", "hq.domains.control_plane.providers", "hq_sdk.*", "hq.platform.api.*", "hq.platform.mcp.*"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+disallow_any_generics = true
+warn_return_any = true
+
+[tool.coverage.run]
+source = ["."]
+parallel = true
+concurrency = ["multiprocessing", "thread"]
+sigterm = true
+omit = ["*/migrations/*", "*/tests/*", "*/tests.py", "manage.py", "hq/config/*", ".venv/*"]
+
+[tool.coverage.report]
+show_missing = false
+skip_covered = false

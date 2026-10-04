@@ -1,6 +1,6 @@
 """Discoverable read-resource contracts shared by HQ and its plugins."""
 
-from application.resources import (
+from hq.platform.application.resources import (
     ResourceQuery,
     ResourceSpec,
     describe_resources,
