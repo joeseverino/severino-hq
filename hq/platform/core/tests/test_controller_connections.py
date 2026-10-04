@@ -159,13 +159,34 @@ class ControllerSSHTests(Host):
     def setUp(self):
         super().setUp()
         self.stub("id", "printf '0\\n'\n")
-        self.stub("ssh", 'printf "%s\\n" "$@"\n')
+        identities = self.runtime / "ssh"
+        identities.mkdir(mode=0o700)
+        (identities / REFERENCE).write_text("an identity\n")
+        (identities / "known_hosts").write_text("example.test ssh-ed25519 example\n")
+        # Prints its arguments, what it was given to read, and whether the
+        # caller still holds the identity lock (fd 8).
+        self.stub("ssh", '''printf "%s\\n" "$@"
+previous=""
+for argument; do
+    [ "$previous" != -i ] || printf "identity: %s\\n" "$(cat "$argument")"
+    case "$argument" in UserKnownHostsFile=*) printf "pinned: %s\\n" "$(cut -d" " -f1 "${argument#UserKnownHostsFile=}")" ;; esac
+    previous="$argument"
+done
+if ( : >&8 ) 2>/dev/null; then echo "lock: held"; else echo "lock: released"; fi
+''')
 
     def test_the_connection_is_read_from_the_document_as_data(self):
         result = self.run_script("controller-ssh.sh", REFERENCE, "preflight")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("reader@example.test\npreflight\n", result.stdout)
-        self.assertIn(f"-i\n{self.runtime}/ssh/{REFERENCE}\n", result.stdout)
+        # From a copy of its own, with the lock already let go: a remote that
+        # hangs holds up no render.
+        self.assertRegex(result.stdout, rf"-i\n{self.runtime}/run\.ssh\.[^/\n]+/identity\n")
+        self.assertIn("identity: an identity", result.stdout)
+        self.assertIn("pinned: example.test", result.stdout)
+        self.assertIn("lock: released", result.stdout)
+        self.assertNotIn(f"{self.runtime}/ssh/", result.stdout)
+        self.assertEqual(list(self.runtime.glob("run.ssh.*")), [])
         self.assertIn("-p\n22\n", result.stdout)
         self.assertNotIn(SENTINEL, result.stdout + result.stderr)
 
@@ -375,7 +396,8 @@ class RendererDeliveryTests(unittest.TestCase):
             "RestrictNamespaces=yes", "RestrictRealtime=yes", "RestrictSUIDSGID=yes", "LockPersonality=yes",
             "MemoryDenyWriteExecute=yes", "UMask=0077", "RequiresMountsFor=/run/severino-hq-secrets",
             # Narrower than the shell renderer's.
-            "RestrictAddressFamilies=AF_UNIX AF_INET", "IPAddressDeny=any", "IPAddressAllow=127.0.0.0/8",
+            "RestrictAddressFamilies=AF_UNIX AF_INET", "IPAddressDeny=any", "IPAddressAllow=127.0.0.1", "SocketBindDeny=any",
+            "PrivateIPC=yes", "MemorySwapMax=0", "MemoryMax=512M", "TasksMax=128", "LimitCORE=0",
             "CapabilityBoundingSet=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE", "SystemCallFilter=@system-service",
         ):
             with self.subTest(directive=directive):

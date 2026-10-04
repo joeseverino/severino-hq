@@ -215,6 +215,11 @@ func TestConnectionRefusals(t *testing.T) {
 		{"unknown projection", base(set("projection", "nonexistent")), "names an unknown projection"},
 		{"invalid prefix", base(set("env_prefix", "EXAMPLE;id")), "invalid env_prefix"},
 		{"lowercase prefix", base(set("env_prefix", "example")), "invalid env_prefix"},
+		{"prefix of the controller's own settings", base(set("env_prefix", "HQ")), "the controller's own settings use"},
+		{"prefix under the launcher's namespace", base(set("env_prefix", "HQ_CONTROLLER")), "the controller's own settings use"},
+		{"prefix of the application's settings", base(set("env_prefix", "SEVERINO")), "the controller's own settings use"},
+		{"prefix of the framework's settings", base(set("env_prefix", "DJANGO_X")), "the controller's own settings use"},
+		{"prefix of 1Password's own variables", base(set("env_prefix", "OP")), "the controller's own settings use"},
 		{"invalid ref", base(set("connection_ref", "../example")), "invalid connection_ref"},
 		{"ref with a space", base(set("connection_ref", "exam ple")), "invalid connection_ref"},
 		{"multi-line credential", base(set("credential", "token\nINJECTED=x")), "Invalid controller field value"},
@@ -388,7 +393,12 @@ func TestApplicationEnvironment(t *testing.T) {
 	refused(t, replace(), "empty render")
 	refused(t, replace(f("lower", "only")), "empty render")
 	refused(t, replace(append(fifteen, f("REFERENCE", "op://Example Vault/item/field"))...), "unresolved reference")
-	refused(t, replace(append(fifteen, f("MULTI", "first\nINJECTED=\nlast"))...), "rendered empty")
+	// A line of a multi-line value that looks like an empty assignment is
+	// inside its quotes: it is the value, and it is rendered as written.
+	multi, err := Project(replace(append(fifteen, f("MULTI", "first\nINJECTED=\nlast"))...))
+	if err != nil || !strings.Contains(string(multi.AppEnv), "MULTI='first\nINJECTED=\nlast'\n") {
+		t.Fatalf("a multi-line value was refused or rewritten: %v", err)
+	}
 	refused(t, replace(append(fifteen, f("BINARY", "a\x00b"))...), "NUL")
 	// Read back as text, a carriage return would not be the byte that was written.
 	refused(t, replace(append(fifteen, f("WINDOWS", "line one\r\nline two"))...), "carriage return")
@@ -556,6 +566,10 @@ func TestIdentityRefusals(t *testing.T) {
 		{"tab in host", with(set("host", "edge.example.com\tinjected")), "control character in HOST"},
 		{"host with option", with(set("host", "-oProxyCommand=x")), "invalid host"},
 		{"host with user", with(set("host", "root@edge.example.com")), "invalid host"},
+		{"host starting with a dash", with(set("host", "-edge.example.com")), "invalid host"},
+		{"user as an option", with(set("user", "-oProxyCommand")), "invalid user"},
+		{"user with a host", with(set("user", "root@other")), "invalid user"},
+		{"user with a space", with(set("user", "deploy user")), "invalid user"},
 		{"port not a number", with(set("port", "22x")), "invalid port"},
 		{"port zero", with(set("port", "0")), "invalid port"},
 		{"port too large", with(set("port", "65536")), "invalid port"},
@@ -630,7 +644,8 @@ func TestSigningKeyRefusals(t *testing.T) {
 	both := `{"schema_version":1,"projections":{"both":{
 	  "CONNECTION_REF":{"source":"connection_ref"},"HOST":{"source":"field","label":"host"},
 	  "HOST_KEY":{"source":"field","label":"host_key"},"IDENTITY":{"source":"field","label":"identity"},
-	  "PORT":{"source":"field","label":"port"},"SIGNING_KEY":{"source":"field","label":"signing_key"}}}}`
+	  "PORT":{"source":"field","label":"port"},"USER":{"source":"field","label":"user"},
+	  "SIGNING_KEY":{"source":"field","label":"signing_key"}}}}`
 	parsed, err := ParseRegistry([]byte(both))
 	if err != nil {
 		t.Fatal(err)
@@ -638,7 +653,7 @@ func TestSigningKeyRefusals(t *testing.T) {
 	identity := connecttest.Ed25519Key(t)
 	in := input(t, item{ID: id(1), Fields: []field{
 		f("connection_ref", "edge"), f("projection", "both"), f("env_prefix", "EDGE"), f("host", "edge.example.com"),
-		f("port", "22"), f("host_key", hostKey), f("identity", "Edge deploy key"), f("signing_key", "Example app key")}},
+		f("port", "22"), f("user", "deploy"), f("host_key", hostKey), f("identity", "Edge deploy key"), f("signing_key", "Example app key")}},
 		keyItem, connecttest.KeyItem(id(3), "Edge deploy key", identity.PKCS8, identity.Public))
 	in.Registry = parsed
 	refused(t, in, "declares both an SSH identity and a signing key")

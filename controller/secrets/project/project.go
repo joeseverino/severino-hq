@@ -103,7 +103,6 @@ func named(items []connectapi.FullItem, name string) []connectapi.FullItem {
 }
 
 var appVariable = regexp.MustCompile(`^[A-Z][A-Z0-9_]+$`)
-var emptyAssignment = regexp.MustCompile(`(?m)^[A-Za-z_][A-Za-z0-9_]*=$`)
 
 // appEnvironment renders the environment item's UPPER_SNAKE fields as
 // shell-quoted KEY='value' lines, the format hq/config/settings.py loads.
@@ -117,6 +116,7 @@ func appEnvironment(input Input) ([]byte, int, error) {
 	seen := map[string]bool{}
 	for _, field := range fields(matches[0]) {
 		label, value := text(field.Label), text(field.Value)
+		// A field with no value renders no variable, so none renders empty.
 		if !appVariable.MatchString(label) || value == "" {
 			continue
 		}
@@ -139,13 +139,25 @@ func appEnvironment(input Input) ([]byte, int, error) {
 	if bytes.Contains(out.Bytes(), []byte("op://")) {
 		return nil, 0, refuse("Refusing: an unresolved reference survived injection.")
 	}
-	if emptyAssignment.Match(out.Bytes()) {
-		return nil, 0, refuse("Refusing: a variable rendered empty.")
-	}
 	if count < input.MinAppVariables {
 		return nil, 0, refuse("Refusing suspiciously small app env (", strconv.Itoa(count), " vars) from 1Password.")
 	}
 	return out.Bytes(), count, nil
+}
+
+// reservedPrefixes are the namespaces of what the launcher and the image set
+// for the controller and for HQ's own process. A connection under one would
+// collide with those settings, and the controller would strip them all from
+// the bridge as that connection's.
+var reservedPrefixes = []string{"HQ", "SEVERINO", "DJANGO", "PYTHON", "OP", "SSL", "LC"}
+
+func reserved(prefix string) bool {
+	for _, name := range reservedPrefixes {
+		if prefix == name || strings.HasPrefix(prefix, name+"_") {
+			return true
+		}
+	}
+	return false
 }
 
 func hasControl(value string) bool {
@@ -193,6 +205,9 @@ func connection(input Input, item connectapi.FullItem) (*connections.Connection,
 	}
 	if !connections.ValidName(prefix) {
 		return nil, refuse("Connection has an invalid env_prefix.")
+	}
+	if reserved(prefix) {
+		return nil, refuse("Connection ", ref, " declares an env_prefix the controller's own settings use.")
 	}
 	projection, known := input.Registry.Projections[name]
 	if !known {

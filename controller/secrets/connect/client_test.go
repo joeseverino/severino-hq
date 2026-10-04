@@ -72,6 +72,44 @@ func TestTokenIsValidatedAndNeverFormats(t *testing.T) {
 	}
 }
 
+func TestAClientNeverFormatsItsToken(t *testing.T) {
+	fake := connecttest.New(t)
+	held := client(t, fake)
+	var log bytes.Buffer
+	slog.New(slog.NewTextHandler(&log, nil)).Info("client", "pointer", held, "value", *held, "wrapped", fmt.Errorf("with %v", held))
+	slog.New(slog.NewJSONHandler(&log, nil)).Info("client", "pointer", held, "value", *held, "nested", struct{ C *Client }{held})
+	rendered := log.String() + fmt.Sprintf("%v %+v %#v %s %q %x", held, held, held, held, held, held) +
+		fmt.Sprintf("%v %+v %#v", *held, *held, *held) + fmt.Sprint(held, *held, []*Client{held}, struct{ C Client }{*held})
+	if strings.Contains(rendered, connecttest.Token) {
+		t.Fatalf("the token was rendered: %s", rendered)
+	}
+	if !strings.Contains(rendered, "connect.Client(http://127.0.0.1:") {
+		t.Fatalf("a client does not say what it is: %s", rendered)
+	}
+}
+
+func TestAListingLongerThanAVaultIsRefused(t *testing.T) {
+	fake := connecttest.New(t)
+	fake.Intercept = func(w http.ResponseWriter, r *http.Request) bool {
+		if !strings.HasSuffix(r.URL.Path, "/items") {
+			return false
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte("["))
+		for n := range MaxItems + 1 {
+			if n > 0 {
+				w.Write([]byte(","))
+			}
+			fmt.Fprintf(w, `{"id":%q,"category":"LOGIN","vault":{"id":%q}}`, connecttest.ID(n), connecttest.VaultID)
+		}
+		w.Write([]byte("]"))
+		return true
+	}
+	if _, err := client(t, fake).Items(context.Background(), connecttest.VaultID); !errors.Is(err, ErrResponse) || !strings.Contains(err.Error(), "more items") {
+		t.Fatalf("an unbounded listing was accepted: %v", err)
+	}
+}
+
 func TestDialerRefusesEverythingButIPv4Loopback(t *testing.T) {
 	for _, address := range []string{
 		"192.0.2.1:80", "198.51.100.7:8080", "203.0.113.9:443", "[::1]:8080", "localhost:8080",
@@ -96,7 +134,7 @@ func TestDialerRefusesEverythingButIPv4Loopback(t *testing.T) {
 		}
 	}
 	// And through the client's own request path.
-	rigged := &Client{endpoint: "http://192.0.2.1:8080", token: token(t), http: newHTTPClient()}
+	rigged := &Client{endpoint: "http://192.0.2.1:8080", authorize: bearer(token(t)), http: newHTTPClient()}
 	if _, err := rigged.Vaults(context.Background()); !errors.Is(err, ErrNotLoopback) {
 		t.Fatalf("a non-loopback endpoint was read: %v", err)
 	}

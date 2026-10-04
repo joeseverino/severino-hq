@@ -19,7 +19,9 @@ import (
 // KnownHosts is the name of the pinned host keys beside the identities.
 const KnownHosts = "known_hosts"
 
-var sshHost = regexp.MustCompile(`^[A-Za-z0-9.:-]+$`)
+// As the controller holds them before either reaches ssh's command line.
+var sshHost = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.:-]*$`)
+var sshUser = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]{0,31}$`)
 var digits = regexp.MustCompile(`^[0-9]+$`)
 
 // keyField is an SSH Key item's private or public half, by the field's stable
@@ -114,6 +116,9 @@ func keys(input Input, document connections.Document) ([]File, int, int, error) 
 			}
 			if !sshHost.MatchString(values["HOST"]) {
 				return nil, 0, 0, refuse("Connection ", ref, " has an invalid host.")
+			}
+			if !sshUser.MatchString(values["USER"]) {
+				return nil, 0, 0, refuse("Connection ", ref, " has an invalid user.")
 			}
 			port, err := strconv.Atoi(values["PORT"])
 			if !digits.MatchString(values["PORT"]) || err != nil || port < 1 || port > 65535 {

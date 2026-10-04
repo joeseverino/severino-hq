@@ -15,8 +15,8 @@ if [ "$(id -u)" -ne 0 ]; then
     echo "controller-ssh.sh must run as root." >&2
     exit 1
 fi
-# Held across the exec, so ssh reads the connection and identities of one
-# generation.
+# Held while the connection is read and its identity copied, so both are of
+# one generation.
 controller_ssh_lock shared
 controller_require_connections
 
@@ -64,15 +64,27 @@ case "${operation}" in
         ;;
 esac
 
-exec ssh \
+# The identity and the pinned hosts of this generation, copied under the lock
+# and used from the copy, so the lock is let go before ssh runs: a remote that
+# hangs must not hold up every render for the length of its session. The copy
+# sits on the same root-only tmpfs and goes when this script does; the
+# launcher clears any `run.*` a killed one left.
+run_dir="$(mktemp -d "${controller_runtime_dir}/run.ssh.XXXXXX")"
+trap 'rm -rf "${run_dir}"' EXIT
+trap 'exit 1' HUP INT TERM
+cp -p "${ssh_dir}/${connection_ref}" "${run_dir}/identity"
+cp -p "${ssh_dir}/known_hosts" "${run_dir}/known_hosts"
+exec 8>&-
+
+ssh \
     -F /dev/null \
     -o BatchMode=yes \
     -o IdentitiesOnly=yes \
     -o StrictHostKeyChecking=yes \
-    -o UserKnownHostsFile="${ssh_dir}/known_hosts" \
+    -o UserKnownHostsFile="${run_dir}/known_hosts" \
     -o GlobalKnownHostsFile=/dev/null \
     -o ConnectTimeout=10 \
-    -i "${ssh_dir}/${connection_ref}" \
+    -i "${run_dir}/identity" \
     -p "${port}" \
     -- \
     "${user}@${host}" \

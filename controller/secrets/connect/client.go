@@ -25,11 +25,13 @@ import (
 // large is not one.
 const (
 	MaxResponseBytes = 4 << 20
-	dialTimeout      = 3 * time.Second
-	headerTimeout    = 10 * time.Second
-	requestTimeout   = 15 * time.Second
-	firstBackoff     = 250 * time.Millisecond
-	maxBackoff       = 5 * time.Second
+	// MaxItems bounds one vault's listing: each item is one more request.
+	MaxItems       = 2000
+	dialTimeout    = 3 * time.Second
+	headerTimeout  = 10 * time.Second
+	requestTimeout = 15 * time.Second
+	firstBackoff   = 250 * time.Millisecond
+	maxBackoff     = 5 * time.Second
 )
 
 // Token is a Connect bearer token. It formats, logs and marshals as a
@@ -143,8 +145,10 @@ func newHTTPClient() *http.Client {
 // Client reads one Connect server.
 type Client struct {
 	endpoint string
-	token    Token
-	http     *http.Client
+	// authorize sets the bearer header. The token is held in this closure
+	// and in no field, so nothing that prints a Client can reach it.
+	authorize func(*http.Request)
+	http      *http.Client
 	// Sleep waits between readiness attempts; tests replace it.
 	Sleep func(context.Context, time.Duration) error
 }
@@ -169,8 +173,18 @@ func New(endpoint string, token Token) (*Client, error) {
 	if token.value == "" {
 		return nil, errors.New("empty Connect token")
 	}
-	return &Client{endpoint: endpoint, token: token, http: newHTTPClient(), Sleep: sleep}, nil
+	return &Client{endpoint: endpoint, authorize: bearer(token), http: newHTTPClient(), Sleep: sleep}, nil
 }
+
+func bearer(token Token) func(*http.Request) {
+	return func(request *http.Request) { request.Header.Set("Authorization", "Bearer "+token.value) }
+}
+
+// A Client formats and logs as its endpoint and nothing else.
+func (c Client) String() string             { return "connect.Client(" + c.endpoint + ")" }
+func (c Client) GoString() string           { return c.String() }
+func (c Client) Format(f fmt.State, _ rune) { io.WriteString(f, c.String()) }
+func (c Client) LogValue() slog.Value       { return slog.StringValue(c.String()) }
 
 func sleep(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)
@@ -192,7 +206,7 @@ func (c *Client) get(ctx context.Context, op, path string, authenticated bool, o
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("User-Agent", "severino-hq-secrets")
 	if authenticated {
-		request.Header.Set("Authorization", "Bearer "+c.token.value)
+		c.authorize(request)
 	}
 	response, err := c.http.Do(request)
 	if err != nil {
@@ -285,6 +299,9 @@ func (c *Client) Items(ctx context.Context, vault string) ([]connectapi.Item, er
 	var items []connectapi.Item
 	if err := c.get(ctx, "list items", "/v1/vaults/"+vault+"/items", true, &items); err != nil {
 		return nil, err
+	}
+	if len(items) > MaxItems {
+		return nil, &Error{Op: "list items", Class: ErrResponse, Detail: "more items than a host's vault holds"}
 	}
 	seen := map[string]bool{}
 	for _, item := range items {

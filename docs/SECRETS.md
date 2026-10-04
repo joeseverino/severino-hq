@@ -99,7 +99,10 @@ variables is a failure, not an empty success.
 In the application environment a carriage return or a variable set
 twice is refused, because readers would disagree about the value. A
 connections document larger than the controller reads is refused as content,
-so the last good one stays. A bootstrap reference is compared to the vault's
+so the last good one stays. An SSH host or user that
+could read as an option, and an `env_prefix` in a namespace the controller's
+own settings use (`HQ`, `SEVERINO`, `DJANGO`, `PYTHON`, `OP`, `SSL`, `LC`), are
+refused. A bootstrap reference is compared to the vault's
 names without regard to case or surrounding spaces. `known_hosts` names a host
 as ssh looks it up: bare on port 22, `[host]:port` otherwise.
 
@@ -386,13 +389,21 @@ each before the live unit is trusted with it.
 1. **The hardening, in a transient unit.** Copy the binary out of the image and
    run it with the unit's properties and the host's own drop-in values, against
    a scratch tmpfs mounted `noswap`, so nothing live is written:
-   `systemd-run --wait --pipe -p LoadCredentialEncrypted=... -p ProtectSystem=strict -p ReadWritePaths=... -p CapabilityBoundingSet='CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE' -p RestrictAddressFamilies='AF_UNIX AF_INET' -p IPAddressDeny=any -p IPAddressAllow=127.0.0.0/8 -p SystemCallFilter=@system-service -p SystemCallErrorNumber=EPERM -p SystemCallArchitectures=native -p ProtectProc=invisible -p MemoryDenyWriteExecute=yes ...`
+   `systemd-run --wait --pipe -p LoadCredentialEncrypted=... -p ProtectSystem=strict -p ReadWritePaths=... -p CapabilityBoundingSet='CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE' -p RestrictAddressFamilies='AF_UNIX AF_INET' -p IPAddressDeny=any -p IPAddressAllow=127.0.0.1 -p SocketBindDeny=any -p SystemCallFilter=@system-service -p SystemCallErrorNumber=EPERM -p SystemCallArchitectures=native -p ProtectProc=invisible -p PrivateIPC=yes -p MemorySwapMax=0 -p MemoryMax=512M -p TasksMax=128 -p LimitCORE=0 -p MemoryDenyWriteExecute=yes ...`
    with `SEVERINO_CONTROLLER_SECRET_DIR` and `SEVERINO_HQ_SECRET_DIR` pointed at
-   the scratch directories. Each directive added in this release is one to
-   remove and retry if the probe fails: `CapabilityBoundingSet` (the in-place
-   rewrite of a 0400 file the web account owns), `RestrictAddressFamilies`
-   without `AF_INET6`, `IPAddressDeny`/`IPAddressAllow`, `SystemCallFilter`,
-   `ProtectProc`.
+   the scratch directories. Each directive the shell renderer's unit did not
+   have is one to remove and retry if the probe fails:
+   - `CapabilityBoundingSet` (the in-place rewrite of a 0400 file the web
+     account owns);
+   - `RestrictAddressFamilies` without `AF_INET6`;
+   - `IPAddressDeny=any` with `IPAddressAllow=127.0.0.1`;
+   - `SocketBindDeny=any`;
+   - `SystemCallFilter=@system-service` with `SystemCallErrorNumber` and
+     `SystemCallArchitectures`;
+   - `ProtectProc=invisible` and `PrivateIPC=yes`;
+   - `MemorySwapMax=0`, `MemoryMax=512M`, `TasksMax=128`, `LimitCORE=0`. Run
+     the probe with a changed application variable too, so the docker CLI's
+     restart runs under the memory and task bounds.
 2. **Connect after a restart.** Restart Connect, start the unit, and read the
    journal: `secrets.connect.ready attempts=N` shows the retries. If Connect
    answers a locked first request with 401 or 403 rather than no answer or 5xx,
