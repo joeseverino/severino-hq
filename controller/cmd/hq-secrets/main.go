@@ -33,7 +33,7 @@ var exitCodes = map[string]int{
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-	code := run(ctx, os.Args[1:], os.Getenv, os.Geteuid(), os.Stderr)
+	code := run(ctx, os.Args[1:], os.Getenv, os.Geteuid(), install.UnprivilegedPortStart, os.Stderr)
 	stop()
 	os.Exit(code)
 }
@@ -103,7 +103,7 @@ func configure(args []string, getenv func(string) string, stderr io.Writer) (sec
 	}, container, nil
 }
 
-func run(ctx context.Context, args []string, getenv func(string) string, euid int, stderr io.Writer) int {
+func run(ctx context.Context, args []string, getenv func(string) string, euid int, portFloor func() (int, error), stderr io.Writer) int {
 	log := slog.New(slog.NewTextHandler(stderr, nil))
 	fail := func(err error) int {
 		class := secrets.Class(err)
@@ -119,7 +119,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 		return fail(configError("hq-secrets must run as root."))
 	}
 	runner := &secrets.Runner{
-		Config: config, Mounts: install.SystemMounts, Web: secrets.DockerWeb{Container: container},
+		Config: config, Mounts: install.SystemMounts, PortFloor: portFloor, Web: secrets.DockerWeb{Container: container},
 		Log: log, Now: time.Now,
 		Sleep: func(ctx context.Context, d time.Duration) error {
 			timer := time.NewTimer(d)

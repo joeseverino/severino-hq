@@ -16,7 +16,7 @@ func environment(values map[string]string) func(string) string {
 func complete() map[string]string {
 	return map[string]string{
 		"SEVERINO_SECRETS_VAULT": "Example Vault", "SEVERINO_ENV_ITEM": "example env",
-		"SEVERINO_CONNECT_CREDENTIAL": "op_connect_example", "OP_CONNECT_HOST": "http://127.0.0.1:8080",
+		"SEVERINO_CONNECT_CREDENTIAL": "op_connect_example", "OP_CONNECT_HOST": "http://127.0.0.1:880",
 		"CREDENTIALS_DIRECTORY": "/run/credentials/example",
 	}
 }
@@ -28,29 +28,31 @@ func TestConfigurationRefusals(t *testing.T) {
 		args   []string
 		want   string
 	}{
-		"a retired backend":          {func(e map[string]string) { e["SEVERINO_SECRETS_BACKEND"] = "service-account" }, 0, nil, "no longer exists"},
-		"an unknown backend":         {func(e map[string]string) { e["SEVERINO_SECRETS_BACKEND"] = "unknown" }, 0, nil, "no longer exists"},
-		"a Connect token in the env": {func(e map[string]string) { e["OP_CONNECT_TOKEN"] = sentinel }, 0, nil, "Remove OP_CONNECT_TOKEN"},
-		"a service token in the env": {func(e map[string]string) { e["OP_SERVICE_ACCOUNT_TOKEN"] = sentinel }, 0, nil, "Remove OP_SERVICE_ACCOUNT_TOKEN"},
-		"the legacy override":        {func(e map[string]string) { e["SEVERINO_CONTROLLER_ENV"] = "/run/severino-hq/severino_controller_env" }, 0, nil, "Remove SEVERINO_CONTROLLER_ENV"},
-		"a container name as a flag": {func(e map[string]string) { e["HQ_CONTAINER"] = "--privileged" }, 0, nil, "not a container name"},
-		"not root":                   {func(map[string]string) {}, 10001, nil, "must run as root"},
-		"no vault":                   {func(e map[string]string) { delete(e, "SEVERINO_SECRETS_VAULT") }, 0, nil, "SEVERINO_SECRETS_VAULT is required"},
-		"no environment item":        {func(e map[string]string) { delete(e, "SEVERINO_ENV_ITEM") }, 0, nil, "SEVERINO_ENV_ITEM is required"},
-		"no credential name":         {func(e map[string]string) { delete(e, "SEVERINO_CONNECT_CREDENTIAL") }, 0, nil, "SEVERINO_CONNECT_CREDENTIAL is required"},
-		"no endpoint":                {func(e map[string]string) { delete(e, "OP_CONNECT_HOST") }, 0, nil, "IPv4 loopback"},
-		"a remote endpoint":          {func(e map[string]string) { e["OP_CONNECT_HOST"] = "https://example.com" }, 0, nil, "IPv4 loopback"},
-		"a tailnet endpoint":         {func(e map[string]string) { e["OP_CONNECT_HOST"] = "http://192.0.2.10:8080" }, 0, nil, "IPv4 loopback"},
-		"an argument":                {func(map[string]string) {}, 0, []string{"render"}, "usage"},
-		"an unknown flag":            {func(map[string]string) {}, 0, []string{"-fallback"}, "usage"},
-		"a shared runtime directory": {func(e map[string]string) { e["SEVERINO_CONTROLLER_SECRET_DIR"] = "/run/severino-hq" }, 0, nil, "Unsafe controller secret directory"},
+		"a retired backend":           {func(e map[string]string) { e["SEVERINO_SECRETS_BACKEND"] = "service-account" }, 0, nil, "no longer exists"},
+		"an unknown backend":          {func(e map[string]string) { e["SEVERINO_SECRETS_BACKEND"] = "unknown" }, 0, nil, "no longer exists"},
+		"a Connect token in the env":  {func(e map[string]string) { e["OP_CONNECT_TOKEN"] = sentinel }, 0, nil, "Remove OP_CONNECT_TOKEN"},
+		"a service token in the env":  {func(e map[string]string) { e["OP_SERVICE_ACCOUNT_TOKEN"] = sentinel }, 0, nil, "Remove OP_SERVICE_ACCOUNT_TOKEN"},
+		"the legacy override":         {func(e map[string]string) { e["SEVERINO_CONTROLLER_ENV"] = "/run/severino-hq/severino_controller_env" }, 0, nil, "Remove SEVERINO_CONTROLLER_ENV"},
+		"a container name as a flag":  {func(e map[string]string) { e["HQ_CONTAINER"] = "--privileged" }, 0, nil, "not a container name"},
+		"not root":                    {func(map[string]string) {}, 10001, nil, "must run as root"},
+		"no vault":                    {func(e map[string]string) { delete(e, "SEVERINO_SECRETS_VAULT") }, 0, nil, "SEVERINO_SECRETS_VAULT is required"},
+		"no environment item":         {func(e map[string]string) { delete(e, "SEVERINO_ENV_ITEM") }, 0, nil, "SEVERINO_ENV_ITEM is required"},
+		"no credential name":          {func(e map[string]string) { delete(e, "SEVERINO_CONNECT_CREDENTIAL") }, 0, nil, "SEVERINO_CONNECT_CREDENTIAL is required"},
+		"no endpoint":                 {func(e map[string]string) { delete(e, "OP_CONNECT_HOST") }, 0, nil, "IPv4 loopback"},
+		"a remote endpoint":           {func(e map[string]string) { e["OP_CONNECT_HOST"] = "https://example.com" }, 0, nil, "IPv4 loopback"},
+		"a tailnet endpoint":          {func(e map[string]string) { e["OP_CONNECT_HOST"] = "http://192.0.2.10:8080" }, 0, nil, "IPv4 loopback"},
+		"a port any account can bind": {func(e map[string]string) { e["OP_CONNECT_HOST"] = "http://127.0.0.1:8080" }, 0, nil, "only root can listen there"},
+		"the first unprivileged port": {func(e map[string]string) { e["OP_CONNECT_HOST"] = "http://127.0.0.1:1024" }, 0, nil, "below 1024"},
+		"an argument":                 {func(map[string]string) {}, 0, []string{"render"}, "usage"},
+		"an unknown flag":             {func(map[string]string) {}, 0, []string{"-fallback"}, "usage"},
+		"a shared runtime directory":  {func(e map[string]string) { e["SEVERINO_CONTROLLER_SECRET_DIR"] = "/run/severino-hq" }, 0, nil, "Unsafe controller secret directory"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			env := complete()
 			c.change(env)
 			var stderr bytes.Buffer
-			code := run(context.Background(), c.args, environment(env), c.euid, &stderr)
+			code := run(context.Background(), c.args, environment(env), c.euid, func() (int, error) { return 1024, nil }, &stderr)
 			want := exitCodes["config"]
 			if name == "a shared runtime directory" {
 				want = exitCodes["host"]
@@ -78,8 +80,8 @@ func TestTheBackendSwitchAcceptsOnlyConnect(t *testing.T) {
 	}
 }
 
-// A host configured for the shell renderer deploys this one without an edit:
-// what its drop-ins still set is either read or ignored, never refused.
+// A host configured for the shell renderer, once Connect is on a privileged
+// port: what its drop-ins still set is either read or ignored, never refused.
 func TestAHostConfiguredForTheShellRendererIsAccepted(t *testing.T) {
 	env := complete()
 	env["SEVERINO_SECRETS_BACKEND"] = "connect"
@@ -89,7 +91,7 @@ func TestAHostConfiguredForTheShellRendererIsAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the previous release's drop-ins were refused: %v", err)
 	}
-	if config.Vault != "Example Vault" || config.ConnectCredential != "op_connect_example" || config.Endpoint != "http://127.0.0.1:8080" {
+	if config.Vault != "Example Vault" || config.ConnectCredential != "op_connect_example" || config.Endpoint != "http://127.0.0.1:880" {
 		t.Fatalf("configuration: %+v", config)
 	}
 }

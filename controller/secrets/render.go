@@ -68,7 +68,7 @@ func Class(err error) string {
 	switch {
 	case err == nil:
 		return ""
-	case errors.Is(err, ErrConfig), errors.Is(err, connect.ErrEndpoint), errors.Is(err, project.ErrRegistry):
+	case errors.Is(err, ErrConfig), errors.Is(err, connect.ErrEndpoint), errors.Is(err, connect.ErrPort), errors.Is(err, project.ErrRegistry):
 		return "config"
 	case errors.Is(err, install.ErrBusy):
 		return "busy"
@@ -109,6 +109,13 @@ type Runner struct {
 	Now    func() time.Time
 	// Sleep waits between attempts; tests replace it.
 	Sleep func(context.Context, time.Duration) error
+	// PortFloor reads the lowest port any account may listen on
+	// (net.ipv4.ip_unprivileged_port_start). The endpoint's port must be below
+	// it, or "privileged" proves nothing about who answers.
+	PortFloor func() (int, error)
+	// open makes the Connect client for a test's in-process server; only
+	// tests set it. Unset, the client is connect.New and nothing else.
+	open func(endpoint string, token connect.Token) (*connect.Client, error)
 	// fault fails the run at a named step; only tests set it.
 	fault func(step string) error
 }
@@ -118,6 +125,32 @@ func (r *Runner) at(step string) error {
 		return nil
 	}
 	return r.fault(step)
+}
+
+type hostRefusal struct{ message string }
+
+func (e *hostRefusal) Error() string { return e.message }
+func (e *hostRefusal) Unwrap() error { return install.ErrHost }
+
+// privileged refuses a host where the endpoint's port is one any account may
+// listen on: the port rule rests on the kernel reserving it for root.
+func (r *Runner) privileged() error {
+	port, err := connect.Port(r.Config.Endpoint)
+	if err != nil {
+		return err
+	}
+	if r.PortFloor == nil {
+		return &hostRefusal{"The host's unprivileged port floor cannot be read, so the Connect port cannot be shown to be root's."}
+	}
+	floor, err := r.PortFloor()
+	if err != nil {
+		return &hostRefusal{"The host's unprivileged port floor cannot be read, so the Connect port cannot be shown to be root's."}
+	}
+	if port >= floor {
+		return &hostRefusal{"Any account can listen on the Connect port on this host: net.ipv4.ip_unprivileged_port_start is " +
+			strconv.Itoa(floor) + ", and the port must be below it."}
+	}
+	return nil
 }
 
 var credentialName = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
@@ -160,8 +193,8 @@ func (r *Runner) validate() error {
 		return errConfig("SEVERINO_ENV_ITEM is required")
 	case config.ConnectCredential == "":
 		return errConfig("SEVERINO_CONNECT_CREDENTIAL is required")
-	case connect.CheckEndpoint(config.Endpoint) != nil:
-		return connect.ErrEndpoint
+	case r.open == nil && connect.CheckEndpoint(config.Endpoint) != nil:
+		return connect.CheckEndpoint(config.Endpoint)
 	case config.MinAppVariables < 1 || config.ConnectTimeout <= 0 || config.FullEvery <= 0:
 		return errConfig("the renderer's bounds must be positive")
 	}
@@ -240,6 +273,11 @@ func (r *Runner) Run(ctx context.Context) (Result, error) {
 	if err := r.validate(); err != nil {
 		return Result{}, err
 	}
+	if r.open == nil {
+		if err := r.privileged(); err != nil {
+			return Result{}, err
+		}
+	}
 	// The host first: nothing is read from Connect onto a directory that could
 	// reach a disk.
 	tree, err := install.Open(r.Config.Layout, r.Mounts)
@@ -297,7 +335,11 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *Status)
 	if err != nil {
 		return Result{}, errConfig(err.Error())
 	}
-	client, err := connect.New(config.Endpoint, token)
+	open := connect.New
+	if r.open != nil {
+		open = r.open
+	}
+	client, err := open(config.Endpoint, token)
 	if err != nil {
 		return Result{}, err
 	}

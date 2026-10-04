@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/secrets/connect"
+	"github.com/joeseverino/severino-hq/controller/secrets/connect/testclient"
 	"github.com/joeseverino/severino-hq/controller/secrets/connecttest"
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 	"github.com/joeseverino/severino-hq/controller/secrets/project"
@@ -121,10 +123,13 @@ func newHost(t *testing.T, items ...item) *host {
 			ConnectTimeout: 5 * time.Second, FullEvery: 24 * time.Hour, HealthAttempts: 12, HealthInterval: 5 * time.Second,
 		},
 		Mounts: func(string) error { return h.mountErr },
-		Web:    h.web,
-		Log:    slog.New(slog.NewTextHandler(h.log, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		Now:    func() time.Time { return h.now },
-		Sleep:  func(context.Context, time.Duration) error { return nil },
+		open: func(endpoint string, token connect.Token) (*connect.Client, error) {
+			return testclient.New(t, endpoint, token)
+		},
+		Web:   h.web,
+		Log:   slog.New(slog.NewTextHandler(h.log, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Now:   func() time.Time { return h.now },
+		Sleep: func(context.Context, time.Duration) error { return nil },
 	}
 	return h
 }
@@ -585,13 +590,6 @@ func TestAFailedRefreshPreservesEveryInstalledFile(t *testing.T) {
 			}
 			// The failure is on record, and the last success is still the last success.
 			status := h.status()
-			if c.name == "remote endpoint" {
-				// Refused before the host is opened: nothing is written at all.
-				if !status.LastAttempt.At.Equal(succeeded.At) {
-					t.Fatalf("a refused configuration wrote the status document: %+v", status.LastAttempt)
-				}
-				return
-			}
 			if status.LastAttempt.Outcome != "failed" || status.LastAttempt.Failure != c.class || !status.LastAttempt.At.Equal(h.now) {
 				t.Fatalf("status attempt: %+v", status.LastAttempt)
 			}
@@ -1159,6 +1157,87 @@ func TestTheWritersTokenReachesTheDocumentByProjection(t *testing.T) {
 	// The reader token itself is never part of what is rendered.
 	if strings.Contains(read(t, h.document()), connecttest.Token) {
 		t.Fatal("the reader token is in the connections document")
+	}
+}
+
+// Outside a test the client is connect.New: a port below 1024, on a host that
+// reserves those ports for root.
+func TestTheConnectPortMustBeOneOnlyRootCanListenOn(t *testing.T) {
+	production := func(endpoint string, floor func() (int, error)) (*host, error) {
+		h := newHost(t, apiToken(1, "example", "EXAMPLE"))
+		h.runner.open = nil
+		h.runner.Config.Endpoint = endpoint
+		h.runner.Config.ConnectTimeout = 100 * time.Millisecond
+		h.runner.PortFloor = floor
+		// A run that reached for the token fails as configuration instead.
+		os.Remove(filepath.Join(h.creds, "op_connect_example"))
+		_, err := h.run()
+		return h, err
+	}
+	kernel := func(floor int) func() (int, error) { return func() (int, error) { return floor, nil } }
+	// The test's own Connect is on a high port, as an impostor's would be.
+	fake := newHost(t)
+	for name, endpoint := range map[string]string{"an impostor's port": fake.fake.Server.URL, "8080": "http://127.0.0.1:8080", "1024": "http://127.0.0.1:1024"} {
+		h, err := production(endpoint, kernel(1024))
+		if !errors.Is(err, connect.ErrPort) || Class(err) != "config" || !strings.Contains(err.Error(), "below 1024") {
+			t.Fatalf("%s was accepted: %v", name, err)
+		}
+		if len(fake.fake.Requests) != 0 || len(h.fake.Requests) != 0 {
+			t.Fatalf("%s was dialed", name)
+		}
+	}
+	// A host that lets any account bind low ports makes the rule mean nothing.
+	for name, floor := range map[string]func() (int, error){
+		"a floor of zero":        kernel(0),
+		"a floor at the port":    kernel(1),
+		"an unreadable floor":    func() (int, error) { return 0, errors.New("unreadable") },
+		"no way to read a floor": nil,
+	} {
+		_, err := production("http://127.0.0.1:1", floor)
+		if Class(err) != "host" {
+			t.Fatalf("%s: wanted a host refusal, got %q: %v", name, Class(err), err)
+		}
+	}
+	// A privileged port on a host that reserves it: the run goes on, to the
+	// credential it was not given.
+	for _, endpoint := range []string{"http://127.0.0.1:1", "http://127.0.0.1:1023"} {
+		if _, err := production(endpoint, kernel(1024)); Class(err) != "config" || errors.Is(err, connect.ErrPort) {
+			t.Fatalf("%s on a default host: %q %v", endpoint, Class(err), err)
+		}
+	}
+}
+
+// The rule has no switch. Only test files may reach the client that lacks it.
+func TestNothingOutsideATestCanMakeAClientWithoutThePortRule(t *testing.T) {
+	checked := 0
+	for _, dir := range []string{".", "install", "project", "connect", "../cmd/hq-secrets", "../connections"} {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			name := entry.Name()
+			if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+				continue
+			}
+			source := read(t, filepath.Join(dir, name))
+			checked++
+			if strings.Contains(source, "connect/testclient") || strings.Contains(source, "AnyPort") {
+				t.Errorf("%s/%s reaches the client without the port rule", dir, name)
+			}
+			if dir != "connect" && strings.Contains(source, "connect/internal") {
+				t.Errorf("%s/%s imports the client's internals", dir, name)
+			}
+			if regexp.MustCompile(`\.open\s*=[^=]`).MatchString(source) || strings.Contains(source, "open:") {
+				t.Errorf("%s/%s sets the test-only opener", dir, name)
+			}
+		}
+	}
+	if checked < 10 {
+		t.Fatalf("only %d files were checked", checked)
+	}
+	if !strings.Contains(read(t, "connect/connect.go"), "client.New(endpoint, token, client.Privileged)") {
+		t.Fatal("connect.New does not apply the privileged-port rule")
 	}
 }
 

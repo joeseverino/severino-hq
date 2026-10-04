@@ -1,4 +1,4 @@
-package connect
+package client
 
 import (
 	"bytes"
@@ -27,7 +27,7 @@ func token(t *testing.T) Token {
 
 func client(t *testing.T, fake *connecttest.Fake) *Client {
 	t.Helper()
-	found, err := New(fake.Server.URL, token(t))
+	found, err := New(fake.Server.URL, token(t), AnyPort)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,12 +42,59 @@ func TestEndpointMustBeExplicitIPv4Loopback(t *testing.T) {
 		"http://127.0.0.1:999999", "http://192.0.2.10:8080", "http://127.0.0.2:8080", "http://user@127.0.0.1:8080",
 		"https://example.com", "http://127.0.0.1:8080@example.com", " http://127.0.0.1:8080", "http://127.0.0.1:8080\n",
 	} {
-		if _, err := New(endpoint, token(t)); !errors.Is(err, ErrEndpoint) {
+		if _, err := New(endpoint, token(t), AnyPort); !errors.Is(err, ErrEndpoint) {
 			t.Errorf("endpoint %q was accepted: %v", endpoint, err)
 		}
 	}
-	if _, err := New("http://127.0.0.1:8080", Token{}); err == nil {
+	if _, err := New("http://127.0.0.1:8080", Token{}, AnyPort); err == nil {
 		t.Error("an empty token was accepted")
+	}
+}
+
+// The loopback rule proves the address, not who listens there. Only root can
+// listen below 1024, so only there can the answer be root's Connect.
+func TestOnlyAPrivilegedPortIsDialedOutsideATest(t *testing.T) {
+	for _, port := range []string{"1", "80", "443", "1023"} {
+		if err := CheckEndpoint("http://127.0.0.1:"+port, Privileged); err != nil {
+			t.Errorf("port %s was refused: %v", port, err)
+		}
+		if _, err := New("http://127.0.0.1:"+port, token(t), Privileged); err != nil {
+			t.Errorf("a client for port %s was refused: %v", port, err)
+		}
+	}
+	for _, port := range []string{"1024", "8080", "49152", "65535"} {
+		err := CheckEndpoint("http://127.0.0.1:"+port, Privileged)
+		if !errors.Is(err, ErrPort) || !strings.Contains(err.Error(), "only root can listen there") {
+			t.Errorf("port %s was accepted or refused without the reason: %v", port, err)
+		}
+		if _, err := New("http://127.0.0.1:"+port, token(t), Privileged); !errors.Is(err, ErrPort) {
+			t.Errorf("a client for port %s was made: %v", port, err)
+		}
+	}
+	// The dialer holds the same rule, for a client whose endpoint was never
+	// checked: a listener on a high port sees no connection and no token.
+	fake := connecttest.New(t)
+	inner := newHTTPClient(Privileged)
+	if _, err := inner.Get(fake.Server.URL + "/v1/vaults"); !errors.Is(err, ErrPort) {
+		t.Fatalf("a high port was dialed: %v", err)
+	}
+	rigged := &Client{endpoint: fake.Server.URL, authorize: bearer(token(t)), http: newHTTPClient(Privileged), Sleep: sleep}
+	if _, err := rigged.Vaults(context.Background()); !errors.Is(err, ErrPort) {
+		t.Fatalf("a client past its endpoint check read a high port: %v", err)
+	}
+	if _, _, err := rigged.WaitReady(context.Background()); !errors.Is(err, ErrPort) {
+		t.Fatalf("readiness retried a port it may not dial: %v", err)
+	}
+	if len(fake.Requests) != 0 {
+		t.Fatalf("the listener on a high port was reached: %v", fake.Requests)
+	}
+	for _, address := range []string{"127.0.0.1:1024", "127.0.0.1:8080", "127.0.0.1:0", "127.0.0.1:x"} {
+		if err := requireLoopback(address, Privileged); err == nil {
+			t.Errorf("the dialer accepted %s", address)
+		}
+	}
+	if err := requireLoopback("127.0.0.1:1023", Privileged); err != nil {
+		t.Errorf("the dialer refused a privileged port: %v", err)
 	}
 }
 
@@ -115,18 +162,18 @@ func TestDialerRefusesEverythingButIPv4Loopback(t *testing.T) {
 		"192.0.2.1:80", "198.51.100.7:8080", "203.0.113.9:443", "[::1]:8080", "localhost:8080",
 		"example.com:80", "0.0.0.0:80", "10.0.0.1:80", "[::ffff:127.0.0.1]:80", "127.0.0.1", "",
 	} {
-		if err := requireLoopback(address); !errors.Is(err, ErrNotLoopback) {
+		if err := requireLoopback(address, AnyPort); !errors.Is(err, ErrNotLoopback) {
 			t.Errorf("address %q was accepted", address)
 		}
 	}
 	for _, address := range []string{"127.0.0.1:8080", "127.0.0.53:1"} {
-		if err := requireLoopback(address); err != nil {
+		if err := requireLoopback(address, AnyPort); err != nil {
 			t.Errorf("loopback %q was refused", address)
 		}
 	}
 	// The real client, pointed past its endpoint check at an address that is
 	// not loopback: the dialer itself refuses, before any packet.
-	inner := newHTTPClient()
+	inner := newHTTPClient(AnyPort)
 	for _, url := range []string{"http://192.0.2.1:8080/v1/vaults", "http://[::1]:8080/v1/vaults", "http://localhost:8080/v1/vaults"} {
 		_, err := inner.Get(url)
 		if !errors.Is(err, ErrNotLoopback) {
@@ -134,7 +181,7 @@ func TestDialerRefusesEverythingButIPv4Loopback(t *testing.T) {
 		}
 	}
 	// And through the client's own request path.
-	rigged := &Client{endpoint: "http://192.0.2.1:8080", authorize: bearer(token(t)), http: newHTTPClient()}
+	rigged := &Client{endpoint: "http://192.0.2.1:8080", authorize: bearer(token(t)), http: newHTTPClient(AnyPort)}
 	if _, err := rigged.Vaults(context.Background()); !errors.Is(err, ErrNotLoopback) {
 		t.Fatalf("a non-loopback endpoint was read: %v", err)
 	}
@@ -155,7 +202,7 @@ func TestProxyEnvironmentIsIgnored(t *testing.T) {
 	if proxied {
 		t.Fatal("the request went through the environment's proxy")
 	}
-	if transport := newHTTPClient().Transport.(*http.Transport); transport.Proxy != nil {
+	if transport := newHTTPClient(AnyPort).Transport.(*http.Transport); transport.Proxy != nil {
 		t.Fatal("the transport has a proxy function")
 	}
 }
@@ -337,7 +384,7 @@ func TestDenialIsFinalAndUnavailabilityIsRetriedUnderTheDeadline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, _ := New(fake.Server.URL, denied)
+	c, _ := New(fake.Server.URL, denied, AnyPort)
 	c.Sleep = func(context.Context, time.Duration) error { return nil }
 	if _, attempts, err := c.WaitReady(context.Background()); !errors.Is(err, ErrDenied) || attempts != 1 {
 		t.Fatalf("a refused token was retried or accepted: %d %v", attempts, err)
@@ -386,7 +433,7 @@ func TestNothingListeningIsUnavailable(t *testing.T) {
 	}
 	address := listener.Addr().String()
 	listener.Close()
-	c, err := New("http://"+address, token(t))
+	c, err := New("http://"+address, token(t), AnyPort)
 	if err != nil {
 		t.Fatal(err)
 	}

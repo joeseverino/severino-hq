@@ -39,6 +39,16 @@ exception and stay out of that vault; see "Minting observer credentials".
 
 - Connect binds only to IPv4 loopback. Do not publish it through a reverse proxy,
   Tailscale Serve/Funnel, LAN listener, or a tailnet address.
+- Connect is published on a loopback port below 1024. The loopback rule proves
+  the address, not who is listening: a port any account may bind could be taken
+  while Connect is down, by any local process or a container on the host's
+  network, and the reader token sent to whoever took it. Only root can listen
+  below 1024, so only root's Connect can answer there. The renderer refuses an
+  endpoint on any other port, its dialer refuses to connect to one, and it
+  refuses to run on a host whose `net.ipv4.ip_unprivileged_port_start` is not
+  above the port. There is no setting that relaxes this.
+- The renderer's unit `Requires=` the Connect unit and is ordered after it, so
+  a Connect that failed to start stops the render.
 - Tailscale grants restrict administrative access to the host. They do not
   authorize processes on the host to use Connect. Local nftables rules enforce
   that boundary; test local unprivileged callers and container bridge paths,
@@ -316,7 +326,8 @@ the SDK reaches 1.0 or Connect gains file upload.
 3. Validate the reader token and warm every required item. An unauthenticated
    health endpoint is insufficient evidence of usable cached secrets.
 4. Install a host-specific version of
-   `deploy/systemd/severino-hq-secrets-connect.conf.example`. Order after Connect
+   `deploy/systemd/severino-hq-secrets-connect.conf.example`: Connect on a
+   loopback port below 1024, the unit requiring Connect and ordered after it
    without requiring cloud readiness. Validate the effective systemd unit.
 5. Compare rendered results privately without printing values. Exercise denied
    tokens, missing items, malformed responses, unavailable Connect, unchanged
@@ -361,7 +372,26 @@ window, the unit fails to start and nothing is written; the installer's start
 in step 4 is unaffected. A controller run between the sync and the first
 successful render is refused by the launcher, which requires the document.
 
-Host-owned drop-ins need no edit before the deploy. The renderer reads
+One change is required before the deploy: Connect must be on a loopback
+port below 1024. The renderer refuses the endpoint otherwise (`config`, exit
+2), the previous files are kept, and the deploy rolls back as described below.
+Make the change while the shell renderer is still live, which accepts any
+loopback port, in this order, so nothing is broken in between:
+
+1. Publish Connect on `127.0.0.1:<port below 1024>` beside or in place of its
+   current port, and restart it.
+2. Move the firewall guard that admits only uid 0 to Connect to the new port
+   (keep the old rule until step 4 if both ports are published).
+3. Set `OP_CONNECT_HOST=http://127.0.0.1:<port>` in the host's drop-in, change
+   its `Wants=` on the Connect unit to `Requires=`, and `systemctl daemon-reload`.
+4. `systemctl start severino-hq-secrets.service` and confirm the shell
+   renderer succeeds on the new port. Then stop publishing the old port and
+   remove its firewall rule.
+5. Confirm `sysctl net.ipv4.ip_unprivileged_port_start` is above the port
+   (1024 unless the host lowered it).
+6. Deploy.
+
+Nothing else in the host-owned drop-ins needs an edit. The renderer reads
 `SEVERINO_SECRETS_VAULT`, `SEVERINO_ENV_ITEM`, `SEVERINO_CONNECT_CREDENTIAL`,
 `OP_CONNECT_HOST` and the `LoadCredentialEncrypted=` line as they are;
 tolerates `SEVERINO_SECRETS_BACKEND=connect`; and ignores
@@ -369,7 +399,8 @@ tolerates `SEVERINO_SECRETS_BACKEND=connect`; and ignores
 a healthy deploy, remove those three, and any `TimeoutStartSec=` shorter than
 the unit's. It refuses a `SEVERINO_SECRETS_BACKEND` other than `connect`, an
 `OP_CONNECT_TOKEN` or `OP_SERVICE_ACCOUNT_TOKEN` variable, and a
-`SEVERINO_CONTROLLER_ENV` override.
+`SEVERINO_CONTROLLER_ENV` override, and an endpoint that is not IPv4 loopback
+on a port below 1024.
 
 If the first render or the preflight fails, the installer restores the
 previous unit and drop-in, and the previous deploy script restores the
@@ -404,6 +435,9 @@ each before the live unit is trusted with it.
    - `MemorySwapMax=0`, `MemoryMax=512M`, `TasksMax=128`, `LimitCORE=0`. Run
      the probe with a changed application variable too, so the docker CLI's
      restart runs under the memory and task bounds.
+   The renderer also reads `/proc/sys/net/ipv4/ip_unprivileged_port_start`
+   under `ProtectKernelTunables=yes`, which leaves `/proc/sys` readable;
+   confirm the probe gets past that read.
 2. **Connect after a restart.** Restart Connect, start the unit, and read the
    journal: `secrets.connect.ready attempts=N` shows the retries. If Connect
    answers a locked first request with 401 or 403 rather than no answer or 5xx,

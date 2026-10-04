@@ -1,6 +1,8 @@
-// Package connect reads a 1Password Connect server on this machine's IPv4
-// loopback, and nowhere else.
-package connect
+// Package client is the Connect client itself. It is internal so that the only
+// way to make one from outside is connect.New, which always applies the
+// privileged-port rule; the one other caller is connect/testclient, which a
+// test must hand a testing.TB.
+package client
 
 import (
 	"context"
@@ -73,6 +75,7 @@ var (
 	ErrDenied      = errors.New("Connect refused the token")
 	ErrResponse    = errors.New("Connect returned an unusable response")
 	ErrIdentifier  = errors.New("not a 1Password identifier")
+	ErrPort        = errors.New("Connect must listen on a port below 1024: only root can listen there, so only root's Connect can answer")
 )
 
 // Error is one failed exchange: what was asked and the class of failure. It
@@ -99,10 +102,33 @@ func (e *Error) Unwrap() error { return e.Class }
 
 var endpointPattern = regexp.MustCompile(`^http://127\.0\.0\.1:([0-9]{1,5})$`)
 
+// Ports says whether an endpoint's port may be dialed.
+type Ports func(port int) error
+
+// Privileged is the rule every client outside a test is made with. The
+// loopback rule proves the address, not who is listening on it: a port anyone
+// may bind could be taken while Connect is down, and the token sent to
+// whoever took it.
+func Privileged(port int) error {
+	if port < 1 || port >= 1024 {
+		return ErrPort
+	}
+	return nil
+}
+
+// AnyPort is for a test's in-process server, which cannot listen below 1024.
+func AnyPort(port int) error {
+	if port < 1 || port > 65535 {
+		return ErrEndpoint
+	}
+	return nil
+}
+
 // requireLoopback is the rule the dialer enforces on the address it is about
-// to connect to, whatever the configured endpoint said.
-func requireLoopback(address string) error {
-	host, _, err := net.SplitHostPort(address)
+// to connect to, whatever the configured endpoint said: IPv4 loopback, on a
+// port the client's rule allows.
+func requireLoopback(address string, ports Ports) error {
+	host, rawPort, err := net.SplitHostPort(address)
 	if err != nil {
 		return ErrNotLoopback
 	}
@@ -110,16 +136,20 @@ func requireLoopback(address string) error {
 	if err != nil || !ip.Is4() || !ip.IsLoopback() {
 		return ErrNotLoopback
 	}
-	return nil
+	port, err := strconv.Atoi(rawPort)
+	if err != nil {
+		return ErrNotLoopback
+	}
+	return ports(port)
 }
 
 // newHTTPClient is the only client this package makes: no proxy, no redirect,
 // IPv4 loopback only, every phase bounded.
-func newHTTPClient() *http.Client {
+func newHTTPClient(ports Ports) *http.Client {
 	dialer := &net.Dialer{
 		Timeout: dialTimeout,
 		// After resolution, on the socket itself: the last word on where it goes.
-		Control: func(_, address string, _ syscall.RawConn) error { return requireLoopback(address) },
+		Control: func(_, address string, _ syscall.RawConn) error { return requireLoopback(address, ports) },
 	}
 	return &http.Client{
 		Timeout: requestTimeout,
@@ -129,7 +159,7 @@ func newHTTPClient() *http.Client {
 		Transport: &http.Transport{
 			Proxy: nil,
 			DialContext: func(ctx context.Context, _, address string) (net.Conn, error) {
-				if err := requireLoopback(address); err != nil {
+				if err := requireLoopback(address, ports); err != nil {
 					return nil, err
 				}
 				return dialer.DialContext(ctx, "tcp4", address)
@@ -153,27 +183,39 @@ type Client struct {
 	Sleep func(context.Context, time.Duration) error
 }
 
-// CheckEndpoint refuses any endpoint but http://127.0.0.1:PORT.
-func CheckEndpoint(endpoint string) error {
+// CheckEndpoint refuses any endpoint but http://127.0.0.1:PORT, with a port
+// the rule allows.
+func CheckEndpoint(endpoint string, ports Ports) error {
 	match := endpointPattern.FindStringSubmatch(endpoint)
 	if match == nil {
 		return ErrEndpoint
 	}
-	if port, err := strconv.Atoi(match[1]); err != nil || port < 1 || port > 65535 {
+	port, err := strconv.Atoi(match[1])
+	if err != nil || port < 1 || port > 65535 {
 		return ErrEndpoint
 	}
-	return nil
+	return ports(port)
 }
 
-// New makes a client for an endpoint CheckEndpoint accepts.
-func New(endpoint string, token Token) (*Client, error) {
-	if err := CheckEndpoint(endpoint); err != nil {
+// Port is the port of an endpoint CheckEndpoint accepts.
+func Port(endpoint string) (int, error) {
+	match := endpointPattern.FindStringSubmatch(endpoint)
+	if match == nil {
+		return 0, ErrEndpoint
+	}
+	return strconv.Atoi(match[1])
+}
+
+// New makes a client for an endpoint CheckEndpoint accepts under the rule,
+// and its dialer holds every connection to the same rule.
+func New(endpoint string, token Token, ports Ports) (*Client, error) {
+	if err := CheckEndpoint(endpoint, ports); err != nil {
 		return nil, err
 	}
 	if token.value == "" {
 		return nil, errors.New("empty Connect token")
 	}
-	return &Client{endpoint: endpoint, authorize: bearer(token), http: newHTTPClient(), Sleep: sleep}, nil
+	return &Client{endpoint: endpoint, authorize: bearer(token), http: newHTTPClient(ports), Sleep: sleep}, nil
 }
 
 func bearer(token Token) func(*http.Request) {
@@ -214,6 +256,8 @@ func (c *Client) get(ctx context.Context, op, path string, authenticated bool, o
 		switch {
 		case errors.Is(err, ErrNotLoopback):
 			return &Error{Op: op, Class: ErrNotLoopback}
+		case errors.Is(err, ErrPort):
+			return &Error{Op: op, Class: ErrPort}
 		case errors.Is(err, ErrRedirect):
 			return &Error{Op: op, Class: ErrRedirect}
 		case errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded):
