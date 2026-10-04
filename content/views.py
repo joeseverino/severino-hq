@@ -1,4 +1,3 @@
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count
 from django.urls import reverse, reverse_lazy
 from django.utils.html import format_html
@@ -11,20 +10,14 @@ from django.views.generic import (
 )
 
 from application.analytics import CONTENT_TRAFFIC_DAYS, attach_traffic, item_traffic
-from application.content import content_command_from_cleaned_data, save_content
-from application.deletion import delete_content
 from application.pages import PageAction, PageMixin, record_trail
 from application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
-from application.writes import (
-    ServiceCreateMixin,
-    ServiceDeleteMixin,
-    ServiceUpdateMixin,
-)
+from application.writes import RecordDeleteMixin, RecordFormMixin
 from .forms import ContentItemForm
 from .models import PAGE_TYPES, WRITEUP_TYPES, ContentItem
 
 
-class _ContentSectionView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
+class _ContentSectionView(PageMixin, TableListMixin, ListView):
     """One half of the registry, as a table.
 
     The registry is cut once, in ``content.models``, and both sections read the
@@ -137,7 +130,7 @@ class ContentPage(PageMixin):
         return record_trail(CONTENT_TRAIL, getattr(self, "object", None), lambda item: item.title)
 
 
-class ContentDetailView(PageMixin, LoginRequiredMixin, DetailView):
+class ContentDetailView(PageMixin, DetailView):
     model = ContentItem
     template_name = "content/content_detail.html"
     slug_field = "slug"
@@ -180,45 +173,22 @@ class ContentDetailView(PageMixin, LoginRequiredMixin, DetailView):
         return tuple(actions)
 
 
-class ContentWrite:
-    """What every content write shares, whichever direction it goes."""
-
-    model = ContentItem
-    noun = "Content item"
-    result_key = "content"
-    identity_attr = "slug"
-    identity_kwarg = "current_slug"
-
-
-class ContentCreateView(
-    ContentWrite, ContentPage, ServiceCreateMixin, LoginRequiredMixin, CreateView
-):
+class ContentCreateView(ContentPage, RecordFormMixin, CreateView):
     page_title = "New content item"
     form_class = ContentItemForm
     template_name = "content/content_form.html"
-    service = staticmethod(save_content)
-    command_from_cleaned_data = staticmethod(content_command_from_cleaned_data)
 
 
-class ContentUpdateView(
-    ContentWrite, ContentPage, ServiceUpdateMixin, LoginRequiredMixin, UpdateView
-):
+class ContentUpdateView(ContentPage, RecordFormMixin, UpdateView):
     page_title = "Edit content item"
+    model = ContentItem
     form_class = ContentItemForm
     template_name = "content/content_form.html"
-    slug_field = "slug"
-    slug_url_kwarg = "slug"
-    service = staticmethod(save_content)
-    command_from_cleaned_data = staticmethod(content_command_from_cleaned_data)
 
 
-class ContentDeleteView(
-    ContentWrite, ContentPage, ServiceDeleteMixin, LoginRequiredMixin, DeleteView
-):
+class ContentDeleteView(ContentPage, RecordDeleteMixin, DeleteView):
     page_title = "Delete content item?"
+    model = ContentItem
     template_name = "content/content_confirm_delete.html"
-    slug_field = "slug"
-    slug_url_kwarg = "slug"
     success_url = reverse_lazy("content:list")
     context_object_name = "item"
-    service = staticmethod(delete_content)

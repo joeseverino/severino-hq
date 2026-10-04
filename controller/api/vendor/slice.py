@@ -162,12 +162,31 @@ def narrow(name, schema, kept):
         raise SystemExit(f"keep names what {name} does not have: {sorted(missing)}")
 
 
-def main(path):
-    vendor = Path.cwd()
-    settings = tomllib.loads((vendor / "slice.toml").read_text(encoding="utf-8"))
-    with open(path, encoding="utf-8") as handle:
-        spec = json.load(handle)
-    wanted = set(operation_ids(vendor / "oapi-codegen.yaml"))
+def slice_operation(spec, item, operation, decodes, sends, roots):
+    """Keep an operation's route contract and validate its decoded models."""
+
+    op_id = operation["operationId"]
+    answers = success(operation)
+    kept = {
+        "operationId": op_id,
+        "parameters": path_parameters(spec, item, operation),
+        "responses": {code: {"description": answer.get("description", "")} for code, answer in answers.items()},
+    }
+    upstream = reachable(spec, answers)
+    for name in decodes.get(op_id, ()):
+        if SCHEMAS + name not in upstream:
+            raise SystemExit(f"{op_id} answers no {name}")
+        roots.add(SCHEMAS + name)
+    if op_id in sends:
+        if "requestBody" not in operation:
+            raise SystemExit(f"{op_id} sends no request body")
+        kept["requestBody"] = copy.deepcopy(operation["requestBody"])
+    return kept
+
+
+def slice_paths(spec, wanted, settings):
+    """Select declared operations and collect their decoded schema roots."""
+
     decodes = settings.get("decodes", {})
     sends = set(settings.get("sends", ()))
     if stray := (decodes.keys() | sends) - wanted:
@@ -178,24 +197,18 @@ def main(path):
         for method, operation in item.items():
             if method not in METHODS or operation.get("operationId") not in wanted:
                 continue
-            op_id = operation["operationId"]
-            wanted.discard(op_id)
-            answers = success(operation)
-            kept = {"operationId": op_id, "parameters": path_parameters(spec, item, operation), "responses":{code: {"description": answer.get("description", "")} for code, answer in answers.items()}}
-            upstream = reachable(spec, answers)
-            for name in decodes.get(op_id, ()):
-                if SCHEMAS + name not in upstream:
-                    raise SystemExit(f"{op_id} answers no {name}")
-                roots.add(SCHEMAS + name)
-            if op_id in sends:
-                if "requestBody" not in operation:
-                    raise SystemExit(f"{op_id} sends no request body")
-                kept["requestBody"] = copy.deepcopy(operation["requestBody"])
-            paths.setdefault(route, {})[method] = kept
+            wanted.discard(operation["operationId"])
+            paths.setdefault(route, {})[method] = slice_operation(spec, item, operation, decodes, sends, roots)
     if wanted:
         raise SystemExit(f"operations missing upstream: {sorted(wanted)}")
     if settings.get("drop-examples"):
         drop_media_examples(paths)
+    return paths, roots
+
+
+def slice_components(spec, paths, roots, settings):
+    """Follow retained schema references after applying property narrowing."""
+
     keep = settings.get("keep", {})
     pending, seen = set(roots), set()
     refs(paths, pending)
@@ -215,7 +228,13 @@ def main(path):
         refs(body, pending)
     if stale := keep.keys() - components.get("schemas", {}).keys():
         raise SystemExit(f"keep names components the slice does not hold: {sorted(stale)}")
-    for key, go_name in settings.get("go-names", {}).items():
+    return components
+
+
+def name_components(components, names):
+    """Apply explicit generated names only to retained components."""
+
+    for key, go_name in names.items():
         kind, _, name = key.rpartition("/")
         kind = kind or "schemas"
         if name not in components.get(kind, {}):
@@ -223,6 +242,17 @@ def main(path):
         components[kind][name] = {**components[kind][name], "x-go-name": go_name}
     for kind in components:
         components[kind] = dict(sorted(components[kind].items()))
+
+
+def main(path):
+    vendor = Path.cwd()
+    settings = tomllib.loads((vendor / "slice.toml").read_text(encoding="utf-8"))
+    with open(path, encoding="utf-8") as handle:
+        spec = json.load(handle)
+    wanted = set(operation_ids(vendor / "oapi-codegen.yaml"))
+    paths, roots = slice_paths(spec, wanted, settings)
+    components = slice_components(spec, paths, roots, settings)
+    name_components(components, settings.get("go-names", {}))
     keywords = tuple(settings.get("strip", ()))
     strip_keywords(paths, keywords)
     strip_keywords(components, keywords)

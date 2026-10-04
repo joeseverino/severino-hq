@@ -1,11 +1,9 @@
 from django import forms
 
-from application.forms import BusinessUseMixin
-
 from .models import Asset
 
 
-class AssetForm(BusinessUseMixin, forms.ModelForm):
+class AssetForm(forms.ModelForm):
     class Meta:
         model = Asset
         fields = [

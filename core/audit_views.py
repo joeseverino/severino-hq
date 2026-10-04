@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse
 from django.views.generic import DetailView, ListView
 
@@ -14,7 +13,7 @@ from application.tables import TableColumn, TableFilter, TableListMixin
 from .models import AuditLog
 
 
-class AuditLogListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
+class AuditLogListView(PageMixin, TableListMixin, ListView):
     model = AuditLog
     template_name = "core/auditlog_list.html"
     context_object_name = "events"
@@ -150,7 +149,7 @@ class AuditLogListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
         return self.request.GET.get("awaiting") == "1"
 
 
-class AuditLogDetailView(PageMixin, LoginRequiredMixin, DetailView):
+class AuditLogDetailView(PageMixin, DetailView):
     """One event, in full, and what sits either side of it.
 
     The list can only ever show a line per event. What an audit trail is

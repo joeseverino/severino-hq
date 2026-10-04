@@ -5,7 +5,7 @@ from __future__ import annotations
 import secrets
 from collections.abc import Callable
 from dataclasses import replace
-from typing import Any
+from typing import Any, TypedDict
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from pydantic import TypeAdapter
@@ -82,36 +82,51 @@ def authorize_capability(spec: CapabilitySpec, principal: Principal) -> None:
     require_all(principal, spec.required_capabilities)
 
 
+class CapabilityDescription(TypedDict):
+    """One registry entry as every adapter describes it."""
+
+    name: str
+    label: str
+    summary: str
+    effect: str
+    required_capabilities: list[str]
+    target: str | None
+    target_label: str
+    target_help: str
+    target_query: dict[str, str | int | float | bool]
+    execution_notes: list[str]
+    target_initial_fields: list[str]
+    resource: str | None
+    input_schema: dict[str, Any]
+
+
 def describe_capabilities() -> dict[str, Any]:
     """Return stable JSON Schemas and operational effects for every capability."""
 
-    return {
-        "ok": True,
-        "schema_version": 2,
-        "capabilities": [
-            {
-                "name": spec.name,
-                "label": spec.title,
-                "summary": spec.summary,
-                "effect": spec.effect,
-                "required_capabilities": [
-                    capability.value
-                    if isinstance(capability, Capability)
-                    else capability
-                    for capability in spec.required_capabilities
-                ],
-                "target": spec.target_kind,
-                "target_label": spec.target_label,
-                "target_help": spec.target_help,
-                "target_query": dict(spec.target_query),
-                "execution_notes": list(spec.execution_notes),
-                "target_initial_fields": list(spec.target_initial_fields),
-                "resource": spec.subject_resource,
-                "input_schema": capability_schema(spec),
-            }
-            for spec in integration_graph().capabilities.values()
-        ],
-    }
+    described: list[CapabilityDescription] = [
+        {
+            "name": spec.name,
+            "label": spec.title,
+            "summary": spec.summary,
+            "effect": spec.effect,
+            "required_capabilities": [
+                capability.value
+                if isinstance(capability, Capability)
+                else capability
+                for capability in spec.required_capabilities
+            ],
+            "target": spec.target_kind,
+            "target_label": spec.target_label,
+            "target_help": spec.target_help,
+            "target_query": dict(spec.target_query),
+            "execution_notes": list(spec.execution_notes),
+            "target_initial_fields": list(spec.target_initial_fields),
+            "resource": spec.subject_resource,
+            "input_schema": capability_schema(spec),
+        }
+        for spec in integration_graph().capabilities.values()
+    ]
+    return {"ok": True, "schema_version": 2, "capabilities": described}
 
 
 def _target_keyword(spec: CapabilitySpec, target: str | int | None) -> dict[str, Any]:

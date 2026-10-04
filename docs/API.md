@@ -112,6 +112,7 @@ curl -s https://hq.example.com/api/v2/capabilities/example.import/ \
 | Method | Path | |
 |---|---|---|
 | `GET` | `/api/v2/` | Who you are and what you were granted |
+| `GET` | `/api/v2/openapi.json` | This API as an OpenAPI 3.2 document; also served to the signed-in operator's session, even with no API resource configured, and rendered for them at `/api/docs/` |
 | `GET` | `/api/v2/capabilities/` | Every capability, flagged `permitted` for this token |
 | `POST` | `/api/v2/capabilities/<name>/` | Run one |
 | `GET` | `/api/v2/resources/` | Every read resource, its operations and filter schema |
@@ -284,11 +285,9 @@ freshness policy.
 
 The path is the semantic major version. Additive fields may join an existing
 version; removing a field, tightening accepted input, or changing retry
-semantics requires a new path. Version 1 remains available for the original
-Shortcut contract and returns `Deprecation: true` plus a `successor-version`
-link. Version 2 is the current contract and requires durable idempotency for
-state changes. No sunset date is advertised until there is an actual removal
-decision and migration window; clients are never given a fictional deadline.
+semantics requires a new path. Version 2 is the only contract and requires
+durable idempotency for state changes. HQ has no outside clients, so a new
+version replaces the old one rather than running beside it.
 
 ### Errors
 
@@ -371,3 +370,30 @@ The client secret sits in the automation client. That is a real exposure and
 the reason it receives only `example.write`: someone who extracts it can run
 that one plugin capability, but cannot read unrelated records, touch a project,
 or delete anything.
+
+## Contract tooling
+
+The host and controller descriptions use OpenAPI 3.2.0. The stable controller
+generator does not yet recognize the 3.2.1 patch version correctly, so both
+descriptions use the version the complete toolchain accepts. No compatibility
+translation is applied. Resource filters emit individual query parameters;
+`x-hq-query-schema` retains the aggregate schema, including unknown-field policy.
+
+Install the locked contract tools with `npm --prefix scripts/openapi ci`.
+`scripts/check-openapi.sh` validates both descriptions against the specification
+and checks generated client freshness and runtime behavior. The TypeScript
+client and CLI are generated from the host description. Redocly currently marks
+its client generator experimental; generated artifacts are pinned and checked
+rather than assumed compatible across upgrades.
+
+`manage.py test fuzz.api_properties` generates bounded requests through Django's
+real WSGI middleware using Schemathesis from the tools dependency set. Host cases
+have read authority; a synthetic capability tests authorized writes and durable
+retry without provider effects. Each case rolls back database changes and blocks
+outbound connections. These tooling tests run explicitly in the contributor
+gates; production test discovery does not require development dependencies.
+
+MCP resource names, identifiers and catalogue descriptions derive from the live
+deployment's OpenAPI document after Django initialization. Other MCP tools keep
+their application-service signatures: tools without an HTTP operation are not
+claimed to be generated HTTP clients.

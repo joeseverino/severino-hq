@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from application.routes import reverse
 from django.views.generic import TemplateView
 
@@ -10,7 +9,7 @@ from application.controller_page import controller_page
 from application.pages import PageAction, PageMixin
 
 
-class ControllerView(PageMixin, LoginRequiredMixin, TemplateView):
+class ControllerView(PageMixin, TemplateView):
     """Whether the controller is arriving, what it last read, and what waits for it.
 
     Read-only. The controller is not something HQ operates: it arrives, pulls

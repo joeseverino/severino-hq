@@ -25,7 +25,6 @@ from ..plugins import (
     plugin_capabilities,
     plugin_health,
     plugin_token_authenticated_prefixes,
-    plugin_urlpatterns,
 )
 from ..domains import domain_navigation
 from ..pages import page_context
@@ -516,19 +515,6 @@ class PluginContractTests(TestCase):
         ):
             installed_plugins()
 
-    def test_a_url_prefix_under_a_sign_in_exempt_path_fails_at_startup(self):
-        """Mounted there, every route of the plugin would skip the sign-in."""
-
-        for prefix in ("api/notes/", "static/notes/", "health/notes/", "accounts/loginpage/"):
-            with self.subTest(prefix=prefix):
-                env, importer = self.load(
-                    replace(VALID, url_prefix=prefix, urlconf="example.urls")
-                )
-                with env, importer, self.assertRaisesRegex(
-                    ImproperlyConfigured, "exempt from sign-in"
-                ):
-                    plugin_urlpatterns()
-
     def test_route_configuration_is_atomic(self):
         env, importer = self.load(replace(VALID, url_prefix="notes/"))
         with env, importer, self.assertRaises(ImproperlyConfigured):
@@ -540,12 +526,12 @@ class PluginContractTests(TestCase):
                 VALID,
                 url_prefix="mobile/",
                 urlconf="example.urls",
-                token_authenticated_routes=("api/v1/",),
+                token_authenticated_routes=("webhook/",),
             )
         )
         with env, importer:
             self.assertEqual(
-                plugin_token_authenticated_prefixes(), ("/mobile/api/v1/",)
+                plugin_token_authenticated_prefixes(), ("/mobile/webhook/",)
             )
 
     def test_a_token_route_cannot_escape_its_own_mount(self):
@@ -564,7 +550,7 @@ class PluginContractTests(TestCase):
 
     def test_a_token_route_without_a_mount_fails_closed(self):
         env, importer = self.load(
-            replace(VALID, token_authenticated_routes=("api/v1/",))
+            replace(VALID, token_authenticated_routes=("webhook/",))
         )
         with env, importer, self.assertRaises(ImproperlyConfigured):
             installed_plugins()

@@ -16,7 +16,8 @@ from expenses.models import Expense
 from projects.models import Project
 from .labels import plural
 from .sensitivity import safe_doc_ids
-from .security import Capability, Principal
+from .domains import records_of
+from .security import Principal
 from .projection import iso
 from .ui import counted
 
@@ -100,7 +101,7 @@ def save_content(
     current_slug: str | None = None,
     expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    principal.require(Capability.WRITE_CONTENT)
+    principal.require(records_of("content").write)
     operation = "content.create" if current_slug is None else "content.update"
     with operation_context(
         interface=principal.interface, actor=principal.actor, operation=operation
@@ -143,20 +144,3 @@ def save_content(
         item.related_documentation.set(docs)
 
     return {"ok": True, "created": created, "content": serialize_content(item)}
-
-
-def content_command_from_cleaned_data(data: dict[str, Any]) -> ContentCommand:
-    scalar_fields = {
-        field: data.get(field)
-        for field in ContentCommand.__dataclass_fields__
-        if not field.startswith("related_")
-    }
-    return ContentCommand(
-        **scalar_fields,
-        related_projects=tuple(row.slug for row in data["related_projects"]),
-        related_assets=tuple(row.slug for row in data["related_assets"]),
-        related_expenses=tuple(row.id for row in data["related_expenses"]),
-        related_documentation=tuple(
-            row.doc_id for row in data["related_documentation"]
-        ),
-    )

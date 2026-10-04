@@ -1,8 +1,8 @@
 """
 Middleware for Severino HQ.
 
-- LoginRequiredMiddleware: this is a single-user / internal app; every URL
-  requires authentication unless explicitly exempted.
+- LoginRequiredMiddleware: this is a single-user / internal app; every view
+  requires a session unless it is marked ``@login_not_required``.
 - CurrentUserMiddleware: scopes the request user to the active ASGI context so
   ORM signals can attribute audit events without leaking across requests.
 """
@@ -15,8 +15,7 @@ from time import monotonic
 from uuid import uuid4
 
 from django.conf import settings
-from django.contrib.auth.views import redirect_to_login
-from django.urls import resolve, Resolver404
+from django.contrib.auth import middleware as auth_middleware
 
 from application.arrivals import note as note_arrival
 from application.cadence import note_activity
@@ -136,40 +135,6 @@ class RequestContextMiddleware:
             request_logging.reset_request_id(token)
 
 
-class AdminPolicyMiddleware:
-    """Run Django admin under the one directive its own JavaScript cannot meet.
-
-    The application policy requires Trusted Types, which makes assigning a
-    string to `innerHTML` throw rather than parse. HQ's own scripts never do
-    that; admin's bundled jQuery does, on every page it renders. So the relaxation
-    is scoped to that surface rather than weakening the policy everywhere.
-
-    A middleware rather than a decorator because the admin routes a view per
-    registered model and generates most of them: a decorator that has to be
-    remembered on each is one that will eventually be missed, silently, and the
-    admin page that missed it simply stops working.
-
-    Ordered immediately after Django's CSP middleware, which is what makes this
-    work at all: response middleware runs outermost-last, so the override has
-    to be attached by something *inside* the middleware that reads it.
-    """
-
-    # Where the admin is mounted. A test asserts this against the URLconf
-    # rather than trusting the two to stay in step: a prefix that stops
-    # matching does not fail, it silently serves the admin a policy its own
-    # scripts cannot satisfy, and the page is blank.
-    prefix = "/admin/"
-
-    def __init__(self, get_response):
-        self.get_response = get_response
-
-    def __call__(self, request):
-        response = self.get_response(request)
-        if request.path.startswith(self.prefix):
-            response._csp_config = settings.SEVERINO_ADMIN_CSP
-        return response
-
-
 def get_current_user():
     return _current_user.get()
 
@@ -199,44 +164,22 @@ class CurrentUserMiddleware:
             _current_user.reset(token)
 
 
-class LoginRequiredMiddleware:
-    """Force authentication on every URL except a small allowlist."""
+class LoginRequiredMiddleware(auth_middleware.LoginRequiredMiddleware):
+    """Django's sign-in gate: every view needs a session unless it is marked
+    ``@login_not_required`` where it is defined.
 
-    def __init__(self, get_response):
-        self.get_response = get_response
+    Also lets through the routes an extension declared as carrying their own
+    authentication. Skipping the redirect is not skipping auth: the view
+    still authenticates the request, and answers 401 rather than an HTML
+    login page a native client cannot use.
+    """
 
-    def __call__(self, request):
-        if self._is_exempt(request):
-            return self.get_response(request)
-
-        if not request.user.is_authenticated:
-            return redirect_to_login(request.get_full_path(), settings.LOGIN_URL)
-
-        return self.get_response(request)
-
-    @staticmethod
-    def _is_exempt(request) -> bool:
+    def process_view(self, request, view_func, view_args, view_kwargs):
         from application.plugins import plugin_token_authenticated_prefixes
 
-        path = request.path
-        for prefix in settings.LOGIN_EXEMPT_PATH_PREFIXES:
-            if path.startswith(prefix):
-                return True
-        # Routes an extension declared as carrying their own authentication.
-        # Skipping the redirect here is not skipping auth: the view still has
-        # to authenticate the request, and answers 401 rather than serving an
-        # HTML login page to a client that cannot use one.
-        for prefix in plugin_token_authenticated_prefixes():
-            if path.startswith(prefix):
-                return True
-        try:
-            match = resolve(path)
-            if match.url_name in settings.LOGIN_EXEMPT_URL_NAMES:
-                return True
-        except Resolver404:
-            # Unresolvable paths are non-exempt and continue to authentication.
-            pass
-        return False
+        if request.path.startswith(plugin_token_authenticated_prefixes()):
+            return None
+        return super().process_view(request, view_func, view_args, view_kwargs)
 
 
 class ProjectionMiddleware:

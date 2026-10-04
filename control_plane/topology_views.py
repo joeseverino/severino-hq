@@ -6,7 +6,6 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404
 from application.routes import reverse
 from django.views.generic import TemplateView
@@ -28,7 +27,7 @@ from application.timestamps import moment
 from application.ui import counted
 
 
-class TopologyView(PageMixin, LoginRequiredMixin, TemplateView):
+class TopologyView(PageMixin, TemplateView):
     """The live, actionable graph derived by the application layer."""
 
     template_name = "control_plane/topology.html"
@@ -272,7 +271,7 @@ class TopologyView(PageMixin, LoginRequiredMixin, TemplateView):
         return topology_url(focus, direction=direction, depth=depth, lens=lens)
 
 
-class TopologyNodeView(LoginRequiredMixin, TemplateView):
+class TopologyNodeView(TemplateView):
     """One node's body, for the page to fetch when the node is opened.
 
     The page draws every node's summary and leaves the bodies to this, so

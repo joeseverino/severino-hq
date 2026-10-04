@@ -6,7 +6,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Sum
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.utils import timezone
@@ -24,7 +23,7 @@ from projects.models import Project
 from . import exports as exporters
 
 
-class ReportsView(PageMixin, LoginRequiredMixin, TemplateView):
+class ReportsView(PageMixin, TemplateView):
     template_name = "reports/reports.html"
     page_title = "Reports"
 
@@ -136,7 +135,7 @@ EXPORTS = (
 )
 
 
-class ExportView(LoginRequiredMixin, View):
+class ExportView(View):
     """Serve one declared export.
 
     Bound to its ``Export`` through ``as_view(export=...)``, so the URL table

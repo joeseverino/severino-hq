@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils.html import format_html
@@ -17,11 +16,8 @@ from django.views.generic import (
 )
 
 from application.documentation import (
-    documentation_command_from_cleaned_data,
-    save_documentation,
     sync_documentation,
 )
-from application.deletion import delete_documentation
 from application.security import web_principal
 from application.pages import PageAction, PageMixin, page_context, record_trail
 from application.tables import (
@@ -31,11 +27,7 @@ from application.tables import (
     TableSort,
     TableToggle,
 )
-from application.writes import (
-    ServiceCreateMixin,
-    ServiceDeleteMixin,
-    ServiceUpdateMixin,
-)
+from application.writes import RecordDeleteMixin, RecordFormMixin
 
 from .forms import DocumentationRecordForm, ManifestImportForm
 from .importer import ManifestImportError
@@ -45,7 +37,7 @@ from .models import DocumentationRecord
 DOCS_TRAIL = ("Documentation index", reverse_lazy("docs_index:list"))
 
 
-class DocsListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
+class DocsListView(PageMixin, TableListMixin, ListView):
     model = DocumentationRecord
     template_name = "docs_index/docs_list.html"
     paginate_by = 25
@@ -130,7 +122,7 @@ class DocsPage(PageMixin):
         return record_trail(DOCS_TRAIL, getattr(self, "object", None), lambda record: record.doc_id)
 
 
-class DocsDetailView(PageMixin, LoginRequiredMixin, DetailView):
+class DocsDetailView(PageMixin, DetailView):
     model = DocumentationRecord
     template_name = "docs_index/docs_detail.html"
     slug_field = "doc_id"
@@ -169,45 +161,32 @@ class DocsDetailView(PageMixin, LoginRequiredMixin, DetailView):
         )
 
 
-class DocsWrite:
-    """What every documentation write shares, whichever direction it goes."""
-
-    model = DocumentationRecord
-    noun = "Doc record"
-    result_key = "documentation"
-    identity_attr = "doc_id"
-    identity_kwarg = "current_doc_id"
-
-
-class DocsCreateView(DocsWrite, DocsPage, ServiceCreateMixin, LoginRequiredMixin, CreateView):
+class DocsCreateView(DocsPage, RecordFormMixin, CreateView):
     page_title = "New doc record"
     form_class = DocumentationRecordForm
     template_name = "docs_index/docs_form.html"
-    service = staticmethod(save_documentation)
-    command_from_cleaned_data = staticmethod(documentation_command_from_cleaned_data)
 
 
-class DocsUpdateView(DocsWrite, DocsPage, ServiceUpdateMixin, LoginRequiredMixin, UpdateView):
+class DocsUpdateView(DocsPage, RecordFormMixin, UpdateView):
     page_title = "Edit doc record"
+    model = DocumentationRecord
     form_class = DocumentationRecordForm
     template_name = "docs_index/docs_form.html"
     slug_field = "doc_id"
     slug_url_kwarg = "doc_id"
-    service = staticmethod(save_documentation)
-    command_from_cleaned_data = staticmethod(documentation_command_from_cleaned_data)
 
 
-class DocsDeleteView(DocsWrite, DocsPage, ServiceDeleteMixin, LoginRequiredMixin, DeleteView):
+class DocsDeleteView(DocsPage, RecordDeleteMixin, DeleteView):
     page_title = "Delete doc record?"
+    model = DocumentationRecord
     template_name = "docs_index/docs_confirm_delete.html"
     slug_field = "doc_id"
     slug_url_kwarg = "doc_id"
     success_url = reverse_lazy("docs_index:list")
     context_object_name = "record"
-    service = staticmethod(delete_documentation)
 
 
-class ManifestImportView(LoginRequiredMixin, View):
+class ManifestImportView(View):
     template_name = "docs_index/import.html"
 
     def render_form(self, request, form):

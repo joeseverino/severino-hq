@@ -25,6 +25,7 @@ from ..domains import (
     domain_attention_items,
     domain_dashboard_cards,
     domain_navigation,
+    host_records,
 )
 from ..plugins import PluginIntegration
 from ..ui import Insight
@@ -112,6 +113,29 @@ class DomainRegistryTests(SimpleTestCase):
             "core.context_processors declares sections again; derive them from "
             "application.domains instead.",
         )
+
+    def test_apps_and_urls_are_read_off_the_declarations(self):
+        """settings and the root urlconf name no domain; each declares itself."""
+        root = Path(settings.BASE_DIR) / "config"
+        settings_source = (root / "settings.py").read_text()
+        urls_source = (root / "urls.py").read_text()
+        for descriptor in HOST_DOMAINS:
+            for app in descriptor.apps:
+                self.assertIn(app, settings.INSTALLED_APPS)
+                self.assertNotIn(f'"{app}"', settings_source)
+            for mount in descriptor.mounts:
+                self.assertNotIn(f'"{mount.urlconf}"', urls_source)
+
+    def test_record_commands_and_permissions_are_derived_not_listed(self):
+        """A record domain's verbs and permissions exist only as its declaration."""
+        from ..core_capabilities import CORE_CAPABILITY_SPECS
+        from ..security import Capability
+
+        records = host_records()
+        verbs = {f"{r.noun}.{verb}" for r in records for verb in ("create", "upsert", "update", "delete")}
+        permissions = {p for r in records for p in (r.write, r.delete)}
+        self.assertEqual({spec.name for spec in CORE_CAPABILITY_SPECS} & verbs, set())
+        self.assertEqual({member.value for member in Capability} & permissions, set())
 
     def test_the_view_keeps_no_code_to_url_table(self):
         """The queue's links come from the domains, not from a lookup here.

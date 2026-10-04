@@ -2,7 +2,8 @@
 
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
-from django.urls import include, path
+from django.contrib.auth.decorators import login_not_required
+from django.urls import URLPattern, include, path
 from django.views.generic import RedirectView
 
 from django.conf import settings
@@ -33,7 +34,24 @@ from core.dashboard_views import (
     DashboardView,
 )
 from core.command_views import CommandView
+from application.domains import host_urlpatterns
 from application.plugins import plugin_urlpatterns
+
+def public(urlconf: str):
+    """``include(urlconf)`` with every route in it answering without a session.
+
+    For a mount whose views are someone else's (the SSO handshake) or carry
+    their own credential (the bearer-token API), where the exemption is a fact
+    about the whole mount rather than one view.
+    """
+
+    included = include(urlconf)
+    for pattern in included[0].urlpatterns:
+        if not isinstance(pattern, URLPattern):
+            raise TypeError(f"{urlconf} nests an include; mark its views instead.")
+        login_not_required(pattern.callback)
+    return included
+
 
 urlpatterns = [
     path("health/live/", health_live, name="health_live"),
@@ -61,10 +79,10 @@ urlpatterns = [
     ),
     path(
         "accounts/logout/",
-        auth_views.LogoutView.as_view(),
+        login_not_required(auth_views.LogoutView.as_view()),
         name="logout",
     ),
-    path("oidc/", include("mozilla_django_oidc.urls")),
+    path("oidc/", public("mozilla_django_oidc.urls")),
     path("", DashboardView.as_view(), name="dashboard"),
     path("action-items/", ActionItemsView.as_view(), name="action_items"),
     path(
@@ -106,26 +124,14 @@ urlpatterns = [
         DashboardGlanceSettingsView.as_view(),
         name="dashboard_glance_settings",
     ),
-    path("calendar/", include("calendars.urls")),
     path("search/", SearchView.as_view(), name="search"),
     path("commands/<str:name>/", CommandView.as_view(), name="command"),
-    path("projects/", include("projects.urls")),
-    path("content/", include("content.urls")),
-    path("docs/", include("docs_index.urls")),
     path("watching/", WatchingView.as_view(), name="watching"),
     path("watching/refresh/", WatchingRefreshView.as_view(), name="watching_refresh"),
     path("posture/", PostureView.as_view(), name="posture"),
-    path("assets/", include("assets.urls")),
-    path("expenses/", include("expenses.urls")),
-    path("receipts/", include("receipts.urls")),
-    path("reports/", include("reports.urls")),
-    path("contacts/", include("contacts.urls")),
-    path("analytics/", include("analytics.urls")),
-    path("domains/", include("control_plane.zone_urls")),
-    path("infrastructure/", include("control_plane.urls")),
-    path("audit/", include("core.urls")),
-    path("api/", include("hq_api.urls")),
-    path("jobs/", include("jobs.urls")),
+    path("api/", public("hq_api.urls")),
+    # Every host domain's own URL configuration, where its declaration mounts it.
+    *host_urlpatterns(),
 ]
 
 urlpatterns.extend(plugin_urlpatterns())

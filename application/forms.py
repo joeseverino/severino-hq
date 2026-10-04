@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from django import forms
 
-from .business_use import check_business_use
-
 
 class MultipleFileInput(forms.FileInput):
     """A file input that reports every selected file.
@@ -60,17 +58,3 @@ class LinesField(forms.Field):
         if isinstance(value, (list, tuple)):
             return "\n".join(str(item) for item in value)
         return value
-
-
-class BusinessUseMixin:
-    """The share of a purchase used for the business, as a whole percentage.
-
-    The UI face of the rule ``application.business_use`` owns: the save
-    services enforce the same check for every adapter, and this shows its
-    refusal on the field before the form reaches them.
-    """
-
-    def clean_business_use_percentage(self):
-        return check_business_use(
-            int(self.cleaned_data.get("business_use_percentage") or 0)
-        )

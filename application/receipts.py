@@ -14,7 +14,8 @@ from expenses.models import Expense
 from receipts.models import Receipt
 from receipts.validation import validate_receipt_file
 
-from .security import Capability, Principal
+from .domains import records_of
+from .security import Principal
 
 
 class NotFoundError(ValueError):
@@ -74,7 +75,7 @@ def update_receipt(
     expected_updated_at: str | None = None,
     upload=None,
 ) -> dict[str, Any]:
-    principal.require(Capability.WRITE_RECEIPTS)
+    principal.require(records_of("receipts").write)
     with operation_context(
         interface=principal.interface, actor=principal.actor, operation="receipt.update"
     ):
@@ -107,7 +108,7 @@ def upload_receipt(
     *,
     principal: Principal,
 ) -> dict[str, Any]:
-    principal.require(Capability.WRITE_RECEIPTS)
+    principal.require(records_of("receipts").write)
     validate_receipt_file(upload)
     expense, asset = _relations(command)
     with operation_context(
@@ -138,6 +139,16 @@ def upload_receipt(
             },
         )
     return {"ok": True, "created": True, "receipt": serialize_receipt(receipt)}
+
+
+def file_cleanup(receipt: Receipt):
+    """Delete the private file once the receipt's own delete has committed."""
+
+    name = receipt.file.name if receipt.file else ""
+    storage = receipt.file.storage if receipt.file else None
+    if not name or storage is None:
+        return None
+    return lambda: storage.delete(name)
 
 
 def receipt_command_from_cleaned_data(data) -> ReceiptMetadataCommand:

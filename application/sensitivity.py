@@ -17,7 +17,7 @@ from django.db.models import QuerySet
 
 from docs_index.models import SAFE_SENSITIVITIES, DocumentationRecord
 
-__all__ = ["SAFE_SENSITIVITIES", "safe_doc_ids"]
+__all__ = ["SAFE_SENSITIVITIES", "safe_doc_ids", "safe_records"]
 
 
 def safe_doc_ids(documentation: QuerySet[DocumentationRecord]) -> list[str]:
@@ -28,3 +28,9 @@ def safe_doc_ids(documentation: QuerySet[DocumentationRecord]) -> list[str]:
         .order_by("doc_id")
         .values_list("doc_id", flat=True)
     )
+
+
+def safe_records() -> QuerySet[DocumentationRecord]:
+    """Every documentation record an AI-facing surface may name."""
+
+    return DocumentationRecord.objects.filter(sensitivity__in=SAFE_SENSITIVITIES)

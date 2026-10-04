@@ -21,8 +21,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import cache
-from typing import Any, Callable
+from typing import Any, Callable, NamedTuple
 
+from django.urls import URLResolver, include, path
 from django.utils.module_loading import import_string
 
 from .plugins import (
@@ -46,19 +47,75 @@ HOST_ORDER_FLOOR = 100
 HOST_ORDER_MACHINERY = 900
 
 
+class Mount(NamedTuple):
+    """Where a domain's URL configuration hangs off the root."""
+
+    prefix: str
+    urlconf: str
+
+
+@dataclass(frozen=True)
+class Records:
+    """A plain record domain: one model created, changed and deleted by command.
+
+    Declared once, it yields the domain's create, update and delete
+    capabilities, its write and delete permissions, deletion itself and its
+    count on the health reading. Anything else the domain can be asked to do is
+    a command declared through ``integration.capabilities``.
+
+    References are ``module:attribute`` strings so the declaration stays
+    importable from settings, before any model is.
+    """
+
+    # Names the commands: "expense" gives expense.create, expense.delete.
+    noun: str
+    # The readable resource the commands act on. Also names the permissions:
+    # "expenses" gives write_expenses and delete_expenses.
+    resource: str
+    model: str
+    # A key of ``integration_specs.TARGET_KINDS``, and the model field it names.
+    target: str
+    lookup: str
+    command: str
+    # Creates when given no target, updates when given one.
+    save: str
+    upsert: str = ""
+    create: bool = True
+    # What a person calls one record, where the noun reads wrong.
+    title: str = ""
+    # Given the record about to go, returns what to run once the delete commits.
+    on_delete: str = ""
+    # The records any reader may count; every row when empty.
+    visible: str = ""
+    # (verb, summary, label) where the derived wording would say less than it should.
+    wording: tuple[tuple[str, str, str], ...] = ()
+
+    @property
+    def write(self) -> str:
+        return f"write_{self.resource}"
+
+    @property
+    def delete(self) -> str:
+        return f"delete_{self.resource}"
+
+
 @dataclass(frozen=True)
 class DomainDescriptor:
     """A host section's whole declaration.
 
     ``id`` is stable and dotted so it can key attribution on surfaces that
     compose host and extension domains together, matching the shape a
-    ``PluginManifest`` id already has.
+    ``PluginManifest`` id already has. ``apps`` reach ``INSTALLED_APPS`` and
+    ``mounts`` the root URL configuration; neither file lists a domain itself.
     """
 
     id: str
     label: str
     navigation: tuple[NavigationItem, ...] = ()
     integration: PluginIntegration = PluginIntegration()
+    apps: tuple[str, ...] = ()
+    mounts: tuple[Mount, ...] = ()
+    records: Records | None = None
 
 
 @dataclass(frozen=True)
@@ -75,6 +132,7 @@ class Domain:
     origin: str
     navigation: tuple[NavigationItem, ...]
     integration: PluginIntegration = PluginIntegration()
+    records: Records | None = None
 
     @property
     def bar_order(self) -> int:
@@ -87,15 +145,23 @@ class Domain:
         return min((item.order for item in self.navigation), default=HOST_ORDER_MACHINERY)
 
 
-def _provider(reference: str) -> Callable[[], Any]:
-    """Keep host declarations import-lazy while storing typed callables."""
+def load(reference: str) -> Any:
+    """What a ``module:attribute`` reference in a declaration names."""
 
     module, separator, attribute = reference.partition(":")
     if not separator:
+        raise ValueError(f"Reference {reference!r} must use module:attribute.")
+    return import_string(f"{module}.{attribute}")
+
+
+def _provider(reference: str) -> Callable[[], Any]:
+    """Keep host declarations import-lazy while storing typed callables."""
+
+    if ":" not in reference:
         raise ValueError(f"Provider {reference!r} must use module:attribute.")
 
     def provide() -> Any:
-        return import_string(f"{module}.{attribute}")()
+        return load(reference)()
 
     return provide
 
@@ -129,6 +195,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             capabilities=_provider("application.calendar_specs:capabilities"),
             resources=_provider("application.calendar_specs:resources"),
         ),
+        apps=("calendars",),
+        mounts=(Mount("calendar/", "calendars.urls"),),
     ),
     DomainDescriptor(
         id="hq.projects",
@@ -141,11 +209,24 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # only months of work clear it, so it does not belong in the queue.
         # The number shows on the projects card as "N need output".
         integration=PluginIntegration(
+            resources=_provider("projects.specs:resources"),
             dashboard=_provider("application.sections:projects"),
             # What GitHub holds for a person: a deploy waiting on approval, a
             # failing default branch, a serious alert, a lapsing admission.
             # Decisions, not the portfolio's shape, which is why it is here.
             attention=_provider("application.github_posture:build_attention"),
+        ),
+        apps=("projects",),
+        mounts=(Mount("projects/", "projects.urls"),),
+        records=Records(
+            noun="project",
+            resource="projects",
+            model="projects.models:Project",
+            target="slug",
+            lookup="slug",
+            command="application.projects:ProjectCommand",
+            save="application.projects:save_project",
+            upsert="application.projects:upsert_project",
         ),
     ),
     DomainDescriptor(
@@ -166,8 +247,22 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             NavigationItem("Docs", "docs_index:list", "docs_index", 101, "Build"),
         ),
         integration=PluginIntegration(
+            resources=_provider("docs_index.specs:resources"),
             attention=_provider("application.attention:documentation"),
             dashboard=_provider("application.sections:documentation"),
+        ),
+        apps=("docs_index",),
+        mounts=(Mount("docs/", "docs_index.urls"),),
+        records=Records(
+            noun="documentation",
+            resource="documentation",
+            model="docs_index.models:DocumentationRecord",
+            target="doc_id",
+            lookup="doc_id",
+            command="application.documentation:DocumentationCommand",
+            save="application.documentation:save_documentation",
+            title="document",
+            visible="application.sensitivity:safe_records",
         ),
     ),
     DomainDescriptor(
@@ -184,8 +279,21 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             NavigationItem("Writeups", "content:writeups", "content", 110, "Web"),
         ),
         integration=PluginIntegration(
+            resources=_provider("content.specs:resources"),
             attention=_provider("application.attention:content"),
             dashboard=_provider("application.sections:content"),
+        ),
+        apps=("content",),
+        mounts=(Mount("content/", "content.urls"),),
+        records=Records(
+            noun="content",
+            resource="content",
+            model="content.models:ContentItem",
+            target="slug",
+            lookup="slug",
+            command="application.content:ContentCommand",
+            save="application.content:save_content",
+            title="content item",
         ),
     ),
     DomainDescriptor(
@@ -204,9 +312,13 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             NavigationItem("Contacts", "contacts:list", "contacts", 112, "Web"),
         ),
         integration=PluginIntegration(
+            capabilities=_provider("contacts.specs:capabilities"),
+            resources=_provider("contacts.specs:resources"),
             attention=_provider("application.attention:contacts"),
             connections=_provider("contacts.d1:connection_specs"),
         ),
+        apps=("contacts",),
+        mounts=(Mount("contacts/", "contacts.urls"),),
     ),
     DomainDescriptor(
         id="hq.zones",
@@ -219,6 +331,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(
             NavigationItem("Domains", "zones:index", "zones", 113, "Web"),
         ),
+        mounts=(Mount("domains/", "control_plane.zone_urls"),),
     ),
     DomainDescriptor(
         id="hq.analytics",
@@ -228,6 +341,11 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(
             NavigationItem("Analytics", "analytics:overview", "analytics", 114, "Web"),
         ),
+        integration=PluginIntegration(
+            resources=_provider("analytics.specs:resources"),
+        ),
+        apps=("analytics",),
+        mounts=(Mount("analytics/", "analytics.urls"),),
     ),
     DomainDescriptor(
         id="hq.expenses",
@@ -236,8 +354,21 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             NavigationItem("Expenses", "expenses:list", "expenses", 120, "Business"),
         ),
         integration=PluginIntegration(
+            resources=_provider("expenses.specs:resources"),
             attention=_provider("application.attention:expenses"),
             dashboard=_provider("application.sections:expenses"),
+        ),
+        apps=("expenses",),
+        mounts=(Mount("expenses/", "expenses.urls"),),
+        records=Records(
+            noun="expense",
+            resource="expenses",
+            model="expenses.models:Expense",
+            target="integer",
+            lookup="pk",
+            command="application.expenses:ExpenseCommand",
+            save="application.expenses:save_expense",
+            wording=(("create", "Create an HQ expense.", "Record expense"),),
         ),
     ),
     DomainDescriptor(
@@ -247,7 +378,26 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             NavigationItem("Receipts", "receipts:list", "receipts", 121, "Business"),
         ),
         integration=PluginIntegration(
-            attention=_provider("application.attention:receipts")
+            resources=_provider("receipts.specs:resources"),
+            attention=_provider("application.attention:receipts"),
+        ),
+        apps=("receipts",),
+        mounts=(Mount("receipts/", "receipts.urls"),),
+        # Receipts arrive as uploads, so there is no create command.
+        records=Records(
+            noun="receipt",
+            resource="receipts",
+            model="receipts.models:Receipt",
+            target="integer",
+            lookup="pk",
+            command="application.receipts:ReceiptMetadataCommand",
+            save="application.receipts:update_receipt",
+            create=False,
+            on_delete="application.receipts:file_cleanup",
+            wording=(
+                ("update", "Update receipt metadata and relationships (never file bytes).", ""),
+                ("delete", "Delete a confirmed receipt and its private file.", ""),
+            ),
         ),
     ),
     DomainDescriptor(
@@ -257,7 +407,20 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             NavigationItem("Assets", "assets:list", "assets", 122, "Business"),
         ),
         integration=PluginIntegration(
-            attention=_provider("application.attention:assets")
+            resources=_provider("assets.specs:resources"),
+            attention=_provider("application.attention:assets"),
+        ),
+        apps=("assets",),
+        mounts=(Mount("assets/", "assets.urls"),),
+        records=Records(
+            noun="asset",
+            resource="assets",
+            model="assets.models:Asset",
+            target="slug",
+            lookup="slug",
+            command="application.assets:AssetCommand",
+            save="application.assets:save_asset",
+            upsert="application.assets:upsert_asset",
         ),
     ),
     DomainDescriptor(
@@ -266,6 +429,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(
             NavigationItem("Reports", "reports:dashboard", "reports", 123, "Business"),
         ),
+        apps=("reports",),
+        mounts=(Mount("reports/", "reports.urls"),),
     ),
     DomainDescriptor(
         id="hq.findings",
@@ -330,6 +495,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         integration=PluginIntegration(
             attention=_provider("application.attention:infrastructure")
         ),
+        apps=("control_plane",),
+        mounts=(Mount("infrastructure/", "control_plane.urls"),),
     ),
     DomainDescriptor(
         id="hq.tools",
@@ -411,6 +578,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(
             NavigationItem("Jobs", "jobs:list", "jobs", 132, "Infrastructure"),
         ),
+        apps=("jobs",),
+        mounts=(Mount("jobs/", "jobs.urls"),),
     ),
     DomainDescriptor(
         id="hq.audit",
@@ -423,6 +592,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         integration=PluginIntegration(
             attention=_provider("application.attention:waiting_for_approval")
         ),
+        mounts=(Mount("audit/", "core.urls"),),
     ),
     DomainDescriptor(
         id="hq.history",
@@ -440,6 +610,18 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             NavigationItem("Agents", "agent_policy", "", HOST_ORDER_MACHINERY + 1, "System"),
         ),
     ),
+    DomainDescriptor(
+        id="hq.api",
+        label="API",
+        # Beside Agents: the machine API is what an agent's token reaches.
+        navigation=(
+            NavigationItem(
+                "API", "api_reference:reference", "api_reference",
+                HOST_ORDER_MACHINERY + 2, "System",
+            ),
+        ),
+        mounts=(Mount("api/docs/", "hq_api.web_urls"),),
+    ),
 )
 
 
@@ -452,9 +634,39 @@ def host_domains() -> tuple[Domain, ...]:
             origin="host",
             navigation=descriptor.navigation,
             integration=descriptor.integration,
+            records=descriptor.records,
         )
         for descriptor in HOST_DOMAINS
     )
+
+
+def host_apps() -> list[str]:
+    """The Django apps the host's domains own, for ``INSTALLED_APPS``."""
+
+    return list(dict.fromkeys(app for descriptor in HOST_DOMAINS for app in descriptor.apps))
+
+
+def host_urlpatterns() -> list[URLResolver]:
+    """Each domain's URL configuration, mounted where it declares."""
+
+    return [
+        path(mount.prefix, include(mount.urlconf))
+        for descriptor in HOST_DOMAINS
+        for mount in descriptor.mounts
+    ]
+
+
+def host_records() -> tuple[Records, ...]:
+    return tuple(domain.records for domain in host_domains() if domain.records)
+
+
+def records_of(resource: str) -> Records:
+    """The record declaration for one resource; a typo fails at first use."""
+
+    for records in host_records():
+        if records.resource == resource:
+            return records
+    raise LookupError(f"No host domain declares records for {resource!r}.")
 
 
 def extension_domains() -> tuple[Domain, ...]:
@@ -584,8 +796,12 @@ def domain_dashboard_sections() -> tuple[dict[str, Any], ...]:
     return read_once("domains.dashboard_sections", _dashboard_sections)
 
 
+def _given(cards: tuple[dict[str, Any], ...]) -> Callable[[], tuple[dict[str, Any], ...]]:
+    return lambda: cards
+
+
 def _dashboard_sections() -> tuple[dict[str, Any], ...]:
-    sections = []
+    sections: list[dict[str, Any]] = []
     for domain in sorted(all_domains(), key=lambda domain: domain.bar_order):
         if domain.integration.dashboard is None:
             continue
@@ -593,5 +809,5 @@ def _dashboard_sections() -> tuple[dict[str, Any], ...]:
         if cards:
             sections.append({"id": domain.id, "label": domain.label, "cards": cards})
     # One validation still catches collisions across contributors.
-    gather_cards((section["id"], lambda section=section: section["cards"]) for section in sections)
+    gather_cards((section["id"], _given(section["cards"])) for section in sections)
     return tuple(sections)

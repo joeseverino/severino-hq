@@ -6,7 +6,6 @@ from typing import get_origin
 
 from django.contrib import messages
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -54,7 +53,7 @@ from .provider_spec import NameContext
 from .providers import PROVIDERS, controller_action_policy, describe_providers
 
 
-class ResourceFormView(LoginRequiredMixin, View):
+class ResourceFormView(View):
     """Declare or amend one resource, on a form its provider generates.
 
     The write goes through ``save_managed_resource`` (the same use case the
@@ -457,7 +456,7 @@ def _readable_error(exc) -> str:
     return " ".join(messages_found) if messages_found else str(exc)
 
 
-class AdoptView(LoginRequiredMixin, View):
+class AdoptView(View):
     """Bring something the provider already holds under HQ's management.
 
     One click, no form. The spec is read back out of the live record, so the
@@ -483,7 +482,7 @@ class AdoptView(LoginRequiredMixin, View):
         return redirect("control_plane:service", hostname=result["hostname"])
 
 
-class CertificateUploadView(LoginRequiredMixin, View):
+class CertificateUploadView(View):
     """Take a certificate generated elsewhere and hold it for installation."""
 
     template_name = "control_plane/certificate_upload.html"
@@ -545,7 +544,7 @@ class CertificateUploadView(LoginRequiredMixin, View):
         )
 
 
-class AdoptRecordView(LoginRequiredMixin, View):
+class AdoptRecordView(View):
     """Take on one record a sweep found, identified by what makes it that record.
 
     Separate from adopting a service because a service is a hostname and some

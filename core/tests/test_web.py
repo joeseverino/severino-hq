@@ -143,23 +143,40 @@ class AuthGateTests(TestCase):
         )
         self.assertEqual(relaxed, ["style-src"])
 
-    # Production's versioning: a live development server names its assets by
-    # run instead (core.context_processors._asset_version).
-    @override_settings(STATIC_LIVE=False)
-    def test_application_shell_versions_every_shared_asset(self):
-        content = self.client.get("/accounts/login/").content.decode()
-        for asset in (
-            "css/app.css",
-            "img/apple-touch-icon.png",
-            "img/favicon.ico",
-            "img/favicon.svg",
-            "js/app.js",
-            "js/tables.js",
+    def test_application_shell_names_every_asset_by_its_content(self):
+        """Production's storage, collected: no static URL on the shell is plain."""
+
+        # DEBUG off: with it on, Django's manifest storage hands out plain names.
+        with tempfile.TemporaryDirectory() as root, override_settings(
+            DEBUG=False,
+            STATIC_ROOT=root,
+            STORAGES={
+                **settings.STORAGES,
+                "staticfiles": {"BACKEND": "core.static.HashedStaticStorage"},
+            },
         ):
+            call_command("collectstatic", interactive=False, verbosity=0)
+            content = self.client.get("/accounts/login/").content.decode()
+        assets = re.findall(r'/static/([^"?]+)', content)
+        self.assertGreaterEqual(len(assets), 7)
+        for asset in assets:
             with self.subTest(asset=asset):
-                self.assertRegex(
-                    content, rf"/static/{re.escape(asset)}\?v=[0-9a-f]{{12}}"
-                )
+                self.assertRegex(asset, r"\.[0-9a-f]{12}\.\w+$")
+
+    def test_an_uncollected_asset_keeps_its_plain_name(self):
+        """A checkout that never collected still renders, unversioned."""
+
+        from django.contrib.staticfiles.storage import staticfiles_storage
+
+        with tempfile.TemporaryDirectory() as root, override_settings(
+            DEBUG=False,
+            STATIC_ROOT=root,
+            STORAGES={
+                **settings.STORAGES,
+                "staticfiles": {"BACKEND": "core.static.HashedStaticStorage"},
+            },
+        ):
+            self.assertEqual(staticfiles_storage.url("css/app.css"), "/static/css/app.css")
 
     @override_settings(SEVERINO_OIDC_ENABLED=True)
     def test_login_page_shows_sso_button_when_enabled(self):
@@ -1423,15 +1440,13 @@ class DeductibleMathTests(TestCase):
         e.save()
         self.assertEqual(e.estimated_deductible_amount, Decimal("150.00"))
 
-    def test_asset_deductible_clamps_percentage(self):
+    def test_asset_deductible_is_computed_on_save(self):
         a = Asset.objects.create(
             item_name="x",
             total_cost=Decimal("100.00"),
-            business_use_percentage=250,  # nonsense
+            business_use_percentage=40,
         )
-        # Saved value is clamped to 100.
-        self.assertEqual(a.business_use_percentage, 100)
-        self.assertEqual(a.estimated_deductible_amount, Decimal("100.00"))
+        self.assertEqual(a.estimated_deductible_amount, Decimal("40.00"))
 
 
 class AuditLogTests(TestCase):

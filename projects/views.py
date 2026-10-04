@@ -1,5 +1,4 @@
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404
 from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.shortcuts import redirect
@@ -16,11 +15,8 @@ from django.views.generic import (
 
 from application.projects import (
     NotFoundError,
-    project_command_from_cleaned_data,
     refresh_project,
-    save_project,
 )
-from application.deletion import delete_project
 from projects.github import github_repository
 from application.security import web_principal
 from application.timestamps import moment
@@ -34,11 +30,7 @@ from application.tables import (
     TableToggle,
 )
 from application.services import service_url_for
-from application.writes import (
-    ServiceCreateMixin,
-    ServiceDeleteMixin,
-    ServiceUpdateMixin,
-)
+from application.writes import RecordDeleteMixin, RecordFormMixin
 from .forms import ProjectForm
 from .models import PROJECT_CATEGORY_CHOICES, Project
 
@@ -46,7 +38,7 @@ from .models import PROJECT_CATEGORY_CHOICES, Project
 PROJECTS_TRAIL = ("Projects", reverse_lazy("projects:list"))
 
 
-class ProjectListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
+class ProjectListView(PageMixin, TableListMixin, ListView):
     model = Project
     template_name = "projects/project_list.html"
     paginate_by = 25
@@ -124,7 +116,7 @@ class ProjectListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
         return self.apply_table_query(qs)
 
 
-class ProjectRefreshView(LoginRequiredMixin, View):
+class ProjectRefreshView(View):
     """Fetch metadata (like last push) from GitHub for a project."""
 
     def post(self, request, slug: str):
@@ -170,7 +162,7 @@ class ProjectPage(PageMixin):
         return record_trail(PROJECTS_TRAIL, getattr(self, "object", None), lambda project: project.name)
 
 
-class ProjectDetailView(PageMixin, LoginRequiredMixin, DetailView):
+class ProjectDetailView(PageMixin, DetailView):
     model = Project
     template_name = "projects/project_detail.html"
     slug_field = "slug"
@@ -245,51 +237,28 @@ class ProjectDetailView(PageMixin, LoginRequiredMixin, DetailView):
         return tuple(actions)
 
 
-class ProjectWrite:
-    """What every project write shares, whichever direction it goes."""
-
-    model = Project
-    noun = "Project"
-    result_key = "project"
-    identity_attr = "slug"
-    identity_kwarg = "current_slug"
-
-
-class ProjectCreateView(
-    ProjectWrite, ProjectPage, ServiceCreateMixin, LoginRequiredMixin, CreateView
-):
+class ProjectCreateView(ProjectPage, RecordFormMixin, CreateView):
     page_title = "New project"
     form_class = ProjectForm
     template_name = "projects/project_form.html"
-    service = staticmethod(save_project)
-    command_from_cleaned_data = staticmethod(project_command_from_cleaned_data)
 
 
-class ProjectUpdateView(
-    ProjectWrite, ProjectPage, ServiceUpdateMixin, LoginRequiredMixin, UpdateView
-):
+class ProjectUpdateView(ProjectPage, RecordFormMixin, UpdateView):
     page_title = "Edit project"
+    model = Project
     form_class = ProjectForm
     template_name = "projects/project_form.html"
-    slug_field = "slug"
-    slug_url_kwarg = "slug"
-    service = staticmethod(save_project)
-    command_from_cleaned_data = staticmethod(project_command_from_cleaned_data)
 
 
-class ProjectDeleteView(
-    ProjectWrite, ProjectPage, ServiceDeleteMixin, LoginRequiredMixin, DeleteView
-):
+class ProjectDeleteView(ProjectPage, RecordDeleteMixin, DeleteView):
     page_title = "Delete project?"
+    model = Project
     template_name = "projects/project_confirm_delete.html"
-    slug_field = "slug"
-    slug_url_kwarg = "slug"
     success_url = reverse_lazy("projects:list")
     context_object_name = "project"
-    service = staticmethod(delete_project)
 
 
-class WatchingView(PageMixin, LoginRequiredMixin, TemplateView):
+class WatchingView(PageMixin, TemplateView):
     """Your GitHub profile and what you watch there. Yours: the account your
     sign-in claims, so nobody reads a login HQ was merely told about."""
 
@@ -346,7 +315,7 @@ class WatchingView(PageMixin, LoginRequiredMixin, TemplateView):
         ]
 
 
-class WatchingRefreshView(LoginRequiredMixin, View):
+class WatchingRefreshView(View):
     def post(self, request):
         from application.github_profile import refresh
         from application.github_public import GitHubReadError
@@ -368,7 +337,7 @@ class WatchingRefreshView(LoginRequiredMixin, View):
         return redirect("watching")
 
 
-class PostureView(PageMixin, LoginRequiredMixin, TemplateView):
+class PostureView(PageMixin, TemplateView):
     """Every repository the GitHub App reads, against the standard it is held to.
 
     Led by what is not met, because that is what the page is for; a check met

@@ -13,13 +13,16 @@ is the failure this prevents.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Concatenate, cast
+from typing import Any, Concatenate, Literal, NotRequired, TypedDict, cast
+
+from pydantic import ConfigDict, with_config
 
 from django.conf import settings
 from django.core.exceptions import RequestDataTooBig
 from django.http import HttpRequest, HttpResponse
+from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 
 from application.agent_access import agents_paused
@@ -27,6 +30,7 @@ from application.agent_registry import observe
 from application.denials import record_denial
 from core.network import client_ip
 from application.capabilities import (
+    CapabilityDescription,
     authorize_capability,
     capability_registry,
     describe_capabilities,
@@ -35,9 +39,10 @@ from application.capabilities import (
 from application.connections import describe_connections, list_connections
 from application.findings import findings as application_findings
 from application.topology import topology as application_topology
-from application.security import AuthorizationError, Principal
+from application.security import AuthorizationError, Capability, Principal, web_principal
 from application.resources import (
     InvalidResourceInput,
+    ResourceDescription,
     ResourceNotFound,
     UnknownResource,
     UnsupportedResourceOperation,
@@ -68,6 +73,67 @@ class APIRequest(HttpRequest):
 
 View = Callable[Concatenate[HttpRequest, ...], HttpResponse]
 APIView = Callable[Concatenate[APIRequest, ...], HttpResponse]
+
+
+# What these views answer, typed once: the OpenAPI document (hq_api/openapi.py)
+# derives its schemas from these, and its contract tests hold real responses
+# to them.
+class ErrorDetail(TypedDict):
+    code: str
+    message: str
+    details: NotRequired[Any]
+
+
+class Failure(TypedDict):
+    ok: Literal[False]
+    error: ErrorDetail
+
+
+class RootData(TypedDict):
+    service: str
+    api_version: int
+    resource: str
+    actor: str
+    granted: list[str]
+    links: dict[str, str]
+
+
+class CapabilityEntry(CapabilityDescription):
+    permitted: bool
+    idempotency_key_required: bool
+    request_schema: dict[str, Any]
+
+
+class CapabilityCatalog(TypedDict):
+    schema_version: int
+    capabilities: list[CapabilityEntry]
+
+
+class ResourceEntry(ResourceDescription):
+    permitted: bool
+
+
+class ResourceCatalog(TypedDict):
+    schema_version: int
+    resources: list[ResourceEntry]
+
+
+class ConnectionCatalog(TypedDict):
+    schema_version: int
+    connections: list[dict[str, Any]]
+    groups: list[dict[str, Any]]
+
+
+@with_config(ConfigDict(extra="allow"))
+class ResourceCollection(TypedDict):
+    """Every list guarantees items/count and may include projection metadata."""
+
+    items: list[dict[str, Any]]
+    count: int
+
+
+# An application projection with its own schema_version; HQ types it there.
+Projection = dict[str, Any]
 
 
 # HQ answers a failed capability with its own error code. Mapping the ones that
@@ -129,10 +195,11 @@ def _permission_catalog(
 
 
 def _fail(message: str, *, code: str, status: int, details: Any = None) -> HttpResponse:
-    error: dict[str, Any] = {"code": code, "message": message}
+    error: ErrorDetail = {"code": code, "message": message}
     if details is not None:
         error["details"] = details
-    response = _json({"ok": False, "error": error}, status=status)
+    failure: Failure = {"ok": False, "error": error}
+    response = _json(dict(failure), status=status)
     if status == 401:
         # A native client cannot use an HTML login page. Saying *how* to
         # authenticate is the difference between a retryable failure and a
@@ -150,7 +217,18 @@ def _principal(request: HttpRequest) -> tuple[Principal, dict[str, Any]]:
     return api_principal(claims), claims
 
 
-def _request_schema(spec: dict[str, Any]) -> dict[str, Any]:
+def _operator(request: HttpRequest) -> Principal | None:
+    """The signed-in operator, for a request with a session and no token."""
+
+    if "Authorization" in request.headers:
+        return None
+    user = getattr(request, "user", None)
+    if user is None or not user.is_authenticated:
+        return None
+    return web_principal(user)
+
+
+def _request_schema(spec: Mapping[str, Any]) -> dict[str, Any]:
     # Pydantic emits local refs such as ``#/$defs/Record``. Once the command
     # schema is nested under ``payload`` those refs still resolve from the
     # document root, so hoist its definitions into the envelope root instead
@@ -187,18 +265,40 @@ def _request_schema(spec: dict[str, Any]) -> dict[str, Any]:
     return schema
 
 
-def _endpoint(methods: tuple[str, ...]) -> Callable[[APIView], View]:
+# Every endpoint can answer these before its view runs: an unverified token,
+# a refused grant or paused agents, a wrong method, an unconfigured surface.
+ENDPOINT_ERRORS = (401, 403, 405, 503)
+
+
+def _endpoint(
+    methods: tuple[str, ...],
+    *,
+    data: Any,
+    errors: tuple[int, ...] = (),
+    operator_session: bool = False,
+) -> Callable[[APIView], View]:
     """Authenticate, then put every failure in the same envelope.
 
     CSRF-exempt by construction rather than by concession: these views read the
     Authorization header and never the session cookie, so a browser cannot make
-    an authenticated request to them at all.
+    an authenticated request to them at all. ``operator_session`` is the one
+    exception, for GET views only: a signed-in operator's session, holding
+    READ, is accepted as well, and works while the token surface is
+    unconfigured because it does not depend on it.
+
+    ``data`` is the type a success carries under ``data`` (None: the body is
+    not enveloped) and ``errors`` the statuses the view adds to
+    ENDPOINT_ERRORS. Both are read by hq_api/openapi.py.
     """
+
+    if operator_session and set(methods) - {"GET", "HEAD"}:
+        raise ValueError("A session is accepted only on a safe method.")
 
     def decorate(view: APIView) -> View:
         @csrf_exempt
         def wrapper(request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
-            if not is_configured():
+            operator = _operator(request) if operator_session else None
+            if operator is None and not is_configured():
                 return _fail(
                     "The machine API is not configured on this deployment.",
                     code="not_configured",
@@ -212,6 +312,15 @@ def _endpoint(methods: tuple[str, ...]) -> Callable[[APIView], View]:
                 )
                 response["Allow"] = ", ".join(methods)
                 return response
+            if operator is not None:
+                try:
+                    operator.require(Capability.READ)
+                except AuthorizationError as exc:
+                    return _fail(exc.reason, code=exc.code, status=403)
+                authenticated = cast(APIRequest, request)
+                authenticated.principal = operator
+                authenticated.token_claims = {}
+                return view(authenticated, *args, **kwargs)
             try:
                 principal, claims = _principal(request)
             except (TokenError, AuthorizationError) as exc:
@@ -247,11 +356,7 @@ def _endpoint(methods: tuple[str, ...]) -> Callable[[APIView], View]:
             authenticated = cast(APIRequest, request)
             authenticated.principal = principal
             authenticated.token_claims = claims
-            response = view(authenticated, *args, **kwargs)
-            if kwargs.get("version") == 1:
-                response["Deprecation"] = "true"
-                response["Link"] = '</api/v2/>; rel="successor-version"'
-            return response
+            return view(authenticated, *args, **kwargs)
 
         wrapper.__name__ = view.__name__
         wrapper.__doc__ = view.__doc__
@@ -261,36 +366,51 @@ def _endpoint(methods: tuple[str, ...]) -> Callable[[APIView], View]:
         # is served to anyone who asks. `core.tests.test_security` walks these routes
         # and fails if one lacks the mark.
         setattr(wrapper, "__hq_authenticated__", True)
+        setattr(wrapper, "__hq_methods__", methods)
+        setattr(wrapper, "__hq_data__", data)
+        setattr(wrapper, "__hq_errors__", tuple(sorted({*ENDPOINT_ERRORS, *errors})))
+        setattr(wrapper, "__hq_operator_session__", operator_session)
         return wrapper
 
     return decorate
 
 
-@_endpoint(("GET",))
-def root(request: APIRequest, version: int) -> HttpResponse:
+@_endpoint(("GET",), data=RootData)
+def root(request: APIRequest) -> HttpResponse:
     """What this is, and what the presented credential may actually do."""
 
-    links = {"capabilities": f"/api/v{version}/capabilities/"}
-    if version >= 2:
-        links["resources"] = f"/api/v{version}/resources/"
-        links["connections"] = f"/api/v{version}/connections/"
-        links["topology"] = f"/api/v{version}/topology/"
-        links["findings"] = f"/api/v{version}/findings/"
-    return _ok(
-        {
-            "service": "severino-hq",
-            "api_version": version,
-            "current_api_version": CURRENT_API_VERSION,
-            "resource": settings.SEVERINO_API_RESOURCE,
-            "actor": request.principal.actor,
-            "granted": sorted(granted(request.token_claims)),
-            "links": links,
-        }
-    )
+    links = {
+        name: reverse(f"hq_api:{name}")
+        for name in ("capabilities", "resources", "connections", "topology", "findings", "openapi")
+    }
+    data: RootData = {
+        "service": "severino-hq",
+        "api_version": CURRENT_API_VERSION,
+        "resource": settings.SEVERINO_API_RESOURCE,
+        "actor": request.principal.actor,
+        "granted": sorted(granted(request.token_claims)),
+        "links": links,
+    }
+    return _ok(data)
 
 
-@_endpoint(("GET",))
-def capabilities(request: APIRequest, version: int) -> HttpResponse:
+@_endpoint(("GET",), data=None, operator_session=True)
+def openapi(request: APIRequest) -> HttpResponse:
+    """This API as an OpenAPI 3.2 document, derived from its routes and registries.
+
+    Never anonymous: it names every capability, grant and resource kind, which
+    /capabilities/ already keeps from anonymous callers. The signed-in operator
+    reads it too (the reference page at /api/docs/), including where no API
+    resource is configured: it describes the code, not a credential.
+    """
+
+    from .openapi import document
+
+    return _json(document())
+
+
+@_endpoint(("GET",), data=CapabilityCatalog)
+def capabilities(request: APIRequest) -> HttpResponse:
     """Every capability HQ has, flagged by whether this token may run it.
 
     The whole registry is returned, not just the permitted slice: a client
@@ -300,36 +420,37 @@ def capabilities(request: APIRequest, version: int) -> HttpResponse:
 
     described = describe_capabilities()
     held = granted(request.token_claims)
-    return _ok(
-        {
-            "schema_version": described["schema_version"],
-            "capabilities": [
-                {
-                    **spec,
-                    "permitted": set(spec["required_capabilities"]) <= held,
-                    "idempotency_key_required": (
-                        version >= 2 and spec["effect"] != "read"
-                    ),
-                    "request_schema": _request_schema(spec),
-                }
-                for spec in described["capabilities"]
-            ],
-        }
-    )
+    specs: list[CapabilityDescription] = described["capabilities"]
+    catalog: CapabilityCatalog = {
+        "schema_version": described["schema_version"],
+        "capabilities": [
+            {
+                **spec,
+                "permitted": set(spec["required_capabilities"]) <= held,
+                "idempotency_key_required": spec["effect"] != "read",
+                "request_schema": _request_schema(spec),
+            }
+            for spec in specs
+        ],
+    }
+    return _ok(catalog)
 
 
-@_endpoint(("GET",))
-def resources(request: APIRequest, version: int) -> HttpResponse:
+@_endpoint(("GET",), data=ResourceCatalog)
+def resources(request: APIRequest) -> HttpResponse:
     """Every readable resource, including operations this token may use."""
 
     described = describe_resources()
     held = granted(request.token_claims)
-    return _ok(
-        {
-            "schema_version": described["schema_version"],
-            "resources": _permission_catalog(described["resources"], held),
-        }
-    )
+    specs: list[ResourceDescription] = described["resources"]
+    catalog: ResourceCatalog = {
+        "schema_version": described["schema_version"],
+        "resources": [
+            {**spec, "permitted": set(spec["required_capabilities"]) <= held}
+            for spec in specs
+        ],
+    }
+    return _ok(catalog)
 
 
 def _projection(
@@ -348,7 +469,7 @@ def _projection(
     "never applied".
     """
 
-    def view(request: APIRequest, version: int) -> HttpResponse:
+    def view(request: APIRequest) -> HttpResponse:
         try:
             return _ok(
                 serve(
@@ -366,7 +487,10 @@ def _projection(
     # route-walking security test reads them.
     view.__name__ = name
     view.__doc__ = doc
-    return _endpoint(("GET",))(view)
+    served = _endpoint(("GET",), data=Projection)(view)
+    # The narrowing inputs, for the OpenAPI document's query parameters.
+    setattr(served, "__hq_query_fields__", query_fields)
+    return served
 
 
 topology = _projection(
@@ -393,20 +517,19 @@ findings = _projection(
 )
 
 
-@_endpoint(("GET",))
-def connections(request: APIRequest, version: int) -> HttpResponse:
+@_endpoint(("GET",), data=ConnectionCatalog)
+def connections(request: APIRequest) -> HttpResponse:
     """Connection contracts plus the safe state this token may inspect."""
 
     described = describe_connections()
     held = granted(request.token_claims)
     state = list_connections(principal=request.principal)
-    return _ok(
-        {
-            "schema_version": described["schema_version"],
-            "connections": _permission_catalog(described["connections"], held),
-            "groups": state["groups"],
-        }
-    )
+    catalog: ConnectionCatalog = {
+        "schema_version": described["schema_version"],
+        "connections": _permission_catalog(described["connections"], held),
+        "groups": state["groups"],
+    }
+    return _ok(catalog)
 
 
 def _resource_failure(exc: Exception) -> HttpResponse:
@@ -429,8 +552,12 @@ def _resource_failure(exc: Exception) -> HttpResponse:
     raise exc
 
 
-@_endpoint(("GET",))
-def resource_list(request: APIRequest, version: int, name: str) -> HttpResponse:
+# What _resource_failure answers with.
+RESOURCE_ERRORS = (400, 404, 405)
+
+
+@_endpoint(("GET",), data=ResourceCollection, errors=RESOURCE_ERRORS)
+def resource_list(request: APIRequest, name: str) -> HttpResponse:
     """List one resource through its declared, schema-validated query."""
 
     filters: dict[str, str] = {}
@@ -457,10 +584,8 @@ def resource_list(request: APIRequest, version: int, name: str) -> HttpResponse:
         return _resource_failure(exc)
 
 
-@_endpoint(("GET",))
-def resource_detail(
-    request: APIRequest, version: int, name: str, identifier: str
-) -> HttpResponse:
+@_endpoint(("GET",), data=dict[str, Any], errors=RESOURCE_ERRORS)
+def resource_detail(request: APIRequest, name: str, identifier: str) -> HttpResponse:
     """Get one resource record through its declared identifier contract."""
 
     try:
@@ -500,32 +625,13 @@ class Envelope:
     expected_updated_at: str | None
 
 
-@dataclass(frozen=True)
-class Dialect:
-    """How one API version reads a request body.
-
-    There is one axis here, not seven. v2 checks the envelope (media type,
-    JSON strictness, unknown fields, field types, a retry key on every write)
-    and v1 checks none of it. Stating that once, as data, is the difference
-    between adding v3 and auditing a function for every place a version number
-    was compared.
-
-    v1 is frozen rather than improved: a Shortcut written against it six months
-    ago still works, which is the whole reason the version sits in the path.
-    """
-
-    strict: bool
-
-
-DIALECTS = {1: Dialect(strict=False), 2: Dialect(strict=True)}
-
 ENVELOPE_FIELDS = frozenset({"payload", "target", "expected_updated_at"})
 
 
-def _body_json(request: HttpRequest, dialect: Dialect) -> dict[str, Any]:
+def _body_json(request: HttpRequest) -> dict[str, Any]:
     """The request body as a JSON object, or an EnvelopeError saying why not."""
 
-    if dialect.strict and request.content_type != "application/json":
+    if request.content_type != "application/json":
         raise EnvelopeError(
             "Content-Type must be application/json.",
             code="unsupported_media_type",
@@ -542,14 +648,11 @@ def _body_json(request: HttpRequest, dialect: Dialect) -> dict[str, Any]:
     if not body:
         return {}
     try:
-        if dialect.strict:
-            payload = json.loads(
-                body,
-                parse_constant=_reject_json_constant,
-                object_pairs_hook=_strict_json_object,
-            )
-        else:
-            payload = json.loads(body)
+        payload = json.loads(
+            body,
+            parse_constant=_reject_json_constant,
+            object_pairs_hook=_strict_json_object,
+        )
     except (ValueError, UnicodeDecodeError):
         raise EnvelopeError(
             "Request body is not valid JSON.", code="invalid_json"
@@ -561,9 +664,7 @@ def _body_json(request: HttpRequest, dialect: Dialect) -> dict[str, Any]:
     return payload
 
 
-def _parse_envelope(
-    request: HttpRequest, dialect: Dialect
-) -> tuple[dict[str, Any], Envelope]:
+def _parse_envelope(request: HttpRequest) -> tuple[dict[str, Any], Envelope]:
     """Validate the wrapper so the capability only ever sees a real command.
 
     Returns the raw body alongside the parsed envelope because the idempotency
@@ -572,41 +673,39 @@ def _parse_envelope(
     are still two different requests.
     """
 
-    payload = _body_json(request, dialect)
+    payload = _body_json(request)
 
-    if dialect.strict:
-        unknown = payload.keys() - ENVELOPE_FIELDS
-        if unknown:
-            raise EnvelopeError(
-                f"Unknown request fields: {', '.join(sorted(unknown))}."
-            )
+    unknown = payload.keys() - ENVELOPE_FIELDS
+    if unknown:
+        raise EnvelopeError(f"Unknown request fields: {', '.join(sorted(unknown))}.")
 
-    command = payload.get("payload", {}) if dialect.strict else payload.get("payload") or {}
+    command = payload.get("payload", {})
     if not isinstance(command, dict):
         raise EnvelopeError("payload must be a JSON object.")
 
     target = payload.get("target")
     expected_updated_at = payload.get("expected_updated_at")
-    if dialect.strict:
-        # bool before (str, int): in Python a bool *is* an int, and a target of
-        # ``true`` is a client bug worth naming rather than a record id of 1.
-        if target is not None and (
-            isinstance(target, bool) or not isinstance(target, (str, int))
-        ):
-            raise EnvelopeError("target must be a string or integer.")
-        if expected_updated_at is not None and not isinstance(expected_updated_at, str):
-            raise EnvelopeError("expected_updated_at must be a string.")
+    # bool before (str, int): in Python a bool *is* an int, and a target of
+    # ``true`` is a client bug worth naming rather than a record id of 1.
+    if target is not None and (isinstance(target, bool) or not isinstance(target, (str, int))):
+        raise EnvelopeError("target must be a string or integer.")
+    if expected_updated_at is not None and not isinstance(expected_updated_at, str):
+        raise EnvelopeError("expected_updated_at must be a string.")
 
     return payload, Envelope(command, target, expected_updated_at)
 
 
-@_endpoint(("POST",))
-def execute(request: APIRequest, name: str, version: int) -> HttpResponse:
+# The envelope's own refusals (malformed, too large, wrong media type, a missing
+# or reused retry key) and every status a capability's error code maps to.
+EXECUTE_ERRORS = (400, 409, 413, 415, *CAPABILITY_STATUS.values())
+
+
+@_endpoint(("POST",), data=dict[str, Any], errors=EXECUTE_ERRORS)
+def execute(request: APIRequest, name: str) -> HttpResponse:
     """Run one HQ capability, replaying machine writes by idempotency key."""
 
-    dialect = DIALECTS.get(version, DIALECTS[CURRENT_API_VERSION])
     try:
-        payload, envelope = _parse_envelope(request, dialect)
+        payload, envelope = _parse_envelope(request)
     except EnvelopeError as exc:
         return _fail(exc.message, code=exc.code, status=exc.status)
 
@@ -652,22 +751,19 @@ def execute(request: APIRequest, name: str, version: int) -> HttpResponse:
         return _fail(exc.reason, code=exc.code, status=403)
 
     key = request.headers.get("Idempotency-Key", "")
-    if dialect.strict and not key:
+    if not key:
         return _fail(
             "Idempotency-Key is required for capabilities that change state.",
             code="idempotency_key_required",
             status=400,
         )
-    if not key:
-        response_payload, status = run()
-        return _json(response_payload, status=status)
 
     try:
         key = validate_key(key)
         response_payload, status, replayed = execute_once(
             actor=request.principal.actor,
             key=key,
-            request_sha256=request_fingerprint(name, payload, api_version=version),
+            request_sha256=request_fingerprint(name, payload, api_version=CURRENT_API_VERSION),
             operation=run,
         )
     except InvalidIdempotencyKey as exc:

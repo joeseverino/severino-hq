@@ -16,9 +16,9 @@ from expenses.models import Expense
 from projects.models import Project
 
 from core.audit import operation_context
-from .business_use import require_business_use
 from .sensitivity import SAFE_SENSITIVITIES
-from .security import Capability, Principal
+from .domains import records_of
+from .security import Principal
 
 
 
@@ -88,7 +88,7 @@ def save_expense(
     current_id: int | None = None,
     expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    principal.require(Capability.WRITE_EXPENSES)
+    principal.require(records_of("expenses").write)
     operation = "expense.create" if current_id is None else "expense.update"
     with operation_context(
         interface=principal.interface, actor=principal.actor, operation=operation
@@ -105,7 +105,6 @@ def save_expense(
                 raise ConflictError(f"Expense {current_id!r} changed after it was read.")
 
         values = asdict(command)
-        require_business_use(values)
         relations = {
             "related_project": _one(Project, "slug", values.pop("related_project")),
             "related_asset": _one(Asset, "slug", values.pop("related_asset")),
@@ -119,25 +118,3 @@ def save_expense(
         expense.full_clean()
         expense.save()
     return {"ok": True, "created": created, "expense": serialize_expense(expense)}
-
-
-def expense_command_from_cleaned_data(data: dict[str, Any]) -> ExpenseCommand:
-    return ExpenseCommand(
-        date=data["date"],
-        vendor=data["vendor"],
-        item=data["item"],
-        category=data["category"],
-        total_cost=data["total_cost"],
-        business_use_percentage=data["business_use_percentage"],
-        payment_method=data["payment_method"],
-        business_purpose=data["business_purpose"],
-        notes=data["notes"],
-        related_project=data["related_project"].slug if data["related_project"] else None,
-        related_asset=data["related_asset"].slug if data["related_asset"] else None,
-        related_content=data["related_content"].slug if data["related_content"] else None,
-        related_documentation=(
-            data["related_documentation"].doc_id
-            if data["related_documentation"]
-            else None
-        ),
-    )

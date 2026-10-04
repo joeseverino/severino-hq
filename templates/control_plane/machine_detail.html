@@ -278,7 +278,7 @@ for: each once, the detail below. Whatever it is also declared as is the
           </tr>
           <tr>
             <th scope="row">Traffic</th>
-            <td>{{ machine.presence.rx_bytes|filesizeformat }} in · {{ machine.presence.tx_bytes|filesizeformat }} out</td>
+            <td>{{ machine.presence.rx_bytes|bytes }} in · {{ machine.presence.tx_bytes|bytes }} out</td>
           </tr>
           <tr>
             <th scope="row">Node key</th>

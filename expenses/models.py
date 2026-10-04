@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from django.db import models
 
+from application import business_use
 from assets.models import PAYMENT_METHOD_CHOICES, quantize_money
 from core.models import TimestampedModel
 
@@ -38,6 +39,7 @@ class Expense(TimestampedModel):
     )
     business_use_percentage = models.PositiveSmallIntegerField(
         default=100,
+        validators=business_use.VALIDATORS,
         help_text="0-100. Used to estimate the deductible amount.",
     )
     estimated_deductible_amount = models.DecimalField(
@@ -93,16 +95,15 @@ class Expense(TimestampedModel):
             models.Index(fields=("category",)),
             models.Index(fields=("vendor",)),
         ]
+        constraints = [business_use.in_range("expense_business_use_in_range")]
 
     def __str__(self) -> str:
         return f"{self.date} {self.vendor} · {self.item}"
 
     def save(self, *args, **kwargs):
-        pct = max(0, min(int(self.business_use_percentage or 0), 100))
-        self.business_use_percentage = pct
         cost = self.total_cost or Decimal("0.00")
         self.estimated_deductible_amount = quantize_money(
-            cost * Decimal(pct) / Decimal(100)
+            cost * Decimal(self.business_use_percentage) / Decimal(100)
         )
         super().save(*args, **kwargs)
 

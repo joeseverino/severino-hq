@@ -94,7 +94,7 @@ class RefreshAsksTheAppTests(TestCase):
 
     def test_a_principal_that_may_not_wake_the_controller_falls_back_to_the_public_read(self):
         read_by_app()
-        writer = Principal("agent", "mcp", frozenset({Capability.READ, Capability.WRITE_PROJECTS}))
+        writer = Principal("agent", "mcp", frozenset({Capability.READ, "write_projects"}))
 
         result, fetcher = self.refresh(writer)
 

@@ -10,7 +10,6 @@ second truth, only a second way of slicing the first.
 from __future__ import annotations
 
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from django.shortcuts import redirect, render
@@ -80,7 +79,7 @@ def _records_lede(zone) -> str:
     )
 
 
-class ZoneIndexView(LoginRequiredMixin, View):
+class ZoneIndexView(View):
     """Straight to a domain when there is one to go to.
 
     A list page is a stop on the way to the page an operator actually wanted;
@@ -122,7 +121,7 @@ def _spf_value(zone) -> str:
     return ""
 
 
-class ZoneMailView(LoginRequiredMixin, View):
+class ZoneMailView(View):
     """Everything that decides a domain's mail, on one page.
 
     Four records read separately mean nothing and read together are a policy:
@@ -217,7 +216,7 @@ class ZoneMailView(LoginRequiredMixin, View):
         )
 
 
-class ZonePinView(LoginRequiredMixin, View):
+class ZonePinView(View):
     """Star a domain so it sorts first, for this operator only."""
 
     def post(self, request, zone: str):
@@ -249,7 +248,7 @@ def _pin_action(zone) -> PageAction:
     )
 
 
-class ZoneDetailView(LoginRequiredMixin, View):
+class ZoneDetailView(View):
     """One domain: every record in it, and what the zone currently says."""
 
     def get(self, request, zone):
@@ -318,7 +317,7 @@ def _declaration_actions(zone) -> tuple[PageAction, ...]:
     return tuple(actions)
 
 
-class ZoneAdoptView(LoginRequiredMixin, View):
+class ZoneAdoptView(View):
     """Take on a domain and everything published in it, exactly as it is.
 
     One action: declaring the domain is the decision. The records another

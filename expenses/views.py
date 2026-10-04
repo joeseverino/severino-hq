@@ -1,6 +1,5 @@
 from decimal import Decimal
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Sum
 from django.urls import reverse, reverse_lazy
 from django.views.generic import (
@@ -11,21 +10,15 @@ from django.views.generic import (
     UpdateView,
 )
 
-from application.expenses import expense_command_from_cleaned_data, save_expense
-from application.deletion import delete_expense
 from application.pages import PageAction, PageMixin, record_trail
 from application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from application.moments import when_day
-from application.writes import (
-    ServiceCreateMixin,
-    ServiceDeleteMixin,
-    ServiceUpdateMixin,
-)
+from application.writes import RecordDeleteMixin, RecordFormMixin
 from .forms import ExpenseForm
 from .models import EXPENSE_CATEGORY_CHOICES, Expense
 
 
-class ExpenseListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
+class ExpenseListView(PageMixin, TableListMixin, ListView):
     model = Expense
     template_name = "expenses/expense_list.html"
     paginate_by = 50
@@ -87,7 +80,7 @@ class ExpensePage(PageMixin):
         return record_trail(EXPENSES_TRAIL, getattr(self, "object", None), str)
 
 
-class ExpenseDetailView(PageMixin, LoginRequiredMixin, DetailView):
+class ExpenseDetailView(PageMixin, DetailView):
     model = Expense
     template_name = "expenses/expense_detail.html"
     context_object_name = "expense"
@@ -115,52 +108,26 @@ class ExpenseDetailView(PageMixin, LoginRequiredMixin, DetailView):
         )
 
 
-class ExpenseWrite:
-    """What every expense write shares, whichever direction it goes.
-
-    An expense is identified by its primary key, which the service payload
-    spells ``id``: hence the two names for the one identity.
-    """
-
-    model = Expense
-    noun = "Expense"
-    result_key = "expense"
-    identity_attr = "pk"
-    identity_result_key = "id"
-    identity_kwarg = "current_id"
-
-    # An expense is logged, not created: the ledger vocabulary is the one the
-    # rest of this domain already speaks.
-    created_message = "Expense logged: {target}."
-    updated_message = "Expense updated: {target}."
-    deleted_message = "Expense deleted: {target}."
-
-
-class ExpenseCreateView(
-    ExpenseWrite, ExpensePage, ServiceCreateMixin, LoginRequiredMixin, CreateView
-):
+class ExpenseCreateView(ExpensePage, RecordFormMixin, CreateView):
     page_title = "New expense"
     form_class = ExpenseForm
     template_name = "expenses/expense_form.html"
-    service = staticmethod(save_expense)
-    command_from_cleaned_data = staticmethod(expense_command_from_cleaned_data)
+    # An expense is logged, not created: the ledger vocabulary.
+    created_message = "Expense logged: {target}."
 
 
-class ExpenseUpdateView(
-    ExpenseWrite, ExpensePage, ServiceUpdateMixin, LoginRequiredMixin, UpdateView
-):
+class ExpenseUpdateView(ExpensePage, RecordFormMixin, UpdateView):
     page_title = "Edit expense"
+    model = Expense
     form_class = ExpenseForm
     template_name = "expenses/expense_form.html"
-    service = staticmethod(save_expense)
-    command_from_cleaned_data = staticmethod(expense_command_from_cleaned_data)
+    updated_message = "Expense updated: {target}."
 
 
-class ExpenseDeleteView(
-    ExpenseWrite, ExpensePage, ServiceDeleteMixin, LoginRequiredMixin, DeleteView
-):
+class ExpenseDeleteView(ExpensePage, RecordDeleteMixin, DeleteView):
     page_title = "Delete expense?"
+    model = Expense
     template_name = "expenses/expense_confirm_delete.html"
     success_url = reverse_lazy("expenses:list")
     context_object_name = "expense"
-    service = staticmethod(delete_expense)
+    deleted_message = "Expense deleted: {target}."

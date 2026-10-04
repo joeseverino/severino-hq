@@ -9,7 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect
@@ -35,7 +34,8 @@ from application.receipts import (
     update_receipt,
     upload_receipt,
 )
-from application.deletion import DeleteCommand, delete_receipt
+from application.deletion import DeleteCommand
+from application.records import deleter
 from application.security import web_principal
 from application.pages import PageAction, PageMixin, record_trail
 from application.tables import TableColumn, TableListMixin, TableToggle
@@ -53,7 +53,7 @@ from .models import Receipt
 RECEIPTS_TRAIL = ("Receipts", reverse_lazy("receipts:list"))
 
 
-class ReceiptListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
+class ReceiptListView(PageMixin, TableListMixin, ListView):
     model = Receipt
     template_name = "receipts/receipt_list.html"
     paginate_by = 25
@@ -96,7 +96,7 @@ class ReceiptPage(PageMixin):
         return record_trail(RECEIPTS_TRAIL, self.get_receipt(), str)
 
 
-class ReceiptDetailView(PageMixin, LoginRequiredMixin, DetailView):
+class ReceiptDetailView(PageMixin, DetailView):
     model = Receipt
     template_name = "receipts/receipt_detail.html"
     context_object_name = "receipt"
@@ -135,7 +135,7 @@ class ReceiptDetailView(PageMixin, LoginRequiredMixin, DetailView):
         return tuple(actions)
 
 
-class ReceiptMatchView(ReceiptPage, LoginRequiredMixin, TemplateView):
+class ReceiptMatchView(ReceiptPage, TemplateView):
     """Suggest potential Expense links for an unlinked receipt."""
 
     template_name = "receipts/receipt_match.html"
@@ -210,7 +210,7 @@ class ReceiptMatchView(ReceiptPage, LoginRequiredMixin, TemplateView):
         return redirect(receipt.get_absolute_url())
 
 
-class ReceiptCreateView(ReceiptPage, LoginRequiredMixin, CreateView):
+class ReceiptCreateView(ReceiptPage, CreateView):
     page_title = "Upload receipt"
     model = Receipt
     form_class = ReceiptUploadForm
@@ -228,7 +228,7 @@ class ReceiptCreateView(ReceiptPage, LoginRequiredMixin, CreateView):
         return redirect(self.object.get_absolute_url())
 
 
-class ReceiptUpdateView(ReceiptPage, LoginRequiredMixin, UpdateView):
+class ReceiptUpdateView(ReceiptPage, UpdateView):
     page_title = "Edit receipt"
     model = Receipt
     form_class = ReceiptUploadForm
@@ -246,7 +246,7 @@ class ReceiptUpdateView(ReceiptPage, LoginRequiredMixin, UpdateView):
         return redirect(self.object.get_absolute_url())
 
 
-class ReceiptDeleteView(ReceiptPage, LoginRequiredMixin, DeleteView):
+class ReceiptDeleteView(ReceiptPage, DeleteView):
     page_title = "Delete receipt?"
     model = Receipt
     template_name = "receipts/receipt_confirm_delete.html"
@@ -255,7 +255,7 @@ class ReceiptDeleteView(ReceiptPage, LoginRequiredMixin, DeleteView):
 
     def form_valid(self, form):
         receipt_id = self.get_object().pk
-        delete_receipt(
+        deleter("receipts")(
             DeleteCommand(confirm=str(receipt_id)),
             principal=web_principal(self.request.user),
             current_id=receipt_id,
@@ -264,7 +264,7 @@ class ReceiptDeleteView(ReceiptPage, LoginRequiredMixin, DeleteView):
         return redirect(self.success_url)
 
 
-class ReceiptFileView(LoginRequiredMixin, View):
+class ReceiptFileView(View):
     """Auth-protected download of a receipt's underlying file."""
 
     def get(self, request, pk: int):

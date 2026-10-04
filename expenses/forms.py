@@ -1,11 +1,9 @@
 from django import forms
 
-from application.forms import BusinessUseMixin
-
 from .models import Expense
 
 
-class ExpenseForm(BusinessUseMixin, forms.ModelForm):
+class ExpenseForm(forms.ModelForm):
     class Meta:
         model = Expense
         fields = [

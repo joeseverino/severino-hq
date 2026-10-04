@@ -153,6 +153,17 @@ jobs:
             exit 1
           fi
           echo "the matrix and the badge state the toolchain: ${expected//|/, }" | tee "$RUNNER_TEMP/gate-badges"
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: scripts/openapi/package-lock.json
+      - run: npm --prefix scripts/openapi ci
+      - name: OpenAPI contracts
+        id: openapi
+        run: |
+          scripts/check-openapi.sh
+          echo "both OpenAPI descriptions pass specification lint" | tee "$RUNNER_TEMP/gate-openapi"
       - name: Each lockfile is what its .in file compiles to
         id: lockfile
         # Each header names the command that produces its lockfile. Regenerated
@@ -380,6 +391,7 @@ jobs:
           python manage.py check
           python manage.py plugins
       - run: python manage.py makemigrations --check --dry-run
+      - run: python manage.py api_openapi --check
       - name: Tests with coverage gate
         env:
           COVERAGE_FLOOR: ${{ steps.toolchain.outputs.coverage-floor }}

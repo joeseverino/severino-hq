@@ -240,7 +240,7 @@ class CapabilityGateTests(TestCase):
         self.assertEqual(set(spec.required_capabilities), upserts)
 
     def test_a_principal_missing_either_is_refused(self):
-        for held in (Capability.WRITE_PROJECTS, Capability.WRITE_ASSETS):
+        for held in ("write_projects", "write_assets"):
             principal = Principal("example-agent", "mcp", frozenset({Capability.READ, held}))
 
             result = run(principal=principal)
@@ -252,7 +252,7 @@ class CapabilityGateTests(TestCase):
     def test_the_use_case_refuses_without_the_capability_too(self):
         from ..security import AuthorizationError
 
-        principal = Principal("example-agent", "mcp", frozenset({Capability.WRITE_PROJECTS}))
+        principal = Principal("example-agent", "mcp", frozenset({"write_projects"}))
         with self.assertRaises(AuthorizationError):
             import_registry(HQImportCommand(**DOCUMENT), principal=principal)
 

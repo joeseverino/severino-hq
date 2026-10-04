@@ -12,9 +12,9 @@ from django.db import transaction
 from assets.models import Asset
 from core.audit import operation_context
 from projects.models import Project
-from .business_use import require_business_use
 from .sensitivity import safe_doc_ids
-from .security import Capability, Principal
+from .domains import records_of
+from .security import Principal
 from .upserts import upsert_by_slug
 from .projection import addressable, iso, listing
 from .ui import counted
@@ -110,7 +110,7 @@ def save_asset(
     current_slug: str | None = None,
     expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    principal.require(Capability.WRITE_ASSETS)
+    principal.require(records_of("assets").write)
     operation = "asset.create" if current_slug is None else "asset.update"
     with operation_context(
         interface=principal.interface, actor=principal.actor, operation=operation
@@ -130,7 +130,6 @@ def save_asset(
                 )
 
         values = asdict(command)
-        require_business_use(values)
         project_slugs = values.pop("related_projects")
         projects = list(Project.objects.filter(slug__in=project_slugs))
         found_slugs = {project.slug for project in projects}
@@ -168,17 +167,4 @@ def upsert_asset(
         save_asset,
         principal=principal,
         expected_updated_at=expected_updated_at,
-    )
-
-
-def asset_command_from_cleaned_data(data: dict[str, Any]) -> AssetCommand:
-    related = data.get("related_projects") or ()
-    values = {
-        field: data.get(field)
-        for field in AssetCommand.__dataclass_fields__
-        if field != "related_projects"
-    }
-    return AssetCommand(
-        **values,
-        related_projects=tuple(project.slug for project in related),
     )

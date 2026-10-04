@@ -10,10 +10,10 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import Field
 
-from application.integration_specs import ResourceSpec
-from application.resources import resource_registry
+from hq_api.openapi import document
 
 from . import services
+from .contract import catalogue, resource_contract
 
 mcp = FastMCP(
     "Severino HQ",
@@ -39,17 +39,10 @@ def register_tool(function: Callable[..., Any]) -> Callable[..., Awaitable[Any]]
     return mcp.tool()(sync_to_async(function, thread_sensitive=True))
 
 
-# Resource kinds come from HQ's resource registry, so a kind a provider adds is
-# readable here without touching this module.
-_REGISTRY = resource_registry()
-
-
-def _kinds(supported: Callable[[ResourceSpec], bool]) -> tuple[str, ...]:
-    return tuple(sorted(name for name, spec in _REGISTRY.items() if supported(spec)))
-
-
-_LISTABLE = _kinds(lambda spec: bool(spec.list_handler and spec.list_query_type))
-_ADDRESSABLE = _kinds(lambda spec: bool(spec.detail_handler and spec.identifier))
+# Snapshot the live deployment contract once, after Django has initialized.
+_CONTRACT = resource_contract(document())
+_LISTABLE = tuple(resource.name for resource in _CONTRACT.listable)
+_ADDRESSABLE = tuple(resource.name for resource in _CONTRACT.addressable)
 
 if TYPE_CHECKING:
     ListableResource = str
@@ -57,15 +50,6 @@ if TYPE_CHECKING:
 else:
     ListableResource = Literal[_LISTABLE]
     AddressableResource = Literal[_ADDRESSABLE]
-
-
-def _catalogue(kinds: tuple[str, ...], *, identifier: bool) -> str:
-    lines = []
-    for name in kinds:
-        spec = _REGISTRY[name]
-        key = f" Identifier: `{spec.identifier}`." if identifier else ""
-        lines.append(f"- `{name}`: {spec.summary}{key}")
-    return "\n".join(lines)
 
 
 def list_resource(
@@ -87,7 +71,7 @@ def list_resource(
 list_resource.__doc__ = (
     "List records of one HQ resource kind as `{items, count}`. Pages are bounded; "
     "a kind may refuse a caller without the capability it requires. Kinds:\n"
-    + _catalogue(_LISTABLE, identifier=False)
+    + catalogue(_CONTRACT.listable)
 )
 
 
@@ -105,7 +89,7 @@ def get_resource(
 get_resource.__doc__ = (
     "Get one record of an HQ resource kind, with its relationships. A missing record "
     "is an error, not an empty result. Kinds and their identifiers:\n"
-    + _catalogue(_ADDRESSABLE, identifier=True)
+    + catalogue(_CONTRACT.addressable)
 )
 
 

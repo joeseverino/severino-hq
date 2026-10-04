@@ -24,7 +24,7 @@ OPERATOR = Principal(
     frozenset(
         {
             Capability.READ,
-            Capability.WRITE_PROJECTS,
+            "write_projects",
             Capability.MANAGE_CONTACTS,
             Capability.LOOK_UP_PUBLIC_RECORDS,
         }

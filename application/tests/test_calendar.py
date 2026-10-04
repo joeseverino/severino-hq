@@ -283,7 +283,7 @@ class WriteTests(TestCase):
         with override_settings(SEVERINO_MCP_ENABLE_CALENDAR=True, SEVERINO_MCP_ENABLE_WRITES=False):
             agent = mcp_principal()
             self.assertTrue(agent.permits(Capability.WRITE_CALENDAR))
-            self.assertFalse(agent.permits(Capability.WRITE_EXPENSES))
+            self.assertFalse(agent.permits("write_expenses"))
             self.assertFalse(agent.permits(Capability.DELETE_CALENDAR))
 
     def test_choices_are_per_operator_and_name_a_real_source(self):

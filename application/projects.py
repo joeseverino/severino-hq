@@ -20,7 +20,8 @@ from projects.models import Project
 from projects.github import GitHubMetadataError, fetch_last_push
 from content.content_sync import ContentSyncError, sync_content_index
 from .sensitivity import safe_doc_ids
-from .security import Capability, Principal
+from .domains import records_of
+from .security import Principal
 from .upserts import upsert_by_slug
 from .projection import addressable, iso, listing
 
@@ -121,7 +122,7 @@ def refresh_project(
     public read of when it was last pushed.
     """
 
-    principal.require(Capability.WRITE_PROJECTS)
+    principal.require(records_of("projects").write)
     try:
         project = Project.objects.get(slug=slug)
     except Project.DoesNotExist as exc:
@@ -262,7 +263,7 @@ def save_project(
 ) -> dict[str, Any]:
     """Create or update one project and return the canonical representation."""
 
-    principal.require(Capability.WRITE_PROJECTS)
+    principal.require(records_of("projects").write)
     operation = "project.create" if current_slug is None else "project.update"
     with operation_context(
         interface=principal.interface, actor=principal.actor, operation=operation
@@ -312,15 +313,4 @@ def upsert_project(
         save_project,
         principal=principal,
         expected_updated_at=expected_updated_at,
-    )
-
-
-def project_command_from_cleaned_data(data: dict[str, Any]) -> ProjectCommand:
-    """Translate the shared ModelForm's validated fields into the use-case DTO."""
-
-    return ProjectCommand(
-        **{
-            field: data.get(field, "")
-            for field in ProjectCommand.__dataclass_fields__
-        }
     )

@@ -12,7 +12,6 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -49,7 +48,6 @@ def reply_mailto(address: str, subject: str = "Re: your message") -> str:
     return f"mailto:{quote(address, safe='@')}?subject={quote(subject, safe='')}"
 
 
-@login_required
 def contact_list(request):
     selected_status = request.GET.get("status", "").strip()
     q = request.GET.get("q", "").strip()
@@ -83,7 +81,6 @@ def contact_list(request):
     )
 
 
-@login_required
 def contact_detail(request, pk: int):
     try:
         submission = get_submission(pk)
@@ -146,7 +143,6 @@ def _safe_next(request) -> str:
     return safe_next(request, fallback=listing, scope=listing)
 
 
-@login_required
 @require_POST
 def contact_set_status(request, pk: int):
     status = request.POST.get("status", "")
@@ -175,7 +171,6 @@ def contact_set_status(request, pk: int):
     return redirect(_safe_next(request))
 
 
-@login_required
 def contact_delete(request, pk: int):
     try:
         submission = get_submission(pk)

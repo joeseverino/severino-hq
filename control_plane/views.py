@@ -6,7 +6,6 @@ from typing import Any
 
 from django.contrib import messages
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from application.routes import reverse
@@ -186,7 +185,7 @@ def _removal_note(resource) -> str:
         return ""
 
 
-class ResourceRemoveView(LoginRequiredMixin, View):
+class ResourceRemoveView(View):
     """Ask first, then queue removal of the record itself.
 
     Not a row delete. What this describes lives at a provider, so dropping the
@@ -268,7 +267,7 @@ class ResourceRemoveView(LoginRequiredMixin, View):
         return redirect("control_plane:detail", key=key)
 
 
-class InfrastructureListView(PageMixin, LoginRequiredMixin, ListView):
+class InfrastructureListView(PageMixin, ListView):
     model = ManagedResource
     template_name = "control_plane/resource_list.html"
     context_object_name = "resources"
@@ -303,7 +302,7 @@ class InfrastructureListView(PageMixin, LoginRequiredMixin, ListView):
         return context
 
 
-class InfrastructureDetailView(PageMixin, LoginRequiredMixin, DetailView):
+class InfrastructureDetailView(PageMixin, DetailView):
     model = ManagedResource
     slug_field = "key"
     slug_url_kwarg = "key"
@@ -506,7 +505,7 @@ OPERATION_PHRASE = {
 }
 
 
-class OperationView(LoginRequiredMixin, View):
+class OperationView(View):
     """Ask the controller for one action on one resource.
 
     The action comes from the URL rather than from the class, so adding a verb
@@ -536,7 +535,7 @@ class OperationView(LoginRequiredMixin, View):
         return redirect(destination)
 
 
-class CertificateDownloadView(LoginRequiredMixin, View):
+class CertificateDownloadView(View):
     def get(self, request, key):
         resource = get_object_or_404(ManagedResource, key=key)
         certificate_pem = resource.status.get("certificate_pem", "")
@@ -557,7 +556,7 @@ class CertificateDownloadView(LoginRequiredMixin, View):
         return response
 
 
-class ResourceReportDownloadView(LoginRequiredMixin, View):
+class ResourceReportDownloadView(View):
     def get(self, request, key):
         resource = get_object_or_404(ManagedResource, key=key)
         payload = {
@@ -581,6 +580,6 @@ class ResourceReportDownloadView(LoginRequiredMixin, View):
         return response
 
 
-class ProviderSchemaView(LoginRequiredMixin, View):
+class ProviderSchemaView(View):
     def get(self, request):
         return JsonResponse(describe_providers(), json_dumps_params={"indent": 2})

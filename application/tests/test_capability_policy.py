@@ -17,8 +17,8 @@ from ..capability_policy import Rule, Scope, decide, field_name, matrix, set_rul
 from ..security import AuthorizationError, Capability, Principal, cli_principal, web_principal
 from .test_approvals import POLICY_KEY, declare_policy, policy_document, update_payload
 
-WRITES = frozenset({Capability.READ, Capability.WRITE_PROJECTS, Capability.MANAGE_INFRASTRUCTURE})
-DELETES = WRITES | {Capability.DELETE_PROJECTS}
+WRITES = frozenset({Capability.READ, "write_projects", Capability.MANAGE_INFRASTRUCTURE})
+DELETES = WRITES | {"delete_projects"}
 
 
 def agent(actor="example-agent", interface="mcp", capabilities=WRITES):

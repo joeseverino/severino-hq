@@ -18,21 +18,28 @@ image="${work}/image"
 make_image() {
     rm -rf "${image}"
     mkdir -p "${image}"
-    cp -R scripts config deploy docker-compose.yml "${image}/"
-    find "${image}" -name __pycache__ -prune -exec rm -rf {} +
+    tar --exclude=node_modules --exclude=__pycache__ \
+        -cf "${work}/root-tree.tar" scripts config deploy docker-compose.yml
+    tar -xf "${work}/root-tree.tar" -C "${image}"
     sh scripts/root-tree-manifest.sh "${image}" >"${image}/root-tree.sha256"
 }
 
-# 1. The manifest: every shipped file, sorted, hashed; caches left out.
+# 1. The manifest: every shipped file, sorted, hashed; local tooling left out.
 make_image
+[ ! -d "${image}/scripts/openapi/node_modules" ] ||
+    fail "the image fixture copied local Node dependencies"
 manifest="$(sh scripts/root-tree-manifest.sh "${image}")"
+mkdir -p "${image}/scripts/openapi/node_modules/example/nested"
+printf 'local dependency\n' >"${image}/scripts/openapi/node_modules/example/nested/index.js"
+[ "$(sh scripts/root-tree-manifest.sh "${image}")" = "${manifest}" ] ||
+    fail "the manifest listed local Node dependencies"
 mkdir -p "${image}/config/__pycache__"
 : >"${image}/config/__pycache__/settings.cpython-312.pyc"
 [ "$(sh scripts/root-tree-manifest.sh "${image}")" = "${manifest}" ] ||
     fail "the manifest listed a bytecode cache"
-printf '%s\n' "${manifest}" | grep -q '  scripts/severino-hq-sync-scripts$' ||
+printf '%s\n' "${manifest}" | grep '  scripts/severino-hq-sync-scripts$' >/dev/null ||
     fail "the manifest does not list the sync program"
-printf '%s\n' "${manifest}" | grep -q '  docker-compose.yml$' ||
+printf '%s\n' "${manifest}" | grep '  docker-compose.yml$' >/dev/null ||
     fail "the manifest does not list docker-compose.yml"
 [ "$(printf '%s\n' "${manifest}" | sed 's/^[0-9a-f]*  //' | LC_ALL=C sort)" = \
     "$(printf '%s\n' "${manifest}" | sed 's/^[0-9a-f]*  //')" ] ||

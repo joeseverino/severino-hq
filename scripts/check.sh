@@ -77,6 +77,17 @@ echo "[check] Django configuration and migration drift"
 "$python" manage.py check
 "$python" manage.py makemigrations --check --dry-run
 
+echo "[check] The machine API's OpenAPI document is current"
+# Derived from the host alone: extensions add to the served document, not to
+# the committed one.
+env -u SEVERINO_HQ_PLUGINS "$python" manage.py api_openapi --check
+
+echo "[check] OpenAPI contracts"
+scripts/check-openapi.sh
+
+echo "[check] Generated API cases through WSGI"
+env -u SEVERINO_HQ_PLUGINS "$python" manage.py test fuzz.api_properties --noinput --parallel 1
+
 echo "[check] Complete test suite"
 "$python" manage.py test --noinput --parallel "$parallel"
 

@@ -17,6 +17,7 @@ from docs_index.importer import (
 )
 from docs_index.models import DocumentationRecord
 from .labels import plural
+from .domains import records_of
 from .security import Capability, Principal
 from .ui import counted
 from assets.models import Asset
@@ -110,7 +111,7 @@ def save_documentation(
     current_doc_id: str | None = None,
     expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    principal.require(Capability.WRITE_DOCUMENTATION)
+    principal.require(records_of("documentation").write)
     operation = (
         "documentation.create" if current_doc_id is None else "documentation.update"
     )
@@ -153,19 +154,6 @@ def save_documentation(
         "created": created,
         "documentation": serialize_documentation(record),
     }
-
-
-def documentation_command_from_cleaned_data(data) -> DocumentationCommand:
-    return DocumentationCommand(
-        **{
-            field: data.get(field)
-            for field in DocumentationCommand.__dataclass_fields__
-            if not field.startswith("related_")
-        },
-        related_projects=tuple(row.slug for row in data["related_projects"]),
-        related_assets=tuple(row.slug for row in data["related_assets"]),
-        related_expenses=tuple(row.id for row in data["related_expenses"]),
-    )
 
 
 def sync_documentation(

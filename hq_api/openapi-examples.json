@@ -1,0 +1,236 @@
+{
+  "executeV2": {
+    "responses": {
+      "400": {
+        "error": {
+          "code": "invalid_json",
+          "message": "Request body is not valid JSON."
+        },
+        "ok": false
+      },
+      "401": {
+        "error": {
+          "code": "invalid_token",
+          "message": "The access token was not accepted."
+        },
+        "ok": false
+      },
+      "404": {
+        "error": {
+          "code": "unknown_capability",
+          "message": "Unknown capability 'nope.nothing'."
+        },
+        "ok": false
+      }
+    }
+  },
+  "getProjectsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "category": "other",
+          "description": "",
+          "last_push_at": null,
+          "name": "Machine readable",
+          "public_url": "",
+          "relationships": {
+            "assets": [],
+            "content": [],
+            "documentation": [],
+            "expense_ids": []
+          },
+          "repository_url": "",
+          "slug": "machine-readable",
+          "status": "idea",
+          "technologies": [],
+          "updated_at": "2026-10-04T04:26:25.579275+00:00"
+        },
+        "ok": true
+      }
+    }
+  },
+  "listProjectsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 1,
+          "items": [
+            {
+              "category": "other",
+              "description": "",
+              "last_push_at": null,
+              "name": "Machine readable",
+              "public_url": "",
+              "repository_url": "",
+              "slug": "machine-readable",
+              "status": "idea",
+              "technologies": [],
+              "updated_at": "2026-10-04T04:26:25.579275+00:00"
+            }
+          ]
+        },
+        "ok": true
+      },
+      "400": {
+        "error": {
+          "code": "invalid_input",
+          "details": [
+            {
+              "loc": [
+                "limit"
+              ],
+              "msg": "Input should be a valid integer",
+              "type": "int_parsing"
+            }
+          ],
+          "message": "projects: limit must be a valid integer."
+        },
+        "ok": false
+      },
+      "403": {
+        "error": {
+          "code": "forbidden",
+          "message": "api principal 'example-automation' lacks 'read'."
+        },
+        "ok": false
+      }
+    }
+  },
+  "openapiV2": {
+    "responses": {
+      "401": {
+        "error": {
+          "code": "invalid_token",
+          "message": "An access token is required."
+        },
+        "ok": false
+      }
+    }
+  },
+  "projectCreateV2": {
+    "request": {
+      "payload": {
+        "name": "Machine sync",
+        "slug": "machine-sync",
+        "status": "active"
+      }
+    },
+    "responses": {
+      "200": {
+        "data": {
+          "created": true,
+          "project": {
+            "category": "other",
+            "description": "",
+            "last_push_at": null,
+            "name": "Machine sync",
+            "public_url": "",
+            "relationships": {
+              "assets": [],
+              "content": [],
+              "documentation": [],
+              "expense_ids": []
+            },
+            "repository_url": "",
+            "slug": "machine-sync",
+            "status": "active",
+            "technologies": [],
+            "updated_at": "2026-10-04T04:26:25.204589+00:00"
+          }
+        },
+        "ok": true
+      },
+      "400": {
+        "error": {
+          "code": "idempotency_key_required",
+          "message": "Idempotency-Key is required for capabilities that change state."
+        },
+        "ok": false
+      },
+      "401": {
+        "error": {
+          "code": "invalid_token",
+          "message": "The access token was not accepted."
+        },
+        "ok": false
+      },
+      "403": {
+        "error": {
+          "code": "agents_paused",
+          "message": "Agents are paused by the operator."
+        },
+        "ok": false
+      },
+      "409": {
+        "error": {
+          "code": "idempotency_conflict",
+          "message": "This Idempotency-Key was already used for a different request."
+        },
+        "ok": false
+      },
+      "415": {
+        "error": {
+          "code": "unsupported_media_type",
+          "message": "Content-Type must be application/json."
+        },
+        "ok": false
+      }
+    }
+  },
+  "rootV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "actor": "example-automation",
+          "api_version": 2,
+          "granted": [
+            "example.write"
+          ],
+          "links": {
+            "capabilities": "/api/v2/capabilities/",
+            "connections": "/api/v2/connections/",
+            "findings": "/api/v2/findings/",
+            "openapi": "/api/v2/openapi.json",
+            "resources": "/api/v2/resources/",
+            "topology": "/api/v2/topology/"
+          },
+          "resource": "https://hq.example.test/api",
+          "service": "severino-hq"
+        },
+        "ok": true
+      },
+      "401": {
+        "error": {
+          "code": "invalid_token",
+          "message": "An access token is required."
+        },
+        "ok": false
+      },
+      "403": {
+        "error": {
+          "code": "agents_paused",
+          "message": "Agents are paused by the operator."
+        },
+        "ok": false
+      },
+      "503": {
+        "error": {
+          "code": "not_configured",
+          "message": "The machine API is not configured on this deployment."
+        },
+        "ok": false
+      }
+    }
+  },
+  "topologyV2": {
+    "responses": {
+      "403": {
+        "error": {
+          "code": "forbidden",
+          "message": "api principal 'example-automation' lacks 'read'."
+        },
+        "ok": false
+      }
+    }
+  }
+}

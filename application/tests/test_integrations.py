@@ -6,6 +6,7 @@ from django.test import TestCase
 
 from hq_sdk.capabilities import StrictCommand
 from projects.models import Project
+from projects.specs import ProjectQuery
 
 from ..capabilities import CapabilitySpec, describe_capabilities
 from ..command_center import command_center
@@ -17,7 +18,7 @@ from ..integrations import (
     integration_graph,
     override_integration_graph,
 )
-from ..resources import EmptyQuery, ProjectQuery, ResourceSpec, describe_resources
+from ..resources import EmptyQuery, ResourceSpec, describe_resources
 from ..search_contracts import SearchDefinition
 from ..security import Capability, Principal
 from ..plugins import clear_plugin_composition_cache

@@ -325,6 +325,7 @@ def compile_integration_graph(
 def _compiled_integration_graph() -> IntegrationGraph:
     from .core_capabilities import CORE_CAPABILITY_SPECS
     from .domains import host_specs
+    from .records import capability_specs as record_capability_specs
     from .plugins import (
         plugin_capability_specs,
         plugin_connection_specs,
@@ -334,7 +335,12 @@ def _compiled_integration_graph() -> IntegrationGraph:
     from .resources import CORE_RESOURCE_SPECS
 
     return compile_integration_graph(
-        capabilities=(*CORE_CAPABILITY_SPECS, *host_specs("capabilities"), *plugin_capability_specs()),
+        capabilities=(
+            *CORE_CAPABILITY_SPECS,
+            *record_capability_specs(),
+            *host_specs("capabilities"),
+            *plugin_capability_specs(),
+        ),
         resources=(*CORE_RESOURCE_SPECS, *host_specs("resources"), *plugin_resource_specs()),
         connections=(*host_specs("connections"), *plugin_connection_specs()),
         search=plugin_search_definitions(),

@@ -111,6 +111,11 @@ else
   bad "README python badge says '$claimed_pythons'; the matrix runs '$expected_pythons'"
 fi
 
+# ------------------------------------------------------------- contracts
+step "OpenAPI"
+run "OpenAPI specification lint" scripts/check-openapi.sh
+run "Generated API cases through WSGI" env -u SEVERINO_HQ_PLUGINS DJANGO_DEBUG=true "$PY" manage.py test fuzz.api_properties --noinput --parallel 1
+
 # ---------------------------------------------------------------- tests
 # The badge quotes the oldest interpreter's coverage, so it is compared on that
 # run and reported as not run only when no interpreter here is that version.
@@ -130,6 +135,7 @@ for python_bin in ${SEVERINO_CI_PYTHONS:-$PY}; do
   SEVERINO_HQ_PLUGINS=example_hq_plugin.plugin:plugin \
     run "public plugin contract" "$python_bin" manage.py check
   run "makemigrations --check" "$python_bin" manage.py makemigrations --check --dry-run
+  run "api_openapi --check" env -u SEVERINO_HQ_PLUGINS "$python_bin" manage.py api_openapi --check
   if "$python_bin" -c "import coverage" 2>/dev/null; then
     run "tests with coverage gate" sh -c \
       "SEVERINO_HQ_PLUGINS= '$python_bin' -m coverage run manage.py test --parallel auto >/dev/null 2>&1 && '$python_bin' -m coverage combine --quiet && '$python_bin' -m coverage report --fail-under=$COVERAGE_FLOOR >/dev/null"

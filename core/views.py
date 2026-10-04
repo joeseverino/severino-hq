@@ -5,7 +5,6 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView
 from django.conf import settings
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
@@ -109,7 +108,7 @@ class ThrottledLoginView(LoginView):
         return self.render_to_response(self.get_context_data(form=form), status=429)
 
 
-class DemoModeView(LoginRequiredMixin, View):
+class DemoModeView(View):
     """Turn substituted values on or off for this browser.
 
     POST because it changes what every number on every page means, and a thing
@@ -135,7 +134,7 @@ class DemoModeView(LoginRequiredMixin, View):
         return redirect(safe_next(request, fallback=reverse("dashboard")))
 
 
-class AgentAccessView(LoginRequiredMixin, View):
+class AgentAccessView(View):
     """Pause or resume every agent. The form sends a state, never a toggle."""
 
     def post(self, request):
@@ -150,7 +149,7 @@ class AgentAccessView(LoginRequiredMixin, View):
         return redirect(safe_next(request, fallback=reverse("dashboard")))
 
 
-class ThemeView(LoginRequiredMixin, View):
+class ThemeView(View):
     """Choose system, light or dark. The form sends a choice, never a toggle."""
 
     def post(self, request):
@@ -167,7 +166,7 @@ class ThemeView(LoginRequiredMixin, View):
         return redirect(safe_next(request, fallback=reverse("dashboard")))
 
 
-class AvatarView(LoginRequiredMixin, View):
+class AvatarView(View):
     """The picture of whoever is asking, and nobody else's.
 
     The address carries the picture's digest, so a new picture is a new
@@ -188,7 +187,7 @@ class AvatarView(LoginRequiredMixin, View):
         return response
 
 
-class AgentPolicyView(PageMixin, LoginRequiredMixin, TemplateView):
+class AgentPolicyView(PageMixin, TemplateView):
     """Capability policy. Reads from matrix(), writes through apply_changes()."""
 
     template_name = "core/agent_policy.html"
@@ -247,7 +246,7 @@ class AgentPolicyView(PageMixin, LoginRequiredMixin, TemplateView):
         return redirect("agent_policy")
 
 
-class SearchView(PageMixin, LoginRequiredMixin, TemplateView):
+class SearchView(PageMixin, TemplateView):
     template_name = "search.html"
     page_title = "Command Center"
     result_limit = 8
@@ -368,7 +367,7 @@ class SearchView(PageMixin, LoginRequiredMixin, TemplateView):
         return ctx
 
 
-class ApprovalEntryView(LoginRequiredMixin, View):
+class ApprovalEntryView(View):
     """A stable link to a held request's audit entry."""
 
     def get(self, request, approval_id):
@@ -380,7 +379,7 @@ class ApprovalEntryView(LoginRequiredMixin, View):
         return redirect("core:audit_detail", pk=event.pk)
 
 
-class ConnectionView(PageMixin, LoginRequiredMixin, TemplateView):
+class ConnectionView(PageMixin, TemplateView):
     """Why this request was allowed to arrive, layer by layer.
 
     A page rather than only a dialog, for the same reason every other dialog
@@ -409,7 +408,7 @@ class ConnectionView(PageMixin, LoginRequiredMixin, TemplateView):
         return context
 
 
-class PublicAddressView(LoginRequiredMixin, View):
+class PublicAddressView(View):
     """What the public internet says about one address, as a fragment.
 
     A GET serves what HQ already holds and asks no one. A POST runs the lookup,

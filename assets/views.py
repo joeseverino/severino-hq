@@ -1,4 +1,3 @@
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
 from django.urls import reverse, reverse_lazy
 from django.utils.html import format_html
@@ -10,20 +9,14 @@ from django.views.generic import (
     UpdateView,
 )
 
-from application.assets import asset_command_from_cleaned_data, save_asset
-from application.deletion import delete_asset
 from application.pages import PageAction, PageMixin, record_trail
 from application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
-from application.writes import (
-    ServiceCreateMixin,
-    ServiceDeleteMixin,
-    ServiceUpdateMixin,
-)
+from application.writes import RecordDeleteMixin, RecordFormMixin
 from .forms import AssetForm
 from .models import ASSET_CATEGORY_CHOICES, Asset
 
 
-class AssetListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
+class AssetListView(PageMixin, TableListMixin, ListView):
     model = Asset
     template_name = "assets/asset_list.html"
     paginate_by = 25
@@ -71,7 +64,7 @@ class AssetPage(PageMixin):
         )
 
 
-class AssetDetailView(PageMixin, LoginRequiredMixin, DetailView):
+class AssetDetailView(PageMixin, DetailView):
     model = Asset
     template_name = "assets/asset_detail.html"
     slug_field = "slug"
@@ -107,39 +100,22 @@ class AssetDetailView(PageMixin, LoginRequiredMixin, DetailView):
         )
 
 
-class AssetWrite:
-    """What every asset write shares, whichever direction it goes."""
-
-    model = Asset
-    noun = "Asset"
-    result_key = "asset"
-    identity_attr = "slug"
-    identity_kwarg = "current_slug"
-
-
-class AssetCreateView(AssetWrite, AssetPage, ServiceCreateMixin, LoginRequiredMixin, CreateView):
+class AssetCreateView(AssetPage, RecordFormMixin, CreateView):
     page_title = "New asset"
     form_class = AssetForm
     template_name = "assets/asset_form.html"
-    service = staticmethod(save_asset)
-    command_from_cleaned_data = staticmethod(asset_command_from_cleaned_data)
 
 
-class AssetUpdateView(AssetWrite, AssetPage, ServiceUpdateMixin, LoginRequiredMixin, UpdateView):
+class AssetUpdateView(AssetPage, RecordFormMixin, UpdateView):
     page_title = "Edit asset"
+    model = Asset
     form_class = AssetForm
     template_name = "assets/asset_form.html"
-    slug_field = "slug"
-    slug_url_kwarg = "slug"
-    service = staticmethod(save_asset)
-    command_from_cleaned_data = staticmethod(asset_command_from_cleaned_data)
 
 
-class AssetDeleteView(AssetWrite, AssetPage, ServiceDeleteMixin, LoginRequiredMixin, DeleteView):
+class AssetDeleteView(AssetPage, RecordDeleteMixin, DeleteView):
     page_title = "Delete asset?"
+    model = Asset
     template_name = "assets/asset_confirm_delete.html"
-    slug_field = "slug"
-    slug_url_kwarg = "slug"
     success_url = reverse_lazy("assets:list")
     context_object_name = "asset"
-    service = staticmethod(delete_asset)

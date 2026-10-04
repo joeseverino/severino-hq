@@ -31,7 +31,7 @@ FINANCE = Principal("finance", "test", frozenset({"example.finance.read"}))
 FINANCE_OPERATOR = Principal(
     "finance-operator",
     "test",
-    frozenset({"example.finance.read", Capability.WRITE_PROJECTS}),
+    frozenset({"example.finance.read", "write_projects"}),
 )
 INFRA_OPERATOR = Principal(
     "infrastructure-operator",

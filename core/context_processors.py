@@ -1,85 +1,12 @@
 from application.domains import domain_navigation
-from functools import cache
-import hashlib
-import os
-from pathlib import Path
-import time
 
 from django.conf import settings
-
-
-def _asset_fingerprint() -> str:
-    """Content fingerprint for every bundle loaded by the application shell.
-
-    STORAGES deliberately uses the non-manifest static backend, so asset URLs
-    carry no content hash, while WhiteNoise serves them with far-future cache
-    headers. Without a version token a deployed asset change is invisible to a
-    browser holding a cached copy. Content, not mtimes, means an image rebuild
-    neither busts unchanged assets nor retains changed JavaScript.
-    """
-    digest = hashlib.sha256()
-    root = Path(settings.BASE_DIR) / "static"
-    for relative in (
-        "css/app.css",
-        "img/apple-touch-icon.png",
-        "img/favicon.ico",
-        "img/favicon.svg",
-        "js/app.js",
-        "js/tables.js",
-    ):
-        try:
-            digest.update((root / relative).read_bytes())
-        except OSError:
-            return "0"
-    return digest.hexdigest()[:12]
-
-
-@cache
-def _production_asset_version() -> str:
-    return _asset_fingerprint()
-
-
-@cache
-def _development_asset_version() -> str:
-    """A token that belongs to this run rather than to the file contents.
-
-    In development the fingerprint above is actively harmful. It hashes the
-    source tree, while the mount serves the collected one, so between an edit
-    and the next `collectstatic` the page advertises a URL derived from the new
-    bytes and the server answers it with the old ones. A browser that asks in
-    that window caches the wrong body against the right URL, and because the
-    hash has already moved on, nothing will ever produce a different URL to
-    dislodge it. The symptom is not a caching one: it is the application
-    running code that is no longer on disk, indefinitely.
-
-    A per-run token cannot land in that state (the next start has a different
-    URL whatever happened during the last one) and `core.static` sends
-    `no-cache` in development anyway, so edits still appear without a restart.
-    """
-
-    return f"dev{os.getpid()}{int(time.time())}"
-
-
-def _asset_version() -> str:
-    # Development separates one run from the next and revalidates within a run.
-    # Production computes a content fingerprint once, avoiding filesystem reads
-    # in every template context.
-    #
-    # Keyed on live static serving, not DEBUG: a local server runs with DEBUG
-    # off to match production, and fingerprinting once at start would serve
-    # every later stylesheet edit under a URL the browser already holds as
-    # immutable, so the edit would never show. Live serving
-    # is development by definition (a deployment check refuses it) and sends
-    # no-cache, which is what the per-run token relies on.
-    live = settings.DEBUG or getattr(settings, "STATIC_LIVE", False)
-    return _development_asset_version() if live else _production_asset_version()
 
 
 def site(request):
     return {
         "SITE_NAME": getattr(settings, "SEVERINO_SITE_NAME", "Severino HQ"),
         "SITE_HOST": getattr(settings, "SEVERINO_SITE_HOST", "localhost"),
-        "ASSET_VERSION": _asset_version(),
     }
 
 

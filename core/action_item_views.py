@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -34,7 +33,7 @@ def _action_items(request, current=None):
     return all_items, items
 
 
-class ActionItemsView(PageMixin, LoginRequiredMixin, TemplateView):
+class ActionItemsView(PageMixin, TemplateView):
     """The full human surface for HQ's one composed attention queue."""
 
     template_name = "action_items.html"
@@ -78,7 +77,7 @@ class ActionItemsView(PageMixin, LoginRequiredMixin, TemplateView):
         return context
 
 
-class ActionItemCountView(LoginRequiredMixin, View):
+class ActionItemCountView(View):
     """How many items wait, for the header, fetched after the page rather than during it."""
 
     def get(self, request):
@@ -86,7 +85,7 @@ class ActionItemCountView(LoginRequiredMixin, View):
         return JsonResponse({"count": count})
 
 
-class ActionItemAsideView(LoginRequiredMixin, View):
+class ActionItemAsideView(View):
     """Dismiss items, or restore them, for the signed-in person.
 
     Each route names the state in ``aside``. A row's button posts the row

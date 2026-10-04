@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
 from django.views.generic import DetailView, ListView
 
@@ -13,7 +12,7 @@ from .models import Job
 from .runner import reap
 
 
-class JobListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
+class JobListView(PageMixin, TableListMixin, ListView):
     """Every job, newest first, through the host's own table contract."""
 
     model = Job
@@ -61,7 +60,7 @@ class JobListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
         )
 
 
-class JobStatusView(LoginRequiredMixin, DetailView):
+class JobStatusView(DetailView):
     """One job's state, as JSON, for a page that is watching it.
 
     Polled every couple of seconds for as long as the page is open, so it

@@ -6,14 +6,13 @@ window, asks once, and renders. Nothing is joined or summed in a template.
 
 from __future__ import annotations
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import TemplateView
 
 from application.analytics import DEFAULT_WINDOW_DAYS, overview
 from application.pages import PageMixin
 
 
-class AnalyticsOverviewView(PageMixin, LoginRequiredMixin, TemplateView):
+class AnalyticsOverviewView(PageMixin, TemplateView):
     template_name = "analytics/overview.html"
     page_title = "Analytics"
 

@@ -25,7 +25,7 @@
   `__Host-csrftoken`. The prefix is enforced by the browser rather than by HQ:
   no other host or path under the domain can set a cookie of that name, so a
   session cannot be planted by a neighbour for HQ to read back.
-- `SECURE_BROWSER_XSS_FILTER`, `SECURE_CONTENT_TYPE_NOSNIFF`, `X-Frame-Options:
+- `SECURE_CONTENT_TYPE_NOSNIFF`, `X-Frame-Options:
   DENY`, `Referrer-Policy: same-origin`, `Cross-Origin-Opener-Policy:
   same-origin` and `Cross-Origin-Resource-Policy: same-origin` enabled. The
   static mount sets the last two itself, because it sits above the Django
@@ -60,9 +60,14 @@
   XSS sink cannot execute even if one is introduced, and `trusted-types 'none'`
   means no policy can be declared to opt back out. It costs nothing today
   because every dynamic node HQ builds uses `createElement`/`textContent`.
-  Django admin's bundled jQuery cannot meet it, so `core.middleware`'s
-  `AdminPolicyMiddleware` drops that one directive for `/admin/` and nothing
-  else; a test asserts the relaxation stays that narrow.
+  Django admin's bundled jQuery cannot meet it, so `core.admin_site` puts
+  every admin view under `csp_override` with that one directive dropped and
+  nothing else; a test asserts the relaxation stays that narrow. The API
+  reference at `/api/docs/` is the other exception, for the same reason: the
+  vendored Scalar bundle (`static/vendor/scalar`, version and SHA-256 in
+  `UPSTREAM`, checked by a test) renders through `innerHTML`. Its policy is
+  derived the same way (`SEVERINO_API_REFERENCE_CSP`), keeps scripts to
+  `'self'` with no inline code or `eval`, and fetches nothing off-origin.
 - Violations are reported back. The policy carries `report-to` and `report-uri`
   pointing at `/csp-report/`, which records the directive, the blocked URI and
   the reporting address to the audit log: bounded body size, truncated fields,
@@ -73,8 +78,10 @@
 - HSTS on by default for a year, including subdomains. Preload stays opt-in:
   it is slow to undo and meaningless for a name the public internet cannot
   resolve.
-- `LoginRequiredMiddleware` redirects anonymous users to login for every URL
-  outside the small allowlist.
+- Django's `LoginRequiredMiddleware` (`core.middleware` adds extensions'
+  token routes) redirects anonymous users to login for every view not marked
+  `@login_not_required`. `AnonymousSweepTests` asks for every route without a
+  session and holds the public ones to a reviewed list.
 - Receipt files:
   - Stored at `SEVERINO_MEDIA_ROOT`, **outside the app code directory**.
   - Filenames are randomized (UUID), not user-supplied.

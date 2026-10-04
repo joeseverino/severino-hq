@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -34,7 +33,7 @@ from application.ui import ListRow
 from contacts import inbox
 
 
-class DashboardLinkChoiceView(LoginRequiredMixin, View):
+class DashboardLinkChoiceView(View):
     """Choose which outward links the dashboard shows, for this operator only.
 
     A preference, so it is stored the same way starring a domain is and reaches
@@ -74,7 +73,7 @@ class DashboardLinkChoiceView(LoginRequiredMixin, View):
         return redirect(safe_next(request) or reverse("dashboard"))
 
 
-class DashboardView(LoginRequiredMixin, TemplateView):
+class DashboardView(TemplateView):
     template_name = "dashboard.html"
 
     def get_context_data(self, **kwargs):
@@ -184,7 +183,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         return ctx
 
 
-class DashboardGlanceView(LoginRequiredMixin, View):
+class DashboardGlanceView(View):
     template_name = "core/_dashboard_glance.html"
 
     def get(self, request):
@@ -217,7 +216,7 @@ class DashboardGlanceView(LoginRequiredMixin, View):
         )
 
 
-class DashboardGlanceSettingsView(LoginRequiredMixin, View):
+class DashboardGlanceSettingsView(View):
     def get(self, request):
         return render(
             request,

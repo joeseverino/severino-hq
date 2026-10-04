@@ -6,41 +6,18 @@ from . import views
 
 app_name = "hq_api"
 urlpatterns = [
-    path("v1/", views.root, {"version": 1}, name="root-v1"),
-    path(
-        "v1/capabilities/",
-        views.capabilities,
-        {"version": 1},
-        name="capabilities-v1",
-    ),
-    path(
-        "v1/capabilities/<str:name>/",
-        views.execute,
-        {"version": 1},
-        name="execute-v1",
-    ),
-    path("v2/", views.root, {"version": 2}, name="root"),
-    path("v2/capabilities/", views.capabilities, {"version": 2}, name="capabilities"),
-    path("v2/resources/", views.resources, {"version": 2}, name="resources"),
-    path("v2/connections/", views.connections, {"version": 2}, name="connections"),
-    path("v2/topology/", views.topology, {"version": 2}, name="topology"),
-    path("v2/findings/", views.findings, {"version": 2}, name="findings"),
-    path(
-        "v2/resources/<str:name>/",
-        views.resource_list,
-        {"version": 2},
-        name="resource-list",
-    ),
+    path("v2/", views.root, name="root"),
+    path("v2/openapi.json", views.openapi, name="openapi"),
+    path("v2/capabilities/", views.capabilities, name="capabilities"),
+    path("v2/resources/", views.resources, name="resources"),
+    path("v2/connections/", views.connections, name="connections"),
+    path("v2/topology/", views.topology, name="topology"),
+    path("v2/findings/", views.findings, name="findings"),
+    path("v2/resources/<str:name>/", views.resource_list, name="resource-list"),
     path(
         "v2/resources/<str:name>/<str:identifier>/",
         views.resource_detail,
-        {"version": 2},
         name="resource-detail",
     ),
-    path(
-        "v2/capabilities/<str:name>/",
-        views.execute,
-        {"version": 2},
-        name="execute",
-    ),
+    path("v2/capabilities/<str:name>/", views.execute, name="execute"),
 ]

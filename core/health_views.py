@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 from django.conf import settings
+from django.contrib.auth.decorators import login_not_required
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.http import JsonResponse
@@ -13,12 +14,14 @@ from django.http import JsonResponse
 from application.plugins import plugin_health
 
 
+@login_not_required
 def health_live(request):
     """Minimal process liveness probe; never touches an external dependency."""
 
     return JsonResponse({"status": "ok"})
 
 
+@login_not_required
 def health_ready(request):
     """Prove HQ can safely serve traffic without disclosing configuration."""
 

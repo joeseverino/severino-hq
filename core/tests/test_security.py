@@ -8,9 +8,15 @@ whose loss is invisible in review of the change that causes it.
 
 from __future__ import annotations
 
+import re
+from types import SimpleNamespace
+from urllib.parse import urlsplit
+
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
-from django.urls import URLPattern, URLResolver, get_resolver, reverse
+from django.urls import Resolver404, URLPattern, URLResolver, get_resolver, resolve, reverse
+from django.urls.resolvers import RoutePattern
 from django.utils import timezone
 
 from core.models import AuditLog
@@ -341,6 +347,70 @@ def _routes(patterns=None, prefix=""):
             yield prefix + str(entry.pattern), entry.callback
 
 
+# What answers without a session, by path prefix. The reviewed list the
+# sweep below holds every route to; nothing at runtime reads it.
+PUBLIC_SURFACE = (
+    "/health/",  # container probes, which cannot sign in
+    "/accounts/login/",
+    "/accounts/logout/",
+    "/oidc/",  # the SSO handshake itself
+    "/api/v2/",  # bearer-token authenticated, tested above; /api/docs/ is a page
+    # A browser reporting a refused policy sends no credentials, so requiring a
+    # session here would silence the reports that matter most: the ones from
+    # the sign-in page. It stores nothing it was not sent and answers 204.
+    "/csp-report/",
+)
+
+# A value each URL converter accepts, so a parameterised route can be asked for.
+_CONVERTER_SAMPLES = {
+    "IntConverter": "1",
+    "StringConverter": "sample",
+    "SlugConverter": "sample",
+    "PathConverter": "sample",
+    "UUIDConverter": "00000000-0000-0000-0000-000000000000",
+}
+
+
+def _sample(pattern) -> str:
+    if isinstance(pattern, RoutePattern):
+        return re.sub(
+            r"<(?:\w+:)?(\w+)>",
+            lambda m: _CONVERTER_SAMPLES[type(pattern.converters[m.group(1)]).__name__],
+            str(pattern),
+        )
+    regex = pattern._regex.lstrip("^").rstrip("$").replace("\\Z", "")
+    # A group of alternatives takes its first; any other group, a word.
+    regex = re.sub(
+        r"\(\?P<\w+>([^()]*)\)",
+        lambda m: m.group(1).split("|")[0] if "|" in m.group(1) else "sample",
+        regex,
+    )
+    return regex.replace("\\", "")
+
+
+def _sampled_routes(patterns=None, prefix="/"):
+    """Every leaf route as a path that should resolve to it, with its view."""
+
+    for entry in get_resolver().url_patterns if patterns is None else patterns:
+        if isinstance(entry, URLResolver):
+            yield from _sampled_routes(entry.url_patterns, prefix + _sample(entry.pattern))
+        elif isinstance(entry, URLPattern):
+            yield prefix + _sample(entry.pattern), entry.callback
+
+
+def _sent_to_sign_in(response, view) -> bool:
+    """A redirect to sign in, carrying where to come back to.
+
+    The admin names its own login page, which HQ routes to the one sign-in.
+    """
+
+    if response.status_code != 302:
+        return False
+    location = urlsplit(response["Location"])
+    sign_in = {settings.LOGIN_URL, str(getattr(view, "login_url", "") or settings.LOGIN_URL)}
+    return location.path in sign_in and "next=" in location.query
+
+
 class RouteExposureTests(SimpleTestCase):
     """No route reaches production unauthenticated by accident."""
 
@@ -349,41 +419,20 @@ class RouteExposureTests(SimpleTestCase):
 
         Not a style rule. A view added to `hq_api/urls.py` without the
         decorator is served to anybody who can reach the port, and nothing
-        else in the stack would stop it.
+        else in the stack would stop it. A page mounted under /api/ that keeps
+        the login redirect (the reference at /api/docs/) is a page like any
+        other.
         """
 
         unguarded = [
             route
             for route, view in _routes()
             if route.startswith("api/")
+            and getattr(view, "login_required", True) is False
             and not getattr(view, "__hq_authenticated__", False)
         ]
         self.assertEqual(
             unguarded, [], f"API routes served without authentication: {unguarded}"
-        )
-
-    def test_the_unauthenticated_surface_is_the_reviewed_one(self):
-        """A change detector, on purpose.
-
-        Widening what the public may reach should be a deliberate edit to this
-        list with a reason attached, not a side effect of adding a prefix.
-        """
-
-        self.assertEqual(
-            set(__import__("django.conf", fromlist=["settings"]).settings.LOGIN_EXEMPT_PATH_PREFIXES),
-            {
-                "/health/",  # container probes, which cannot sign in
-                "/accounts/login",
-                "/accounts/logout",
-                "/oidc/",  # the SSO handshake itself
-                "/static/",
-                "/api/",  # bearer-token authenticated, tested above
-                # A browser reporting a refused policy sends no credentials,
-                # so requiring a session here would silence the reports that
-                # matter most: the ones from the sign-in page. It stores
-                # nothing it was not sent and answers 204 either way.
-                "/csp-report/",
-            },
         )
 
 
@@ -397,23 +446,34 @@ class AnonymousSweepTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response["Location"].startswith("/accounts/login/"))
 
-    def test_no_page_serves_content_to_an_anonymous_caller(self):
-        client = Client()
-        served = []
-        for route, _view in _routes():
-            if any(
-                route.startswith(prefix.lstrip("/"))
-                for prefix in ("health/", "accounts/", "oidc/", "static/", "api/")
-            ):
+    def test_only_the_reviewed_surface_answers_without_a_session(self):
+        """Every route in the composed URLconf, asked for without a session.
+
+        A change detector, on purpose: a route is public exactly when its path
+        falls under PUBLIC_SURFACE (or a route an extension declared as
+        carrying its own token), and every other route sends a stranger to
+        sign in. Widening what the public may reach should be a deliberate
+        edit to that list with a reason attached, not a side effect.
+        """
+
+        from application.plugins import plugin_token_authenticated_prefixes
+
+        public = PUBLIC_SURFACE + plugin_token_authenticated_prefixes()
+        client = Client(raise_request_exception=False)
+        wrong, asked = [], 0
+        for path, view in _sampled_routes():
+            try:
+                if resolve(path).func is not view:
+                    continue  # shadowed by an earlier route; nothing reaches it
+            except Resolver404:
+                wrong.append(f"{path}: the sample does not resolve")
                 continue
-            if "<" in route or "(" in route:
-                # Parameterised routes cannot be built without inventing an id;
-                # they share the same middleware gate as the rest.
-                continue
-            response = client.get(f"/{route}", REMOTE_ADDR="127.0.0.1")
-            if response.status_code == 200:
-                served.append(route)
-        self.assertEqual(served, [], f"served to an anonymous caller: {served}")
+            asked += 1
+            response = client.get(path, REMOTE_ADDR="127.0.0.1")
+            if _sent_to_sign_in(response, view) == path.startswith(public):
+                wrong.append(f"{path}: {response.status_code} {response.get('Location', '')}")
+        self.assertEqual(wrong, [])
+        self.assertGreater(asked, 100)
 
 
 class ReceiptUploadHardeningTests(TestCase):
@@ -505,16 +565,18 @@ class StaticCachingTests(SimpleTestCase):
                 self.headers = {}
 
         files = CachedStaticFiles(directory=".", check_dir=False)
-        scope = {"query_string": b"v=abc" if versioned else b""}
+        manifest = SimpleNamespace(hashed_files={"app.js": "app.0123456789ab.js"})
         with (
             override_settings(STATIC_LIVE=live),
+            patch("core.static.staticfiles_storage", manifest),
             patch.object(
                 CachedStaticFiles.__bases__[0],
                 "get_response",
                 new=_returns(_Response()),
             ),
         ):
-            response = asyncio.run(files.get_response("app.js", scope))
+            name = "app.0123456789ab.js" if versioned else "app.js"
+            response = asyncio.run(files.get_response(name, {}))
         return response.headers["Cache-Control"]
 
     def test_production_pins_a_versioned_asset_forever(self):
@@ -523,13 +585,15 @@ class StaticCachingTests(SimpleTestCase):
             "public, max-age=31536000, immutable",
         )
 
+    def test_an_unhashed_asset_is_cached_briefly(self):
+        self.assertEqual(
+            self._cache_control(live=False, versioned=False), "public, max-age=3600"
+        )
+
     def test_serving_live_never_pins_anything(self):
-        """The version token hashes the source tree; this mount serves the
-        collected one. In development those are only in step just after
-        `collectstatic`, so an edit-then-load hands the browser the new URL
-        with the old bytes and tells it to keep them forever. Every later
-        edit is then invisible, and it presents as the application not
-        running the code on disk rather than as a caching problem.
+        """Live serving reads the source trees, which change under one name.
+        Pinned, every later edit would be invisible and present as the
+        application not running the code on disk.
         """
 
         for versioned in (True, False):
@@ -755,21 +819,17 @@ class BrowserBoundaryTests(TestCase):
         """
 
         application = self.client.get("/accounts/login/")
-        admin = self.client.get("/admin/", follow=False)
-
-        relaxed = set(_directives(application["Content-Security-Policy"]))
-        relaxed -= set(_directives(admin["Content-Security-Policy"]))
-        self.assertEqual(relaxed, {"require-trusted-types-for", "trusted-types"})
-
-    def test_the_middleware_guards_the_prefix_the_urlconf_actually_uses(self):
-        """A prefix that stops matching does not fail; it serves a blank admin."""
-
-        from core.middleware import AdminPolicyMiddleware
-
-        self.assertEqual(
-            AdminPolicyMiddleware.prefix,
-            reverse("admin:index"),
+        self.client.force_login(
+            get_user_model().objects.create_superuser("admin-example", password="unused-test-pass")
         )
+        # The site's own page and a generated per-model one.
+        for path in (reverse("admin:index"), reverse("admin:core_auditlog_changelist")):
+            with self.subTest(path=path):
+                admin = self.client.get(path)
+                self.assertEqual(admin.status_code, 200)
+                relaxed = set(_directives(application["Content-Security-Policy"]))
+                relaxed -= set(_directives(admin["Content-Security-Policy"]))
+                self.assertEqual(relaxed, {"require-trusted-types-for", "trusted-types"})
 
 
 def _directives(policy):

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from django.contrib import messages
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect
 from application.routes import reverse
 from django.views import View
@@ -12,14 +11,14 @@ from django.views import View
 from application.security import AuthorizationError, safe_next, web_principal
 
 
-class ApprovalListView(LoginRequiredMixin, View):
+class ApprovalListView(View):
     """Retired: redirects to the audit log's awaiting view."""
 
     def get(self, request):
         return redirect(f"{reverse('core:audit_list')}?awaiting=1")
 
 
-class ApprovalDecisionView(LoginRequiredMixin, View):
+class ApprovalDecisionView(View):
     """Agree to a held change, or refuse it. Nothing else can.
 
     A POST from a signed-in operator, which is the entire mechanism: the

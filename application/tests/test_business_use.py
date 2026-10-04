@@ -1,4 +1,4 @@
-"""The business-use range is one rule, held by the services for every adapter."""
+"""The business-use range is one rule, declared on the model and held on every path."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ from datetime import date
 from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.db import IntegrityError, transaction
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from assets.models import Asset
@@ -18,7 +19,6 @@ from hq_mcp.identity import reset_principal, set_principal
 from hq_mcp.server import mcp
 
 from ..assets import AssetCommand, save_asset
-from ..business_use import check_business_use
 from ..expenses import ExpenseCommand, save_expense
 from ..security import cli_principal, mcp_principal
 
@@ -40,17 +40,28 @@ def _expense(pct: int) -> dict:
     }
 
 
-class RuleTests(SimpleTestCase):
+class RuleTests(TestCase):
     def test_the_bounds_are_inclusive(self):
         for value in IN_RANGE:
             with self.subTest(value=value):
-                self.assertEqual(check_business_use(value), value)
+                Asset(item_name="Example asset", business_use_percentage=value).full_clean()
 
     def test_out_of_range_names_the_bound_it_broke(self):
         for value, code in ((150, "max_value"), (-1, "min_value")):
             with self.subTest(value=value), self.assertRaises(ValidationError) as caught:
-                check_business_use(value)
-            self.assertEqual(caught.exception.code, code)
+                Asset(item_name="Example asset", business_use_percentage=value).full_clean()
+            (error,) = caught.exception.error_dict["business_use_percentage"]
+            self.assertEqual(error.code, code)
+
+    def test_the_table_refuses_a_row_written_around_validation(self):
+        for create in (
+            lambda: Asset.objects.create(item_name="Example asset", business_use_percentage=150),
+            lambda: Expense.objects.create(
+                date=date(2026, 7, 25), vendor="V", item="I", business_use_percentage=150
+            ),
+        ):
+            with self.subTest(create=create), self.assertRaises(IntegrityError), transaction.atomic():
+                create()
 
 
 class ServiceTests(TestCase):

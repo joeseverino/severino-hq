@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 import json
 
+from django.contrib.auth.decorators import login_not_required
 from django.http import HttpResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -44,6 +45,7 @@ def _csp_violations(payload):
     return []
 
 
+@login_not_required
 @csrf_exempt
 @require_POST
 def csp_report(request):

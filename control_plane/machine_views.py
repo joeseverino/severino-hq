@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from urllib.parse import urlencode
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404
 from django.shortcuts import redirect
 from application.routes import reverse
@@ -24,7 +23,7 @@ from .provider_adapters.declarations import MACHINE_KIND
 from .provider_adapters.portainer import CONTAINER_KIND
 
 
-class MachineListView(PageMixin, LoginRequiredMixin, TemplateView):
+class MachineListView(PageMixin, TemplateView):
     """Every machine anything reported, and what is on each.
 
     Nothing here is declared. A machine exists because a credential reaches it,
@@ -89,7 +88,7 @@ def whatif_context(request, default: str = "", *, target_default: str | None = N
     return context
 
 
-class TailnetView(PageMixin, LoginRequiredMixin, TemplateView):
+class TailnetView(PageMixin, TemplateView):
     """The tailnet, and whether one machine may reach another.
 
     A page because the question has nowhere else to live. Reachability is not a
@@ -133,7 +132,7 @@ class TailnetView(PageMixin, LoginRequiredMixin, TemplateView):
         return context
 
 
-class MachineDetailView(PageMixin, LoginRequiredMixin, TemplateView):
+class MachineDetailView(PageMixin, TemplateView):
     """One machine, and everything that ties to it.
 
     A container's host, a proxy's forwarding address, what a Portainer says it

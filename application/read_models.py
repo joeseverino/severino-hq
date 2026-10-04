@@ -3,18 +3,16 @@
 from __future__ import annotations
 from .sensitivity import SAFE_SENSITIVITIES
 from .projection import iso, page_size
+from . import records
 
 from typing import Any
 
 from django.db.models import FETCH_RAISE, Count
 from django.utils import timezone
 
-from assets.models import Asset
-from content.models import ContentItem
 from core.models import AuditLog
 from docs_index.models import DocumentationRecord
 from expenses.models import Expense
-from projects.models import Project
 from receipts.models import Receipt
 
 
@@ -162,14 +160,6 @@ def system_health() -> dict[str, Any]:
         "status": "ok",
         "checked_at": timezone.now().isoformat(),
         "database": "ok",
-        "counts": {
-            "projects": Project.objects.count(),
-            "assets": Asset.objects.count(),
-            "expenses": Expense.objects.count(),
-            "receipts": Receipt.objects.count(),
-            "content": ContentItem.objects.count(),
-            "documentation_safe": DocumentationRecord.objects.filter(
-                sensitivity__in=SAFE_SENSITIVITIES
-            ).count(),
-        },
+        # Each record domain's own count, read off its declaration.
+        "counts": records.counts(),
     }

@@ -7,11 +7,23 @@ authoritative for human and agentic development in this public repository.
 
 1. Run `git status --short`; preserve unrelated work.
 2. Read the nearest code and tests before changing an interface.
-3. Run `./scripts/check.sh` before handing work back.
+3. While editing, run `./scripts/check-fast.sh` (see below). Run
+   `./scripts/check.sh` before handing work back.
 4. Run `./scripts/ci-local.sh` before pushing.
 5. Run `./scripts/preflight.sh` before calling a change ready. On a small
    machine, push first and run `./scripts/preflight.sh --remote`: it reads
    every check GitHub ran on that commit instead of running `ci-local.sh`.
+
+`check-fast.sh [BASE]` is the inner loop: the changed files against the merge
+base (`BASE`, `$CHECK_BASE`, then `origin/main`, `main`) are mapped through the
+tree's import graph to the test modules that reach them, plus every test of the
+changed Django apps, the architecture tests, ruff on the changed files, `manage.py
+check`, migration drift, and mypy on changed typed modules. `--list` prints the
+selection. Tens of seconds for a one-domain change; a change to a shared layer
+reaches most of the suite and says so. It reads Python imports and app names, so
+a rule tested only through a string or a template it cannot see needs
+`check.sh`. It never replaces `check.sh`, which also runs the suite with `DEBUG`
+off. A new host domain: `docs/NEW_DOMAIN.md`.
 
 `check.sh` answers "do my changes work?". `ci-local.sh` answers "will the
 pipeline accept them?": ruff and mypy at the pinned versions, the shell gates, the
@@ -147,6 +159,13 @@ same review, and should fail when its path matches nothing rather than pass.
   the exports to it. A change there is a fleet change: regenerate with
   `manage.py sdk_contract`, review the diff, and decide whether
   `PLUGIN_API_VERSION` moves.
+- The machine API's OpenAPI 3.2 document is derived (`hq_api/openapi.py`) and
+  served at `/api/v2/openapi.json`; `hq_api/hq-api.openapi.json` is the host's
+  copy for clients. Regenerate it with `manage.py api_openapi` after changing a
+  route, capability, resource or domain; `--check` fails the gate on drift.
+  The signed-in operator reads it rendered at `/api/docs/` (System > API), a
+  vendored Scalar bundle: to upgrade it, replace
+  `static/vendor/scalar/standalone.js` and update `UPSTREAM`.
 - List views use `TableListMixin`; direct view mutations and MCP model access
   are rejected by architecture tests.
 - A link to a command's form is built by `application.action_links.command_url`

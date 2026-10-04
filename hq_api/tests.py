@@ -11,6 +11,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from application.security import AuthorizationError
 
 from . import security, views
+from .testing import ContractClient
 
 ISSUER = "https://sso.example.test"
 RESOURCE = "https://hq.example.test/api"
@@ -234,6 +235,9 @@ class CompositionCheckTests(SimpleTestCase):
     OIDC_RP_SIGN_ALGO="RS256",
 )
 class TransportTests(TestCase):
+    # Every response below is also held to the OpenAPI document.
+    client_class = ContractClient
+
     def _post(self, name, body, token=None, idempotency_key="test-key"):
         headers = {}
         if token is not None:
@@ -255,7 +259,7 @@ class TransportTests(TestCase):
         as success and silently import nothing.
         """
 
-        response = self.client.get("/api/v1/")
+        response = self.client.get("/api/v2/")
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response["WWW-Authenticate"], views.REALM)
         self.assertEqual(response.json()["ok"], False)
@@ -594,16 +598,6 @@ class TransportTests(TestCase):
         self.assertEqual(data["links"]["connections"], "/api/v2/connections/")
         self.assertEqual(data["links"]["topology"], "/api/v2/topology/")
 
-    def test_v1_does_not_advertise_a_v2_only_resource_route(self):
-        with _serving():
-            response = self.client.get(
-                "/api/v1/", HTTP_AUTHORIZATION=f"Bearer {_token()}"
-            )
-
-        links = response.json()["data"]["links"]
-        self.assertEqual(links["capabilities"], "/api/v1/capabilities/")
-        self.assertNotIn("resources", links)
-
     def test_capabilities_flag_what_this_token_may_run(self):
         with _serving():
             response = self.client.get(
@@ -824,38 +818,15 @@ class TransportTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["error"]["code"], "forbidden")
 
-    def test_v1_remains_compatible_without_an_idempotency_key(self):
-        from projects.models import Project
-
-        with _serving():
-            response = self.client.post(
-                "/api/v1/capabilities/project.create/",
-                data=json.dumps(
-                    {
-                        "payload": {
-                            "name": "Legacy client",
-                            "slug": "legacy-client",
-                            "status": "active",
-                        }
-                    }
-                ),
-                content_type="application/json",
-                HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
-            )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["Deprecation"], "true")
-        self.assertIn("/api/v2/", response["Link"])
-        self.assertTrue(Project.objects.filter(slug="legacy-client").exists())
-
     def test_a_response_is_never_cacheable(self):
         with _serving():
             response = self.client.get(
-                "/api/v1/", HTTP_AUTHORIZATION=f"Bearer {_token()}"
+                "/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token()}"
             )
         self.assertEqual(response["Cache-Control"], "private, no-store")
 
     @override_settings(SEVERINO_API_RESOURCE="")
     def test_the_surface_is_off_until_a_resource_is_configured(self):
-        response = self.client.get("/api/v1/")
+        response = self.client.get("/api/v2/")
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["error"]["code"], "not_configured")

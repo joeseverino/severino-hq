@@ -29,26 +29,16 @@ class Capability(StrEnum):
     # that. Operators hold every capability; MCP holds this one only if a
     # deployment says so.
     LOOK_UP_PUBLIC_RECORDS = "look_up_public_records"
-    WRITE_PROJECTS = "write_projects"
-    WRITE_ASSETS = "write_assets"
-    WRITE_CONTENT = "write_content"
-    WRITE_EXPENSES = "write_expenses"
+    # A record domain's write_<resource> and delete_<resource> are not listed
+    # here: they derive from its ``Records`` declaration (``record_permissions``).
     # The operator's own calendar: appointments, visits, plans. Personal, so
     # an agent reads and writes it only on its own switch.
     READ_CALENDAR = "read_calendar"
     WRITE_CALENDAR = "write_calendar"
-    WRITE_RECEIPTS = "write_receipts"
     MANAGE_CONTACTS = "manage_contacts"
     SYNC_DOCUMENTATION = "sync_documentation"
-    WRITE_DOCUMENTATION = "write_documentation"
     PRUNE_DOCUMENTATION = "prune_documentation"
-    DELETE_PROJECTS = "delete_projects"
-    DELETE_ASSETS = "delete_assets"
-    DELETE_CONTENT = "delete_content"
-    DELETE_EXPENSES = "delete_expenses"
     DELETE_CALENDAR = "delete_calendar"
-    DELETE_DOCUMENTATION = "delete_documentation"
-    DELETE_RECEIPTS = "delete_receipts"
     MANAGE_INFRASTRUCTURE = "manage_infrastructure"
     REQUEST_CERTIFICATE_RENEWAL = "request_certificate_renewal"
 
@@ -87,9 +77,23 @@ class PolicyDenied(AuthorizationError):
     code = "denied_by_policy"
 
 
-# Stable core contract retained for callers constructing explicit principals.
-# Runtime operator principals derive plugin grants in addition to this set.
-OPERATOR_CAPABILITIES = frozenset(Capability)
+def record_permissions(kind: str) -> frozenset[str]:
+    """Every record domain's ``write`` or ``delete`` permission, by declaration."""
+
+    from .domains import host_records
+
+    return frozenset(getattr(records, kind) for records in host_records())
+
+
+def host_capabilities() -> frozenset[Capability | str]:
+    """Everything the host can grant: its own capabilities and every record domain's."""
+
+    return frozenset(Capability) | record_permissions("write") | record_permissions("delete")
+
+
+# For callers constructing explicit principals. Runtime operator principals
+# derive the same set, plus plugin grants, when they are built.
+OPERATOR_CAPABILITIES = host_capabilities()
 
 
 @dataclass(frozen=True)
@@ -150,7 +154,7 @@ def require_all(principal: Principal, capabilities: Iterable[Capability | str]) 
 def _operator_capabilities() -> frozenset[Capability | str]:
     from .plugins import plugin_capabilities
 
-    return OPERATOR_CAPABILITIES | plugin_capabilities("operator")
+    return host_capabilities() | plugin_capabilities("operator")
 
 
 def web_principal(user: AbstractBaseUser | AnonymousUser) -> Principal:
@@ -189,19 +193,10 @@ def mcp_principal() -> Principal:
     if getattr(settings, "SEVERINO_MCP_ENABLE_DOC_SYNC", False):
         capabilities.add(Capability.SYNC_DOCUMENTATION)
     if getattr(settings, "SEVERINO_MCP_ENABLE_WRITES", False):
-        capabilities.update(
-            {
-                Capability.WRITE_PROJECTS,
-                Capability.WRITE_ASSETS,
-                Capability.WRITE_CONTENT,
-                Capability.WRITE_EXPENSES,
-                Capability.WRITE_RECEIPTS,
-                # Broad writes still imply doc sync; the narrow flag exists to
-                # grant it *without* them, not to withhold it from them.
-                Capability.SYNC_DOCUMENTATION,
-                Capability.WRITE_DOCUMENTATION,
-            }
-        )
+        capabilities.update(record_permissions("write"))
+        # Broad writes still imply doc sync; the narrow flag exists to grant it
+        # *without* them, not to withhold it from them.
+        capabilities.add(Capability.SYNC_DOCUMENTATION)
         capabilities.update(plugin_capabilities("mcp_write"))
     # The calendar is personal, so it is neither in READ nor in the broad
     # writes: "put this on my calendar" is its own decision, and granting it
@@ -213,16 +208,7 @@ def mcp_principal() -> Principal:
     if getattr(
         settings, "SEVERINO_MCP_ENABLE_WRITES", False
     ) and getattr(settings, "SEVERINO_MCP_ENABLE_DELETES", False):
-        capabilities.update(
-            {
-                Capability.DELETE_PROJECTS,
-                Capability.DELETE_ASSETS,
-                Capability.DELETE_CONTENT,
-                Capability.DELETE_EXPENSES,
-                Capability.DELETE_DOCUMENTATION,
-                Capability.DELETE_RECEIPTS,
-            }
-        )
+        capabilities.update(record_permissions("delete"))
         if getattr(settings, "SEVERINO_MCP_ENABLE_CALENDAR", False):
             capabilities.add(Capability.DELETE_CALENDAR)
     # Topology sync needs to declare infrastructure; it never needs to ask a

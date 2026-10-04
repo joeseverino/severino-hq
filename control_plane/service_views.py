@@ -6,7 +6,6 @@ from functools import cached_property
 
 from django.contrib import messages
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404
 from django.shortcuts import redirect, render
 from application.routes import reverse
@@ -39,7 +38,7 @@ from .provider_adapters.portainer import CONTAINER_KIND
 from .providers import service_facets
 
 
-class ServiceListView(PageMixin, LoginRequiredMixin, TemplateView):
+class ServiceListView(PageMixin, TemplateView):
     """The hostname view of the same declarations the resource list shows."""
 
     template_name = "control_plane/service_list.html"
@@ -98,7 +97,7 @@ class ServiceListView(PageMixin, LoginRequiredMixin, TemplateView):
         return context
 
 
-class ServiceDetailView(PageMixin, LoginRequiredMixin, TemplateView):
+class ServiceDetailView(PageMixin, TemplateView):
     """One hostname, whether or not anything has been declared for it yet.
 
     A name with nothing behind it still has a page: it is where publishing a
@@ -252,7 +251,7 @@ class ServiceDetailView(PageMixin, LoginRequiredMixin, TemplateView):
         return context
 
 
-class ServiceStartView(LoginRequiredMixin, View):
+class ServiceStartView(View):
     """Ask for a hostname, then stand on its page.
 
     The whole of "publish a service" is knowing the name. Everything after it
@@ -274,7 +273,7 @@ class ServiceStartView(LoginRequiredMixin, View):
         return redirect("control_plane:service", hostname=hostname)
 
 
-class ServicePinView(LoginRequiredMixin, View):
+class ServicePinView(View):
     """Keep a service at the top of the list, for this operator only.
 
     A preference, so it never touches a spec: starring a hostname does not
@@ -291,7 +290,7 @@ class ServicePinView(LoginRequiredMixin, View):
         return redirect(safe_next(request) or reverse("control_plane:services"))
 
 
-class ServiceMoveView(LoginRequiredMixin, View):
+class ServiceMoveView(View):
     """Move one favorite past its neighbour.
 
     Up and down rather than dragging: it is one POST, it works without script,

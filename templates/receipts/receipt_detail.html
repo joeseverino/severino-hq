@@ -5,7 +5,7 @@
   <dt>Date</dt><dd>{{ receipt.date|when }}</dd>
   <dt>Amount</dt><dd>${{ receipt.amount|floatformat:2|intcomma }}</dd>
   {% if receipt.content_type %}<dt>Content type</dt><dd><code>{{ receipt.content_type }}</code></dd>{% endif %}
-  {% if receipt.size_bytes %}<dt>Size</dt><dd>{{ receipt.size_bytes|filesizeformat }}</dd>{% endif %}
+  {% if receipt.size_bytes %}<dt>Size</dt><dd>{{ receipt.size_bytes|bytes }}</dd>{% endif %}
   {% if receipt.related_expense %}<dt>Expense</dt><dd><a href="{{ receipt.related_expense.get_absolute_url }}">{{ receipt.related_expense }}</a></dd>{% endif %}
   {% if receipt.related_asset %}<dt>Asset</dt><dd><a href="{{ receipt.related_asset.get_absolute_url }}">{{ receipt.related_asset.item_name }}</a></dd>{% endif %}
 </dl>

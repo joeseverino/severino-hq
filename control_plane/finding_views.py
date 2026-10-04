@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from application.routes import reverse
 from django.views.generic import TemplateView
 
@@ -12,7 +11,7 @@ from application.security import web_principal
 from application.pages import PageAction, PageMixin
 
 
-class FindingsView(PageMixin, LoginRequiredMixin, TemplateView):
+class FindingsView(PageMixin, TemplateView):
     """Evidence and safe existing actions for claims from the live topology."""
 
     template_name = "control_plane/findings.html"

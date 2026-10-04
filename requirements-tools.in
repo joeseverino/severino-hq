@@ -12,3 +12,8 @@ django-stubs==6.1.1
 # references, package URLs, provenance, failure logs): thousands of generated
 # inputs each, which is also what OpenSSF Scorecard's Fuzzing check looks for.
 hypothesis==6.168.3
+# Validates HQ's machine-API document (hq_api/openapi.py) as OpenAPI 3.1 in
+# the suite. Not in the image, so there that one test is skipped.
+openapi-spec-validator==0.9.0
+# Generated API cases exercise the live WSGI contract on a disposable database.
+schemathesis==4.29.1

@@ -1,0 +1,9 @@
+package: @scalar/api-reference
+version: 1.72.4
+license: MIT
+file: dist/browser/standalone.js
+tarball: https://registry.npmjs.org/@scalar/api-reference/-/api-reference-1.72.4.tgz
+integrity: sha512-HKsUqCJbXhmz/5j6ETceXVgnlZKOX1uidF7jz8elSuzKE6FJjJYhK1G7WqxHk4zLabbSb13QHQ9yKUikf8XLBQ==
+upstream_sha256: f5ac0c3504a7ca77ca9fa96a6bb7c8f98b42c271864df35583f6ed9e6da40c23
+edit: the final sourceMappingURL line is removed; the map is not vendored and collectstatic fails on a reference it cannot resolve.
+sha256: d8214a409c8828623327a2576c279e01e2b9e1872b374398584f7b20103c6bb9

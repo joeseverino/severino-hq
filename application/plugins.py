@@ -9,7 +9,6 @@ import os
 import re
 from typing import Any, Callable, Iterable
 
-from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.urls import URLResolver, include, path
 from application.routes import reverse
@@ -199,23 +198,6 @@ def _validate_mount(manifest: PluginManifest) -> None:
             )
 
 
-def _refuse_sign_in_exempt_mount(plugin: PluginManifest) -> None:
-    """A mount the host's own sign-in exemptions would cover fails at startup.
-
-    Checked when the URLs are built rather than with the rest of the manifest:
-    the manifests are read while settings are still loading, and the
-    exemptions are a setting.
-    """
-
-    mounted = "/" + plugin.url_prefix
-    if any(mounted.startswith(prefix) for prefix in settings.LOGIN_EXEMPT_PATH_PREFIXES):
-        raise ImproperlyConfigured(
-            f"Plugin {plugin.id!r} url_prefix {plugin.url_prefix!r} falls under "
-            "a path exempt from sign-in. Declare token_authenticated_routes for a "
-            "route that carries its own authentication instead."
-        )
-
-
 def _validate_providers(manifest: PluginManifest) -> None:
     """The one executable entry point every extension must declare."""
 
@@ -276,9 +258,9 @@ def _validate_capabilities(manifest: PluginManifest) -> None:
             raise ImproperlyConfigured(
                 f"Plugin {manifest.id!r} declares invalid capability {capability!r}."
             )
-    from .security import Capability
+    from .security import host_capabilities
 
-    host = {str(capability) for capability in Capability}
+    host = {str(capability) for capability in host_capabilities()}
     claimed = sorted(set(declared_capabilities) & host)
     if claimed:
         raise ImproperlyConfigured(
@@ -394,8 +376,6 @@ def installed_plugin_apps() -> list[str]:
 
 def plugin_urlpatterns() -> list[URLResolver]:
     mounted = [plugin for plugin in installed_plugins() if plugin.urlconf]
-    for plugin in mounted:
-        _refuse_sign_in_exempt_mount(plugin)
     return [path(plugin.url_prefix, include(plugin.urlconf)) for plugin in mounted]
 
 

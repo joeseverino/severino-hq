@@ -1,0 +1,2 @@
+# Vendored bytes stay byte-for-byte upstream (see each UPSTREAM file).
+static/vendor/** -whitespace linguist-vendored

@@ -1,46 +1,23 @@
 """What HQ itself can be asked to do: its own capability declarations.
 
 One entry per command, each naming its effect, the authority it needs and the
-service that carries it out. ``application.integrations`` joins these with what
-each host module and extension declares; ``application.capabilities`` runs
-them.
+service that carries it out. A record domain's create, update and delete are
+not here: ``application.records`` derives them from its declaration.
+``application.integrations`` joins these with what each host domain and
+extension declares; ``application.capabilities`` runs them.
 """
 
 from __future__ import annotations
 
 from control_plane.provider_adapters.tls import CERTIFICATE_KIND
 
-from .assets import AssetCommand, save_asset, upsert_asset
 from .cadence import ControllerSweepCommand, request_controller_sweep
-from .contact_submissions import (
-    ContactDeleteCommand,
-    ContactListCommand,
-    ContactReviewCommand,
-    execute_contact_delete,
-    execute_contact_list,
-    execute_contact_review,
-)
-from .content import ContentCommand, save_content
-from .deletion import (
-    DeleteCommand,
-    delete_asset,
-    delete_content,
-    delete_documentation,
-    delete_expense,
-    delete_project,
-    delete_receipt,
-)
 from .documentation import (
-    DocumentationCommand,
     DocumentationSyncCommand,
     execute_documentation_sync,
-    save_documentation,
 )
-from .expenses import ExpenseCommand, save_expense
 from .infrastructure import ManagedResourceCommand, save_managed_resource
-from .integration_specs import (
-    CapabilitySpec,
-)
+from .integration_specs import CapabilitySpec
 from .lookup import (
     AddressCommand,
     NameCommand,
@@ -49,13 +26,9 @@ from .lookup import (
 )
 from .policy_fixes import request_empty_groups_removal
 from .projects import (
-    ProjectCommand,
     ProjectRefreshCommand,
     execute_project_refresh,
-    save_project,
-    upsert_project,
 )
-from .receipts import ReceiptMetadataCommand, update_receipt
 from .registry_import import REQUIRED_CAPABILITIES as IMPORT_CAPABILITIES
 from .registry_import import HQImportCommand, execute_hq_import
 from .resource_operations import (
@@ -67,9 +40,8 @@ from .resource_operations import (
     request_removal,
     request_route_approval,
 )
-from .security import (
-    Capability,
-)
+from .domains import records_of
+from .security import Capability
 from .sync import HQSyncCommand, execute_hq_sync
 from .tailnet import POLICY_KIND as TAILNET_POLICY_KIND
 from .tailnet import TAILNET_KIND
@@ -105,43 +77,10 @@ CORE_CAPABILITY_SPECS = (
         label="Import projects and assets",
     ),
     CapabilitySpec(
-        "project.create",
-        "Create an HQ project.",
-        "remote_write",
-        Capability.WRITE_PROJECTS,
-        ProjectCommand,
-        save_project,
-        subject_resource="projects",
-        label="Create project",
-    ),
-    CapabilitySpec(
-        "project.upsert",
-        "Idempotently create or update an HQ project by slug.",
-        "remote_write",
-        Capability.WRITE_PROJECTS,
-        ProjectCommand,
-        upsert_project,
-        subject_resource="projects",
-        label="Create or update project",
-    ),
-    CapabilitySpec(
-        "project.update",
-        "Update an HQ project.",
-        "remote_write",
-        Capability.WRITE_PROJECTS,
-        ProjectCommand,
-        save_project,
-        "slug",
-        "projects",
-        target_label="Project slug",
-        target_help="The project to update.",
-        label="Update project",
-    ),
-    CapabilitySpec(
         "project.refresh",
         "Refresh a project's GitHub and published-content metadata.",
         "remote_write",
-        Capability.WRITE_PROJECTS,
+        records_of("projects").write,
         ProjectRefreshCommand,
         execute_project_refresh,
         "slug",
@@ -159,159 +98,6 @@ CORE_CAPABILITY_SPECS = (
         label="Refresh project metadata",
     ),
     CapabilitySpec(
-        "contact.submissions.list",
-        "List contact submissions held in Cloudflare D1.",
-        "read",
-        Capability.MANAGE_CONTACTS,
-        ContactListCommand,
-        execute_contact_list,
-        subject_resource="contact.submissions",
-        execution_notes=(
-            "Validate the requested status and result bound locally.",
-            "Read submissions through the configured D1 connection.",
-            "Return only the requested bounded result set.",
-        ),
-        label="List contact submissions",
-    ),
-    CapabilitySpec(
-        "contact.submission.review",
-        "Review and update one contact submission in Cloudflare D1.",
-        "remote_write",
-        Capability.MANAGE_CONTACTS,
-        ContactReviewCommand,
-        execute_contact_review,
-        "integer",
-        "contact.submissions",
-        target_label="Submission ID",
-        target_help="The contact submission to review.",
-        execution_notes=(
-            "Read the selected submission and validate its new review state.",
-            "Write the review fields through the configured D1 connection.",
-            "Record the attributed change in HQ's audit log.",
-        ),
-        label="Review contact submission",
-    ),
-    CapabilitySpec(
-        "contact.submission.delete",
-        "Delete one explicitly confirmed contact submission from Cloudflare D1.",
-        "destructive",
-        Capability.MANAGE_CONTACTS,
-        ContactDeleteCommand,
-        execute_contact_delete,
-        "integer",
-        "contact.submissions",
-        target_label="Submission ID",
-        target_help="The contact submission to delete.",
-        execution_notes=(
-            "Require confirmation that exactly matches the selected submission ID.",
-            "Delete the record through the configured D1 connection.",
-            "Treat an already-absent record as a successful retry and audit the change.",
-        ),
-        label="Delete contact submission",
-    ),
-    CapabilitySpec(
-        "asset.create",
-        "Create an HQ asset.",
-        "remote_write",
-        Capability.WRITE_ASSETS,
-        AssetCommand,
-        save_asset,
-        subject_resource="assets",
-        label="Create asset",
-    ),
-    CapabilitySpec(
-        "asset.upsert",
-        "Idempotently create or update an HQ asset by slug.",
-        "remote_write",
-        Capability.WRITE_ASSETS,
-        AssetCommand,
-        upsert_asset,
-        subject_resource="assets",
-        label="Create or update asset",
-    ),
-    CapabilitySpec(
-        "asset.update",
-        "Update an HQ asset.",
-        "remote_write",
-        Capability.WRITE_ASSETS,
-        AssetCommand,
-        save_asset,
-        "slug",
-        "assets",
-        target_label="Asset slug",
-        target_help="The asset to update.",
-        label="Update asset",
-    ),
-    CapabilitySpec(
-        "content.create",
-        "Create an HQ content item.",
-        "remote_write",
-        Capability.WRITE_CONTENT,
-        ContentCommand,
-        save_content,
-        subject_resource="content",
-        label="Create content",
-    ),
-    CapabilitySpec(
-        "content.update",
-        "Update an HQ content item.",
-        "remote_write",
-        Capability.WRITE_CONTENT,
-        ContentCommand,
-        save_content,
-        "slug",
-        "content",
-        target_label="Content slug",
-        target_help="The content item to update.",
-        label="Update content",
-    ),
-    CapabilitySpec(
-        "expense.create",
-        "Create an HQ expense.",
-        "remote_write",
-        Capability.WRITE_EXPENSES,
-        ExpenseCommand,
-        save_expense,
-        subject_resource="expenses",
-        label="Record expense",
-    ),
-    CapabilitySpec(
-        "expense.update",
-        "Update an HQ expense.",
-        "remote_write",
-        Capability.WRITE_EXPENSES,
-        ExpenseCommand,
-        save_expense,
-        "integer",
-        "expenses",
-        target_label="Expense ID",
-        target_help="The expense to update.",
-        label="Update expense",
-    ),
-    CapabilitySpec(
-        "documentation.create",
-        "Create an HQ documentation metadata record.",
-        "remote_write",
-        Capability.WRITE_DOCUMENTATION,
-        DocumentationCommand,
-        save_documentation,
-        subject_resource="documentation",
-        label="Create document",
-    ),
-    CapabilitySpec(
-        "documentation.update",
-        "Update an HQ documentation metadata record.",
-        "remote_write",
-        Capability.WRITE_DOCUMENTATION,
-        DocumentationCommand,
-        save_documentation,
-        "doc_id",
-        "documentation",
-        target_label="Document ID",
-        target_help="The documentation record to update.",
-        label="Update document",
-    ),
-    CapabilitySpec(
         "documentation.sync",
         "Synchronize a validated vault manifest into HQ.",
         "remote_write",
@@ -320,97 +106,6 @@ CORE_CAPABILITY_SPECS = (
         execute_documentation_sync,
         subject_resource="documentation",
         label="Sync documentation",
-    ),
-    CapabilitySpec(
-        "receipt.update",
-        "Update receipt metadata and relationships (never file bytes).",
-        "remote_write",
-        Capability.WRITE_RECEIPTS,
-        ReceiptMetadataCommand,
-        update_receipt,
-        "integer",
-        "receipts",
-        target_label="Receipt ID",
-        target_help="The receipt to update.",
-        label="Update receipt",
-    ),
-    CapabilitySpec(
-        "project.delete",
-        "Delete a confirmed project.",
-        "destructive",
-        Capability.DELETE_PROJECTS,
-        DeleteCommand,
-        delete_project,
-        "slug",
-        "projects",
-        target_label="Project slug",
-        target_help="The project to delete.",
-        label="Delete project",
-    ),
-    CapabilitySpec(
-        "asset.delete",
-        "Delete a confirmed asset.",
-        "destructive",
-        Capability.DELETE_ASSETS,
-        DeleteCommand,
-        delete_asset,
-        "slug",
-        "assets",
-        target_label="Asset slug",
-        target_help="The asset to delete.",
-        label="Delete asset",
-    ),
-    CapabilitySpec(
-        "content.delete",
-        "Delete confirmed content.",
-        "destructive",
-        Capability.DELETE_CONTENT,
-        DeleteCommand,
-        delete_content,
-        "slug",
-        "content",
-        target_label="Content slug",
-        target_help="The content item to delete.",
-        label="Delete content",
-    ),
-    CapabilitySpec(
-        "expense.delete",
-        "Delete a confirmed expense.",
-        "destructive",
-        Capability.DELETE_EXPENSES,
-        DeleteCommand,
-        delete_expense,
-        "integer",
-        "expenses",
-        target_label="Expense ID",
-        target_help="The expense to delete.",
-        label="Delete expense",
-    ),
-    CapabilitySpec(
-        "documentation.delete",
-        "Delete confirmed documentation metadata.",
-        "destructive",
-        Capability.DELETE_DOCUMENTATION,
-        DeleteCommand,
-        delete_documentation,
-        "doc_id",
-        "documentation",
-        target_label="Document ID",
-        target_help="The documentation record to delete.",
-        label="Delete document",
-    ),
-    CapabilitySpec(
-        "receipt.delete",
-        "Delete a confirmed receipt and its private file.",
-        "destructive",
-        Capability.DELETE_RECEIPTS,
-        DeleteCommand,
-        delete_receipt,
-        "integer",
-        "receipts",
-        target_label="Receipt ID",
-        target_help="The receipt to delete.",
-        label="Delete receipt",
     ),
     CapabilitySpec(
         "infrastructure.resource.create",

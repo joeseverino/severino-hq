@@ -24,7 +24,7 @@ from ..security import AuthorizationError, Capability, Principal, mcp_principal
 from .test_relationships import estate
 
 READER = Principal("reader", "test", frozenset({Capability.READ}))
-NOBODY = Principal("nobody", "test", frozenset({Capability.WRITE_PROJECTS}))
+NOBODY = Principal("nobody", "test", frozenset({"write_projects"}))
 
 # Every derived read, and one identifier its detail answers to after ``estate``.
 LISTS = {

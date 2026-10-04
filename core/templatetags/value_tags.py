@@ -15,6 +15,7 @@ from application.moments import (
     when_day as _when_day,
     when_exact as _when_exact,
 )
+from application.labels import human_bytes
 from application.ui import MISSING, counted as _counted
 
 register = template.Library()
@@ -40,6 +41,15 @@ def counted_phrases(phrases) -> tuple[str, str | None]:
 def empty_value():
     """The mark for a value that is not there, where there is no value to test."""
     return format_html('<span class="empty-value" title="None">{}</span>', MISSING)
+
+
+@register.filter(name="bytes")
+def bytes_(value):
+    """``{{ n|bytes }}``: a byte count as ``human_bytes`` says it, the format the
+    controller's readings already use. Never ``filesizeformat``, which says the
+    same count differently."""
+
+    return human_bytes(value)
 
 
 @register.filter

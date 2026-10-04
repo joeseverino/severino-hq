@@ -28,3 +28,6 @@ Dockerfile
 # write to. severino-hq-sync-scripts copies it out of the running image.
 .dockerignore
 .mypy_cache/
+
+# JavaScript tooling is installed locally; generated artifacts are committed.
+**/node_modules

@@ -109,7 +109,7 @@ class ServiceTests(TestCase):
 
         from .identity import reset_principal, set_principal
 
-        bound = set_principal(Principal("example-writer", "mcp", frozenset({Capability.WRITE_PROJECTS})))
+        bound = set_principal(Principal("example-writer", "mcp", frozenset({"write_projects"})))
         self.addCleanup(reset_principal, bound)
         for tool in (services.audit_registry, services.documentation_status, services.system_health):
             with self.subTest(tool=tool.__name__), self.assertRaises(AuthorizationError):
@@ -163,19 +163,20 @@ class ServiceTests(TestCase):
     def test_operating_snapshot_is_a_registered_read_tool(self):
         self.assertIsNotNone(mcp._tool_manager.get_tool("dashboard_snapshot"))
 
-    def test_resource_kinds_are_derived_from_the_registry(self):
-        from application.resources import resource_registry
+    def test_resource_kinds_are_derived_from_the_live_document(self):
+        from hq_api.openapi import document
 
-        registry = resource_registry()
-        listable = sorted(n for n, s in registry.items() if s.list_handler and s.list_query_type)
-        addressable = sorted(n for n, s in registry.items() if s.detail_handler and s.identifier)
+        from .contract import catalogue, resource_contract
+
+        contract = resource_contract(document())
+        listable = [resource.name for resource in contract.listable]
+        addressable = [resource.name for resource in contract.addressable]
         tools = {tool.name: tool for tool in mcp._tool_manager.list_tools()}
 
         self.assertEqual(tools["list_resource"].parameters["properties"]["name"]["enum"], listable)
         self.assertEqual(tools["get_resource"].parameters["properties"]["name"]["enum"], addressable)
-        self.assertIn("infrastructure.resources", listable)
-        for name in addressable:
-            self.assertIn(f"`{name}`", tools["get_resource"].description)
+        self.assertIn(catalogue(contract.listable), tools["list_resource"].description)
+        self.assertIn(catalogue(contract.addressable), tools["get_resource"].description)
 
     def test_resource_reads_have_one_path(self):
         names = {tool.name for tool in mcp._tool_manager.list_tools()}
@@ -537,7 +538,7 @@ class AgentIdentityTests(MCPBoundaryTests):
         self.assertFalse(is_interactive(seen["principal"]))
 
     def test_capabilities_are_the_token_grant_and_are_never_widened(self):
-        granted = frozenset({Capability.READ, Capability.WRITE_PROJECTS})
+        granted = frozenset({Capability.READ, "write_projects"})
         agent = Principal("example-agent", "mcp", granted)
         app, seen = self._capturing_app()
 
@@ -546,7 +547,7 @@ class AgentIdentityTests(MCPBoundaryTests):
         )
 
         self.assertEqual(seen["principal"].capabilities, granted)
-        self.assertFalse(seen["principal"].permits(Capability.DELETE_PROJECTS))
+        self.assertFalse(seen["principal"].permits("delete_projects"))
 
     def test_a_static_bearer_is_refused(self):
         """There is no static bearer: presenting one is an unauthenticated
@@ -667,7 +668,7 @@ class GrantCeilingTests(TestCase):
             agent = token_principal(self._claims("read", "write_projects"))
 
         self.assertTrue(agent.permits(Capability.READ))
-        self.assertFalse(agent.permits(Capability.WRITE_PROJECTS))
+        self.assertFalse(agent.permits("write_projects"))
 
     def test_a_grant_the_deployment_allows_is_held(self):
         from django.test import override_settings
@@ -677,7 +678,7 @@ class GrantCeilingTests(TestCase):
         with override_settings(SEVERINO_MCP_ENABLE_WRITES=True):
             agent = token_principal(self._claims("read", "write_projects"))
 
-        self.assertTrue(agent.permits(Capability.WRITE_PROJECTS))
+        self.assertTrue(agent.permits("write_projects"))
 
     def test_the_ceiling_never_widens_a_grant(self):
         from django.test import override_settings
@@ -687,7 +688,7 @@ class GrantCeilingTests(TestCase):
         with override_settings(SEVERINO_MCP_ENABLE_WRITES=True):
             agent = token_principal(self._claims("read"))
 
-        self.assertFalse(agent.permits(Capability.WRITE_PROJECTS))
+        self.assertFalse(agent.permits("write_projects"))
 
 
 class DoorRefusalTests(MCPBoundaryTests):
@@ -849,3 +850,75 @@ class TheCallerReachesTheToolTests(TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertNotIn('"isError":true', response.text.replace(" ", ""))
         self.assertEqual(seen.get("actor"), "example-agent")
+
+
+class ResourceContractTests(SimpleTestCase):
+    def _document(self):
+        return {
+            "paths": {
+                "/resources/{name}/": {"get": {"operationId": "resourceListV2"}},
+                "/resources/example.notes/": {
+                    "get": {"x-hq-resource": "example.notes", "description": "Synthetic notes."}
+                },
+                "/resources/example.notes/{identifier}/": {
+                    "parameters": [{"$ref": "#/components/parameters/Identifier"}],
+                    "get": {
+                        "x-hq-resource": "example.notes", "description": "Synthetic notes.",
+                        "x-hq-identifier": "slug",
+                    },
+                },
+                "/resources/example.events/": {
+                    "get": {"x-hq-resource": "example.events", "description": "Events."}
+                },
+                "/resources/example.single/{identifier}/": {
+                    "get": {
+                        "x-hq-resource": "example.single", "description": "Single record.",
+                        "parameters": [{"name": "identifier", "in": "path"}],
+                        "x-hq-identifier": "id",
+                    }
+                },
+            },
+            "components": {"parameters": {"Identifier": {"name": "identifier", "in": "path"}}},
+        }
+
+    def test_an_injected_document_owns_the_catalog(self):
+        from .contract import catalogue, resource_contract
+
+        with mock.patch("application.resources.resource_registry", side_effect=AssertionError("registry walk")):
+            contract = resource_contract(self._document())
+        self.assertEqual([r.name for r in contract.listable], ["example.events", "example.notes"])
+        self.assertEqual([r.name for r in contract.addressable], ["example.notes", "example.single"])
+        self.assertIn("`example.notes`: Synthetic notes. Identifier: `slug`.", catalogue(contract.addressable))
+
+    def test_altering_the_document_changes_the_catalog(self):
+        from .contract import resource_contract
+
+        document = self._document()
+        operation = document["paths"]["/resources/example.events/"]["get"]
+        operation["x-hq-resource"] = "example.changed"
+        operation["description"] = "Changed summary."
+        contract = resource_contract(document)
+        self.assertEqual(contract.listable[0].name, "example.changed")
+        self.assertEqual(contract.listable[0].summary, "Changed summary.")
+
+    def test_missing_metadata_and_duplicate_operations_fail_closed(self):
+        from .contract import resource_contract
+
+        for field in ("description", "x-hq-identifier"):
+            document = self._document()
+            del document["paths"]["/resources/example.notes/{identifier}/"]["get"][field]
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                resource_contract(document)
+        document = self._document()
+        document["paths"]["/duplicate/"] = document["paths"]["/resources/example.events/"]
+        with self.assertRaisesRegex(ValueError, "same operation twice"):
+            resource_contract(document)
+
+    def test_external_and_recursive_parameter_references_are_refused(self):
+        from .contract import resource_contract
+
+        for reference in ("https://example.com/parameter", "#/components/parameters/Identifier"):
+            document = self._document()
+            document["components"]["parameters"]["Identifier"] = {"$ref": reference}
+            with self.subTest(reference=reference), self.assertRaises(ValueError):
+                resource_contract(document)

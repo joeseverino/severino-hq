@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from application.routes import reverse
 from django.views.generic import TemplateView
 
@@ -44,7 +43,7 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
     }
 
 
-class ContainerListView(PageMixin, LoginRequiredMixin, TemplateView):
+class ContainerListView(PageMixin, TemplateView):
     """Led by what needs you (``needs_you``): a version with a known
     vulnerability or a newer release, each once however many containers run
     it. Then every container, one row each."""

@@ -30,7 +30,8 @@ from . import assets as asset_use_cases
 from . import projects as project_use_cases
 from .assets import AssetCommand, upsert_asset
 from .projects import ProjectCommand, upsert_project
-from .security import Capability, Principal, require_all
+from .domains import records_of
+from .security import Principal, require_all
 from .ui import counted
 
 MAX_IMPORT_RECORDS = 1000
@@ -42,7 +43,7 @@ DERIVED_FIELDS: dict[str, tuple[str, ...]] = {
     "asset": (),
 }
 
-REQUIRED_CAPABILITIES = (Capability.WRITE_PROJECTS, Capability.WRITE_ASSETS)
+REQUIRED_CAPABILITIES = (records_of("projects").write, records_of("assets").write)
 
 
 @dataclass(frozen=True)

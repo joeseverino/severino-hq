@@ -1052,12 +1052,12 @@ class DocumentationSyncCapabilityTests(SimpleTestCase):
             principal = mcp_principal()
         principal.require(Capability.SYNC_DOCUMENTATION)
         for withheld in (
-            Capability.WRITE_EXPENSES,
-            Capability.WRITE_RECEIPTS,
-            Capability.WRITE_PROJECTS,
-            Capability.WRITE_ASSETS,
-            Capability.WRITE_CONTENT,
-            Capability.WRITE_DOCUMENTATION,
+            "write_expenses",
+            "write_receipts",
+            "write_projects",
+            "write_assets",
+            "write_content",
+            "write_documentation",
         ):
             with self.assertRaises(AuthorizationError):
                 principal.require(withheld)

@@ -32,6 +32,7 @@ from config.devtools import (
 # The plugin registry is loaded by name: settings is imported by everything, and
 # a static import here would put it inside the application's own import cycle.
 installed_plugin_apps = import_module("application.plugins").installed_plugin_apps
+host_apps = import_module("application.domains").host_apps
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -174,7 +175,6 @@ CSRF_COOKIE_SAMESITE = os.environ.get("DJANGO_CSRF_COOKIE_SAMESITE", "Lax")
 # and SessionRefresh below is what re-checks the provider.
 SESSION_COOKIE_AGE = env_int("SEVERINO_SESSION_SECONDS", 12 * 60 * 60)
 CSRF_COOKIE_HTTPONLY = False  # Django needs JS access for the token header
-SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 SECURE_REFERRER_POLICY = "same-origin"
@@ -272,6 +272,13 @@ SECURE_CSP = {
 # cannot leave a stale copy behind serving the admin a weaker boundary.
 SEVERINO_ADMIN_CSP = without_trusted_types(SECURE_CSP)
 
+# The API reference at /api/docs/, derived the same way and for the same kind
+# of reason: the vendored Scalar bundle (static/vendor/scalar) writes strings
+# into innerHTML through Vue and its markdown renderer, and no configuration
+# of it creates only the `hq-fragment` policy. Every source stays 'self'; it
+# needs no inline script and, configured jitless, no eval.
+SEVERINO_API_REFERENCE_CSP = without_trusted_types(SECURE_CSP)
+
 # ----- Who may reach HQ at all ------------------------------------------------
 
 # HQ answers the private LAN, the tailnet, and loopback (the container
@@ -334,7 +341,8 @@ SEVERINO_LOGIN_WINDOW_SECONDS = int(
 # ----- Apps --------------------------------------------------------------------
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    # Django's admin, on a site that scopes its CSP exception (core.admin_site).
+    "core.admin_site.HQAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -342,22 +350,12 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.humanize",
     "mozilla_django_oidc",
-    # Severino HQ
+    # Severino HQ: the machinery, then every app a host domain declares in
+    # application/domains.py, then the extensions.
     "core",
-    "projects",
-    "content",
-    "analytics",
-    "docs_index",
-    "assets",
-    "expenses",
-    "receipts",
-    "reports",
-    "contacts",
-    "control_plane",
+    *host_apps(),
     "search_index",
     "hq_api",
-    "jobs",
-    "calendars",
 ] + installed_plugin_apps()
 
 MIDDLEWARE = [
@@ -371,9 +369,6 @@ MIDDLEWARE = [
     # before sessions / auth do any work.
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.csp.ContentSecurityPolicyMiddleware",
-    # Immediately inside the policy middleware, because that is the only place
-    # a per-response override can still be attached. See the class docstring.
-    "core.middleware.AdminPolicyMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -391,12 +386,11 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 
-# Whether a rendered template is reused rather than re-read from disk. Django
-# infers this from DEBUG when the loaders are left implicit, which ties the cost
-# of iterating to the switch that also governs tracebacks, cookie flags and host
-# checking. They are unrelated concerns: caching a template is a speed decision,
-# DEBUG is an exposure one. Separating them lets a deployment that must not leak
-# a traceback still be one where editing a template shows up on reload.
+# Whether a rendered template is reused rather than re-read from disk. Left
+# implicit, Django always wraps the loaders in the cached loader, whatever DEBUG
+# says, and only runserver's autoreloader clears it; under uvicorn an edited
+# template would not show until a restart. Explicit loaders make caching a
+# switch of its own, on by default only with DEBUG off.
 TEMPLATE_CACHE = env_bool("DJANGO_TEMPLATE_CACHE", default=not DEBUG)
 
 _TEMPLATE_LOADERS = [
@@ -554,32 +548,6 @@ LOGIN_REDIRECT_URL = "/"
 # straight back into a still-valid Pocket ID session and signs the operator
 # back in: a sign-out button that visibly does nothing.
 LOGOUT_REDIRECT_URL = "/accounts/login/?signed_out=1"
-
-# Paths that are public (everything else requires login).
-LOGIN_EXEMPT_URL_NAMES = {
-    "login",
-    "logout",
-    "oidc_authentication_init",
-    "oidc_authentication_callback",
-}
-LOGIN_EXEMPT_PATH_PREFIXES = (
-    "/health/",
-    "/accounts/login",
-    "/accounts/logout",
-    "/oidc/",
-    "/static/",
-    # Exempt from the session-login *redirect*, not from authentication. These
-    # views read a bearer token and answer 401; a 302 to an HTML login page is
-    # the wrong answer for a Shortcut, which cannot fill one in.
-    "/api/",
-    # A browser reporting a policy violation is not a person signing in. The
-    # report is sent without credentials by specification, so requiring a
-    # session here would mean HQ never hears about a violation on the one page
-    # where a violation matters most: the sign-in form. It stays behind the
-    # network gate like everything else, and the view stores nothing it was
-    # not sent.
-    SEVERINO_CSP_REPORT_PATH,
-)
 
 # The commit this build is, and the repository it came from: stamped into the
 # image by CI (and set from the checkout by the dev stack). Empty for a build
@@ -775,16 +743,6 @@ STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = Path(os.environ.get("DJANGO_STATIC_ROOT", str(BASE_DIR / "staticfiles")))
 
-# WhiteNoise: serve compressed, far-future-cached static files in production.
-# Use the non-manifest backend so a missing collectstatic run doesn't 500 the
-# whole site, at the cost of asset URLs not being fingerprinted.
-STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
-    },
-}
-
 # Serve static files from the source trees, uncached, instead of from the
 # collected STATIC_ROOT, so an edited stylesheet shows on the next reload.
 # A deployment check (hq.E110) refuses it with DEBUG off; a local dev server may
@@ -794,6 +752,18 @@ STORAGES = {
 # fallback.
 STATIC_LIVE = env_bool("DJANGO_WHITENOISE_AUTOREFRESH", default=DEBUG)
 WHITENOISE_AUTOREFRESH = WHITENOISE_USE_FINDERS = STATIC_LIVE
+
+# Collected assets are named by their content (css/app.3f2a1b9c0d4e.css), so
+# core.static can cache them forever. Live serving keeps plain names: the
+# source trees it reads have no hashed copies, and it sends no-cache anyway.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        if STATIC_LIVE
+        else "core.static.HashedStaticStorage",
+    },
+}
 
 # Media (uploaded receipts) lives OUTSIDE the app code in production.
 # Receipt files are served only through an auth-protected view, never via MEDIA_URL.
@@ -921,7 +891,7 @@ if SEVERINO_DEBUG_TOOLBAR:
     # Inside the policy middleware, so the nonce on the toolbar's scripts is the
     # one the header states.
     MIDDLEWARE.insert(
-        MIDDLEWARE.index("core.middleware.AdminPolicyMiddleware") + 1,
+        MIDDLEWARE.index("django.middleware.csp.ContentSecurityPolicyMiddleware") + 1,
         DEBUG_TOOLBAR_MIDDLEWARE,
     )
     SECURE_CSP = without_trusted_types(SECURE_CSP)

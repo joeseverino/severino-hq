@@ -12,6 +12,7 @@ from django.utils.text import slugify
 # make every caller move with it. The rule itself lives in application.money,
 # which extensions can reach through hq_sdk and a domain app cannot.
 from application.money import quantize_money
+from application import business_use
 from core.models import TimestampedModel
 
 
@@ -59,6 +60,7 @@ class Asset(TimestampedModel):
     )
     business_use_percentage = models.PositiveSmallIntegerField(
         default=100,
+        validators=business_use.VALIDATORS,
         help_text="0-100. Multiplied into total_cost to estimate deductible amount.",
     )
     estimated_deductible_amount = models.DecimalField(
@@ -91,6 +93,7 @@ class Asset(TimestampedModel):
             models.Index(fields=("category",)),
             models.Index(fields=("-purchase_date",)),
         ]
+        constraints = [business_use.in_range("asset_business_use_in_range")]
 
     def __str__(self) -> str:
         return self.item_name
@@ -104,11 +107,9 @@ class Asset(TimestampedModel):
                 slug = f"{base}-{n}"
                 n += 1
             self.slug = slug
-        pct = max(0, min(int(self.business_use_percentage or 0), 100))
-        self.business_use_percentage = pct
         cost = self.total_cost or Decimal("0.00")
         self.estimated_deductible_amount = quantize_money(
-            cost * Decimal(pct) / Decimal(100)
+            cost * Decimal(self.business_use_percentage) / Decimal(100)
         )
         super().save(*args, **kwargs)
 

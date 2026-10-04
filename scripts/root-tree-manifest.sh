@@ -19,8 +19,9 @@ for d in scripts config deploy; do
 done
 
 {
-    find scripts config deploy -type f \
-        ! -path '*/__pycache__/*' ! -name '*.pyc' ! -name '.DS_Store'
+    find scripts config deploy \
+        -type d \( -name node_modules -o -name __pycache__ \) -prune -o \
+        -type f ! -name '*.pyc' ! -name '.DS_Store' -print
     echo docker-compose.yml
 } | LC_ALL=C sort | while IFS= read -r f; do
     sha256sum -- "${f}"

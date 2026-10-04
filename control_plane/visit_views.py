@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404, JsonResponse
 from django.views import View
 
@@ -15,7 +14,7 @@ NAME_LIMIT = 253
 WATCH_LIMIT = 4000
 
 
-class VisitRefreshView(LoginRequiredMixin, View):
+class VisitRefreshView(View):
     """Ask for what one page is assembled from, or say whether it is being read.
 
     The page says which page it is; what that means is HQ's to work out. A POST

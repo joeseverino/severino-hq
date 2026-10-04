@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from django.contrib import messages
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect
 from application.routes import reverse
 from django.views import View
@@ -17,7 +16,7 @@ from application.security import safe_next, web_principal
 from application.pages import PageAction, PageMixin
 
 
-class ConnectionListView(PageMixin, LoginRequiredMixin, TemplateView):
+class ConnectionListView(PageMixin, TemplateView):
     """What HQ can reach, as the controllers last found it.
 
     Read-only by construction. Every row here started as a 1Password item, and
@@ -53,7 +52,7 @@ class ConnectionListView(PageMixin, LoginRequiredMixin, TemplateView):
         return context
 
 
-class ReadNowView(LoginRequiredMixin, View):
+class ReadNowView(View):
     """Ask the controller to read one connection, one kind, or everything now.
 
     POST only; the subject comes from the form or the action's URL.

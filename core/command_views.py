@@ -6,7 +6,6 @@ import json
 import secrets
 from urllib.parse import quote
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import Http404
@@ -129,7 +128,7 @@ def _apply_execution_error(form, result: dict) -> None:
         form.add_error(None, error.get("message", "The command could not be executed."))
 
 
-class CommandView(LoginRequiredMixin, View):
+class CommandView(View):
     """Render and execute any permitted capability without reimplementing it."""
 
     template_name = "command.html"

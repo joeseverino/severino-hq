@@ -4,7 +4,6 @@ from __future__ import annotations
 
 
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect
 from application.routes import reverse
 from django.views.generic import TemplateView
@@ -13,7 +12,7 @@ from application.pages import PageMixin
 from application.timestamps import moment
 
 
-class ToolsView(PageMixin, LoginRequiredMixin, TemplateView):
+class ToolsView(PageMixin, TemplateView):
     """The tools, one tab at a time, answering on a plain GET.
 
     Deliberately thin. Every tool here is backed by registered capabilities,

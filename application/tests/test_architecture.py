@@ -4,6 +4,8 @@ import ast
 import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, override_settings
@@ -80,13 +82,15 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
                 transport=transport, base_url="http://testserver"
             ) as client:
                 return await client.get(
-                    "/bundle.css?v=content-hash",
+                    "/bundle.0123456789ab.css",
                     headers={"Accept-Encoding": "gzip"},
                 )
 
         with TemporaryDirectory() as directory:
-            Path(directory, "bundle.css").write_text("a" * 2000, encoding="utf-8")
-            response = async_to_sync(request)(directory)
+            Path(directory, "bundle.0123456789ab.css").write_text("a" * 2000, encoding="utf-8")
+            manifest = SimpleNamespace(hashed_files={"bundle.css": "bundle.0123456789ab.css"})
+            with patch("core.static.staticfiles_storage", manifest):
+                response = async_to_sync(request)(directory)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["content-encoding"], "gzip")
@@ -672,12 +676,10 @@ class StyleContractTests(SimpleTestCase):
         except OSError:
             terms = ()
         # Lockfiles and pinned action SHAs are hashes, not hosts. Vendored
-        # upstream specs carry their own documentation examples verbatim.
+        # bundles/specs carry upstream examples, pinned by their UPSTREAM.
         skip = (
-            "package-lock.json",
-            "requirements.txt",
-            ".github/",
-            "controller/api/vendor/",
+            "package-lock.json", "requirements.txt", ".github/",
+            "controller/api/vendor/", "static/vendor/",
         )
 
         findings = []
@@ -1296,6 +1298,14 @@ class OnePrimitiveTests(SimpleTestCase):
             for path in sorted((self.ROOT / "templates").rglob("*.html"))
             if "|timesince }} ago" in path.read_text(encoding="utf-8")
             or "|timesince %}" in path.read_text(encoding="utf-8")
+        ]
+        self.assertEqual(found, [])
+
+    def test_templates_say_byte_counts_through_the_bytes_filter(self):
+        found = [
+            path.relative_to(self.ROOT).as_posix()
+            for path in sorted((self.ROOT / "templates").rglob("*.html"))
+            if "filesizeformat" in path.read_text(encoding="utf-8")
         ]
         self.assertEqual(found, [])
 

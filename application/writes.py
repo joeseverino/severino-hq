@@ -11,6 +11,12 @@ with a web principal, reload the record the service names, say what happened,
 and go to it. What varies is only which service, which record, and what the
 thing is called, so those are what a view declares here.
 
+A plain record domain (one declared with ``Records`` in
+``application.domains``) needs less: ``RecordFormMixin`` saves its
+``ModelForm`` through ``application.records.save_form`` and
+``RecordDeleteMixin`` deletes through the declared deleter. The view names
+only its form; noun, permission and target come from the declaration.
+
 Reloading is deliberate rather than wasteful. Services return serialisable
 results because the API and the MCP share them; a Django view needs a model
 instance for ``get_absolute_url`` and ``__str__``. The alternative is teaching
@@ -21,11 +27,12 @@ already owns. One query at the boundary is the cheaper trade.
 from __future__ import annotations
 
 from django.contrib import messages
-from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.shortcuts import redirect
 from application.routes import reverse
 
 from .deletion import DeleteCommand
+from .records import delete_instance, display_noun, records_for, save_form
 from .security import web_principal
 
 
@@ -183,6 +190,55 @@ class ServiceDeleteMixin(ServiceWriteMixin):
         return redirect(self.success_url)
 
 
+def _show_on_form(form, error: ValidationError) -> None:
+    """Put a model's refusal beside the field it names, or above the form."""
+
+    for field, errors in error.update_error_dict({}).items():
+        form.add_error(field if field in form.fields else None, errors)
+
+
+class RecordFormMixin:
+    """Create or update a plain record domain's record from its ``ModelForm``.
+
+    For ``CreateView`` and ``UpdateView``. ``created_message`` and
+    ``updated_message`` may reword the announcement.
+    """
+
+    def form_valid(self, form):
+        adding = form.instance._state.adding
+        try:
+            self.object = save_form(form, principal=web_principal(self.request.user))
+        except ValidationError as error:
+            _show_on_form(form, error)
+            return self.form_invalid(form)
+        template = (
+            getattr(self, "created_message", CREATED)
+            if adding
+            else getattr(self, "updated_message", UPDATED)
+        )
+        noun = display_noun(records_for(type(self.object)))
+        messages.success(self.request, template.format(noun=noun, target=self.object))
+        return redirect(self.object.get_absolute_url())
+
+
+class RecordDeleteMixin(ServiceDeleteMixin):
+    """Delete a plain record domain's record through its declared deleter.
+
+    For ``DeleteView``; ``deleted_message`` may reword the announcement. Takes
+    only the confirmation page from ``ServiceDeleteMixin``: the service, noun
+    and target come from the declaration.
+    """
+
+    def form_valid(self, form):
+        noun = display_noun(records_for(type(self.object)))
+        result = delete_instance(self.object, principal=web_principal(self.request.user))
+        template = getattr(self, "deleted_message", DELETED)
+        messages.success(
+            self.request, template.format(noun=noun, target=result["deleted"]["label"])
+        )
+        return redirect(self.success_url)
+
+
 class CommandFormMixin:
     """A plain form whose submit is one service call.
 
@@ -238,6 +294,8 @@ class CommandFormMixin:
 
 __all__ = [
     "CommandFormMixin",
+    "RecordDeleteMixin",
+    "RecordFormMixin",
     "ServiceCreateMixin",
     "ServiceDeleteMixin",
     "ServiceUpdateMixin",

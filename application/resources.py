@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import Any
+from typing import Any, TypedDict
 
 from pydantic import (
     BaseModel,
@@ -14,25 +14,14 @@ from pydantic import (
     field_validator,
 )
 
-from assets.models import Asset
-from content.models import ContentItem
 from control_plane.models import ManagedResource
 from core.models import AuditLog
-from docs_index.models import DocumentationRecord
-from expenses.models import Expense
-from projects.models import Project
-from receipts.models import Receipt
 
 from . import (
-    analytics,
-    assets,
     connection_context,
-    contact_submissions,
     container_reads,
     derived_reads,
     infrastructure,
-    projects,
-    read_models,
     resource_context,
     service_list,
     services,
@@ -84,40 +73,8 @@ class InfrastructureResourceQuery(BoundedQuery):
         return value
 
 
-class ProjectQuery(BoundedQuery):
-    status: str | None = None
-    query: str | None = None
-
-
-class AssetQuery(BoundedQuery):
-    status: str | None = None
-    query: str | None = None
-
-
-class ExpenseQuery(BoundedQuery):
-    year: int | None = None
-    category: str | None = None
-
-
-class ReceiptQuery(BoundedQuery):
-    unmatched_only: bool = False
-
-
-class AnalyticsQuery(BoundedQuery):
-    # Empty means the default breakdown rather than "every breakdown at once":
-    # the dimensions cannot be crossed, so a combined answer would be six
-    # answers wearing one collection's shape.
-    dimension: str = ""
-    days: int = Field(default=28, ge=1, le=184)
-
-
 class EmptyQuery(ResourceQuery):
     pass
-
-
-class ContactSubmissionQuery(BoundedQuery):
-    status: str = ""
-    query: str = ""
 
 
 class ActionItemQuery(BoundedQuery):
@@ -136,138 +93,6 @@ class SearchQuery(BoundedQuery):
 
 
 CORE_RESOURCE_SPECS = (
-    ResourceSpec(
-        "projects",
-        "Projects",
-        "Projects and their safe cross-domain relationships.",
-        Capability.READ,
-        projects.list_projects,
-        ProjectQuery,
-        projects.get_project,
-        "slug",
-        not_found_errors=(projects.NotFoundError,),
-        search=SearchDefinition(
-            "projects",
-            Project,
-            "slug",
-            ("name", "slug", "description", "technologies_used", "notes"),
-            label="Projects",
-            title_field="name",
-        ),
-        web_route="projects:list",
-    ),
-    ResourceSpec(
-        "contact.submissions",
-        "Contact submissions",
-        "Contact requests held in Cloudflare D1 and reviewed through HQ.",
-        Capability.MANAGE_CONTACTS,
-        contact_submissions.list_contact_submissions,
-        ContactSubmissionQuery,
-        contact_submissions.get_contact_submission,
-        "id",
-        int,
-        not_found_errors=(contact_submissions.ContactSubmissionNotFound,),
-        web_route="contacts:list",
-    ),
-    ResourceSpec(
-        "assets",
-        "Assets",
-        "Assets and their safe cross-domain relationships.",
-        Capability.READ,
-        assets.list_assets,
-        AssetQuery,
-        assets.get_asset,
-        "slug",
-        not_found_errors=(assets.NotFoundError,),
-        search=SearchDefinition(
-            "assets",
-            Asset,
-            "slug",
-            ("item_name", "slug", "vendor", "serial_number", "category", "notes"),
-            label="Assets",
-            title_field="item_name",
-        ),
-        web_route="assets:list",
-    ),
-    ResourceSpec(
-        "content",
-        "Content",
-        "Content records indexed by HQ.",
-        Capability.READ,
-        search=SearchDefinition(
-            "content",
-            ContentItem,
-            "slug",
-            ("title", "slug", "topic", "tags", "notes"),
-            label="Content",
-            title_field="title",
-        ),
-        web_route="content:list",
-    ),
-    ResourceSpec(
-        "documentation",
-        "Docs",
-        "Sensitivity-aware documentation pointers indexed by HQ.",
-        Capability.READ,
-        search=SearchDefinition(
-            "documentation",
-            DocumentationRecord,
-            "doc_id",
-            (
-                "doc_id",
-                "title",
-                "system_service",
-                "obsidian_path",
-                "github_path",
-                "notes",
-            ),
-            label="Docs",
-            title_field="title",
-            badge_field="doc_id",
-        ),
-        web_route="docs_index:list",
-    ),
-    ResourceSpec(
-        "expenses",
-        "Expenses",
-        "Expense records with stable relationship identifiers.",
-        Capability.READ,
-        read_models.list_expenses,
-        ExpenseQuery,
-        search=SearchDefinition(
-            "expenses",
-            Expense,
-            "pk",
-            ("vendor", "item", "category", "business_purpose", "notes"),
-            label="Expenses",
-        ),
-        web_route="expenses:list",
-    ),
-    ResourceSpec(
-        "receipts",
-        "Receipts",
-        "Receipt metadata without file contents, storage paths, or URLs.",
-        Capability.READ,
-        read_models.list_receipts,
-        ReceiptQuery,
-        search=SearchDefinition(
-            "receipts",
-            Receipt,
-            "pk",
-            ("original_filename", "vendor", "notes"),
-            label="Receipts",
-        ),
-        web_route="receipts:list",
-    ),
-    ResourceSpec(
-        "analytics",
-        "Analytics",
-        "What the published site was asked for, by any breakdown HQ records.",
-        Capability.READ,
-        analytics.list_analytics,
-        AnalyticsQuery,
-        web_route="analytics:overview",
-    ),
     ResourceSpec(
         "audit",
         "Audit log",
@@ -536,34 +361,61 @@ def resource_search_capabilities() -> dict[str, tuple[Capability | str, ...]]:
     }
 
 
+class ListOperation(TypedDict):
+    query_schema: dict[str, Any]
+
+
+class GetOperation(TypedDict):
+    identifier: str
+
+
+class SearchOperation(TypedDict):
+    scope: str
+
+
+# Functional form: ``list`` is a key here, not the builtin.
+ResourceOperations = TypedDict(
+    "ResourceOperations",
+    {
+        "list": ListOperation | None,
+        "get": GetOperation | None,
+        "search": SearchOperation | None,
+    },
+)
+
+
+class ResourceDescription(TypedDict):
+    """One registry entry as every adapter describes it."""
+
+    name: str
+    label: str
+    summary: str
+    web_route: str | None
+    required_capabilities: list[str]
+    operations: ResourceOperations
+
+
 def describe_resources() -> dict[str, Any]:
-    return {
-        "ok": True,
-        "schema_version": 1,
-        "resources": [
-            {
-                "name": spec.name,
-                "label": spec.label,
-                "summary": spec.summary,
-                "web_route": spec.web_route or None,
-                "required_capabilities": list(required_capability_names(spec)),
-                "operations": {
-                    "list": (
-                        {
-                            "query_schema": spec.list_query_type.model_json_schema(),
-                        }
-                        if spec.list_query_type
-                        else None
-                    ),
-                    "get": (
-                        {"identifier": spec.identifier} if spec.identifier else None
-                    ),
-                    "search": ({"scope": spec.search.scope} if spec.search else None),
-                },
-            }
-            for spec in integration_graph().resources.values()
-        ],
-    }
+    described: list[ResourceDescription] = [
+        {
+            "name": spec.name,
+            "label": spec.label,
+            "summary": spec.summary,
+            "web_route": spec.web_route or None,
+            "required_capabilities": list(required_capability_names(spec)),
+            "operations": {
+                "list": (
+                    {"query_schema": spec.list_query_type.model_json_schema()}
+                    if spec.list_query_type
+                    else None
+                ),
+                "get": ({"identifier": spec.identifier} if spec.identifier else None),
+                "search": ({"scope": spec.search.scope} if spec.search else None),
+            },
+        }
+        for spec in integration_graph().resources.values()
+    ]
+    return {"ok": True, "schema_version": 1, "resources": described}
 
 
 def _resource(name: str) -> ResourceSpec:

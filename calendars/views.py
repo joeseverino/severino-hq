@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import date
 from uuid import UUID
 
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
@@ -48,7 +47,7 @@ def month_url(month: date, day: date | None = None) -> str:
     return f"{reverse('calendar:month')}{query}{f'&day={day.isoformat()}' if day else ''}"
 
 
-class CalendarView(PageMixin, LoginRequiredMixin, TemplateView):
+class CalendarView(PageMixin, TemplateView):
     template_name = "calendars/calendar.html"
     page_title = "Calendar"
 
@@ -153,7 +152,7 @@ def _rows(day, *, opened: str = "") -> tuple:
     return tuple(found)
 
 
-class CalendarSourceView(LoginRequiredMixin, View):
+class CalendarSourceView(View):
     """Check or uncheck one source, then go back to the month it was chosen on."""
 
     def post(self, request, source_id):
@@ -181,14 +180,14 @@ class EntryWrite:
     identity_kwarg = "current_key"
 
 
-class EntryDetailView(LoginRequiredMixin, RedirectView):
+class EntryDetailView(RedirectView):
     """An entry's own address opens it on the calendar."""
 
     def get_redirect_url(self, uid):
         return get_object_or_404(Entry, uid=uid).get_absolute_url()
 
 
-class EntryCreateView(EntryWrite, EntryPage, ServiceCreateMixin, LoginRequiredMixin, CreateView):
+class EntryCreateView(EntryWrite, EntryPage, ServiceCreateMixin, CreateView):
     page_title = "New entry"
     form_class = EntryForm
     template_name = "calendars/entry_form.html"
@@ -200,7 +199,7 @@ class EntryCreateView(EntryWrite, EntryPage, ServiceCreateMixin, LoginRequiredMi
         return {"starts_on": on or timezone.localdate()}
 
 
-class EntryUpdateView(EntryWrite, EntryPage, ServiceUpdateMixin, LoginRequiredMixin, UpdateView):
+class EntryUpdateView(EntryWrite, EntryPage, ServiceUpdateMixin, UpdateView):
     page_title = "Edit entry"
     form_class = EntryForm
     template_name = "calendars/entry_form.html"
@@ -208,7 +207,7 @@ class EntryUpdateView(EntryWrite, EntryPage, ServiceUpdateMixin, LoginRequiredMi
     command_from_cleaned_data = staticmethod(entry_command)
 
 
-class EntryDeleteView(EntryWrite, EntryPage, ServiceDeleteMixin, LoginRequiredMixin, DeleteView):
+class EntryDeleteView(EntryWrite, EntryPage, ServiceDeleteMixin, DeleteView):
     page_title = "Delete entry?"
     template_name = "calendars/entry_confirm_delete.html"
     success_url = reverse_lazy("calendar:month")

@@ -733,7 +733,7 @@ class SurfaceTests(TestCase):
         CapabilityRule.objects.create(
             scope="surface", subject="mcp", capability="project.create", rule="approve"
         )
-        writer = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.WRITE_PROJECTS}))
+        writer = Principal("example-agent", "mcp", frozenset({Capability.READ, "write_projects"}))
         held = execute_capability("project.create", {"name": "Held project"}, principal=writer)
 
         entry = self._entry(ApprovalRequest.objects.get(pk=held["approval"]["id"]))
