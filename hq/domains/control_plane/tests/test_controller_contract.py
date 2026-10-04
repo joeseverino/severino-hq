@@ -289,7 +289,9 @@ class ControllerContractTests(TestCase):
         )
 
     def test_registry(self):
-        registry = bridge("registry")
+        # The host alone: a composition admits extensions of its own.
+        with patch("hq.platform.application.controller.admitted_sources", return_value=()):
+            registry = bridge("registry")
         self.assertIn({"kind": "adguard.rewrite", "action": "reconcile"}, registry["capabilities"])
         self.assertIn("tls.uploaded_certificate", registry["material_kinds"])
         self.assertTrue(all(entry["reason"] for entry in registry["locked"]))
