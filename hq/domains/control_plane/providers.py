@@ -9,11 +9,6 @@ from typing import Any
 
 from hq.platform.application.routes import reverse
 
-from pydantic import (
-    TypeAdapter,
-)
-
-
 from .attribution import unattributed_kinds
 from .connection_kinds import CONNECTION_CREDENTIALS
 from .observations import OBSERVATIONS
@@ -24,6 +19,7 @@ from .provider_spec import (
     ControllerProviderCapability,
     ProviderResolutionContext,
     ProviderSpec,
+    adapter,
 )
 
 
@@ -271,7 +267,7 @@ def validate_spec(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
     except KeyError as exc:
         raise ValueError(f"Unknown infrastructure resource kind {kind!r}.") from exc
     validated = provider.validate(payload)
-    dumped: dict[str, Any] = TypeAdapter(provider.spec_type).dump_python(validated, mode="json")
+    dumped: dict[str, Any] = adapter(provider.spec_type).dump_python(validated, mode="json")
     return dumped
 
 
@@ -287,6 +283,6 @@ def resolve_provider_spec(
     authored = validate_spec(kind, payload)
     resolved = provider.resolver(authored, context) if provider.resolver else authored
     resolved_type = provider.resolved_type or provider.spec_type
-    value: Any = TypeAdapter(resolved_type).validate_python(resolved)
-    dumped: dict[str, Any] = TypeAdapter(resolved_type).dump_python(value, mode="json")
+    value: Any = adapter(resolved_type).validate_python(resolved)
+    dumped: dict[str, Any] = adapter(resolved_type).dump_python(value, mode="json")
     return dumped

@@ -186,6 +186,63 @@ The dashboard projection has an executable query budget. Growth that adds an
 unbounded query or N+1 relationship fetch fails CI before it becomes an
 operator-visible latency regression.
 
+### What a page costs
+
+`manage.py bench_pages` measures it. The command builds Django's test database
+(never the real one), fills it with `hq.platform.core.bench.seed` (a few years of
+one operator's records: 4,000 expenses, 3,000 receipts, 300 assets, 6,000 audit
+rows, a swept estate of about 270 managed resources), and requests every route
+that answers a GET as a signed-in operator through the whole middleware stack.
+It reports median and p95 time, the query count, how many of those queries
+repeat one already made in the same request, and the response size.
+
+```bash
+DJANGO_STATIC_ROOT=/tmp/hq-static python manage.py bench_pages
+python manage.py bench_pages --only dashboard --sql     # one page, with its queries
+python manage.py bench_pages --scale 0.25 --rounds 10   # a quicker pass
+```
+
+The pages come from the URL configuration. A route that takes arguments is
+requested with the seeded record `SAMPLES` names for it, and one with no sample
+is listed under "Not benched", so a new detail page appears there until it has
+one. An empty database hides every cost that grows with rows, which is why the
+bench seeds first.
+
+Timings move with the machine; query counts do not. Compare two trees by
+running them back to back and reading the counts first.
+`hq/platform/core/tests/test_page_budgets.py` pins the counts below against the
+same seed, at two sizes where a per-row read would show.
+
+Measured 2026-10-04 on an 8 GB M3, Python 3.14, the lower of two paired runs
+(median ms, queries). Pages not listed did not move beyond run-to-run spread.
+
+| Page | Before | After | Queries before | Queries after |
+| --- | ---: | ---: | ---: | ---: |
+| Dashboard (`/`) | 140.0 | 121.3 | 97 | 53 |
+| Action items | 158.4 | 141.2 | 71 | 27 |
+| Action item count (header) | 104.9 | 85.2 | 69 | 25 |
+| Findings | 133.6 | 113.6 | 61 | 17 |
+| Topology | 121.3 | 96.8 | 61 | 17 |
+| Services | 74.2 | 59.2 | 60 | 16 |
+| One service | 79.8 | 63.7 | 65 | 21 |
+| One machine | 72.1 | 56.7 | 65 | 21 |
+| One resource | 68.0 | 51.7 | 64 | 20 |
+| Tailnet | 92.5 | 72.7 | 63 | 19 |
+| Calendar | 51.6 | 36.7 | 60 | 16 |
+| Search (`?q=example`) | 139.2 | 124.4 | 76 | 32 |
+| Year summary export | 100.1 | 31.4 | 617 | 27 |
+| Expenses | 11.2 | 9.0 | 8 | 8 |
+| API `findings` | 98.3 | 77.7 | 61 | 17 |
+| API `topology` | 86.3 | 68.6 | 61 | 17 |
+| API `action.items` | 104.9 | 84.8 | 70 | 26 |
+
+What remains is not query cost. The infrastructure pages spend their time
+deriving the topology, services and findings in Python on each request (SQL is
+under 5 ms of the dashboard's 121). The record forms that offer every expense
+as an option (new receipt, new documentation, new content: about 165 ms) spend
+it rendering 4,000 `<option>` elements; that is a change to the form, not to a
+query.
+
 This is the important scaling property: a fourth interface does not create a
 fourth implementation.
 

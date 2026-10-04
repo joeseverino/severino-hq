@@ -31,7 +31,7 @@ Two consequences:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import cached_property
 from typing import Any
 from urllib.parse import urlparse
@@ -496,6 +496,28 @@ def _container_declarations() -> dict[tuple[str, str], Any]:
     }
 
 
+class _ContainersRunning:
+    """The container sweep, read at most once and only if a service runs in one.
+
+    A catalogue asks once per service; each asking the database made the page
+    cost a query, and a parse of every container, per hostname.
+    """
+
+    def __init__(self) -> None:
+        self._found: dict[tuple[str, str], tuple[dict[str, Any], Any]] | None = None
+
+    def on(self, host: str, name: str) -> tuple[dict[str, Any], Any] | None:
+        if self._found is None:
+            self._found = {}
+            for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND):
+                for record in snapshot.records:
+                    key = (record.get("host"), record.get("name"))
+                    if all(isinstance(part, str) for part in key):
+                        # The first record wins, as a scan of the sweep would find it.
+                        self._found.setdefault(key, (record, snapshot.observed_at))
+        return self._found.get((host, name))
+
+
 @dataclass(frozen=True)
 class _Estate:
     """One reading of the world, shared by every service assembled from it.
@@ -514,6 +536,7 @@ class _Estate:
     at: "Whereabouts | None" = None
     in_use: "_CertificatesInUse | None" = None
     readings: "Readings | None" = None
+    running: _ContainersRunning = field(default_factory=_ContainersRunning)
 
     @classmethod
     def read(cls, covering, machines) -> "_Estate":
@@ -580,7 +603,7 @@ def _assemble(
                 for covered_facet, names, claim in covering
                 if covered_facet == facet_id and _serves(hostname, names, claim, served_with)
             ),
-            observed=_observed(facet_id, origin),
+            observed=_observed(facet_id, origin, estate.running),
             machine=(
                 machine_for(origin, machines) if facet_id == RUNTIME_FACET else None
             ),
@@ -634,7 +657,9 @@ def _serving(index: "Readings | None", origin_address: str) -> tuple[str, ...]:
 # other reference to it in this module goes through this.
 
 
-def _observed(facet_id: str, origin: Origin | None) -> "Running | None":
+def _observed(
+    facet_id: str, origin: Origin | None, running: "_ContainersRunning"
+) -> "Running | None":
     """What HQ found supplying this facet without having been told.
 
     Only the runtime facet can answer, because the origin has already done the
@@ -647,14 +672,11 @@ def _observed(facet_id: str, origin: Origin | None) -> "Running | None":
 
     if facet_id != "runtime" or origin is None or not origin.container:
         return None
-    for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND):
-        for record in snapshot.records:
-            if (
-                record.get("host") == origin.host
-                and record.get("name") == origin.container
-            ):
-                return Running.of(record, snapshot.observed_at, container_watchers())
-    return None
+    found = running.on(origin.host, origin.container)
+    if found is None:
+        return None
+    record, observed_at = found
+    return Running.of(record, observed_at, container_watchers())
 
 
 class _CertificatesInUse:

@@ -99,6 +99,20 @@ def day_span(first, last=None):
     return start, timezone.make_aware(datetime.combine(day(last) + timedelta(days=1), time.min), zone)
 
 
+def years_of(model, field: str) -> list[int]:
+    """Each calendar year a date column holds a row for, oldest first.
+
+    The distinct days come off the column as stored. ``dates(field, "year")``
+    truncates every row first, which on SQLite is a call back into Python per
+    row to answer with a handful of years.
+    """
+
+    days = (
+        model.objects.exclude(**{field: None}).order_by().values_list(field, flat=True).distinct()
+    )
+    return sorted({day.year for day in days})
+
+
 def page_size(limit: int, *, maximum: int = MAX_PAGE_SIZE) -> int:
     """How many rows to actually return for a requested limit.
 

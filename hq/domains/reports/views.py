@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.views.generic import TemplateView, View
 
 from hq.platform.application.pages import PageMixin
+from hq.platform.application.projection import years_of
 from hq.domains.assets.models import Asset
 from hq.domains.content.models import ContentItem
 from hq.platform.core.audit import record_event
@@ -50,9 +51,7 @@ class ReportsView(PageMixin, TemplateView):
         ctx.update(
             year=year,
             available_years=sorted(
-                {d.year for d in Expense.objects.dates("date", "year")}
-                | {d.year for d in Asset.objects.dates("purchase_date", "year")}
-                | {timezone.localdate().year},
+                {*years_of(Expense, "date"), *years_of(Asset, "purchase_date"), timezone.localdate().year},
                 reverse=True,
             ),
             expenses_count=expense_summary["n"] or 0,

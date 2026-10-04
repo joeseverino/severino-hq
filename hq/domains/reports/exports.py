@@ -146,6 +146,8 @@ def _money(value) -> str:
 
 
 def year_summary(year: int) -> dict:
+    # Related records are read from the prefetch (``.all()``): a ``values_list``
+    # on the relation asks the database again for every row.
     expenses = Expense.objects.filter(date__year=year)
     assets = Asset.objects.filter(purchase_date__year=year)
 
@@ -185,15 +187,9 @@ def year_summary(year: int) -> dict:
             "published_url": c.published_url,
             "published_at": c.published_at.isoformat() if c.published_at else None,
             "wordpress_post_id": c.wordpress_post_id,
-            "related_projects": list(
-                c.related_projects.values_list("slug", flat=True)
-            ),
-            "related_assets": list(
-                c.related_assets.values_list("slug", flat=True)
-            ),
-            "related_documentation": list(
-                c.related_documentation.values_list("doc_id", flat=True)
-            ),
+            "related_projects": [related.slug for related in c.related_projects.all()],
+            "related_assets": [related.slug for related in c.related_assets.all()],
+            "related_documentation": [related.doc_id for related in c.related_documentation.all()],
         }
         for c in ContentItem.objects.all()
         .prefetch_related("related_projects", "related_assets", "related_documentation")
@@ -214,12 +210,8 @@ def year_summary(year: int) -> dict:
             "external_url": d.external_url,
             "last_reviewed": d.last_reviewed.isoformat() if d.last_reviewed else None,
             "safe_for_ai_export": d.is_safe_for_ai_export,
-            "related_projects": list(
-                d.related_projects.values_list("slug", flat=True)
-            ),
-            "related_assets": list(
-                d.related_assets.values_list("slug", flat=True)
-            ),
+            "related_projects": [related.slug for related in d.related_projects.all()],
+            "related_assets": [related.slug for related in d.related_assets.all()],
         }
         for d in DocumentationRecord.objects.all().prefetch_related(
             "related_projects", "related_assets"
@@ -238,9 +230,7 @@ def year_summary(year: int) -> dict:
             "business_use_percentage": a.business_use_percentage,
             "estimated_deductible_amount": _money(a.estimated_deductible_amount),
             "status": a.status,
-            "related_projects": list(
-                a.related_projects.values_list("slug", flat=True)
-            ),
+            "related_projects": [related.slug for related in a.related_projects.all()],
         }
         for a in assets.prefetch_related("related_projects")
     ]

@@ -9,6 +9,7 @@ registry that collects it.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
@@ -29,6 +30,13 @@ from hq.platform.application.moments import span, when_day
 
 from .names import in_zone
 from .observations.contract import ReadingPart
+
+
+@lru_cache(maxsize=None)
+def adapter(spec_type: Any) -> TypeAdapter[Any]:
+    """The validator for one spec type, built once: a type's schema never changes."""
+
+    return TypeAdapter(spec_type)
 
 
 @dataclass(frozen=True)
@@ -477,10 +485,10 @@ class ProviderSpec:
             )
 
     def schema(self) -> dict[str, Any]:
-        return TypeAdapter(self.spec_type).json_schema()
+        return adapter(self.spec_type).json_schema()
 
     def validate(self, payload: dict[str, Any]) -> Any:
-        return TypeAdapter(self.spec_type).validate_python(payload)
+        return adapter(self.spec_type).validate_python(payload)
 
 
 @dataclass(frozen=True)

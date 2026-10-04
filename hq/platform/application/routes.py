@@ -10,6 +10,9 @@ is the address. ``reverse`` here is Django's, remembered. It is keyed by
 everything Django's answer depends on, including the script prefix and the URL
 configuration in force, and it forgets everything when a setting changes, which
 is how a test that swaps the URL configuration stays correct.
+
+Those two are fixed for one request, and asking Django for them costs more than
+the remembered lookup they key, so a projection asks once.
 """
 
 from __future__ import annotations
@@ -21,6 +24,8 @@ from django.core.signals import setting_changed
 from django.urls import get_script_prefix, get_urlconf
 from django.urls import reverse as _reverse
 
+from .projection import read_once
+
 
 @lru_cache(maxsize=4096)
 def _resolved(urlconf: Any, prefix: str, current_app: Any, viewname: Any, args: tuple, kwargs: tuple) -> str:
@@ -29,13 +34,20 @@ def _resolved(urlconf: Any, prefix: str, current_app: Any, viewname: Any, args: 
     )
 
 
+def _in_force() -> tuple[Any, str]:
+    """The URL configuration and script prefix this projection is served under."""
+
+    return read_once("routes.in_force", lambda: (get_urlconf(), get_script_prefix()))
+
+
 def reverse(viewname, urlconf=None, args=None, kwargs=None, current_app=None) -> str:
     """Django's ``reverse``, with the same arguments and the same answer."""
 
+    serving, prefix = _in_force()
     try:
         return _resolved(
-            urlconf if urlconf is not None else get_urlconf(),
-            get_script_prefix(),
+            urlconf if urlconf is not None else serving,
+            prefix,
             current_app,
             viewname,
             tuple(args or ()),

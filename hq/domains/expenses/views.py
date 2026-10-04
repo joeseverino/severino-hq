@@ -11,6 +11,7 @@ from django.views.generic import (
 )
 
 from hq.platform.application.pages import PageAction, PageMixin, record_trail
+from hq.platform.application.projection import years_of
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from hq.platform.application.moments import when_day
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
@@ -42,10 +43,7 @@ class ExpenseListView(PageMixin, TableListMixin, ListView):
         return (PageAction("New expense", reverse("expenses:create"), primary=True),)
 
     def get_table_filters(self):
-        years = [
-            (date.year, str(date.year))
-            for date in Expense.objects.dates("date", "year")
-        ]
+        years = [(year, str(year)) for year in years_of(Expense, "date")]
         return (
             TableFilter("category", "Category", "category", EXPENSE_CATEGORY_CHOICES),
             TableFilter("year", "Year", "date__year", years),
