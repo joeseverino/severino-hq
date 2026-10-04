@@ -1,0 +1,38 @@
+overlay: 1.0.0
+info:
+  title: NPM's wire types
+  version: 1.0.0
+actions:
+  # NPM answers a boolean as true/false or 1/0, by release and database.
+  - target: $..[?(@.type == 'boolean')]
+    update:
+      x-go-type: Flag
+  # Ids are whole numbers, written as a number or a decimal string.
+  - target: $.components.schemas.id
+    update:
+      x-go-type: ID
+  - target: $.components.schemas.access_list_id
+    update:
+      x-go-type: ID
+  # Read back, a certificate id is a number; "new" is only ever sent.
+  - target: $.components.schemas.certificate_id
+    update:
+      x-go-type: ID
+  # NPM's own values HQ never reads: a proxy host's are carried forward on
+  # update as NPM wrote them, and a certificate's meta holds its key.
+  - target: $..properties.meta
+    update:
+      x-go-type: json.RawMessage
+  - target: $.components.schemas['proxy-host-object'].properties.locations
+    update:
+      x-go-type: json.RawMessage
+  # One string whichever pattern it matches.
+  - target: $.components.schemas.address
+    update:
+      x-go-type: string
+  - target: $.components.schemas.forwarding_host
+    update:
+      x-go-type: string
+  - target: $.components.schemas['stream-object'].properties.forwarding_host
+    update:
+      x-go-type: string

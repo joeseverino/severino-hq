@@ -1,0 +1,12 @@
+{
+  "name": "hq-contract-tools",
+  "private": true,
+  "engines": {
+    "node": ">=24.21.0"
+  },
+  "devDependencies": {
+    "@redocly/cli": "2.57.0",
+    "zod": "4.6.5"
+  },
+  "type": "module"
+}

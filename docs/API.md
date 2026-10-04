@@ -4,13 +4,13 @@ The fourth delivery adapter, after the web UI, the CLI, and MCP. It exists so a
 phone, a Shortcut, or a cron job can run an HQ capability over HTTP.
 
 It adds **no capability, no domain model, and no business rule**. Every command
-comes from `application/capabilities.py`, and every read comes from
-`application/resources.py`. That keeps four adapters from drifting into four
+comes from `hq/platform/application/capabilities.py`, and every read comes from
+`hq/platform/application/resources.py`. That keeps four adapters from drifting into four
 behaviours.
 
 ```
-hq_api/security.py   verify a token HQ did not issue
-hq_api/views.py      the transport
+hq/platform/api/security.py   verify a token HQ did not issue
+hq/platform/api/views.py      the transport
 ```
 
 ## HQ verifies; it does not issue
@@ -112,6 +112,7 @@ curl -s https://hq.example.com/api/v2/capabilities/example.import/ \
 | Method | Path | |
 |---|---|---|
 | `GET` | `/api/v2/` | Who you are and what you were granted |
+| `GET` | `/api/v2/openapi.json` | This API as an OpenAPI 3.2 document; also served to the signed-in operator's session, even with no API resource configured, and rendered for them at `/api/docs/` |
 | `GET` | `/api/v2/capabilities/` | Every capability, flagged `permitted` for this token |
 | `POST` | `/api/v2/capabilities/<name>/` | Run one |
 | `GET` | `/api/v2/resources/` | Every read resource, its operations and filter schema |
@@ -176,7 +177,7 @@ operations, and insufficient grants fail before a domain query runs.
 
 ### What each surface exposes
 
-Every derived read is a `ResourceSpec` in `application/resources.py`. One
+Every derived read is a `ResourceSpec` in `hq/platform/application/resources.py`. One
 registration serves the API (`/api/v2/resources/<name>/`), MCP (`list_resource`,
 `get_resource`), the CLI (`manage.py hq_call` over those tools) and the SDK
 (`hq_sdk.resources.list_resource` / `get_resource`). Each handler calls the
@@ -195,7 +196,7 @@ the `SEVERINO_MCP_ENABLE_*` switches gate writes, not these reads.
 | Request path per hostname (`paths.path_to`) | Service page, connections | `paths` (`get <hostname>`), inside `services` get | yes | yes | yes | yes |
 | How the calling request reached HQ (`request_path.request_path`) | This connection | `request.path` (the caller's own request; empty, saying why, without one) | yes | yes | no | no |
 | `relationships_for`, with `entity_link` names | Entity pages | `relationships` (`get <node id>`) | yes | yes | yes | yes |
-| Readings, schema-filtered (`control_plane/observations`) | Connections, entity pages | `readings` (`get <kind>`) | yes | yes | yes | yes |
+| Readings, schema-filtered (`hq/domains/control_plane/observations`) | Connections, entity pages | `readings` (`get <kind>`) | yes | yes | yes | yes |
 | Join engine (`facts.readings`) | Entity pages | inside `relationships`, `services`, `domains` | yes | yes | yes | yes |
 | Credential sight | Connections | `credentials` (`get <provider>`) | yes | yes | yes | yes |
 | Connections page (`connection_context.connections_context`): rows with sight, freshness, refusals, what more scope would show, credential fix, reach (network, machine, tailnet peering), last activity, pending read now; summary counts; estate posture; HQ's path | Connections | `connection.standing` (`get <connection_ref>`) | yes | yes | yes | yes |
@@ -284,11 +285,9 @@ freshness policy.
 
 The path is the semantic major version. Additive fields may join an existing
 version; removing a field, tightening accepted input, or changing retry
-semantics requires a new path. Version 1 remains available for the original
-Shortcut contract and returns `Deprecation: true` plus a `successor-version`
-link. Version 2 is the current contract and requires durable idempotency for
-state changes. No sunset date is advertised until there is an actual removal
-decision and migration window; clients are never given a fictional deadline.
+semantics requires a new path. Version 2 is the only contract and requires
+durable idempotency for state changes. HQ has no outside clients, so a new
+version replaces the old one rather than running beside it.
 
 ### Errors
 
@@ -371,3 +370,41 @@ The client secret sits in the automation client. That is a real exposure and
 the reason it receives only `example.write`: someone who extracts it can run
 that one plugin capability, but cannot read unrelated records, touch a project,
 or delete anything.
+
+## Contract tooling
+
+The host and controller descriptions pin OpenAPI 3.2.0, the version the
+controller generator's parser (kin-openapi) recognizes. Move both to 3.2.1 when
+it does; a patch release adds no features. No compatibility
+translation is applied. Resource filters emit individual query parameters;
+`x-hq-query-schema` retains the aggregate schema, including unknown-field policy.
+
+Install the locked contract tools with `npm --prefix scripts/openapi ci`.
+`scripts/check-openapi.sh` validates both descriptions against the specification
+and checks generated client freshness and runtime behavior. The TypeScript
+client and CLI are generated from the host description. Redocly currently marks
+its client generator experimental; generated artifacts are pinned and checked
+rather than assumed compatible across upgrades.
+
+`manage.py test tests.fuzz.api_properties` generates bounded requests through Django's
+real WSGI middleware using Schemathesis from the tools dependency set. Host cases
+have read authority; a synthetic capability tests authorized writes and durable
+retry without provider effects. Each case rolls back database changes and blocks
+outbound connections. These tooling tests run explicitly in the contributor
+gates; production test discovery does not require development dependencies.
+
+All MCP tool input schemas and descriptions consume the live deployment's
+OpenAPI document after Django initialization. `x-hq-mcp-tools` records MCP-only
+metadata; it does not invent HTTP operations for those tools. Argument types
+and defaults are emitted from the declared service signatures with the MCP
+SDK and Pydantic. Resource names, identifiers and catalogues consume the
+already-emitted resource paths. Registration fails if the document disagrees
+with the execution signature, and calls validate against the documented
+constraints before entering application code. Unknown arguments, mistyped
+values and stringified JSON objects are rejected; validation errors do not
+include rejected input values. Authorization and thread-sensitive execution
+remain on the shared service path.
+
+The input-schema override uses a narrow, tested FastMCP Tool metadata seam in
+`hq/platform/mcp/binding.py`; an MCP SDK upgrade must retain those registration
+and validation tests.

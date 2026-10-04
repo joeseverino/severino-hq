@@ -47,31 +47,33 @@ For Connect bootstrap, isolation, and cutover requirements, see
 [Secret delivery and Connect migration](SECRETS.md). Connect is opt-in during
 migration; production authentication does not change merely by updating code.
 
-Production refreshes the validator token AND the full app environment from
-the dedicated 1Password vault with `severino-hq-secrets.service`
-(`scripts/refresh-secrets.sh`). The app env renders from the app-environment
-item into a root-owned file the entrypoint sources: compose has no
-`env_file`, and the on-host `.env` holds only the two non-secret
-`*_FILE_HOST` interpolation paths. The renderer's authentication token is a
-host-bound encrypted systemd credential, not an environment-file value. Select
-the backend and credential explicitly in a host-owned unit drop-in; see
-[Secret delivery](SECRETS.md). The hourly timer
+Production refreshes the full app environment from the dedicated 1Password
+vault with `severino-hq-secrets.service`, which runs `hq-secrets`
+(`controller/cmd/hq-secrets`), a Go program root runs from the root-owned
+tree. The app env renders from the app-environment item into a file
+`hq/config/settings.py` loads: compose has no `env_file`, and the on-host
+`.env` holds only the two non-secret `*_FILE_HOST` interpolation paths. The
+renderer's authentication token is a host-bound encrypted systemd credential,
+not an environment-file value. Name the Connect endpoint and the credential in
+a host-owned unit drop-in; see [Secret delivery](SECRETS.md). The hourly timer
 keeps rotations current and retains the last-known-good values if 1Password
 is temporarily unavailable. To change a prod env var: edit the 1Password
 item, then `systemctl start severino-hq-secrets.service` (or wait for the
 timer; the container restarts only when something actually changed).
 
-Provider credentials are separate from the app environment. Login items in the
-same vault declare a stable `connection_ref`; `scripts/render-controller-env.sh`
-discovers them through that field and renders
-`/run/severino-hq-secrets/severino_controller_env` on tmpfs. The controller service
-requires a root-owned 0700 directory and a root-owned 0400 file, separate from
-the web-writable doorbell directory. `scripts/run-controller.sh` forwards the derived variables only
-to a short-lived controller container running from the exact deployed HQ image.
-The file is never mounted into the HQ web container. Provider variables enter
-the controller container configuration and are visible to Docker administrators;
-they do not enter the long-running web process. Provider
-passwords are never copied into the app-environment item.
+Provider credentials are separate from the app environment. Items in the same
+vault declare a stable `connection_ref`; the renderer discovers them through
+that field and writes one typed document,
+`/run/severino-hq-secrets/controller-connections.json`, on tmpfs. The
+controller service requires a root-owned 0700 directory and a root-owned 0400
+file, separate from the web-writable doorbell directory.
+`scripts/run-controller.sh` copies the document into the run's private
+directory, bind-mounts it read-only into a short-lived controller container
+running from the exact deployed HQ image, and passes only its path. No provider
+credential is a container environment variable, so none is in `docker inspect`
+or the container's on-disk configuration. The document is never mounted into
+the HQ web container. Provider passwords are never copied into the
+app-environment item.
 
 ### `SEVERINO_SECRET_STORE_KEY`
 
@@ -94,9 +96,10 @@ rather than returning an empty secret. Rotate only when you are willing to
 re-upload every stored certificate.
 
 Connection projections are declared once in
-`config/controller-connections.json`. Both secret rendering and runtime
-forwarding derive their variable names from that registry; a new credential
-shape is added as a projection profile instead of duplicated shell logic.
+`hq/config/controller-connections.json`. The renderer derives each
+connection's settings from that registry, and HQ reads the same file to say
+where a credential is kept; a new credential shape is added as a projection
+there and nowhere else.
 Built-in 1Password fields may be selected by stable ID. Custom fields must be
 selected by their stable, unique label because 1Password assigns an opaque ID
 per item; the renderer rejects missing or duplicate matches.
@@ -164,7 +167,7 @@ TAILSCALE_BOOTSTRAP_TOKEN=... scripts/mint-tailscale-client.sh --print-secret
   credential with write scopes.
 
 Both lists are the `requires` of every reading for that provider plus
-`control_plane.credential_reads`, and a test fails when they differ.
+`hq.domains.control_plane.credential_reads`, and a test fails when they differ.
 
 The controller trusts internal provider TLS through the host trust store or a
 deployment-provided `HQ_CONTROLLER_CA_FILE`. The internal CA certificate
@@ -185,7 +188,7 @@ credentials, untrusted TLS, and API failures stop activation. The HQ web
 container never receives the provider environment.
 
 Each release installs itself. Root runs units out of
-`/usr/local/lib/severino-hq`, a root-owned copy of `scripts/`, `config/`,
+`/usr/local/lib/severino-hq`, a root-owned copy of `scripts/`, `hq/config/`,
 `deploy/` and `docker-compose.yml` taken from the running image. Once the new
 image is healthy, `deploy-image.sh` runs the `severino-hq-sync-scripts` that
 image ships (never the host's copy), which replaces the tree and refuses it
@@ -240,7 +243,7 @@ belongs exclusively to the D1 contact-submission path. DNS-01 uses the separate
 `Cloudflare DNS - HQ Controller` API Credential item in the `Severino HQ
 Production` vault. Its stable `connection_ref` is
 `cloudflare-dns-example`; the controller resolves that reference through
-`config/controller-connections.json`. The token is restricted to Zone Read and
+`hq/config/controller-connections.json`. The token is restricted to Zone Read and
 DNS Edit for `example.com`, `example.net`, `example.org`, and
 `example.test`. Controller activation verifies the token and proves all four
 zones are readable without performing a DNS mutation.
@@ -248,11 +251,11 @@ zones are readable without performing a DNS mutation.
 Deployment identities are SSH key items in the controller's vault, generated
 by 1Password, so no private key is ever created on or written to a host's disk.
 Each SSH connection names its key item in an `identity` field.
-`refresh-secrets.sh` renders the private half, the public half and a
+The renderer writes the private half, the public half and a
 `known_hosts` pinned from the connection's Ed25519 host key into the
-controller's secret mount (a tmpfs mounted `noswap`, which the scripts check
-with `findmnt` before rendering), refuses an item whose two halves do not
-match, and installs the set with the controller environment as one generation
+controller's secret mount (a tmpfs mounted `noswap`, which it checks in the
+mount table before reading anything), refuses an item whose two halves do not
+match, and installs the set with the connections document as one generation
 under an exclusive lock that readers take shared. It refuses to run while
 private keys remain in a `secrets/ssh/` directory on disk; the
 operator removes those by hand. The web
@@ -261,7 +264,7 @@ Rotating a key is generating a new item, authorizing its public half on the
 target, and pointing the connection's `identity` at it. The same connection
 registry emits each target's host, port and remote user;
 `scripts/controller-ssh.sh` derives strict, batch-only, operation-allowlisted
-SSH invocations from it. It does not accept arbitrary
+SSH invocations from the rendered document. It does not accept arbitrary
 remote commands. Authorize each generated `.pub` key with the narrowest
 remote account or forced command available. Renewal stays locked until both
 deployment paths pass non-mutating preflight, deployment, live-certificate
@@ -435,7 +438,7 @@ uploads it as the run's `failure-logs` artifact. Anyone can download it; only
 the matching identity opens it:
 
 ```bash
-scripts/failure-logs.sh RUN_ID   # identity from SEVERINO_FAILURE_LOG_IDENTITY
+mise run failure-logs RUN_ID   # identity from SEVERINO_FAILURE_LOG_IDENTITY
 ```
 
 The identity lives in a password manager and is read at use. To rotate it,
@@ -599,7 +602,10 @@ sudo chown severino:severino /opt/severino-hq
 sudo -u severino git clone <your-mirror> /opt/severino-hq
 cd /opt/severino-hq
 sudo -u severino python3 -m venv .venv
-sudo -u severino .venv/bin/pip install -r requirements.txt
+python3 scripts/dependency_config.py uv-requirements > /tmp/hq-uv-bootstrap.txt
+sudo -u severino .venv/bin/python -m pip install --require-hashes --no-deps --ignore-installed -r /tmp/hq-uv-bootstrap.txt
+sudo -u severino .venv/bin/uv export --locked --no-default-groups --no-emit-project --output-file /tmp/hq-runtime.txt > /dev/null
+sudo -u severino .venv/bin/python -m pip install --require-hashes -r /tmp/hq-runtime.txt
 sudo -u severino cp .env.example /etc/severino-hq.env
 sudoedit /etc/severino-hq.env   # fill in real values
 ```
@@ -629,7 +635,7 @@ User=severino
 Group=severino
 WorkingDirectory=/opt/severino-hq
 EnvironmentFile=/etc/severino-hq.env
-ExecStart=/opt/severino-hq/.venv/bin/uvicorn config.asgi:application \
+ExecStart=/opt/severino-hq/.venv/bin/uvicorn hq.config.asgi:application \
   --host 127.0.0.1 --port 8000 --no-proxy-headers
 Restart=on-failure
 RestartSec=5
@@ -718,7 +724,7 @@ verification.
 The deploy checks the three host paths the web container binds before compose
 reads them. The checkout's `.env` is writable by the deploy account, so none of
 them is taken on trust:
-- The app environment is not read from `.env` at all. `refresh-secrets.sh`
+- The app environment is not read from `.env` at all. `hq-secrets`
   renders it to `/run/severino-hq-secrets/web/severino_hq_env`, on the noswap
   tmpfs, in a directory only root can enter, as a single-link regular file
   owned by the web user. The deploy binds that file and nothing else; a copy

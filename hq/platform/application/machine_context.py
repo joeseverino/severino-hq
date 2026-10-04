@@ -1,0 +1,317 @@
+"""Everything else HQ holds about a machine, gathered by what it already knows.
+
+The machine page is where the estate is most densely related and said least
+about it. A machine answers on a handful of names, and behind each name sits a
+DNS record, a proxy host, a certificate and something running: four
+declarations HQ already resolves, per name, for the service page.
+
+So the machine page asks the service catalog what supplies each name, and the
+answer cannot disagree with the service page because it *is* the service page's
+answer.
+
+A section is a function from a machine to rows, and the registry below is the
+list of them. A page that hand-wires each band can only grow when someone edits
+it; a page that reads a registry grows when HQ learns something.
+
+The section and cell primitives are shared with the service page rather than
+copied, so a band gained on one renders identically on the other.
+"""
+
+from __future__ import annotations
+
+from typing import Callable
+
+from hq.platform.application.routes import reverse
+
+from hq.platform.core.models import AuditLog
+
+from hq.domains.control_plane.names import normalized_hostname
+from . import docker_sections
+from .action_links import topology_url
+from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
+from .entity_links import entity_link, kind_label
+from .projection import projection_scope
+from .service_context import Cell, ServiceSection
+from .moments import ago
+from .ui import MISSING
+
+
+def sections_for(machine) -> tuple[ServiceSection, ...]:
+    """Every section that has something to say about this machine."""
+
+    found = []
+    with projection_scope():
+        for resolve in SECTIONS:
+            section = resolve(machine)
+            if section is not None and (section.records or section.actions):
+                found.append(section)
+    return tuple(found)
+
+
+def _identity(machine) -> ServiceSection | None:
+    """The declarations that constitute this machine, and what each is filed as.
+
+    One machine is declared more than once (as a machine, and again as the
+    device the tailnet knows) and a key is unique across every kind, so the
+    second declaration is filed under a suffixed key. The estate then contains
+    ``x`` and ``x-2`` describing one thing, which reads as two machines to
+    anyone who meets the second one first.
+
+    The machine carries both keys, so HQ knows they are the same. This says
+    so, because a name that looks like a duplicate is worth one row to explain
+    and expensive to rediscover.
+    """
+
+    from hq.domains.control_plane.models import ManagedResource
+
+    keys = [
+        key
+        for key in (
+            getattr(machine, "declaration", ""),
+            getattr(machine, "route_approval_key", ""),
+        )
+        if key
+    ]
+    if not keys:
+        return None
+    by_key = {r.key: r for r in ManagedResource.objects.filter(key__in=keys)}
+    records = tuple(
+        (
+            Cell.of(entity_link(by_key[key].kind if key in by_key else "resource", key)),
+            Cell(kind_label(by_key[key].kind) if key in by_key else MISSING, muted=key not in by_key),
+            Cell(
+                "Filed under a suffixed key because the plain one was taken"
+                if key.rpartition("-")[2].isdigit() and not key.rpartition("-")[2].startswith("0")
+                else "",
+                muted=True,
+            ),
+        )
+        for key in keys
+    )
+    return ServiceSection(
+        id="identity",
+        label="Declared as",
+        columns=("Declaration", "Kind", "Note"),
+        records=records,
+    )
+
+
+def _names(machine) -> ServiceSection | None:
+    """Every name this machine answers on, and what supplies each one.
+
+    The band the machine page exists for. A machine is only interesting through
+    its names, and each name is supplied by a short, fixed set of things: what
+    runs it, what resolves it, what fronts it, what secures it. HQ already
+    decides all four, per name, for the service page; this reads that decision
+    rather than making a second one.
+
+    Traffic rides along because it answers the question the facets raise. Four
+    green cells beside a name nobody visits is a different situation from four
+    green cells beside the name carrying the site, and only the machine page
+    holds enough names at once for the comparison to mean anything.
+
+    A blank cell is "nothing supplies this", which is not the same as unhealthy
+    and not the same as unmeasured. Each is said in its own words.
+    """
+
+    from hq.domains.control_plane.providers import service_facets
+
+    from .services import service_catalog
+
+    hostnames = tuple(getattr(machine, "hostnames", ()) or ())
+    if not hostnames:
+        return None
+
+    # One derivation for the whole catalog rather than one per name: asking
+    # per hostname would re-resolve the same estate nine times over.
+    catalog = {service.hostname: service for service in service_catalog()}
+    measured = traffic_for_hosts(set(hostnames), days=HOST_TRAFFIC_DAYS)
+    facets = service_facets()
+
+    def supplied(service, facet_id: str) -> Cell:
+        facet = next((f for f in service.facets if f.id == facet_id), None) if service else None
+        claim = next(iter(facet.claims), None) if facet and facet.present else None
+        if claim is None:
+            return Cell(MISSING, muted=True)
+        return Cell(claim.resource_key, getattr(claim, "url", ""))
+
+    def traffic(hostname: str) -> Cell:
+        reading = measured.get(normalized_hostname(hostname))
+        if not reading:
+            return Cell("unmeasured", muted=True)
+        return Cell(f"{reading['pageviews']:,}")
+
+    ordered = sorted(
+        hostnames,
+        key=lambda host: (
+            -(measured.get(normalized_hostname(host), {}).get("pageviews") or -1),
+            host,
+        ),
+    )
+    # Traffic rides along once at least one name carries a reading, because
+    # that is when the comparison means something. A machine nothing measures
+    # keeps its names and loses the column: nine cells all saying "unmeasured"
+    # say one thing nine times, and the reachable-but-unmeasured finding is
+    # where that absence is raised as a fact about HQ.
+    any_measured = any(measured.get(normalized_hostname(host)) for host in hostnames)
+    label = "Names it answers"
+    if any_measured:
+        label = f"{label} · traffic over {HOST_TRAFFIC_DAYS} days"
+    return ServiceSection(
+        id="names",
+        label=label,
+        columns=(
+            "Name",
+            *(facet_label for _facet, facet_label in facets),
+            *(("Pageviews",) if any_measured else ()),
+        ),
+        records=tuple(
+            (
+                Cell.of(entity_link("service", hostname)),
+                *(supplied(catalog.get(hostname), facet) for facet, _label in facets),
+                *((traffic(hostname),) if any_measured else ()),
+            )
+            for hostname in ordered
+        ),
+        # The whole graph, rather than more rows here. Every other relationship
+        # this machine has is an edge, and the topology is where edges live.
+        actions=(
+            (
+                "See this machine in the topology",
+                topology_url(f"machine:{getattr(machine, 'name', '')}"),
+            ),
+        ),
+    )
+
+
+def _activity(machine) -> ServiceSection | None:
+    """What has recently happened to the things this machine holds.
+
+    Audit entries name the object they changed, and the objects on a machine are
+    its declarations, so the tie is the key each already carries. Scoped to
+    those keys rather than the whole log: this answers "what changed here", not
+    "what changed".
+    """
+
+    keys = [str(key) for key in (getattr(machine, "resources", ()) or ())]
+    if not keys:
+        return None
+    events = AuditLog.objects.filter(object_id__in=keys).order_by("-created_at")[:8]
+    records = tuple(
+        (
+            Cell(
+                event.object_repr or event.object_id,
+                reverse("core:audit_detail", kwargs={"pk": event.pk}),
+            ),
+            Cell(event.get_action_display()),
+            Cell(ago(event.created_at), muted=True),
+        )
+        for event in events
+    )
+    if not records:
+        return None
+    return ServiceSection(
+        id="activity",
+        label="Recent changes",
+        columns=("Object", "Change", "When"),
+        records=records,
+    )
+
+
+def serves_links(machine, relationships) -> tuple:
+    """What the machine serves, read off the same relation query as its
+    Relationships panel, so the header and the panel cannot disagree. HQ's
+    own service leads where HQ runs here."""
+
+    from .connections import machines_once
+    from .hq_self import hq_service
+    from .topology_model import RELATIONS
+
+    group = relationships.group(RELATIONS["runs_on"].inverse)
+    serves = [item.entity for item in (group.items if group else ())]
+    if getattr(machine, "runs_hq", False):
+        own = hq_service(catalog=machines_once())
+        if own is not None:
+            first = entity_link("service", own.hostname)
+            serves = [first, *(link for link in serves if link.label != first.label)]
+    return tuple(dict.fromkeys(serves))
+
+
+def machine_links(machine, relationships) -> dict[str, object]:
+    """Every entity the machine page names outside its sections, as links.
+
+    What it is reached through, what it serves, what else is declared on it,
+    its tailnet device, and who the tailnet policy admits to it. A policy alias
+    names an address; it links to the machine answering there.
+    """
+
+    from .policy_links import PolicyNames
+    from .tailnet import TAILNET_KIND
+
+    presence = getattr(machine, "presence", None)
+    serves = serves_links(machine, relationships)
+    links: dict[str, object] = {
+        "reached_links": tuple(
+            (entity_link("connection", ref), ref in machine.unanswered)
+            for ref in machine.reached_by
+        ),
+        "serves_links": serves,
+        "serves_count": len(serves) + len(getattr(machine, "roles", ()) or ()),
+        "declaration_links": tuple(
+            entity_link("resource", key) for key in machine.other_declarations
+        ),
+        "device_link": None,
+        "magic_dns_link": None,
+        "opening_links": (),
+    }
+    if presence is None:
+        return links
+    record = {"addresses": presence.addresses}
+    links["device_link"] = (
+        entity_link(TAILNET_KIND, machine.route_approval_key, label=presence.tailnet_name)
+        if machine.route_approval_key
+        else entity_link(TAILNET_KIND, presence.tailnet_name, record=record)
+    )
+    if presence.dns_name:
+        links["magic_dns_link"] = entity_link(
+            TAILNET_KIND, presence.dns_name, record=record
+        )
+    names = PolicyNames()
+    links["opening_links"] = tuple(
+        (port, names.of(who)) for port, who in presence.openings
+    )
+    return links
+
+
+def header_addresses(machine) -> tuple[tuple[str, str, str], ...]:
+    """``(label, address, holder)`` for the addresses a person uses to reach it.
+
+    Tailnet, then LAN, then public: each only when it is the device's own
+    (``application.own_addresses``).
+    """
+
+    from .own_addresses import tailnet_sightings
+    from .public_registry import public_endpoints
+
+    presence = getattr(machine, "presence", None)
+    if presence is None:
+        return ()
+    seen = tailnet_sightings()
+    lan = seen.lan_address(presence)
+    return (
+        (("Tailnet", presence.tailnet_address, ""),) if presence.tailnet_address else ()
+    ) + ((("LAN", lan, ""),) if lan else ()) + tuple(
+        ("Public", address, holder)
+        for address, holder in public_endpoints(seen.public_addresses(presence))
+    )
+
+
+
+# The list of sections, stated once. A section with nothing to say returns
+# nothing and does not appear, so the page grows a band only when HQ has one.
+SECTIONS: tuple[Callable[[object], ServiceSection | None], ...] = (
+    _identity,
+    _names,
+    *docker_sections.SECTIONS,
+    _activity,
+)

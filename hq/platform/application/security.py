@@ -1,0 +1,260 @@
+"""Application-level principals and capability enforcement."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import TYPE_CHECKING
+
+from django.conf import settings
+from django.utils.http import url_has_allowed_host_and_scheme
+
+if TYPE_CHECKING:
+    from django.contrib.auth.base_user import AbstractBaseUser
+    from django.contrib.auth.models import AnonymousUser
+    from django.http import HttpRequest
+
+
+class Capability(StrEnum):
+    READ = "read"
+    # The audit trail is a security log. Free-text search over it is gated
+    # separately from baseline reads so a least-privilege adapter principal
+    # (e.g. MCP) never gets it implicitly.
+    READ_AUDIT_LOG = "read_audit_log"
+    # An outbound read, gated apart from baseline READ for the same reason
+    # READ_AUDIT_LOG is: `mcp_principal` holds READ unconditionally, so folding
+    # this into it would let the machine account spend a third party's rate
+    # limit and disclose what HQ is asking about, with nobody having decided
+    # that. Operators hold every capability; MCP holds this one only if a
+    # deployment says so.
+    LOOK_UP_PUBLIC_RECORDS = "look_up_public_records"
+    # A record domain's write_<resource> and delete_<resource> are not listed
+    # here: they derive from its ``Records`` declaration (``record_permissions``).
+    # The operator's own calendar: appointments, visits, plans. Personal, so
+    # an agent reads and writes it only on its own switch.
+    READ_CALENDAR = "read_calendar"
+    WRITE_CALENDAR = "write_calendar"
+    MANAGE_CONTACTS = "manage_contacts"
+    SYNC_DOCUMENTATION = "sync_documentation"
+    PRUNE_DOCUMENTATION = "prune_documentation"
+    DELETE_CALENDAR = "delete_calendar"
+    MANAGE_INFRASTRUCTURE = "manage_infrastructure"
+    REQUEST_CERTIFICATE_RENEWAL = "request_certificate_renewal"
+
+
+# The interfaces where a request is a person, established as one and present at
+# the time. The web surface is behind an identity provider and a passkey, so a
+# click there is somebody; a token call is a credential, and a credential is
+# whatever currently holds it.
+#
+# An allowlist rather than a list of the machine interfaces, so an interface
+# added later is treated as a credential until somebody decides otherwise. The
+# other order fails open: a new adapter would inherit a person's standing by
+# not having been thought about.
+INTERACTIVE_INTERFACES = frozenset({"web"})
+
+
+def is_interactive(principal: "Principal") -> bool:
+    """Whether this act is a person's, rather than a credential's."""
+
+    return principal.interface in INTERACTIVE_INTERFACES
+
+
+class AuthorizationError(PermissionError):
+    """Refused for want of a capability. Its message is written for the caller."""
+
+    code = "forbidden"
+
+    def __init__(self, reason: str = "", *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+
+
+class PolicyDenied(AuthorizationError):
+    """Refused by operator policy rather than a missing grant."""
+
+    code = "denied_by_policy"
+
+
+def record_permissions(kind: str) -> frozenset[str]:
+    """Every record domain's ``write`` or ``delete`` permission, by declaration."""
+
+    from .domains import host_records
+
+    return frozenset(getattr(records, kind) for records in host_records())
+
+
+def host_capabilities() -> frozenset[Capability | str]:
+    """Everything the host can grant: its own capabilities and every record domain's."""
+
+    return frozenset(Capability) | record_permissions("write") | record_permissions("delete")
+
+
+# For callers constructing explicit principals. Runtime operator principals
+# derive the same set, plus plugin grants, when they are built.
+OPERATOR_CAPABILITIES = host_capabilities()
+
+
+@dataclass(frozen=True)
+class Principal:
+    actor: str
+    interface: str
+    capabilities: frozenset[Capability | str]
+    # The person who agreed to this act, where one had to. Empty for everything
+    # else, which is almost everything: an operator clicking a button is their
+    # own consent. It is carried on the principal rather than passed alongside
+    # it so a replayed request keeps naming whoever asked for it, and the
+    # record of who allowed it travels with the act instead of being looked up
+    # afterwards from two rows that nothing joins.
+    approved_by: str = ""
+    # The identity provider's grant before any deployment cap; empty for
+    # principals HQ constructs itself.
+    granted: frozenset[str] = frozenset()
+
+    def permits(self, *capabilities: Capability | str) -> bool:
+        """Whether this principal holds every capability named.
+
+        The question `require` answers by raising. Both exist because callers
+        divide cleanly in two: a handler enforcing authority wants the
+        exception, and a surface deciding whether to draw a control wants a
+        boolean, and a surface that has to catch an exception to render a
+        menu ends up catching it in more places than it should.
+        """
+
+        try:
+            for capability in capabilities:
+                self.require(capability)
+        except AuthorizationError:
+            return False
+        return True
+
+    def require(self, capability: Capability | str) -> None:
+        name = capability.value if isinstance(capability, Capability) else capability
+        available = {
+            item.value if isinstance(item, Capability) else item for item in self.capabilities
+        }
+        if name not in available:
+            raise AuthorizationError(
+                f"{self.interface} principal {self.actor!r} lacks "
+                f"{name!r}."
+            )
+
+
+def require_all(principal: Principal, capabilities: Iterable[Capability | str]) -> None:
+    """``Principal.require`` for a set: raise on the first capability it lacks.
+
+    The one authorization rule every registry applies to what a spec requires.
+    """
+
+    for capability in capabilities:
+        principal.require(capability)
+
+
+def _operator_capabilities() -> frozenset[Capability | str]:
+    from .plugins import plugin_capabilities
+
+    return host_capabilities() | plugin_capabilities("operator")
+
+
+def web_principal(user: AbstractBaseUser | AnonymousUser) -> Principal:
+    if not getattr(user, "is_authenticated", False):
+        raise AuthorizationError("An authenticated web operator is required.")
+    return Principal(user.get_username(), "web", _operator_capabilities())
+
+
+def internal_principal(purpose: str) -> Principal:
+    """HQ reading its own records, never on a caller's behalf."""
+
+    return Principal(purpose, "internal", _operator_capabilities())
+
+
+def cli_principal() -> Principal:
+    return Principal("local-operator", "cli", _operator_capabilities())
+
+
+def mcp_principal() -> Principal:
+    """The most any MCP caller may do on this deployment: the ceiling.
+
+    Built from the `SEVERINO_MCP_ENABLE_*` switches and intersected with each
+    agent's own grant, so an agent never exceeds either. It is not an identity
+    anyone authenticates as.
+    """
+
+    from .plugins import plugin_capabilities
+
+    capabilities: set[Capability | str] = {Capability.READ}
+    capabilities.update(plugin_capabilities("mcp_read"))
+    # Mirroring the vault's documentation index is gated on its own, because it
+    # is the one write an operator wants routinely and in isolation. Bundled
+    # with the rest it could only be granted by also handing the service
+    # account write access to expenses, receipts, projects, assets and content
+    # so in practice it stayed off and the index silently fell behind.
+    if getattr(settings, "SEVERINO_MCP_ENABLE_DOC_SYNC", False):
+        capabilities.add(Capability.SYNC_DOCUMENTATION)
+    if getattr(settings, "SEVERINO_MCP_ENABLE_WRITES", False):
+        capabilities.update(record_permissions("write"))
+        # Broad writes still imply doc sync; the narrow flag exists to grant it
+        # *without* them, not to withhold it from them.
+        capabilities.add(Capability.SYNC_DOCUMENTATION)
+        capabilities.update(plugin_capabilities("mcp_write"))
+    # The calendar is personal, so it is neither in READ nor in the broad
+    # writes: "put this on my calendar" is its own decision, and granting it
+    # grants nothing else.
+    if getattr(settings, "SEVERINO_MCP_ENABLE_CALENDAR", False):
+        capabilities.update({Capability.READ_CALENDAR, Capability.WRITE_CALENDAR})
+    if getattr(settings, "SEVERINO_MCP_ENABLE_PRUNE", False):
+        capabilities.add(Capability.PRUNE_DOCUMENTATION)
+    if getattr(
+        settings, "SEVERINO_MCP_ENABLE_WRITES", False
+    ) and getattr(settings, "SEVERINO_MCP_ENABLE_DELETES", False):
+        capabilities.update(record_permissions("delete"))
+        if getattr(settings, "SEVERINO_MCP_ENABLE_CALENDAR", False):
+            capabilities.add(Capability.DELETE_CALENDAR)
+    # Topology sync needs to declare infrastructure; it never needs to ask a
+    # certificate authority for anything, so enabling `hq sync` does not grant
+    # the service account certificate renewal.
+    if getattr(settings, "SEVERINO_MCP_ENABLE_INFRASTRUCTURE", False):
+        capabilities.add(Capability.MANAGE_INFRASTRUCTURE)
+    if getattr(settings, "SEVERINO_MCP_ENABLE_CERT_RENEWAL", False):
+        capabilities.add(Capability.REQUEST_CERTIFICATE_RENEWAL)
+    # A read, but an outbound one. It leaves the tailnet, spends somebody
+    # else's rate limit, and tells a third party what HQ was asked about,
+    # none of which a baseline read does, and none of which an unattended
+    # caller should start doing because a capability was folded into READ.
+    if getattr(settings, "SEVERINO_MCP_ENABLE_LOOKUP", False):
+        capabilities.add(Capability.LOOK_UP_PUBLIC_RECORDS)
+    return Principal("mcp-service-account", "mcp", frozenset(capabilities))
+
+
+def safe_next(request: HttpRequest, *, fallback: str = "", scope: str = "") -> str:
+    """A caller-supplied destination, but only if it points back at us.
+
+    Shared rather than repeated: the same "go back where I came from" appears
+    on forms, on toggles and on anything else that returns somewhere, and each
+    one written separately is one more chance to redirect wherever a query
+    string says. Checked in one place, every caller gets the check: adapters
+    and plugins alike, which is why it sits beside the principals rather than
+    in whichever app happened to need it first.
+
+    ``scope`` narrows the destination to a path prefix, for callers that return
+    somewhere within one section rather than anywhere on the host. ``fallback``
+    is what an absent or rejected destination becomes, so a caller can redirect
+    on the result unconditionally instead of re-deciding what "nowhere" means.
+    """
+
+    candidate = (
+        request.POST.get("next", "") if request.method == "POST" else ""
+    ) or request.GET.get("next", "")
+    candidate = candidate.strip()
+    if (
+        candidate
+        and (not scope or candidate.startswith(scope))
+        and url_has_allowed_host_and_scheme(
+            candidate,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        )
+    ):
+        return candidate
+    return fallback

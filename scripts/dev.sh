@@ -6,41 +6,25 @@ unset CDPATH
 repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 
-# The same developer-local file the gate reads, on the same terms. It is where
-# the extensions are named and where they are found, so a dev server that did
-# not read it would serve the host alone: every extension page a 404, every
-# extension model unimportable, and nothing saying why. Real environment
-# variables still win, and a checkout without the file is unaffected.
-if [ -f .env.dev ]; then
-    set -a
-    # shellcheck disable=SC1091  # optional, developer-local, absent in CI
-    . ./.env.dev
-    set +a
-fi
-
-if [ -x .venv/bin/python ]; then
-    python=.venv/bin/python
-elif command -v python3 >/dev/null 2>&1; then
-    python=$(command -v python3)
-else
-    echo "Python is required. Follow README.md#local-development." >&2
-    exit 2
-fi
-
-# The signing key, from the password manager rather than from a file. Read at
-# launch and never written to disk, so the read is what asks for a fingerprint.
-# Without it settings generates a throwaway and sessions end at restart, so a
-# machine without the tool still starts and is told what it is getting.
+# Run as `mise run dev`: mise supplies mise.local.toml, which is where the
+# extensions are named and found. Without it this serves the host alone.
 if [ -z "${DJANGO_SECRET_KEY:-}" ] && command -v op >/dev/null 2>&1; then
     DJANGO_SECRET_KEY=$(op read "${HQ_DEV_SECRET_REF:-op://Infrastructure/HQ Local/django secret key}" 2>/dev/null) || true
     export DJANGO_SECRET_KEY
 fi
 if [ -z "${DJANGO_SECRET_KEY:-}" ]; then
-    echo "No signing key: sessions will use the constant in config/settings.py." >&2
+    echo "No signing key: sessions will use the constant in hq/config/settings.py." >&2
 fi
 
 export DJANGO_DEBUG="${DJANGO_DEBUG:-1}"
-export DJANGO_ALLOWED_HOSTS="${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}"
+export DJANGO_ALLOWED_HOSTS="${HQ_DEV_ALLOWED_HOSTS:-localhost,127.0.0.1}"
+if [ -n "${HQ_DEV_CSRF_TRUSTED_ORIGINS:-}" ]; then
+    export DJANGO_CSRF_TRUSTED_ORIGINS="${HQ_DEV_CSRF_TRUSTED_ORIGINS}"
+fi
+if [ -n "${HQ_LOCAL_PLUGINS:-}" ]; then
+    export SEVERINO_HQ_PLUGINS="${HQ_LOCAL_PLUGINS}"
+    export PYTHONPATH="${HQ_LOCAL_PYTHONPATH:-}"
+fi
 
 # Loopback unless asked otherwise. `tailnet` resolves to this machine's tailnet
 # address, which is what a proxy forwards to: written as a word rather than
@@ -73,8 +57,8 @@ if command -v lsof >/dev/null 2>&1 \
     exit 3
 fi
 
-"$python" manage.py collectstatic --noinput --verbosity 0
-exec "$python" -m uvicorn config.asgi:application \
+uv run --locked python manage.py collectstatic --noinput --verbosity 0
+exec uv run --locked python -m uvicorn hq.config.asgi:application \
     --host "$host" \
     --port "$port" \
     --reload

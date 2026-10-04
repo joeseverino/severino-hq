@@ -22,17 +22,19 @@ from pathlib import Path
 # The boundary can get stricter on its own. It cannot get weaker on its own.
 _FLOOR = frozenset(
     {
+        "analytics",
         "application",
         "assets",
+        "calendars",
         "config",
         "contacts",
         "content",
         "control_plane",
-        "controller_runtime",
         "core",
         "docs_index",
         "example_hq_plugin",
         "expenses",
+        "hq",
         "hq_api",
         "hq_mcp",
         "jobs",
@@ -50,7 +52,7 @@ _SUPPORTED_FACADE = "hq_sdk"
 def _host_packages() -> frozenset[str]:
     """Top-level packages of the host this SDK was installed from."""
 
-    root = Path(__file__).resolve().parent.parent
+    root = Path(__file__).resolve().parents[1]
     try:
         entries = list(root.iterdir())
     except OSError:

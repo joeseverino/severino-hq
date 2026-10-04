@@ -35,7 +35,7 @@ a bound method on access and would receive the view as its command; the mixins
 raise at class-creation time rather than letting that reach a write.
 """
 
-from application.writes import (
+from hq.platform.application.writes import (
     CommandFormMixin,
     ServiceCreateMixin,
     ServiceDeleteMixin,

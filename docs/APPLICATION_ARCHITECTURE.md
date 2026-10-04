@@ -13,7 +13,7 @@ tool.</sup>
 
 ## The boundary
 
-The `application/` package is HQ's behavior boundary. It owns everything that
+The `hq/platform/application/` package is HQ's behavior boundary. It owns everything that
 must remain identical no matter who initiated an operation:
 
 | Concern | Canonical owner |
@@ -44,9 +44,9 @@ The adapter disappears after parsing. The application service validates,
 authorizes, opens the transaction, protects against stale state, writes, audits,
 and returns one stable result. The adapter only chooses how that result looks.
 
-That boundary includes reads. `application.resources.ResourceSpec` is the
+That boundary includes reads. `hq.platform.application.resources.ResourceSpec` is the
 registry of readable domains; canonical query projections live in their
-application services and in `application/read_models.py`. Web, API, MCP, and
+application services and in `hq/platform/application/read_models.py`. Web, API, MCP, and
 CLI adapters may filter or render those results, but they do not import Django
 models or rebuild result shapes.
 The projections opt into Django 6.1's `FETCH_RAISE` mode after declaring their
@@ -55,30 +55,30 @@ projection boundary instead of silently becoming an N+1 query in production.
 An architecture fitness test rejects direct model access from the MCP service
 adapter so this separation cannot silently regress.
 
-The dashboard follows the same contract. `application/dashboard.py` emits one
+The dashboard follows the same contract. `hq/platform/application/dashboard.py` emits one
 JSON-safe operating snapshot for KPIs, priority work, recent records, upstream
 state, and activity. The web dashboard renders it, while the authenticated MCP
 exposes it as `dashboard_snapshot`. Infrastructure reads are likewise shared:
-`list_managed_resources` and `get_managed_resource` return public desired state,
-health, and structured operation evidence without provider credentials.
-`get_managed_resource` also returns `derived`, from
-`application/resource_context.py`: the same allowed actions, removal mode,
+the `infrastructure.resources` kind, read through MCP's `list_resource` and
+`get_resource`, returns public desired state, health, and structured operation
+evidence without provider credentials. Its detail record also returns `derived`, from
+`hq/platform/application/resource_context.py`: the same allowed actions, removal mode,
 machines, services, readout and certificate expiry the resource page shows,
 so no adapter derives a fact another cannot return. The tailnet and
-connections pages follow the same pattern: `application/tailnet_context.py` and
-`application/connection_context.py` derive each page once, the view renders
+connections pages follow the same pattern: `hq/platform/application/tailnet_context.py` and
+`hq/platform/application/connection_context.py` derive each page once, the view renders
 the projection object and nothing beside it, and the `tailnet` and
 `connection.standing` resources serialize that object. How HQ reaches a
-connection (network, machine, tailnet peering) is `application/connection_reach.py`,
+connection (network, machine, tailnet peering) is `hq/platform/application/connection_reach.py`,
 joined from the endpoint, HQ's DNS readings, the machine catalogue and the
 peering the machine page shows. Days left anywhere come
-from `application/expiry.py`. A
+from `hq/platform/application/expiry.py`. A
 future REST/OpenAPI adapter can publish these same use cases without moving or
 reimplementing their behavior.
 
 The page-head glance is also a projection, never an owner. Whole-host CPU,
 memory, and storage observations are stored as the machine's telemetry reading
-(`machine-telemetry:<key>`, `application/readings.py`), so its machine page, resource API, and
+(`machine-telemetry:<key>`, `hq/platform/application/readings.py`), so its machine page, resource API, and
 dashboard summarize the same timestamped fact. The operator selects that owner
 with “Show on dashboard” on the machine edit form; the relationship lives in
 `DashboardConfiguration`, not in deployment environment or desired machine
@@ -114,14 +114,14 @@ can offer neither. A rule must also declare `no_help_reason`, which a finding
 carries (and the API returns) whenever it has no remedy and no command. A
 queue `Insight` keeps the SDK's shape, so its help travels in existing fields:
 a remedy as one of its `actions`, a command or a reason as a `run` or
-`cannot` step of its `workflow` (`application/item_help.py`).
-`application/tests/test_item_help.py` fails on any host provider that builds an item
+`cannot` step of its `workflow` (`hq/platform/application/item_help.py`).
+`hq/platform/application/tests/test_item_help.py` fails on any host provider that builds an item
 without one.
 
 A rule is declared beside the detector that decides it: each module that raises
 findings (`perimeter_findings`, `controller_findings`, `docker_estate`,
 `dns_findings` and the rest) exports its own `RULES`, built from the vocabulary
-in `application/finding_model.py`. `application.findings.RULES` is derived from
+in `hq/platform/application/finding_model.py`. `hq.platform.application.findings.RULES` is derived from
 the closed `RULE_MODULES` tuple, and that module keeps only the pipeline: the
 estate, derivation, suppression, resolution and serialization.
 
@@ -173,7 +173,7 @@ producer. Analytics freshness follows the
 same shape: successful site-day coverage is a fact, HQ derives missing windows,
 and the controller executes that plan without owning a second backfill policy.
 
-Large projections run inside `application.projection.projection_scope()`. A
+Large projections run inside `hq.platform.application.projection.projection_scope()`. A
 reading may be reused while one answer is assembled and is discarded when that
 scope exits, eliminating repeated joins/counts without serving process-cached
 state to a later request. The dashboard's contact rows, unread total, and
@@ -186,12 +186,69 @@ The dashboard projection has an executable query budget. Growth that adds an
 unbounded query or N+1 relationship fetch fails CI before it becomes an
 operator-visible latency regression.
 
+### What a page costs
+
+`manage.py bench_pages` measures it. The command builds Django's test database
+(never the real one), fills it with `hq.platform.core.bench.seed` (a few years of
+one operator's records: 4,000 expenses, 3,000 receipts, 300 assets, 6,000 audit
+rows, a swept estate of about 270 managed resources), and requests every route
+that answers a GET as a signed-in operator through the whole middleware stack.
+It reports median and p95 time, the query count, how many of those queries
+repeat one already made in the same request, and the response size.
+
+```bash
+DJANGO_STATIC_ROOT=/tmp/hq-static python manage.py bench_pages
+python manage.py bench_pages --only dashboard --sql     # one page, with its queries
+python manage.py bench_pages --scale 0.25 --rounds 10   # a quicker pass
+```
+
+The pages come from the URL configuration. A route that takes arguments is
+requested with the seeded record `SAMPLES` names for it, and one with no sample
+is listed under "Not benched", so a new detail page appears there until it has
+one. An empty database hides every cost that grows with rows, which is why the
+bench seeds first.
+
+Timings move with the machine; query counts do not. Compare two trees by
+running them back to back and reading the counts first.
+`hq/platform/core/tests/test_page_budgets.py` pins the counts below against the
+same seed, at two sizes where a per-row read would show.
+
+Measured 2026-10-04 on an 8 GB M3, Python 3.14, the lower of two paired runs
+(median ms, queries). Pages not listed did not move beyond run-to-run spread.
+
+| Page | Before | After | Queries before | Queries after |
+| --- | ---: | ---: | ---: | ---: |
+| Dashboard (`/`) | 140.0 | 121.3 | 97 | 53 |
+| Action items | 158.4 | 141.2 | 71 | 27 |
+| Action item count (header) | 104.9 | 85.2 | 69 | 25 |
+| Findings | 133.6 | 113.6 | 61 | 17 |
+| Topology | 121.3 | 96.8 | 61 | 17 |
+| Services | 74.2 | 59.2 | 60 | 16 |
+| One service | 79.8 | 63.7 | 65 | 21 |
+| One machine | 72.1 | 56.7 | 65 | 21 |
+| One resource | 68.0 | 51.7 | 64 | 20 |
+| Tailnet | 92.5 | 72.7 | 63 | 19 |
+| Calendar | 51.6 | 36.7 | 60 | 16 |
+| Search (`?q=example`) | 139.2 | 124.4 | 76 | 32 |
+| Year summary export | 100.1 | 31.4 | 617 | 27 |
+| Expenses | 11.2 | 9.0 | 8 | 8 |
+| API `findings` | 98.3 | 77.7 | 61 | 17 |
+| API `topology` | 86.3 | 68.6 | 61 | 17 |
+| API `action.items` | 104.9 | 84.8 | 70 | 26 |
+
+What remains is not query cost. The infrastructure pages spend their time
+deriving the topology, services and findings in Python on each request (SQL is
+under 5 ms of the dashboard's 121). The record forms that offer every expense
+as an option (new receipt, new documentation, new content: about 165 ms) spend
+it rendering 4,000 `<option>` elements; that is a change to the form, not to a
+query.
+
 This is the important scaling property: a fourth interface does not create a
 fourth implementation.
 
 ## Search and table reads
 
-`application.search` is the search boundary for web tables, CLI/TUI clients,
+`hq.platform.application.search` is the search boundary for web tables, CLI/TUI clients,
 and future MCP tools. It accepts a named scope and query and returns stable
 domain identifiers; adapters do not know how text is indexed.
 
@@ -231,7 +288,7 @@ python manage.py search_hq projects "certificate automation"
 python manage.py rebuild_search_index
 ```
 
-`application.tables.TableListMixin` composes indexed search with multi-value
+`hq.platform.application.tables.TableListMixin` composes indexed search with multi-value
 filters, workflow toggles, allowlisted ordering, and database pagination. The
 browser progressively enhances that GET contract with debounced, cancelable
 requests; plain links and forms remain the complete fallback.
@@ -370,7 +427,7 @@ case when invoked through any interface.
 
 The executor itself takes a retry key from every interface. A capability whose
 effect is not `read` accepts an optional `idempotency_key` in its payload:
-`capability_schema` in `application/integration_specs.py` derives that from the
+`capability_schema` in `hq/platform/application/integration_specs.py` derives that from the
 effect for the published schema and for unknown-field rejection, and
 `execute_capability` replays the first result for a repeated key. A command
 type declares the field only when its handler stores the key with what it
@@ -387,7 +444,7 @@ everything would make the system less honest, not more unified.
 | Projects, assets, expenses, workflow state | HQ database | Authoritative operational records |
 | Credentials and tokens | 1Password | Nothing secret, with one declared exception below |
 | Which connections exist, what they permit, and what each reaches | Owning provider or 1Password/controller | A typed, timestamped `ConnectionInstance`: never the credential, never a second list |
-| Mutation behavior | `application/` | The one executable business contract |
+| Mutation behavior | `hq/platform/application/` | The one executable business contract |
 | Interface presentation | Web / MCP / `hq` wrapper | No business state |
 | Which machines exist, and what reaches them | Sweeps, plus a declaration for what nothing sweeps | Derived first; declared only where nothing can observe |
 | Desired infrastructure state | HQ database | The only copy |
@@ -409,7 +466,7 @@ It exposes the same application capabilities used in-process by HQ itself.
 
 ### Projects
 
-`application.projects.save_project()` is the sole project create/update path.
+`hq.platform.application.projects.save_project()` is the sole project create/update path.
 The web create and edit views, MCP `execute_capability` tool,
 and `create_project` management command all call it and receive the same
 canonical representation.
@@ -425,7 +482,7 @@ Project writes provide:
 
 ### Documentation synchronization
 
-`application.sync.execute_hq_sync()` is the external synchronization boundary.
+`hq.platform.application.sync.execute_hq_sync()` is the external synchronization boundary.
 The local Vault MCP emits the manifest; `hq sync` sends it in one `hq.sync` MCP
 capability call, applied inside one database transaction. The vault describes
 documentation and nothing else; HQ derives the infrastructure topology.
@@ -441,7 +498,7 @@ The sync is:
 
 ### Assets
 
-`application.assets.save_asset()` extends the same contract to equipment and
+`hq.platform.application.assets.save_asset()` extends the same contract to equipment and
 financial metadata. Web create/edit, MCP `execute_capability`, and
 the `create_asset` management command share one transaction and result shape.
 The service resolves project relationships before writing, rolls back on any
@@ -450,7 +507,7 @@ supports the same optional stale-write protection as Projects.
 
 ### Content
 
-`application.content.save_content()` owns the publishing pipeline record and
+`hq.platform.application.content.save_content()` owns the publishing pipeline record and
 its Project, Asset, Expense, and Documentation relationships. All relationship
 identifiers resolve before persistence, so one missing reference rolls the
 entire operation back. MCP results omit sensitive and restricted documentation
@@ -459,7 +516,7 @@ relationship through the same service.
 
 ### Expenses
 
-`application.expenses.save_expense()` owns financial record creation and
+`hq.platform.application.expenses.save_expense()` owns financial record creation and
 updates, deductible calculation, and its optional Project, Asset, Content, and
 Documentation links. Related identifiers resolve before persistence, updates
 lock the row, and MCP/CLI results share the same money-as-string representation
@@ -468,7 +525,7 @@ without disclosing sensitive documentation identifiers.
 ### Receipts
 
 Receipt files and receipt metadata deliberately have different ingress paths.
-Authenticated web upload calls `application.receipts.upload_receipt()` and the
+Authenticated web upload calls `hq.platform.application.receipts.upload_receipt()` and the
 shared file policy before private storage. JSON/MCP exposes only
 `receipt.update`, which can change metadata and stable Expense/Asset links but
 can never read, upload, replace, or return file bytes or a storage path. The
@@ -477,7 +534,7 @@ MCP into a file-exfiltration surface.
 
 ### Documentation records
 
-`application.documentation.save_documentation()` owns manual documentation
+`hq.platform.application.documentation.save_documentation()` owns manual documentation
 metadata creation and updates. It resolves all Project, Asset, and Expense
 relationships before persistence and returns a sensitivity-aware canonical
 representation. Restricted records remain manageable in the authenticated web
@@ -486,7 +543,7 @@ pointers.
 
 ### Deletes
 
-`application.deletion` owns deletion for all six mutable HQ record families.
+`hq.platform.application.deletion` owns deletion for all six mutable HQ record families.
 Every delete is an explicit registry capability with a `destructive` effect,
 requires an exact target confirmation, locks the current row, optionally checks
 `expected_updated_at`, and emits the normal attributed audit event. Receipt
@@ -536,7 +593,7 @@ the normal CLI cannot silently become a second transport or rules engine.
 
 Every new write follows one mechanical path:
 
-1. Define the typed command and canonical result in `application/`.
+1. Define the typed command and canonical result in `hq/platform/application/`.
 2. Implement validation, authorization, locking, persistence, and audit there.
 3. Add minimal web, MCP, and CLI adapters.
 4. Prove identical result shapes with an adapter-parity test.
@@ -574,23 +631,23 @@ service view, the generated create-and-edit forms, adoption) is written once
 and names no provider, so a provider added to the registry appears on all of it
 without another file being edited.
 
-Each provider is one module in `control_plane/provider_adapters/`: its spec
+Each provider is one module in `hq/domains/control_plane/provider_adapters/`: its spec
 models, its kind constants, the functions its declaration names, and the
 declaration itself. The vocabulary those are built from (`ProviderSpec`,
-`ProviderModel`, action policies, `NameContext`) is `control_plane/provider_spec.py`,
-which imports no registry. `control_plane.providers.PROVIDERS` is derived from
+`ProviderModel`, action policies, `NameContext`) is `hq/domains/control_plane/provider_spec.py`,
+which imports no registry. `hq.domains.control_plane.providers.PROVIDERS` is derived from
 the package's closed `ADMITTED` tuple, whose order is the registry's order; the
 registry holds no list of kinds of its own.
 
 A provider module also declares the connection its credential arrives through
 (`CONNECTIONS`, a `ConnectionKind` per provider name), and
-`control_plane.connection_kinds` gathers them from the admitted set. A kind that
+`hq.domains.control_plane.connection_kinds` gathers them from the admitted set. A kind that
 names a connection provider no admitted module declares fails at import. A
-provider's readings are a module of their own in `control_plane/observations/`;
+provider's readings are a module of their own in `hq/domains/control_plane/observations/`;
 the package registers every module beside `contract.py`, in name order, so a
 new file is a registered reading. What may read it is still decided by
 admission. Adding a provider is therefore writing its modules and adding one
-name to `ADMITTED`; `control_plane/provider_adapters/tests/test_admission.py` holds
+name to `ADMITTED`; `hq/domains/control_plane/provider_adapters/tests/test_admission.py` holds
 that to be enough.
 
 Its relationships follow from the same declarations. Nothing in the topology
@@ -607,7 +664,7 @@ names a provider to draw its edges:
   to each other.
 - A declaration whose spec has a `host` field runs on that machine.
 
-**One address-to-machine resolver, in `application/locate.py`.** Every surface
+**One address-to-machine resolver, in `hq/platform/application/locate.py`.** Every surface
 that draws a line between two things HQ knows (a proxy and the box it forwards
 to, a credential and the machine it opens, a service and where it runs) is
 asking the same question. Surfaces differ only in what evidence they hand the
@@ -616,7 +673,7 @@ resolver, never in how it reads one.
 Two invariants keep that from splitting. **Names and addresses are separate
 namespaces**, because a machine may legitimately be named like an address while
 another answers at it, and one dictionary silently keeps whichever was written
-last. And **endpoints are parsed in one place**: `core.network.split_host_port`
+last. And **endpoints are parsed in one place**: `hq.platform.core.network.split_host_port`
 because splitting at the last colon is right for `host:port` and wrong for
 every IPv6 form. A rendered label is never a join key; the resolver joins on
 declared addresses, sweep readings and connection endpoints, all of which are
@@ -677,34 +734,36 @@ references, executes provider adapters, verifies each declared consumer, and
 reports only public status and conditions. Expired claims return to the queue;
 only one queued or claimed operation may exist for a resource/action pair.
 
-A controller provider is admitted as one immutable adapter contribution: its
-typed resource definition, inventory reader, connection probes, actions, and
-verification policy travel together. The compiler rejects a contribution whose
-implemented actions or probes disagree with its declaration, and rejects
-duplicate kinds, probes, or dispatch identities before the worker can run.
-Admission remains a closed tuple owned by HQ; this is modular composition, not
-arbitrary runtime registration. AdGuard is admitted this way, and so is Caddy,
-an SSH-backed provider whose one resource resolves into a shared file.
+A provider's declaration (its typed resource definitions and connections) is
+Django's, admitted as a closed tuple in `hq/domains/control_plane/provider_adapters/`. Its
+controller half is Go, in `controller/providers/`: one file set per
+integration (`adguard`, `npm`, `caddy`, `cloudflare`, `github_app`,
+`github_readings`, `github_delivery`, `portainer`, `tailscale`,
+`tailnet_policy`, `tls`, `host_readings`, `glance`, `redirects`), each
+registering its readers, actions and probes in `providers.New`. The controller
+asks HQ for its declarations through the bridge's `registry` action, claims only
+the declared actions it has a handler for, and refuses a locked action with the
+registry's reason. Vendor responses decode into types generated from each
+vendor's OpenAPI description (`controller/api/vendor/`); bridge messages into
+types generated from `controller/api/hq-controller.openapi.json`. A Go test holds
+the registered readers equal to the contract's `SweptKind`, and Django's contract
+test holds `SweptKind` to the kinds HQ expects a sweep to read.
 
-The kinds the controller core implements directly follow the same rule from the
-other side. Each integration lives in `controller_runtime/` (`tls`,
-`cloudflare`, `portainer`, `tailscale`, `host_readings`), split further by
-concern (`tls_issuance`, `tls_verification`, `npm_certificates`,
-`tailnet_api`, `tailnet_policy`, `cloudflare_api`, `cloudflare_account`). A sibling is called as `module.name`, so a
-patch on the owner reaches every caller. Each handler registers itself beside
-its definition: `@lists(kind)` for inventory,
-`@acts(kind, action)` for an action, `@probes(provider)` for a connection probe
-and `@reads(kind)` for a reading, all in `controller_runtime/handlers.py`. An
-admitted adapter's handlers are registered into the same tables. The dispatch
-tables in `controller_runtime/providers.py` are those registries plus a
-generated refusal for every locked action, and its `REGISTRANTS` tuple is the
-closed set of modules admitted to register; an architecture test rejects a
-handler written into a table by hand.
+The bridge contract is written by hand and both sides take it. What the Go
+generator does not emit (a pattern, a default) the controller reads from the
+copy embedded in its binary (`controller/api/contract.go`), and a declaration
+reads from the same file (`hq/domains/control_plane/bridge_contract.py`): the
+Caddyfile token patterns and the `github.delivery` defaults are stated there
+and nowhere else. A keyword the contract does not state stops the controller
+at start and fails the declaration's import. A vendor's base URL is the
+`servers` entry of its vendored description, generated as a constant.
 
 The homelab controller is a separate root-owned systemd oneshot, not a web
 process. It starts a disposable, capability-dropped container from the exact
-scanned HQ image, so the host needs no parallel Python environment and cannot
-drift from the deployed application. Provider variables, the ACME lineage, and
+scanned HQ image, whose `/usr/local/bin/hq-controller` is the static Go binary
+built in the image's `controller` stage, so the host needs no toolchain and
+cannot drift from the deployed application. The binary reaches HQ through the
+same image's `manage.py infrastructure_controller` (`HQ_IN_PROCESS=1`). Provider variables, the ACME lineage, and
 deployment identities enter only that short-lived container; they never enter
 the web container. The disposable container runs as the same unprivileged UID
 as the application data owner; the root-owned systemd launcher projects
@@ -713,9 +772,9 @@ mode authenticates and peeks without leasing work.
 Apply mode first schedules due work, then claims only explicitly supported
 kind/action pairs. The validated capability document declares which actions are
 automatic; a generic scheduler derives reconciliation for generation/health
-drift, while the TLS provider adds expiry-window renewal policy. The worker
-imports the same validated registry and dispatches every declared action through
-one provider/action map. AdGuard and NPM reconcile in apply mode. TLS reconciliation reuses the
+drift, while the TLS provider adds expiry-window renewal policy. The controller
+reads the same validated registry through the bridge and dispatches every
+declared action through one kind/action map. AdGuard and NPM reconcile in apply mode. TLS reconciliation reuses the
 existing lineage without contacting ACME. For NPM, one managed certificate is
 uploaded once and every enabled proxy host covered by its SANs is discovered,
 rebound, reloaded, and live-verified. TLS renewal issues through DNS-01 only

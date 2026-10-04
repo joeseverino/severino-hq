@@ -1,0 +1,4 @@
+repository: https://github.com/cloudflare/api-schemas
+file: openapi.json
+commit: 03a6de21e114bf8f998013d5b477d7c20fa70475
+sha256: 6d665f1f96baa87c5ba7bfc5ded9401d743a14af74250f594bd302ef4f1c71e8

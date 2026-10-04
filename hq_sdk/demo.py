@@ -20,6 +20,6 @@ it, and a demo that shows a healthy board over a broken one is the failure this
 exists to avoid.
 """
 
-from application.demo import amount, day, label, showing_demo
+from hq.platform.application.demo import amount, day, label, showing_demo
 
 __all__ = ["amount", "day", "label", "showing_demo"]

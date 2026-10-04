@@ -146,7 +146,7 @@ when anything is set. No chip walls.
 paths, ports) in `<code>` and leaves counts, words and phrases as text.
 Numbers are never chips.
 
-A moment, a date and an age are each written one way, by `application/moments.py`:
+A moment, a date and an age are each written one way, by `hq/platform/application/moments.py`:
 `when` ("Oct 3, 9:29 AM"), `when_day` ("Oct 3"), `ago` ("5 days ago", one
 unit) and `when_exact` ("Oct 3, 2026, 9:29:15 AM CDT"). The year is said only
 when it is not this one. A page shows them through the built-in `|when`
@@ -208,7 +208,7 @@ returns only when what it reports changes. The line is drawn once
 (`action_items.split_waiting`) from what each item says of itself.
 
 The queue page is sections by the domain that raised each item, derived from
-what the items carry (`application/action_items.py`), so a domain that starts
+what the items carry (`hq/platform/application/action_items.py`), so a domain that starts
 raising items has its section without being listed anywhere.
 Filters that match nothing offer a way back; they never imply a healthy estate.
 
@@ -254,7 +254,7 @@ somebody opens it.
 and a service's page include `partials/_visit_refresh.html`, naming which page
 they are. Once the page is showing, it posts that, and HQ works out which kinds
 the page is assembled from and asks the controller for those whose last attempt
-is older than their cadence (`application/freshness.py`). Opening a page never
+is older than their cadence (`hq/platform/application/freshness.py`). Opening a page never
 logs in to a machine: a kind whose reader opens a shell is left to the sweep.
 A page in a background tab asks for nothing, a GET never does, and the request
 cannot name a connection or a kind. When the reading lands the page loads
@@ -269,6 +269,6 @@ says a newer reading is in and leaves showing it to them.
    saying what it now covers and why.
 3. A new container of content is a surface: add its selector to the surface
    list, write only its layout.
-4. Run `CHECK_BROWSER=1 ./scripts/check.sh`, then look at the page at a phone,
+4. Run `mise run check` and `mise run browser`, then look at the page at a phone,
    a tablet and a desktop width. The gates catch classes of mistakes; they do
    not tell you it reads well.

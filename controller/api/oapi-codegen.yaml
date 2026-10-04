@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.0/configuration-schema.json
+package: runtime
+output: ../runtime/bridge.gen.go
+generate:
+  models: true
+output-options:
+  skip-prune: true
+  prefer-skip-optional-pointer: true
+  name-normalizer: ToCamelCaseWithInitialisms
+  additional-initialisms:
+    - OK

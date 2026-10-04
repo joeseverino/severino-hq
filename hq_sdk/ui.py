@@ -1,7 +1,7 @@
 """Stable view models and chart builders for host-rendered plugin UI."""
 
-from application.drawings import Dot, Dots, Trend
-from application.moments import (
+from hq.platform.application.drawings import Dot, Dots, Trend
+from hq.platform.application.moments import (
     ago,
     span,
     when,
@@ -9,7 +9,7 @@ from application.moments import (
     when_exact,
     when_range,
 )
-from application.ui import (
+from hq.platform.application.ui import (
     ActivityCalendar,
     Cadence,
     CadenceMatrix,

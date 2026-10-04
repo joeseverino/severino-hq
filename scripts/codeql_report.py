@@ -13,8 +13,8 @@ import sys
 from pathlib import Path
 
 # Run as a file, so the repository root is not on the path by itself.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from application.ui import counted  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from hq.platform.application.ui import counted  # noqa: E402
 
 # Kept in step with `query-filters` in .github/codeql/codeql-config.yml.
 EXCLUDED = {"py/cyclic-import"}

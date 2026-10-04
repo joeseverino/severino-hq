@@ -1,11 +1,15 @@
 name: CI
 
 # Everything a change has to pass, on every pull request and every push to
-# main: Checks, Tests, Browser and Image, and Ready, which writes HQ's review:
+# main: Checks, Tests, Browser, Controller and Image, and Ready, which writes HQ's review:
 # the one check the ruleset requires, from HQ's app alone. CodeQL runs in its
 # own workflow (codeql.yml), a pull request's
 # composition with the extensions in Compose (compose.yml), and production is
 # Deploy's (deploy.yml), which a pull request never reaches.
+#
+# The gates themselves are declared once, in mise.toml: each job below runs the
+# aggregate of its name, and `mise run ci` runs the same list on a developer's
+# machine. A gate is added there, never here.
 #
 # The file keeps its name: the host image is signed by it, and what verifies
 # that signature (Compose, and the deploy script on the host) pins this path.
@@ -101,253 +105,22 @@ jobs:
         run: >-
           scripts/hq-check.sh "Severino HQ · Review" "$HEAD_SHA" in_progress "Checking"
           "CI, CodeQL and the build of HQ are running. This becomes the verdict when they finish."
-      - id: toolchain
-        uses: ./.github/actions/toolchain
-      # The runtime pins too: django-stubs loads the host's settings for mypy.
-      - name: Install the hashed runtime and tool pins
-        run: |
-          pip install --require-hashes -r requirements.txt
-          pip install --require-hashes --no-deps -r requirements-tools.txt
-      - name: Install the pinned shellcheck
-        # The runner image ships its own, at a version the local gate does
-        # not run.
-        env:
-          VERSION: ${{ steps.toolchain.outputs.shellcheck-version }}
-          SHA256: ${{ steps.toolchain.outputs.shellcheck-sha256 }}
-        run: |
-          set -euo pipefail
-          archive="$RUNNER_TEMP/shellcheck.tar.xz"
-          curl -fsSL -o "$archive" "https://github.com/koalaman/shellcheck/releases/download/v${VERSION}/shellcheck-v${VERSION}.linux.x86_64.tar.xz"
-          echo "${SHA256}  ${archive}" | sha256sum --check --quiet
-          tar -xJf "$archive" --strip-components=1 -C /usr/local/bin "shellcheck-v${VERSION}/shellcheck"
-          shellcheck --version
-      - name: ruff
-        id: ruff
-        run: ruff check . && echo "no findings under $(ruff --version)" | tee "$RUNNER_TEMP/gate-ruff"
-      - name: mypy
-        id: mypy
-        # The architectural seams, typed strictly. mypy.ini names them and says
-        # how to widen the set.
-        run: python -m mypy && echo "the typed seams pass $(python -m mypy --version)" | tee "$RUNNER_TEMP/gate-mypy"
-      - name: The test matrix and the README badges state the toolchain
-        id: badges
-        # Neither the matrix below nor static markdown can read toolchain.env,
-        # so both are verified against it: the Python versions a reader sees,
-        # and the ones Tests runs, are the ones declared.
-        env:
-          DECLARED: ${{ steps.toolchain.outputs.python-versions }}
-        run: |
-          set -euo pipefail
-          . ./scripts/toolchain.env
-          # shellcheck disable=SC2086  # the version list is meant to split
-          expected="$(printf '%s\n' $PYTHON_VERSIONS | paste -sd'|' -)"
-          claimed="$(sed -nE 's/.*badge\/python-(.*)-blue.*/\1/p' README.md | head -1 \
-                     | sed 's/%20%7C%20/|/g')"
-          if [ "$expected" != "$claimed" ]; then
-            echo "::error::README python badge says '$claimed'; the toolchain declares '$expected'."
-            exit 1
-          fi
-          matrix="$(yq -o=json -I=0 '.jobs.tests.strategy.matrix.python' .github/workflows/ci.yml)"
-          if [ "$matrix" != "$DECLARED" ]; then
-            echo "::error::Tests runs $matrix; scripts/toolchain.env declares $DECLARED."
-            exit 1
-          fi
-          echo "the matrix and the badge state the toolchain: ${expected//|/, }" | tee "$RUNNER_TEMP/gate-badges"
-      - name: Each lockfile is what its .in file compiles to
-        id: lockfile
-        # Each header names the command that produces its lockfile. Regenerated
-        # here with the pinned uv and compared, so the committed pins are always
-        # the command's output and nothing else.
-        run: |
-          set -euo pipefail
-          for lock in requirements.txt requirements-tools.txt requirements-browser.txt requirements-dev.txt; do
-            command="$(sed -n 's/^#    uv pip compile /uv pip compile /p' "$lock")"
-            case "$command" in
-              *"--output-file $lock "*) ;;
-              *) echo "::error::$lock does not name a command that writes it"; exit 1 ;;
-            esac
-            # Compiled on top of a copy, so uv keeps the committed pins: this
-            # asks whether the file is the command's output, not whether newer
-            # releases exist. That is Dependabot's job, not a red build's.
-            fresh="$(mktemp)"
-            cp "$lock" "$fresh"
-            # shellcheck disable=SC2086  # the recorded command is meant to split
-            ${command/--output-file $lock /--output-file $fresh } --quiet
-            if ! diff -u <(grep -v '^#' "$lock") <(grep -v '^#' "$fresh"); then
-              echo "::error::$lock differs from what its header command produces. Rerun: $command"
-              exit 1
-            fi
-          done
-          echo "every requirements lockfile is the output of its header command" | tee "$RUNNER_TEMP/gate-lockfile"
-      - name: The workflows are valid
-        id: workflows
-        # The version toolchain.env pins, so CI and the local gate agree. With
-        # shellcheck on the PATH (installed above) it also checks every run:
-        # block as shell.
-        env:
-          VERSION: ${{ steps.toolchain.outputs.actionlint-version }}
-          SHA256: ${{ steps.toolchain.outputs.actionlint-sha256 }}
-        run: |
-          set -euo pipefail
-          archive="$RUNNER_TEMP/actionlint.tar.gz"
-          curl -fsSL -o "$archive" "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/actionlint_${VERSION}_linux_amd64.tar.gz"
-          echo "${SHA256}  ${archive}" | sha256sum --check --quiet
-          tar -xzf "$archive" -C /usr/local/bin actionlint
-          actionlint -color
-          set -- .github/workflows/*.yml
-          echo "$# workflows pass actionlint ${VERSION}, run: blocks included" | tee "$RUNNER_TEMP/gate-workflows"
-      - name: Every action is pinned to a commit, with its version beside it
-        id: pins
-        # A tag can be moved after review; a commit cannot. The version comment
-        # is what Dependabot rewrites with the commit and what a reader checks,
-        # so one without the other is a pin nobody can read.
-        run: |
-          set -euo pipefail
-          bad="$(grep -rnE '^[[:space:]-]*uses:[[:space:]]' .github/workflows .github/actions \
-                 | grep -vE 'uses:[[:space:]]+\./' \
-                 | grep -vE '@[0-9a-f]{40} # v[0-9]+(\.[0-9]+){0,2}$' || true)"
-          if [ -n "$bad" ]; then
-            printf '%s\n' "$bad"
-            echo "::error::pin every action to a full commit SHA followed by '# vX.Y.Z'"
-            exit 1
-          fi
-          echo "every action is pinned to a commit, with its version" | tee "$RUNNER_TEMP/gate-pins"
-      - name: Every job has a timeout
-        id: timeouts
-        # Without one a hung job holds its runner for GitHub's six-hour default.
-        # A job that calls a reusable workflow cannot take one; the workflow it
-        # calls is checked instead.
-        run: |
-          set -euo pipefail
-          missing="$(for f in .github/workflows/*.yml; do
-            yq '.jobs | to_entries | .[] | select(.value.uses == null and .value."timeout-minutes" == null) | .key' "$f" \
-              | sed "s|^|$f: |"
-          done)"
-          if [ -n "$missing" ]; then
-            printf '%s\n' "$missing"
-            echo "::error::every job needs timeout-minutes"
-            exit 1
-          fi
-          echo "every job has timeout-minutes" | tee "$RUNNER_TEMP/gate-timeouts"
-      - name: Every hosted job runs on the declared runner image
-        id: runners
-        # The same reasoning as the badge check: workflow YAML cannot read
-        # toolchain.env, so it is verified against it. A job left on
-        # `ubuntu-latest` would move to a new OS on GitHub's schedule.
-        run: |
-          set -euo pipefail
-          . ./scripts/toolchain.env
-          stray="$(grep -HnE '^[[:space:]]*runs-on:' .github/workflows/*.yml \
-                   | grep -v 'self-hosted' \
-                   | grep -v "runs-on: ${RUNNER_IMAGE}\$" || true)"
-          if [ -n "$stray" ]; then
-            printf '%s\n' "$stray"
-            echo "::error::hosted jobs must run on ${RUNNER_IMAGE} (scripts/toolchain.env)."
-            exit 1
-          fi
-          echo "every hosted job runs on ${RUNNER_IMAGE}" | tee "$RUNNER_TEMP/gate-runners"
-      - name: Shell safety
-        id: shell
-        run: |
-          set -euo pipefail
-          . ./scripts/toolchain.env
-          # shellcheck disable=SC2086  # both lists are meant to split
-          set -- $SHELL_SOURCES
-          # Each parsed by the shell its first line names.
-          for f; do
-            case "$(head -n 1 "$f")" in
-              *bash*) bash -n "$f" ;;
-              *) sh -n "$f" ;;
-            esac
-          done
-          # shellcheck disable=SC2086
-          shellcheck -x $SHELL_SOURCES
-          # shellcheck disable=SC2086
-          for suite in $SHELL_SUITES; do "$suite"; done
-          # shellcheck disable=SC2086
-          echo "$(echo $SHELL_SOURCES | wc -w | tr -d ' ') scripts parse and pass shellcheck; $(echo $SHELL_SUITES | wc -w | tr -d ' ') suites pass" \
-            | tee "$RUNNER_TEMP/gate-shell"
-      # Production-posture check: DEBUG off, real host. --fail-level WARNING
-      # turns Django's security advisories into hard failures. The env below
-      # mirrors a real prod config so the check validates how settings.py
-      # translates it, not CI artifacts. The key is a throwaway >50-char value
-      # only to satisfy the strength check (W009).
-      - name: Django deployment check
-        id: deploycheck
-        env:
-          DJANGO_DEBUG: "0"
-          DJANGO_SECRET_KEY: "ci-only-deploy-check-key-0123456789abcdef0123456789abcdef"
-          DJANGO_ALLOWED_HOSTS: "hq.example.com"
-          SEVERINO_OIDC_ISSUER: "https://sso.example.com"
-          DJANGO_BEHIND_TLS_PROXY: "1"
-          DJANGO_SESSION_COOKIE_SECURE: "1"
-          DJANGO_CSRF_COOKIE_SECURE: "1"
-          DJANGO_HSTS_SECONDS: "31536000"
-          DJANGO_HSTS_INCLUDE_SUBDOMAINS: "1"
-          DJANGO_HSTS_PRELOAD: "1"
-        run: |
-          python manage.py check --deploy --fail-level WARNING
-          echo "production settings raise no security warning" | tee "$RUNNER_TEMP/gate-deploycheck"
-      - name: pip-audit
-        id: audit
-        uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
+      - uses: ./.github/actions/toolchain
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
-          inputs: requirements.txt requirements-tools.txt requirements-browser.txt requirements-dev.txt
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: scripts/openapi/package-lock.json
+      - name: Checks
+        # Every gate named checks:* in mise.toml. Each runs to the end, and the
+        # last lines of this step name every one that failed.
+        run: mise run -c checks
       - name: Dependency review
-        id: dependencies
         if: github.event_name == 'pull_request'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
           comment-summary-in-pr: on-failure
-      - name: Structural bar
-        id: structural
-        # No new near-duplicate outside tests; the largest files did not grow.
-        run: |
-          set -eu
-          CODEBASE_MEMORY_BIN="$(scripts/install-scan-tools.sh codebase-memory-mcp)" \
-            scripts/structural-bar.sh
-          echo "no new near-duplicate, and the largest files did not grow" | tee "$RUNNER_TEMP/gate-structural"
-      - name: Scorecard
-        id: scorecard
-        # Scorecard's action reads only the default branch, so a change that
-        # would lower a check is caught here, by the same script a local run
-        # uses. CodeQL is its own job below.
-        env:
-          CHECK_PYTHON: python
-        run: |
-          scripts/security-scan.sh scorecard
-          echo "every file-based check at 10" | tee "$RUNNER_TEMP/gate-scorecard"
-      - name: Gate summary
-        # One table on the run's summary page, built from GitHub's own record
-        # of each step's outcome, so a failed check is a failed row rather than
-        # a missing one. Each check leaves a one-line detail when it passes.
-        if: always()
-        env:
-          STEPS: ${{ toJSON(steps) }}
-        run: |
-          set -euo pipefail
-          rows="$(printf '%s' "$STEPS" | jq -r 'to_entries[] | select(.key != "toolchain" and .key != "app") | "\(.key)\t\(.value.outcome)"')"
-          total="$(printf '%s\n' "$rows" | grep -c . || true)"
-          failed="$(printf '%s\n' "$rows" | grep -c $'\tfailure' || true)"
-          {
-            echo "## Checks"
-            echo
-            if [ "$failed" -eq 0 ]; then echo "All ${total} checks passed."
-            else echo "**${failed} of ${total} checks failed.**"; fi
-            echo
-            echo "| Check | Result | Detail |"
-            echo "| --- | --- | --- |"
-            printf '%s\n' "$rows" | while IFS=$'\t' read -r id outcome; do
-              detail="$(cat "$RUNNER_TEMP/gate-$id" 2>/dev/null | tail -1 || true)"
-              case "$outcome" in
-                success) result="pass" ;;
-                failure) result="**fail**"; detail="see the step log" ;;
-                *) result="$outcome"; detail="${detail:-not run}" ;;
-              esac
-              echo "| \`$id\` | $result | ${detail//|/\\|} |"
-            done
-          } >> "$GITHUB_STEP_SUMMARY"
 
   tests:
     name: Tests
@@ -358,97 +131,60 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Checks holds this to scripts/toolchain.env: a matrix cannot read it.
+        # `checks:badges` holds this to scripts/toolchain.env: a matrix cannot read it.
         python: ["3.13", "3.14"]
     env:
-      DJANGO_DEBUG: "1"
-      DJANGO_SECRET_KEY: ci-only-secret-key-not-for-production
-      DJANGO_ALLOWED_HOSTS: "127.0.0.1,testserver"
+      # `mise run tests` walks this list; a leg is one interpreter.
+      TEST_PYTHONS: ${{ matrix.python }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - id: toolchain
-        uses: ./.github/actions/toolchain
+      - uses: ./.github/actions/toolchain
         with:
           python: ${{ matrix.python }}
-          cache: pip
-      - run: pip install --require-hashes -r requirements.txt
-      - run: pip install --require-hashes --no-deps -r requirements-tools.txt
-      - name: Public plugin contract
-        env:
-          SEVERINO_HQ_PLUGINS: example_hq_plugin.plugin:plugin
-        run: |
-          python manage.py check
-          python manage.py plugins
-      - run: python manage.py makemigrations --check --dry-run
-      - name: Tests with coverage gate
-        env:
-          COVERAGE_FLOOR: ${{ steps.toolchain.outputs.coverage-floor }}
-          OLDEST: ${{ steps.toolchain.outputs.oldest-python }}
-          PYTHON: ${{ matrix.python }}
-        # Parallel across the runner's cores, as scripts/check.sh runs it
-        # locally; core/test_runner.py is what makes workers safe on the WAL
-        # database. Coverage follows the workers (.coveragerc) and is combined
-        # before it is judged. Each test's logs are shown only if it fails, and
-        # the ten slowest tests are named so a slow one is noticed, not endured.
-        run: |
-          set -euo pipefail
-          log="$RUNNER_TEMP/tests.log"
-          coverage run manage.py test --parallel auto --durations 10 2>&1 | tee "$log"
-          coverage combine --quiet
-          coverage report --fail-under="$COVERAGE_FLOOR"
-          pct="$(coverage report --format=total --precision=2)"
-          ran="$(sed -nE 's/^Ran ([0-9]+) tests? in ([0-9.]+)s$/\1 tests in \2s/p' "$log")"
-          {
-            echo "### Python ${PYTHON}: ${ran}, coverage ${pct}% (floor ${COVERAGE_FLOOR}%)"
-            if [ "$PYTHON" = "$OLDEST" ]; then
-              echo
-              echo "<details><summary>Slowest tests</summary>"
-              echo
-              echo "| Seconds | Test |"
-              echo "| ---: | --- |"
-              sed -n '/^Slowest test durations/,/^$/p' "$log" | grep -E '^[0-9.]+s ' \
-                | sed -E 's/^([0-9.]+)s +[^ ]+ \(([^)]+)\).*/| \1 | <code>\2<\/code> |/'
-              echo
-              echo "</details>"
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-      - name: The README badge states the coverage actually measured
-        # The README is static, so the badge is verified rather than
-        # generated. The same script runs in scripts/ci-local.sh.
-        if: matrix.python == steps.toolchain.outputs.oldest-python
-        run: scripts/coverage-badge.sh
+      - name: Tests
+        # Every gate named tests:* in mise.toml.
+        run: mise run tests
 
   # Real-browser layout invariants over synthetic example.* pages
-  # (core/browser_tests.py). Every request the page makes is answered in
-  # process; the browser reaches nothing. scripts/ci-local.sh runs the same.
+  # (hq/platform/core/browser_tests.py). Every request the page makes is answered in
+  # process; the browser reaches nothing.
   browser:
     name: Browser
     needs: proven
     if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    env:
-      DJANGO_DEBUG: "1"
-      DJANGO_SECRET_KEY: ci-only-secret-key-not-for-production
-      DJANGO_ALLOWED_HOSTS: "127.0.0.1,testserver"
-      SEVERINO_LOG_LEVEL: CRITICAL
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/toolchain
-        with:
-          cache: pip
-      - run: pip install --require-hashes -r requirements.txt
-      - run: pip install --require-hashes -r requirements-browser.txt
       # Keyed on the hashed lock: Playwright pins its Chromium build, so a new
       # pin is a new browser and a new cache entry.
       - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('requirements-browser.txt') }}
-      - name: Install Chromium and its system libraries
-        run: python -m playwright install --with-deps --only-shell chromium
-      - name: Browser layout gate
-        run: python manage.py test core.browser_tests --noinput --parallel 1
+          key: playwright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+      - name: Browser
+        # Every gate named browser:* in mise.toml.
+        run: mise run -c browser
+
+  # The Go controller: format, generated types against their specs, vet, and
+  # the unit tests under the race detector.
+  controller:
+    name: Controller
+    needs: proven
+    if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: controller/go.mod
+          cache-dependency-path: controller/go.sum
+      - uses: ./.github/actions/toolchain
+      - name: Controller
+        # Every gate named controller:* in mise.toml.
+        run: mise run -c controller
 
   image:
     name: Image
@@ -527,27 +263,14 @@ jobs:
             --build-arg "DEBIAN_SECURITY_RELEASE=$security_release" \
             -t "$image" .
           echo "image=$image" >> "$GITHUB_OUTPUT"
-      - name: It runs Python 3.14 without package managers
+      - uses: ./.github/actions/toolchain
+        if: env.PROVEN == ''
+      - name: Every check an image must pass
+        # Every gate named image:verify:* in mise.toml, against the image just built.
         if: env.PROVEN == ''
         env:
           IMAGE: ${{ steps.build.outputs.image }}
-        run: |
-          docker run --rm --entrypoint python "$IMAGE" -c \
-            "import importlib.util, shutil, sys; sys.exit(0 if sys.version_info[:2] == (3, 14) and importlib.util.find_spec('pip') is None and shutil.which('pip') is None and shutil.which('uv') is None else 1)"
-      - name: It comes up healthy
-        if: env.PROVEN == ''
-        env:
-          IMAGE: ${{ steps.build.outputs.image }}
-        run: scripts/image-health.sh "$IMAGE"
-      - name: It cannot import development layers
-        if: env.PROVEN == ''
-        # requirements-dev.txt is never installed in the image; this proves it.
-        env:
-          IMAGE: ${{ steps.build.outputs.image }}
-        run: |
-          docker run --rm --entrypoint python "$IMAGE" -c \
-            "import importlib.util, sys; sys.exit(importlib.util.find_spec('debug_toolbar') is not None)"
-          echo "the image does not contain debug_toolbar"
+        run: mise run -c image
       # Scans the exact artifact about to be published: a fixable HIGH or
       # CRITICAL in the image stops it here.
       - name: Scan
@@ -612,7 +335,7 @@ jobs:
 
   ready:
     name: Ready
-    needs: [proven, checks, tests, browser, image]
+    needs: [proven, checks, tests, browser, controller, image]
     # Waits for every gate, and on a pull request for the same commit's Compose
     # and CodeQL too, then moves HQ's review to its verdict: ready to merge, or
     # held, why and what fixes it. That review is the one check the ruleset

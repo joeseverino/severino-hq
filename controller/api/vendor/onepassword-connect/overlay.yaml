@@ -1,0 +1,15 @@
+overlay: 1.0.0
+info:
+  title: Timestamps the renderer never reads stay strings
+  version: 1.0.0
+actions:
+  # A timestamp Connect formats differently must not fail the decode of an
+  # item whose fields are what is being read.
+  - target: $.components.schemas.Item.properties.createdAt.format
+    remove: true
+  - target: $.components.schemas.Item.properties.updatedAt.format
+    remove: true
+  - target: $.components.schemas.Vault.properties.createdAt.format
+    remove: true
+  - target: $.components.schemas.Vault.properties.updatedAt.format
+    remove: true

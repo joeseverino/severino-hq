@@ -1,0 +1,36 @@
+overlay: 1.0.0
+info:
+  title: GitHub REST types the controller decodes
+  version: 1.0.0
+actions:
+  # The one server carries no description to name its generated constant from.
+  - target: $.servers[0]
+    update:
+      x-go-name: ServerURL
+  # The create body's oneOf only restates which conclusion a completed status
+  # requires; its discriminator maps no schema, which oapi-codegen refuses.
+  - target: $.paths['/repos/{owner}/{repo}/check-runs'].post.requestBody.content['application/json'].schema.oneOf
+    remove: true
+  - target: $.paths['/repos/{owner}/{repo}/check-runs'].post.requestBody.content['application/json'].schema.discriminator
+    remove: true
+  # GitHub grants a token Actions variables as actions_variables, which the
+  # description's app-permissions does not list.
+  - target: $.components.schemas['app-permissions'].properties
+    update:
+      actions_variables:
+        type: string
+        description: The level of permission to grant the access token to manage GitHub Actions configuration variables.
+        enum:
+          - read
+          - write
+  # The update body's anyOf only restates the same rule, and the union it
+  # generates marshals every field, an empty conclusion included.
+  - target: $.paths['/repos/{owner}/{repo}/check-runs/{check_run_id}'].patch.requestBody.content['application/json'].schema.anyOf
+    remove: true
+  # Keep enum symbols stable when trimming removes unrelated collisions.
+  - target: $.components.schemas.workflow.properties.state
+    update:
+      x-enum-varnames: [WorkflowStateActive, WorkflowStateDeleted, WorkflowStateDisabledFork, WorkflowStateDisabledInactivity, WorkflowStateDisabledManually]
+  - target: $.components.schemas['content-directory'].items.properties.type
+    update:
+      x-enum-varnames: [ContentDirectoryTypeDir, ContentDirectoryTypeFile, ContentDirectoryTypeSubmodule, ContentDirectoryTypeSymlink]

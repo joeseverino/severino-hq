@@ -1,0 +1,22 @@
+# What ../slice.py keeps of Cloudflare's spec; the operations are oapi-codegen.yaml's.
+strip = ["readOnly", "writeOnly", "format", "default"]
+
+# What each call's envelope result is decoded as. Access applications, DNS
+# records, page rules, rulesets and zone settings are unions the provider
+# decodes into its own types (cloudflare_types.go).
+[decodes]
+accounts-list-accounts = ["iam_account"]
+access-service-tokens-list-service-tokens = ["access_service-tokens"]
+certificate-packs-list-certificate-packs = ["tls-certificates-and-hostnames_certificate_pack"]
+cloudflare-tunnel-configuration-get-configuration = ["tunnel_configuration"]
+cloudflare-tunnel-list-cloudflare-tunnel-connections = ["tunnel_tunnel_client"]
+cloudflare-tunnel-list-cloudflare-tunnels = ["tunnel_cfd_tunnel"]
+d1-list-databases = ["d1_database-response"]
+getZoneRuleset = ["rulesets_RedirectFromValue"]
+pages-project-get-projects = ["pages_project"]
+registrar-domain-registration-list = ["registrar-api_registration"]
+user-api-tokens-verify-token = ["iam_token_verify_response_single_segment"]
+web-analytics-list-sites = ["rum_site"]
+zones-get = ["zones_zone"]
+
+[go-names]

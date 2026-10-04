@@ -8,15 +8,15 @@ HQ can read is not typed in.
 
 | | Where it lives | Who writes it |
 |---|---|---|
-| Resource | `control_plane.providers.PROVIDERS` | Declared or adopted; HQ can reconcile it |
-| Reading | `control_plane.observations.OBSERVATIONS` | Observed only; HQ never changes it |
-| Setting | `config/settings.py` | Deployment-local; derived where HQ holds the fact |
+| Resource | `hq.domains.control_plane.providers.PROVIDERS` | Declared or adopted; HQ can reconcile it |
+| Reading | `hq.domains.control_plane.observations.OBSERVATIONS` | Observed only; HQ never changes it |
+| Setting | `hq/config/settings.py` | Deployment-local; derived where HQ holds the fact |
 | Registry data | Projects, assets | Derived where a connection knows it, else imported once |
 
 ## Readings
 
 A reading is registered once, in the module for its provider under
-`control_plane/observations/`:
+`hq/domains/control_plane/observations/`:
 
 ```python
 class PagesProjectRecord(ObservationRecord):
@@ -36,29 +36,16 @@ ObservationSpec(
 )
 ```
 
-and read by one function registered one of two ways, and no other
-(`controller_runtime/tests/test_reader_registration.py` holds it): a core reader in
-one of the controller's integration modules
-(`controller_runtime/cloudflare_account.py`, `tailscale.py`,
-`host_readings.py`), registered beside its definition:
+and read by one Go reader in the controller's integration
+(`controller/providers/`), registered in its `admit` function:
 
-```python
-@reads("cloudflare.pages_project")
-def list_pages_projects() -> list[dict[str, Any]]:
-    ...
+```go
+r.reader(runtime.ResourceKindCloudflarePagesProject, r.cloudflarePagesProjects)
 ```
 
-or, for an integration with a controller adapter, in the adapter's `readings`
-map (`control_plane/provider_adapters/`), which admits only a registered kind
-read through a connection the integration holds (its definitions' connections,
-or `reads_through` for an integration whose resource kinds the controller core
-holds). A reading through such a connection is always the adapter's:
-
-```python
-ControllerIntegrationAdapter(..., readings={"adguard.client": read_clients})
-```
-
-A reader iterates the provider's connections (`runtime.connection_refs`) and
+The contract's `SweptKind` names every kind read this way; a Go test holds it
+equal to the registered readers and Django's contract test holds it to the
+registry. A reader iterates the provider's connections (`r.Env.Refs`) and
 stamps each record with its `connection_ref`, so a reading is attributed to the
 connection that took it.
 
@@ -68,16 +55,16 @@ Rules:
   stored. A provider response is never stored whole. Fields that carry secret
   material (tokens, client secrets, environment values, private keys) are never
   named.
-- **A refused read raises.** The sweep stores the kind as unreachable with the
-  reason, and the page shows the reason with `requires`. Returning `[]` means
-  the provider has none.
+- **A refused read is an error.** The sweep stores the kind as unreachable
+  with the reason, and the page shows the reason with `requires`. Returning no
+  records means the provider has none.
 - **A partial read says so, as a part.** A reading read in pieces declares
   them in `parts` (`ReadingPart(name, label, requires)`, each `requires` a
   subset of the reading's). A reader that cannot read one calls
-  `refuse_part(part, exc, scope=..., connection_ref=..., address=...)`
-  (`control_plane/provider_adapters/parts.py`); the sweep reports
+  `refuse(ctx, part, connectionRef, scope, err)` or `refuseAt(..., address, err)`
+  (`controller/providers/provider.go`); the sweep reports
   the kind's `refused_parts` beside its records and HQ stores them
-  (`control_plane.reading_parts`). A refused part is never a record or a record
+  (`hq.domains.control_plane.reading_parts`). A refused part is never a record or a record
   field, so a count never includes it. The whole kind on one zone, or on one
   machine (`scope` its name, `address` its address), is the part `""`. Resource kinds swept in parts declare them on their provider, `ProviderSpec.parts` (a zone's
   TLS posture and registration, the tailnet policy's settings, DNS and
@@ -112,7 +99,7 @@ Rules:
   edge certificate supplies a name's certificate, a Pages project its runtime,
   an address registration who holds the network. `expires` and `issuer` read
   those two facts off a record; an issuer is named through
-  `control_plane.certificate_authorities`. `short_label` is the label under a
+  `hq.domains.control_plane.certificate_authorities`. `short_label` is the label under a
   column that already names the facet ("Edge" under Certificate).
 - **A reading can name services and route them.** `names_services` makes each
   of a record's hostnames a service, marked observed when nothing declares it
@@ -157,8 +144,7 @@ and the containers running each, with the reference each was started from) and
 `portainer.compose_project` (Portainer stacks and compose labels). Each record
 names `host` and `host_address`, so it joins the machine by either. One
 container list per environment feeds all of them within a sweep
-(`control_plane/provider_adapters/portainer_readings.py`, declared by the
-Portainer adapter). An environment that cannot be read is the whole reading
+(`controller/providers/portainer_readings.go`). An environment that cannot be read is the whole reading
 refused on that machine (`scope` the machine, `address` its address), so it
 shows on that machine's page; every environment refusing raises.
 
@@ -166,20 +152,19 @@ The NPM login feeds `npm.certificate` (joined to the names NPM serves with it,
 not every name it covers), `npm.redirect` (the same `redirects_to` as
 `cloudflare.redirect`, answered at the ingress: `facet` `proxy`),
 `npm.stream`, `npm.access_list` (address rules and login names, never
-passwords) and `npm.dead_host` (`control_plane/provider_adapters/npm_readings.py`,
-declared by the NPM adapter). `requires` names NPM's own permission areas
+passwords) and `npm.dead_host` (`controller/providers/npm.go`). `requires` names NPM's own permission areas
 (`certificates: view`). A host list the login may not see is a refused part:
 of `npm.certificate` (which names each certificate serves) and of
 `npm.access_list` (which names it guards). A 401 is a refused credential and a
-403 a missing permission (`control_plane/provider_adapters/refusals.py`).
+403 a missing permission (`runtime.StatusFailure`).
 
 ## Facts about a subject
 
-`application.facts` is the join engine. Every page that attaches a reading to
+`hq.platform.application.facts` is the join engine. Every page that attaches a reading to
 a subject calls it; nothing else parses a record to join it.
 
 ```python
-from application.facts import Subject, readings, inventory_about
+from hq.platform.application.facts import Subject, readings, inventory_about
 
 subject = Subject.of(hostnames=("app.example.com",))      # a service
 subject = Subject.of(hostnames=names, addresses=addrs)     # a machine
@@ -305,7 +290,7 @@ HQ can run: an access list on the proxy host it declares.
 
 ## History
 
-The audit log (`/audit/`) is the one history. `application.history` lays what
+The audit log (`/audit/`) is the one history. `hq.platform.application.history` lays what
 each source dates on it, newest first, and its Source filter picks them apart:
 - Through HQ: what anyone did through HQ, from the audit log.
 - Outside HQ: when a reading's records changed between two sweeps. The sweep
@@ -323,17 +308,17 @@ time falls on. A search, another sort, an action filter or `?awaiting=1` lists
 the audit rows one by one.
 
 Every condition a resource reports carries `since`, which is kept while the
-condition holds the same way (`application.conditions`). So a drift keeps the
+condition holds the same way (`hq.platform.application.conditions`). So a drift keeps the
 moment it was first seen. The topology gives a drifted declaration that moment
 and what the same history holds within six hours of it
-(`application.history.near`), and the drift findings show both beside the
+(`hq.platform.application.history.near`), and the drift findings show both beside the
 key-level difference. That way "Keep the live version" or "Restore HQ's
 version" is decided next to the deploy, recreate or edit that likely caused it.
 
 ## Contradictions
 
 Each connection reports alone, and each report can be healthy while together
-they describe something that cannot work. `application/contradiction_findings.py`
+they describe something that cannot work. `hq/platform/application/contradiction_findings.py`
 reads the walked paths and stored readings for these, polling nothing:
 
 | Rule | Two sides that disagree | Fix HQ offers |
@@ -374,16 +359,16 @@ joins to its machine, phrased from the container's side (`container_relation`:
 network's driver and subnets), shown beside it on every relationship row. Two
 declared containers on a user-defined Docker network (not `bridge`, `host` or
 `none`) also have a `talks_to` edge naming the network
-(`application/docker_estate.py`). The machine page's Docker bands (environment,
+(`hq/platform/application/docker_estate.py`). The machine page's Docker bands (environment,
 compose projects, networks, where data lives, images) and the service page's
 "Who is allowed" band read the same joined records
-(`application/docker_sections.py`, `application/npm_sections.py`).
+(`hq/platform/application/docker_sections.py`, `hq/platform/application/npm_sections.py`).
 
 Findings from these readings: `container-image-behind` (the machine's own tag
 now names a different image than the container runs; no registry is asked),
 `container-image-untagged`, and `certificate-expiring` for any
 certificate-facet reading within 21 days of expiry, by `expiry.days_until`,
-on the connection that read it (`application/certificate_expiry.py`).
+on the connection that read it (`hq/platform/application/certificate_expiry.py`).
 
 The machine, service, domain and declaration pages render the section from
 it, with "See in topology" (`?focus=<node>`), one "Not readable" line linking
@@ -403,8 +388,8 @@ machine answering at its address (`policy_links`).
 
 RDAP needs no credential, so HQ reads it rather than a controller:
 `registry.address` (who holds a public address) and `registry.domain` (a
-domain's registrar and expiry), in `control_plane/observations/public_registry.py`.
-`application.public_registry.refresh` runs from `manage.py refresh_public_registry`,
+domain's registrar and expiry), in `hq/domains/control_plane/observations/public_registry.py`.
+`hq.platform.application.public_registry.refresh` runs from `manage.py refresh_public_registry`,
 never from a page: the host starts it once a day, and at once when HQ rings
 its doorbell (`/run/severino-hq/registry-doorbell`, watched by
 `severino-hq-public-registry.path`) because a sweep found an image or a digest
@@ -427,18 +412,18 @@ the registrar is not read. Auto-renew is then unknown, and the page says so.
 The same refresh reads what a running container's image is and whether it is
 current, also keyless. `registry.image` is each image a container runs, read
 from its own registry over the OCI distribution API with an anonymous pull
-token (`application.oci_registry`): the tags that carry a version, and the
+token (`hq.platform.application.oci_registry`): the tags that carry a version, and the
 build labels naming the repository it is built from. `registry.upstream` is
 each GitHub repository an image names that way, or lives under in `ghcr.io`:
 its recent releases and its published security advisories with their version
-ranges and fixes (`application.github_public`). Upstreams are chosen from the
+ranges and fixes (`hq.platform.application.github_public`). Upstreams are chosen from the
 images just read, and fewer are read per run, because GitHub's anonymous limit
 is shared with Watching. Every host a registry read touches is named by someone
 else (the image, the registry's token challenge, a redirect to a CDN), so each
 request is HTTPS to a name resolving only to public addresses, a token never
 follows a redirect to another host, and a response is size-capped.
 
-`application.containers` joins them per running container: the version it runs
+`hq.platform.application.containers` joins them per running container: the version it runs
 (the tag, or the tag its digest was pulled as), newer tags of the same shape
 (`1.31.3-alpine` is compared only with `N.N.N-alpine`), and the advisories whose
 range holds that version, where a stated fix at or below it clears an
@@ -454,13 +439,13 @@ whether a running tag has been rebuilt since it was pulled (`moved_to`). A
 digest that could not be read makes its image due again on the next run.
 
 `registry.digest` is what the publisher attached to each of those digests, read
-once (`application.oci_registry.attestations`, `application.attestations`): the
+once (`hq.platform.application.oci_registry.attestations`, `hq.platform.application.attestations`): the
 in-toto statements BuildKit puts beside a platform's manifest, from which HQ
 keeps the SBOM's package URLs and the SLSA provenance's source, commit, builder
 and base images. Metadata beside the image, never a layer of it: nothing is
 pulled and nothing runs. The statements are the publisher's word and unsigned,
 and the page says "states", not "proves". `registry.vulnerabilities` is those
-packages checked against OSV (`application.osv`), keyless, one batch per
+packages checked against OSV (`hq.platform.application.osv`), keyless, one batch per
 thousand packages, each vulnerability's detail read once and kept until OSV
 modifies it: the id, the package and version installed, the versions that fix
 it, and a severity where the database gives one.
@@ -477,20 +462,20 @@ unrated or unfixed one is shown, never raised.
 Portainer: user, privilege, capabilities, host namespaces, security options,
 devices, mounts, port bindings, limits, restart policy and health check. It is
 built field by field, so the environment, the command line and labels, which
-the inspect document also carries, are never stored. `application.container_standard`
-holds each container to a standard over it (`application.standards`, the same
+the inspect document also carries, are never stored. `hq.platform.application.container_standard`
+holds each container to a standard over it (`hq.platform.application.standards`, the same
 primitive as the GitHub posture): reach over the machine (privilege, the Docker
 socket, the host's process namespace, confinement off, a writable system path,
 a machine-level capability) is serious and queued, one item per check naming
 every container that fails it; hardening (a non-root user, no-new-privileges,
 its own network, bound ports, a memory limit, a health check) is shown and not
-queued. `application.supply_chain` holds the image to a second standard on the
+queued. `hq.platform.application.supply_chain` holds the image to a second standard on the
 same primitive: pinned to a digest, its source known, its build described, its
 packages listed, no fixable serious vulnerability, no advisory against its
 version, its tag still naming what runs. A check HQ could not read is
 unavailable, never failed.
 
-`application.upgrades` plans an upgrade for every container something newer is
+`hq.platform.application.upgrades` plans an upgrade for every container something newer is
 published for, and changes nothing: the target by digest, the size of the move,
 the advisories and package vulnerabilities it clears or would bring (the two
 digests' OSV readings compared), the writable mounts that would be
@@ -518,12 +503,12 @@ deploy keys, the default workflow token, Actions settings), and the names of its
 Actions variables. Each part is refused on its own where the repository's plan
 offers none, and says so.
 
-`application.github_estate` joins a project to its repository by URL and puts
+`hq.platform.application.github_estate` joins a project to its repository by URL and puts
 what waits on a person on the action queue: a deploy held for approval, a
 failing default branch, a deploy that failed its own verification, serious
 alerts, an admission about to lapse.
 
-`application.github_posture` holds every repository to a standard derived from
+`hq.platform.application.github_posture` holds every repository to a standard derived from
 the same record: what every repository is held to (only you have access, deploy
 keys read-only and in use, a read-only workflow token that approves nothing,
 actions pinned to a commit, Dependabot security fixes, no Actions variables),
@@ -552,19 +537,19 @@ whose workflows were not read gets the reason instead.
 
 Watching reads the signed-in person's own GitHub profile and the repositories
 they star from GitHub's public API, credential-free: whose profile is the login
-their sign-in claims (`application.linked_accounts`), never one typed into HQ.
+their sign-in claims (`hq.platform.application.linked_accounts`), never one typed into HQ.
 
 ## Machine roles
 
 What a machine does for the estate is derived from the tailnet readings by the
-rules in `application.machine_roles.ROLES`: an exit node offers and has approved
+rules in `hq.platform.application.machine_roles.ROLES`: an exit node offers and has approved
 both default routes; the tailnet DNS server holds an address the policy names as
 a nameserver. The machine list, the machine page's Serves card and search read
 `Machine.roles`.
 
 ## The estate at a glance
 
-`application.estate.estate_reading` reads the machine catalogue, the service
+`hq.platform.application.estate.estate_reading` reads the machine catalogue, the service
 catalogue, the zone names, the connection rows and the joined readings once per
 projection. The dashboard's estate card, the estate action items (offline
 machines, managed certificates in their renewal window) and the command
@@ -572,14 +557,14 @@ center's estate results read it.
 
 ## Machine surfaces
 
-Each derived read is also a registered resource (`application.derived_reads`):
+Each derived read is also a registered resource (`hq.platform.application.derived_reads`):
 `estate`, `action.items`, `machines`, `domains`, `relationships`, `readings`,
 `credentials` and `search`. Each handler calls the function its page calls, so
 the API, MCP, CLI and SDK answer what the page shows. See `docs/API.md`.
 
 ## Topology
 
-Machines, services and domains are nodes of their own (`application.topology_estate`).
+Machines, services and domains are nodes of their own (`hq.platform.application.topology_estate`).
 A controller or target that names one folds into it; anything else a
 connection reaches stays a target. A machine is reached through the
 connections the machine catalogue names. A domain's join keys are every name
@@ -598,7 +583,7 @@ that name it. A node no sweep or reading can observe says so; one that can but
 has not been read says it is not observed yet.
 
 HQ's own service is a service node too, running on the machine the machine
-catalogue names (`application.hq_self`), the same answer as the machine page
+catalogue names (`hq.platform.application.hq_self`), the same answer as the machine page
 and the services list.
 
 ## Trust
@@ -655,8 +640,8 @@ what both upserts require.
 ### Precedence of derived fields
 
 A derived value wins over an imported one. `Project.public_url` is the case
-today: it is how `application.published_sites.projects_by_hostname` ties a project to
-a service and how `content.content_sync.index_project` finds the site that
+today: it is how `hq.platform.application.published_sites.projects_by_hostname` ties a project to
+a service and how `hq.domains.content.content_sync.index_project` finds the site that
 serves the content index, and a Pages project can supply it.
 
 - The import sets a derivable field only when the stored value is blank or
@@ -667,7 +652,7 @@ serves the content index, and a Pages project can supply it.
 - A derivation writes over an imported value. Where a reading and a stored
   value disagree, the facts panel shows both.
 
-Derivable fields are listed in `application.registry_import.DERIVED_FIELDS`.
+Derivable fields are listed in `hq.platform.application.registry_import.DERIVED_FIELDS`.
 A field a connection starts to derive is added there.
 
 ## Credential lists
@@ -677,7 +662,7 @@ them: Cloudflare as `<permission group name> (<account|zone>)`, Tailscale as the
 bare scope name. A part of a reading names the subset it needs in `parts`.
 `scripts/cloudflare-observer-permissions.txt` and
 `scripts/tailscale-observer-scopes.txt` hold every reading's `requires` plus
-the reads in `control_plane.credential_reads` that are not readings yet; a test
+the reads in `hq.domains.control_plane.credential_reads` that are not readings yet; a test
 keeps them equal.
 
 ## What a credential can see
@@ -699,7 +684,7 @@ reading it feeds and every resource kind a sweep reads. A kind with an
 - **Never swept**.
 
 A readable kind older than its cadence allows reads **Out of date**
-(`application.freshness`). The services page's provider readings use the same
+(`hq.platform.application.freshness`). The services page's provider readings use the same
 words, through `credential_sight.standing`.
 
 A connection whose probe fails reports why, as `failure`, classified where the

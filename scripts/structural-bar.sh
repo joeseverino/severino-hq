@@ -9,7 +9,7 @@
 #   scripts/structural-bar.sh --record   # rewrite the baseline from this tree
 #
 # Needs codebase-memory-mcp (https://github.com/DeusData/codebase-memory-mcp).
-# Exit 3 when it is missing, so ci-local reports the gate as not run.
+# Exit 3 when it is missing, which fails the gate (`mise run checks:structural`).
 set -eu
 
 repo="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
@@ -23,30 +23,27 @@ command -v "${cbm}" >/dev/null 2>&1 || {
 }
 
 cli() { # cli <tool> <json args>
-    printf '%s' "$2" | "${cbm}" cli --json "$1" 2>/dev/null
+    printf '%s' "$2" | "${cbm}" cli --json "$1" 2>"${errors}"
 }
 
-cli index_repository "{\"repo_path\":\"${repo}\",\"mode\":\"full\",\"name\":\"${project}\"}" >/dev/null
+errors="$(mktemp)"
+# The tool says why it could not index; without that this fails silently.
+cli index_repository "{\"repo_path\":\"${repo}\",\"mode\":\"full\",\"name\":\"${project}\"}" >/dev/null || {
+    cat "${errors}" >&2
+    rm -f "${errors}"
+    exit 1
+}
 
 current="$(mktemp)"
-trap 'rm -f "${current}"' EXIT
+graph="$(mktemp)"
+inspector="$(mktemp)"
+trap 'rm -f "${current}" "${graph}" "${inspector}" "${errors}"' EXIT
+# Syntax inspection uses the Go standard library; provider code is never loaded.
+go build -o "${inspector}" "${repo}/scripts/structural_go.go"
+STRUCTURAL_INSPECTOR="${inspector}" python3 "${repo}/scripts/test_structural_classify.py"
 
-cli query_graph "{\"project\":\"${project}\",\"query\":\"MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, a.name, b.file_path, b.name\"}" |
-    python3 -c '
-import json, re, sys
-text = json.load(sys.stdin)["content"][0]["text"]
-test = re.compile(r"(^|/)(test_[^/]*|tests|[^/]*_tests)\.py$|(^|/)tests/")
-pairs = set()
-for line in text.splitlines()[1:]:
-    cells = line.split()
-    if len(cells) != 4 or line.startswith("total"):
-        continue
-    a, b = (cells[0], cells[1]), (cells[2], cells[3])
-    if test.search(a[0]) or test.search(b[0]):
-        continue
-    pairs.add("similar " + " <> ".join(sorted(f"{path}::{name}" for path, name in (a, b))))
-print("\n".join(sorted(pairs)))
-' >"${current}"
+cli query_graph "{\"project\":\"${project}\",\"query\":\"MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name\"}" >"${graph}"
+python3 "${repo}/scripts/structural_classify.py" "${repo}" "${inspector}" <"${graph}" >"${current}"
 
 cd "${repo}"
 git ls-files '*.py' | grep -Ev '(^|/)(test_[^/]*|tests|[^/]*_tests)\.py$|(^|/)tests/|/migrations/' |

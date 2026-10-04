@@ -153,7 +153,7 @@ def _shape(value: object) -> dict[str, Any]:
 def describe() -> dict[str, Any]:
     """The current contract, as plain JSON data."""
 
-    from application.plugins import PLUGIN_API_VERSION
+    from hq.platform.application.plugins import PLUGIN_API_VERSION
 
     modules = {}
     for name in module_names():

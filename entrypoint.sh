@@ -9,7 +9,7 @@
 
 set -eu
 
-# The 1Password-rendered app env is loaded by config/settings.py (so exec'd
+# The 1Password-rendered app env is loaded by hq/config/settings.py (so exec'd
 # processes get it too): nothing to source here.
 
 # Temporary files outlive only the process that made them; whatever a killed

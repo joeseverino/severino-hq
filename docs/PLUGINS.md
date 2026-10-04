@@ -39,7 +39,7 @@ plugin = PluginManifest(
     url_prefix="notes/",
     urlconf="example_notes.urls",
     navigation=(NavigationItem("Notes", "notes:list", "notes"),),
-    token_authenticated_routes=("api/v1/",),
+    token_authenticated_routes=("webhook/",),
     operator_capabilities=("notes.read", "notes.write"),
     mcp_read_capabilities=("notes.read",),
     mcp_write_capabilities=("notes.write",),
@@ -51,8 +51,8 @@ the deployment image, and run its migrations. `python manage.py plugins` emits
 the effective, machine-readable inventory and validates compatibility.
 
 Capabilities a manifest declares are the plugin's own: naming one of the host's
-fails at startup, and so does a `url_prefix` under a path the host exempts from
-sign-in. A route that authenticates its own requests is listed in
+fails at startup. Every plugin view needs a session wherever it is mounted; a
+route that authenticates its own requests is listed in
 `token_authenticated_routes`.
 
 ## The golden path
@@ -388,8 +388,8 @@ no topology template, route, callback, or host edit.
 ## Shared UI contract
 
 Installable modules inherit HQ's design system and should not ship a parallel
-stylesheet for ordinary application structure. API v1 guarantees these host
-templates:
+stylesheet for ordinary application structure. The plugin API guarantees these
+host templates:
 
 | Template | Contract |
 | --- | --- |

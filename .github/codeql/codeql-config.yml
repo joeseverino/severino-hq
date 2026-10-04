@@ -23,4 +23,4 @@ query-filters:
 # names statically, so it re-exports the host's settings with `import *`; the
 # file never runs inside HQ.
 paths-ignore:
-  - config/settings_typecheck.py
+  - hq/config/settings_typecheck.py

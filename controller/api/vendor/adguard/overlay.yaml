@@ -1,0 +1,26 @@
+overlay: 1.0.0
+info:
+  title: Tolerant reads for older AdGuard releases
+  version: 1.0.0
+actions:
+  # Older AdGuard Home builds leave these fields out; the provider treats an
+  # absent field as unknown, so they must not be required.
+  - target: $.components.schemas.ServerStatus.required
+    remove: true
+  - target: $.components.schemas.GetQueryLogConfigResponse.required
+    remove: true
+  - target: $.components.schemas.RewriteSettings.required
+    remove: true
+  - target: $.components.schemas.Filter.required
+    remove: true
+  # Interval is milliseconds as a JSON number; float32 would round it.
+  - target: $.components.schemas.GetQueryLogConfigResponse.properties.interval
+    update:
+      format: double
+  - target: $.components.schemas.Filter.properties.rules_count
+    update:
+      format: int64
+  - target: $.components.schemas.Filter.properties.last_updated.format
+    remove: true
+  - target: $.components.schemas.QueryLogItemClient.required
+    remove: true

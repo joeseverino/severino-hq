@@ -19,6 +19,6 @@ loads.
 column by, so a read of "sessions since the 1st" uses the column's index.
 """
 
-from application.projection import day_span, read_once
+from hq.platform.application.projection import day_span, read_once
 
 __all__ = ["day_span", "read_once"]

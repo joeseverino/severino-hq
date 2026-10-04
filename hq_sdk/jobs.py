@@ -31,7 +31,7 @@ it the only way through would be importing the host's `jobs` package
 directly, which is precisely what this facade exists to prevent.
 """
 
-from jobs.models import Job
-from jobs.runner import JobConflict, Progress, reap, start
+from hq.domains.jobs.models import Job
+from hq.domains.jobs.runner import JobConflict, Progress, reap, start
 
 __all__ = ["Job", "JobConflict", "Progress", "reap", "start"]

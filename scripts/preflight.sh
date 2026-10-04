@@ -6,17 +6,17 @@
 #   scripts/preflight.sh --skip-host   # local gates only; never exits 0
 #
 # Runs, in order:
-#   1. scripts/ci-local.sh, with every gate required (a gate it cannot run fails);
+#   1. `mise run ci`: every gate the pipeline runs (one that cannot run fails);
 #      or, with --remote, every check GitHub ran on this exact commit, waited
 #      for and required to pass: the same gates, on GitHub's machines. The
 #      commit must be pushed.
-#   2. scripts/check.sh, with the composed pass required (SEVERINO_HQ_PLUGINS set)
+#   2. `mise run suite:composed`, required (SEVERINO_HQ_PLUGINS set)
 #   3. scripts/preflight-host.sh on the deploy host over SSH: read-only checks
 #      of the checkout's ownership, the runner's sudo rule, the root-owned
 #      programs against this commit, the installed units and free disk.
 #
 # The host is SEVERINO_HQ_DEPLOY_HOST, an SSH destination, set in the
-# environment or in .env.dev (see scripts/dev.env.example). The release is
+# environment or in mise.local.toml (see scripts/mise.local.example.toml). The release is
 # HEAD, which must be committed: a check of uncommitted files proves nothing
 # about the commit that ships.
 #
@@ -38,12 +38,6 @@ for argument in "$@"; do
     esac
 done
 
-if [ -f .env.dev ]; then
-    set -a
-    # shellcheck disable=SC1091  # optional, developer-local
-    . ./.env.dev
-    set +a
-fi
 # shellcheck source=scripts/lib/systemd-units.sh
 . ./scripts/lib/systemd-units.sh
 
@@ -99,15 +93,15 @@ github_gates() {
 if [ "${remote}" -eq 1 ]; then
     gate "every GitHub check on this commit" github_gates
 else
-    gate "ci-local, every gate required" env CI_LOCAL_REQUIRE_ALL=1 scripts/ci-local.sh
+    gate "every gate the pipeline runs" mise run -c ci
 fi
-gate "check.sh, composed pass required" env CHECK_REQUIRE_COMPOSED=1 scripts/check.sh
+gate "the suite composed with the extensions" env REQUIRE_COMPOSED=1 mise run suite:composed
 
 # The host half's inputs, derived from this commit and from main.
 host_payload() {
     work="$1"
     mkdir -p "${work}/release" "${work}/main"
-    git archive HEAD scripts config deploy docker-compose.yml | tar -x -C "${work}/release"
+    git archive HEAD scripts hq/config deploy docker-compose.yml | tar -x -C "${work}/release"
     git archive "${PREFLIGHT_BASE_REF:-origin/main}" deploy/systemd | tar -x -C "${work}/main"
     units_shipped "${work}/release/deploy/systemd" >"${work}/release-units"
     # Shipped by main and by this release: already installed, if the host is current.

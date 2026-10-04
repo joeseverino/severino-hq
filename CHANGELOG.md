@@ -50,7 +50,7 @@ one gated path.
 
 ### Added
 
-- Readings: one observation contract (`control_plane/observations/`). A schema
+- Readings: one observation contract (`hq/domains/control_plane/observations/`). A schema
   is the allowlist for what is stored, each kind has one reader, and a refused
   read says which permission is missing. Cloudflare (DNS, Pages, D1, Access
   applications and service tokens, tunnels, edge certificates, zone settings,
@@ -120,7 +120,7 @@ The first cut: a private operations app.
 - Authentication: login-required on every URL except `/accounts/login/` and
   `/static/`. No public registration.
 - Dashboard with YTD KPIs (expenses total, estimated deductible, active
-  projects/assets, draft content, docs needing review, recent activity).
+  hq/domains/projects/assets, draft content, docs needing review, recent activity).
 - CRUD UI for projects, content items, documentation records, assets,
   expenses, receipts, with search, filter, sort, pagination.
 - Auto-computed `estimated_deductible_amount = total_cost * business_use_pct`

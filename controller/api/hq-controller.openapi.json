@@ -1,0 +1,2190 @@
+{
+  "openapi": "3.2.0",
+  "info": {
+    "title": "HQ controller bridge",
+    "version": "1.0.0",
+    "description": "The contract between Severino HQ and its infrastructure controller. Each path is one bridge action (today the infrastructure_controller management command, payload on stdin, JSON on stdout). Go types are generated from components/schemas; Django's tests validate every action's output against them."
+  },
+  "paths": {
+    "/claim": {
+      "post": {
+        "operationId": "claim",
+        "summary": "Lease the next compatible operation.",
+        "x-bridge-action": "claim",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lease-seconds",
+            "in": "query",
+            "required": false,
+            "description": "Lease length, 30 to 3600.",
+            "schema": {
+              "type": "integer",
+              "minimum": 30,
+              "maximum": 3600
+            }
+          },
+          {
+            "name": "capability",
+            "in": "query",
+            "required": false,
+            "description": "A kind:action the controller can perform.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The command's JSON output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pending"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/peek": {
+      "post": {
+        "operationId": "peek",
+        "summary": "Read the next compatible operation without leasing it.",
+        "x-bridge-action": "peek",
+        "parameters": [
+          {
+            "name": "capability",
+            "in": "query",
+            "required": false,
+            "description": "A kind:action the controller can perform.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The command's JSON output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pending"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/export": {
+      "post": {
+        "operationId": "export",
+        "summary": "The contract for one resource.",
+        "x-bridge-action": "export",
+        "parameters": [
+          {
+            "name": "resource",
+            "in": "query",
+            "required": true,
+            "description": "Managed resource key.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The command's JSON output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Contract"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/material": {
+      "post": {
+        "operationId": "material",
+        "summary": "Certificate material for one resource.",
+        "x-bridge-action": "material",
+        "parameters": [
+          {
+            "name": "resource",
+            "in": "query",
+            "required": true,
+            "description": "Managed resource key.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The command's JSON output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/report": {
+      "post": {
+        "operationId": "report",
+        "summary": "Report an operation's result.",
+        "x-bridge-action": "report",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "operation",
+            "in": "query",
+            "required": true,
+            "description": "Operation id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The command's JSON output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControllerReport"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/schedule": {
+      "post": {
+        "operationId": "schedule",
+        "summary": "Queue the operations the contracts call for.",
+        "x-bridge-action": "schedule",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The command's JSON output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sweep-due": {
+      "post": {
+        "operationId": "sweep_due",
+        "summary": "Whether to sweep now, and why.",
+        "x-bridge-action": "sweep-due",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The command's JSON output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SweepVerdict"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/connections": {
+      "post": {
+        "operationId": "connections",
+        "summary": "Record the connections this controller carries.",
+        "x-bridge-action": "connections",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The command's JSON output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ConnectionRecord"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/inventory": {
+      "post": {
+        "operationId": "inventory",
+        "summary": "Record one sweep.",
+        "x-bridge-action": "inventory",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The command's JSON output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Inventory"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/steps": {
+      "post": {
+        "operationId": "steps",
+        "summary": "Record the work one pass could not finish.",
+        "x-bridge-action": "steps",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The command's JSON output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/StepFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics-plan": {
+      "post": {
+        "operationId": "analytics_plan",
+        "summary": "The window to read for each site.",
+        "x-bridge-action": "analytics-plan",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The command's JSON output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsPlan"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AnalyticsSiteIdentity"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics": {
+      "post": {
+        "operationId": "analytics",
+        "summary": "Record site analytics.",
+        "x-bridge-action": "analytics",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The command's JSON output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyticsReadings"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/glance-plan": {
+      "post": {
+        "operationId": "glance_plan",
+        "summary": "The dashboard panels to refresh.",
+        "x-bridge-action": "glance-plan",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The command's JSON output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlancePlan"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/glance": {
+      "post": {
+        "operationId": "glance",
+        "summary": "Record dashboard observations.",
+        "x-bridge-action": "glance",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The command's JSON output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GlanceObservations"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/registry": {
+      "post": {
+        "operationId": "registry",
+        "summary": "The provider declarations the controller acts on.",
+        "x-bridge-action": "registry",
+        "responses": {
+          "200": {
+            "description": "The command's JSON output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControllerRegistry"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Operation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "requested_actor": {
+            "type": "string"
+          },
+          "requested_interface": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "x-go-type-skip-optional-pointer": false
+          },
+          "claimed_by": {
+            "type": "string"
+          },
+          "lease_expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "x-go-type-skip-optional-pointer": false
+          },
+          "attempt_count": {
+            "type": "integer"
+          },
+          "result": {
+            "description": "The provider's last result for this operation, as Django stored it.",
+            "x-go-type": "any"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "resource",
+          "action",
+          "state",
+          "reason",
+          "requested_actor",
+          "requested_interface",
+          "created_at",
+          "completed_at",
+          "claimed_by",
+          "lease_expires_at",
+          "attempt_count",
+          "result"
+        ],
+        "description": "A queued or claimed operation, as serialize_operation emits it."
+      },
+      "Resource": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ResourceKind"
+          },
+          "generation": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "spec": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Desired state, resolved for the kind. Each provider decodes it into its own type."
+          },
+          "observed": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "What the provider was last seen holding for this resource."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "kind",
+          "generation",
+          "enabled",
+          "spec",
+          "observed"
+        ]
+      },
+      "Contract": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "type": "integer"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/Resource"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "resource"
+        ],
+        "description": "The desired-only contract for one resource (export)."
+      },
+      "Pending": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Operation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "x-go-type-skip-optional-pointer": false
+          },
+          "schema_version": {
+            "type": "integer"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/Resource"
+          },
+          "unresolvable": {
+            "type": "string"
+          },
+          "verification": {
+            "$ref": "#/components/schemas/Verification",
+            "description": "The operation's action's verification policy, when it declares one.",
+            "x-go-type-skip-optional-pointer": false
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "operation"
+        ],
+        "description": "The next operation (claim/peek). schema_version and resource accompany an operation whose contract resolved; unresolvable explains one that did not (peek only); verification is the action's declared verification policy, when it has one."
+      },
+      "Material": {
+        "type": "object",
+        "properties": {
+          "fullchain": {
+            "type": "string"
+          },
+          "private_key": {
+            "type": "string"
+          },
+          "domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "fullchain",
+          "private_key",
+          "domains"
+        ],
+        "description": "A stored certificate's material, released only to the controller applying it."
+      },
+      "Condition": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/ConditionType"
+          },
+          "status": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "status",
+          "reason",
+          "message"
+        ]
+      },
+      "ControllerReport": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "observed_generation": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "type": "object",
+            "additionalProperties": true,
+            "x-go-type": "any",
+            "description": "The provider's status for the resource; its shape belongs to the kind."
+          },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Condition"
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "observed_generation"
+        ]
+      },
+      "ConnectionRecord": {
+        "type": "object",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "manages": {
+            "type": "boolean"
+          },
+          "probed": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "reaches": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "failure": {
+            "$ref": "#/components/schemas/FailureClass"
+          },
+          "carried": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "Credential expiry the probe read, when it read one."
+          },
+          "store": {
+            "x-go-type": "any",
+            "description": "Where the connection's credentials are stored, as connection_env reports it."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "connection_ref",
+          "provider",
+          "endpoint",
+          "manages",
+          "probed",
+          "ok",
+          "detail",
+          "reaches"
+        ],
+        "description": "One connection the controller carries and what its probe found."
+      },
+      "StepFailure": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "step",
+          "subject",
+          "reason"
+        ],
+        "description": "Work one pass could not finish; subject is the connection ref it used."
+      },
+      "RefusedPart": {
+        "type": "object",
+        "properties": {
+          "part": {
+            "$ref": "#/components/schemas/ReadingPartName"
+          },
+          "connection_ref": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "refusal": {
+            "$ref": "#/components/schemas/FailureClass"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "part",
+          "refusal",
+          "reason",
+          "scope",
+          "connection_ref"
+        ],
+        "description": "One declared part of a reading that was refused: which part, why, and on what (\"\" scope for all of it)."
+      },
+      "KindReport": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "connected": {
+            "type": "boolean",
+            "description": "False when nothing this controller holds can read the kind; absent means it was read.",
+            "x-go-type-skip-optional-pointer": false
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "One record of the kind; Django validates it against that kind's observation schema.",
+              "x-go-type": "any"
+            }
+          },
+          "error": {
+            "type": "string"
+          },
+          "refusal": {
+            "$ref": "#/components/schemas/Refusal"
+          },
+          "refused_parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RefusedPart"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "records"
+        ]
+      },
+      "Inventory": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/KindReport"
+        },
+        "description": "One sweep: each kind read, by kind name."
+      },
+      "AnalyticsSiteIdentity": {
+        "type": "object",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "site_tag": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "connection_ref",
+          "site_tag"
+        ]
+      },
+      "AnalyticsWindow": {
+        "type": "object",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "site_tag": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string",
+            "format": "date",
+            "x-go-type": "string"
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "x-go-type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "backfill",
+              "refresh"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "connection_ref",
+          "site_tag",
+          "start",
+          "end",
+          "reason"
+        ]
+      },
+      "AnalyticsPlan": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsWindow"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "windows"
+        ]
+      },
+      "AnalyticsReadings": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "One controller's reading of every analytics site it can see (record_analytics).",
+        "properties": {
+          "sites": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsSiteReading"
+            }
+          }
+        },
+        "required": [
+          "sites"
+        ]
+      },
+      "GlanceMachineTarget": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "connections",
+          "request_id"
+        ]
+      },
+      "GlanceWeatherTarget": {
+        "type": "object",
+        "properties": {
+          "point": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string",
+            "description": "The National Weather Service API the forecast is read from, as HQ's connection states it."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "point",
+          "endpoint"
+        ]
+      },
+      "GlancePlanTargets": {
+        "type": "object",
+        "properties": {
+          "infrastructure": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlanceMachineTarget"
+            }
+          },
+          "weather": {
+            "$ref": "#/components/schemas/GlanceWeatherTarget"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "infrastructure",
+          "weather"
+        ]
+      },
+      "GlancePlan": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "panels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlancePanelID"
+            }
+          },
+          "targets": {
+            "$ref": "#/components/schemas/GlancePlanTargets"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "panels",
+          "targets"
+        ]
+      },
+      "GlanceObservations": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "One dashboard panel observation (record_dashboard_observations). Not yet produced by the Go controller."
+        }
+      },
+      "ForcedRead": {
+        "type": "object",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ResourceKind"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "kinds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ResourceKind"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "connection_ref",
+          "kind",
+          "requested_at",
+          "kinds"
+        ],
+        "description": "An operator's pending read request."
+      },
+      "SweepVerdict": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "interval_seconds": {
+            "type": "integer"
+          },
+          "carry": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "forced": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ForcedRead"
+            }
+          },
+          "only_kinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResourceKind"
+            }
+          },
+          "due": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "age_seconds": {
+            "type": "integer",
+            "description": "Absent before anything has been swept."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "interval_seconds",
+          "carry",
+          "forced",
+          "only_kinds",
+          "due",
+          "reason"
+        ]
+      },
+      "Acknowledgement": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true,
+        "description": "Django's answer to a report; the controller reads only ok."
+      },
+      "Capability": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ResourceKind"
+          },
+          "action": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "action"
+        ]
+      },
+      "LockedAction": {
+        "type": "object",
+        "description": "An action the registry refuses, and the reason it gives.",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ResourceKind"
+          },
+          "action": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "action",
+          "reason"
+        ]
+      },
+      "AdmittedExtension": {
+        "type": "object",
+        "description": "One admitted extension's source, from the plugin lock the image carries.",
+        "properties": {
+          "plugin": {
+            "type": "string"
+          },
+          "source_repository": {
+            "type": "string",
+            "description": "owner/name of the repository the extension is built from."
+          },
+          "source_workflow": {
+            "type": "string",
+            "description": "The workflow whose successful run on main admits it."
+          },
+          "source_commit": {
+            "type": "string",
+            "description": "The commit the image runs."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "plugin",
+          "source_repository",
+          "source_workflow",
+          "source_commit"
+        ]
+      },
+      "ControllerRegistry": {
+        "type": "object",
+        "description": "What the controller may do and where each kind is read, from HQ's provider declarations.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "capabilities": {
+            "type": "array",
+            "description": "Actions the controller may apply.",
+            "items": {
+              "$ref": "#/components/schemas/Capability"
+            }
+          },
+          "locked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LockedAction"
+            }
+          },
+          "material_kinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResourceKind"
+            },
+            "description": "Kinds whose work needs material HQ holds."
+          },
+          "connection_providers": {
+            "type": "object",
+            "description": "Each resource kind's connection providers.",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/ConnectionProvider"
+              }
+            }
+          },
+          "observations": {
+            "type": "object",
+            "description": "Each reading kind's provider.",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "connection_credentials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionProvider"
+            },
+            "description": "Providers a connection credential is modelled for."
+          },
+          "extensions": {
+            "type": "array",
+            "description": "Each admitted extension the running image composes, which delivery follows.",
+            "items": {
+              "$ref": "#/components/schemas/AdmittedExtension"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "capabilities",
+          "locked",
+          "material_kinds",
+          "connection_providers",
+          "observations",
+          "connection_credentials",
+          "extensions"
+        ]
+      },
+      "AnalyticsSiteReading": {
+        "type": "object",
+        "description": "One site's traffic and vitals over whole UTC days, start to end inclusive.",
+        "properties": {
+          "site_tag": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "connection_ref": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string",
+            "format": "date",
+            "x-go-type": "string"
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "x-go-type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsRow"
+            }
+          },
+          "vitals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsVitals"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "site_tag",
+          "host",
+          "connection_ref",
+          "start",
+          "end",
+          "rows",
+          "vitals"
+        ]
+      },
+      "AnalyticsRow": {
+        "type": "object",
+        "description": "One day's count for one value of one breakdown.",
+        "properties": {
+          "dimension": {
+            "type": "string",
+            "enum": [
+              "path",
+              "referrer",
+              "country",
+              "device",
+              "browser",
+              "os"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-go-type-skip-optional-pointer": false
+          },
+          "pageviews": {
+            "type": "integer"
+          },
+          "visits": {
+            "type": "integer"
+          },
+          "sample_interval": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "dimension",
+          "value",
+          "date",
+          "pageviews",
+          "visits",
+          "sample_interval"
+        ]
+      },
+      "AnalyticsVitals": {
+        "type": "object",
+        "description": "One day's site-wide Core Web Vitals.",
+        "properties": {
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-go-type-skip-optional-pointer": false
+          },
+          "sample_interval": {
+            "type": "integer"
+          },
+          "cumulative_layout_shift": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-go-type-skip-optional-pointer": false,
+            "x-go-type": "float64"
+          },
+          "largest_contentful_paint_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "x-go-type-skip-optional-pointer": false,
+            "description": "p75 in milliseconds; null when there were no samples."
+          },
+          "interaction_to_next_paint_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "x-go-type-skip-optional-pointer": false,
+            "description": "p75 in milliseconds; null when there were no samples."
+          },
+          "first_contentful_paint_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "x-go-type-skip-optional-pointer": false,
+            "description": "p75 in milliseconds; null when there were no samples."
+          },
+          "time_to_first_byte_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "x-go-type-skip-optional-pointer": false,
+            "description": "p75 in milliseconds; null when there were no samples."
+          },
+          "lcp_good": {
+            "type": "integer"
+          },
+          "lcp_needs_improvement": {
+            "type": "integer"
+          },
+          "lcp_poor": {
+            "type": "integer"
+          },
+          "inp_good": {
+            "type": "integer"
+          },
+          "inp_needs_improvement": {
+            "type": "integer"
+          },
+          "inp_poor": {
+            "type": "integer"
+          },
+          "cls_good": {
+            "type": "integer"
+          },
+          "cls_needs_improvement": {
+            "type": "integer"
+          },
+          "cls_poor": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "date",
+          "sample_interval",
+          "cumulative_layout_shift",
+          "largest_contentful_paint_ms",
+          "interaction_to_next_paint_ms",
+          "first_contentful_paint_ms",
+          "time_to_first_byte_ms",
+          "lcp_good",
+          "lcp_needs_improvement",
+          "lcp_poor",
+          "inp_good",
+          "inp_needs_improvement",
+          "inp_poor",
+          "cls_good",
+          "cls_needs_improvement",
+          "cls_poor"
+        ]
+      },
+      "Verification": {
+        "type": "object",
+        "description": "How long the controller keeps checking that an applied change is actually served, declared by the action it belongs to.",
+        "properties": {
+          "timeout_seconds": {
+            "type": "integer"
+          },
+          "interval_seconds": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "timeout_seconds",
+          "interval_seconds"
+        ],
+        "additionalProperties": false
+      },
+      "ResourceKind": {
+        "type": "string",
+        "description": "Every kind of resource or reading HQ's provider registry declares. Django's contract test holds this list equal to the registry, so a kind added on either side fails the build.",
+        "enum": [
+          "adguard.client",
+          "adguard.dns",
+          "adguard.query_summary",
+          "adguard.rewrite",
+          "caddy.route",
+          "cloudflare.access_app",
+          "cloudflare.access_service_token",
+          "cloudflare.d1_database",
+          "cloudflare.dns_record",
+          "cloudflare.edge_certificate",
+          "cloudflare.pages_project",
+          "cloudflare.redirect",
+          "cloudflare.tunnel",
+          "cloudflare.zone",
+          "github.delivery",
+          "github.repository",
+          "host.firewall",
+          "host.perimeter",
+          "hq.request_path",
+          "machine",
+          "network",
+          "npm.access_list",
+          "npm.certificate",
+          "npm.dead_host",
+          "npm.proxy_host",
+          "npm.redirect",
+          "npm.stream",
+          "pki.authority",
+          "portainer.compose_project",
+          "portainer.container",
+          "portainer.environment",
+          "portainer.image",
+          "portainer.network",
+          "portainer.runtime",
+          "portainer.stack",
+          "portainer.volume",
+          "registry.address",
+          "registry.digest",
+          "registry.domain",
+          "registry.image",
+          "registry.upstream",
+          "registry.vulnerabilities",
+          "tailscale.device",
+          "tailscale.dns",
+          "tailscale.policy",
+          "tailscale.settings",
+          "tailscale.user",
+          "tls.certificate",
+          "tls.delivery_target",
+          "tls.uploaded_certificate"
+        ],
+        "x-enum-varnames": [
+          "ResourceKindAdGuardClient",
+          "ResourceKindAdGuardDNS",
+          "ResourceKindAdGuardQuerySummary",
+          "ResourceKindAdGuardRewrite",
+          "ResourceKindCaddyRoute",
+          "ResourceKindCloudflareAccessApp",
+          "ResourceKindCloudflareAccessServiceToken",
+          "ResourceKindCloudflareD1Database",
+          "ResourceKindCloudflareDNSRecord",
+          "ResourceKindCloudflareEdgeCertificate",
+          "ResourceKindCloudflarePagesProject",
+          "ResourceKindCloudflareRedirect",
+          "ResourceKindCloudflareTunnel",
+          "ResourceKindCloudflareZone",
+          "ResourceKindGitHubDelivery",
+          "ResourceKindGitHubRepository",
+          "ResourceKindHostFirewall",
+          "ResourceKindHostPerimeter",
+          "ResourceKindHQRequestPath",
+          "ResourceKindMachine",
+          "ResourceKindNetwork",
+          "ResourceKindNPMAccessList",
+          "ResourceKindNPMCertificate",
+          "ResourceKindNPMDeadHost",
+          "ResourceKindNPMProxyHost",
+          "ResourceKindNPMRedirect",
+          "ResourceKindNPMStream",
+          "ResourceKindPKIAuthority",
+          "ResourceKindPortainerComposeProject",
+          "ResourceKindPortainerContainer",
+          "ResourceKindPortainerEnvironment",
+          "ResourceKindPortainerImage",
+          "ResourceKindPortainerNetwork",
+          "ResourceKindPortainerRuntime",
+          "ResourceKindPortainerStack",
+          "ResourceKindPortainerVolume",
+          "ResourceKindRegistryAddress",
+          "ResourceKindRegistryDigest",
+          "ResourceKindRegistryDomain",
+          "ResourceKindRegistryImage",
+          "ResourceKindRegistryUpstream",
+          "ResourceKindRegistryVulnerabilities",
+          "ResourceKindTailscaleDevice",
+          "ResourceKindTailscaleDNS",
+          "ResourceKindTailscalePolicy",
+          "ResourceKindTailscaleSettings",
+          "ResourceKindTailscaleUser",
+          "ResourceKindTLSCertificate",
+          "ResourceKindTLSDeliveryTarget",
+          "ResourceKindTLSUploadedCertificate"
+        ]
+      },
+      "SweptKind": {
+        "type": "string",
+        "description": "A kind the controller reads in a sweep: exactly the kinds it registers a reader for.",
+        "enum": [
+          "adguard.client",
+          "adguard.dns",
+          "adguard.query_summary",
+          "adguard.rewrite",
+          "caddy.route",
+          "cloudflare.access_app",
+          "cloudflare.access_service_token",
+          "cloudflare.d1_database",
+          "cloudflare.dns_record",
+          "cloudflare.edge_certificate",
+          "cloudflare.pages_project",
+          "cloudflare.redirect",
+          "cloudflare.tunnel",
+          "cloudflare.zone",
+          "github.delivery",
+          "github.repository",
+          "host.firewall",
+          "host.perimeter",
+          "npm.access_list",
+          "npm.certificate",
+          "npm.dead_host",
+          "npm.proxy_host",
+          "npm.redirect",
+          "npm.stream",
+          "portainer.compose_project",
+          "portainer.container",
+          "portainer.environment",
+          "portainer.image",
+          "portainer.network",
+          "portainer.runtime",
+          "portainer.volume",
+          "tailscale.device",
+          "tailscale.dns",
+          "tailscale.policy",
+          "tailscale.settings",
+          "tailscale.user"
+        ],
+        "x-enum-varnames": [
+          "SweptAdGuardClient",
+          "SweptAdGuardDNS",
+          "SweptAdGuardQuerySummary",
+          "SweptAdGuardRewrite",
+          "SweptCaddyRoute",
+          "SweptCloudflareAccessApp",
+          "SweptCloudflareAccessServiceToken",
+          "SweptCloudflareD1Database",
+          "SweptCloudflareDNSRecord",
+          "SweptCloudflareEdgeCertificate",
+          "SweptCloudflarePagesProject",
+          "SweptCloudflareRedirect",
+          "SweptCloudflareTunnel",
+          "SweptCloudflareZone",
+          "SweptGitHubDelivery",
+          "SweptGitHubRepository",
+          "SweptHostFirewall",
+          "SweptHostPerimeter",
+          "SweptNPMAccessList",
+          "SweptNPMCertificate",
+          "SweptNPMDeadHost",
+          "SweptNPMProxyHost",
+          "SweptNPMRedirect",
+          "SweptNPMStream",
+          "SweptPortainerComposeProject",
+          "SweptPortainerContainer",
+          "SweptPortainerEnvironment",
+          "SweptPortainerImage",
+          "SweptPortainerNetwork",
+          "SweptPortainerRuntime",
+          "SweptPortainerVolume",
+          "SweptTailscaleDevice",
+          "SweptTailscaleDNS",
+          "SweptTailscalePolicy",
+          "SweptTailscaleSettings",
+          "SweptTailscaleUser"
+        ]
+      },
+      "Refusal": {
+        "type": "string",
+        "description": "Why a provider refused a read: the credential itself, or one permission it lacks. Empty when the reason is unclassified.",
+        "enum": [
+          "",
+          "credential",
+          "permission"
+        ],
+        "x-enum-varnames": [
+          "RefusalUnclassified",
+          "RefusalCredential",
+          "RefusalPermission"
+        ]
+      },
+      "FailureClass": {
+        "type": "string",
+        "description": "Why a read got no usable answer: a refusal, an address that answered as something other than the API, or nothing answering. Empty when unclassified.",
+        "enum": [
+          "",
+          "credential",
+          "permission",
+          "address",
+          "network"
+        ],
+        "x-enum-varnames": [
+          "FailureClassUnclassified",
+          "FailureClassCredential",
+          "FailureClassPermission",
+          "FailureClassAddress",
+          "FailureClassNetwork"
+        ]
+      },
+      "PassMode": {
+        "type": "string",
+        "enum": [
+          "plan",
+          "apply"
+        ],
+        "x-enum-varnames": [
+          "PassModePlan",
+          "PassModeApply"
+        ],
+        "description": "Whether a pass only looked (plan) or claimed and executed work (apply)."
+      },
+      "PlannedOperation": {
+        "type": "object",
+        "description": "The operation a plan pass would run next and what it would change.",
+        "properties": {
+          "operation": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "would_change": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "resource",
+          "action",
+          "would_change",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "PlanPassOutput": {
+        "type": "object",
+        "description": "The line a plan pass prints on stdout.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/PassMode"
+          },
+          "claimed": {
+            "type": "boolean"
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionRecord"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlannedOperation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "x-go-type": "PlannedOperation",
+            "x-go-type-skip-optional-pointer": false
+          }
+        },
+        "required": [
+          "ok",
+          "mode",
+          "claimed",
+          "connections",
+          "warnings",
+          "plan"
+        ],
+        "additionalProperties": false
+      },
+      "IdlePassOutput": {
+        "type": "object",
+        "description": "The line an apply pass prints when it found nothing to claim.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/PassMode"
+          },
+          "claimed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "mode",
+          "claimed"
+        ],
+        "additionalProperties": false
+      },
+      "AppliedOperationOutput": {
+        "type": "object",
+        "description": "The line an apply pass prints for one operation it ran.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "changed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "operation",
+          "resource",
+          "changed"
+        ],
+        "additionalProperties": false
+      },
+      "RefusedOperationOutput": {
+        "type": "object",
+        "description": "The line an apply pass prints for one operation a provider refused.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "operation",
+          "resource",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "TLSConsumerKind": {
+        "type": "string",
+        "description": "Where a certificate is served from: the kinds of TLS consumer a certificate spec declares.",
+        "enum": [
+          "caddy",
+          "cpanel",
+          "npm"
+        ],
+        "x-enum-varnames": [
+          "TLSConsumerKindCaddy",
+          "TLSConsumerKindCPanel",
+          "TLSConsumerKindNPM"
+        ]
+      },
+      "GlancePanelID": {
+        "type": "string",
+        "description": "A dashboard panel the glance plan can ask the controller to read.",
+        "enum": [
+          "infrastructure",
+          "weather"
+        ],
+        "x-enum-varnames": [
+          "GlancePanelIDInfrastructure",
+          "GlancePanelIDWeather"
+        ]
+      },
+      "CaddyRouteInFile": {
+        "type": "object",
+        "description": "One route in the file HQ writes on a Caddy edge. The file is text, so each value is one token: a hostname (a wildcard allowed) and an upstream as host:port or scheme://host:port. HQ validates a declaration with these patterns and the controller checks them again on the line that writes the file.",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253,
+            "pattern": "^(?:\\*\\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\\.?$"
+          },
+          "upstream": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253,
+            "pattern": "^(?:(?:https?|h2c)://)?[A-Za-z0-9](?:[A-Za-z0-9._-]*|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]{1,5})?$"
+          }
+        },
+        "required": [
+          "domain",
+          "upstream"
+        ],
+        "additionalProperties": false
+      },
+      "CaddyCertificateDirectory": {
+        "type": "string",
+        "description": "The directory a Caddy edge loads delivered certificates from: one plain absolute path.",
+        "maxLength": 500,
+        "pattern": "^(?:/[A-Za-z0-9._-]+)+/?$"
+      },
+      "CaddyRequestedHost": {
+        "type": "string",
+        "description": "An upstream that names the host each request names, with an optional fixed port (the captured group).",
+        "pattern": "^\\{http\\.request\\.host(?:port)?\\}(?::([0-9]{1,5}))?$"
+      },
+      "GitHubDeliveryProduction": {
+        "type": "string",
+        "description": "What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.",
+        "enum": [
+          "Every extension's latest admission, confirmed on GitHub"
+        ],
+        "x-enum-varnames": [
+          "GitHubDeliveryProductionCurrent"
+        ]
+      },
+      "GitHubDeliverySpec": {
+        "type": "object",
+        "description": "A github.delivery declaration. The defaults are the declaration a sweep reports and HQ adopts.",
+        "properties": {
+          "repository": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+            "description": "owner/name of the repository whose composition workflow deploys HQ."
+          },
+          "workflow": {
+            "type": "string",
+            "pattern": "^\\.github/workflows/[A-Za-z0-9_.-]+\\.ya?ml$",
+            "default": ".github/workflows/compose.yml"
+          },
+          "branch": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_./-]+$",
+            "default": "main"
+          },
+          "production": {
+            "$ref": "#/components/schemas/GitHubDeliveryProduction"
+          }
+        },
+        "required": [
+          "repository",
+          "workflow",
+          "branch",
+          "production"
+        ],
+        "additionalProperties": false
+      },
+      "ConnectionProvider": {
+        "type": "string",
+        "description": "A connection provider HQ's registry declares: what a credential is for. Django's contract test holds this to the admitted connections.",
+        "enum": [
+          "adguard",
+          "cloudflare_api",
+          "cloudflare_dns",
+          "github_app",
+          "npm",
+          "onepassword",
+          "portainer",
+          "ssh",
+          "tailscale"
+        ],
+        "x-enum-varnames": [
+          "ConnectionProviderAdGuard",
+          "ConnectionProviderCloudflareAPI",
+          "ConnectionProviderCloudflareDNS",
+          "ConnectionProviderGitHubApp",
+          "ConnectionProviderNPM",
+          "ConnectionProviderOnePassword",
+          "ConnectionProviderPortainer",
+          "ConnectionProviderSSH",
+          "ConnectionProviderTailscale"
+        ]
+      },
+      "ReadingPartName": {
+        "type": "string",
+        "description": "A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares, and Django's contract test holds this to the declared parts.",
+        "enum": [
+          "",
+          "access",
+          "acl_management",
+          "apps",
+          "branch_rules",
+          "clients",
+          "code_scanning",
+          "configuration",
+          "connections",
+          "dead_hosts",
+          "dependabot",
+          "dns",
+          "environments",
+          "file_size",
+          "filtering",
+          "https",
+          "images",
+          "leaked_credentials",
+          "page_rules",
+          "posture",
+          "proxy_hosts",
+          "querylog",
+          "redirection_hosts",
+          "registration",
+          "rewrites",
+          "rules",
+          "runners",
+          "services",
+          "settings",
+          "streams",
+          "upstreams",
+          "variables",
+          "workflow_pins"
+        ],
+        "x-enum-varnames": [
+          "PartWhole",
+          "PartAccess",
+          "PartACLManagement",
+          "PartApps",
+          "PartBranchRules",
+          "PartClients",
+          "PartCodeScanning",
+          "PartConfiguration",
+          "PartConnections",
+          "PartDeadHosts",
+          "PartDependabot",
+          "PartDNS",
+          "PartEnvironments",
+          "PartFileSize",
+          "PartFiltering",
+          "PartHTTPS",
+          "PartImages",
+          "PartLeakedCredentials",
+          "PartPageRules",
+          "PartPosture",
+          "PartProxyHosts",
+          "PartQueryLog",
+          "PartRedirectionHosts",
+          "PartRegistration",
+          "PartRewrites",
+          "PartRules",
+          "PartRunners",
+          "PartServices",
+          "PartSettings",
+          "PartStreams",
+          "PartUpstreams",
+          "PartVariables",
+          "PartWorkflowPins"
+        ]
+      },
+      "TLSCertificateName": {
+        "type": "string",
+        "description": "A certbot lineage name: it becomes --cert-name and a directory under live/. HQ's tls.certificate declaration validates with it and the controller checks it again where it reaches certbot's argv and a path.",
+        "maxLength": 160,
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "TLSCertificateDomain": {
+        "type": "string",
+        "description": "A domain certbot is asked for: DNS labels, optionally under one wildcard. The controller checks it where it reaches certbot's argv.",
+        "pattern": "^(\\*\\.)?([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
+      },
+      "CloudflareCAAValue": {
+        "type": "string",
+        "description": "A CAA record's content as flags, tag and quoted value (the three groups). HQ validates a declared CAA record with it and both sides take the content apart with it.",
+        "pattern": "^\\s*(\\d{1,3})\\s+(issue|issuewild|iodef)\\s+\"([^\"]*)\"\\s*$"
+      },
+      "ConditionType": {
+        "type": "string",
+        "description": "What a condition says of a resource: it is as declared, it differs from the declaration, or it needs attention.",
+        "enum": [
+          "Ready",
+          "Drifted",
+          "Degraded"
+        ],
+        "x-enum-varnames": [
+          "ConditionReady",
+          "ConditionDrifted",
+          "ConditionDegraded"
+        ]
+      }
+    }
+  }
+}

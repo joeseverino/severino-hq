@@ -15,16 +15,8 @@ if [ -z "$(find "$dir" -type f -size +0 -print -quit 2>/dev/null)" ]; then
   exit 0
 fi
 
-if ! command -v age >/dev/null; then
-  tools="${RUNNER_TEMP:-$(mktemp -d)}/age-${AGE_VERSION}"
-  archive="$tools.tar.gz"
-  curl -fsSL --retry 3 -o "$archive" \
-    "https://github.com/FiloSottile/age/releases/download/v${AGE_VERSION}/age-v${AGE_VERSION}-linux-amd64.tar.gz"
-  echo "${AGE_SHA256}  ${archive}" | sha256sum --check --quiet
-  mkdir -p "$tools"
-  tar -xzf "$archive" -C "$tools" --strip-components 1 age/age
-  PATH="$tools:$PATH"
-fi
+# age is one of the pinned tools (mise.toml); the workflow installs it.
+command -v age >/dev/null || { echo "age is not installed (mise install age)." >&2; exit 1; }
 
 (cd "$dir" && find . -type f -size +0 -print0) \
   | tar -czf - -C "$dir" --null -T - \

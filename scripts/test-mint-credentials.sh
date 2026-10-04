@@ -119,7 +119,7 @@ never_in_argv() { # never_in_argv NAME SECRET
 # --- Cloudflare -----------------------------------------------------------
 
 # The script's mechanics, against groups the stub knows. The real list is
-# checked against the readings by control_plane.tests.test_credential_reads.
+# checked against the readings by hq.domains.control_plane.tests.test_credential_reads.
 printf '%s\n' "Account Settings Read (account)" "Account Analytics Read (account)" \
     "Registrar Domains Read (account)" "Zone Settings Read (zone)" \
     >"${fixture_dir}/known.txt"

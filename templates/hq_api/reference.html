@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}API reference{% endblock %}
+{% block content %}
+<div id="api-reference-root" data-url="{{ document_url }}"></div>
+<noscript><p>The reference needs JavaScript. The document itself is at <a href="{{ document_url }}">{{ document_url }}</a>.</p></noscript>
+{% endblock %}
+{% block scripts_extra %}
+  <script src="{% static 'js/api-reference.js' %}" defer></script>
+  <script src="{% static 'vendor/scalar/standalone.js' %}" defer></script>
+{% endblock %}

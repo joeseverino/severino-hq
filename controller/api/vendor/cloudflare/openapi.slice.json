@@ -1,0 +1,3350 @@
+{
+ "openapi": "3.0.3",
+ "info": {
+  "title": "Cloudflare API",
+  "version": "4.0.0"
+ },
+ "servers": [
+  {
+   "description": "Client API",
+   "url": "https://api.cloudflare.com/client/v4"
+  }
+ ],
+ "paths": {
+  "/accounts": {
+   "get": {
+    "operationId": "accounts-list-accounts",
+    "parameters": [],
+    "responses": {
+     "200": {
+      "description": "List Accounts response"
+     }
+    }
+   }
+  },
+  "/accounts/{account_id}/access/apps": {
+   "get": {
+    "operationId": "access-applications-list-access-applications",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List Access applications response"
+     }
+    }
+   }
+  },
+  "/accounts/{account_id}/access/service_tokens": {
+   "get": {
+    "operationId": "access-service-tokens-list-service-tokens",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List service tokens response"
+     }
+    }
+   }
+  },
+  "/accounts/{account_id}/cfd_tunnel": {
+   "get": {
+    "operationId": "cloudflare-tunnel-list-cloudflare-tunnels",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List Cloudflare Tunnels response"
+     }
+    }
+   }
+  },
+  "/accounts/{account_id}/cfd_tunnel/{tunnel_id}/configurations": {
+   "get": {
+    "operationId": "cloudflare-tunnel-configuration-get-configuration",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "tunnel_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Get configuration response"
+     }
+    }
+   }
+  },
+  "/accounts/{account_id}/cfd_tunnel/{tunnel_id}/connections": {
+   "get": {
+    "operationId": "cloudflare-tunnel-list-cloudflare-tunnel-connections",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "tunnel_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List Cloudflare Tunnel connections response"
+     }
+    }
+   }
+  },
+  "/accounts/{account_id}/d1/database": {
+   "get": {
+    "operationId": "d1-list-databases",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List D1 databases response"
+     }
+    }
+   }
+  },
+  "/accounts/{account_id}/d1/database/{database_id}": {
+   "get": {
+    "operationId": "d1-get-database",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "database_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Database details response"
+     }
+    }
+   }
+  },
+  "/accounts/{account_id}/pages/projects": {
+   "get": {
+    "operationId": "pages-project-get-projects",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Get projects response."
+     }
+    }
+   }
+  },
+  "/accounts/{account_id}/registrar/registrations": {
+   "get": {
+    "operationId": "registrar-domain-registration-list",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List of registrations for the account."
+     }
+    }
+   }
+  },
+  "/accounts/{account_id}/rum/site_info/list": {
+   "get": {
+    "operationId": "web-analytics-list-sites",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List of Web Analytics sites."
+     }
+    }
+   }
+  },
+  "/user/tokens/verify": {
+   "get": {
+    "operationId": "user-api-tokens-verify-token",
+    "parameters": [],
+    "responses": {
+     "200": {
+      "description": "Verify Token response"
+     }
+    }
+   }
+  },
+  "/zones": {
+   "get": {
+    "operationId": "zones-get",
+    "parameters": [],
+    "responses": {
+     "200": {
+      "description": "List Zones response."
+     }
+    }
+   }
+  },
+  "/zones/{zone_id}/dns_records": {
+   "get": {
+    "operationId": "dns-records-for-a-zone-list-dns-records",
+    "parameters": [
+     {
+      "name": "zone_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List DNS Records response"
+     }
+    }
+   },
+   "post": {
+    "operationId": "dns-records-for-a-zone-create-dns-record",
+    "parameters": [
+     {
+      "name": "zone_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Create DNS Record response"
+     }
+    }
+   }
+  },
+  "/zones/{zone_id}/dns_records/{dns_record_id}": {
+   "delete": {
+    "operationId": "dns-records-for-a-zone-delete-dns-record",
+    "parameters": [
+     {
+      "name": "dns_record_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "zone_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Delete DNS Record response"
+     }
+    }
+   },
+   "put": {
+    "operationId": "dns-records-for-a-zone-update-dns-record",
+    "parameters": [
+     {
+      "name": "dns_record_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "zone_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Update DNS Record response"
+     }
+    }
+   }
+  },
+  "/zones/{zone_id}/pagerules": {
+   "get": {
+    "operationId": "page-rules-list-page-rules",
+    "parameters": [
+     {
+      "name": "zone_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List Page Rules response"
+     }
+    }
+   }
+  },
+  "/zones/{zone_id}/rulesets": {
+   "get": {
+    "operationId": "listZoneRulesets",
+    "parameters": [
+     {
+      "name": "zone_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": ""
+     }
+    }
+   }
+  },
+  "/zones/{zone_id}/rulesets/{ruleset_id}": {
+   "get": {
+    "operationId": "getZoneRuleset",
+    "parameters": [
+     {
+      "name": "ruleset_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "zone_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": ""
+     }
+    }
+   }
+  },
+  "/zones/{zone_id}/settings/{setting_id}": {
+   "get": {
+    "operationId": "zone-settings-get-single-setting",
+    "parameters": [
+     {
+      "name": "zone_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "setting_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Get zone setting response"
+     }
+    }
+   }
+  },
+  "/zones/{zone_id}/ssl/certificate_packs": {
+   "get": {
+    "operationId": "certificate-packs-list-certificate-packs",
+    "parameters": [
+     {
+      "name": "zone_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List Certificate Packs response."
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "schemas": {
+   "access_client_id": {
+    "description": "The Client ID for the service token. Access will check for this value in the `CF-Access-Client-ID` request header.",
+    "type": "string",
+    "example": "88bf3b6d86161464f6509f7219099e57.access.example.com"
+   },
+   "access_created_at": {
+    "allOf": [
+     {
+      "type": "string",
+      "x-stainless-skip": true
+     },
+     {
+      "$ref": "#/components/schemas/access_timestamp"
+     }
+    ]
+   },
+   "access_duration": {
+    "description": "The duration for how long the service token will be valid. Must be in the format `300ms` or `2h45m`, or the special value `forever` for non-expiring tokens. Valid time units are: ns, us (or \u00b5s), ms, s, m, h. The default is 1 year in hours (8760h).",
+    "type": "string",
+    "example": "60m",
+    "x-auditable": true
+   },
+   "access_enabled": {
+    "description": "Whether the service token is enabled. A disabled service token cannot be used to authenticate; both its current and previous `client_secret` stop being accepted, but the token itself is preserved and can be re-enabled at any time. Defaults to enabled when omitted on create.",
+    "type": "boolean",
+    "x-auditable": true
+   },
+   "access_name-2": {
+    "description": "The name of the service token.",
+    "type": "string",
+    "example": "CI/CD token",
+    "x-auditable": true
+   },
+   "access_service-tokens": {
+    "type": "object",
+    "properties": {
+     "client_id": {
+      "$ref": "#/components/schemas/access_client_id"
+     },
+     "created_at": {
+      "$ref": "#/components/schemas/access_created_at"
+     },
+     "duration": {
+      "$ref": "#/components/schemas/access_duration"
+     },
+     "enabled": {
+      "$ref": "#/components/schemas/access_enabled"
+     },
+     "expires_at": {
+      "$ref": "#/components/schemas/access_timestamp"
+     },
+     "id": {
+      "allOf": [
+       {
+        "description": "The ID of the service token.",
+        "type": "string"
+       },
+       {
+        "$ref": "#/components/schemas/access_uuid"
+       }
+      ]
+     },
+     "last_seen_at": {
+      "allOf": [
+       {
+        "type": "string",
+        "x-stainless-skip": true
+       },
+       {
+        "$ref": "#/components/schemas/access_timestamp"
+       }
+      ]
+     },
+     "name": {
+      "$ref": "#/components/schemas/access_name-2"
+     },
+     "updated_at": {
+      "$ref": "#/components/schemas/access_updated_at"
+     }
+    }
+   },
+   "access_timestamp": {
+    "type": "string",
+    "example": "2014-01-01T05:20:00.12345Z",
+    "x-auditable": true
+   },
+   "access_updated_at": {
+    "allOf": [
+     {
+      "type": "string",
+      "x-stainless-skip": true
+     },
+     {
+      "$ref": "#/components/schemas/access_timestamp"
+     }
+    ]
+   },
+   "access_uuid": {
+    "description": "UUID.",
+    "type": "string",
+    "example": "f174e90a-fafe-4643-bbbc-4a0ed4fc8415",
+    "maxLength": 36,
+    "x-auditable": true
+   },
+   "d1_created-at": {
+    "description": "Specifies the timestamp the resource was created as an ISO8601 string.",
+    "type": "string",
+    "example": "2022-11-15T18:25:44.442097Z",
+    "x-auditable": true
+   },
+   "d1_database-identifier": {
+    "description": "D1 database identifier (UUID).",
+    "type": "string",
+    "example": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "x-auditable": true
+   },
+   "d1_database-name": {
+    "description": "D1 database name.",
+    "type": "string",
+    "example": "my-database",
+    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]*$",
+    "x-auditable": true
+   },
+   "d1_database-response": {
+    "type": "object",
+    "properties": {
+     "created_at": {
+      "$ref": "#/components/schemas/d1_created-at"
+     },
+     "jurisdiction": {
+      "$ref": "#/components/schemas/d1_jurisdiction-nullable"
+     },
+     "name": {
+      "$ref": "#/components/schemas/d1_database-name"
+     },
+     "uuid": {
+      "$ref": "#/components/schemas/d1_database-identifier"
+     },
+     "version": {
+      "$ref": "#/components/schemas/d1_database-version"
+     }
+    }
+   },
+   "d1_database-version": {
+    "type": "string",
+    "example": "production",
+    "pattern": "^(alpha|beta|production)$",
+    "x-auditable": true
+   },
+   "d1_jurisdiction-nullable": {
+    "description": "Specify the location to restrict the D1 database to run and store data. If this option is present, the location hint is ignored.",
+    "type": "string",
+    "example": "eu",
+    "enum": [
+     "eu",
+     "fedramp",
+     "us"
+    ],
+    "nullable": true,
+    "x-auditable": true
+   },
+   "iam_account": {
+    "type": "object",
+    "properties": {
+     "created_on": {
+      "description": "Timestamp for the creation of the account",
+      "type": "string",
+      "example": "2014-03-01T12:21:02Z",
+      "x-auditable": true
+     },
+     "id": {
+      "$ref": "#/components/schemas/iam_common_components-schemas-identifier"
+     },
+     "managed_by": {
+      "description": "Parent container details",
+      "type": "object",
+      "properties": {
+       "parent_org_id": {
+        "description": "ID of the parent Organization, if one exists",
+        "type": "string",
+        "example": "4536bcfad5faccb111b47003c79917fa",
+        "maxLength": 32,
+        "x-auditable": true
+       },
+       "parent_org_name": {
+        "description": "Name of the parent Organization, if one exists",
+        "type": "string",
+        "example": "Demo Parent Organization",
+        "x-auditable": true
+       }
+      }
+     },
+     "name": {
+      "description": "Account name",
+      "type": "string",
+      "example": "Demo Account",
+      "maxLength": 100,
+      "x-auditable": true
+     },
+     "settings": {
+      "description": "Account settings",
+      "type": "object",
+      "properties": {
+       "abuse_contact_email": {
+        "description": "Sets an abuse contact email to notify for abuse reports.",
+        "type": "string",
+        "x-auditable": true
+       },
+       "enforce_twofactor": {
+        "description": "Indicates whether membership in this account requires that\nTwo-Factor Authentication is enabled",
+        "type": "boolean",
+        "x-auditable": true,
+        "x-stainless-terraform-configurability": "computed_optional"
+       }
+      }
+     },
+     "type": {
+      "$ref": "#/components/schemas/iam_account-type"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "type"
+    ]
+   },
+   "iam_account-type": {
+    "enum": [
+     "standard",
+     "enterprise"
+    ]
+   },
+   "iam_api-response-common": {
+    "type": "object",
+    "properties": {
+     "errors": {
+      "$ref": "#/components/schemas/iam_messages-2"
+     },
+     "messages": {
+      "$ref": "#/components/schemas/iam_messages-2"
+     },
+     "success": {
+      "description": "Whether the API call was successful.",
+      "type": "boolean",
+      "example": true,
+      "enum": [
+       true
+      ]
+     }
+    },
+    "required": [
+     "success",
+     "errors",
+     "messages"
+    ]
+   },
+   "iam_api-response-single": {
+    "type": "object",
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/iam_api-response-common"
+     }
+    ]
+   },
+   "iam_common_components-schemas-identifier": {
+    "description": "Identifier",
+    "type": "string",
+    "example": "023e105f4ecef8ad9ca31a8372d0c353",
+    "maxLength": 32,
+    "minLength": 32,
+    "x-auditable": true
+   },
+   "iam_expires_on": {
+    "description": "The expiration time on or after which the JWT MUST NOT be accepted for processing.",
+    "type": "string",
+    "example": "2020-01-01T00:00:00Z",
+    "x-auditable": true
+   },
+   "iam_messages-2": {
+    "type": "array",
+    "items": {
+     "properties": {
+      "code": {
+       "type": "integer",
+       "minimum": 1000
+      },
+      "documentation_url": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "source": {
+       "type": "object",
+       "properties": {
+        "pointer": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "required": [
+      "code",
+      "message"
+     ],
+     "type": "object",
+     "uniqueItems": true
+    },
+    "example": []
+   },
+   "iam_not_before": {
+    "description": "The time before which the token MUST NOT be accepted for processing.",
+    "type": "string",
+    "example": "2018-07-01T05:20:00Z",
+    "x-auditable": true
+   },
+   "iam_token_identifier": {
+    "description": "Token identifier tag.",
+    "type": "string",
+    "example": "ed17574386854bf78a67040be0a770b0",
+    "maxLength": 32,
+    "x-auditable": true
+   },
+   "iam_token_status": {
+    "description": "Status of the token.",
+    "type": "string",
+    "example": "active",
+    "enum": [
+     "active",
+     "disabled",
+     "expired"
+    ],
+    "x-auditable": true,
+    "x-stainless-terraform-configurability": "computed_optional"
+   },
+   "iam_token_verify_response_single_segment": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/iam_api-response-single"
+     },
+     {
+      "properties": {
+       "result": {
+        "properties": {
+         "expires_on": {
+          "$ref": "#/components/schemas/iam_expires_on"
+         },
+         "id": {
+          "$ref": "#/components/schemas/iam_token_identifier"
+         },
+         "not_before": {
+          "$ref": "#/components/schemas/iam_not_before"
+         },
+         "status": {
+          "$ref": "#/components/schemas/iam_token_status"
+         }
+        },
+        "required": [
+         "id",
+         "status"
+        ]
+       }
+      },
+      "type": "object"
+     }
+    ]
+   },
+   "pages_build_config": {
+    "description": "Configs for the project build process.",
+    "type": "object",
+    "properties": {
+     "build_caching": {
+      "description": "Enable build caching for the project.",
+      "type": "boolean",
+      "example": true,
+      "nullable": true,
+      "x-auditable": true
+     },
+     "build_command": {
+      "description": "Command used to build project.",
+      "type": "string",
+      "example": "npm run build",
+      "nullable": true,
+      "x-auditable": true
+     },
+     "destination_dir": {
+      "description": "Assets output directory of the build.",
+      "type": "string",
+      "example": "build",
+      "nullable": true,
+      "x-auditable": true
+     },
+     "root_dir": {
+      "description": "Directory to run the command.",
+      "type": "string",
+      "example": "/",
+      "nullable": true,
+      "x-auditable": true
+     },
+     "web_analytics_tag": {
+      "description": "The classifying tag for analytics.",
+      "type": "string",
+      "example": "cee1c73f6e4743d0b5e6bb1a0bcaabcc",
+      "nullable": true,
+      "x-auditable": true
+     },
+     "web_analytics_token": {
+      "description": "The auth token for analytics.",
+      "type": "string",
+      "example": "021e1057c18547eca7b79f2516f06o7x",
+      "nullable": true,
+      "x-sensitive": true
+     }
+    },
+    "required": [
+     "web_analytics_tag",
+     "web_analytics_token"
+    ]
+   },
+   "pages_deployment": {
+    "type": "object",
+    "properties": {
+     "aliases": {
+      "description": "A list of alias URLs pointing to this deployment.",
+      "type": "array",
+      "items": {
+       "type": "string",
+       "x-auditable": true
+      },
+      "example": [
+       "https://branchname.projectname.pages.dev"
+      ],
+      "nullable": true
+     },
+     "build_config": {
+      "$ref": "#/components/schemas/pages_build_config"
+     },
+     "created_on": {
+      "description": "When the deployment was created.",
+      "type": "string",
+      "example": "2021-03-09T00:55:03.923456Z",
+      "x-auditable": true
+     },
+     "deployment_trigger": {
+      "description": "Info about what caused the deployment.",
+      "type": "object",
+      "properties": {
+       "metadata": {
+        "description": "Additional info about the trigger.",
+        "type": "object",
+        "properties": {
+         "branch": {
+          "description": "Where the trigger happened.",
+          "type": "string",
+          "example": "main",
+          "x-auditable": true
+         },
+         "commit_dirty": {
+          "description": "Whether the deployment trigger commit was dirty.",
+          "type": "boolean",
+          "example": false,
+          "x-auditable": true
+         },
+         "commit_hash": {
+          "description": "Hash of the deployment trigger commit.",
+          "type": "string",
+          "example": "ad9ccd918a81025731e10e40267e11273a263421",
+          "x-auditable": true
+         },
+         "commit_message": {
+          "description": "Message of the deployment trigger commit.",
+          "type": "string",
+          "example": "Update index.html",
+          "x-auditable": true
+         }
+        },
+        "required": [
+         "branch",
+         "commit_hash",
+         "commit_message",
+         "commit_dirty"
+        ]
+       },
+       "type": {
+        "description": "What caused the deployment.",
+        "type": "string",
+        "example": "ad_hoc",
+        "enum": [
+         "github:push",
+         "ad_hoc",
+         "deploy_hook"
+        ],
+        "x-auditable": true
+       }
+      },
+      "required": [
+       "type",
+       "metadata"
+      ]
+     },
+     "env_vars": {
+      "$ref": "#/components/schemas/pages_env_vars"
+     },
+     "environment": {
+      "description": "Type of deploy.",
+      "type": "string",
+      "example": "preview",
+      "enum": [
+       "preview",
+       "production"
+      ],
+      "x-auditable": true
+     },
+     "id": {
+      "description": "Id of the deployment.",
+      "type": "string",
+      "example": "f64788e9-fccd-4d4a-a28a-cb84f88f6",
+      "x-auditable": true
+     },
+     "is_skipped": {
+      "description": "Whether the deployment was skipped.",
+      "type": "boolean",
+      "example": true,
+      "x-auditable": true
+     },
+     "latest_stage": {
+      "$ref": "#/components/schemas/pages_stage"
+     },
+     "modified_on": {
+      "description": "When the deployment was last modified.",
+      "type": "string",
+      "example": "2021-03-09T00:58:59.045655",
+      "x-auditable": true
+     },
+     "project_id": {
+      "description": "Id of the project.",
+      "type": "string",
+      "example": "7b162ea7-7367-4d67-bcde-1160995d5",
+      "x-auditable": true
+     },
+     "project_name": {
+      "$ref": "#/components/schemas/pages_project_name"
+     },
+     "short_id": {
+      "description": "Short Id (8 character) of the deployment.",
+      "type": "string",
+      "example": "f64788e9",
+      "x-auditable": true
+     },
+     "skip_reason": {
+      "description": "Why the deployment was skipped.",
+      "type": "string",
+      "example": "commit_message",
+      "enum": [
+       "commit_message",
+       "preview_deployments_disabled",
+       "production_deployments_disabled",
+       "path_config",
+       "branch_config",
+       "pages_to_workers_conversion",
+       "superseded_queued_build"
+      ],
+      "nullable": true,
+      "x-auditable": true
+     },
+     "source": {
+      "$ref": "#/components/schemas/pages_source"
+     },
+     "stages": {
+      "description": "List of past stages.",
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/pages_stage"
+      },
+      "example": [
+       {
+        "ended_on": "2021-06-03T15:39:03.134378Z",
+        "name": "queued",
+        "started_on": "2021-06-03T15:38:15.608194Z",
+        "status": "active"
+       },
+       {
+        "ended_on": null,
+        "name": "initialize",
+        "started_on": null,
+        "status": "idle"
+       },
+       {
+        "ended_on": null,
+        "name": "clone_repo",
+        "started_on": null,
+        "status": "idle"
+       },
+       {
+        "ended_on": null,
+        "name": "build",
+        "started_on": null,
+        "status": "idle"
+       },
+       {
+        "ended_on": null,
+        "name": "deploy",
+        "started_on": null,
+        "status": "idle"
+       }
+      ]
+     },
+     "url": {
+      "description": "The live URL to view this deployment.",
+      "type": "string",
+      "example": "https://f64788e9.ninjakittens.pages.dev",
+      "x-auditable": true
+     },
+     "uses_functions": {
+      "description": "Whether the deployment uses functions.",
+      "type": "boolean",
+      "nullable": true,
+      "x-auditable": true
+     }
+    },
+    "required": [
+     "aliases",
+     "build_config",
+     "created_on",
+     "deployment_trigger",
+     "environment",
+     "env_vars",
+     "id",
+     "is_skipped",
+     "latest_stage",
+     "modified_on",
+     "project_id",
+     "project_name",
+     "short_id",
+     "source",
+     "stages",
+     "url"
+    ]
+   },
+   "pages_deployment_config_values": {
+    "type": "object",
+    "properties": {
+     "ai_bindings": {
+      "description": "Constellation bindings used for Pages Functions.",
+      "type": "object",
+      "example": {
+       "AI_BINDING": {
+        "project_id": "some-project-id"
+       }
+      },
+      "additionalProperties": {
+       "description": "AI binding.",
+       "properties": {
+        "project_id": {
+         "type": "string",
+         "x-auditable": true
+        }
+       },
+       "required": [
+        "project_id"
+       ],
+       "type": "object"
+      }
+     },
+     "always_use_latest_compatibility_date": {
+      "description": "Whether to always use the latest compatibility date for Pages Functions.",
+      "type": "boolean",
+      "example": false,
+      "x-auditable": true
+     },
+     "analytics_engine_datasets": {
+      "description": "Analytics Engine bindings used for Pages Functions.",
+      "type": "object",
+      "example": {
+       "ANALYTICS_ENGINE_BINDING": {
+        "dataset": "api_analytics"
+       }
+      },
+      "additionalProperties": {
+       "description": "Analytics Engine binding.",
+       "properties": {
+        "dataset": {
+         "description": "Name of the dataset.",
+         "type": "string",
+         "example": "api_analytics",
+         "x-auditable": true
+        }
+       },
+       "required": [
+        "dataset"
+       ],
+       "type": "object"
+      }
+     },
+     "browsers": {
+      "description": "Browser bindings used for Pages Functions.",
+      "type": "object",
+      "example": {
+       "BROWSER": {}
+      },
+      "additionalProperties": {
+       "description": "Browser binding.",
+       "nullable": true,
+       "type": "object",
+       "x-stainless-empty-object": true
+      }
+     },
+     "build_image_major_version": {
+      "description": "The major version of the build image to use for Pages Functions.",
+      "type": "integer",
+      "example": 3,
+      "x-auditable": true
+     },
+     "compatibility_date": {
+      "description": "Compatibility date used for Pages Functions.",
+      "type": "string",
+      "example": "2025-01-01T00:00:00Z",
+      "x-auditable": true,
+      "x-stainless-terraform-configurability": "computed_optional"
+     },
+     "compatibility_flags": {
+      "description": "Compatibility flags used for Pages Functions.",
+      "type": "array",
+      "items": {
+       "type": "string",
+       "x-auditable": true
+      },
+      "example": [
+       "url_standard"
+      ]
+     },
+     "d1_databases": {
+      "description": "D1 databases used for Pages Functions.",
+      "type": "object",
+      "example": {
+       "D1_BINDING": {
+        "id": "445e2955-951a-43f8-a35b-a4d0c8138f63"
+       }
+      },
+      "additionalProperties": {
+       "description": "D1 binding.",
+       "properties": {
+        "id": {
+         "description": "UUID of the D1 database.",
+         "type": "string",
+         "example": "445e2955-951a-43f8-a35b-a4d0c8138f63",
+         "x-auditable": true
+        }
+       },
+       "required": [
+        "id"
+       ],
+       "type": "object"
+      }
+     },
+     "durable_object_namespaces": {
+      "description": "Durable Object namespaces used for Pages Functions.",
+      "type": "object",
+      "example": {
+       "DO_BINDING": {
+        "namespace_id": "5eb63bbbe01eeed093cb22bb8f5acdc3"
+       }
+      },
+      "additionalProperties": {
+       "description": "Durable Object binding.",
+       "properties": {
+        "namespace_id": {
+         "description": "ID of the Durable Object namespace.",
+         "type": "string",
+         "example": "5eb63bbbe01eeed093cb22bb8f5acdc3",
+         "x-auditable": true
+        }
+       },
+       "required": [
+        "namespace_id"
+       ],
+       "type": "object"
+      }
+     },
+     "env_vars": {
+      "$ref": "#/components/schemas/pages_env_vars"
+     },
+     "fail_open": {
+      "description": "Whether to fail open when the deployment config cannot be applied.",
+      "type": "boolean",
+      "example": true,
+      "x-auditable": true
+     },
+     "hyperdrive_bindings": {
+      "description": "Hyperdrive bindings used for Pages Functions.",
+      "type": "object",
+      "example": {
+       "HYPERDRIVE": {
+        "id": "a76a99bc342644deb02c38d66082262a"
+       }
+      },
+      "additionalProperties": {
+       "description": "Hyperdrive binding.",
+       "properties": {
+        "id": {
+         "type": "string",
+         "example": "a76a99bc342644deb02c38d66082262a",
+         "x-auditable": true
+        }
+       },
+       "required": [
+        "id"
+       ],
+       "type": "object"
+      }
+     },
+     "kv_namespaces": {
+      "description": "KV namespaces used for Pages Functions.",
+      "type": "object",
+      "example": {
+       "KV_BINDING": {
+        "namespace_id": "5eb63bbbe01eeed093cb22bb8f5acdc3"
+       }
+      },
+      "additionalProperties": {
+       "description": "KV namespace binding.",
+       "properties": {
+        "namespace_id": {
+         "description": "ID of the KV namespace.",
+         "type": "string",
+         "example": "5eb63bbbe01eeed093cb22bb8f5acdc3",
+         "x-auditable": true
+        }
+       },
+       "required": [
+        "namespace_id"
+       ],
+       "type": "object"
+      }
+     },
+     "limits": {
+      "description": "Limits for Pages Functions.",
+      "type": "object",
+      "example": {
+       "cpu_ms": 100
+      },
+      "properties": {
+       "cpu_ms": {
+        "description": "CPU time limit in milliseconds.",
+        "type": "integer",
+        "example": 100,
+        "x-auditable": true
+       }
+      },
+      "required": [
+       "cpu_ms"
+      ]
+     },
+     "mtls_certificates": {
+      "description": "mTLS bindings used for Pages Functions.",
+      "type": "object",
+      "example": {
+       "MTLS": {
+        "certificate_id": "d7cdd17c-916f-4cb7-aabe-585eb382ec4e"
+       }
+      },
+      "additionalProperties": {
+       "description": "mTLS binding.",
+       "properties": {
+        "certificate_id": {
+         "type": "string",
+         "example": "d7cdd17c-916f-4cb7-aabe-585eb382ec4e",
+         "x-auditable": true
+        }
+       },
+       "required": [
+        "certificate_id"
+       ],
+       "type": "object"
+      }
+     },
+     "placement": {
+      "description": "Placement setting used for Pages Functions.",
+      "type": "object",
+      "example": {
+       "mode": "smart"
+      },
+      "properties": {
+       "mode": {
+        "description": "Placement mode.",
+        "type": "string",
+        "example": "smart",
+        "x-auditable": true
+       }
+      },
+      "required": [
+       "mode"
+      ]
+     },
+     "queue_producers": {
+      "description": "Queue Producer bindings used for Pages Functions.",
+      "type": "object",
+      "example": {
+       "QUEUE_PRODUCER_BINDING": {
+        "name": "some-queue"
+       }
+      },
+      "additionalProperties": {
+       "description": "Queue Producer binding.",
+       "properties": {
+        "name": {
+         "description": "Name of the Queue.",
+         "type": "string",
+         "example": "some-queue",
+         "x-auditable": true
+        }
+       },
+       "required": [
+        "name"
+       ],
+       "type": "object"
+      }
+     },
+     "r2_buckets": {
+      "description": "R2 buckets used for Pages Functions.",
+      "type": "object",
+      "example": {
+       "R2_BINDING": {
+        "name": "some-bucket"
+       }
+      },
+      "additionalProperties": {
+       "description": "R2 binding.",
+       "properties": {
+        "jurisdiction": {
+         "description": "Jurisdiction of the R2 bucket.",
+         "type": "string",
+         "example": "eu",
+         "nullable": true,
+         "x-auditable": true
+        },
+        "name": {
+         "description": "Name of the R2 bucket.",
+         "type": "string",
+         "example": "some-bucket",
+         "x-auditable": true
+        }
+       },
+       "required": [
+        "name"
+       ],
+       "type": "object"
+      }
+     },
+     "services": {
+      "description": "Services used for Pages Functions.",
+      "type": "object",
+      "example": {
+       "SERVICE_BINDING": {
+        "entrypoint": "MyHandler",
+        "environment": "production",
+        "service": "example-worker"
+       }
+      },
+      "additionalProperties": {
+       "description": "Service binding.",
+       "properties": {
+        "entrypoint": {
+         "description": "The entrypoint to bind to.",
+         "type": "string",
+         "nullable": true,
+         "x-auditable": true
+        },
+        "environment": {
+         "description": "The Service environment.",
+         "type": "string",
+         "x-auditable": true
+        },
+        "service": {
+         "description": "The Service name.",
+         "type": "string",
+         "x-auditable": true
+        }
+       },
+       "required": [
+        "service",
+        "environment"
+       ],
+       "type": "object"
+      }
+     },
+     "usage_model": {
+      "description": "The usage model for Pages Functions.",
+      "type": "string",
+      "example": "standard",
+      "enum": [
+       "standard",
+       "bundled",
+       "unbound"
+      ],
+      "deprecated": true,
+      "x-auditable": true,
+      "x-stainless-deprecation-message": "All new projects now use the Standard usage model."
+     },
+     "vectorize_bindings": {
+      "description": "Vectorize bindings used for Pages Functions.",
+      "type": "object",
+      "example": {
+       "VECTORIZE": {
+        "index_name": "my_index"
+       }
+      },
+      "additionalProperties": {
+       "description": "Vectorize binding.",
+       "properties": {
+        "index_name": {
+         "type": "string",
+         "example": "my_index",
+         "x-auditable": true
+        }
+       },
+       "required": [
+        "index_name"
+       ],
+       "type": "object"
+      }
+     },
+     "wrangler_config_hash": {
+      "description": "Hash of the Wrangler configuration used for the deployment.",
+      "type": "string",
+      "example": "abc123def456",
+      "x-auditable": true
+     }
+    },
+    "required": [
+     "env_vars",
+     "fail_open",
+     "always_use_latest_compatibility_date",
+     "compatibility_date",
+     "compatibility_flags",
+     "build_image_major_version",
+     "usage_model"
+    ]
+   },
+   "pages_env_vars": {
+    "description": "Environment variables used for builds and Pages Functions.",
+    "type": "object",
+    "additionalProperties": {
+     "discriminator": {
+      "mapping": {
+       "plain_text": "#/components/schemas/pages_plain_text_env_var",
+       "secret_text": "#/components/schemas/pages_secret_text_env_var"
+      },
+      "propertyName": "type"
+     },
+     "nullable": true,
+     "oneOf": [
+      {
+       "$ref": "#/components/schemas/pages_plain_text_env_var"
+      },
+      {
+       "$ref": "#/components/schemas/pages_secret_text_env_var"
+      }
+     ],
+     "type": "object"
+    },
+    "nullable": true
+   },
+   "pages_plain_text_env_var": {
+    "description": "A plaintext environment variable.",
+    "type": "object",
+    "properties": {
+     "type": {
+      "type": "string",
+      "enum": [
+       "plain_text"
+      ],
+      "x-auditable": true
+     },
+     "value": {
+      "description": "Environment variable value.",
+      "type": "string"
+     }
+    },
+    "example": {
+     "type": "plain_text",
+     "value": "hello world"
+    },
+    "nullable": true,
+    "required": [
+     "type",
+     "value"
+    ]
+   },
+   "pages_project": {
+    "type": "object",
+    "properties": {
+     "build_config": {
+      "$ref": "#/components/schemas/pages_build_config"
+     },
+     "canonical_deployment": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/pages_deployment"
+       },
+       {
+        "description": "Most recent production deployment of the project.",
+        "nullable": true,
+        "type": "object"
+       }
+      ]
+     },
+     "created_on": {
+      "description": "When the project was created.",
+      "type": "string",
+      "example": "2017-01-01T00:00:00Z",
+      "x-auditable": true
+     },
+     "deployment_configs": {
+      "description": "Configs for deployments in a project.",
+      "type": "object",
+      "properties": {
+       "preview": {
+        "description": "Configs for preview deploys.",
+        "allOf": [
+         {
+          "$ref": "#/components/schemas/pages_deployment_config_values"
+         }
+        ]
+       },
+       "production": {
+        "description": "Configs for production deploys.",
+        "allOf": [
+         {
+          "$ref": "#/components/schemas/pages_deployment_config_values"
+         }
+        ]
+       }
+      },
+      "required": [
+       "production",
+       "preview"
+      ]
+     },
+     "domains": {
+      "description": "A list of associated custom domains for the project.",
+      "type": "array",
+      "items": {
+       "type": "string",
+       "x-auditable": true
+      },
+      "example": [
+       "customdomain.com",
+       "customdomain.org"
+      ]
+     },
+     "framework": {
+      "description": "Framework the project is using.",
+      "type": "string",
+      "x-auditable": true
+     },
+     "framework_version": {
+      "description": "Version of the framework the project is using.",
+      "type": "string",
+      "x-auditable": true
+     },
+     "id": {
+      "description": "ID of the project.",
+      "type": "string",
+      "example": "7b162ea7-7367-4d67-bcde-1160995d5",
+      "x-auditable": true
+     },
+     "latest_deployment": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/pages_deployment"
+       },
+       {
+        "description": "Most recent deployment of the project.",
+        "nullable": true,
+        "type": "object"
+       }
+      ]
+     },
+     "name": {
+      "$ref": "#/components/schemas/pages_project_name"
+     },
+     "preview_script_name": {
+      "description": "Name of the preview script.",
+      "type": "string",
+      "example": "pages-worker--1234567-preview",
+      "x-auditable": true
+     },
+     "production_branch": {
+      "description": "Production branch of the project. Used to identify production deployments.",
+      "type": "string",
+      "example": "main",
+      "x-auditable": true
+     },
+     "production_script_name": {
+      "description": "Name of the production script.",
+      "type": "string",
+      "example": "pages-worker--1234567-production",
+      "x-auditable": true
+     },
+     "source": {
+      "$ref": "#/components/schemas/pages_source"
+     },
+     "subdomain": {
+      "description": "The Cloudflare subdomain associated with the project.",
+      "type": "string",
+      "example": "helloworld.pages.dev",
+      "x-auditable": true
+     },
+     "uses_functions": {
+      "description": "Whether the project uses functions.",
+      "type": "boolean",
+      "nullable": true,
+      "x-auditable": true
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "deployment_configs",
+     "latest_deployment",
+     "canonical_deployment",
+     "created_on",
+     "production_branch",
+     "production_script_name",
+     "preview_script_name",
+     "uses_functions",
+     "framework",
+     "framework_version"
+    ]
+   },
+   "pages_project_name": {
+    "description": "Name of the Pages project. Must begin with a lowercase letter or digit and contain only lowercase letters, digits, and hyphens.",
+    "type": "string",
+    "example": "this-is-my-project-01",
+    "pattern": "^[a-z0-9][a-z0-9-]*$",
+    "x-auditable": true
+   },
+   "pages_secret_text_env_var": {
+    "description": "An encrypted environment variable.",
+    "type": "object",
+    "properties": {
+     "type": {
+      "type": "string",
+      "enum": [
+       "secret_text"
+      ],
+      "x-auditable": true
+     },
+     "value": {
+      "description": "Secret value.",
+      "type": "string",
+      "x-sensitive": true
+     }
+    },
+    "example": {
+     "type": "secret_text",
+     "value": ""
+    },
+    "nullable": true,
+    "required": [
+     "type",
+     "value"
+    ]
+   },
+   "pages_source": {
+    "description": "Configs for the project source control.",
+    "type": "object",
+    "properties": {
+     "config": {
+      "$ref": "#/components/schemas/pages_source_config"
+     },
+     "type": {
+      "$ref": "#/components/schemas/pages_source_type"
+     }
+    },
+    "required": [
+     "type",
+     "config"
+    ]
+   },
+   "pages_source_config": {
+    "type": "object",
+    "properties": {
+     "deployments_enabled": {
+      "description": "Whether to enable automatic deployments when pushing to the source repository.\nWhen disabled, no deployments (production or preview) will be triggered automatically.\n",
+      "type": "boolean",
+      "deprecated": true,
+      "x-auditable": true,
+      "x-stainless-deprecation-message": "Use `production_deployments_enabled` and `preview_deployment_setting` for more granular control."
+     },
+     "owner": {
+      "description": "The owner of the repository.",
+      "type": "string",
+      "example": "my-org",
+      "x-auditable": true
+     },
+     "owner_id": {
+      "description": "The owner ID of the repository.",
+      "type": "string",
+      "example": "12345678",
+      "x-auditable": true
+     },
+     "path_excludes": {
+      "description": "A list of paths that should be excluded from triggering a preview deployment. Wildcard syntax (`*`) is supported.",
+      "type": "array",
+      "items": {
+       "type": "string",
+       "x-auditable": true
+      }
+     },
+     "path_includes": {
+      "description": "A list of paths that should be watched to trigger a preview deployment. Wildcard syntax (`*`) is supported.",
+      "type": "array",
+      "items": {
+       "type": "string",
+       "x-auditable": true
+      }
+     },
+     "pr_comments_enabled": {
+      "description": "Whether to enable PR comments.",
+      "type": "boolean",
+      "x-auditable": true
+     },
+     "preview_branch_excludes": {
+      "description": "A list of branches that should not trigger a preview deployment. Wildcard syntax (`*`) is supported. Must be used with `preview_deployment_setting` set to `custom`.",
+      "type": "array",
+      "items": {
+       "type": "string",
+       "x-auditable": true
+      }
+     },
+     "preview_branch_includes": {
+      "description": "A list of branches that should trigger a preview deployment. Wildcard syntax (`*`) is supported. Must be used with `preview_deployment_setting` set to `custom`.",
+      "type": "array",
+      "items": {
+       "type": "string",
+       "x-auditable": true
+      }
+     },
+     "preview_deployment_setting": {
+      "description": "Controls whether commits to preview branches trigger a preview deployment.",
+      "type": "string",
+      "enum": [
+       "all",
+       "none",
+       "custom"
+      ],
+      "x-auditable": true
+     },
+     "production_branch": {
+      "description": "The production branch of the repository.",
+      "type": "string",
+      "example": "main",
+      "x-auditable": true
+     },
+     "production_deployments_enabled": {
+      "description": "Whether to trigger a production deployment on commits to the production branch.",
+      "type": "boolean",
+      "x-auditable": true
+     },
+     "repo_id": {
+      "description": "The ID of the repository.",
+      "type": "string",
+      "example": "12345678",
+      "x-auditable": true
+     },
+     "repo_name": {
+      "description": "The name of the repository.",
+      "type": "string",
+      "example": "my-repo",
+      "x-auditable": true
+     }
+    },
+    "required": [
+     "deployments_enabled",
+     "owner",
+     "owner_id",
+     "path_excludes",
+     "path_includes",
+     "pr_comments_enabled",
+     "preview_branch_excludes",
+     "preview_branch_includes",
+     "preview_deployment_setting",
+     "production_branch",
+     "production_deployments_enabled",
+     "repo_id",
+     "repo_name"
+    ]
+   },
+   "pages_source_type": {
+    "description": "The source control management provider.",
+    "type": "string",
+    "example": "github",
+    "enum": [
+     "github",
+     "gitlab"
+    ],
+    "x-auditable": true
+   },
+   "pages_stage": {
+    "description": "The status of the deployment.",
+    "type": "object",
+    "properties": {
+     "ended_on": {
+      "description": "When the stage ended.",
+      "type": "string",
+      "example": "2021-03-09T00:58:59.045655",
+      "nullable": true,
+      "x-auditable": true
+     },
+     "name": {
+      "description": "The current build stage.",
+      "type": "string",
+      "example": "deploy",
+      "enum": [
+       "queued",
+       "initialize",
+       "clone_repo",
+       "build",
+       "deploy"
+      ],
+      "x-auditable": true
+     },
+     "started_on": {
+      "description": "When the stage started.",
+      "type": "string",
+      "example": "2021-03-09T00:55:03.923456Z",
+      "nullable": true,
+      "x-auditable": true
+     },
+     "status": {
+      "description": "State of the current stage.",
+      "type": "string",
+      "example": "success",
+      "enum": [
+       "success",
+       "idle",
+       "active",
+       "failure",
+       "canceled",
+       "skipped"
+      ],
+      "x-auditable": true
+     }
+    },
+    "required": [
+     "name",
+     "started_on",
+     "ended_on",
+     "status"
+    ]
+   },
+   "registrar-api_domain_name": {
+    "description": "Provides a fully qualified domain name (FQDN), including the extension\n(e.g., `example.com`, `mybrand.app`). The domain name uniquely identifies\na registration. Cloudflare permits only one registration per domain, making\nthe domain name a natural idempotency key for registration requests.\n",
+    "type": "string",
+    "example": "example.com",
+    "x-auditable": true
+   },
+   "registrar-api_registration": {
+    "description": "A domain registration resource representing the current state of a registered domain.",
+    "type": "object",
+    "properties": {
+     "auto_renew": {
+      "description": "Whether automatic renewal occurs before expiration.",
+      "type": "boolean",
+      "example": true
+     },
+     "created_at": {
+      "description": "When the domain was registered. Present when the registration resource exists.",
+      "type": "string",
+      "example": "2025-01-15T10:00:00Z"
+     },
+     "domain_name": {
+      "$ref": "#/components/schemas/registrar-api_domain_name"
+     },
+     "expires_at": {
+      "description": "When the domain registration expires. Ready registrations include this value; only `registration_pending` and `transfer_pending` may return null.",
+      "type": "string",
+      "example": "2026-01-15T10:00:00Z",
+      "nullable": true
+     },
+     "locked": {
+      "description": "Whether the domain is locked for transfer.",
+      "type": "boolean",
+      "example": true
+     },
+     "privacy_mode": {
+      "description": "Current WHOIS privacy mode for the registration.",
+      "type": "string",
+      "example": "redaction",
+      "enum": [
+       "off",
+       "redaction"
+      ]
+     },
+     "status": {
+      "description": "Current registration status.\n- `active`: The domain operates with an active registration.\n- `registration_pending`: Registration remains in progress.\n- `transfer_pending`: Domain transfer is in progress.\n- `expired`: The domain registration expired.\n- `suspended`: The registry suspended the domain.\n- `redemption_period`: The domain entered the redemption grace period.\n- `pending_delete`: The registry scheduled the domain for deletion.\n",
+      "type": "string",
+      "example": "active",
+      "enum": [
+       "active",
+       "registration_pending",
+       "transfer_pending",
+       "expired",
+       "suspended",
+       "redemption_period",
+       "pending_delete"
+      ]
+     }
+    },
+    "required": [
+     "domain_name",
+     "status",
+     "created_at",
+     "expires_at",
+     "auto_renew",
+     "privacy_mode",
+     "locked"
+    ]
+   },
+   "rulesets_RedirectFromValue": {
+    "description": "A redirect based on the request properties.",
+    "type": "object",
+    "properties": {
+     "preserve_query_string": {
+      "description": "Whether to keep the query string of the original request.",
+      "type": "boolean",
+      "example": true,
+      "title": "Preserve Query String"
+     },
+     "status_code": {
+      "description": "The status code to use for the redirect.",
+      "type": "integer",
+      "example": 302,
+      "enum": [
+       301,
+       302,
+       303,
+       307,
+       308
+      ],
+      "title": "Status Code"
+     },
+     "target_url": {
+      "description": "A URL to redirect the request to.",
+      "type": "object",
+      "maxProperties": 1,
+      "minProperties": 1,
+      "properties": {
+       "expression": {
+        "description": "An expression that evaluates to a URL to redirect the request to.",
+        "type": "string",
+        "example": "concat(\"https://example.com\", http.request.uri.path)",
+        "minLength": 1,
+        "title": "Redirect Expression"
+       },
+       "value": {
+        "description": "A URL to redirect the request to.",
+        "type": "string",
+        "example": "https://example.com",
+        "minLength": 1,
+        "title": "Redirect Value"
+       }
+      },
+      "title": "Target URL"
+     }
+    },
+    "required": [
+     "target_url"
+    ],
+    "title": "Single Redirect"
+   },
+   "rum_auto_install": {
+    "description": "If enabled, the JavaScript snippet is automatically injected for orange-clouded sites.",
+    "type": "boolean",
+    "example": true,
+    "x-auditable": true
+   },
+   "rum_rule": {
+    "type": "object",
+    "properties": {
+     "created": {
+      "$ref": "#/components/schemas/rum_timestamp"
+     },
+     "host": {
+      "description": "The hostname the rule will be applied to.",
+      "type": "string",
+      "example": "example.com",
+      "x-auditable": true
+     },
+     "id": {
+      "$ref": "#/components/schemas/rum_rule_identifier"
+     },
+     "inclusive": {
+      "description": "Whether the rule includes or excludes traffic from being measured.",
+      "type": "boolean",
+      "example": true,
+      "x-auditable": true
+     },
+     "is_paused": {
+      "description": "Whether the rule is paused or not.",
+      "type": "boolean",
+      "example": false,
+      "x-auditable": true
+     },
+     "paths": {
+      "description": "The paths the rule will be applied to.",
+      "type": "array",
+      "items": {
+       "type": "string",
+       "x-auditable": true
+      },
+      "example": [
+       "*"
+      ]
+     },
+     "priority": {
+      "type": "number",
+      "example": 1000,
+      "x-auditable": true
+     }
+    }
+   },
+   "rum_rule_identifier": {
+    "description": "The Web Analytics rule identifier.",
+    "type": "string",
+    "example": "f174e90a-fafe-4643-bbbc-4a0ed4fc8415",
+    "x-auditable": true
+   },
+   "rum_rules": {
+    "description": "A list of rules.",
+    "type": "array",
+    "items": {
+     "$ref": "#/components/schemas/rum_rule"
+    }
+   },
+   "rum_ruleset": {
+    "type": "object",
+    "properties": {
+     "enabled": {
+      "description": "Whether the ruleset is enabled.",
+      "type": "boolean",
+      "example": true
+     },
+     "id": {
+      "$ref": "#/components/schemas/rum_ruleset_identifier"
+     },
+     "zone_name": {
+      "type": "string",
+      "example": "example.com"
+     },
+     "zone_tag": {
+      "$ref": "#/components/schemas/rum_zone_tag"
+     }
+    }
+   },
+   "rum_ruleset_identifier": {
+    "description": "The Web Analytics ruleset identifier.",
+    "type": "string",
+    "example": "f174e90a-fafe-4643-bbbc-4a0ed4fc8415",
+    "x-auditable": true
+   },
+   "rum_site": {
+    "type": "object",
+    "properties": {
+     "auto_install": {
+      "$ref": "#/components/schemas/rum_auto_install"
+     },
+     "created": {
+      "$ref": "#/components/schemas/rum_timestamp"
+     },
+     "rules": {
+      "$ref": "#/components/schemas/rum_rules"
+     },
+     "ruleset": {
+      "$ref": "#/components/schemas/rum_ruleset"
+     },
+     "site_tag": {
+      "$ref": "#/components/schemas/rum_site_tag"
+     },
+     "site_token": {
+      "$ref": "#/components/schemas/rum_site_token"
+     },
+     "snippet": {
+      "$ref": "#/components/schemas/rum_snippet"
+     }
+    }
+   },
+   "rum_site_tag": {
+    "description": "The Web Analytics site identifier.",
+    "type": "string",
+    "example": "023e105f4ecef8ad9ca31a8372d0c353",
+    "x-auditable": true
+   },
+   "rum_site_token": {
+    "description": "The Web Analytics site token.",
+    "type": "string",
+    "example": "023e105f4ecef8ad9ca31a8372d0c353",
+    "x-auditable": true
+   },
+   "rum_snippet": {
+    "description": "Encoded JavaScript snippet.",
+    "type": "string",
+    "example": "<!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{\"token\": \"bc40a2d1b5834453aba85c1b9a3054da\"}'></script><!-- End Cloudflare Web Analytics -->",
+    "x-auditable": true
+   },
+   "rum_timestamp": {
+    "type": "string",
+    "example": "2014-01-01T05:20:00.12345Z",
+    "x-auditable": true
+   },
+   "rum_zone_tag": {
+    "description": "The zone identifier.",
+    "type": "string",
+    "example": "023e105f4ecef8ad9ca31a8372d0c353",
+    "x-auditable": true
+   },
+   "tls-certificates-and-hostnames_certificate_authority-2": {
+    "description": "Certificate Authority selected for the order.  For information on any certificate authority specific details or restrictions [see this page for more details](https://developers.cloudflare.com/ssl/reference/certificate-authorities).",
+    "type": "string",
+    "example": "lets_encrypt",
+    "enum": [
+     "google",
+     "lets_encrypt",
+     "ssl_com"
+    ],
+    "x-auditable": true
+   },
+   "tls-certificates-and-hostnames_certificate_pack": {
+    "description": "A certificate pack with all its properties.",
+    "type": "object",
+    "properties": {
+     "certificate_authority": {
+      "$ref": "#/components/schemas/tls-certificates-and-hostnames_certificate_authority-2"
+     },
+     "certificates": {
+      "description": "Array of certificates in this pack.",
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/tls-certificates-and-hostnames_certificate_pack_certificate"
+      }
+     },
+     "cloudflare_branding": {
+      "$ref": "#/components/schemas/tls-certificates-and-hostnames_cloudflare_branding"
+     },
+     "dcv_delegation_records": {
+      "description": "DCV Delegation records for domain validation.",
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/tls-certificates-and-hostnames_validation_record"
+      }
+     },
+     "hosts": {
+      "$ref": "#/components/schemas/tls-certificates-and-hostnames_hosts-2"
+     },
+     "id": {
+      "$ref": "#/components/schemas/tls-certificates-and-hostnames_certificate_pack_identifier"
+     },
+     "primary_certificate": {
+      "$ref": "#/components/schemas/tls-certificates-and-hostnames_primary"
+     },
+     "status": {
+      "$ref": "#/components/schemas/tls-certificates-and-hostnames_status-5"
+     },
+     "type": {
+      "$ref": "#/components/schemas/tls-certificates-and-hostnames_type-2"
+     },
+     "validation_errors": {
+      "description": "Domain validation errors that have been received by the certificate authority (CA).",
+      "type": "array",
+      "items": {
+       "properties": {
+        "message": {
+         "description": "A domain validation error.",
+         "type": "string",
+         "example": "SERVFAIL looking up CAA for app.example.com",
+         "x-auditable": true
+        }
+       },
+       "type": "object"
+      }
+     },
+     "validation_method": {
+      "$ref": "#/components/schemas/tls-certificates-and-hostnames_validation_method"
+     },
+     "validation_records": {
+      "description": "Certificates' validation records.",
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/tls-certificates-and-hostnames_validation_record"
+      }
+     },
+     "validity_days": {
+      "$ref": "#/components/schemas/tls-certificates-and-hostnames_validity_days"
+     }
+    },
+    "required": [
+     "id",
+     "type",
+     "hosts",
+     "certificates",
+     "status"
+    ]
+   },
+   "tls-certificates-and-hostnames_certificate_pack_certificate": {
+    "description": "An individual certificate within a certificate pack.",
+    "type": "object",
+    "properties": {
+     "bundle_method": {
+      "description": "Certificate bundle method.",
+      "type": "string",
+      "example": "ubiquitous",
+      "x-auditable": true
+     },
+     "expires_on": {
+      "description": "When the certificate from the authority expires.",
+      "type": "string",
+      "example": "2024-01-01T00:00:00Z",
+      "x-auditable": true
+     },
+     "geo_restrictions": {
+      "description": "Specify the region where your private key can be held locally.",
+      "type": "object",
+      "properties": {
+       "label": {
+        "type": "string",
+        "example": "us",
+        "enum": [
+         "us",
+         "eu",
+         "highest_security"
+        ],
+        "x-auditable": true
+       }
+      }
+     },
+     "hosts": {
+      "description": "Hostnames covered by this certificate.",
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "example": [
+       "example.com",
+       "*.example.com"
+      ],
+      "x-auditable": true
+     },
+     "id": {
+      "description": "Certificate identifier.",
+      "type": "string",
+      "example": "7e7b8deba8538af625850b7b2530034c",
+      "x-auditable": true
+     },
+     "issuer": {
+      "description": "The certificate authority that issued the certificate.",
+      "type": "string",
+      "example": "Let's Encrypt",
+      "x-auditable": true
+     },
+     "modified_on": {
+      "description": "When the certificate was last modified.",
+      "type": "string",
+      "example": "2014-01-01T05:20:00Z",
+      "x-auditable": true
+     },
+     "priority": {
+      "description": "The order/priority in which the certificate will be used.",
+      "type": "number",
+      "x-auditable": true
+     },
+     "signature": {
+      "description": "The type of hash used for the certificate.",
+      "type": "string",
+      "example": "ECDSAWithSHA256",
+      "x-auditable": true
+     },
+     "status": {
+      "description": "Certificate status.",
+      "type": "string",
+      "example": "active",
+      "x-auditable": true
+     },
+     "uploaded_on": {
+      "description": "When the certificate was uploaded to Cloudflare.",
+      "type": "string",
+      "example": "2014-01-01T05:20:00Z",
+      "x-auditable": true
+     },
+     "zone_id": {
+      "$ref": "#/components/schemas/tls-certificates-and-hostnames_identifier"
+     }
+    },
+    "required": [
+     "id",
+     "hosts",
+     "status"
+    ]
+   },
+   "tls-certificates-and-hostnames_certificate_pack_identifier": {
+    "description": "The unique identifier for a certificate_pack.",
+    "type": "string",
+    "example": "3822ff90-ea29-44df-9e55-21300bb9419b",
+    "x-auditable": true
+   },
+   "tls-certificates-and-hostnames_cloudflare_branding": {
+    "description": "Whether or not to add Cloudflare Branding for the order.  This will add a subdomain of sni.cloudflaressl.com as the Common Name if set to true.",
+    "type": "boolean",
+    "example": false,
+    "x-auditable": true
+   },
+   "tls-certificates-and-hostnames_hosts-2": {
+    "description": "Comma separated list of valid host names for the certificate packs. Must contain the zone apex, may not contain more than 50 hosts, and may not be empty.",
+    "type": "array",
+    "items": {
+     "type": "string",
+     "x-auditable": true
+    },
+    "example": [
+     "example.com",
+     "*.example.com",
+     "www.example.com"
+    ],
+    "x-stainless-collection-type": "set",
+    "x-stainless-terraform-configurability": "computed_optional"
+   },
+   "tls-certificates-and-hostnames_identifier": {
+    "description": "Identifier.",
+    "type": "string",
+    "example": "023e105f4ecef8ad9ca31a8372d0c353",
+    "maxLength": 32,
+    "x-auditable": true
+   },
+   "tls-certificates-and-hostnames_primary": {
+    "description": "Identifier of the primary certificate in a pack.",
+    "type": "string",
+    "example": "7e7b8deba8538af625850b7b2530034c",
+    "x-auditable": true
+   },
+   "tls-certificates-and-hostnames_status-5": {
+    "description": "Status of certificate pack.",
+    "type": "string",
+    "example": "initializing",
+    "enum": [
+     "initializing",
+     "pending_validation",
+     "deleted",
+     "pending_issuance",
+     "pending_deployment",
+     "pending_deletion",
+     "pending_expiration",
+     "expired",
+     "active",
+     "initializing_timed_out",
+     "validation_timed_out",
+     "issuance_timed_out",
+     "deployment_timed_out",
+     "deletion_timed_out",
+     "pending_cleanup",
+     "staging_deployment",
+     "staging_active",
+     "deactivating",
+     "inactive",
+     "backup_issued",
+     "holding_deployment"
+    ],
+    "x-auditable": true
+   },
+   "tls-certificates-and-hostnames_type-2": {
+    "description": "Type of certificate pack.",
+    "type": "string",
+    "example": "universal",
+    "enum": [
+     "mh_custom",
+     "managed_hostname",
+     "sni_custom",
+     "universal",
+     "advanced",
+     "total_tls",
+     "keyless",
+     "legacy_custom"
+    ],
+    "x-auditable": true
+   },
+   "tls-certificates-and-hostnames_validation_method": {
+    "description": "Validation Method selected for the order.",
+    "type": "string",
+    "example": "txt",
+    "enum": [
+     "txt",
+     "http",
+     "email"
+    ],
+    "x-auditable": true
+   },
+   "tls-certificates-and-hostnames_validation_record": {
+    "description": "Certificate's required validation record.",
+    "type": "object",
+    "properties": {
+     "cname": {
+      "description": "The CNAME record hostname for DCV delegation.",
+      "type": "string",
+      "example": "_acme-challenge.example.com",
+      "x-auditable": true
+     },
+     "cname_target": {
+      "description": "The CNAME record target value for DCV delegation.",
+      "type": "string",
+      "example": "dcv.cloudflare.com",
+      "x-auditable": true
+     },
+     "emails": {
+      "description": "The set of email addresses that the certificate authority (CA) will use to complete domain validation.",
+      "type": "array",
+      "items": {
+       "type": "string",
+       "x-auditable": true
+      },
+      "example": [
+       "administrator@example.com",
+       "webmaster@example.com"
+      ]
+     },
+     "http_body": {
+      "description": "The content that the certificate authority (CA) will expect to find at the http_url during the domain validation.",
+      "type": "string",
+      "example": "ca3-574923932a82475cb8592200f1a2a23d"
+     },
+     "http_url": {
+      "description": "The url that will be checked during domain validation.",
+      "type": "string",
+      "example": "http://app.example.com/.well-known/pki-validation/ca3-da12a1c25e7b48cf80408c6c1763b8a2.txt"
+     },
+     "status": {
+      "description": "Status of the validation record.",
+      "type": "string",
+      "example": "pending"
+     },
+     "txt_name": {
+      "description": "The hostname that the certificate authority (CA) will check for a TXT record during domain validation .",
+      "type": "string",
+      "example": "_acme-challenge.app.example.com",
+      "x-auditable": true
+     },
+     "txt_value": {
+      "description": "The TXT record that the certificate authority (CA) will check during domain validation.",
+      "type": "string",
+      "example": "810b7d5f01154524b961ba0cd578acc2"
+     }
+    }
+   },
+   "tls-certificates-and-hostnames_validity_days": {
+    "description": "Validity Days selected for the order.",
+    "type": "integer",
+    "enum": [
+     14,
+     30,
+     90,
+     365
+    ],
+    "x-auditable": true
+   },
+   "tunnel_account_id": {
+    "description": "Cloudflare account ID",
+    "type": "string",
+    "example": "699d98642c564d2e855e9661899b7252",
+    "maxLength": 32,
+    "x-auditable": true
+   },
+   "tunnel_arch": {
+    "description": "The cloudflared OS architecture used to establish this connection.",
+    "type": "string",
+    "example": "linux_amd64"
+   },
+   "tunnel_cfd_tunnel": {
+    "description": "A Cloudflare Tunnel that connects your origin to Cloudflare's edge.",
+    "type": "object",
+    "properties": {
+     "account_tag": {
+      "$ref": "#/components/schemas/tunnel_account_id"
+     },
+     "config_src": {
+      "$ref": "#/components/schemas/tunnel_config_src"
+     },
+     "connections": {
+      "$ref": "#/components/schemas/tunnel_connections_deprecated"
+     },
+     "conns_active_at": {
+      "$ref": "#/components/schemas/tunnel_conns_active_at"
+     },
+     "conns_inactive_at": {
+      "$ref": "#/components/schemas/tunnel_conns_inactive_at"
+     },
+     "created_at": {
+      "$ref": "#/components/schemas/tunnel_created_at"
+     },
+     "deleted_at": {
+      "$ref": "#/components/schemas/tunnel_deleted_at"
+     },
+     "id": {
+      "$ref": "#/components/schemas/tunnel_tunnel_id"
+     },
+     "metadata": {
+      "$ref": "#/components/schemas/tunnel_metadata"
+     },
+     "name": {
+      "$ref": "#/components/schemas/tunnel_tunnel_name"
+     },
+     "remote_config": {
+      "$ref": "#/components/schemas/tunnel_remote_config"
+     },
+     "status": {
+      "$ref": "#/components/schemas/tunnel_status"
+     },
+     "tun_type": {
+      "$ref": "#/components/schemas/tunnel_tunnel_type"
+     }
+    }
+   },
+   "tunnel_client_id": {
+    "description": "UUID of the Cloudflare Tunnel connector.",
+    "type": "string",
+    "example": "1bedc50d-42b3-473c-b108-ff3d10c0d925",
+    "maxLength": 36,
+    "x-auditable": true
+   },
+   "tunnel_colo_name": {
+    "description": "The Cloudflare data center used for this connection.",
+    "type": "string",
+    "example": "DFW"
+   },
+   "tunnel_config": {
+    "description": "The tunnel configuration and ingress rules.",
+    "type": "object",
+    "properties": {
+     "ingress": {
+      "description": "List of public hostname definitions. At least one ingress rule needs to be defined for the tunnel.",
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/tunnel_ingressRule"
+      },
+      "minItems": 1
+     },
+     "originRequest": {
+      "$ref": "#/components/schemas/tunnel_originRequest"
+     },
+     "warp-routing": {
+      "description": "Enable private network access from WARP users to private network routes. This is enabled if the tunnel has an assigned route.",
+      "type": "object",
+      "deprecated": true,
+      "properties": {
+       "enabled": {
+        "type": "boolean"
+       }
+      },
+      "x-stainless-deprecation-message": "This field is ignored by cloudflared since version 2023.10.0.",
+      "x-stainless-skip": true
+     }
+    }
+   },
+   "tunnel_config_src": {
+    "description": "Indicates if this is a locally or remotely configured tunnel. If `local`, manage the tunnel using a YAML file on the origin machine. If `cloudflare`, manage the tunnel on the Zero Trust dashboard.",
+    "type": "string",
+    "example": "cloudflare",
+    "enum": [
+     "local",
+     "cloudflare"
+    ]
+   },
+   "tunnel_config_src-2": {
+    "description": "Indicates if this is a locally or remotely configured tunnel. If `local`, manage the tunnel using a YAML file on the origin machine. If `cloudflare`, manage the tunnel's configuration on the Zero Trust dashboard.",
+    "type": "string",
+    "example": "cloudflare",
+    "enum": [
+     "local",
+     "cloudflare"
+    ],
+    "x-stainless-terraform-configurability": "computed_optional"
+   },
+   "tunnel_config_version": {
+    "description": "The version of the remote tunnel configuration. Used internally to sync cloudflared with the Zero Trust dashboard.",
+    "type": "integer"
+   },
+   "tunnel_config_version-2": {
+    "description": "The version of the Tunnel Configuration.",
+    "type": "integer"
+   },
+   "tunnel_configuration": {
+    "description": "Cloudflare Tunnel configuration",
+    "type": "object",
+    "properties": {
+     "account_id": {
+      "$ref": "#/components/schemas/tunnel_identifier"
+     },
+     "config": {
+      "$ref": "#/components/schemas/tunnel_config"
+     },
+     "created_at": {
+      "$ref": "#/components/schemas/tunnel_timestamp"
+     },
+     "source": {
+      "$ref": "#/components/schemas/tunnel_config_src-2"
+     },
+     "tunnel_id": {
+      "$ref": "#/components/schemas/tunnel_tunnel_id-2"
+     },
+     "version": {
+      "$ref": "#/components/schemas/tunnel_config_version-2"
+     }
+    }
+   },
+   "tunnel_connection_id": {
+    "description": "UUID of the Cloudflare Tunnel connection.",
+    "type": "string",
+    "example": "1bedc50d-42b3-473c-b108-ff3d10c0d925",
+    "maxLength": 36,
+    "x-auditable": true
+   },
+   "tunnel_connections": {
+    "description": "The Cloudflare Tunnel connections between your origin and Cloudflare's edge.",
+    "type": "array",
+    "items": {
+     "$ref": "#/components/schemas/tunnel_schemas-connection"
+    }
+   },
+   "tunnel_connections_deprecated": {
+    "description": "The Cloudflare Tunnel connections between your origin and Cloudflare's edge.",
+    "type": "array",
+    "items": {
+     "$ref": "#/components/schemas/tunnel_schemas-connection"
+    },
+    "deprecated": true,
+    "x-stainless-deprecation-message": "This field will start returning an empty array. To fetch the connections of a given tunnel, please use the dedicated endpoint `/accounts/{account_id}/{tunnel_type}/{tunnel_id}/connections`"
+   },
+   "tunnel_conns_active_at": {
+    "description": "Timestamp of when the tunnel established at least one connection to Cloudflare's edge. If `null`, the tunnel is inactive.",
+    "type": "string",
+    "example": "2009-11-10T23:00:00Z"
+   },
+   "tunnel_conns_inactive_at": {
+    "description": "Timestamp of when the tunnel became inactive (no connections to Cloudflare's edge). If `null`, the tunnel is active.",
+    "type": "string",
+    "example": "2009-11-10T23:00:00Z"
+   },
+   "tunnel_created_at": {
+    "description": "Timestamp of when the resource was created.",
+    "type": "string",
+    "example": "2021-01-25T18:22:34.317854Z"
+   },
+   "tunnel_deleted_at": {
+    "description": "Timestamp of when the resource was deleted. If `null`, the resource has not been deleted.",
+    "type": "string",
+    "example": "2009-11-10T23:00:00Z"
+   },
+   "tunnel_features": {
+    "description": "Features enabled for the Cloudflare Tunnel.",
+    "type": "array",
+    "items": {
+     "example": "ha-origin",
+     "type": "string"
+    }
+   },
+   "tunnel_identifier": {
+    "description": "Identifier.",
+    "type": "string",
+    "example": "023e105f4ecef8ad9ca31a8372d0c353",
+    "maxLength": 32,
+    "x-auditable": true
+   },
+   "tunnel_ingressRule": {
+    "description": "Public hostname",
+    "type": "object",
+    "properties": {
+     "hostname": {
+      "description": "Public hostname for this service.",
+      "type": "string",
+      "example": "tunnel.example.com"
+     },
+     "originRequest": {
+      "$ref": "#/components/schemas/tunnel_originRequest"
+     },
+     "path": {
+      "description": "Requests with this path route to this public hostname.",
+      "type": "string",
+      "example": "subpath"
+     },
+     "service": {
+      "description": "Protocol and address of destination server. Supported protocols: http://, https://, unix://, tcp://, ssh://, rdp://, unix+tls://, smb://. Alternatively can return a HTTP status code http_status:[code] e.g. 'http_status:404'.\n",
+      "type": "string",
+      "example": "https://localhost:8001"
+     }
+    },
+    "required": [
+     "hostname",
+     "service"
+    ]
+   },
+   "tunnel_ip": {
+    "type": "string",
+    "example": "10.1.0.137"
+   },
+   "tunnel_is_pending_reconnect": {
+    "description": "Cloudflare continues to track connections for several minutes after they disconnect. This is an optimization to improve latency and reliability of reconnecting.  If `true`, the connection has disconnected but is still being tracked. If `false`, the connection is actively serving traffic.",
+    "type": "boolean",
+    "example": false,
+    "deprecated": true,
+    "x-stainless-deprecation-message": "This functionality has been removed. The is_pending_reconnect field will now always report false."
+   },
+   "tunnel_metadata": {
+    "description": "Metadata associated with the tunnel.",
+    "type": "object",
+    "example": {}
+   },
+   "tunnel_originRequest": {
+    "description": "Configuration parameters for the public hostname specific connection settings between cloudflared and origin server.",
+    "type": "object",
+    "properties": {
+     "access": {
+      "description": "For all L7 requests to this hostname, cloudflared will validate each request's Cf-Access-Jwt-Assertion request header.",
+      "type": "object",
+      "properties": {
+       "audTag": {
+        "description": "Access applications that are allowed to reach this hostname for this Tunnel. Audience tags can be identified in the dashboard or via the List Access policies API.",
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "required": {
+        "description": "Deny traffic that has not fulfilled Access authorization.",
+        "type": "boolean",
+        "example": false
+       },
+       "teamName": {
+        "type": "string",
+        "example": "zero-trust-organization-name"
+       }
+      },
+      "required": [
+       "audTag",
+       "teamName"
+      ]
+     },
+     "caPool": {
+      "description": "Path to the certificate authority (CA) for the certificate of your origin. This option should be used only if your certificate is not signed by Cloudflare.",
+      "type": "string"
+     },
+     "connectTimeout": {
+      "description": "Timeout for establishing a new TCP connection to your origin server. This excludes the time taken to establish TLS, which is controlled by tlsTimeout.",
+      "type": "integer",
+      "example": 10
+     },
+     "disableChunkedEncoding": {
+      "description": "Disables chunked transfer encoding. Useful if you are running a WSGI server.",
+      "type": "boolean"
+     },
+     "http2Origin": {
+      "description": "Attempt to connect to origin using HTTP2. Origin must be configured as https.",
+      "type": "boolean"
+     },
+     "httpHostHeader": {
+      "description": "Sets the HTTP Host header on requests sent to the local service.",
+      "type": "string"
+     },
+     "keepAliveConnections": {
+      "description": "Maximum number of idle keepalive connections between Tunnel and your origin. This does not restrict the total number of concurrent connections.",
+      "type": "integer",
+      "example": 100
+     },
+     "keepAliveTimeout": {
+      "description": "Timeout after which an idle keepalive connection can be discarded.",
+      "type": "integer",
+      "example": 90
+     },
+     "matchSNItoHost": {
+      "description": "Auto configure the Hostname on the origin server certificate.",
+      "type": "boolean",
+      "example": false,
+      "x-stainless-naming": {
+       "python": {
+        "name": "match_sni_to_host"
+       }
+      }
+     },
+     "noHappyEyeballs": {
+      "description": "Disable the \u201chappy eyeballs\u201d algorithm for IPv4/IPv6 fallback if your local network has misconfigured one of the protocols.",
+      "type": "boolean",
+      "example": false
+     },
+     "noTLSVerify": {
+      "description": "Disables TLS verification of the certificate presented by your origin. Will allow any certificate from the origin to be accepted.",
+      "type": "boolean",
+      "example": false
+     },
+     "originServerName": {
+      "description": "Hostname that cloudflared should expect from your origin server certificate.",
+      "type": "string"
+     },
+     "proxyType": {
+      "description": "cloudflared starts a proxy server to translate HTTP traffic into TCP when proxying, for example, SSH or RDP. This configures what type of proxy will be started. Valid options are: \"\" for the regular proxy and \"socks\" for a SOCKS5 proxy.\n",
+      "type": "string"
+     },
+     "tcpKeepAlive": {
+      "description": "The timeout after which a TCP keepalive packet is sent on a connection between Tunnel and the origin server.",
+      "type": "integer",
+      "example": 30
+     },
+     "tlsTimeout": {
+      "description": "Timeout for completing a TLS handshake to your origin server, if you have chosen to connect Tunnel to an HTTPS server.",
+      "type": "integer",
+      "example": 10
+     }
+    }
+   },
+   "tunnel_remote_config": {
+    "description": "If `true`, the tunnel can be configured remotely from the Zero Trust dashboard. If `false`, the tunnel must be configured locally on the origin machine.",
+    "type": "boolean",
+    "example": true,
+    "deprecated": true,
+    "x-auditable": true,
+    "x-stainless-deprecation-message": "Use the config_src field instead.",
+    "x-stainless-ignore": true
+   },
+   "tunnel_run_at": {
+    "description": "Timestamp of when the tunnel connection was started.",
+    "type": "string",
+    "example": "2009-11-10T23:00:00Z"
+   },
+   "tunnel_schemas-connection": {
+    "properties": {
+     "client_id": {
+      "$ref": "#/components/schemas/tunnel_client_id"
+     },
+     "client_version": {
+      "$ref": "#/components/schemas/tunnel_version"
+     },
+     "colo_name": {
+      "$ref": "#/components/schemas/tunnel_colo_name"
+     },
+     "id": {
+      "$ref": "#/components/schemas/tunnel_connection_id"
+     },
+     "is_pending_reconnect": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/tunnel_is_pending_reconnect"
+       }
+      ],
+      "x-fern-ignore": true
+     },
+     "opened_at": {
+      "description": "Timestamp of when the connection was established.",
+      "type": "string",
+      "example": "2021-01-25T18:22:34.317854Z"
+     },
+     "origin_ip": {
+      "description": "The public IP address of the host running cloudflared.",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/tunnel_ip"
+       }
+      ]
+     },
+     "uuid": {
+      "$ref": "#/components/schemas/tunnel_connection_id"
+     }
+    }
+   },
+   "tunnel_status": {
+    "description": "The status of the tunnel. Valid values are `inactive` (tunnel has never been run), `degraded` (tunnel is active and able to serve traffic but in an unhealthy state), `healthy` (tunnel is active and able to serve traffic), or `down` (tunnel can not serve traffic as it has no connections to the Cloudflare Edge).",
+    "type": "string",
+    "example": "healthy",
+    "enum": [
+     "inactive",
+     "degraded",
+     "healthy",
+     "down"
+    ]
+   },
+   "tunnel_timestamp": {
+    "type": "string",
+    "example": "2014-01-01T05:20:00.12345Z",
+    "x-auditable": true
+   },
+   "tunnel_tunnel_client": {
+    "description": "A client (typically cloudflared) that maintains connections to a Cloudflare data center.",
+    "type": "object",
+    "properties": {
+     "arch": {
+      "$ref": "#/components/schemas/tunnel_arch"
+     },
+     "config_version": {
+      "$ref": "#/components/schemas/tunnel_config_version"
+     },
+     "conns": {
+      "$ref": "#/components/schemas/tunnel_connections"
+     },
+     "features": {
+      "$ref": "#/components/schemas/tunnel_features"
+     },
+     "id": {
+      "$ref": "#/components/schemas/tunnel_connection_id"
+     },
+     "run_at": {
+      "$ref": "#/components/schemas/tunnel_run_at"
+     },
+     "version": {
+      "$ref": "#/components/schemas/tunnel_version"
+     }
+    }
+   },
+   "tunnel_tunnel_id": {
+    "description": "UUID of the tunnel.",
+    "type": "string",
+    "example": "f70ff985-a4ef-4643-bbbc-4a0ed4fc8415",
+    "maxLength": 36,
+    "x-auditable": true
+   },
+   "tunnel_tunnel_id-2": {
+    "description": "UUID of the tunnel.",
+    "type": "string",
+    "example": "f70ff985-a4ef-4643-bbbc-4a0ed4fc8415",
+    "maxLength": 36
+   },
+   "tunnel_tunnel_name": {
+    "description": "A user-friendly name for a tunnel.",
+    "type": "string",
+    "example": "blog"
+   },
+   "tunnel_tunnel_type": {
+    "description": "The type of tunnel.",
+    "type": "string",
+    "example": "cfd_tunnel",
+    "enum": [
+     "cfd_tunnel",
+     "warp_connector",
+     "warp",
+     "magic",
+     "ip_sec",
+     "gre",
+     "cni"
+    ],
+    "x-auditable": true
+   },
+   "tunnel_version": {
+    "description": "The cloudflared version used to establish this connection.",
+    "type": "string",
+    "example": "2022.7.1"
+   },
+   "zones_identifier": {
+    "description": "Identifier",
+    "type": "string",
+    "example": "023e105f4ecef8ad9ca31a8372d0c353",
+    "maxLength": 32
+   },
+   "zones_paused": {
+    "description": "Indicates whether the zone is only using Cloudflare DNS services. A\ntrue value means the zone will not receive security or performance\nbenefits.\n",
+    "type": "boolean"
+   },
+   "zones_type": {
+    "description": "A full zone implies that DNS is hosted with Cloudflare. A partial zone is\ntypically a partner-hosted zone or a CNAME setup.\n",
+    "type": "string",
+    "example": "full",
+    "enum": [
+     "full",
+     "partial",
+     "secondary",
+     "internal"
+    ]
+   },
+   "zones_zone": {
+    "type": "object",
+    "properties": {
+     "account": {
+      "description": "The account the zone belongs to.",
+      "type": "object",
+      "properties": {
+       "id": {
+        "description": "Identifier",
+        "type": "string",
+        "example": "023e105f4ecef8ad9ca31a8372d0c353",
+        "maxLength": 32,
+        "x-auditable": true
+       },
+       "name": {
+        "description": "The name of the account.",
+        "type": "string",
+        "example": "Example Account Name"
+       }
+      }
+     },
+     "activated_on": {
+      "description": "The last time proof of ownership was detected and the zone was made\nactive.",
+      "type": "string",
+      "example": "2014-01-02T00:01:00.12345Z",
+      "nullable": true
+     },
+     "cname_suffix": {
+      "description": "Allows the customer to use a custom apex.\n*Tenants Only Configuration*.",
+      "type": "string",
+      "example": "cdn.cloudflare.com"
+     },
+     "created_on": {
+      "description": "When the zone was created.",
+      "type": "string",
+      "example": "2014-01-01T05:20:00.12345Z"
+     },
+     "development_mode": {
+      "description": "The interval (in seconds) from when development mode expires\n(positive integer) or last expired (negative integer) for the\ndomain. If development mode has never been enabled, this value is 0.",
+      "type": "number",
+      "example": 7200
+     },
+     "id": {
+      "description": "Identifier",
+      "type": "string",
+      "example": "023e105f4ecef8ad9ca31a8372d0c353",
+      "maxLength": 32,
+      "x-auditable": true
+     },
+     "meta": {
+      "description": "Metadata about the zone.",
+      "type": "object",
+      "properties": {
+       "cdn_only": {
+        "description": "The zone is only configured for CDN.",
+        "type": "boolean",
+        "example": true
+       },
+       "custom_certificate_quota": {
+        "description": "Number of Custom Certificates the zone can have.",
+        "type": "integer",
+        "example": 1
+       },
+       "dns_only": {
+        "description": "The zone is only configured for DNS.",
+        "type": "boolean",
+        "example": true
+       },
+       "foundation_dns": {
+        "description": "The zone is setup with Foundation DNS.",
+        "type": "boolean",
+        "example": true
+       },
+       "page_rule_quota": {
+        "description": "Number of Page Rules a zone can have.",
+        "type": "integer",
+        "example": 100
+       },
+       "phishing_detected": {
+        "description": "The zone has been flagged for phishing.",
+        "type": "boolean",
+        "example": false
+       },
+       "step": {
+        "type": "integer",
+        "example": 2
+       }
+      }
+     },
+     "modified_on": {
+      "description": "When the zone was last modified.",
+      "type": "string",
+      "example": "2014-01-01T05:20:00.12345Z"
+     },
+     "name": {
+      "description": "The domain name. Per [RFC 1035](https://datatracker.ietf.org/doc/html/rfc1035#section-2.3.4) the overall zone name can be up to 253 characters, with each segment (\"label\") not exceeding 63 characters.",
+      "type": "string",
+      "example": "example.com",
+      "maxLength": 253,
+      "pattern": "^([a-zA-Z0-9][\\-a-zA-Z0-9]*\\.)+[\\-a-zA-Z0-9]{2,20}$",
+      "x-auditable": true
+     },
+     "name_servers": {
+      "description": "The name servers Cloudflare assigns to a zone.",
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "example": [
+       "bob.ns.cloudflare.com",
+       "lola.ns.cloudflare.com"
+      ]
+     },
+     "original_dnshost": {
+      "description": "DNS host at the time of switching to Cloudflare.",
+      "type": "string",
+      "example": "NameCheap",
+      "maxLength": 50,
+      "nullable": true
+     },
+     "original_name_servers": {
+      "description": "Original name servers before moving to Cloudflare.",
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "example": [
+       "ns1.originaldnshost.com",
+       "ns2.originaldnshost.com"
+      ],
+      "nullable": true
+     },
+     "original_registrar": {
+      "description": "Registrar for the domain at the time of switching to Cloudflare.",
+      "type": "string",
+      "example": "GoDaddy",
+      "nullable": true
+     },
+     "owner": {
+      "description": "The owner of the zone.",
+      "type": "object",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/zones_identifier"
+       },
+       "name": {
+        "description": "Name of the owner.",
+        "type": "string",
+        "example": "Example Org"
+       },
+       "type": {
+        "description": "The type of owner.",
+        "type": "string",
+        "example": "organization"
+       }
+      }
+     },
+     "paused": {
+      "$ref": "#/components/schemas/zones_paused"
+     },
+     "permissions": {
+      "description": "Legacy permissions based on legacy user membership information.",
+      "type": "array",
+      "items": {
+       "example": "#worker:read",
+       "type": "string"
+      },
+      "deprecated": true,
+      "x-stainless-deprecation-message": "This has been replaced by Account memberships."
+     },
+     "plan": {
+      "description": "A Zones subscription information.",
+      "deprecated": true,
+      "properties": {
+       "can_subscribe": {
+        "description": "States if the subscription can be activated.",
+        "type": "boolean",
+        "example": false
+       },
+       "currency": {
+        "description": "The denomination of the customer.",
+        "type": "string",
+        "example": "USD"
+       },
+       "externally_managed": {
+        "description": "If this Zone is managed by another company.",
+        "type": "boolean",
+        "example": false
+       },
+       "frequency": {
+        "description": "How often the customer is billed.",
+        "type": "string",
+        "example": "monthly"
+       },
+       "id": {
+        "$ref": "#/components/schemas/zones_identifier"
+       },
+       "is_subscribed": {
+        "description": "States if the subscription active.",
+        "type": "boolean",
+        "example": false
+       },
+       "legacy_discount": {
+        "description": "If the legacy discount applies to this Zone.",
+        "type": "boolean",
+        "example": false
+       },
+       "legacy_id": {
+        "description": "The legacy name of the plan.",
+        "type": "string",
+        "example": "free"
+       },
+       "name": {
+        "description": "Name of the owner.",
+        "type": "string",
+        "example": "Example Org"
+       },
+       "price": {
+        "description": "How much the customer is paying.",
+        "type": "number",
+        "example": 10.99
+       }
+      },
+      "x-stainless-deprecation-message": "Please use the `/zones/{zone_id}/subscription` API\nto update a zone's plan. Changing this value will create/cancel\nassociated subscriptions. To view available plans for this zone,\nsee [Zone Plans](https://developers.cloudflare.com/api/resources/zones/subresources/plans/)."
+     },
+     "status": {
+      "description": "The zone status on Cloudflare.",
+      "type": "string",
+      "example": "active",
+      "enum": [
+       "initializing",
+       "pending",
+       "active",
+       "moved"
+      ]
+     },
+     "tenant": {
+      "description": "The root organizational unit that this zone belongs to (such as a tenant or organization).",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/zones_identifier"
+       },
+       "name": {
+        "description": "The name of the Tenant account.",
+        "type": "string",
+        "example": "Example Account Name"
+       }
+      }
+     },
+     "tenant_unit": {
+      "description": "The immediate parent organizational unit that this zone belongs to (such as under a tenant or sub-organization).",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/zones_identifier"
+       }
+      }
+     },
+     "type": {
+      "$ref": "#/components/schemas/zones_type"
+     },
+     "vanity_name_servers": {
+      "description": "An array of domains used for custom name servers. This is only available for Business and Enterprise plans.",
+      "type": "array",
+      "items": {
+       "maxLength": 253,
+       "type": "string"
+      },
+      "example": [
+       "ns1.example.com",
+       "ns2.example.com"
+      ]
+     },
+     "verification_key": {
+      "description": "Verification key for partial zone setup.",
+      "type": "string",
+      "example": "284344499-1084221259"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "development_mode",
+     "owner",
+     "account",
+     "meta",
+     "name_servers",
+     "original_name_servers",
+     "original_registrar",
+     "original_dnshost",
+     "created_on",
+     "modified_on",
+     "activated_on",
+     "plan"
+    ]
+   }
+  }
+ }
+}

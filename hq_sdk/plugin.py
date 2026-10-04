@@ -1,6 +1,6 @@
 """Plugin declaration contract."""
 
-from application.plugins import (
+from hq.platform.application.plugins import (
     PLUGIN_API_VERSION,
     NavigationItem,
     PluginIntegration,

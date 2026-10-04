@@ -5,8 +5,8 @@
 set -eu
 
 cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
-# shellcheck source=scripts/toolchain.env
-. ./scripts/toolchain.env
+# Derived from the tree, so no shell file can be outside these checks.
+sources="$(scripts/shell-sources.sh)"
 failures=0
 failure_marker="$(mktemp)"
 trap 'rm -f "${failure_marker}"' EXIT HUP INT TERM
@@ -22,38 +22,19 @@ for lib in scripts/lib/*.sh; do
     [ -f "${lib}" ] || continue
     sed -n 's/^\([a-z_][a-z_0-9]*\)() *{.*/\1/p' "${lib}" | while IFS= read -r fn; do
         # shellcheck disable=SC2086
-        callers="$(grep -l "${fn}" $SHELL_SOURCES 2>/dev/null | grep -cv "^${lib}$")"
+        callers="$(grep -l "${fn}" ${sources} 2>/dev/null | grep -cv "^${lib}$")"
         if [ "${callers}" -eq 0 ]; then
-            echo "FAIL ${lib##*/}: ${fn}() has no caller in SHELL_SOURCES" >&2
+            echo "FAIL ${lib##*/}: ${fn}() has no caller in any shell file" >&2
             echo x >>"${failure_marker}"
         fi
     done
 done
 
-# 2. Every shell file in the repository must be in SHELL_SOURCES.
-#
-# A file outside the list is neither syntax-checked nor shellchecked.
-#
-# Membership is decided by a file's interpreter, not by its name: a script such
-# as `scripts/severino-hq-sync-scripts` runs as root and carries no extension.
-# The shebang decides whether a file is shell, so that is what this asks.
-# SHELL_SOURCES is newline-separated; normalise before matching.
-listed=" $(printf '%s' "${SHELL_SOURCES}" | tr '\n' ' ') "
-for f in $(git ls-files 2>/dev/null); do
-    [ -f "${f}" ] || continue
-    head -1 "${f}" 2>/dev/null \
-        | grep -qE '^#!.*(/|env )(sh|bash|dash|ksh)([[:space:]]|$)' || continue
-    case "${listed}" in
-        *" ${f} "*) ;;
-        *) fail "${f} is not in SHELL_SOURCES" ;;
-    esac
-done
-
-# 3. `set -o pipefail` may not appear in a /bin/sh script.
+# 2. `set -o pipefail` may not appear in a /bin/sh script.
 #
 # dash rejects it outright, so a guard written this way fails on the host rather
 # than here, and only for the hosts that use dash.
-for f in ${SHELL_SOURCES}; do
+for f in ${sources}; do
     [ -f "${f}" ] || continue
     # Not itself: this file names the option in the pattern it searches for.
     case "${f##*/}" in test-shell-contracts.sh) continue ;; esac
@@ -61,22 +42,6 @@ for f in ${SHELL_SOURCES}; do
     # An executed line, not a comment explaining why it is absent.
     if grep -qE '^[[:space:]]*set +-o +pipefail' "${f}"; then
         fail "${f}: set -o pipefail under #!/bin/sh (dash rejects it)"
-    fi
-done
-
-failures=$((failures + $(wc -l <"${failure_marker}" | tr -d ' ')))
-# 4. Every external tool the gate depends on must have a pinned version.
-#
-# An unpinned linter means the local gate and the pipeline run different
-# software against the same files. This refuses any unpinned one.
-grep -hoE 'command -v [a-z0-9_-]+' scripts/ci-local.sh scripts/check.sh 2>/dev/null \
-    | awk '{print $3}' | sort -u | while IFS= read -r tool; do
-    # Interpreters are pinned by PYTHON_VERSIONS, not by a tool version.
-    case "${tool}" in python*|uv) continue ;; esac
-    var="$(printf '%s' "${tool}" | tr 'a-z-' 'A-Z_')_VERSION"
-    if ! grep -qE "^${var}=" scripts/toolchain.env; then
-        echo "FAIL ${tool} is used by the gate with no ${var} in toolchain.env" >&2
-        echo x >>"${failure_marker}"
     fi
 done
 

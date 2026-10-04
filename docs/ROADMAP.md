@@ -24,7 +24,7 @@ HQ's relationship-aware JSON exports, and answers questions like "what runbook
 covers AdGuard?" or "what assets relate to project Y?": behind a sensitivity
 gate that withholds secret-adjacent runbook bodies. It builds on HQ's stable
 `doc_id`s/slugs, AI-readable exports, and the frontmatter schema
-(`docs_index/schema.json`) the MCP and HQ both validate against. The MCP runs locally on the Mac; git-crypt keys
+(`hq/domains/docs_index/schema.json`) the MCP and HQ both validate against. The MCP runs locally on the Mac; git-crypt keys
 never go on the server.
 
 ### HQ typed control plane: registry-driven execution shipped

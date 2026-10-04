@@ -1,0 +1,438 @@
+"""The connection page's security story must stay derived and honest."""
+
+from django.test import RequestFactory, TestCase, override_settings
+from django.utils import timezone
+
+from hq.domains.control_plane.models import ProviderInventory
+
+from ..connection_security import (
+    connection_security_posture,
+    observed_connection_controls,
+    observed_request_controls,
+)
+from ..connections import (
+    ConnectionAbility,
+    ConnectionInstance,
+    ConnectionLink,
+    ConnectionSpec,
+)
+from ..connection_catalog import ConnectionAbilityState, ConnectionGroup, ConnectionView
+from ..security import Capability
+
+
+def observed_ingress_control(hostname):
+    return observed_request_controls(hostname)[0]
+
+
+def observed_firewall_control():
+    return observed_request_controls("hq.example.test")[1]
+
+
+def _groups(*, ability_available=True, status="good", required_scopes=("example:read",)):
+    ability = ConnectionAbility(
+        "example.read",
+        "Read example",
+        "Read one synthetic account.",
+        required_scopes=required_scopes,
+    )
+    instance = ConnectionInstance(
+        "example:one",
+        "Example",
+        "example",
+        status,
+        "healthy" if status == "good" else "attention",
+        scopes_known=ability_available is not None,
+        granted_scopes=("example:read",) if ability_available else (),
+        ability_names=(ability.name,),
+        dependencies=(ConnectionLink("example.resource"),),
+    )
+    spec = ConnectionSpec(
+        "example.connections",
+        "Example connections",
+        "Synthetic connection contract.",
+        Capability.READ,
+        lambda: (instance,),
+        (ability,),
+        secret_store="Example Vault",
+    )
+    return (
+        ConnectionGroup(
+            spec,
+            (
+                ConnectionView(
+                    instance,
+                    lifecycle={"good": "ready", "serious": "unreachable"}.get(
+                        status, "configured"
+                    ),
+                    abilities=(
+                        ConnectionAbilityState(
+                            ability,
+                            ability_available,
+                            () if ability_available is not False else ("example:read",),
+                            None,
+                            (
+                                "unknown"
+                                if ability_available is None
+                                else "missing"
+                                if ability_available is False
+                                else "verified"
+                                if required_scopes
+                                else "undeclared"
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+class OneStateModelTests(TestCase):
+    """The headline counts the lifecycle each row shows, so they cannot disagree."""
+
+    def _posture_with(self, lifecycle):
+        from dataclasses import replace
+
+        (group,) = _groups()
+        view = replace(group.connections[0], lifecycle=lifecycle)
+        request = RequestFactory().get("/", HTTP_HOST="hq.example.test", REMOTE_ADDR="100.64.0.5")
+        return connection_security_posture(
+            (replace(group, connections=(view,)),), request=request
+        )
+
+    def test_each_lifecycle_lands_in_exactly_one_headline_bucket(self):
+        for lifecycle, bucket in (
+            ("ready", "healthy_count"),
+            ("reachable", "healthy_count"),
+            ("stale", "attention_count"),
+            ("unauthorized", "attention_count"),
+            ("unreachable", "attention_count"),
+            ("revoked", "attention_count"),
+            ("configured", "unverified_count"),
+        ):
+            with self.subTest(lifecycle=lifecycle):
+                posture = self._posture_with(lifecycle)
+                counts = {
+                    name: getattr(posture, name)
+                    for name in ("healthy_count", "attention_count", "unverified_count")
+                }
+                self.assertEqual(counts[bucket], 1, counts)
+                self.assertEqual(sum(counts.values()), 1, counts)
+
+    def test_a_whole_account_credential_is_named_and_still_ready(self):
+        from dataclasses import replace
+
+        from hq.platform.application.connection_catalog import (
+            AUTHORITY_LABELS,
+            connection_authority,
+            connection_lifecycle,
+        )
+
+        (group,) = _groups()
+        view = group.connections[0]
+        coarse = (replace(view.abilities[0], evidence="coarse"),)
+        authority = connection_authority(coarse)
+
+        self.assertEqual(authority, "whole_account")
+        self.assertEqual(AUTHORITY_LABELS[authority], "Whole-account credential")
+        observed = replace(view.instance, observed_at=timezone.now())
+        self.assertEqual(
+            connection_lifecycle(observed, authority, stale_after_hours=24, now=timezone.now()),
+            "ready",
+        )
+
+
+@override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=True)
+class ConnectionSecurityPostureTests(TestCase):
+    def request(self, address="100.64.0.5", *, secure=True, **extra):
+        return RequestFactory().get(
+            "/infrastructure/connections/",
+            secure=secure,
+            HTTP_HOST="hq.example.test",
+            REMOTE_ADDR=address,
+            **extra,
+        )
+
+    def test_tailnet_ingress_and_connection_authority_are_derived_together(self):
+        posture = connection_security_posture(_groups(), request=self.request())
+
+        self.assertEqual(posture.headline, "Tailnet ingress. Explicit authority.")
+        self.assertEqual(posture.external_custody_count, 1)
+        self.assertEqual(posture.scope_verified_count, 1)
+        self.assertEqual(posture.dependency_count, 1)
+        self.assertEqual(
+            next(control for control in posture.controls if control.id == "edge").state,
+            "neutral",
+        )
+
+    @override_settings(SEVERINO_TRUSTED_PROXIES=["10.0.0.9/32"])
+    def test_the_current_trusted_proxy_path_is_proven_without_a_probe(self):
+        posture = connection_security_posture(
+            _groups(),
+            request=self.request("10.0.0.9", HTTP_X_FORWARDED_FOR="100.64.0.5"),
+        )
+
+        proxy = next(control for control in posture.controls if control.id == "proxy")
+        self.assertEqual(proxy.state, "good")
+        self.assertEqual(proxy.evidence, "1 trusted proxy hop")
+
+    def test_unknown_scope_evidence_stays_visibly_unknown(self):
+        posture = connection_security_posture(
+            _groups(ability_available=None), request=self.request()
+        )
+
+        scope = next(control for control in posture.controls if control.id == "scope")
+        self.assertEqual(scope.state, "attention")
+        self.assertIn("1 unknown", scope.evidence)
+        self.assertEqual(posture.state, "neutral")
+
+    def test_an_ability_that_declared_no_proof_is_reported_as_undeclared(self):
+        # Not "capability-only", which sounded like a kind of authorization. An
+        # ability with no grant model and no credential model has told HQ
+        # nothing, and the posture carries that as a visible debt.
+        posture = connection_security_posture(
+            _groups(ability_available=True, required_scopes=()), request=self.request()
+        )
+
+        scope = next(control for control in posture.controls if control.id == "scope")
+        self.assertEqual(scope.state, "attention")
+        self.assertIn("1 undeclared", scope.evidence)
+        self.assertNotIn("unknown", scope.evidence)
+        self.assertEqual(posture.scope_undeclared_count, 1)
+        self.assertEqual(posture.scope_unknown_count, 0)
+        self.assertEqual(posture.state, "neutral")
+
+    def test_verified_and_keyless_evidence_alone_is_a_proven_control(self):
+        posture = connection_security_posture(_groups(), request=self.request())
+
+        scope = next(control for control in posture.controls if control.id == "scope")
+        self.assertEqual(scope.state, "good")
+        self.assertEqual(scope.evidence, "1 verified · 0 whole-account · 0 keyless")
+
+    def test_missing_scope_or_untrusted_ingress_never_gets_a_green_summary(self):
+        missing = connection_security_posture(
+            _groups(ability_available=False), request=self.request()
+        )
+        public = connection_security_posture(
+            _groups(), request=self.request("203.0.113.7")
+        )
+
+        self.assertEqual(missing.state, "serious")
+        self.assertEqual(public.state, "serious")
+
+    def test_deriving_the_posture_costs_no_queries(self):
+        with self.assertNumQueries(0):
+            connection_security_posture(_groups(), request=self.request())
+
+    def test_npm_policy_is_derived_into_current_hostname_security(self):
+        ProviderInventory.objects.create(
+            kind="npm.proxy_host",
+            observed_at=timezone.now(),
+            records=[
+                {
+                    "domain_names": ["hq.example.test"],
+                    "access_list_id": 7,
+                    "access_policy": {
+                        "name": "Tailnet only",
+                        "satisfy_any": False,
+                        "pass_auth": False,
+                        "authorization_count": 0,
+                        "clients": [
+                            {"directive": "allow", "address": "100.64.0.0/10"},
+                            {
+                                "directive": "allow",
+                                "address": "fd7a:115c:a1e0::/48",
+                            },
+                            {"directive": "deny", "address": "all"},
+                        ],
+                    },
+                }
+            ],
+        )
+
+        with self.assertNumQueries(1):
+            edge = observed_ingress_control("hq.example.test")
+        posture = connection_security_posture(
+            _groups(), request=self.request(), edge=edge
+        )
+
+        self.assertEqual(edge.state, "good")
+        self.assertEqual(edge.evidence, "Tailnet ranges · deny all")
+        self.assertEqual(posture.state, "good")
+
+    def test_npm_generated_final_deny_is_not_duplicated_to_prove_the_policy(self):
+        ProviderInventory.objects.create(
+            kind="npm.proxy_host",
+            observed_at=timezone.now(),
+            records=[
+                {
+                    "domain_names": ["hq.example.test"],
+                    "access_list_id": 7,
+                    "access_policy": {
+                        "name": "Tailnet only",
+                        "satisfy_any": False,
+                        "pass_auth": False,
+                        "authorization_count": 0,
+                        "implicit_deny": True,
+                        "clients": [
+                            {"directive": "allow", "address": "100.64.0.0/10"},
+                            {
+                                "directive": "allow",
+                                "address": "fd7a:115c:a1e0::/48",
+                            },
+                        ],
+                    },
+                }
+            ],
+        )
+
+        edge = observed_ingress_control("hq.example.test")
+
+        self.assertEqual(edge.state, "good")
+        self.assertEqual(edge.evidence, "Tailnet ranges · implicit deny all")
+
+    def test_a_widened_npm_policy_degrades_the_whole_posture(self):
+        ProviderInventory.objects.create(
+            kind="npm.proxy_host",
+            observed_at=timezone.now(),
+            records=[
+                {
+                    "domain_names": ["hq.example.test"],
+                    "access_list_id": 7,
+                    "access_policy": {
+                        "name": "Too broad",
+                        "satisfy_any": False,
+                        "pass_auth": False,
+                        "authorization_count": 0,
+                        "clients": [{"directive": "allow", "address": "0.0.0.0/0"}],
+                    },
+                }
+            ],
+        )
+
+        edge = observed_ingress_control("hq.example.test")
+        posture = connection_security_posture(
+            _groups(), request=self.request(), edge=edge
+        )
+
+        self.assertEqual(edge.state, "serious")
+        self.assertEqual(posture.state, "serious")
+
+    def test_tailscale_policy_and_npm_edge_share_one_cached_read(self):
+        ProviderInventory.objects.bulk_create(
+            [
+                ProviderInventory(
+                    kind="tailscale.policy",
+                    observed_at=timezone.now(),
+                    records=[
+                        {
+                            "record": "policy",
+                            "grants": [{"src": ["group:staff"]}],
+                            "tests": [{"src": "example@example.test"}],
+                        }
+                    ],
+                ),
+                ProviderInventory(
+                    kind="npm.proxy_host",
+                    observed_at=timezone.now(),
+                    records=[],
+                ),
+            ]
+        )
+
+        with self.assertNumQueries(1):
+            tailnet_policy, _edge = observed_connection_controls(
+                "hq.example.test"
+            )
+
+        self.assertEqual(tailnet_policy.state, "good")
+        self.assertEqual(tailnet_policy.evidence, "Observed · 1 grant · 1 test")
+
+
+class ArrivalInterfaceTests(TestCase):
+    """The strongest claim on the page must not be the least evidenced one.
+
+    "The address is on the tailnet" reads a field the sender writes. This
+    control says whether the kernel also required the packet to arrive there,
+    so its absence has to read as unknown rather than as either answer.
+    """
+
+    def _reading(self, **overrides):
+        record = {
+            "record": "interface-binding",
+            "interface": "tailscale0",
+            "accept_requires_interface": True,
+            "foreign_interface_dropped": True,
+        }
+        record.update(overrides)
+        ProviderInventory.objects.create(
+            kind="host.firewall",
+            observed_at=timezone.now(),
+            records=[record],
+            reachable=True,
+        )
+
+    def test_a_reading_nothing_took_is_not_a_verdict(self):
+        control = observed_firewall_control()
+        self.assertEqual(control.state, "neutral")
+        self.assertIn("cannot say", control.detail)
+
+    def test_an_unreachable_reading_is_not_a_verdict_either(self):
+        ProviderInventory.objects.create(
+            kind="host.firewall",
+            observed_at=timezone.now(),
+            records=[{"record": "interface-binding"}],
+            reachable=False,
+        )
+        self.assertEqual(observed_firewall_control().state, "neutral")
+
+    def test_the_interface_being_required_is_what_makes_it_good(self):
+        self._reading()
+        control = observed_firewall_control()
+        self.assertEqual(control.state, "good")
+        self.assertIn("tailscale0", control.evidence)
+        self.assertIn("sender's word", control.detail)
+
+    def test_admitting_on_the_address_alone_is_reported_as_such(self):
+        self._reading(accept_requires_interface=False, foreign_interface_dropped=False)
+        control = observed_firewall_control()
+        self.assertEqual(control.state, "bad")
+        self.assertIn("address alone", control.detail)
+
+    def test_accepting_without_dropping_says_what_is_uncounted(self):
+        self._reading(foreign_interface_dropped=False)
+        control = observed_firewall_control()
+        self.assertEqual(control.state, "good")
+        self.assertIn("no rule that drops", control.detail)
+
+
+class IngressRegistryTests(TestCase):
+    """The ingress control asks the registry which kinds carry a source policy."""
+
+    def test_any_kind_declaring_an_ingress_policy_is_read(self):
+        from dataclasses import replace
+        from unittest import mock
+
+        from hq.domains.control_plane.provider_adapters.contracts import IngressPolicy
+        from hq.domains.control_plane.providers import PROVIDERS
+
+        proxy = replace(
+            PROVIDERS["npm.proxy_host"],
+            kind="example.proxy",
+            connection_providers=("ssh",),
+            ingress_policy=lambda record: IngressPolicy(
+                hostnames=tuple(record["names"]), restricted=False
+            ),
+        )
+        ProviderInventory.objects.create(
+            kind="example.proxy",
+            observed_at=timezone.now(),
+            reachable=True,
+            records=[{"names": ["hq.example.test"]}],
+        )
+        with mock.patch.dict(PROVIDERS, {"example.proxy": proxy}):
+            edge = observed_ingress_control("hq.example.test")
+
+        self.assertEqual(edge.state, "serious")
+        self.assertEqual(edge.evidence, "No source restriction")
+        self.assertIn("SSH", edge.detail)

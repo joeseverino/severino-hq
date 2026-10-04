@@ -1,0 +1,6 @@
+# Advisories that do not apply to this module, each with its evidence.
+# controller/scripts/check.sh fails when the evidence stops holding.
+
+[[IgnoredVulns]]
+id = "GO-2026-5932"
+reason = "Covers only golang.org/x/crypto/openpgp and its subpackages, in every release, so no version fixes it. The controller, its tests and its generator import x/crypto for ssh alone; no openpgp package is in the import graph."

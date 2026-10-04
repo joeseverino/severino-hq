@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.0/configuration-schema.json
+package: githubapi
+output: github.gen.go
+generate:
+  models: true
+  server-urls: true
+output-options:
+  overlay:
+    path: ../../api/vendor/github/overlay.yaml
+  skip-prune: true
+  prefer-skip-optional-pointer: true
+  name-normalizer: ToCamelCaseWithInitialisms
+  include-operation-ids:
+    - actions/get-github-actions-default-workflow-permissions-repository
+    - actions/get-github-actions-permissions-repository
+    - actions/get-job-for-workflow-run
+    - actions/get-pending-deployments-for-run
+    - actions/list-artifacts-for-repo
+    - actions/list-repo-variables
+    - actions/list-repo-workflows
+    - actions/list-self-hosted-runners-for-repo
+    - actions/list-workflow-runs
+    - actions/list-workflow-runs-for-repo
+    - apps/create-installation-access-token
+    - apps/get-authenticated
+    - apps/get-repo-installation
+    - apps/list-installations
+    - apps/list-repos-accessible-to-installation
+    - checks/create
+    - checks/list-for-ref
+    - checks/update
+    - code-scanning/list-alerts-for-repo
+    - dependabot/list-alerts-for-repo
+    - issues/create-comment
+    - issues/list-comments
+    - pulls/list
+    - repos/check-automated-security-fixes
+    - repos/get
+    - repos/get-all-environments
+    - repos/get-branch-rules
+    - repos/get-commit
+    - repos/get-content
+    - repos/list-collaborators
+    - repos/list-deploy-keys
+    - repos/list-deployment-statuses
+    - repos/list-deployments
+    - repos/list-pull-requests-associated-with-commit
+    - repos/list-releases
+    - secret-scanning/list-alerts-for-repo

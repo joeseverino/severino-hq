@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.0/configuration-schema.json
+package: npmapi
+output: npm.gen.go
+generate:
+  models: true
+output-options:
+  overlay:
+    path: ../../api/vendor/npm/overlay.yaml
+  skip-prune: false
+  include-operation-ids:
+    - create404Host
+    - createAccessList
+    - createCertificate
+    - createProxyHost
+    - createRedirectionHost
+    - createStream
+    - deleteAccessList
+    - deleteCertificate
+    - deleteDeadHost
+    - deleteProxyHost
+    - deleteRedirectionHost
+    - deleteStream
+    - disableDeadHost
+    - disableProxyHost
+    - disableRedirectionHost
+    - disableStream
+    - downloadCertificate
+    - enableDeadHost
+    - enableProxyHost
+    - enableRedirectionHost
+    - enableStream
+    - getAccessList
+    - getAccessLists
+    - getCertificate
+    - getCertificates
+    - getDNSProviders
+    - getDeadHost
+    - getDeadHosts
+    - getProxyHost
+    - getProxyHosts
+    - getRedirectionHost
+    - getRedirectionHosts
+    - getStream
+    - getStreams
+    - loginWith2FA
+    - refreshToken
+    - renewCertificate
+    - requestToken
+    - testHttpReach
+    - updateAccessList
+    - updateDeadHost
+    - updateProxyHost
+    - updateRedirectionHost
+    - updateStream
+    - uploadCertificate
+    - validateCertificates

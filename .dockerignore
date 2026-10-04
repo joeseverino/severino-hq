@@ -1,8 +1,12 @@
 __pycache__
 *.pyc
 *.pyo
-.venv/
+# Any environment, whatever a tool names it.
+.venv*/
 venv/
+.coverage*
+.ruff_cache/
+htmlcov/
 .git/
 .gitignore
 .env
@@ -16,6 +20,7 @@ var/
 media/
 exports/
 backups/
+deploy/bin/
 docs/
 .DS_Store
 .idea/
@@ -28,3 +33,9 @@ Dockerfile
 # write to. severino-hq-sync-scripts copies it out of the running image.
 .dockerignore
 .mypy_cache/
+
+# JavaScript tooling is installed locally; generated artifacts are committed.
+**/node_modules
+
+# Developer-local mise settings.
+mise.local.toml

@@ -9,14 +9,13 @@ readonly app_dir="${SEVERINO_HQ_APP_DIR:-/opt/apps/severino-hq}"
 script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 # shellcheck source=scripts/lib/controller-env.sh
 . "${script_dir}/lib/controller-env.sh"
-readonly env_file="${controller_env}"
 readonly mode="${1:-}"
 readonly container="${HQ_CONTAINER:-severino-hq}"
 readonly acme_dir="${app_dir}/secrets/acme"
 readonly web_secret_dir="${SEVERINO_HQ_WEB_SECRET_DIR:-${controller_runtime_dir}/web}"
 # shellcheck source=scripts/lib/secrets.sh
 . "${script_dir}/lib/secrets.sh"
-# Where refresh-secrets.sh rendered the environment, which is the tmpfs once a
+# Where hq-secrets rendered the environment, which is the tmpfs once a
 # refresh has run and the checkout only before one has.
 app_env_dir="$(secrets_app_env_dir "${web_secret_dir}" "${app_dir}/secrets")"
 readonly app_env_dir
@@ -26,13 +25,13 @@ if [ "$(id -u)" -ne 0 ]; then
     echo "run-controller.sh must run as root." >&2
     exit 1
 fi
-controller_require_environment
+controller_require_connections
 if [ ! -s "${app_env}" ]; then
     echo "Controller application environment is missing: ${app_env}." >&2
     exit 1
 fi
 # The checkout is somewhere another account can write. Only what
-# refresh-secrets.sh rendered is handed to the controller, wherever it sits: a
+# hq-secrets rendered is handed to the controller, wherever it sits: a
 # root-only directory holding a file of the web user's own.
 if ! secrets_private_dir "${app_env_dir}" || ! secrets_trusted_file "${app_env}" 10001; then
     echo "Refusing the application environment: ${app_env_dir} must be root's alone, holding a file owned by 10001." >&2
@@ -58,6 +57,7 @@ trap 'rm -rf "${run_dir}"' EXIT
 trap 'exit 1' HUP INT TERM
 runtime_app_env="${run_dir}/env"
 runtime_ssh_dir="${run_dir}/ssh"
+runtime_connections="${run_dir}/connections.json"
 # The roots this host added to its own trust store, as one bundle. Public roots
 # are always trusted; these only add to them, and a host with none mounts none.
 ca_file="${run_dir}/ca.pem"
@@ -68,16 +68,27 @@ chmod 0444 "${ca_file}"
 runtime_tailnet="${run_dir}/tailnet.json"
 runtime_tailnet_lock="${run_dir}/tailnet-lock.json"
 runtime_firewall="${run_dir}/firewall.json"
-install -o root -g root -m 0400 "${app_env}" "${runtime_app_env}"
-chown 10001:10001 "${runtime_app_env}"
-# The identities refresh-secrets.sh rendered, copied under the shared lock so
-# the run holds one generation even if a refresh replaces it meanwhile.
+# The application environment, the connections document and the identities
+# hq-secrets rendered, copied under the shared lock so the run holds one
+# generation even if a refresh replaces it meanwhile. The environment is
+# rewritten in place, so a copy taken outside the lock could be cut short.
+# The document is the controller account's own private file, which is the
+# only kind the controller reads.
 install -d -m 0700 "${runtime_ssh_dir}"
 controller_ssh_lock shared
+controller_require_connections
+install -o root -g root -m 0400 "${app_env}" "${runtime_app_env}"
+install -o root -g root -m 0400 "${controller_connections}" "${runtime_connections}"
 if [ -d "${controller_runtime_dir}/ssh" ]; then
     cp -a "${controller_runtime_dir}/ssh/." "${runtime_ssh_dir}/"
 fi
 exec 8>&-
+if [ ! -s "${runtime_app_env}" ]; then
+    echo "Controller application environment is empty: ${app_env}." >&2
+    exit 1
+fi
+chown 10001:10001 "${runtime_app_env}"
+chown 10001:10001 "${runtime_connections}"
 chown -R 10001:10001 "${runtime_ssh_dir}"
 image="$(docker inspect --format '{{.Config.Image}}' "${container}")"
 data_volume="$(
@@ -101,12 +112,6 @@ case "${source_repository}" in
     */*/* | *[!A-Za-z0-9_./-]*) source_repository="" ;;
 esac
 
-set -a
-# Values are shell-quoted by render-controller-env.sh.
-# shellcheck disable=SC1090
-. "${env_file}"
-set +a
-
 # Labelled with a nonce for this run, and handed the same nonce, so the sweep
 # can tell which of the containers it finds is itself. A fixed label is not
 # enough: any container can set it and drop out of the sweep.
@@ -122,12 +127,15 @@ set -- run --rm --network host --user 10001:10001 --cap-drop ALL \
     --env "HQ_CONTROLLER_RUN=${run_nonce}" \
     --security-opt no-new-privileges:true \
     --tmpfs /tmp:size=64m,noexec,nosuid,nodev \
-    --entrypoint python \
+    --entrypoint /usr/local/bin/hq-controller \
     --mount "type=volume,source=${data_volume},target=/data" \
     --mount "type=bind,source=${runtime_app_env},target=/run/secrets/severino_hq_env,readonly" \
+    --mount "type=bind,source=${runtime_connections},target=/run/secrets/controller-connections.json,readonly" \
     --mount "type=bind,source=${runtime_ssh_dir},target=/run/secrets/controller-ssh,readonly" \
     --mount "type=bind,source=${acme_dir},target=/var/lib/severino-hq/acme" \
     --env HQ_IN_PROCESS=1 \
+    --env HQ_MANAGE_PY=/app/manage.py \
+    --env HQ_CONTROLLER_CONNECTIONS=/run/secrets/controller-connections.json \
     --env HQ_CONTROLLER_SSH_DIR=/run/secrets/controller-ssh \
     --env HQ_ACME_DIR=/var/lib/severino-hq/acme \
     --env "HQ_CONTROLLER_IMAGE=${image}" \
@@ -158,8 +166,8 @@ fi
 # process that faces the internet, to serve a provider that runs nowhere near
 # it. It also keeps a third-party binary out of a public image.
 #
-# The host's own copy is already trusted to render this machine's secrets, so
-# it carries no provenance this machine had not already accepted. Statically
+# The host's own copy is the operator's install, so it carries no provenance
+# this machine had not already accepted. Statically
 # linked, so the container's libc is not part of the bargain; read-only; and
 # beside `--cap-drop ALL` and `no-new-privileges`, which leave its setgid bit
 # inert.
@@ -251,20 +259,12 @@ if command -v nft >/dev/null 2>&1 \
         --env SEVERINO_HOST_FIREWALL=/run/severino-hq/firewall.json
 fi
 
-# Forward what the renderer produced, rather than recomputing the same names
-# from a registry. The registry holds the shape a connection can take; which
-# connections exist is the vault's to say, so a list rebuilt here is a second
-# answer to a question this file cannot see.
-#
-# The names only: `--env NAME` passes the value already sourced above, so no
-# secret reaches the process table.
-while IFS= read -r env_name; do
-    [ -n "${env_name}" ] || continue
-    set -- "$@" --env "${env_name}"
-done <<EOF
-$(sed -nE 's/^([A-Z][A-Z0-9_]*)=.*/\1/p' "${env_file}")
-EOF
-set -- "$@" "${image}" -m controller_runtime.worker
+# No connection reaches the container's environment: Docker writes a
+# container's resolved environment to disk and shows it in `docker inspect`.
+# The controller reads them from the document mounted above, by the path
+# passed in HQ_CONTROLLER_CONNECTIONS. Every --env here is a path, a name or a
+# nonce.
+set -- "$@" "${image}"
 if [ "${mode}" = "--apply" ]; then
     set -- "$@" --apply
 fi
