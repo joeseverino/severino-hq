@@ -1,7 +1,7 @@
 name: CI
 
 # Everything a change has to pass, on every pull request and every push to
-# main: Checks, Tests, Browser and Image, and Ready, which writes HQ's review:
+# main: Checks, Tests, Browser, Controller and Image, and Ready, which writes HQ's review:
 # the one check the ruleset requires, from HQ's app alone. CodeQL runs in its
 # own workflow (codeql.yml), a pull request's
 # composition with the extensions in Compose (compose.yml), and production is
@@ -450,6 +450,32 @@ jobs:
       - name: Browser layout gate
         run: python manage.py test core.browser_tests --noinput --parallel 1
 
+  # The Go controller: format, generated bridge types against the contract,
+  # vet, unit tests, and differential parity against the Python controller.
+  # Parity imports HQ's provider code, so it runs on the toolchain's Python.
+  controller:
+    name: Controller
+    needs: proven
+    if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DJANGO_SECRET_KEY: ci-only-secret-key-not-for-production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/toolchain
+        with:
+          cache: pip
+      - run: pip install --require-hashes -r requirements.txt
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: controller/go.mod
+          cache-dependency-path: controller/go.sum
+      - name: Controller checks
+        env:
+          CHECK_PYTHON: python
+        run: controller/scripts/check.sh
+
   image:
     name: Image
     # Alongside the other gates, not after them: on a pull request Compose
@@ -612,7 +638,7 @@ jobs:
 
   ready:
     name: Ready
-    needs: [proven, checks, tests, browser, image]
+    needs: [proven, checks, tests, browser, controller, image]
     # Waits for every gate, and on a pull request for the same commit's Compose
     # and CodeQL too, then moves HQ's review to its verdict: ready to merge, or
     # held, why and what fixes it. That review is the one check the ruleset

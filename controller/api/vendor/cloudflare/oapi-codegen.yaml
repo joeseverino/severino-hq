@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.0/configuration-schema.json
+package: cfapi
+output: cloudflare.gen.go
+generate:
+  models: true
+output-options:
+  prefer-skip-optional-pointer: true
+  name-normalizer: ToCamelCaseWithInitialisms
+  include-operation-ids:
+    - accounts-list-accounts
+    - access-applications-list-access-applications
+    - access-service-tokens-list-service-tokens
+    - certificate-packs-list-certificate-packs
+    - cloudflare-tunnel-configuration-get-configuration
+    - cloudflare-tunnel-list-cloudflare-tunnel-connections
+    - cloudflare-tunnel-list-cloudflare-tunnels
+    - d1-get-database
+    - d1-list-databases
+    - dns-records-for-a-zone-create-dns-record
+    - dns-records-for-a-zone-delete-dns-record
+    - dns-records-for-a-zone-list-dns-records
+    - dns-records-for-a-zone-update-dns-record
+    - getZoneRuleset
+    - listZoneRulesets
+    - page-rules-list-page-rules
+    - pages-project-get-projects
+    - registrar-domain-registration-list
+    - user-api-tokens-verify-token
+    - web-analytics-list-sites
+    - zone-settings-get-single-setting
+    - zones-get

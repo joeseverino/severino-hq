@@ -20,6 +20,7 @@ from pydantic import TypeAdapter, ValidationError
 from application.controller import (
     ControllerReport,
     claim_next_operation,
+    controller_registry,
     peek_next_operation,
     report_operation,
     schedule_automatic_operations,
@@ -123,6 +124,11 @@ def _glance_plan(options: dict) -> Any:
     return dashboard_refresh_plan(options["controller_id"])
 
 
+def _registry(options: dict) -> Any:
+    del options
+    return controller_registry()
+
+
 def _schedule(options: dict) -> Any:
     return schedule_automatic_operations(options["controller_id"])
 
@@ -159,6 +165,7 @@ ACTIONS: tuple[Action, ...] = (
         "glance", ("controller_id", "payload"), _recorded(record_dashboard_observations)
     ),
     Action("report", ("controller_id", "operation", "payload"), _report),
+    Action("registry", (), _registry),
 )
 
 BY_NAME = {action.name: action for action in ACTIONS}

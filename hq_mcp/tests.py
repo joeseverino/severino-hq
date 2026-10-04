@@ -96,7 +96,7 @@ class ServiceTests(TestCase):
         safe_doc.related_projects.add(project)
         restricted_doc.related_projects.add(project)
 
-        result = services.get_project(project.slug)
+        result = services.get_resource("projects", project.slug)
 
         self.assertEqual(result["technologies"], ["Django", "MCP"])
         self.assertEqual(result["relationships"]["assets"], [asset.slug])
@@ -143,13 +143,13 @@ class ServiceTests(TestCase):
         for number in range(105):
             Project.objects.create(name=f"Project {number:03d}")
 
-        result = services.list_projects(limit=500)
+        result = services.list_resource("projects", {"limit": 500})
 
         self.assertEqual(result["count"], projection.MAX_PAGE_SIZE)
 
     def test_missing_object_uses_structured_service_error(self):
         with self.assertRaisesRegex(services.NotFoundError, "No 'assets' record"):
-            services.get_asset("missing")
+            services.get_resource("assets", "missing")
 
     def test_registry_audit_is_a_registered_read_tool(self):
         Project.objects.create(name="Unreferenced", slug="unreferenced")
@@ -160,10 +160,30 @@ class ServiceTests(TestCase):
         self.assertEqual(result["orphan_projects"], ["unreferenced"])
         self.assertIsNotNone(mcp._tool_manager.get_tool("audit_registry"))
 
-    def test_operating_snapshot_and_infrastructure_are_registered_read_tools(self):
+    def test_operating_snapshot_is_a_registered_read_tool(self):
         self.assertIsNotNone(mcp._tool_manager.get_tool("dashboard_snapshot"))
-        self.assertIsNotNone(mcp._tool_manager.get_tool("list_managed_resources"))
-        self.assertIsNotNone(mcp._tool_manager.get_tool("get_managed_resource"))
+
+    def test_resource_kinds_are_derived_from_the_registry(self):
+        from application.resources import resource_registry
+
+        registry = resource_registry()
+        listable = sorted(n for n, s in registry.items() if s.list_handler and s.list_query_type)
+        addressable = sorted(n for n, s in registry.items() if s.detail_handler and s.identifier)
+        tools = {tool.name: tool for tool in mcp._tool_manager.list_tools()}
+
+        self.assertEqual(tools["list_resource"].parameters["properties"]["name"]["enum"], listable)
+        self.assertEqual(tools["get_resource"].parameters["properties"]["name"]["enum"], addressable)
+        self.assertIn("infrastructure.resources", listable)
+        for name in addressable:
+            self.assertIn(f"`{name}`", tools["get_resource"].description)
+
+    def test_resource_reads_have_one_path(self):
+        names = {tool.name for tool in mcp._tool_manager.list_tools()}
+
+        self.assertEqual(len(names), 15)
+        for wrapper in ("list_projects", "get_project", "list_assets", "get_asset", "list_managed_resources",
+                        "get_managed_resource", "list_services", "get_service", "list_expenses", "list_receipts"):
+            self.assertNotIn(wrapper, names)
 
     def test_resource_registry_is_discoverable_and_generically_readable(self):
         project = Project.objects.create(name="Generic resource")

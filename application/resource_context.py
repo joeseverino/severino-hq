@@ -1,6 +1,6 @@
 """Everything HQ derives about one managed resource, for every adapter.
 
-The resource page, the HTTP API and MCP's ``get_managed_resource`` read this
+The resource page, the HTTP API and MCP's ``get_resource`` read this
 one projection, so none of them can derive a fact the others cannot return:
 what may be done to it, where it runs and sends traffic, which services it
 takes part in, how its provider describes it, and when a certificate runs out.

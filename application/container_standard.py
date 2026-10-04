@@ -44,16 +44,6 @@ def _on(test):
     return check
 
 
-def _mounted(test):
-    """A check of its mounts, from whichever reading has them."""
-
-    def check(container: Any) -> bool | None:
-        mounts = container.mounts
-        return None if mounts is None else test([mount for mount in mounts if mount.get("type") == "bind"])
-
-    return check
-
-
 # Emptied by every boot: state for this run of something, never kept.
 RUNTIME_ROOTS = ("/run", "/var/run", "/tmp", "/dev/shm")
 

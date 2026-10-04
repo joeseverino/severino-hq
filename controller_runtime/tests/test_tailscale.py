@@ -682,6 +682,11 @@ class TailnetPolicyWriteTests(TestCase):
         with self.assertRaisesRegex(ProviderError, "not readable JSON"):
             self.reconcile("{not json")
 
+    def test_a_declaration_that_is_not_an_object_is_refused(self):
+        for document in ("[1, 2]", "5", '"text"', "null"):
+            with self.subTest(document=document), self.assertRaisesRegex(ProviderError, "not a JSON object"):
+                self.reconcile(document)
+
     def test_a_tested_policy_already_in_place_is_ready(self):
         result, sent = self.reconcile(json.dumps(self.TESTED), live=self.TESTED)
 

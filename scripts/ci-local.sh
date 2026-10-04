@@ -168,6 +168,16 @@ else
     "$PY" manage.py test core.browser_tests --noinput --parallel 1
 fi
 
+# ---------------------------------------------------------- controller job
+step "controller"
+if command -v go >/dev/null; then
+  run "controller/scripts/check.sh (Go checks and parity)" env \
+    CHECK_PYTHON="$PY" DJANGO_SECRET_KEY=ci-only-secret-key-not-for-production \
+    controller/scripts/check.sh
+else
+  skip "go is not installed: controller checks not run"
+fi
+
 # ------------------------------------------------------------ security
 step "security"
 run "manage.py check --deploy --fail-level WARNING" env \

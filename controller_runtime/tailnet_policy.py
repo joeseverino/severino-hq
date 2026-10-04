@@ -248,6 +248,8 @@ def reconcile_tailnet_policy(
         document = json.loads(wanted)
     except ValueError as exc:
         raise ProviderError("The declared policy is not readable JSON.") from exc
+    if not isinstance(document, dict):
+        raise ProviderError("The declared policy is not a JSON object.")
     token = tailnet_api.tailnet_token(spec.get("connection_ref", ""))
     live = _tailnet_policy(token)
     if live == document:

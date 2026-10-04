@@ -22,6 +22,14 @@ def view_modules(root: Path) -> list[Path]:
     return sorted(path for path in found if not path.name.startswith("test"))
 
 
+
+def _is_address(text: str, found: re.Match[str]) -> bool:
+    """Whether a dotted quad in text is an address, not a version or an RFC section."""
+
+    if any(int(part) > 255 for part in found.group().split(".")):
+        return False
+    return text[max(0, found.start() - 8):found.start()] != "section-"
+
 class DeliveryAdapterArchitectureTests(SimpleTestCase):
     def test_workflow_models_remain_a_dependency_leaf(self):
         root = Path(__file__).parent.resolve().parent
@@ -677,12 +685,9 @@ class StyleContractTests(SimpleTestCase):
                 text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
-            for candidate in address.findall(text):
-                octets = candidate.split(".")
-                if any(int(part) > 255 for part in octets):
-                    continue  # a version string, not an address
-                if not reserved.match(candidate):
-                    findings.append(f"{name}: {candidate}")
+            for found in address.finditer(text):
+                if _is_address(text, found) and not reserved.match(found.group()):
+                    findings.append(f"{name}: {found.group()}")
             if host_key.search(text):
                 findings.append(f"{name}: ssh host key")
             for candidate in sorted(set(private_host.findall(text))):

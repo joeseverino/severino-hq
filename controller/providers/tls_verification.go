@@ -1,0 +1,347 @@
+package providers
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
+	"net/url"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/joeseverino/severino-hq/controller/runtime"
+)
+
+// certificateCovers is TLS wildcard matching: a wildcard covers one label.
+func certificateCovers(domain string, names map[string]bool) bool {
+	normalized := hostname(domain)
+	if names[normalized] {
+		return true
+	}
+	_, parent, found := strings.Cut(normalized, ".")
+	return found && names["*."+parent]
+}
+
+func nameSet(names []string) map[string]bool {
+	set := map[string]bool{}
+	for _, name := range names {
+		set[name] = true
+	}
+	return set
+}
+
+// daysUntil is days left to the nearest day; negative only once past.
+func daysUntil(when, now time.Time) int {
+	left := when.Sub(now).Seconds() / 86400
+	if left < 0 {
+		return int(math.Floor(left))
+	}
+	if left > 0 {
+		return max(1, int(math.Floor(left+0.5)))
+	}
+	return 0
+}
+
+// npmProxyHost is the part of an NPM proxy host certificate work reads.
+type npmProxyHost struct {
+	ID            json.RawMessage `json:"id"`
+	DomainNames   []string        `json:"domain_names"`
+	Enabled       json.RawMessage `json:"enabled"`
+	CertificateID json.RawMessage `json:"certificate_id"`
+}
+
+// serving is false only for an explicit false: NPM's 0 still counts, as in the Python controller.
+func (h npmProxyHost) serving() bool { return strings.TrimSpace(string(h.Enabled)) != "false" }
+
+func (r *Registry) npmCertificateHosts(ctx context.Context, base string, headers map[string]string) ([]npmProxyHost, error) {
+	raw, err := r.HTTP.Request(ctx, base+"/nginx/proxy-hosts", "GET", headers, nil)
+	if err != nil {
+		return nil, err
+	}
+	hosts, err := decodeAs[[]npmProxyHost](raw, "Provider returned an invalid record list.")
+	if hosts == nil && err == nil {
+		hosts = []npmProxyHost{}
+	}
+	return hosts, err
+}
+
+func (r *Registry) npmCoveredHosts(ctx context.Context, certificateDomains []string) ([]npmProxyHost, error) {
+	base, headers, err := r.npmSession(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	hosts, err := r.npmCertificateHosts(ctx, base, headers)
+	if err != nil {
+		return nil, err
+	}
+	names := nameSet(certificateDomains)
+	covered := []npmProxyHost{}
+	for _, host := range hosts {
+		if !host.serving() {
+			continue
+		}
+		for _, domain := range host.DomainNames {
+			if certificateCovers(domain, names) {
+				covered = append(covered, host)
+				break
+			}
+		}
+	}
+	return covered, nil
+}
+
+// tlsConsumerDomains is the names to read one consumer on: declared, plus what NPM routes.
+func (r *Registry) tlsConsumerDomains(ctx context.Context, consumer TLSConsumer, spec TLSCertificateSpec) ([]string, error) {
+	domains := append([]string{}, consumer.VerifyDomains...)
+	if consumer.Kind == "npm" && consumer.DiscoverCoveredHosts {
+		covered, err := r.npmCoveredHosts(ctx, spec.Domains)
+		if err != nil {
+			return nil, err
+		}
+		set := nameSet(domains)
+		for _, host := range covered {
+			for _, name := range host.DomainNames {
+				set[name] = true
+			}
+		}
+		domains = sortedKeys(set)
+	}
+	return domains, nil
+}
+
+// consumerTLSEndpoint resolves a consumer's origin without changing the name sent as SNI.
+func (r *Registry) consumerTLSEndpoint(consumer TLSConsumer) (string, error) {
+	switch consumer.Kind {
+	case "npm":
+		prefix, err := r.Env.Prefix("npm", "")
+		if err != nil {
+			return "", err
+		}
+		configured, err := r.Env.Required(prefix, "URL")
+		if err != nil {
+			return "", err
+		}
+		parsed, err := url.Parse(configured)
+		if err != nil || parsed.Hostname() == "" {
+			return "", &ProviderError{Message: "NPM origin verification endpoint is missing."}
+		}
+		return strings.ToLower(parsed.Hostname()), nil
+	case "caddy", "cpanel":
+		target, err := r.Env.SSH(consumer.ConnectionRef)
+		if err != nil {
+			return "", err
+		}
+		if target.Host == "" {
+			return "", &ProviderError{Message: consumer.Kind + " origin verification endpoint is missing."}
+		}
+		return target.Host, nil
+	}
+	return "", nil
+}
+
+func tlsUnreachable(consumer TLSConsumer, domain, endpoint string, err error) TLSUnreachable {
+	return TLSUnreachable{Consumer: consumer.Name, Domain: domain, Endpoint: endpoint, Port: strconv.Itoa(tlsPort), Reason: err.Error()}
+}
+
+func (r *Registry) readTLSConsumer(ctx context.Context, consumer TLSConsumer, domains []string) ([]TLSObservation, []TLSUnreachable) {
+	connectHost, err := r.consumerTLSEndpoint(consumer)
+	if err != nil {
+		if !isProviderError(err) {
+			err = &ProviderError{Message: err.Error()}
+		}
+		return nil, []TLSUnreachable{tlsUnreachable(consumer, "", "", err)}
+	}
+	observations := []TLSObservation{}
+	unreachable := []TLSUnreachable{}
+	for _, domain := range domains {
+		observed, err := r.observeTLS(ctx, domain, connectHost)
+		if err != nil {
+			endpoint := connectHost
+			if endpoint == "" {
+				endpoint = domain
+			}
+			unreachable = append(unreachable, tlsUnreachable(consumer, domain, endpoint, err))
+			continue
+		}
+		observed.Consumer, observed.ConsumerKind = consumer.Name, consumer.Kind
+		observations = append(observations, observed)
+	}
+	return observations, unreachable
+}
+
+func isProviderError(err error) bool {
+	var provider *ProviderError
+	return errors.As(err, &provider)
+}
+
+func tlsConditions(spec TLSCertificateSpec, observations []TLSObservation, unverified []string, unreachable []TLSUnreachable, daysRemaining int) []Condition {
+	conditions := []Condition{}
+	fingerprints := map[string]bool{}
+	for _, item := range observations {
+		fingerprints[item.FingerprintSHA256] = true
+	}
+	if len(fingerprints) > 1 {
+		conditions = append(conditions, Condition{Type: "Drifted", Status: true, Reason: "ConsumerMismatch", Message: "TLS consumers are serving different certificates."})
+	}
+	if daysRemaining <= spec.RenewalWindowDays {
+		conditions = append(conditions, Condition{Type: "Degraded", Status: true, Reason: "ExpiringSoon", Message: fmt.Sprintf("A verified TLS consumer expires in %d days.", daysRemaining)})
+	}
+	if len(unverified) > 0 {
+		conditions = append(conditions, Condition{Type: "Degraded", Status: true, Reason: "ConsumerUnverified", Message: "No verification domain is declared for: " + strings.Join(unverified, ", ")})
+	}
+	if len(unreachable) > 0 {
+		missed := make([]string, 0, len(unreachable))
+		for _, item := range unreachable {
+			if item.Domain != "" {
+				missed = append(missed, item.Domain)
+			} else {
+				missed = append(missed, item.Consumer)
+			}
+		}
+		conditions = append(conditions, Condition{Type: "Degraded", Status: true, Reason: "ConsumerUnreachable", Message: "Could not be read: " + strings.Join(missed, ", ")})
+	}
+	if len(conditions) == 0 {
+		return []Condition{condition("Ready", "Verified", "All TLS consumers are current.")}
+	}
+	return conditions
+}
+
+// reconcileTLS reads what every consumer serves and judges it.
+func (r *Registry) reconcileTLS(ctx context.Context, spec TLSCertificateSpec) (Result, *TLSCertificateStatus, error) {
+	observations := []TLSObservation{}
+	unverified := []string{}
+	unreachable := []TLSUnreachable{}
+	for _, consumer := range spec.Consumers {
+		domains, err := r.tlsConsumerDomains(ctx, consumer, spec)
+		if err != nil {
+			return Result{}, nil, err
+		}
+		if len(domains) == 0 {
+			unverified = append(unverified, consumer.Name)
+			continue
+		}
+		read, missed := r.readTLSConsumer(ctx, consumer, domains)
+		observations = append(observations, read...)
+		unreachable = append(unreachable, missed...)
+	}
+	if len(observations) == 0 {
+		if len(unreachable) > 0 {
+			reasons := make([]string, 0, len(unreachable))
+			for _, item := range unreachable {
+				reasons = append(reasons, item.Reason)
+			}
+			return Result{}, nil, &ProviderError{Message: "No TLS consumer could be reached: " + strings.Join(reasons, "; ")}
+		}
+		return Result{}, nil, &ProviderError{Message: "No TLS verification domains were declared."}
+	}
+	soonest, newest := observations[0], observations[0]
+	for _, item := range observations[1:] {
+		if item.NotAfter < soonest.NotAfter {
+			soonest = item
+		}
+		if item.NotAfter > newest.NotAfter {
+			newest = item
+		}
+	}
+	expiry, _ := time.Parse("2006-01-02T15:04:05-07:00", soonest.NotAfter)
+	verified := make([]string, 0, len(observations))
+	for _, item := range observations {
+		verified = append(verified, item.Domain)
+	}
+	sort.Strings(verified)
+	status := &TLSCertificateStatus{
+		Issuer:               newest.Issuer,
+		NotAfter:             soonest.NotAfter,
+		ArtifactNotAfter:     newest.NotAfter,
+		CertificatePEM:       newest.certificatePEM,
+		VerifiedDomains:      verified,
+		Consumers:            observations,
+		UnreachableConsumers: unreachable,
+	}
+	return Result{
+		Changed:    false,
+		Status:     status,
+		Conditions: tlsConditions(spec, observations, unverified, unreachable, daysUntil(expiry, r.Now())),
+		Message:    "TLS consumers observed.",
+	}, status, nil
+}
+
+// tlsVerificationPolicy is how long to keep checking that a renewed certificate is served.
+func tlsVerificationPolicy(ctx context.Context) (time.Duration, time.Duration, error) {
+	policy, ok := runtime.VerificationFrom(ctx)
+	if !ok {
+		return 0, 0, &ProviderError{Message: "TLS renewal declares no verification policy."}
+	}
+	timeout, interval := policy.TimeoutSeconds, policy.IntervalSeconds
+	if timeout < 30 || timeout > 600 || interval < 1 || interval > 30 || interval > timeout {
+		return 0, 0, &ProviderError{Message: "TLS renewal verification policy is out of bounds."}
+	}
+	return time.Duration(timeout) * time.Second, time.Duration(interval) * time.Second, nil
+}
+
+func fingerprintsAre(status *TLSCertificateStatus, expected string) bool {
+	seen := map[string]bool{}
+	for _, item := range status.Consumers {
+		seen[item.FingerprintSHA256] = true
+	}
+	return len(seen) == 1 && seen[expected]
+}
+
+// verifyTLSDeployment reads every consumer until each serves the expected certificate.
+func (r *Registry) verifyTLSDeployment(ctx context.Context, spec TLSCertificateSpec, expected string) (Result, *TLSCertificateStatus, error) {
+	timeout, interval, err := tlsVerificationPolicy(ctx)
+	if err != nil {
+		return Result{}, nil, err
+	}
+	deadline := r.Monotonic().Add(timeout)
+	for {
+		result, status, err := r.reconcileTLS(ctx, spec)
+		if err != nil {
+			return Result{}, nil, err
+		}
+		if fingerprintsAre(status, expected) {
+			return result, status, nil
+		}
+		if !r.Monotonic().Before(deadline) {
+			evidence := TLSVerificationEvidence{ExpectedFingerprint: expected, Consumers: []TLSConsumerEvidence{}}
+			stale := map[string][]string{}
+			for _, item := range status.Consumers {
+				matches := item.FingerprintSHA256 == expected
+				evidence.Consumers = append(evidence.Consumers, TLSConsumerEvidence{Consumer: item.Consumer, Kind: item.ConsumerKind, Domain: item.Domain, FingerprintSHA256: item.FingerprintSHA256, MatchesExpected: matches})
+				if !matches {
+					stale[item.Consumer] = append(stale[item.Consumer], item.Domain)
+				}
+			}
+			consumers := make([]string, 0, len(stale))
+			for consumer := range stale {
+				consumers = append(consumers, consumer)
+			}
+			sort.Strings(consumers)
+			details := make([]string, 0, len(consumers))
+			for _, consumer := range consumers {
+				names := append([]string{}, stale[consumer]...)
+				sort.Strings(names)
+				details = append(details, consumer+" still serves the previous certificate at "+strings.Join(names, ", "))
+			}
+			return Result{}, nil, &ProviderError{
+				Message: fmt.Sprintf("%d of %d TLS consumers did not activate the certificate within %ds: %s.", len(stale), len(spec.Consumers), int(timeout.Seconds()), strings.Join(details, "; ")),
+				Status:  evidence,
+			}
+		}
+		if err := r.Sleep(ctx, interval); err != nil {
+			return Result{}, nil, err
+		}
+	}
+}
+
+// matchEvidence states the expected fingerprint beside every observation.
+func matchEvidence(status *TLSCertificateStatus, expected string) {
+	status.ExpectedFingerprint = expected
+	for i := range status.Consumers {
+		matches := status.Consumers[i].FingerprintSHA256 == expected
+		status.Consumers[i].MatchesExpected = &matches
+	}
+}

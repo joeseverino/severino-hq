@@ -13,7 +13,13 @@ from django.db.models import Q
 from django.utils import timezone
 
 from control_plane.models import ManagedResource, OperationRequest
-from control_plane.providers import enabled_controller_actions
+from control_plane.connection_kinds import CONNECTION_CREDENTIALS
+from control_plane.observations import OBSERVATIONS
+from control_plane.providers import (
+    PROVIDERS,
+    controller_capability_registry,
+    enabled_controller_actions,
+)
 from control_plane.provider_adapters.tls import CERTIFICATE_KIND
 
 from .agent_access import agents_paused
@@ -104,6 +110,33 @@ def _compatible_operations(operations, capabilities: tuple[tuple[str, str], ...]
     return operations.filter(predicate)
 
 
+def _verification(operation: OperationRequest) -> dict[str, int] | None:
+    """The verification policy the operation's action declares, if any.
+
+    A certificate reconcile redeploys and verifies under the renewal policy.
+    """
+
+    kind = operation.resource.kind
+    capability = controller_capability_registry().capabilities.get(kind)
+    action = "renew" if kind == CERTIFICATE_KIND else operation.action
+    policy = capability.actions.get(action) if capability else None
+    verification = policy.verification if policy else None
+    if verification is None:
+        return None
+    return {
+        "timeout_seconds": verification.timeout_seconds,
+        "interval_seconds": verification.interval_seconds,
+    }
+
+
+def _pending(operation: OperationRequest) -> dict[str, Any]:
+    pending: dict[str, Any] = {"ok": True, "operation": serialize_operation(operation)}
+    verification = _verification(operation)
+    if verification is not None:
+        pending["verification"] = verification
+    return pending
+
+
 def peek_next_operation(
     *, capabilities: tuple[tuple[str, str], ...] = ()
 ) -> dict[str, Any]:
@@ -117,7 +150,7 @@ def peek_next_operation(
     operation = operations.first()
     if operation is None:
         return {"ok": True, "operation": None}
-    result = {"ok": True, "operation": serialize_operation(operation)}
+    result = _pending(operation)
     try:
         result.update(controller_contract(operation.resource))
     except (KeyError, TypeError, ValueError) as exc:
@@ -347,10 +380,7 @@ def claim_next_operation(
             "updated_at",
         )
     )
-    result = {
-        "ok": True,
-        "operation": serialize_operation(operation),
-    }
+    result = _pending(operation)
     result.update(contract)
     return result
 
@@ -478,4 +508,39 @@ def report_operation(
         "ok": True,
         "operation": serialize_operation(operation),
         "resource": serialize_resource(resource),
+    }
+
+
+def controller_registry() -> dict[str, Any]:
+    """The provider declarations a controller acts on, as data.
+
+    A controller that cannot import these declarations asks for them: which
+    actions it may apply, which it must refuse and why, which kinds need material
+    HQ holds, and which connections can read each kind.
+    """
+
+    registry = controller_capability_registry()
+    return {
+        "ok": True,
+        "capabilities": [
+            {"kind": kind, "action": action}
+            for kind, action in enabled_controller_actions()
+        ],
+        "locked": [
+            {"kind": kind, "action": action, "reason": policy.reason}
+            for kind, capability in sorted(registry.capabilities.items())
+            for action, policy in sorted(capability.actions.items())
+            if policy.mode == "locked"
+        ],
+        "material_kinds": sorted(
+            kind for kind, provider in PROVIDERS.items() if provider.material_handler
+        ),
+        "connection_providers": {
+            kind: list(provider.connection_providers)
+            for kind, provider in sorted(PROVIDERS.items())
+        },
+        "observations": {
+            kind: reading.provider for kind, reading in sorted(OBSERVATIONS.items())
+        },
+        "connection_credentials": sorted(CONNECTION_CREDENTIALS),
     }

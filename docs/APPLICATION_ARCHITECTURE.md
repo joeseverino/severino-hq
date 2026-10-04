@@ -59,9 +59,9 @@ The dashboard follows the same contract. `application/dashboard.py` emits one
 JSON-safe operating snapshot for KPIs, priority work, recent records, upstream
 state, and activity. The web dashboard renders it, while the authenticated MCP
 exposes it as `dashboard_snapshot`. Infrastructure reads are likewise shared:
-`list_managed_resources` and `get_managed_resource` return public desired state,
-health, and structured operation evidence without provider credentials.
-`get_managed_resource` also returns `derived`, from
+the `infrastructure.resources` kind, read through MCP's `list_resource` and
+`get_resource`, returns public desired state, health, and structured operation
+evidence without provider credentials. Its detail record also returns `derived`, from
 `application/resource_context.py`: the same allowed actions, removal mode,
 machines, services, readout and certificate expiry the resource page shows,
 so no adapter derives a fact another cannot return. The tailnet and
