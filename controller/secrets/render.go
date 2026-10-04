@@ -5,6 +5,7 @@
 package secrets
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -108,6 +109,15 @@ type Runner struct {
 	Now    func() time.Time
 	// Sleep waits between attempts; tests replace it.
 	Sleep func(context.Context, time.Duration) error
+	// fault fails the run at a named step; only tests set it.
+	fault func(step string) error
+}
+
+func (r *Runner) at(step string) error {
+	if r.fault == nil {
+		return nil
+	}
+	return r.fault(step)
 }
 
 var credentialName = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
@@ -250,6 +260,12 @@ func (r *Runner) Run(ctx context.Context) (Result, error) {
 		}
 	}
 	result, err := r.render(ctx, tree, &status)
+	// Whatever the render did, a container that has not loaded the installed
+	// environment is restarted now: after a failure, on an unchanged vault,
+	// and again every run until it comes back healthy.
+	if settleErr := r.settle(ctx, tree, &result); err == nil {
+		err = settleErr
+	}
 	status.LastAttempt = Attempt{At: r.Now().UTC(), Outcome: result.Outcome, Failure: Class(err)}
 	if err != nil {
 		status.LastAttempt.Outcome = "failed"
@@ -312,7 +328,7 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *Status)
 		((last.AttributeVersion == nil && vault.AttributeVersion == nil) || sameVersion(last.AttributeVersion, vault.AttributeVersion)) &&
 		last.Inputs == r.inputs(last.Salt, registryBytes) &&
 		r.Now().Sub(last.RenderedAt) < config.FullEvery && r.Now().After(last.RenderedAt.Add(-time.Minute)) &&
-		r.intact(tree, last) {
+		!r.pendingUnreadable(tree) && r.intact(tree, last) {
 		status.LastSuccess = &Success{At: r.Now().UTC(), RenderedAt: last.RenderedAt, ContentVersion: vault.ContentVersion,
 			AttributeVersion: vault.AttributeVersion, Counts: last.Counts}
 		r.Log.Info("Severino HQ secrets are current.", slog.String("event", "secrets.render.current"),
@@ -357,12 +373,39 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *Status)
 	}
 
 	result := Result{Outcome: "rendered"}
+	// Every installed file changes under the lock the launcher copies them
+	// with, the application environment included: its in-place write truncates
+	// first. Taken before anything is touched, so a launcher that holds it
+	// longer than the wait leaves this run with nothing half done.
+	unlock, err := tree.LockSSH(ctx)
+	if err != nil {
+		return result, err
+	}
+	defer unlock()
 	if err := tree.RemoveMCPToken(); err != nil {
+		return result, err
+	}
+	// The restart is owed from before the first byte is written until the
+	// container is healthy on it. A run that dies in between leaves the mark,
+	// and the next run, finding the file already equal, still restarts.
+	_, owed, _ := r.pending(tree)
+	checkout := tree.HasCheckoutEnv()
+	current, ok := install.Read(tree.Web(), install.AppEnvName, layout.WebUID, 0o400)
+	differs := !ok || !bytes.Equal(current, out.AppEnv)
+	if checkout && !differs {
+		current, ok = install.Read(tree.Secret(), install.AppEnvName, layout.WebUID, 0o400)
+		differs = !ok || !bytes.Equal(current, out.AppEnv)
+	}
+	if differs || owed {
+		if err := r.markPending(tree, out.AppEnv); err != nil {
+			return result, err
+		}
+	}
+	if err := r.at("marked"); err != nil {
 		return result, err
 	}
 	// Existing bind mounts require in-place updates; this is not a multi-file
 	// transaction.
-	checkout := tree.HasCheckoutEnv()
 	if checkout {
 		changed, err := install.InPlace(tree.Secret(), install.AppEnvName, out.AppEnv, layout.WebUID, layout.WebGID, 0o400)
 		if err != nil {
@@ -376,10 +419,16 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *Status)
 	}
 	result.WebChanged = result.WebChanged || changed
 	result.Changed = result.WebChanged
+	if err := r.at("web-env"); err != nil {
+		return result, err
+	}
 
-	controllerChanged, err := r.installController(ctx, tree, stage, encoded, out)
+	controllerChanged, err := r.installController(tree, stage, encoded, out)
 	result.Changed = result.Changed || controllerChanged
 	if err != nil {
+		return result, err
+	}
+	if err := r.at("controller"); err != nil {
 		return result, err
 	}
 
@@ -418,17 +467,13 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *Status)
 			return result, err
 		}
 	}
+	if err := r.at("state"); err != nil {
+		return result, err
+	}
 	status.LastSuccess = &Success{At: next.RenderedAt, RenderedAt: next.RenderedAt, ContentVersion: read.ContentVersion,
 		AttributeVersion: read.AttributeVersion, Counts: next.Counts}
-
-	if result.WebChanged && r.Web.Installed(ctx) {
-		result.Restarted = true
-		if err := r.restart(ctx); err != nil {
-			return result, err
-		}
-	}
 	r.Log.Info("Severino HQ secrets rendered.", slog.String("event", "secrets.render.installed"),
-		slog.Bool("changed", result.Changed), slog.Bool("web_changed", result.WebChanged), slog.Bool("web_restarted", result.Restarted),
+		slog.Bool("changed", result.Changed), slog.Bool("web_changed", result.WebChanged),
 		slog.Int("items_read", next.Counts.ItemsRead), slog.Int("connections", next.Counts.Connections),
 		slog.Int("app_variables", next.Counts.AppVariables), slog.Int("identities", next.Counts.Identities),
 		slog.Int("signing_keys", next.Counts.SigningKeys))
@@ -443,13 +488,9 @@ func (*installFailure) Error() string {
 func (*installFailure) Unwrap() error { return install.ErrHost }
 
 // installController moves the connections document and the identities into
-// place as one generation, under the lock the launcher reads them with.
-func (r *Runner) installController(ctx context.Context, tree *install.Tree, stage *install.Stage, encoded []byte, out project.Output) (bool, error) {
-	unlock, err := tree.LockSSH(ctx)
-	if err != nil {
-		return false, err
-	}
-	defer unlock()
+// place as one generation. The caller holds the lock the launcher reads them
+// with.
+func (r *Runner) installController(tree *install.Tree, stage *install.Stage, encoded []byte, out project.Output) (bool, error) {
 	changed, err := stage.Rename("connections", install.ConnectionsName, encoded, 0o400, nil)
 	if err != nil {
 		return changed, err

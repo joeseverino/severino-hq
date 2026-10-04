@@ -68,20 +68,26 @@ chmod 0444 "${ca_file}"
 runtime_tailnet="${run_dir}/tailnet.json"
 runtime_tailnet_lock="${run_dir}/tailnet-lock.json"
 runtime_firewall="${run_dir}/firewall.json"
-install -o root -g root -m 0400 "${app_env}" "${runtime_app_env}"
-chown 10001:10001 "${runtime_app_env}"
-# The connections document and the identities hq-secrets rendered, copied
-# under the shared lock so the run holds one generation even if a refresh
-# replaces it meanwhile. The document is the controller account's own private
-# file, which is the only kind the controller reads.
+# The application environment, the connections document and the identities
+# hq-secrets rendered, copied under the shared lock so the run holds one
+# generation even if a refresh replaces it meanwhile. The environment is
+# rewritten in place, so a copy taken outside the lock could be cut short.
+# The document is the controller account's own private file, which is the
+# only kind the controller reads.
 install -d -m 0700 "${runtime_ssh_dir}"
 controller_ssh_lock shared
 controller_require_connections
+install -o root -g root -m 0400 "${app_env}" "${runtime_app_env}"
 install -o root -g root -m 0400 "${controller_connections}" "${runtime_connections}"
 if [ -d "${controller_runtime_dir}/ssh" ]; then
     cp -a "${controller_runtime_dir}/ssh/." "${runtime_ssh_dir}/"
 fi
 exec 8>&-
+if [ ! -s "${runtime_app_env}" ]; then
+    echo "Controller application environment is empty: ${app_env}." >&2
+    exit 1
+fi
+chown 10001:10001 "${runtime_app_env}"
 chown 10001:10001 "${runtime_connections}"
 chown -R 10001:10001 "${runtime_ssh_dir}"
 image="$(docker inspect --format '{{.Config.Image}}' "${container}")"

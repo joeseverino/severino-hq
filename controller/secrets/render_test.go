@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -748,6 +749,210 @@ func TestTheWebContainerIsRestartedOnlyForItsOwnEnvironment(t *testing.T) {
 	}
 	if status := h.status(); status.LastAttempt.Failure != "web_unhealthy" {
 		t.Fatalf("status: %+v", status.LastAttempt)
+	}
+}
+
+// rotate changes one application variable in the vault.
+func (h *host) rotate() {
+	h.fake.Edit(func(fake *connecttest.Fake) {
+		value := "rotated-" + strconv.Itoa(fake.ContentVersion)
+		fake.Items[len(fake.Items)-1].Fields[1].Value = &value
+	})
+}
+
+func (h *host) owed() bool {
+	_, err := os.Lstat(filepath.Join(h.layout().RuntimeDir, pendingName))
+	return err == nil
+}
+
+// A rotated application secret must reach the running container. Whatever
+// stops a run after the environment file is rewritten, the restart is still
+// made: in that run if it can be, otherwise by the next.
+func TestAFailureAfterTheEnvironmentIsWrittenStillRestartsTheContainer(t *testing.T) {
+	for _, step := range []string{"web-env", "controller", "state"} {
+		t.Run("failed at "+step, func(t *testing.T) {
+			h := newHost(t, apiToken(1, "example", "EXAMPLE"))
+			h.web.installed = true
+			h.ok()
+			h.rotate()
+			h.runner.fault = func(at string) error {
+				if at == step {
+					return errors.New("injected failure")
+				}
+				return nil
+			}
+			result, err := h.run()
+			if err == nil || !result.Restarted || h.web.restarts != 2 || h.owed() {
+				t.Fatalf("the failing run left the container on the old environment: %v %+v restarts=%d", err, result, h.web.restarts)
+			}
+			h.runner.fault = nil
+			next := h.ok()
+			if next.Restarted || h.web.restarts != 2 || h.owed() {
+				t.Fatalf("the next run restarted again: %+v", next)
+			}
+			if _, err := connections.ReadFile(h.document(), os.Getuid()); err != nil {
+				t.Fatalf("the next run did not finish the install: %v", err)
+			}
+			if h.ok().Outcome != "current" {
+				t.Fatal("the host did not settle")
+			}
+		})
+		// Killed rather than failed: nothing more can be done in that run.
+		t.Run("terminated at "+step, func(t *testing.T) {
+			h := newHost(t, apiToken(1, "example", "EXAMPLE"))
+			h.web.installed = true
+			h.ok()
+			h.rotate()
+			ctx, cancel := context.WithCancel(context.Background())
+			h.runner.fault = func(at string) error {
+				if at == step {
+					cancel()
+					return errors.New("terminated")
+				}
+				return nil
+			}
+			if _, err := h.runner.Run(ctx); err == nil || h.web.restarts != 1 || !h.owed() {
+				t.Fatalf("a terminated run: %v restarts=%d owed=%v", err, h.web.restarts, h.owed())
+			}
+			rotated := read(t, h.appEnv())
+			h.runner.fault = nil
+			h.log.Reset()
+			next := h.ok()
+			// The file is already equal, so nothing "changed"; the restart is
+			// owed all the same, on the skip path too.
+			if next.WebChanged || !next.Restarted || h.web.restarts != 2 || h.owed() || read(t, h.appEnv()) != rotated {
+				t.Fatalf("the restart was lost: %+v restarts=%d\n%s", next, h.web.restarts, h.log)
+			}
+			if step == "state" && next.Outcome != "current" {
+				t.Fatalf("after the state was saved the next run reads the vault again: %+v", next)
+			}
+			if after := h.ok(); after.Restarted || h.web.restarts != 2 {
+				t.Fatalf("a settled host restarted again: %+v", after)
+			}
+		})
+	}
+}
+
+func TestARestartIsNeverMadeOntoAFileThatWasNotWritten(t *testing.T) {
+	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
+	h.web.installed = true
+	h.ok()
+	before := read(t, h.appEnv())
+	h.rotate()
+	// Stopped after the mark and before the write.
+	h.runner.fault = func(at string) error {
+		if at == "marked" {
+			return errors.New("injected failure")
+		}
+		return nil
+	}
+	if result, err := h.run(); err == nil || result.Restarted || h.web.restarts != 1 || read(t, h.appEnv()) != before || !h.owed() {
+		t.Fatalf("restarted onto an unwritten environment: %v %+v", err, result)
+	}
+	// Cut short by the write itself: the mark names another file.
+	os.Chmod(h.appEnv(), 0o600)
+	os.WriteFile(h.appEnv(), []byte("DJANGO_SECRET_KEY='cut"), 0o400)
+	os.Chmod(h.appEnv(), 0o400)
+	h.runner.fault = func(string) error { return errors.New("injected failure") }
+	if result, _ := h.run(); result.Restarted || h.web.restarts != 1 {
+		t.Fatal("restarted onto a cut file")
+	}
+	h.runner.fault = nil
+	if result := h.ok(); !result.WebChanged || !result.Restarted || h.web.restarts != 2 || h.owed() || read(t, h.appEnv()) == before {
+		t.Fatalf("the next run did not write and restart: %+v", result)
+	}
+	// An unchanged render with nothing owed leaves no mark.
+	h.fake.Edit(func(*connecttest.Fake) {})
+	if result := h.ok(); result.Restarted || h.owed() {
+		t.Fatalf("an unchanged environment marked a restart: %+v", result)
+	}
+}
+
+func TestAnUnhealthyRestartIsRetriedUntilItIsHealthy(t *testing.T) {
+	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
+	h.web.installed = true
+	h.ok()
+	h.rotate()
+	h.web.health = []string{"unhealthy"}
+	if _, err := h.run(); Class(err) != "web_unhealthy" || !h.owed() {
+		t.Fatalf("an unhealthy restart: %v", err)
+	}
+	// The vault is unchanged and every file is intact, yet the run is not a
+	// success while the container has not come back on the new environment.
+	if _, err := h.run(); Class(err) != "web_unhealthy" || h.web.restarts != 3 || !h.owed() {
+		t.Fatalf("the restart was not retried: %v restarts=%d", err, h.web.restarts)
+	}
+	if status := h.status(); status.LastAttempt.Outcome != "failed" || status.LastAttempt.Failure != "web_unhealthy" {
+		t.Fatalf("status: %+v", status.LastAttempt)
+	}
+	// Connect down does not stand in the way of it either.
+	h.web.health = []string{"healthy"}
+	h.runner.Config.ConnectTimeout = 100 * time.Millisecond
+	h.fake.Unavailable = 1 << 30
+	if result, err := h.run(); Class(err) != "connect_unavailable" || !result.Restarted || h.web.restarts != 4 || h.owed() {
+		t.Fatalf("the owed restart waited for Connect: %v %+v", err, result)
+	}
+	h.fake.Unavailable = 0
+	h.runner.Config.ConnectTimeout = 5 * time.Second
+	if result := h.ok(); result.Restarted || h.web.restarts != 4 {
+		t.Fatalf("a healthy container was restarted again: %+v", result)
+	}
+}
+
+func TestAnUnreadableRestartMarkForcesAFullRender(t *testing.T) {
+	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
+	h.web.installed = true
+	h.ok()
+	os.WriteFile(filepath.Join(h.layout().RuntimeDir, pendingName), []byte("not a mark"), 0o600)
+	if result := h.ok(); result.Outcome != "rendered" || !result.Restarted || h.web.restarts != 2 || h.owed() {
+		t.Fatalf("an unreadable mark was skipped over: %+v", result)
+	}
+	// No container: nothing to restart, and one created later reads the file.
+	h.web.installed = false
+	h.rotate()
+	if result := h.ok(); result.Restarted || h.owed() || h.web.restarts != 2 {
+		t.Fatalf("a host without the container kept a restart owed: %+v", result)
+	}
+}
+
+// The launcher copies the environment under the shared lock; the renderer
+// must not rewrite it, or anything else, while a launcher holds that lock.
+func TestNothingInstalledIsTouchedWhileALauncherHoldsTheLock(t *testing.T) {
+	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
+	h.web.installed = true
+	h.ok()
+	paths := []string{h.appEnv(), h.document()}
+	before := []string{read(t, paths[0]), read(t, paths[1])}
+	inodes := []uint64{inode(t, paths[0]), inode(t, paths[1])}
+	launcher, err := os.OpenFile(filepath.Join(h.layout().RuntimeDir, "ssh.lock"), os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer launcher.Close()
+	if err := syscall.Flock(int(launcher.Fd()), syscall.LOCK_SH); err != nil {
+		t.Fatal(err)
+	}
+	h.rotate()
+	h.fake.Edit(func(fake *connecttest.Fake) {
+		rotated := secretToken + "-rotated"
+		fake.Items[0].Fields[3].Value = &rotated
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+	if _, err := h.runner.Run(ctx); Class(err) != "host" {
+		t.Fatalf("the renderer went ahead under a launcher's lock: %v", err)
+	}
+	for index, path := range paths {
+		if read(t, path) != before[index] || inode(t, path) != inodes[index] {
+			t.Fatalf("%s was rewritten while a launcher could be copying it", filepath.Base(path))
+		}
+	}
+	if h.owed() || h.web.restarts != 1 {
+		t.Fatal("a run that wrote nothing owes or made a restart")
+	}
+	syscall.Flock(int(launcher.Fd()), syscall.LOCK_UN)
+	if result := h.ok(); !result.WebChanged || !result.Restarted {
+		t.Fatalf("after the launcher let go: %+v", result)
 	}
 }
 

@@ -103,6 +103,16 @@ staged on the private tmpfs, before any installed file is touched. Retrieval or
 validation failure preserves the previous files. A staging directory a killed
 run left is removed by the next run, under the lock.
 
+Every installed file, the application environment included, is written under
+the lock the launcher holds shared while it copies them, taken before the
+first write. A changed application environment is followed by a restart of the
+web container, and that restart is owed from before the file is written until
+the container is healthy on it: the renderer keeps `web-restart-pending.json`
+on the tmpfs, naming the environment by salted digest. Each run pays an owed
+restart, whether the render succeeded, failed or found the vault unchanged, and
+only onto the file the mark names. A run that fails as `web_unhealthy` keeps
+failing that way, hourly, until the container comes back.
+
 An unchanged vault is not re-read item by item. The renderer keeps a root-only
 state file on the tmpfs with the vault's content version and a salted digest of
 every file it installed. When the version, the registry and the configuration

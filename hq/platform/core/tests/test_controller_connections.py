@@ -294,6 +294,24 @@ esac
         # The run's staging is gone when the launcher returns.
         self.assertEqual(list(self.runtime.glob("run.*")), [])
 
+    def test_the_application_environment_is_copied_under_the_shared_lock(self):
+        # The renderer rewrites it in place, truncating first, under the
+        # exclusive lock: a copy taken outside the shared one can be cut short.
+        self.stub("flock", 'echo lock >>"$FIXTURES/order"\n')
+        install = (self.bin / "install").read_text().replace(
+            "set -eu\n", 'set -eu\necho "install $*" >>"$FIXTURES/order"\n', 1)
+        (self.bin / "install").write_text(install)
+        result = self.launch()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        order = (self.root / "order").read_text().splitlines()
+        copies = [i for i, line in enumerate(order)
+                  if line.startswith("install ") and line.endswith("/env") and "severino_hq_env" in line]
+        self.assertEqual(len(copies), 1, order)
+        self.assertLess(order.index("lock"), copies[0])
+        script = LAUNCHER.read_text()
+        self.assertLess(script.index("controller_ssh_lock shared"), script.index('"${app_env}" "${runtime_app_env}"'))
+        self.assertLess(script.index('"${app_env}" "${runtime_app_env}"'), script.index("exec 8>&-"))
+
     def test_the_launcher_never_sources_or_forwards_connection_values(self):
         script = LAUNCHER.read_text()
         self.assertNotIn('--env "${env_name}"', script)

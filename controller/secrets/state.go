@@ -1,12 +1,15 @@
 package secrets
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"io/fs"
+	"log/slog"
 	"os"
 	"sort"
 	"time"
@@ -148,4 +151,81 @@ func (r *Runner) intact(tree *install.Tree, last state) bool {
 		}
 	}
 	return true
+}
+
+// pendingName marks a web container that has not loaded the application
+// environment on the tmpfs.
+const pendingName = "web-restart-pending.json"
+
+// pendingMark names the environment the restart is owed for, by salted digest:
+// a restart onto a file that is not that one (cut short, or never written) is
+// worse than no restart.
+type pendingMark struct {
+	Salt   string `json:"salt"`
+	Digest string `json:"digest"`
+}
+
+// pending reads the mark: whether one exists, and whether it could be read.
+func (r *Runner) pending(tree *install.Tree) (pendingMark, bool, bool) {
+	if _, err := tree.Runtime().Lstat(pendingName); err != nil {
+		return pendingMark{}, false, false
+	}
+	data, ok := install.Read(tree.Runtime(), pendingName, r.Config.Layout.RootUID, 0o600)
+	var mark pendingMark
+	if !ok || jsonv2.Unmarshal(data, &mark, jsonv2.RejectUnknownMembers(true)) != nil || mark.Salt == "" || mark.Digest == "" {
+		return pendingMark{}, true, false
+	}
+	return mark, true, true
+}
+
+// pendingUnreadable reports a mark that exists but names no environment: only
+// a full render can rewrite it, so the run is not skipped.
+func (r *Runner) pendingUnreadable(tree *install.Tree) bool {
+	_, exists, readable := r.pending(tree)
+	return exists && !readable
+}
+
+func (r *Runner) markPending(tree *install.Tree, environment []byte) error {
+	salt, err := newSalt()
+	if err != nil {
+		return errors.New("no randomness for the restart mark")
+	}
+	data, err := json.Marshal(pendingMark{Salt: salt, Digest: digest(salt, environment)})
+	if err != nil {
+		return err
+	}
+	return tree.WriteAtomic(pendingName, data, 0o600)
+}
+
+func (r *Runner) clearPending(tree *install.Tree) error {
+	if err := tree.Runtime().Remove(pendingName); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return &installFailure{}
+	}
+	return nil
+}
+
+// settle pays an owed restart. It restarts only onto the environment the mark
+// names, and clears the mark only once the container is healthy on it, or
+// when there is no container to restart: one created later reads the file.
+func (r *Runner) settle(ctx context.Context, tree *install.Tree, result *Result) error {
+	mark, exists, readable := r.pending(tree)
+	if !exists || !readable || ctx.Err() != nil {
+		return nil
+	}
+	layout := r.Config.Layout
+	installed, ok := install.Read(tree.Web(), install.AppEnvName, layout.WebUID, 0o400)
+	if !ok || digest(mark.Salt, installed) != mark.Digest {
+		return nil
+	}
+	if r.Web.Installed(ctx) {
+		result.Restarted = true
+		if err := r.restart(ctx); err != nil {
+			return err
+		}
+		r.Log.Info("Severino HQ restarted on its new environment.", slog.String("event", "secrets.web.restarted"))
+	}
+	if ctx.Err() != nil {
+		return nil
+	}
+	return r.clearPending(tree)
 }
