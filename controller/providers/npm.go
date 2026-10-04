@@ -573,54 +573,56 @@ func optionalPort(value int) *int {
 	return &value
 }
 
-func (r *Registry) npmRedirects(ctx context.Context, ref string) ([]NPMRedirectRecord, error) {
+// npmHostRecords is one host list as its records. record gets each host and
+// base, which resolves what every host kind shows the same way and fails on a
+// malformed host.
+func npmHostRecords[T, R any](ctx context.Context, r *Registry, ref string, src npmSource[T], what string, record func(host T, base npmHostBase) (R, error)) ([]R, error) {
 	names := r.npmCertificateNames(ctx, ref)
-	hosts, err := npmRead(ctx, r, ref, npmRedirectionHosts)
+	hosts, err := npmRead(ctx, r, ref, src)
 	if err != nil {
 		return nil, err
 	}
-	out := []NPMRedirectRecord{}
+	base := func(id *npmapi.Id, domains []string, certificate npmapi.CertificateId, sslForced, enabled npmapi.Flag) (NPMHostRecord, error) {
+		resolved, err := npmID(id, what)
+		return NPMHostRecord{
+			ID:          resolved,
+			Hostnames:   npmNames(domains),
+			Certificate: names[int(certificate)],
+			SSLForced:   bool(sslForced),
+			Enabled:     bool(enabled),
+		}, err
+	}
+	out := []R{}
 	for _, host := range hosts {
-		id, err := npmID(host.Id, "redirection host")
+		rec, err := record(host, base)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, NPMRedirectRecord{
-			ID:           id,
-			Hostnames:    npmNames(host.DomainNames),
-			Target:       npmTarget(string(host.ForwardScheme), host.ForwardDomainName),
-			TargetHost:   hostname(host.ForwardDomainName),
-			StatusCode:   optionalPort(host.ForwardHttpCode),
-			PreservePath: bool(host.PreservePath),
-			SSLForced:    bool(host.SslForced),
-			Certificate:  names[int(host.CertificateId)],
-			Enabled:      bool(host.Enabled),
-		})
+		out = append(out, rec)
 	}
 	return out, nil
 }
 
+type npmHostBase func(id *npmapi.Id, domains []string, certificate npmapi.CertificateId, sslForced, enabled npmapi.Flag) (NPMHostRecord, error)
+
+func (r *Registry) npmRedirects(ctx context.Context, ref string) ([]NPMRedirectRecord, error) {
+	return npmHostRecords(ctx, r, ref, npmRedirectionHosts, "redirection host", func(host npmapi.RedirectionHostObject, base npmHostBase) (NPMRedirectRecord, error) {
+		shared, err := base(host.Id, host.DomainNames, host.CertificateId, host.SslForced, host.Enabled)
+		return NPMRedirectRecord{
+			NPMHostRecord: shared,
+			Target:        npmTarget(string(host.ForwardScheme), host.ForwardDomainName),
+			TargetHost:    hostname(host.ForwardDomainName),
+			StatusCode:    optionalPort(host.ForwardHttpCode),
+			PreservePath:  bool(host.PreservePath),
+		}, err
+	})
+}
+
 func (r *Registry) npmDeadHosts(ctx context.Context, ref string) ([]NPMDeadHostRecord, error) {
-	names := r.npmCertificateNames(ctx, ref)
-	hosts, err := npmRead(ctx, r, ref, npmDeadHostsSource)
-	if err != nil {
-		return nil, err
-	}
-	out := []NPMDeadHostRecord{}
-	for _, host := range hosts {
-		id, err := npmID(host.Id, "404 host")
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, NPMDeadHostRecord{
-			ID:          id,
-			Hostnames:   npmNames(host.DomainNames),
-			Certificate: names[int(host.CertificateId)],
-			SSLForced:   bool(host.SslForced),
-			Enabled:     bool(host.Enabled),
-		})
-	}
-	return out, nil
+	return npmHostRecords(ctx, r, ref, npmDeadHostsSource, "404 host", func(host npmapi.DeadHostObject, base npmHostBase) (NPMDeadHostRecord, error) {
+		shared, err := base(host.Id, host.DomainNames, host.CertificateId, host.SslForced, host.Enabled)
+		return NPMDeadHostRecord{shared}, err
+	})
 }
 
 func (r *Registry) npmStreams(ctx context.Context, ref string) ([]NPMStreamRecord, error) {

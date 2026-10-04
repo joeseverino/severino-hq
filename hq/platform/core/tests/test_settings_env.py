@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 from django.test import SimpleTestCase
 
@@ -153,3 +154,43 @@ class MountedAppEnvTests(SimpleTestCase):
             "SEVERINO_DOC_REVIEW_INTERVAL_DAYS must be at least 1",
             result.stderr,
         )
+
+
+class EnvIntTests(SimpleTestCase):
+    NAME = "SEVERINO_TEST_ENV_INT"
+
+    def read(self, raw: str | None, default: int, **bounds: int) -> int:
+        from hq.config.settings import env_int
+
+        with mock.patch.dict(os.environ):
+            os.environ.pop(self.NAME, None)
+            if raw is not None:
+                os.environ[self.NAME] = raw
+            return env_int(self.NAME, default, **bounds)
+
+    def test_unbounded_value_falls_back_to_the_default(self):
+        for raw, expected in ((None, 5), ("", 5), ("  ", 5), ("soon", 5), (" 12 ", 12), ("-3", -3)):
+            with self.subTest(raw=raw):
+                self.assertEqual(self.read(raw, 5), expected)
+
+    def test_bounded_value_is_read_or_defaulted_when_unset(self):
+        for raw, expected in ((None, 1), ("", 1), ("12", 12), ("1", 1)):
+            with self.subTest(raw=raw):
+                self.assertEqual(self.read(raw, 1, minimum=1, maximum=12), expected)
+
+    def test_bounded_value_refuses_what_it_cannot_honor(self):
+        for raw in ("13", "0", "ten"):
+            with self.subTest(raw=raw), self.assertRaisesMessage(
+                RuntimeError, f"{self.NAME} must be between 1 and 12."
+            ):
+                self.read(raw, 1, minimum=1, maximum=12)
+        for raw in ("59", "soon"):
+            with self.subTest(raw=raw), self.assertRaisesMessage(
+                RuntimeError, f"{self.NAME} must be at least 60."
+            ):
+                self.read(raw, 86400, minimum=60)
+
+    def test_settings_read_every_integer_through_env_int(self):
+        source = (REPO_ROOT / "hq" / "config" / "settings.py").read_text(encoding="utf-8")
+        self.assertNotIn("int(os.environ", source)
+        self.assertNotIn("int(os.getenv", source)

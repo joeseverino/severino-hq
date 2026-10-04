@@ -1,7 +1,7 @@
 # Severino HQ
 
 [![CI](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml)
-&nbsp;![coverage](https://img.shields.io/badge/coverage-91%25-brightgreen)
+&nbsp;![coverage](https://img.shields.io/badge/coverage-90%25%2B-brightgreen)
 &nbsp;![python](https://img.shields.io/badge/python-3.13%20%7C%203.14-blue)
 
 A self-hosted operations hub that derives its picture of your infrastructure

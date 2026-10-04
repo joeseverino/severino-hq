@@ -142,26 +142,26 @@ type NPMCertificateRecord struct {
 	Serves        []string `json:"serves"`
 }
 
-type NPMRedirectRecord struct {
+// NPMHostRecord is what every NPM host kind shows the same way.
+type NPMHostRecord struct {
 	ConnectionRef *string  `json:"connection_ref,omitempty"`
 	ID            int      `json:"id"`
 	Hostnames     []string `json:"hostnames"`
-	Target        string   `json:"target"`
-	TargetHost    string   `json:"target_host"`
-	StatusCode    *int     `json:"status_code"`
-	PreservePath  bool     `json:"preserve_path"`
-	SSLForced     bool     `json:"ssl_forced"`
 	Certificate   string   `json:"certificate"`
+	SSLForced     bool     `json:"ssl_forced"`
 	Enabled       bool     `json:"enabled"`
 }
 
+type NPMRedirectRecord struct {
+	NPMHostRecord
+	Target       string `json:"target"`
+	TargetHost   string `json:"target_host"`
+	StatusCode   *int   `json:"status_code"`
+	PreservePath bool   `json:"preserve_path"`
+}
+
 type NPMDeadHostRecord struct {
-	ConnectionRef *string  `json:"connection_ref,omitempty"`
-	ID            int      `json:"id"`
-	Hostnames     []string `json:"hostnames"`
-	Certificate   string   `json:"certificate"`
-	SSLForced     bool     `json:"ssl_forced"`
-	Enabled       bool     `json:"enabled"`
+	NPMHostRecord
 }
 
 type NPMStreamRecord struct {

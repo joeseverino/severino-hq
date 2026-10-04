@@ -110,6 +110,12 @@ if [ "$expected_pythons" = "$claimed_pythons" ]; then
 else
   bad "README python badge says '$claimed_pythons'; the matrix runs '$expected_pythons'"
 fi
+claimed_floor="$(sed -nE 's/.*badge\/coverage-([0-9]+)%25%2B-.*/\1/p' README.md | head -1)"
+if [ "$COVERAGE_FLOOR" = "$claimed_floor" ]; then
+  ok "README coverage badge states the floor (${COVERAGE_FLOOR}%)"
+else
+  bad "README coverage badge says '${claimed_floor}%+'; the floor is ${COVERAGE_FLOOR}%"
+fi
 
 # ------------------------------------------------------------- contracts
 step "OpenAPI"
@@ -117,10 +123,6 @@ run "OpenAPI specification lint" scripts/check-openapi.sh
 run "Generated API cases through WSGI" env -u SEVERINO_HQ_PLUGINS DJANGO_DEBUG=true "$PY" manage.py test tests.fuzz.api_properties --noinput --parallel 1
 
 # ---------------------------------------------------------------- tests
-# The badge quotes the oldest interpreter's coverage, so it is compared on that
-# run and reported as not run only when no interpreter here is that version.
-badge_python="${PYTHON_VERSIONS%% *}"
-badge_checked=0
 for python_bin in ${SEVERINO_CI_PYTHONS:-$PY}; do
   if [ ! -x "$python_bin" ]; then
     skip "$python_bin is not an executable interpreter"; continue
@@ -139,21 +141,11 @@ for python_bin in ${SEVERINO_CI_PYTHONS:-$PY}; do
   if "$python_bin" -c "import coverage" 2>/dev/null; then
     run "tests with coverage gate" sh -c \
       "SEVERINO_HQ_PLUGINS= '$python_bin' -m coverage run manage.py test --parallel auto >/dev/null 2>&1 && '$python_bin' -m coverage combine --quiet && '$python_bin' -m coverage report --fail-under=$COVERAGE_FLOOR >/dev/null"
-    python_version="$("$python_bin" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
-    if [ "$python_version" = "$badge_python" ]; then
-      run "README coverage badge (scripts/coverage-badge.sh)" scripts/coverage-badge.sh "$python_bin"
-      badge_checked=1
-    fi
   else
     run "tests" "$python_bin" manage.py test
     skip "coverage is not installed on $python_bin: gate not checked"
   fi
 done
-if [ "$badge_checked" -eq 0 ]; then
-  # Not ok: nothing was compared, and a check that did not run is reported as
-  # not run, never as green.
-  skip "coverage badge not checked (no Python ${badge_python} interpreter with coverage)"
-fi
 
 # ------------------------------------------------------------- browser job
 # Real-browser layout invariants over synthetic pages (hq/platform/core/browser_tests.py).

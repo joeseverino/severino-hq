@@ -60,17 +60,29 @@ def env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def env_int(name: str, default: int) -> int:
+def env_int(
+    name: str, default: int, *, minimum: int | None = None, maximum: int | None = None
+) -> int:
     """A whole number from the environment, or the default when it is not one.
 
     Refusing to start over a malformed cadence value would take HQ down to
     protect a polling interval. The default is always a working answer.
+
+    A ``minimum`` marks a value HQ will not guess, such as the month a fiscal
+    year starts: not a number, or outside the bounds, refuses to start.
     """
 
+    raw = os.environ.get(name, "").strip()
     try:
-        return int(os.environ.get(name, "").strip() or default)
+        value = int(raw) if raw else default
     except ValueError:
-        return default
+        value = None
+    if minimum is None:
+        return default if value is None else value
+    if value is None or value < minimum or (maximum is not None and value > maximum):
+        allowed = f"at least {minimum}" if maximum is None else f"between {minimum} and {maximum}"
+        raise RuntimeError(f"{name} must be {allowed}.")
+    return value
 
 
 def env_list(name: str, default: list[str] | None = None) -> list[str]:
@@ -336,9 +348,7 @@ SEVERINO_TRUSTED_PROXIES = env_list(
 # Sign-in throttling for the break-glass password path. Read back out of the
 # audit log by `core.throttle`; see that module for why there is no counter.
 SEVERINO_LOGIN_MAX_ATTEMPTS = env_int("SEVERINO_LOGIN_MAX_ATTEMPTS", 5)
-SEVERINO_LOGIN_WINDOW_SECONDS = int(
-    os.environ.get("SEVERINO_LOGIN_WINDOW_SECONDS", "900")
-)
+SEVERINO_LOGIN_WINDOW_SECONDS = env_int("SEVERINO_LOGIN_WINDOW_SECONDS", 900)
 
 # ----- Apps --------------------------------------------------------------------
 
@@ -636,11 +646,9 @@ SEVERINO_API_LEEWAY_SECONDS = env_int("SEVERINO_API_LEEWAY_SECONDS", 30)
 # A retry key represents one machine request for this long. The record is
 # durable because a process restart is exactly when an in-memory replay cache
 # would fail the client that needs it.
-SEVERINO_API_IDEMPOTENCY_TTL_SECONDS = int(
-    os.environ.get("SEVERINO_API_IDEMPOTENCY_TTL_SECONDS", "86400")
+SEVERINO_API_IDEMPOTENCY_TTL_SECONDS = env_int(
+    "SEVERINO_API_IDEMPOTENCY_TTL_SECONDS", 86400, minimum=60
 )
-if SEVERINO_API_IDEMPOTENCY_TTL_SECONDS < 60:
-    raise RuntimeError("SEVERINO_API_IDEMPOTENCY_TTL_SECONDS must be at least 60.")
 
 # Encrypts the few secrets an operator deliberately hands to HQ: today, the
 # private key of an internally signed certificate that has to reach a proxy.
@@ -812,17 +820,10 @@ LOGGING = {
 # ----- App-specific ------------------------------------------------------------
 
 SEVERINO_SITE_NAME = os.environ.get("SEVERINO_SITE_NAME", "Severino HQ")
-SEVERINO_FISCAL_YEAR_START_MONTH = int(
-    os.environ.get("SEVERINO_FISCAL_YEAR_START_MONTH", "1")
+SEVERINO_FISCAL_YEAR_START_MONTH = env_int(
+    "SEVERINO_FISCAL_YEAR_START_MONTH", 1, minimum=1, maximum=12
 )
-if not 1 <= SEVERINO_FISCAL_YEAR_START_MONTH <= 12:
-    raise RuntimeError("SEVERINO_FISCAL_YEAR_START_MONTH must be between 1 and 12.")
-
-SEVERINO_DOC_REVIEW_INTERVAL_DAYS = int(
-    os.environ.get("SEVERINO_DOC_REVIEW_INTERVAL_DAYS", "180")
-)
-if SEVERINO_DOC_REVIEW_INTERVAL_DAYS < 1:
-    raise RuntimeError("SEVERINO_DOC_REVIEW_INTERVAL_DAYS must be at least 1.")
+SEVERINO_DOC_REVIEW_INTERVAL_DAYS = env_int("SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180, minimum=1)
 
 # Cloudflare D1: the contact-form submissions live in a Cloudflare D1
 # database, not HQ's SQLite. The contacts app reads/writes it

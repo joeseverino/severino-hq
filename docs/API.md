@@ -373,9 +373,9 @@ or delete anything.
 
 ## Contract tooling
 
-The host and controller descriptions use OpenAPI 3.2.0. The stable controller
-generator does not yet recognize the 3.2.1 patch version correctly, so both
-descriptions use the version the complete toolchain accepts. No compatibility
+The host and controller descriptions pin OpenAPI 3.2.0, the version the
+controller generator's parser (kin-openapi) recognizes. Move both to 3.2.1 when
+it does; a patch release adds no features. No compatibility
 translation is applied. Resource filters emit individual query parameters;
 `x-hq-query-schema` retains the aggregate schema, including unknown-field policy.
 

@@ -133,7 +133,7 @@ jobs:
         id: badges
         # Neither the matrix below nor static markdown can read toolchain.env,
         # so both are verified against it: the Python versions a reader sees,
-        # and the ones Tests runs, are the ones declared.
+        # the ones Tests runs, and the coverage floor are the ones declared.
         env:
           DECLARED: ${{ steps.toolchain.outputs.python-versions }}
         run: |
@@ -145,6 +145,11 @@ jobs:
                      | sed 's/%20%7C%20/|/g')"
           if [ "$expected" != "$claimed" ]; then
             echo "::error::README python badge says '$claimed'; the toolchain declares '$expected'."
+            exit 1
+          fi
+          floor="$(sed -nE 's/.*badge\/coverage-([0-9]+)%25%2B-.*/\1/p' README.md | head -1)"
+          if [ "$floor" != "$COVERAGE_FLOOR" ]; then
+            echo "::error::README coverage badge says '${floor}%+'; the floor is ${COVERAGE_FLOOR}%."
             exit 1
           fi
           matrix="$(yq -o=json -I=0 '.jobs.tests.strategy.matrix.python' .github/workflows/ci.yml)"
@@ -409,11 +414,6 @@ jobs:
               echo "</details>"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: The README badge states the coverage actually measured
-        # The README is static, so the badge is verified rather than
-        # generated. The same script runs in scripts/ci-local.sh.
-        if: matrix.python == steps.toolchain.outputs.oldest-python
-        run: scripts/coverage-badge.sh
 
   # Real-browser layout invariants over synthetic example.* pages
   # (hq/platform/core/browser_tests.py). Every request the page makes is answered in

@@ -1310,6 +1310,22 @@ class OnePrimitiveTests(SimpleTestCase):
         ]
         self.assertEqual(found, [])
 
+    def test_python_says_byte_counts_through_human_bytes(self):
+        called = re.compile(r"import[^\n]*filesizeformat|filesizeformat\(")
+        sources = [
+            path
+            for package in ("hq", "hq_sdk")
+            for path in sorted((self.ROOT / package).rglob("*.py"))
+            if "tests" not in path.parts
+        ]
+        self.assertTrue(sources)
+        found = [
+            path.relative_to(self.ROOT).as_posix()
+            for path in sources
+            if called.search(path.read_text(encoding="utf-8"))
+        ]
+        self.assertEqual(found, [])
+
     def test_templates_name_entities_through_the_entity_tag(self):
 
         # A button to a page (Cancel, Edit) is an action, not a mention.
