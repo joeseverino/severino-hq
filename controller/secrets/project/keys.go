@@ -134,8 +134,13 @@ func keys(input Input, document connections.Document) ([]File, int, int, error) 
 			}
 			files[ref] = File{Name: ref, Data: pem.EncodeToMemory(block), Mode: 0o400, Same: sameIdentity(public)}
 			files[ref+".pub"] = File{Name: ref + ".pub", Data: ssh.MarshalAuthorizedKey(public), Mode: 0o444}
-			knownHosts.WriteString("[" + values["HOST"] + "]:" + values["PORT"] + " " +
-				strings.TrimSpace(string(ssh.MarshalAuthorizedKey(hostKey))) + "\n")
+			// As ssh looks a host up: by bare name on port 22, bracketed with
+			// the port otherwise, and by the number the controller dials.
+			known := values["HOST"]
+			if port != 22 {
+				known = "[" + known + "]:" + strconv.Itoa(port)
+			}
+			knownHosts.WriteString(known + " " + strings.TrimSpace(string(ssh.MarshalAuthorizedKey(hostKey))) + "\n")
 			identities++
 		}
 		if name, ok := values["SIGNING_KEY"]; ok {

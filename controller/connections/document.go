@@ -118,6 +118,10 @@ func (d Document) Encode() ([]byte, error) {
 	if err := encoder.Encode(sorted); err != nil {
 		return nil, invalid("not encodable")
 	}
+	// What Decode would refuse is never written.
+	if out.Len() > MaxBytes {
+		return nil, invalid("larger than %d bytes", MaxBytes)
+	}
 	return out.Bytes(), nil
 }
 

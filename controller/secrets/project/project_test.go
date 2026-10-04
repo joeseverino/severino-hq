@@ -293,12 +293,17 @@ func TestBootstrapReferences(t *testing.T) {
 		t.Fatal("a bootstrap reference in another vault was not rendered")
 	}
 	for reference, want := range map[string]string{
-		"op://" + connecttest.VaultName + "/Example bootstrap":       "keeps its bootstrap credential in the vault the controller reads",
-		"op://" + connecttest.VaultID + "/Example bootstrap":         "keeps its bootstrap credential in the vault the controller reads",
-		"op://" + connecttest.VaultName + "/Example bootstrap/field": "keeps its bootstrap credential in the vault the controller reads",
-		"op://" + connecttest.VaultName:                              "keeps its bootstrap credential in the vault the controller reads",
-		"op://Operator Vault/Example bootstrap/credential":           "name the item",
-		"op://Operator Vault/Example bootstrap/section/credential":   "name the item",
+		"op://" + connecttest.VaultName + "/Example bootstrap":                  "keeps its bootstrap credential in the vault the controller reads",
+		"op://" + connecttest.VaultID + "/Example bootstrap":                    "keeps its bootstrap credential in the vault the controller reads",
+		"op://" + connecttest.VaultName + "/Example bootstrap/field":            "keeps its bootstrap credential in the vault the controller reads",
+		"op://" + connecttest.VaultName:                                         "keeps its bootstrap credential in the vault the controller reads",
+		"op://" + strings.ToLower(connecttest.VaultName) + "/Example bootstrap": "keeps its bootstrap credential in the vault the controller reads",
+		"op://" + strings.ToUpper(connecttest.VaultName) + "/Example bootstrap": "keeps its bootstrap credential in the vault the controller reads",
+		"op://" + connecttest.VaultName + " /Example bootstrap":                 "keeps its bootstrap credential in the vault the controller reads",
+		"op:// " + connecttest.VaultName + "/Example bootstrap":                 "keeps its bootstrap credential in the vault the controller reads",
+		"op://" + strings.ToUpper(connecttest.VaultID) + "/Example bootstrap":   "keeps its bootstrap credential in the vault the controller reads",
+		"op://Operator Vault/Example bootstrap/credential":                      "name the item",
+		"op://Operator Vault/Example bootstrap/section/credential":              "name the item",
 		"not-a-reference":         "invalid bootstrap reference",
 		"op://":                   "invalid bootstrap reference",
 		"op://Operator Vault":     "invalid bootstrap reference",
@@ -385,6 +390,16 @@ func TestApplicationEnvironment(t *testing.T) {
 	refused(t, replace(append(fifteen, f("REFERENCE", "op://Example Vault/item/field"))...), "unresolved reference")
 	refused(t, replace(append(fifteen, f("MULTI", "first\nINJECTED=\nlast"))...), "rendered empty")
 	refused(t, replace(append(fifteen, f("BINARY", "a\x00b"))...), "NUL")
+	// Read back as text, a carriage return would not be the byte that was written.
+	refused(t, replace(append(fifteen, f("WINDOWS", "line one\r\nline two"))...), "carriage return")
+	refused(t, replace(append(fifteen, f("BARE", "a\rb"))...), "carriage return")
+	// Django takes the first of two, a shell sourcing the file the last.
+	refused(t, replace(append(fifteen, f("EXAMPLE_A", "another"))...), "set twice")
+	refused(t, replace(append(fifteen, f("TWICE", "one"), f("TWICE", "one"))...), "set twice")
+	// A repeated label that renders nothing is not a variable set twice.
+	if _, err := Project(replace(append(fifteen, f("notes", "a"), f("notes", "b"), f("EMPTY", ""), f("EMPTY", ""))...)); err != nil {
+		t.Fatalf("repeated labels that are not variables were refused: %v", err)
+	}
 
 	missing := input(t, apiToken(1, "example", "EXAMPLE"))
 	missing.EnvItem = "another env"
@@ -465,6 +480,38 @@ func TestSSHIdentitiesRenderWithPinnedHosts(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ssh looks a host up by bare name on port 22 and as [host]:port otherwise,
+// and the controller dials the port as a number.
+func TestKnownHostsAreWrittenAsSSHLooksThemUp(t *testing.T) {
+	key := connecttest.Ed25519Key(t)
+	for port, want := range map[string]string{
+		"22":    "edge.example.com " + hostKey + "\n",
+		"022":   "edge.example.com " + hostKey + "\n",
+		"2222":  "[edge.example.com]:2222 " + hostKey + "\n",
+		"02222": "[edge.example.com]:2222 " + hostKey + "\n",
+		"65535": "[edge.example.com]:65535 " + hostKey + "\n",
+	} {
+		connection := sshConnection(1, "edge", "EDGE", "Edge deploy key")
+		connection.Fields[4].Value = &port
+		out, err := Project(input(t, connection, connecttest.KeyItem(id(2), "Edge deploy key", key.PKCS8, key.Public)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := string(files(t, out)[KnownHosts].Data); got != want {
+			t.Errorf("port %s pinned as %q", port, got)
+		}
+	}
+}
+
+// The controller refuses a document over its size bound, so one is never
+// rendered: the last good document stays.
+func TestAConnectionsDocumentTheControllerWouldRefuseIsNotRendered(t *testing.T) {
+	huge := apiToken(1, "example", "EXAMPLE")
+	value := strings.Repeat("a", connections.MaxBytes)
+	huge.Fields[3].Value = &value
+	refused(t, input(t, huge), "the controller would not read")
 }
 
 func TestIdentityRefusals(t *testing.T) {

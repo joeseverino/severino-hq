@@ -530,6 +530,10 @@ func TestAFailedRefreshPreservesEveryInstalledFile(t *testing.T) {
 		{"identity halves differ", "content", func(h *host) {
 			h.fake.Items[2] = connecttest.KeyItem(id(3), "Edge deploy key", key.PKCS8, other.Public)
 		}},
+		{"a credential too large for the controller to read", "content", func(h *host) {
+			value := strings.Repeat("a", connections.MaxBytes)
+			h.fake.Items[0].Fields[3].Value = &value
+		}},
 		{"a multi-line credential", "content", func(h *host) {
 			value := secretToken + "\nINJECTED=x"
 			h.fake.Items[0].Fields[3].Value = &value
@@ -953,6 +957,27 @@ func TestNothingInstalledIsTouchedWhileALauncherHoldsTheLock(t *testing.T) {
 	syscall.Flock(int(launcher.Fd()), syscall.LOCK_UN)
 	if result := h.ok(); !result.WebChanged || !result.Restarted {
 		t.Fatalf("after the launcher let go: %+v", result)
+	}
+}
+
+// The account that deploys can write the checkout. A lock it plants and holds
+// there does not stop a render.
+func TestALockHeldInTheCheckoutDoesNotStopARender(t *testing.T) {
+	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
+	os.MkdirAll(h.layout().SecretDir, 0o700)
+	for _, name := range []string{".refresh.lock", "refresh.lock"} {
+		planted, err := os.OpenFile(filepath.Join(h.layout().SecretDir, name), os.O_WRONLY|os.O_CREATE, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer planted.Close()
+		if err := syscall.Flock(int(planted.Fd()), syscall.LOCK_EX); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.ok()
+	if _, err := os.Lstat(filepath.Join(h.layout().RuntimeDir, "refresh.lock")); err != nil {
+		t.Fatal("the lock is not on the runtime tmpfs")
 	}
 }
 

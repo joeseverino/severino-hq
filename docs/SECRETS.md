@@ -96,8 +96,14 @@ values containing control characters. The connection registry
 the vault remains the connection inventory. A render that resolved no
 connection, an empty application environment, or one with fewer than fifteen
 variables is a failure, not an empty success.
+In the application environment a carriage return or a variable set
+twice is refused, because readers would disagree about the value. A
+connections document larger than the controller reads is refused as content,
+so the last good one stays. A bootstrap reference is compared to the vault's
+names without regard to case or surrounding spaces. `known_hosts` names a host
+as ssh looks it up: bare on port 22, `[host]:port` otherwise.
 
-Refresh takes an exclusive lock, checks the host, and only then reads Connect.
+Refresh takes an exclusive lock on the runtime tmpfs, checks the host, and only then reads Connect.
 Everything is read and validated in memory, and what is renamed into place is
 staged on the private tmpfs, before any installed file is touched. Retrieval or
 validation failure preserves the previous files. A staging directory a killed

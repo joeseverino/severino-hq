@@ -110,6 +110,9 @@ class StoreReferenceTests(TestCase):
     def test_a_bootstrap_is_an_item_reference_outside_the_store_vault(self):
         for bootstrap in (
             "op://Example Vault/Cloudflare bootstrap",
+            "op://example vault/Cloudflare bootstrap",
+            "op://EXAMPLE VAULT/Cloudflare bootstrap",
+            "op://Example Vault /Cloudflare bootstrap",
             "op://Operator Vault/Cloudflare bootstrap/credential",
             "https://example.com",
             "op://Operator Vault/line\nbreak",

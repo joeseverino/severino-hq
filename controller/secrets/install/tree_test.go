@@ -276,8 +276,8 @@ func TestLockRefusesASecondRenderer(t *testing.T) {
 	}
 	again()
 	// The lock is a file of its own; a link at its name is not followed.
-	os.Remove(filepath.Join(found.SecretDir, lockName))
-	os.Symlink(filepath.Join(found.RuntimeDir, "elsewhere"), filepath.Join(found.SecretDir, lockName))
+	os.Remove(filepath.Join(found.RuntimeDir, lockName))
+	os.Symlink(filepath.Join(found.RuntimeDir, "elsewhere"), filepath.Join(found.RuntimeDir, lockName))
 	if _, err := first.Lock(); !errors.Is(err, ErrHost) {
 		t.Fatalf("a linked lock file was followed: %v", err)
 	}
@@ -342,6 +342,27 @@ func TestStagingIsPrivateAndOnlyItsOwnIsRemoved(t *testing.T) {
 	}
 	if err := stage.Write("../escaped", []byte("{}"), os.Getuid(), os.Getgid(), 0o400); err == nil {
 		t.Fatal("a staged write left the staging directory")
+	}
+	// The run's own lock is not staging: taking a stage leaves it held.
+	unlock, err := tree.Lock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage.Close()
+	if stage, err = tree.NewStage(); err != nil {
+		t.Fatal(err)
+	}
+	second, err := Open(tree.Layout, tmpfs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := second.Lock(); !errors.Is(err, ErrBusy) {
+		t.Fatalf("staging removed the held lock: %v", err)
+	}
+	second.Close()
+	unlock()
+	if err := stage.Write("connections", []byte("{}"), os.Getuid(), os.Getgid(), 0o400); err != nil {
+		t.Fatal(err)
 	}
 	changed, err := stage.Rename("connections", ConnectionsName, []byte("{}"), 0o400, nil)
 	if err != nil || !changed || read(t, filepath.Join(runtime, ConnectionsName)) != "{}" {

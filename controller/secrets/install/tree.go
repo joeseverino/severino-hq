@@ -27,7 +27,7 @@ const (
 	AppEnvName      = "severino_hq_env"
 	ConnectionsName = "controller-connections.json"
 	SSHDirName      = "ssh"
-	lockName        = ".refresh.lock"
+	lockName        = "refresh.lock"
 	sshLockName     = "ssh.lock"
 	mcpTokenName    = "severino_mcp_token"
 	stagePrefix     = ".refresh."
@@ -206,9 +206,11 @@ func flock(file *os.File, how int) error {
 
 // Lock refuses a concurrent run. The lock is not about speed: two renderers
 // interleaving their installs is how a host ends up holding files from two
-// different reads of the vault.
+// different reads of the vault. It lives on the runtime tmpfs, which only root
+// can enter and whose parent only root can change; a lock under the checkout
+// could be held, or swapped, by the account that deploys.
 func (t *Tree) Lock() (func(), error) {
-	file, err := t.secret.OpenFile(lockName, os.O_WRONLY|os.O_CREATE|syscall.O_NOFOLLOW, 0o600)
+	file, err := t.runtime.OpenFile(lockName, os.O_WRONLY|os.O_CREATE|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return nil, hostError("The refresh lock could not be opened.")
 	}

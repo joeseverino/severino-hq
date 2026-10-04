@@ -59,7 +59,8 @@ def store_references(raw: Any) -> dict[str, str]:
         found.update(vault=vault, item=item)
     match = _BOOTSTRAP.match(bootstrap)
     # A bootstrap the controller's own vault holds is one the controller reads.
-    if match and match.group(1) != vault:
+    # 1Password resolves a vault name without regard to case.
+    if match and match.group(1).strip().casefold() != vault.casefold():
         found["bootstrap"] = bootstrap
     return found
 

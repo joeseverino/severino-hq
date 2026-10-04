@@ -87,6 +87,22 @@ func TestDecodeRefusals(t *testing.T) {
 	}
 }
 
+func TestEncodeRefusesADocumentDecodeWouldCallTooLarge(t *testing.T) {
+	large := valid()
+	large.Connections[0].Values["API_TOKEN"] = strings.Repeat("a", MaxBytes-400)
+	encoded, err := large.Encode()
+	if err != nil {
+		t.Fatalf("a document under the bound was refused: %v", err)
+	}
+	if _, err := Decode(encoded); err != nil {
+		t.Fatalf("what encodes does not decode: %v", err)
+	}
+	large.Connections[0].Values["API_TOKEN"] = strings.Repeat("a", MaxBytes)
+	if _, err := large.Encode(); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a document the reader refuses was encoded: %v", err)
+	}
+}
+
 func TestEncodeRefusesWhatDecodeWould(t *testing.T) {
 	broken := valid()
 	broken.Connections[0].Values["API_TOKEN"] = "a\nb"

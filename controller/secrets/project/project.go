@@ -114,14 +114,22 @@ func appEnvironment(input Input) ([]byte, int, error) {
 	}
 	var out bytes.Buffer
 	count := 0
+	seen := map[string]bool{}
 	for _, field := range fields(matches[0]) {
 		label, value := text(field.Label), text(field.Value)
 		if !appVariable.MatchString(label) || value == "" {
 			continue
 		}
-		if strings.ContainsRune(value, 0) {
-			return nil, 0, refuse("Refusing: an application variable holds a NUL byte.")
+		if strings.ContainsAny(value, "\x00\r") {
+			// The loader reads the file as text: a carriage return would not
+			// come back as it was written.
+			return nil, 0, refuse("Refusing: an application variable holds a NUL byte or a carriage return.")
 		}
+		if seen[label] {
+			// Which one wins would depend on who reads the file.
+			return nil, 0, refuse("Refusing: an application variable is set twice.")
+		}
+		seen[label] = true
 		out.WriteString(label + "='" + strings.ReplaceAll(value, "'", `'\''`) + "'\n")
 		count++
 	}
@@ -264,8 +272,11 @@ func checkBootstrap(vault Vault, ref, bootstrap string) error {
 		return refuse("Connection ", ref, " has an invalid bootstrap reference.")
 	}
 	parts := strings.Split(rest, "/")
+	// 1Password resolves a vault name without regard to case, and a stray
+	// space is still the same vault to whoever reads the reference.
+	inVault := strings.TrimSpace(parts[0])
 	for _, own := range []string{vault.Configured, vault.ID, vault.Name} {
-		if own != "" && (parts[0] == own || strings.HasPrefix(rest, own+"/")) {
+		if own = strings.TrimSpace(own); own != "" && strings.EqualFold(inVault, own) {
 			return refuse("Connection ", ref, " keeps its bootstrap credential in the vault the controller reads.")
 		}
 	}
@@ -310,7 +321,10 @@ func Project(input Input) (Output, error) {
 	if len(document.Connections) == 0 {
 		return Output{}, refuse("Refusing a controller environment that resolved no connections.")
 	}
-	if err := document.Validate(); err != nil {
+	// Encoded here, with the size bound the controller reads under, so a
+	// document it would refuse is a refusal of the vault's content and never
+	// replaces the last good one.
+	if _, err := document.Encode(); err != nil {
 		return Output{}, refuse("Refusing a connections document the controller would not read.")
 	}
 	out.Document = document
