@@ -393,6 +393,13 @@ func TestAnUnchangedVaultIsNotReReadItemByItem(t *testing.T) {
 		}
 	}
 
+	// The vault's own attributes are part of what is current.
+	unchanged("before the vault's attributes change")
+	h.fake.Lock()
+	h.fake.AttributeVersion++
+	h.fake.Unlock()
+	rendered("a new attribute version")
+
 	// A full read at least once a day, whatever the versions say.
 	unchanged("before a day passes")
 	h.now = h.now.Add(25 * time.Hour)

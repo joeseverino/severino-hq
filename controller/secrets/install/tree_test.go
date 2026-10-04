@@ -131,6 +131,57 @@ func TestOpenAsksTheMountTableBeforeAnythingElseIsMade(t *testing.T) {
 	}
 }
 
+// The application environment is as secret as the rest: a web directory
+// outside the runtime mount is held to the same memory.
+func TestTheWebDirectoryMustBeOnTheSameKindOfMemory(t *testing.T) {
+	found := layout(t)
+	found.WebDir = filepath.Join(filepath.Dir(found.RuntimeDir), "web-on-disk")
+	asked := []string{}
+	tree, err := Open(found, func(dir string) error {
+		asked = append(asked, dir)
+		if dir == found.WebDir {
+			return hostError("Controller secret directory must be on tmpfs.")
+		}
+		return nil
+	})
+	if !errors.Is(err, ErrHost) {
+		tree.Close()
+		t.Fatalf("a web directory on a disk was accepted (asked %v): %v", asked, err)
+	}
+	if len(asked) != 2 || asked[1] != found.WebDir {
+		t.Fatalf("the web directory's mount was not asked about: %v", asked)
+	}
+}
+
+// A link where a private directory should be is refused before anything is
+// done to what it points at.
+func TestALinkedDirectoryIsNotReownedOrRemoded(t *testing.T) {
+	for name, place := range map[string]func(*Layout) string{
+		"the secret directory": func(l *Layout) string { return l.SecretDir },
+		"the web directory":    func(l *Layout) string { return l.WebDir },
+	} {
+		t.Run(name, func(t *testing.T) {
+			found := layout(t)
+			elsewhere := found.RuntimeDir + "-elsewhere"
+			if err := os.Mkdir(elsewhere, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			os.Chmod(elsewhere, 0o755)
+			if err := os.Symlink(elsewhere, place(&found)); err != nil {
+				t.Fatal(err)
+			}
+			tree, err := Open(found, tmpfs)
+			if !errors.Is(err, ErrHost) {
+				tree.Close()
+				t.Fatalf("accepted: %v", err)
+			}
+			if info, _ := os.Stat(elsewhere); info.Mode().Perm() != 0o755 {
+				t.Fatalf("the link's target was changed to mode %o", info.Mode().Perm())
+			}
+		})
+	}
+}
+
 func TestInPlaceInstall(t *testing.T) {
 	tree := open(t)
 	dir, uid, gid := tree.Layout.WebDir, os.Getuid(), os.Getgid()

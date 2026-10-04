@@ -282,6 +282,38 @@ func TestAnItemReadMustReturnTheItemAsked(t *testing.T) {
 	if _, err := c.Item(context.Background(), connecttest.VaultID, connecttest.ID(2)); err != nil {
 		t.Fatal(err)
 	}
+	// The right item, of another vault.
+	other := "wwwwwwwwwwwwwwwwwwwwwwwwww"
+	fake.Intercept = func(w http.ResponseWriter, r *http.Request) bool {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, connecttest.ID(1)):
+			fmt.Fprintf(w, `{"id":%q,"category":"LOGIN","vault":{"id":%q}}`, connecttest.ID(1), other)
+		case strings.HasSuffix(r.URL.Path, connecttest.VaultID):
+			fmt.Fprintf(w, `{"id":%q,"name":"Another Vault","contentVersion":1}`, other)
+		default:
+			return false
+		}
+		return true
+	}
+	if _, err := c.Item(context.Background(), connecttest.VaultID, connecttest.ID(1)); !errors.Is(err, ErrResponse) {
+		t.Fatalf("an item of another vault was accepted: %v", err)
+	}
+	if _, err := c.Vault(context.Background(), connecttest.VaultID); !errors.Is(err, ErrResponse) {
+		t.Fatalf("another vault was accepted for the one asked: %v", err)
+	}
+	fake.Intercept = func(w http.ResponseWriter, r *http.Request) bool {
+		if !strings.HasSuffix(r.URL.Path, connecttest.VaultID) {
+			return false
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"name":"No identifier","contentVersion":1}`))
+		return true
+	}
+	if _, err := c.Vault(context.Background(), connecttest.VaultID); !errors.Is(err, ErrResponse) {
+		t.Fatalf("a vault with no identifier was accepted: %v", err)
+	}
+	fake.Intercept = nil
 	before := fake.Count("/")
 	for _, bad := range []string{"", "../x", "UPPERCASEUPPERCASEUPPERCAS", "short", connecttest.ID(1) + "/files", "example-item"} {
 		if _, err := c.Item(context.Background(), connecttest.VaultID, bad); !errors.Is(err, ErrIdentifier) {
