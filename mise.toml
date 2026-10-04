@@ -1,0 +1,480 @@
+# The toolchain and every gate, declared once.
+#
+#   mise install        the pinned tools (versions here, checksums in mise.lock)
+#   mise run fast       the inner loop: only what the change touches
+#   mise run check      does my change work
+#   mise run ci         will the pipeline accept it: every gate CI runs
+#   mise run <gate>     one gate, e.g. `mise run checks:ruff`
+#   mise tasks          the list
+#
+# A gate is a task named <job>:<gate>. Each CI job runs the aggregate of its
+# name (`mise run -c checks`), so a gate added here runs locally and in the
+# pipeline with no second list to edit. `-c` keeps going past a failure and
+# names every gate that failed.
+#
+# Python dependencies come from uv.lock through `uv run --locked`; nothing here
+# needs a virtualenv made by hand.
+
+min_version = "2026.10.1"
+
+[settings]
+# .node-version stays the one Node pin; setup-node reads it too.
+idiomatic_version_file_enable_tools = ["node"]
+
+[env]
+# Facts that are not tools: the Python matrix, the coverage floor, the runner
+# image. Shell and workflows read the same file.
+_.file = "scripts/toolchain.env"
+SEVERINO_LOG_LEVEL = "CRITICAL"
+
+[tools]
+# One pin: pyproject.toml's, which the image's bootstrap also reads.
+uv = "{{ exec(command='python3 scripts/dependency_config.py pin uv') }}"
+shellcheck = "0.11.0"
+actionlint = "1.7.12"
+yq = "4.54.1"
+jq = "1.8.2"
+# The Scorecard the pinned ossf/scorecard-action builds against (its go.mod).
+scorecard = "5.5.0"
+# Seals a failed Compose run's output (scripts/seal-failure-logs.sh).
+age = "1.3.2"
+
+# The code graph the structural bar indexes with. Linux takes the portable
+# (static) build so the runner needs no matching libc.
+[tools."github:DeusData/codebase-memory-mcp"]
+version = "0.10.8"
+
+[tools."github:DeusData/codebase-memory-mcp".platforms]
+linux-x64 = { asset_pattern = "codebase-memory-mcp-linux-amd64-portable.tar.gz" }
+linux-arm64 = { asset_pattern = "codebase-memory-mcp-linux-arm64-portable.tar.gz" }
+
+# The CodeQL bundle the pinned github/codeql-action defaults to (its
+# src/defaults.json), so the local analysis runs the queries CI runs. Bump with
+# that action.
+[tools."github:github/codeql-action"]
+version = "2.26.4"
+version_prefix = "codeql-bundle-v"
+bin_path = "codeql"
+
+[tools."github:github/codeql-action".platforms]
+macos-arm64 = { asset_pattern = "codeql-bundle-osx64.tar.zst" }
+macos-x64 = { asset_pattern = "codeql-bundle-osx64.tar.zst" }
+linux-x64 = { asset_pattern = "codeql-bundle-linux64.tar.zst" }
+
+# --------------------------------------------------------------- operator
+
+[tasks.dev]
+description = "The development server"
+raw = true
+run = "scripts/dev.sh"
+
+[tasks.preflight]
+description = "Ready to release: every gate, the composed suite and the deploy host"
+raw = true
+run = "scripts/preflight.sh"
+
+[tasks.failure-logs]
+description = "Open a failed Compose run's sealed logs"
+raw = true
+run = "scripts/failure-logs.sh"
+
+# ------------------------------------------------------------- aggregates
+
+[tasks.fast]
+description = "Inner loop: lint, types and tests for what the change touches"
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3" }
+run = "uv run --locked python scripts/fast_gate.py"
+
+[tasks.check]
+description = "Does my change work: lint, contracts, the suite as dev and as production runs it"
+depends = [
+    "checks:conflicts",
+    "checks:patch",
+    "checks:ruff",
+    "checks:openapi",
+    "checks:workflows",
+    "checks:shell",
+    "tests:*",
+    "suite:*",
+]
+
+[tasks.ci]
+description = "Every gate the pipeline runs"
+depends = ["checks", "tests", "browser", "controller", "scan", "image"]
+
+[tasks.checks]
+description = "CI job Checks"
+depends = ["checks:*"]
+
+[tasks.tests]
+description = "CI job Tests, on every Python the matrix declares"
+run = '''
+set -eu
+failed=0
+# A pipeline leg names its one interpreter in TEST_PYTHONS.
+for version in ${TEST_PYTHONS:-$PYTHON_VERSIONS}; do
+    echo "[tests] Python $version"
+    UV_PYTHON="$version" UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-.venv}-$version" \
+        mise run -c 'tests:*' || failed=1
+done
+exit "$failed"
+'''
+
+[tasks.browser]
+description = "CI job Browser"
+depends = ["browser:*"]
+
+[tasks.controller]
+description = "CI job Controller"
+depends = ["controller:*"]
+
+[tasks.scan]
+description = "Code scanning, as the CodeQL workflow runs it"
+depends = ["scan:*"]
+
+[tasks.image]
+description = "CI job Image: build, then every check an image must pass"
+depends = ["image:verify:*"]
+
+# ----------------------------------------------------------------- checks
+# A gate never opens the developer's database: each Django gate names a
+# scratch path, so a checkout's own data cannot change what a gate reports.
+
+[tasks."checks:conflicts"]
+description = "No sync-conflict copies in the tree"
+run = '''
+set -eu
+copies="$(git ls-files --cached --others --exclude-standard | grep -E ' [0-9]+(\.[^/]*)?$' || true)"
+if [ -n "$copies" ]; then
+    echo "Sync-conflict copies in the tree; delete them:" >&2
+    printf '  %s\n' "$copies" >&2
+    exit 1
+fi
+'''
+
+[tasks."checks:patch"]
+description = "No whitespace errors or conflict markers in the working tree"
+run = "git diff --check"
+
+[tasks."checks:ruff"]
+description = "ruff"
+run = "uv run --locked ruff check ."
+
+[tasks."checks:mypy"]
+description = "mypy: the typed seams pyproject.toml names"
+# django-stubs loads the host's settings.
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3" }
+run = "uv run --locked python -m mypy"
+
+[tasks."checks:badges"]
+description = "The README badges and the test matrix state the toolchain"
+run = '''
+set -eu
+expected="$(printf '%s\n' $PYTHON_VERSIONS | paste -sd'|' -)"
+claimed="$(sed -nE 's/.*badge\/python-(.*)-blue.*/\1/p' README.md | head -1 | sed 's/%20%7C%20/|/g')"
+if [ "$expected" != "$claimed" ]; then
+    echo "README python badge says '$claimed'; the toolchain declares '$expected'." >&2
+    exit 1
+fi
+floor="$(sed -nE 's/.*badge\/coverage-([0-9]+)%25%2B-.*/\1/p' README.md | head -1)"
+if [ "$floor" != "$COVERAGE_FLOOR" ]; then
+    echo "README coverage badge says '${floor}%+'; the floor is ${COVERAGE_FLOOR}%." >&2
+    exit 1
+fi
+# A workflow matrix cannot read the toolchain, so it is held to it.
+declared="$(printf '%s\n' $PYTHON_VERSIONS | jq -Rc '[.]' | jq -sc 'add')"
+matrix="$(yq -o=json -I=0 '.jobs.tests.strategy.matrix.python' .github/workflows/ci.yml)"
+if [ "$matrix" != "$declared" ]; then
+    echo "Tests runs $matrix; scripts/toolchain.env declares $declared." >&2
+    exit 1
+fi
+'''
+
+[tasks."setup:openapi"]
+description = "Install the locked contract tools"
+hide = true
+sources = ["scripts/openapi/package-lock.json"]
+outputs = ["scripts/openapi/node_modules/.package-lock.json"]
+run = "npm --prefix scripts/openapi ci"
+
+[tasks."checks:openapi"]
+description = "Both OpenAPI descriptions pass specification lint"
+depends = ["setup:openapi"]
+run = "scripts/check-openapi.sh"
+
+[tasks."checks:lockfile"]
+description = "uv.lock matches pyproject.toml"
+run = "uv lock --check"
+
+[tasks."checks:workflows"]
+description = "The workflows are valid, run: blocks included"
+run = "actionlint -color"
+
+[tasks."checks:pins"]
+description = "Every action is pinned to a commit, with its version beside it"
+run = '''
+set -eu
+# A tag can be moved after review; a commit cannot. The version comment is what
+# Dependabot rewrites with the commit and what a reader checks.
+bad="$(grep -rnE '^[[:space:]-]*uses:[[:space:]]' .github/workflows .github/actions \
+    | grep -vE 'uses:[[:space:]]+\./' \
+    | grep -vE '@[0-9a-f]{40} # v[0-9]+(\.[0-9]+){0,2}$' || true)"
+if [ -n "$bad" ]; then
+    printf '%s\n' "$bad" >&2
+    echo "Pin every action to a full commit SHA followed by '# vX.Y.Z'." >&2
+    exit 1
+fi
+'''
+
+[tasks."checks:timeouts"]
+description = "Every job has a timeout"
+run = '''
+set -eu
+# Without one a hung job holds its runner for GitHub's six-hour default. A job
+# that calls a reusable workflow cannot take one; the workflow it calls is checked.
+missing="$(for f in .github/workflows/*.yml; do
+    yq '.jobs | to_entries | .[] | select(.value.uses == null and .value."timeout-minutes" == null) | .key' "$f" \
+        | sed "s|^|$f: |"
+done)"
+if [ -n "$missing" ]; then
+    printf '%s\n' "$missing" >&2
+    echo "Every job needs timeout-minutes." >&2
+    exit 1
+fi
+'''
+
+[tasks."checks:runners"]
+description = "Every hosted job runs on the declared runner image"
+run = '''
+set -eu
+# A job left on ubuntu-latest would move to a new OS on GitHub's schedule.
+stray="$(grep -HnE '^[[:space:]]*runs-on:' .github/workflows/*.yml \
+    | grep -v 'self-hosted' \
+    | grep -v "runs-on: ${RUNNER_IMAGE}\$" || true)"
+if [ -n "$stray" ]; then
+    printf '%s\n' "$stray" >&2
+    echo "Hosted jobs must run on ${RUNNER_IMAGE} (scripts/toolchain.env)." >&2
+    exit 1
+fi
+'''
+
+[tasks."checks:shell"]
+description = "Every shell file parses and passes shellcheck; the shell suites pass"
+run = '''
+set -eu
+sources="$(scripts/shell-sources.sh)"
+# Each parsed by the shell its first line names.
+for f in $sources; do
+    case "$(head -n 1 "$f")" in
+        *bash*) bash -n "$f" ;;
+        *) sh -n "$f" ;;
+    esac
+done
+# shellcheck disable=SC2086
+shellcheck -x $sources
+for suite in scripts/test-*.sh; do "$suite"; done
+'''
+
+[tasks."checks:deploycheck"]
+description = "Production settings raise no security warning"
+# DEBUG off, a real host. The values mirror a production configuration so the
+# check judges how settings.py reads one. The key is a throwaway long enough
+# for the strength check.
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "0", DJANGO_SECRET_KEY = "ci-only-deploy-check-key-0123456789abcdef0123456789abcdef", DJANGO_ALLOWED_HOSTS = "hq.example.com", SEVERINO_OIDC_ISSUER = "https://sso.example.com", DJANGO_BEHIND_TLS_PROXY = "1", DJANGO_SESSION_COOKIE_SECURE = "1", DJANGO_CSRF_COOKIE_SECURE = "1", DJANGO_HSTS_SECONDS = "31536000", DJANGO_HSTS_INCLUDE_SUBDOMAINS = "1", DJANGO_HSTS_PRELOAD = "1" }
+run = "uv run --locked python manage.py check --deploy --fail-level WARNING"
+
+[tasks."checks:audit"]
+description = "No known vulnerability in any locked dependency"
+run = '''
+set -eu
+export="$(mktemp)"
+trap 'rm -f "$export"' EXIT
+uv export --locked --all-groups --no-emit-project --output-file "$export" >/dev/null
+# The export is exact and hashed, so nothing is resolved or installed to audit it.
+uv run --locked --only-group audit pip-audit --disable-pip --require-hashes -r "$export"
+'''
+
+[tasks."checks:structural"]
+description = "No new near-duplicate; the largest files did not grow"
+run = "scripts/structural-bar.sh"
+
+[tasks."checks:scorecard"]
+description = "Scorecard: every file-based check at 10"
+run = "scripts/security-scan.sh scorecard"
+
+# ------------------------------------------------------------------ tests
+# Each runs on the interpreter UV_PYTHON names; `mise run tests` walks the matrix.
+
+[tasks."tests:django"]
+description = "Django's system checks"
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+run = "uv run --locked python manage.py check"
+
+[tasks."tests:plugins"]
+description = "The public plugin contract"
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver", SEVERINO_HQ_PLUGINS = "tests.fixtures.example_hq_plugin.plugin:plugin" }
+run = [
+    "uv run --locked python manage.py check",
+    "uv run --locked python manage.py plugins",
+]
+
+[tasks."tests:migrations"]
+description = "No model change without its migration"
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+run = "uv run --locked python manage.py makemigrations --check --dry-run"
+
+[tasks."tests:api-document"]
+description = "The machine API's OpenAPI document is current"
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+run = "uv run --locked python manage.py api_openapi --check"
+
+[tasks."tests:api-properties"]
+description = "Generated API cases through the real WSGI middleware"
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+run = "uv run --locked python manage.py test tests.fuzz.api_properties --noinput --parallel 1"
+
+[tasks."tests:suite"]
+description = "The suite, with the coverage floor"
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+# Parallel across the cores; hq/platform/core/test_runner.py makes workers safe
+# on the WAL database. Coverage follows the workers (pyproject.toml) and is
+# combined before it is judged.
+run = '''
+set -eu
+log="$(mktemp)"
+trap 'rm -f "$log"' EXIT
+status=0
+uv run --locked coverage run manage.py test --noinput --parallel auto --durations 10 >"$log" 2>&1 || status=$?
+cat "$log"
+[ "$status" -eq 0 ]
+uv run --locked coverage combine --quiet
+uv run --locked coverage report --fail-under="$COVERAGE_FLOOR" >/dev/null
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    percent="$(uv run --locked coverage report --format=total --precision=2)"
+    ran="$(sed -nE 's/^Ran ([0-9]+) tests? in ([0-9.]+)s$/\1 tests in \2s/p' "$log")"
+    {
+        echo "### Python ${UV_PYTHON:-default}: ${ran}, coverage ${percent}% (floor ${COVERAGE_FLOOR}%)"
+        echo
+        echo "<details><summary>Slowest tests</summary>"
+        echo
+        echo "| Seconds | Test |"
+        echo "| ---: | --- |"
+        sed -n '/^Slowest test durations/,/^$/p' "$log" | grep -E '^[0-9.]+s ' \
+            | sed -E 's/^([0-9.]+)s +[^ ]+ \(([^)]+)\).*/| \1 | <code>\2<\/code> |/'
+        echo
+        echo "</details>"
+    } >>"$GITHUB_STEP_SUMMARY"
+fi
+'''
+
+# ------------------------------------------------------------------ suite
+# The suite as production runs it. Not jobs of the CI workflow: Compose runs
+# the composition against the real extension set.
+
+[tasks."suite:production"]
+description = "The suite with DEBUG off, as production runs it"
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_SECRET_KEY = "check-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "testserver" }
+run = "env -u DJANGO_DEBUG uv run --locked python manage.py test --noinput --parallel auto"
+
+[tasks."suite:composed"]
+description = "The suite composed with the extensions mise.local.toml names"
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_SECRET_KEY = "check-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "testserver", SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION = "0" }
+run = '''
+set -eu
+if [ -z "${HQ_LOCAL_PLUGINS:-}" ]; then
+    if [ "${REQUIRE_COMPOSED:-0}" = 1 ]; then
+        echo "The composed suite is required and HQ_LOCAL_PLUGINS is unset (scripts/mise.local.example.toml)." >&2
+        exit 1
+    fi
+    echo "Composed suite not run: no HQ_LOCAL_PLUGINS supplied (scripts/mise.local.example.toml)."
+    exit 0
+fi
+env -u DJANGO_DEBUG SEVERINO_HQ_PLUGINS="$HQ_LOCAL_PLUGINS" PYTHONPATH="${HQ_LOCAL_PYTHONPATH:-}" \
+    uv run --locked python manage.py test --noinput --parallel auto
+'''
+
+# ---------------------------------------------------------------- browser
+
+[tasks."setup:chromium"]
+description = "Install the Chromium the locked Playwright pins"
+hide = true
+run = '''
+set -eu
+# On a runner the system libraries come with it.
+if [ -n "${CI:-}" ]; then
+    uv run --locked --group browser python -m playwright install --with-deps --only-shell chromium
+else
+    uv run --locked --group browser python -m playwright install --only-shell chromium
+fi
+'''
+
+[tasks."browser:layout"]
+description = "Real-browser layout invariants over synthetic pages"
+depends = ["setup:chromium"]
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+run = "uv run --locked --group browser python manage.py test hq.platform.core.browser_tests --noinput --parallel 1"
+
+# ------------------------------------------------------------- controller
+
+[tasks."controller:check"]
+description = "The Go controller: format, generated types, vet, race tests"
+run = "controller/scripts/check.sh"
+
+# ------------------------------------------------------------------- scan
+
+[tasks."scan:codeql"]
+description = "CodeQL, security-and-quality: no alerts"
+run = "scripts/security-scan.sh codeql"
+
+# ------------------------------------------------------------------ image
+# IMAGE names the image under test; the pipeline passes the one it built.
+
+[tasks."image:build"]
+description = "Build the production image"
+hide = true
+run = '''
+set -eu
+[ -n "${IMAGE:-}" ] || docker build -q -t severino-hq:ci-local .
+'''
+
+[tasks."image:verify:python"]
+description = "It runs Python 3.14 without package managers"
+depends = ["image:build"]
+run = '''
+docker run --rm --entrypoint python "${IMAGE:-severino-hq:ci-local}" -c \
+    "import importlib.util, shutil, sys; sys.exit(0 if sys.version_info[:2] == (3, 14) and importlib.util.find_spec('pip') is None and shutil.which('pip') is None and shutil.which('uv') is None else 1)"
+'''
+
+[tasks."image:verify:healthy"]
+description = "It comes up healthy"
+depends = ["image:build"]
+run = 'scripts/image-health.sh "${IMAGE:-severino-hq:ci-local}"'
+
+[tasks."image:verify:no-dev"]
+description = "It cannot import development layers"
+depends = ["image:build"]
+run = '''
+docker run --rm --entrypoint python "${IMAGE:-severino-hq:ci-local}" -c \
+    "import importlib.util, sys; sys.exit(importlib.util.find_spec('debug_toolbar') is not None)"
+'''
+
+[tasks."image:verify:controller"]
+description = "It carries the controller"
+depends = ["image:build"]
+run = '''
+set -eu
+usage="$(docker run --rm --entrypoint /usr/local/bin/hq-controller "${IMAGE:-severino-hq:ci-local}" -help 2>&1 || true)"
+case "$usage" in
+    *-apply*) ;;
+    *) echo "$usage" >&2; exit 1 ;;
+esac
+'''
+
+[tasks."image:verify:suite"]
+description = "The suite passes inside it"
+depends = ["image:build"]
+run = '''
+docker run --rm --entrypoint python \
+    --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
+    --env DJANGO_ALLOWED_HOSTS=localhost "${IMAGE:-severino-hq:ci-local}" manage.py test --verbosity 0
+'''

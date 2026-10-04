@@ -1,0 +1,43 @@
+# Copy to `mise.local.toml` in the repository root. mise reads it after
+# mise.toml, and git ignores it.
+#
+# Without it `mise run suite:composed` has no extension set to compose, and
+# says so. Nothing here is committed, so the host can be told where extensions
+# live without any of it entering the source. The values below are the
+# synthetic `example.*` namespace; substitute your own checkouts.
+#
+
+[env]
+# Where the extensions' sources are. The extensions are not a dependency of
+# the host; its own libraries are enough to import them.
+HQ_LOCAL_PYTHONPATH = "{{env.HOME}}/code/example-alpha/src:{{env.HOME}}/code/example-beta/src"
+# Which to enable, as `module:attribute`, comma separated. Named for this file
+# rather than as SEVERINO_HQ_PLUGINS so that no gate sees the set by accident:
+# only the composed suite and the dev server load it.
+HQ_LOCAL_PLUGINS = "example_alpha.plugin:plugin,example_beta.plugin:plugin"
+
+# The SSH destination `mise run preflight` checks read-only before a release.
+SEVERINO_HQ_DEPLOY_HOST = "deploy.example.test"
+
+# The age identity that opens a failed run's sealed logs
+# (`mise run failure-logs`), as a password-manager reference read at use, or a
+# file path.
+# SEVERINO_FAILURE_LOG_IDENTITY = "op://vault/item/password"
+
+# The rest configure `mise run dev` alone, and are named for it for the same
+# reason. Where it listens. `tailnet` resolves to this machine's tailnet
+# address, which is what a reverse proxy forwards to; omit it for loopback.
+HQ_DEV_HOST = "tailnet"
+# The name it is reached at, and the origin allowed to post to it. A proxy that
+# terminates TLS makes Django check both, so a server that renders a login page
+# refuses the login without them.
+HQ_DEV_ALLOWED_HOSTS = "dev.example.com,localhost,127.0.0.1"
+HQ_DEV_CSRF_TRUSTED_ORIGINS = "https://dev.example.com"
+
+# Optional. The Django Debug Toolbar on the dev server. Needs DJANGO_DEBUG on;
+# the suite ignores it. See hq/config/devtools.py.
+# SEVERINO_DEBUG_TOOLBAR = "1"
+
+# Optional. A code graph already serving this machine refuses a second build of
+# itself; point the structural bar at the one that is running.
+# CODEBASE_MEMORY_BIN = "{{env.HOME}}/.local/bin/codebase-memory-mcp"

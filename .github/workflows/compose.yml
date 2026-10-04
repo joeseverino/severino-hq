@@ -760,6 +760,18 @@ jobs:
           gh workflow run deploy.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f commit="$COMMIT" -f compose_run="$THIS_RUN"
 
+      - name: Read the pinned mise
+        id: mise
+        if: failure()
+        run: echo "version=$(sed -n 's/^min_version = "\(.*\)"$/\1/p' mise.toml)" >> "$GITHUB_OUTPUT"
+      - name: Install the pinned age
+        if: failure()
+        uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834 # v5.1.0
+        env:
+          MISE_LOCKED: "1"
+        with:
+          version: ${{ steps.mise.outputs.version }}
+          install_args: age
       - name: Seal the withheld output
         id: seal
         if: failure()

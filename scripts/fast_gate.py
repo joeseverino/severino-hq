@@ -2,9 +2,9 @@
 
 Changed files against the merge base are mapped to the test modules that reach
 them, by the import graph of the tree itself (nothing here lists an app). The
-architecture tests always run. ``scripts/check.sh`` stays the gate before a push.
+architecture tests always run. ```mise run check``` stays the gate before a push.
 
-Usage: scripts/check-fast.sh [--list] [BASE]
+Usage: mise run fast [--list] [BASE]
 BASE defaults to $CHECK_BASE, then origin/main, then main. --list prints the
 selected test modules and stops.
 """
@@ -22,7 +22,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 # Never part of the Django suite: other languages, vendored trees, the browser
-# pass that check.sh also leaves to CHECK_BROWSER.
+# pass that `mise run check` also leaves to `mise run browser`.
 SKIP_PARTS = {"node_modules", "controller", "browser_tests", ".venv", "staticfiles"}
 ALWAYS = ("architecture", "new_domain")
 # Past this share of the suite the change is wide and the fast gate says so.
@@ -44,7 +44,7 @@ def merge_base(base: str | None) -> str:
             return git("merge-base", "HEAD", candidate)[0]
         except (subprocess.CalledProcessError, IndexError):
             continue
-    sys.exit("check-fast: no base found; pass one (scripts/check-fast.sh <ref>)")
+    sys.exit("fast: no base found; pass one (mise run fast <ref>)")
 
 
 def changed_files(base: str) -> tuple[list[str], list[str]]:
@@ -236,10 +236,10 @@ def mypy_targets(changed: list[str]) -> list[str]:
 
 
 def step(label: str, cmd: list[str], env: dict[str, str] | None = None) -> bool:
-    print(f"[check-fast] {label}", flush=True)
+    print(f"[fast] {label}", flush=True)
     started = time.monotonic()
     code = subprocess.run(cmd, cwd=ROOT, env=env).returncode
-    print(f"[check-fast] {label}: {time.monotonic() - started:.1f}s", flush=True)
+    print(f"[fast] {label}: {time.monotonic() - started:.1f}s", flush=True)
     return code == 0
 
 
@@ -255,11 +255,11 @@ def main(argv: list[str]) -> int:
     reached, touched = affected(changed, deleted, files)
     labels, total = test_labels(files, reached, touched)
     print(
-        f"[check-fast] base {base[:9]}: {len(changed)} changed, {len(deleted)} deleted, "
+        f"[fast] base {base[:9]}: {len(changed)} changed, {len(deleted)} deleted, "
         f"{len(labels)}/{total} test modules"
     )
     if total and len(labels) / total > WIDE:
-        print("[check-fast] wide change: most of the suite is reached; scripts/check.sh is the honest gate")
+        print("[fast] wide change: most of the suite is reached; `mise run check` is the honest gate")
 
     if list_only:
         print("\n".join(labels))
@@ -286,7 +286,7 @@ def main(argv: list[str]) -> int:
         "tests", [python, "manage.py", "test", "--noinput", "--parallel", os.environ.get("CHECK_PARALLEL", "auto"), *labels], env
     )
     ok &= step("patch integrity", ["git", "diff", "--check", base])
-    print(f"[check-fast] {'passed' if ok else 'FAILED'} in {time.monotonic() - started:.1f}s (full gate before push: scripts/check.sh)")
+    print(f"[fast] {'passed' if ok else 'FAILED'} in {time.monotonic() - started:.1f}s (full gate before push: `mise run check`)")
     return 0 if ok else 1
 
 

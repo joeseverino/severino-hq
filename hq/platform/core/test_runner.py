@@ -192,7 +192,7 @@ def _checkpoint(alias: str) -> None:
 
 
 # The deployment identity the suite runs under, whatever the shell exports: the
-# values CI sets. A developer's `.env.dev` names a real host, and HQ derives its
+# values CI sets. A developer's `mise.local.toml` names a real host, and HQ derives its
 # own hostname from it, which changes what pages read.
 NEUTRAL_IDENTITY = {
     "DJANGO_ALLOWED_HOSTS": "127.0.0.1,testserver",

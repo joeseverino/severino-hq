@@ -12,8 +12,8 @@
 #                                               answer, at 10 (scripts/scorecard_report.py)
 #   trivy      .github/workflows/ci.yml         HIGH,CRITICAL, fixable only
 #
-# CodeQL and Scorecard are the versions scripts/toolchain.env pins, fetched on
-# first use by scripts/install-scan-tools.sh. Both read an export of the files
+# CodeQL and Scorecard are the versions mise.toml pins and mise.lock verifies,
+# installed by `mise install`. Both read an export of the files
 # git would push (tracked plus untracked, less ignored), so a local .venv or
 # stray build output is not scanned.
 #
@@ -44,7 +44,7 @@ while [ $# -gt 0 ]; do
 done
 gates=${gates:-" codeql scorecard"}
 
-python=${CHECK_PYTHON:-python3}
+python=python3
 # Keyed by checkout, so worktrees do not overwrite each other's database.
 key=$(printf '%s' "$repo_root" | cksum | cut -d' ' -f1)
 work="${XDG_CACHE_HOME:-$HOME/.cache}/severino-hq/scan-$key"
@@ -60,7 +60,7 @@ git -c core.quotepath=off ls-files --cached --others --exclude-standard \
 for gate in $gates; do
     case "$gate" in
     codeql)
-        codeql=$(scripts/install-scan-tools.sh codeql)
+        codeql=codeql
         echo "[security] CodeQL $("$codeql" version --format=terse) database"
         # `--build-mode none` is what the Action uses for Python: nothing is
         # compiled, so the extractor reads the tree directly. The Action's own
@@ -87,8 +87,8 @@ for gate in $gates; do
         echo "[security] CodeQL clean"
         ;;
     scorecard)
-        scorecard=$(scripts/install-scan-tools.sh scorecard)
-        echo "[security] Scorecard $SCORECARD_VERSION (local checks)"
+        scorecard=scorecard
+        echo "[security] Scorecard (local checks)"
         # No token: local mode reads files, and a token would let it reach
         # GitHub on this machine's credentials.
         env -u GITHUB_AUTH_TOKEN -u GITHUB_TOKEN -u GH_TOKEN -u GH_AUTH_TOKEN \

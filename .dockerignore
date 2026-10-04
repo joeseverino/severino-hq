@@ -31,3 +31,6 @@ Dockerfile
 
 # JavaScript tooling is installed locally; generated artifacts are committed.
 **/node_modules
+
+# Developer-local mise settings.
+mise.local.toml

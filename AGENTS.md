@@ -7,65 +7,66 @@ authoritative for human and agentic development in this public repository.
 
 1. Run `git status --short`; preserve unrelated work.
 2. Read the nearest code and tests before changing an interface.
-3. While editing, run `./scripts/check-fast.sh` (see below). Run
-   `./scripts/check.sh` before handing work back.
-4. Run `./scripts/ci-local.sh` before pushing.
-5. Run `./scripts/preflight.sh` before calling a change ready. On a small
-   machine, push first and run `./scripts/preflight.sh --remote`: it reads
-   every check GitHub ran on that commit instead of running `ci-local.sh`.
+3. While editing, run `mise run fast` (see below). Run `mise run check` before
+   handing work back.
+4. Run `mise run ci` before pushing.
+5. Run `mise run preflight` before calling a change ready. On a small machine,
+   push first and run `mise run preflight --remote`: it reads every check
+   GitHub ran on that commit instead of running `mise run ci`.
 
-`check-fast.sh [BASE]` is the inner loop: the changed files against the merge
+Setup is [mise](https://mise.jdx.dev) and `mise install`: the pinned tools, at
+the versions in `mise.toml` and the checksums in `mise.lock`. Python
+dependencies come from `uv.lock` through `uv run --locked`, so no virtualenv is
+made by hand. Every gate is a task in `mise.toml` named `<job>:<gate>`;
+`mise tasks` lists them and `mise run checks:ruff` runs one. Outside a task,
+run a command with the same tools as `mise exec -- uv run --locked python
+manage.py ...`.
+
+`mise run fast [BASE]` is the inner loop: the changed files against the merge
 base (`BASE`, `$CHECK_BASE`, then `origin/main`, `main`) are mapped through the
 tree's import graph to the test modules that reach them, plus every test of the
 changed Django apps, the architecture tests, ruff on the changed files, `manage.py
-check`, migration drift, and mypy on changed typed modules. `--list` prints the
-selection. Tens of seconds for a one-domain change; a change to a shared layer
-reaches most of the suite and says so. It reads Python imports and app names, so
-a rule tested only through a string or a template it cannot see needs
-`check.sh`. It never replaces `check.sh`, which also runs the suite with `DEBUG`
-off. A new host domain: `docs/NEW_DOMAIN.md`.
+check`, migration and API document drift, and mypy on changed typed modules.
+`--list` prints the selection. Tens of seconds for a one-domain change; a change
+to a shared layer reaches most of the suite and says so. It reads Python imports
+and app names, so a rule tested only through a string or a template it cannot
+see needs `mise run check`. It never replaces `mise run check`, which also runs
+the suite with `DEBUG` off. A new host domain: `docs/NEW_DOMAIN.md`.
 
-`check.sh` answers "do my changes work?". `ci-local.sh` answers "will the
-pipeline accept them?": ruff and mypy at the pinned versions, the shell gates, the
-Django deployment check, `pip-audit`, the image build, and the suite *inside*
-that image, which is where composition runs it. It prints what it could not
-run rather than implying full coverage. Point it at every interpreter that has
-the requirements installed, because CI runs a 3.13/3.14 matrix and a
-version-specific failure is otherwise found by pushing:
+`mise run check` answers "do my changes work?". `mise run ci` answers "will the
+pipeline accept them?": the aggregates `checks` (ruff and mypy at the locked
+versions, the lockfile, the workflows, the shell gates, the Django deployment
+check, `pip-audit`, the structural bar, Scorecard), `tests` on every Python in
+`PYTHON_VERSIONS` (`scripts/toolchain.env`), `browser`, `controller`, `scan`
+(CodeQL) and `image`: the image build and the suite *inside* that image, which
+is where composition runs it. Each CI job runs the aggregate of its name, so the
+gate list exists once: a gate is added in `mise.toml`, never in a workflow. A
+gate that cannot run fails. `mise run -c ci` keeps going past a failure and
+names every gate that failed.
 
-```sh
-SEVERINO_CI_PYTHONS="/path/py312/bin/python .venv/bin/python" \
-SEVERINO_HQ_PLUGINS=… ./scripts/ci-local.sh
-```
+`mise run check` runs the suite three ways: with `DEBUG` on (`tests:suite`),
+with it off as production runs it (`suite:production`), and (when an extension
+set is supplied) composed with the extensions (`suite:composed`). That third
+pass is the one that catches what CI cannot, because the host and its
+extensions first meet during compose, long after the merge button.
 
-`check.sh` runs the suite three ways: with `DEBUG` on, with it off as production
-runs it, and (when an extension set is supplied) with every extension
-installed. That third pass is the one that catches what CI cannot, because the
-host and its extensions first meet during compose, long after the merge button.
-It needs an interpreter that has them importable, which this repository's own
-venv deliberately does not.
+Name the extension set once in a gitignored `mise.local.toml` (copy
+`scripts/mise.local.example.toml`): `HQ_LOCAL_PYTHONPATH` says where the
+extensions' sources are and `HQ_LOCAL_PLUGINS` which to enable. Only the
+composed suite and the dev server load the set, so no other gate can see it
+by accident. Without it the
+composed pass says it did not run and passes, so public CI and a fresh checkout
+are unaffected, but locally that means the gate covers less, which is the
+reason the file exists. `REQUIRE_COMPOSED=1 mise run suite:composed` fails
+instead; `mise run preflight` runs it that way.
 
-Put those values in a gitignored `.env.dev` once (copy
-`scripts/dev.env.example`) and both `check.sh` and `ci-local.sh` pick them up,
-so the full gate is `./scripts/check.sh` with no arguments. They can still be
-passed explicitly, and an explicit value wins:
-
-```sh
-CHECK_PYTHON=/path/to/venv/bin/python \
-SEVERINO_HQ_PLUGINS=… PYTHONPATH=… ./scripts/check.sh
-```
-
-Without them the composed pass is skipped, so public CI and a fresh checkout are
-unaffected, but locally that means the gate quietly covers less, which is the
-reason the file exists.
-
-Local development uses `./scripts/dev.sh`. It collects assets and runs the same
+Local development uses `mise run dev`. It collects assets and runs the same
 ASGI/Uvicorn path as production with reload enabled.
 
-`check.sh` runs the suite in parallel, which roughly halves the gate's time.
+The gates run the suite in parallel, which roughly halves their time.
 `hq/platform/core/test_runner.py` is what makes that safe on WAL SQLite: read
-it before changing anything about the test database. `CHECK_PARALLEL=1` rules
-parallelism out when a failure looks order- or isolation-dependent.
+it before changing anything about the test database. `CHECK_PARALLEL=1 mise run
+fast` rules parallelism out when a failure looks order- or isolation-dependent.
 
 Diagnosing a parallel failure needs `tblib` installed, or the real error is
 replaced by `cannot pickle 'traceback' object`. `--parallel=1` also works.
@@ -212,8 +213,8 @@ cyclomatic complexity exceeds 15, and `CognitiveComplexityTests` in
 complexity exceeds 20. There is no allowance list: a function over either
 limit is split into named steps.
 
-The architectural seams are type checked. `python -m mypy` (a gate in
-`ci-local.sh` and CI's Checks job) runs mypy with django-stubs over the modules
+The architectural seams are type checked. `mise run checks:mypy` (a gate of
+`mise run ci` and CI's Checks job) runs mypy with django-stubs over the modules
 `pyproject.toml` names: the security, capability, plugin, resource and
 integration-spec contracts, the provider vocabulary and registry with the
 provider modules split out of it, the controller's handler registry and
@@ -246,7 +247,8 @@ Re-index after a change and re-run them; a result that moved the wrong way is a
 finding whether or not the suite is green.
 
 `scripts/structural-bar.sh` runs the duplicate and largest-file checks as a
-gate (`ci-local.sh` includes it) against `scripts/structural-baseline.txt`. Index
+gate (`checks:structural`, part of `mise run ci`) against
+`scripts/structural-baseline.txt`. Index
 the checkout you work in before asking the graph anything; a worktree is its
 own checkout.
 
@@ -264,9 +266,9 @@ this repository's graph will report as safe. Grep the extension checkouts.
 
 ## Definition of done
 
-"Ready" means `./scripts/preflight.sh` exits 0. It runs `ci-local.sh` with
-every gate required, `check.sh` with the composed pass required, and read-only
-checks of the deploy host over SSH (`SEVERINO_HQ_DEPLOY_HOST`): the checkout's
+"Ready" means `mise run preflight` exits 0. It runs `mise run ci`, where a
+gate that cannot run fails, the composed suite with the extension set required,
+and read-only checks of the deploy host over SSH (`SEVERINO_HQ_DEPLOY_HOST`): the checkout's
 ownership, the runner's sudo rule, the root-owned programs against this commit,
 the installed units and free disk. `--skip-host` runs the local gates only and
 exits 2, never 0.
@@ -274,15 +276,15 @@ exits 2, never 0.
 - The requested behavior is implemented at the correct layer.
 - Tests cover success, denial, invalid input, and the regression class where
   applicable, not only the happy path.
-- `./scripts/check.sh` passes, including the composed pass when a change
+- `mise run check` passes, including the composed pass when a change
   touches `hq_sdk`, because the host and its extensions first meet there.
 - A change to templates or CSS passes the browser layout gate:
-  `CHECK_BROWSER=1 ./scripts/check.sh` (Playwright, set up as the README's
-  development section shows). A UI change is also walked in a real browser
+  `mise run browser` (it installs the Chromium the locked Playwright pins).
+  A UI change is also walked in a real browser
   through the workflow it serves, not checked page by page.
-- `./scripts/ci-local.sh` passes before a push, including its code scanning
-  gates (no CodeQL alert and every file-based Scorecard check at 10) and the
-  browser layout gate, which it always runs.
+- `mise run ci` passes before a push, including its code scanning gates (no
+  CodeQL alert and every file-based Scorecard check at 10) and the browser
+  layout gate, which it always runs.
 - A browser check selects markup only through `SELECTORS` in
   `hq/platform/core/browser_tests.py`; `hq/platform/core/tests/test_browser_selectors.py` holds every one
   to a template that renders it.

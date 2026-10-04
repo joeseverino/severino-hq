@@ -43,7 +43,7 @@ if [ "$stale" -ne 0 ]; then
 fi
 
 echo "==> vendor slicer regressions"
-"${CHECK_PYTHON:-python3}" api/vendor/test_slice.py
+python3 api/vendor/test_slice.py
 
 echo "==> go vet"
 go vet ./...

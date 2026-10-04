@@ -1,8 +1,8 @@
 """Real-browser layout checks: manage.py test core.browser_tests --parallel=1.
 
 This filename does not match Django's default test*.py discovery, so the plain
-suite needs neither Playwright nor a browser. `scripts/check.sh` runs it with
-CHECK_BROWSER=1 and `scripts/ci-local.sh` always does.
+suite needs neither Playwright nor a browser. `mise run browser` runs it, and
+`mise run ci` always does.
 
 Pages render through their real views over two synthetic example.* estates,
 a sparse one (core/tests/test_browser_fixtures.py) and a dense, production-shaped
@@ -693,8 +693,7 @@ class LayoutBrowserTests(SimpleTestCase):
             from playwright.sync_api import sync_playwright
         except ImportError as exc:
             raise RuntimeError(
-                "Playwright is not installed. Run: uv sync --locked --group browser && "
-                ".venv/bin/python -m playwright install chromium"
+                "Playwright is not installed. Run: mise run browser"
             ) from exc
         cls.playwright = sync_playwright().start()
         cls.addClassCleanup(cls.playwright.stop)

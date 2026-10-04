@@ -4,8 +4,8 @@
 
 set -eu
 # Hermetic: none of what the gates are asked for comes from the caller.
-unset CI_LOCAL_REQUIRE_ALL CHECK_REQUIRE_COMPOSED SEVERINO_HQ_DEPLOY_HOST \
-    TEST_FAIL_CI_LOCAL TEST_FAIL_CHECK TEST_FREE_KB
+unset REQUIRE_COMPOSED SEVERINO_HQ_DEPLOY_HOST \
+    TEST_FAIL_CI TEST_FAIL_COMPOSED TEST_FREE_KB
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 work="$(mktemp -d)"
@@ -14,7 +14,7 @@ failures=0
 fail() { echo "FAIL $1" >&2; failures=$((failures + 1)); }
 
 # The fixture repository: the real preflight, host half, libraries and root
-# tree, with ci-local.sh and check.sh stubbed to report how they were called.
+# tree, with mise stubbed to report how the gates were called.
 repo="${work}/repo"
 mkdir -p "${repo}/scripts/lib"
 cd "${repo_dir}"
@@ -25,14 +25,6 @@ find "${repo}" -name __pycache__ -prune -exec rm -rf {} +
 for f in preflight.sh preflight-host.sh root-tree-manifest.sh deploy-image.sh \
     severino-hq-sync-scripts lib/checkout.sh lib/systemd-units.sh upgrade-container.sh; do
     cp "scripts/${f}" "${repo}/scripts/${f}"
-done
-for gate in ci-local check; do
-    cat >"${repo}/scripts/${gate}.sh" <<EOF
-#!/bin/sh
-echo "${gate} CI_LOCAL_REQUIRE_ALL=\${CI_LOCAL_REQUIRE_ALL:-} CHECK_REQUIRE_COMPOSED=\${CHECK_REQUIRE_COMPOSED:-}" >>"\${TEST_LOG}"
-exit "\${TEST_FAIL_$(printf '%s' "${gate}" | tr 'a-z-' 'A-Z_'):-0}"
-EOF
-    chmod 0755 "${repo}/scripts/${gate}.sh"
 done
 # Hermetic: the fixture is a throwaway repository, so no signing and no hooks.
 git_() {
@@ -89,7 +81,15 @@ cat >"${host}/bin/df" <<'EOF'
 printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
 printf '/dev/test 99999999 1 %s 1%% /\n' "${TEST_FREE_KB:-9999999}"
 EOF
-chmod 0755 "${bin}/ssh" "${host}/bin/sudo" "${host}/bin/df"
+cat >"${bin}/mise" <<'STUB'
+#!/bin/sh
+echo "mise $* REQUIRE_COMPOSED=${REQUIRE_COMPOSED:-}" >>"${TEST_LOG}"
+case "$*" in
+    *suite:composed*) exit "${TEST_FAIL_COMPOSED:-0}" ;;
+    *) exit "${TEST_FAIL_CI:-0}" ;;
+esac
+STUB
+chmod 0755 "${bin}/ssh" "${bin}/mise" "${host}/bin/sudo" "${host}/bin/df"
 
 readonly good_rules="Matching Defaults entries:
     env_reset, secret-marker-example
@@ -120,10 +120,10 @@ says() { grep -qF "$1" "${work}/out" || fail "output lacks '$1'"; }
 # 1. A current host and passing gates: ready, every gate required, host reached.
 expect 0 "a ready release"
 says "[preflight] READY"
-grep -qx "ci-local CI_LOCAL_REQUIRE_ALL=1 CHECK_REQUIRE_COMPOSED=" "${TEST_LOG}" ||
-    fail "ci-local ran without every gate required"
-grep -qx "check CI_LOCAL_REQUIRE_ALL= CHECK_REQUIRE_COMPOSED=1" "${TEST_LOG}" ||
-    fail "check.sh ran without the composed pass required"
+grep -qx "mise run -c ci REQUIRE_COMPOSED=" "${TEST_LOG}" ||
+    fail "the pipeline's gates did not run"
+grep -qx "mise run suite:composed REQUIRE_COMPOSED=1" "${TEST_LOG}" ||
+    fail "the composed suite ran without being required"
 grep -qx "ssh -o BatchMode=yes deploy.example.test sh -s" "${TEST_LOG}" ||
     fail "the host was not reached through ssh as expected"
 says "warn    the release changes scripts/deploy-image.sh"
@@ -147,18 +147,18 @@ says "SEVERINO_HQ_DEPLOY_HOST is not set"
 unset SEVERINO_HQ_DEPLOY_HOST
 
 # 3. A failing local gate, or an uncommitted change, is not ready.
-export TEST_FAIL_CI_LOCAL=1
-expect 1 "a failing ci-local"
-unset TEST_FAIL_CI_LOCAL
-export TEST_FAIL_CHECK=1
-expect 1 "a failing check.sh"
-unset TEST_FAIL_CHECK
+export TEST_FAIL_CI=1
+expect 1 "a failing gate"
+unset TEST_FAIL_CI
+export TEST_FAIL_COMPOSED=1
+expect 1 "a failing composed suite"
+unset TEST_FAIL_COMPOSED
 : >"${repo}/uncommitted"
 expect 1 "an uncommitted change"
 says "FAILED   committed tree"
 rm "${repo}/uncommitted"
 
-# 4. --remote reads GitHub's checks on HEAD instead of running ci-local.
+# 4. --remote reads GitHub's checks on HEAD instead of running `mise run ci`.
 cat >"${bin}/gh" <<'EOF'
 #!/bin/sh
 echo "gh $*" >>"${TEST_LOG}"
@@ -174,7 +174,7 @@ export TEST_CHECKS="completed success test
 completed success code scanning"
 expect 0 "every GitHub check passed" --remote
 says "code scanning"
-if grep -q '^ci-local' "${TEST_LOG}"; then fail "--remote still ran ci-local"; fi
+if grep -q '^mise run -c ci ' "${TEST_LOG}"; then fail "--remote still ran the local gates"; fi
 TEST_CHECKS="completed success test
 completed failure structural bar"
 expect 1 "a failed GitHub check" --remote

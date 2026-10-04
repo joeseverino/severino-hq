@@ -11,7 +11,7 @@ check; there are no pair, symbol, or source-path exemption lists.
   inside the checkout; the config must have one simple top-level `output` scalar
   resolving to this file. This is provenance correspondence, not proof of
   freshness or authenticity. `controller/scripts/check.sh` regeneration with no
-  diff remains mandatory in CI and ci-local. A marker alone never qualifies.
+  diff remains mandatory in CI and `mise run ci`. A marker alone never qualifies.
 * Python immutable metadata: a module-level undecorated function has no runtime
   arguments and exactly one return statement. Its returned tree contains only
   constants, names, attribute references, tuples, and calls to the imported

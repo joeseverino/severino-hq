@@ -269,6 +269,6 @@ says a newer reading is in and leaves showing it to them.
    saying what it now covers and why.
 3. A new container of content is a surface: add its selector to the surface
    list, write only its layout.
-4. Run `CHECK_BROWSER=1 ./scripts/check.sh`, then look at the page at a phone,
+4. Run `mise run check` and `mise run browser`, then look at the page at a phone,
    a tablet and a desktop width. The gates catch classes of mistakes; they do
    not tell you it reads well.

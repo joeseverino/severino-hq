@@ -35,14 +35,16 @@ existing tables. The HTTP adapter keeps its `hq_api` app label.
 
 ## Environments
 
-`uv sync --locked` creates the host development environment with the default
-`dev` and `tools` groups. Browser checks also need the `browser` group and the
-Playwright browser installation. Runtime exports explicitly omit all default
+`uv run --locked`, which every `mise run` task uses, creates the host
+development environment from `uv.lock` with the default `dev` and `tools`
+groups. Browser checks also need the `browser` group and the Playwright browser
+installation; `mise run browser` supplies both. Runtime exports explicitly omit all default
 groups and retain hashes; image installation verifies those hashes.
 
 The host does not declare its installed extensions. An assembled environment
-installs independently admitted extension wheels. Gates use the supplied
-`CHECK_PYTHON`, `PYTHONPATH` and `SEVERINO_HQ_PLUGINS` values directly. Do not run
+installs independently admitted extension wheels. The local composed suite
+(`mise run suite:composed`) installs nothing: it uses the `HQ_LOCAL_PYTHONPATH`
+and `HQ_LOCAL_PLUGINS` values a gitignored `mise.local.toml` supplies. Do not run
 an exact host sync over that environment: it would remove packages outside the
 host dependency graph. Use the supported composition and plugin-check programs.
 

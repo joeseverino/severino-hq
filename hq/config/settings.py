@@ -483,8 +483,8 @@ DATABASES = {
             # gate. Only being a file matters, not where the file is.
             #
             # Named for the process, because two suites on one machine would
-            # otherwise share the file: `scripts/check.sh` runs concurrently by
-            # default, and running it alongside `scripts/ci-local.sh` is the
+            # otherwise share the file: `mise run check` runs its suites
+            # concurrently, and running it alongside `mise run ci` is the
             # normal way to check work. A shared file makes them fail each other
             # with a locked table: a failure that says nothing about the change
             # and costs a while to attribute. Django's parallel workers suffix

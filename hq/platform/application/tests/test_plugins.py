@@ -68,7 +68,7 @@ SKIP_SUFFIXES = frozenset(
 # Developer-local environment files: gitignored, dockerignored, and the
 # supported place to record where your extension checkouts are. Naming one there
 # is configuration, not a dependency in the host.
-SKIP_FILE_PREFIXES = (".env",)
+SKIP_FILE_PREFIXES = (".env", "mise.local.toml")
 
 
 VALID = PluginManifest(

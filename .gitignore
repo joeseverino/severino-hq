@@ -64,3 +64,6 @@ CLAUDE.local.md
 # Type checker
 .mypy_cache/
 .hypothesis/
+
+# Developer-local mise settings (scripts/mise.local.example.toml).
+mise.local.toml

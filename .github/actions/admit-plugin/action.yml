@@ -96,7 +96,7 @@ runs:
         # shellcheck disable=SC2086  # the version list is meant to split
         echo "python=$(printf '%s\n' $PYTHON_VERSIONS | tail -1)" >> "$GITHUB_OUTPUT"
         echo "cordon-commit=$CORDON_COMMIT" >> "$GITHUB_OUTPUT"
-        echo "uv=$UV_VERSION" >> "$GITHUB_OUTPUT"
+        echo "uv=$(python3 scripts/dependency_config.py pin uv)" >> "$GITHUB_OUTPUT"
 
     - name: Check out exact Cordon verifier
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

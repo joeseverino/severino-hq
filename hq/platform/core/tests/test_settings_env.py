@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 # a merge. A subprocess here starts with no DJANGO_DEBUG, so admission switches
 # itself on, looks for the signed lock a composed image would have supplied, and
 # refuses to start: a true statement about a situation none of these tests are
-# describing. It is the failure mode `scripts/check.sh` warns about in its own
-# comments: a host test that quietly assumes nothing is installed.
+# describing. It is the failure the composed suite (`mise run suite:composed`)
+# exists to catch: a host test that quietly assumes nothing is installed.
 PLUGIN_ENV = (
     "SEVERINO_HQ_PLUGINS",
     "SEVERINO_HQ_PLUGIN_LOCK",

@@ -72,7 +72,7 @@ maintain another diagram.
 
 For a code review, start with the [application boundary](docs/APPLICATION_ARCHITECTURE.md),
 the [extension contract](docs/PLUGINS.md), and the
-[local verification gate](scripts/check.sh). The public tests compose synthetic
+[local verification gates](mise.toml). The public tests compose synthetic
 extensions so the design can be inspected without access to the private installation.
 
 ## The host does not know its extensions
@@ -266,9 +266,12 @@ workflow is started by an event. **CI**
 ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every pull
 request and push: Checks (lint, types, lockfiles, workflows, shell, a
 `check --deploy` posture gate, `pip-audit`, dependency review, the structural
-bar and Scorecard), Tests on Python 3.13/3.14, Browser, and Image (a
+bar and Scorecard), Tests on Python 3.13/3.14, Browser, Controller (the Go
+controller's own gate), and Image (a
 production image that must boot healthy and pass Trivy, then published and
-signed), and **Ready**, which writes HQ's review, the one required check. **CodeQL** runs GitHub's code
+signed), and **Ready**, which writes HQ's review, the one required check. Each
+job runs the aggregate of its name from [`mise.toml`](mise.toml), where every
+gate is declared once, so `mise run ci` runs the same gates before a push. **CodeQL** runs GitHub's code
 scanning beside it. **Compose**
 ([`.github/workflows/compose.yml`](.github/workflows/compose.yml)) builds HQ
 itself: that host with every admitted extension, verified as one application.
@@ -297,36 +300,39 @@ boundary, frontend standards, and definition of done.
 
 ### Set up and run
 
+Install [mise](https://mise.jdx.dev) first. It needs a `python3` on the PATH
+to read the uv pin from `pyproject.toml`.
+
 ```bash
 # 1. Clone & enter
 git clone <your-mirror> severino-hq
 cd severino-hq
 
-# 2. Bootstrap the pinned resolver, then runtime + development tools
-python3 -m venv .venv
-python3 scripts/dependency_config.py uv-requirements > /tmp/hq-uv-bootstrap.txt
-.venv/bin/python -m pip install --require-hashes --no-deps --ignore-installed -r /tmp/hq-uv-bootstrap.txt
-.venv/bin/uv sync --locked
-source .venv/bin/activate
+# 2. The pinned tools (versions in mise.toml, checksums in mise.lock)
+mise install
 
 # 3. Environment
 cp .env.example .env
 # (for dev you can leave DEBUG=0 with a real SECRET_KEY, or set DEBUG=1)
 
 # 4. DB + first user
-python manage.py migrate
-python manage.py createsuperuser
+mise exec -- uv run --locked python manage.py migrate
+mise exec -- uv run --locked python manage.py createsuperuser
 
 # 5. Optional demo data
-python manage.py seed_demo
+mise exec -- uv run --locked python manage.py seed_demo
 
 # 6. Run the production-like ASGI dev server (binds to localhost only)
-./scripts/dev.sh
+mise run dev
 ```
+
+Python dependencies come from `uv.lock` through `uv run --locked`, which every
+task uses; no virtualenv is made by hand. The image alone still bootstraps uv
+itself ([`Dockerfile`](Dockerfile)).
 
 Open <http://127.0.0.1:8000/>, sign in. Admin lives at `/admin/`.
 
-The script collects versioned assets, then runs Uvicorn with reload enabled.
+`mise run dev` collects versioned assets, then runs Uvicorn with reload enabled.
 Using the same ASGI path as production means local browser checks exercise
 compression, cache headers, and routing instead of Django `runserver`'s
 development-only static handler.
@@ -336,41 +342,50 @@ development-only static handler.
 After setup, the entire local quality gate is one command:
 
 ```bash
-./scripts/check.sh
+mise run check
 ```
 
 and everything the pipeline will check is one more:
 
 ```bash
-./scripts/ci-local.sh
+mise run ci
 ```
 
 Whether a change is ready to release is one command whose exit 0 means ready:
 
 ```bash
-./scripts/preflight.sh
+mise run preflight
 ```
 
-It runs both of the above with nothing skippable, then checks the deploy host
-read-only over SSH (`SEVERINO_HQ_DEPLOY_HOST`).
+It runs every gate of `mise run ci`, then the composed suite with the extension
+set required, then checks the deploy host read-only over SSH
+(`SEVERINO_HQ_DEPLOY_HOST`).
 
-`ci-local.sh` includes the code scanning gates: CodeQL with the suite
+Every gate is a task in [`mise.toml`](mise.toml) named `<job>:<gate>`, and each
+CI job runs the aggregate of its name, so the list exists once. `mise tasks`
+prints it, `mise run checks:ruff` runs one gate, and `mise run -c ci` keeps
+going past a failure and names every gate that failed. `mise run fast` is the
+inner loop: only what the change touches.
+
+`mise run ci` includes the code scanning gates: CodeQL with the suite
 `codeql.yml` runs and OpenSSF Scorecard's file-based checks, at the versions
-`scripts/toolchain.env` pins (fetched on first use by
-`scripts/install-scan-tools.sh`), so an alert is reported here before a push.
+`mise.toml` pins and `mise.lock` verifies, so an alert is reported here before
+a push.
 
-Both read an optional, gitignored `.env.dev` for the things only your machine
-knows, which interpreter has the extensions importable, where their sources
-are, and which to enable. Copy [`scripts/dev.env.example`](scripts/dev.env.example)
-and fill it in. Without it both commands still run, but quietly cover less:
-`check.sh` skips the composed pass, which is the one that catches what public
-CI cannot, because the host and its extensions first meet there.
+Every task reads an optional, gitignored `mise.local.toml` for the things only
+your machine knows: where the extensions' sources are and which to enable. Copy
+[`scripts/mise.local.example.toml`](scripts/mise.local.example.toml) to
+`mise.local.toml` in the repository root and fill it in. Without it the
+commands still run, but cover less: `mise run check` says the composed pass did
+not run, and that pass is the one that catches what public CI cannot, because
+the host and its extensions first meet there.
 
 `uv sync` manages a dedicated host environment exactly. Do not run it on an
 assembled environment containing extension wheels: it can remove packages the
 host lock does not name. For those environments, export runtime dependencies
 with `uv export --locked --no-default-groups --no-emit-project` and install the
-hashed export additively, then run the gates with their explicit interpreter.
+hashed export additively. The local gates need no such environment: the
+composed suite imports the extensions' sources through `PYTHONPATH`.
 
 The [repository layout guide](docs/REPOSITORY_LAYOUT.md) explains the package
 roots, stable database identities and local runtime paths. Existing local databases
@@ -378,11 +393,15 @@ require an explicit path choice; the layout move does not move their data.
 
 ### What the gates need
 
-`check.sh` needs only the steps above plus the pinned tools:
-`uv sync --locked` installs the default dev and tools groups. Add browser tools
-with `uv sync --locked --group browser`. `ci-local.sh` covers what CI runs, so it needs what
-CI's runner has. Versions are pinned in [`scripts/toolchain.env`](scripts/toolchain.env);
-the list below says what, never which version, so it cannot drift from the pins.
+`mise install` supplies the pinned tools and `uv run --locked` the Python
+dependencies, the `browser` and `audit` groups included when a gate asks for
+them. `mise run ci` covers what CI runs, so it also needs what CI's runner has.
+Tool versions are pinned in [`mise.toml`](mise.toml) with their checksums in
+[`mise.lock`](mise.lock), Python packages in `uv.lock`;
+[`scripts/toolchain.env`](scripts/toolchain.env) holds the facts that are not
+tools (the Python matrix, the coverage floor, the runner image). The list below
+says what mise does not supply, never which version, so it cannot drift from the
+pins.
 
 - **An unprivileged account.** Run the gates as yourself, not as root. The
   systemd unit contracts model the deploy host's runner with the current
@@ -392,36 +411,36 @@ the list below says what, never which version, so it cannot drift from the pins.
   `var/` and configured runtime volume paths to be writable and fail with a bare 503
   when they are not; `.mypy_cache/` has the same need. A tree once touched as
   root needs its ownership fixed first.
-- **One interpreter per supported Python** (`PYTHON_VERSIONS`), each with the
-  requirements installed, named in `SEVERINO_CI_PYTHONS`. CI runs the matrix, so
-  a version-specific failure is otherwise found by pushing.
-- **System tools:** shellcheck at the pinned version (distribution packages are
-  often older and report differently), `ssh-keygen`, `sqlite3` and `zstd`, which
-  the shell suites call, and `pip-audit`.
-- **Network, the first time:** CodeQL and Scorecard are downloaded and
-  verified by `scripts/install-scan-tools.sh`. Scorecard's vulnerability check
-  queries `api.osv.dev` on every run, so behind a proxy that refuses it, that
-  one check fails while the rest still report.
+- **Every supported Python** (`PYTHON_VERSIONS`). `mise run tests` walks the
+  list, each version in its own environment (`.venv-<version>`), with uv
+  supplying the interpreter. CI runs the matrix, so a version-specific failure
+  is otherwise found by pushing.
+- **System tools:** `python3`, with which mise reads the uv pin; Go at the
+  version `controller/go.mod` names, for the controller gate; and `ssh-keygen`,
+  `sqlite3` and `zstd`, which the shell suites call.
+- **Network, the first time:** mise downloads the tools, CodeQL and Scorecard
+  among them, and verifies each against `mise.lock`. Scorecard's vulnerability
+  check queries `api.osv.dev` on every run, so behind a proxy that refuses it,
+  that one check fails while the rest still report.
 - **A container runtime** for the image build and the suite inside the image.
-  Without one `ci-local.sh` says so and skips them. CodeQL wants about 2 GB of
-  memory.
-- **`DJANGO_SECRET_KEY`, or `DJANGO_DEBUG=1`.** With debug off, settings refuse
-  to load without a key, even for a one-line import check.
+  Without one the `image` gates fail. CodeQL wants about 2 GB of memory.
+- **`DJANGO_SECRET_KEY`, or `DJANGO_DEBUG=1`,** for a command run outside a
+  task. With debug off, settings refuse to load without a key, even for a
+  one-line import check. Each task sets its own.
 
 ### Browser layout checks
 
 Browser layout regressions are a gate of their own. CI runs them in the
-`browser` job and `ci-local.sh` always does (with `CI_LOCAL_REQUIRE_ALL=1` a
-missing Playwright fails the run); in `check.sh` they are opt-in. Playwright is
-a development dependency, pinned by hash and never installed in the image:
+Browser job and `mise run ci` always does; `mise run check` leaves them out.
+Playwright is a development dependency, pinned by hash and never installed in
+the image:
 
 ```bash
-uv sync --locked --group browser
-.venv/bin/python -m playwright install chromium
-DJANGO_DEBUG=true .venv/bin/python manage.py test hq.platform.core.browser_tests --parallel=1
-# Or include browser checks in the full gate:
-CHECK_BROWSER=1 ./scripts/check.sh
+mise run browser
 ```
+
+The task installs the Chromium the locked Playwright pins, then runs
+`hq.platform.core.browser_tests` on one process.
 
 The suite renders the dashboard, service, connections, machine, topology and
 project list pages through their real views over a synthetic `example.*`
@@ -444,14 +463,13 @@ the same assertions there. An existing Edge installation can be selected with
 ### Django Debug Toolbar
 
 The Django Debug Toolbar is a development layer, pinned by hash in
-the `dev` dependency group and never installed in the image (`ci-local.sh` and CI's
-container job both prove the built image cannot import it). It is on only when
+the `dev` dependency group and never installed in the image (`mise run ci` and CI's
+Image job both prove the built image cannot import it). It is on only when
 `DJANGO_DEBUG` is on, `SEVERINO_DEBUG_TOOLBAR=1` is set, the package is
 importable, and the suite is not running:
 
 ```bash
-uv sync --locked --group dev
-SEVERINO_DEBUG_TOOLBAR=1 ./scripts/dev.sh
+SEVERINO_DEBUG_TOOLBAR=1 mise run dev
 ```
 
 It shows to loopback clients; behind a proxy, name the proxy's address in

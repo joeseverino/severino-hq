@@ -435,7 +435,7 @@ uploads it as the run's `failure-logs` artifact. Anyone can download it; only
 the matching identity opens it:
 
 ```bash
-scripts/failure-logs.sh RUN_ID   # identity from SEVERINO_FAILURE_LOG_IDENTITY
+mise run failure-logs RUN_ID   # identity from SEVERINO_FAILURE_LOG_IDENTITY
 ```
 
 The identity lives in a password manager and is read at use. To rotate it,

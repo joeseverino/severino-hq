@@ -17,10 +17,35 @@ from starlette.staticfiles import StaticFiles
 from hq.platform.core.static import CachedStaticFiles
 
 
+# Installed or generated trees inside a checkout. With hidden directories
+# (.git, a virtualenv under any name) they are not this project's source.
+NOT_SOURCE = {
+    "venv", "site-packages", "node_modules", "staticfiles", "build", "data",
+    "var", "media", "exports", "backups",
+}
+
+
+def source_files(root: Path, pattern: str) -> list[Path]:
+    """This checkout's own files matching ``pattern``.
+
+    Read from the directory tree, not from git: the suite also runs inside the
+    image, where there is no git to ask what is tracked.
+    """
+
+    return sorted(
+        path
+        for path in root.rglob(pattern)
+        if not any(
+            part.startswith(".") or part in NOT_SOURCE
+            for part in path.relative_to(root).parts[:-1]
+        )
+    )
+
+
 def view_modules(root: Path) -> list[Path]:
     """Every web view module: ``views.py`` and the ``*_views.py`` split from one."""
 
-    found = {*root.rglob("views.py"), *root.rglob("*_views.py")}
+    found = {*source_files(root, "views.py"), *source_files(root, "*_views.py")}
     assert found, "No view modules were scanned"
     return sorted(path for path in found if not path.name.startswith("test") and "tests" not in path.parts)
 
@@ -189,7 +214,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         root = Path(__file__).resolve().parents[4]
         read = set(view_modules(root))
         escaped = []
-        for source_path in sorted(root.rglob("*.py")):
+        for source_path in source_files(root, "*.py"):
             if source_path.name.startswith("test") or source_path in read:
                 continue
             tree = ast.parse(source_path.read_text(encoding="utf-8"))
@@ -655,7 +680,7 @@ class StyleContractTests(SimpleTestCase):
         # writing about hostnames, which is what a fixture is doing.
         private_host = re.compile(
             r"\b[a-z0-9-]+\.(?!example\b|invalid\b|test\b|localhost\b)"
-            r"(?:homelab|lan|internal|local)\b"
+            r"(?:homelab|lan|internal|local)\b(?!\.(?:example\.)?toml\b)"
         )
         # Names a checkout's own deployment goes by, one per line, kept in
         # .git/info where nothing is tracked or pushed. Absent, only the

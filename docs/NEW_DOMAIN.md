@@ -50,7 +50,7 @@ same commit as the rule. Extensions are a different path: `docs/PLUGINS.md`.
 | Declare a record domain's create, update and delete and its permissions as `records`, never as entries in `core_capabilities.py` or members of `Capability` | `DomainRegistryTests.test_record_commands_and_permissions_are_derived_not_listed` |
 | The declaration alone installs the app, mounts its URLs, puts it on the bar, registers its resource and commands, grants its permissions, deletes and counts it, and puts it in the API document | `NewDomainDeclarationTests.test_its_app_is_installed_and_its_urls_are_mounted`, `NewDomainDeclarationTests.test_it_is_on_the_bar`, `NewDomainDeclarationTests.test_its_resource_and_commands_are_registered`, `NewDomainDeclarationTests.test_its_permissions_are_granted_where_record_permissions_are`, `NewDomainDeclarationTests.test_it_is_created_counted_and_deleted_through_its_commands`, `NewDomainDeclarationTests.test_its_commands_and_resource_are_in_the_api_document` |
 
-Outside the architecture tests, `scripts/check.sh` also needs its migrations
+Outside the architecture tests, `mise run check` also needs its migrations
 committed (`makemigrations --check`), the API document regenerated
 (`manage.py api_openapi`; `api_openapi --check`), and its tests in a `tests/`
 package or a `test*.py` module.

@@ -1,19 +1,16 @@
 name: Toolchain
 description: >-
-  Read scripts/toolchain.env and set up Python: the oldest version the test
-  matrix runs, unless a job names its own.
+  Set up Python and mise: the pinned tools (mise.toml, mise.lock) and the
+  runner every gate goes through. The oldest Python the test matrix runs,
+  unless a job names its own.
 
-# A step, not a job: every job that needs the toolchain reads the same file
+# A step, not a job: every job that needs the toolchain reads the same files
 # itself, so a pull request's checks list carries no row that only passes
-# values along. scripts/ci-local.sh reads the same file directly.
+# values along. A local run reads the same files through `mise run`.
 
 inputs:
   python:
     description: The Python version to set up. Blank sets up the oldest the matrix runs.
-    required: false
-    default: ""
-  cache:
-    description: Passed to setup-python's cache, e.g. pip. Blank caches nothing.
     required: false
     default: ""
 
@@ -24,24 +21,6 @@ outputs:
   oldest-python:
     description: The oldest version the matrix runs.
     value: ${{ steps.read.outputs.oldest-python }}
-  shellcheck-version:
-    description: The shellcheck the gate runs.
-    value: ${{ steps.read.outputs.shellcheck-version }}
-  coverage-floor:
-    description: The coverage the suite must reach.
-    value: ${{ steps.read.outputs.coverage-floor }}
-  actionlint-version:
-    description: The actionlint the gate runs.
-    value: ${{ steps.read.outputs.actionlint-version }}
-  shellcheck-sha256:
-    description: SHA-256 of the shellcheck release archive.
-    value: ${{ steps.read.outputs.shellcheck-sha256 }}
-  actionlint-sha256:
-    description: SHA-256 of the actionlint release archive.
-    value: ${{ steps.read.outputs.actionlint-sha256 }}
-  cordon-commit:
-    description: The Cordon commit admission is signed and verified with.
-    value: ${{ steps.read.outputs.cordon-commit }}
 
 runs:
   using: composite
@@ -57,21 +36,25 @@ runs:
           echo "python-versions=$versions"
           # shellcheck disable=SC2086
           echo "oldest-python=$(printf '%s\n' $PYTHON_VERSIONS | head -1)"
-          echo "shellcheck-version=$SHELLCHECK_VERSION"
-          echo "coverage-floor=$COVERAGE_FLOOR"
-          echo "actionlint-version=$ACTIONLINT_VERSION"
-          echo "shellcheck-sha256=$SHELLCHECK_SHA256"
-          echo "actionlint-sha256=$ACTIONLINT_SHA256"
-          echo "cordon-commit=$CORDON_COMMIT"
+          echo "mise=$(sed -n 's/^min_version = "\(.*\)"$/\1/p' mise.toml)"
         } >> "$GITHUB_OUTPUT"
+        # Nothing installs that mise.lock does not record. The CodeQL bundle is
+        # the local mirror of codeql.yml and age belongs to Compose; neither is
+        # a gate of these jobs.
+        {
+          echo "MISE_LOCKED=1"
+          echo "MISE_DISABLE_TOOLS=github:github/codeql-action,age"
+        } >> "$GITHUB_ENV"
 
     - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
       with:
         python-version: ${{ inputs.python || steps.read.outputs.oldest-python }}
-        cache: ${{ inputs.cache }}
-        cache-dependency-path: uv.lock
-    - name: Bootstrap the hash-pinned uv resolver
-      shell: bash
-      run: |
-        python scripts/dependency_config.py uv-requirements > "$RUNNER_TEMP/uv-bootstrap.txt"
-        pip install --require-hashes --no-deps --ignore-installed -r "$RUNNER_TEMP/uv-bootstrap.txt"
+    - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834 # v5.1.0
+      with:
+        version: ${{ steps.read.outputs.mise }}
+        cache_save_post: true
+    # uv verifies every artifact against uv.lock; the cache only saves the download.
+    - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      with:
+        path: ~/.cache/uv
+        key: uv-${{ runner.os }}-${{ inputs.python || steps.read.outputs.oldest-python }}-${{ hashFiles('uv.lock') }}

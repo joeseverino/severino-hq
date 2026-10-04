@@ -115,3 +115,31 @@ backend, which never runs it. Leaving the request needs a third-party backend
 and a worker process, and a task result carries a status and a return value,
 not progress notes, a heartbeat, one live job per kind, or a lost job recorded
 as lost.
+
+## Gates and tool pins declared once
+
+Declare every gate and every tool pin once, in `mise.toml` and `mise.lock`.
+A gate is a task named `<job>:<gate>`; each CI job runs the aggregate of its
+name (`mise run -c checks`) and `mise run ci` runs the same tasks on a
+developer's machine. A gate is added in `mise.toml`, never in a workflow or a
+script, so the pipeline and a local run cannot disagree about what is checked.
+
+Tool versions live in `mise.toml` and their checksums in `mise.lock`. The
+lockfile reproduced the checksums previously recorded by hand, and adds
+provenance verification of each download. `scripts/toolchain.env` keeps only the
+facts that are not tools: the Python matrix, the coverage floor, the runner
+image, the Cordon commit and the failure-log recipient. Python dependencies
+come from `uv.lock` through `uv run --locked`; no gate names an interpreter path
+or needs a virtualenv made by hand, and `mise run tests` walks every Python the
+matrix declares.
+
+Removed: `scripts/ci-local.sh`, `scripts/check.sh`, `scripts/check-fast.sh`,
+`scripts/install-scan-tools.sh`, `scripts/coverage-badge.sh` and
+`scripts/dev.env.example`. They are `mise run ci`, `mise run check`,
+`mise run fast`, `mise install`, the `checks:badges` gate (the README badge
+states the declared floor) and `scripts/mise.local.example.toml`.
+Developer-local settings moved from `.env.dev` to a gitignored
+`mise.local.toml`. The hand-kept list of shell files is gone:
+`scripts/shell-sources.sh` derives it from the tree and the suites are
+`scripts/test-*.sh`. `controller/scripts/check.sh` stays; `controller:check`
+runs it. No compatibility wrappers remain.

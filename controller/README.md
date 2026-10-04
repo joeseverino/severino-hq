@@ -16,9 +16,10 @@ Malformed payloads fail explicitly. Typed errors become contract failure classes
 at the reporting boundary. Provider declarations and the emitted controller
 OpenAPI document supply the shared vocabulary.
 
-Run `bash controller/scripts/check.sh` from the repository root and
-`go test -race ./...` from `controller/`. Generated contracts and vendor slices
-must regenerate without a diff. The full repository gate is `scripts/check.sh`.
+Run `mise run controller` from the repository root (it runs
+`controller/scripts/check.sh`) and `go test -race ./...` from `controller/`.
+Generated contracts and vendor slices must regenerate without a diff. The full
+repository gate is `mise run check`.
 
 The Go worker replaces the Python worker in this change. Captured parity runs
 are historical migration evidence; the Python worker, coercion helpers and
