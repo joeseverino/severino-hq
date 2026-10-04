@@ -1,8 +1,12 @@
 __pycache__
 *.pyc
 *.pyo
-.venv/
+# Any environment, whatever a tool names it.
+.venv*/
 venv/
+.coverage*
+.ruff_cache/
+htmlcov/
 .git/
 .gitignore
 .env

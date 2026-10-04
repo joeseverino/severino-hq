@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
+import shutil
 import tempfile
+from unittest import skipUnless
 from unittest.mock import patch
 from pathlib import Path
 
@@ -16,6 +18,7 @@ fast_gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fast_gate)
 
 
+@skipUnless(shutil.which("git"), "git is not in the image")
 class FastGateMappingTests(SimpleTestCase):
     def setUp(self):
         self.files = fast_gate.python_files()

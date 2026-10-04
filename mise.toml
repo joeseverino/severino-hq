@@ -473,6 +473,8 @@ esac
 [tasks."image:verify:suite"]
 description = "The suite passes inside it"
 depends = ["image:build"]
+# After the health check: the suite takes every core, and health has a deadline.
+wait_for = ["image:verify:healthy"]
 run = '''
 docker run --rm --entrypoint python \
     --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \

@@ -90,7 +90,7 @@ RUN sh scripts/root-tree-manifest.sh /app > /app/root-tree.sha256
 
 # Mounted volumes; create empty so the container can boot before a host mount.
 RUN mkdir -p /data /media /exports /static \
-    && chown -R severino:severino /data /media /exports /static /app
+    && chown -R severino:severino /data /media /exports /static
 
 USER severino
 EXPOSE 8000

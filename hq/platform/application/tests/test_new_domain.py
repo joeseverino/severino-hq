@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import re
 from pathlib import Path
+from unittest import skipUnless
 
 from django.test import SimpleTestCase
 
@@ -33,6 +34,7 @@ def rules() -> dict[str, set[str]]:
     return found
 
 
+@skipUnless(CHECKLIST.exists(), "the docs are not in the image")
 class NewDomainChecklistTests(SimpleTestCase):
     def setUp(self):
         self.text = CHECKLIST.read_text(encoding="utf-8")
