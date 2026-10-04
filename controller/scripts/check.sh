@@ -19,6 +19,7 @@ generated=(
     "providers/adguardapi/adguard.gen.go:api/vendor/adguard/openapi.yaml"
     "providers/npmapi/npm.gen.go:api/vendor/npm/openapi.bundled.json"
     "providers/githubapi/github.gen.go:api/vendor/github/openapi.slice.json"
+    "secrets/connectapi/connect.gen.go:api/vendor/onepassword-connect/openapi.yaml"
 )
 snapshot=$(mktemp -d)
 for pair in "${generated[@]}"; do

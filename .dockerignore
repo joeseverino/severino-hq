@@ -16,6 +16,7 @@ var/
 media/
 exports/
 backups/
+deploy/bin/
 docs/
 .DS_Store
 .idea/

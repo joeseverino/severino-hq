@@ -11,6 +11,13 @@ preflight plan; `--apply` claims and executes queued operations. Reconciliation
 requires a connection that declares the relevant `manages` capability. Named
 connections must belong to the requested provider.
 
+`cmd/hq-secrets` is a separate binary: the renderer root runs on the host to
+read the vault through 1Password Connect and install what the consumers read
+(`docs/SECRETS.md`). It links no provider code. Connections reach the
+controller in one document whose type both sides share (`connections/`),
+mounted read-only and named by `HQ_CONTROLLER_CONNECTIONS`; none is an
+environment variable of the container.
+
 Provider wire payloads use generated vendor models or official client types.
 Malformed payloads fail explicitly. Typed errors become contract failure classes
 at the reporting boundary. Provider declarations and the emitted controller

@@ -60,8 +60,9 @@ func (e Environment) ChildEnvironment(overrides map[string]string) []string {
 	return env
 }
 
-// WithoutConnections is the environment minus every connection's values and
-// 1Password credentials: what HQ's own process needs, and nothing it does not.
+// WithoutConnections is the environment minus every connection's values, the
+// path of the document they came from, and 1Password credentials: what HQ's
+// own process needs, and nothing it does not.
 func (e Environment) WithoutConnections() []string {
 	prefixes := []string{}
 	for name, value := range e {
@@ -71,7 +72,7 @@ func (e Environment) WithoutConnections() []string {
 	}
 	env := []string{}
 	for name, value := range e {
-		if strings.HasPrefix(name, "OP_") {
+		if strings.HasPrefix(name, "OP_") || name == ConnectionsFile {
 			continue
 		}
 		owned := false

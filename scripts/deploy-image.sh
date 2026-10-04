@@ -49,7 +49,7 @@ esac
 # The host paths the web container binds decide what it loads as its secrets
 # and trusts as a certificate authority. Compose would read them from the
 # checkout's .env, which the deploy account writes, so none is taken from there
-# as given. The secrets environment is the file refresh-secrets.sh renders on
+# as given. The secrets environment is the file hq-secrets renders on
 # the root-only tmpfs; the others are checked against what they may be. Each
 # is exported, which compose prefers over the file.
 readonly root_uid="${SEVERINO_HQ_ROOT_UID:-0}"
@@ -73,7 +73,7 @@ rendered_env() {
         || refuse_mount "$1 is not a directory only root can enter."
     if [ ! -f "$1/severino_hq_env" ] || [ -L "$1/severino_hq_env" ] \
         || [ "$(owner_links "$1/severino_hq_env")" != "${web_uid} 1" ]; then
-        refuse_mount "$1/severino_hq_env is not the file refresh-secrets.sh renders."
+        refuse_mount "$1/severino_hq_env is not the file hq-secrets renders."
     fi
 }
 if [ -e "${web_secret_dir}/severino_hq_env" ] || [ -L "${web_secret_dir}/severino_hq_env" ]; then

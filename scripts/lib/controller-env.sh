@@ -1,7 +1,10 @@
 # shellcheck shell=sh
 # Private controller files must never share the web container's writable mount.
 readonly controller_runtime_dir="${SEVERINO_CONTROLLER_SECRET_DIR:-/run/severino-hq-secrets}"
-readonly controller_env="${controller_runtime_dir}/severino_controller_env"
+# The connections document hq-secrets renders: every provider connection the
+# controller may open, as one JSON file. It is mounted into the controller
+# container read-only; nothing in it is ever passed as an environment variable.
+readonly controller_connections="${controller_runtime_dir}/controller-connections.json"
 
 case "${controller_runtime_dir}" in
     /run/severino-hq|/run/severino-hq/*|*//*|*/../*|*/./*|*/..|*/.|*/)
@@ -9,12 +12,14 @@ case "${controller_runtime_dir}" in
     /*) ;;
     *) echo "Controller secret directory must be absolute." >&2; exit 1 ;;
 esac
-if [ "${SEVERINO_CONTROLLER_ENV:-${controller_env}}" != "${controller_env}" ]; then
+if [ -n "${SEVERINO_CONTROLLER_ENV:-}" ]; then
     echo "Remove SEVERINO_CONTROLLER_ENV; configure SEVERINO_CONTROLLER_SECRET_DIR consistently instead." >&2
     exit 1
 fi
 
-controller_require_directory() {
+# The connections document, and the directory it is in, as the renderer leaves
+# them: a root-only tmpfs that never pages to disk, holding a root-only file.
+controller_require_connections() {
     if [ -L "${controller_runtime_dir}" ] ||
         [ "$(stat -c '%u:%a' "${controller_runtime_dir}")" != '0:700' ]; then
         echo "Controller secret directory must be root-owned with mode 0700." >&2
@@ -43,11 +48,18 @@ controller_require_directory() {
         *) echo "Controller secret directory must be a tmpfs mounted with noswap." >&2
            exit 1 ;;
     esac
+    if [ -L "${controller_connections}" ] || [ ! -f "${controller_connections}" ] ||
+        [ ! -s "${controller_connections}" ] ||
+        [ "$(stat -c '%u:%a' "${controller_connections}")" != '0:400' ]; then
+        echo "Controller connections must be a nonempty root-owned file with mode 0400." >&2
+        exit 1
+    fi
 }
 
-# Serialize access to the rendered SSH identities, so a reader never sees a
-# mix of two generations. $1 is `shared` for readers, `exclusive` for the
-# renderer. The lock is held on fd 8 until the process exits.
+# Serialize access to the connections document and the rendered SSH
+# identities, so a reader never sees a mix of two generations. $1 is `shared`
+# for readers; the renderer (hq-secrets) holds the same lock exclusively. The
+# lock is held on fd 8 until the process exits.
 controller_ssh_lock() {
     case "$1" in
         shared) _flag=-s ;;
@@ -56,19 +68,4 @@ controller_ssh_lock() {
     esac
     exec 8>>"${controller_runtime_dir}/ssh.lock"
     flock "${_flag}" -w 60 8 || { echo "Timed out waiting for the SSH identity lock." >&2; exit 1; }
-}
-
-controller_require_environment() {
-    controller_require_directory
-    if [ -L "${controller_env}" ] || [ ! -f "${controller_env}" ] || [ ! -s "${controller_env}" ] ||
-        [ "$(stat -c '%u:%a' "${controller_env}")" != '0:400' ]; then
-        echo "Controller environment must be a nonempty root-owned file with mode 0400." >&2
-        exit 1
-    fi
-}
-
-# The env prefix of every connection in a rendered controller environment
-# ($1), one per line: only validated variable-name tokens, never a value.
-controller_connection_prefixes() {
-    sed -nE 's/^([A-Z][A-Z0-9_]*)_CONNECTION_REF=.*/\1/p' "$1"
 }

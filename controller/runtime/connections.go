@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/joeseverino/severino-hq/controller/connections"
 )
 
 // Environment is an immutable per-run copy. It is never serialized or logged.
@@ -32,6 +34,39 @@ func ParseEnvironment(entries []string) Environment {
 		}
 	}
 	return env
+}
+
+// ConnectionsFile names the variable holding the path of the connections
+// document the launcher mounts. Connections arrive in that document and never
+// in the container's environment, where `docker inspect` would show them.
+const ConnectionsFile = "HQ_CONTROLLER_CONNECTIONS"
+
+// LoadEnvironment is the process environment plus the connections document it
+// names. The document must be this account's own private file; a connection in
+// the environment beside it, or a setting the environment already holds, is an
+// error rather than a question of which one wins.
+func LoadEnvironment(entries []string) (Environment, error) {
+	env := ParseEnvironment(entries)
+	path := strings.TrimSpace(env[ConnectionsFile])
+	if path == "" {
+		return env, nil
+	}
+	for name, value := range env {
+		if strings.HasSuffix(name, "_"+connections.RefName) && value != "" {
+			return nil, errors.New("a connection is set in the environment; connections arrive in the connections document")
+		}
+	}
+	document, err := connections.ReadFile(path, os.Geteuid())
+	if err != nil {
+		return nil, err
+	}
+	for name, value := range document.Entries() {
+		if _, taken := env[name]; taken {
+			return nil, errors.New("a connection setting is already set in the environment")
+		}
+		env[name] = value
+	}
+	return env, nil
 }
 
 // Why a connection could not be used; match with errors.Is.

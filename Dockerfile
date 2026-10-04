@@ -21,9 +21,10 @@ RUN python scripts/dependency_config.py uv-requirements > /tmp/uv-bootstrap.txt 
     && pip install --require-hashes --prefix=/install -r /tmp/hq-runtime.txt
 
 
-# The controller, one static binary: CGO off, -trimpath, so the runtime image
-# carries no Go toolchain and the binary no build paths. Its Go is go.mod's go
-# directive; the build fails if this pinned image drifts from it.
+# The controller and the root secret renderer, one static binary each: CGO off,
+# -trimpath, so the runtime image carries no Go toolchain and the binaries no
+# build paths. Their Go is go.mod's go directive; the build fails if this
+# pinned image drifts from it.
 FROM golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195 AS controller
 ENV CGO_ENABLED=0 \
     GOTOOLCHAIN=local \
@@ -37,7 +38,8 @@ RUN want="$(sed -n 's/^go \([0-9.]*\)$/\1/p' go.mod)" \
     esac \
     && go mod download
 COPY controller/ ./
-RUN go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-controller ./cmd/hq-controller
+RUN go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-controller ./cmd/hq-controller \
+    && go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-secrets ./cmd/hq-secrets
 
 
 FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS runtime
@@ -79,6 +81,10 @@ COPY --from=controller /out/hq-controller /usr/local/bin/hq-controller
 
 WORKDIR /app
 COPY . /app
+# The renderer root runs on the host. It ships in the root-run tree, beside
+# the units that name it, so the manifest below covers it: the host's copy is
+# the signed image's, byte for byte, and checked daily like every script.
+COPY --from=controller /out/hq-secrets /app/deploy/bin/hq-secrets
 # What severino-hq-sync-scripts verifies the root-run tree against on the host.
 RUN sh scripts/root-tree-manifest.sh /app > /app/root-tree.sha256
 

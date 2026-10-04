@@ -11,6 +11,13 @@ import unittest
 ROOT = Path(__file__).resolve().parents[4]
 
 
+PREVIOUS_DROPIN = (
+    "[Service]\nExecStart=\n"
+    "ExecStart=/usr/local/lib/severino-hq/scripts/refresh-secrets.sh\n"
+    "ReadOnlyPaths=/usr/local/lib/severino-hq\n"
+)
+
+
 class ControllerInstallTests(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
@@ -28,10 +35,18 @@ class ControllerInstallTests(unittest.TestCase):
         # The render's drop-in travels with its unit, so it is rolled back with it.
         self.dropin = self.units / "severino-hq-secrets.service.d/10-root-owned-exec.conf"
         self.dropin.parent.mkdir()
-        self.dropin.write_text("previous drop-in\n")
+        # As the release before the Go renderer left it: the drop-in wins over
+        # the unit, and it names a script this release no longer ships.
+        self.dropin.write_text(PREVIOUS_DROPIN)
         self.legacy = self.runtime / "severino-hq/severino_controller_env"
         self.legacy.parent.mkdir()
         self.legacy.write_text("previous credential\n")
+        # What the shell renderer this release replaces left on the tmpfs.
+        self.shell_env = self.runtime / "severino-hq-secrets/severino_controller_env"
+        self.shell_env.parent.mkdir()
+        self.shell_env.write_text("previous credential\n")
+        self.op_state = self.runtime / "severino-hq-op"
+        self.op_state.mkdir()
         self.log = self.root / "calls"
         self.env = {**os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}",
                     "TEST_ROOT": str(self.root), "TEST_FAIL": ""}
@@ -50,7 +65,8 @@ class ControllerInstallTests(unittest.TestCase):
         # The real unit library: what it derives is what these tests are about.
         shutil.copy(ROOT / "scripts/lib/systemd-units.sh", self.lib / "scripts/lib")
         (self.lib / "scripts/lib/controller-env.sh").write_text(
-            'controller_require_environment() { test -f "$TEST_ROOT/rendered"; }\n'
+            'controller_runtime_dir="$TEST_ROOT/run/severino-hq-secrets"\n'
+            'controller_require_connections() { test -f "$TEST_ROOT/rendered"; }\n'
         )
         self.stub(self.bin / "id", "echo 0")
         self.stub(self.bin / "chown", "exit 0")
@@ -76,6 +92,13 @@ case "$1" in
     enable) [ "$TEST_FAIL" != activation ] ;;
     start)
         grep -q 'severino-hq-secrets' "$TEST_ROOT/systemd/severino-hq-secrets.service"
+        # The first deploy from the shell renderer: by the time the unit is
+        # started, the drop-in that overrides ExecStart is this release's.
+        dropin="$TEST_ROOT/systemd/severino-hq-secrets.service.d/10-root-owned-exec.conf"
+        if [ -f "$dropin" ]; then
+            grep -q 'deploy/bin/hq-secrets$' "$dropin"
+            ! grep -q 'refresh-secrets.sh' "$dropin"
+        fi
         [ "$TEST_FAIL" != render ] || exit 1
         touch "$TEST_ROOT/rendered" ;;
 esac
@@ -107,6 +130,8 @@ echo preflight >>"$TEST_ROOT/calls"
                          (self.lib / "deploy/systemd/severino-hq-secrets.service").read_bytes())
         self.assertEqual(list(self.runtime.glob("severino-hq-unit.*")), [])
         self.assertFalse(self.legacy.exists())
+        self.assertFalse(self.shell_env.exists())
+        self.assertFalse(self.op_state.exists())
 
     def test_failed_render_or_preflight_restores_previous_unit(self):
         for failure in ("render", "preflight", "activation"):
@@ -116,12 +141,14 @@ echo preflight >>"$TEST_ROOT/calls"
                 result = self.run_installer()
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(self.unit.read_text(), "previous unit\n")
-                self.assertEqual(self.dropin.read_text(), "previous drop-in\n")
+                self.assertEqual(self.dropin.read_text(), PREVIOUS_DROPIN)
                 calls = self.log.read_text().splitlines()
                 self.assertEqual(calls[-1], "daemon-reload")
                 if failure != "activation":
                     self.assertFalse(any(call.startswith("enable ") for call in calls))
                 self.assertEqual(self.legacy.read_text(), "previous credential\n")
+                # A rolled-back release still reads the file its renderer wrote.
+                self.assertEqual(self.shell_env.read_text(), "previous credential\n")
                 self.assertEqual(list(self.runtime.glob("severino-hq-unit.*")), [])
 
     def test_failed_first_install_removes_new_unit(self):

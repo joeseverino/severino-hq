@@ -106,7 +106,7 @@ for f in ${render_units}; do
 done
 systemctl daemon-reload
 systemctl start "${render_unit}"
-controller_require_environment
+controller_require_connections
 
 # These commands intentionally return rich machine JSON: locally useful,
 # inappropriate in the public Actions stream inherited by a self-hosted deploy.
@@ -136,6 +136,10 @@ systemctl enable --now "$@"
 # Retire the old credential only after activation succeeds. The web UID owns
 # the doorbell, never a directory containing root-sourced credentials.
 rm -f /run/severino-hq/severino_controller_env
+# What the shell renderer this release replaces left on the tmpfs: every
+# connection as a shell file nothing reads any more, and the op CLI's state.
+rm -f "${controller_runtime_dir}/severino_controller_env"
+rm -rf /run/severino-hq-op
 install -d -m 0755 /run/severino-hq
 chown 10001:10001 /run/severino-hq
 unit_committed=1

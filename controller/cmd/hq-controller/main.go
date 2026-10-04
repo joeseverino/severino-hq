@@ -21,7 +21,12 @@ import (
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	code := run(ctx, os.Args[1:], runtime.ParseEnvironment(os.Environ()), os.Stdout, os.Stderr)
+	code := 1
+	if env, err := runtime.LoadEnvironment(os.Environ()); err != nil {
+		json.NewEncoder(os.Stdout).Encode(failure{Message: err.Error()})
+	} else {
+		code = run(ctx, os.Args[1:], env, os.Stdout, os.Stderr)
+	}
 	stop()
 	os.Exit(code)
 }

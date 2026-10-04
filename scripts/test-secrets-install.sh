@@ -1,8 +1,8 @@
 #!/bin/sh
-# Root writes rendered secrets under a directory another account can replace.
-# What it finds at a destination's name decides whether it writes: only a file
-# of the target's own is written in place; a link, a hard link or someone
-# else's file is refused, and nothing is followed or re-owned.
+# Root reads rendered secrets from under a directory another account can
+# replace. What it finds at a file's name decides whether it reads: only a file
+# of the expected account's own, in a directory only its owner can enter. The
+# renderer's own half of these checks is controller/secrets/install.
 
 set -eu
 
@@ -18,49 +18,26 @@ me="$(id -u)"
 failures=0
 fail() { echo "FAIL $1" >&2; failures=$((failures + 1)); }
 
-render() { printf 'SECRET=%s\n' "$1" >"${fixture}/src"; }
-install_as() {
-    # A subshell, because a refusal exits.
-    (secrets_install_if_changed "${fixture}/src" "$1" "${me}" "$(id -g)" 600) 2>/dev/null
-}
-
-# A fresh destination is created, and an own file is rewritten in place.
-render one
-install_as "${fixture}/env" || fail "a fresh destination was refused"
-# GNU stat on the hosts, BSD stat on a Mac.
-inode_of() { stat -c %i "$1" 2>/dev/null || stat -f %i "$1"; }
-inode="$(inode_of "${fixture}/env")"
-render two
-install_as "${fixture}/env" || fail "an own file was refused"
-[ "$(cat "${fixture}/env")" = "SECRET=two" ] || fail "an own file was not rewritten"
-[ "$(inode_of "${fixture}/env")" = "${inode}" ] || fail "an own file lost its inode (the bind mount would keep the old one)"
-
-# A link planted at the name: not followed.
+printf 'SECRET=one\n' >"${fixture}/env"
 echo "system" >"${fixture}/system-file"
 ln -s "${fixture}/system-file" "${fixture}/linked"
-render three
-install_as "${fixture}/linked" && fail "a symlink destination was written through"
-[ "$(cat "${fixture}/system-file")" = "system" ] || fail "the link's target was overwritten"
-
-# A hard link to another file: not written.
 ln "${fixture}/system-file" "${fixture}/hardlinked"
-install_as "${fixture}/hardlinked" && fail "a hard-linked destination was written"
-[ "$(cat "${fixture}/system-file")" = "system" ] || fail "the hard link's other name was overwritten"
-
-# A directory where a file should be: refused.
 mkdir "${fixture}/dir"
-install_as "${fixture}/dir" && fail "a directory destination was accepted"
 
-# The reader's checks.
 secrets_trusted_file "${fixture}/env" "${me}" || fail "an own file is not trusted"
 secrets_trusted_file "${fixture}/linked" "${me}" && fail "a link is trusted"
+secrets_trusted_file "${fixture}/hardlinked" "${me}" && fail "a hard-linked file is trusted"
+secrets_trusted_file "${fixture}/dir" "${me}" && fail "a directory is trusted as a file"
+secrets_trusted_file "${fixture}/absent" "${me}" && fail "a missing file is trusted"
 secrets_trusted_file "${fixture}/env" 4242 && fail "another uid's file is trusted"
 mkdir -m 700 "${fixture}/private"
 secrets_private_dir "${fixture}/private" "${me}" || fail "a private directory is not trusted"
+secrets_private_dir "${fixture}/private" 4242 && fail "another uid's directory is trusted"
 chmod 755 "${fixture}/private"
 secrets_private_dir "${fixture}/private" "${me}" && fail "an open directory is trusted"
+chmod 700 "${fixture}/private"
 ln -s "${fixture}/private" "${fixture}/private-link"
 secrets_private_dir "${fixture}/private-link" "${me}" && fail "a linked directory is trusted"
 
 [ "${failures}" -eq 0 ] || exit 1
-echo "Secret install drill passed."
+echo "Secret reader drill passed."

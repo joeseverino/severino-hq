@@ -478,3 +478,23 @@ docker run --rm --entrypoint python \
     --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
     --env DJANGO_ALLOWED_HOSTS=localhost "${IMAGE:-severino-hq:ci-local}" manage.py test --verbosity 0
 '''
+
+[tasks."image:verify:secrets"]
+description = "It carries the secret renderer, inside the manifested root tree"
+depends = ["image:build"]
+run = '''
+set -eu
+image="${IMAGE:-severino-hq:ci-local}"
+listed="$(docker run --rm --entrypoint sh "$image" -c \
+    'test -x /app/deploy/bin/hq-secrets && grep -c "  deploy/bin/hq-secrets$" /app/root-tree.sha256')"
+[ "$listed" = 1 ]
+# The image's user is not root, so it must refuse and say why.
+if said="$(docker run --rm --entrypoint /app/deploy/bin/hq-secrets "$image" 2>&1)"; then
+    echo "hq-secrets ran as an unprivileged user." >&2
+    exit 1
+fi
+case "$said" in
+    *"hq-secrets must run as root."*) ;;
+    *) echo "$said" >&2; exit 1 ;;
+esac
+'''

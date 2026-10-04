@@ -1,0 +1,4 @@
+source: https://i.1password.com/media/1password-connect/1password-connect-api_1.8.1.yaml
+version: 1.8.1
+sha256: 77c98db61f39840b136586215b046a2597c950b0fdefae0ab0fa6aebb4dca0f4
+overlay: overlay.yaml keeps the timestamps the renderer never reads as strings

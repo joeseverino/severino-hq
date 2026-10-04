@@ -21,6 +21,9 @@ make_image() {
     tar --exclude=node_modules --exclude=__pycache__ \
         -cf "${work}/root-tree.tar" scripts hq/config deploy docker-compose.yml
     tar -xf "${work}/root-tree.tar" -C "${image}"
+    # The renderer the image build compiles into the tree; no checkout has it.
+    mkdir -p "${image}/deploy/bin"
+    printf '#!/bin/sh\necho built by the image\n' >"${image}/deploy/bin/hq-secrets"
     sh scripts/root-tree-manifest.sh "${image}" >"${image}/root-tree.sha256"
 }
 
@@ -113,8 +116,42 @@ make_image
 refused "a file the manifest does not list"
 
 make_image
-rm "${image}/scripts/render-env.jq"
+rm "${image}/scripts/lib/checkout.sh"
 refused "a tree missing a file its manifest lists"
+
+# The renderer is in the manifest and the unit names it: an image without it,
+# or with another binary in its place, is not synced.
+make_image
+[ -x "${lib}/deploy/bin/hq-secrets" ] || fail "sync did not leave the renderer executable"
+grep -q '  deploy/bin/hq-secrets$' "${image}/root-tree.sha256" ||
+    fail "the manifest does not list the renderer"
+printf 'replaced after the build\n' >"${image}/deploy/bin/hq-secrets"
+refused "a renderer that differs from its manifest line"
+make_image
+rm -r "${image}/deploy/bin"
+sh scripts/root-tree-manifest.sh "${image}" >"${image}/root-tree.sha256"
+refused "a unit naming a renderer the tree does not ship"
+
+# From a checkout, which has scripts but no built renderer: the renderer still
+# comes from the running image, and a checkout that brings its own is not used.
+make_image
+checkout="${work}/checkout"
+rm -rf "${checkout}"
+cp -R "${image}" "${checkout}"
+rm "${checkout}/root-tree.sha256"
+printf 'planted in the checkout\n' >"${checkout}/deploy/bin/hq-secrets"
+sync_checkout() {
+    PATH="${bin}:${PATH}" TEST_IMAGE="${image}" SEVERINO_HQ_LIB_DIR="${lib}" \
+        SEVERINO_HQ_APP_DIR="${checkout}" \
+        sh scripts/severino-hq-sync-scripts --from-checkout >"${work}/out" 2>"${work}/err"
+}
+sync_checkout || fail "a checkout sync was refused: $(cat "${work}/err")"
+cmp -s "${lib}/deploy/bin/hq-secrets" "${image}/deploy/bin/hq-secrets" ||
+    fail "a checkout sync took the renderer from the checkout"
+rm -r "${image}/deploy/bin"
+printf 'untouched\n' >"${lib}/.source"
+if sync_checkout; then fail "a checkout sync accepted an image with no renderer"; fi
+grep -qx untouched "${lib}/.source" || fail "a refused checkout sync replaced the tree"
 
 make_image
 rm "${image}/root-tree.sha256"

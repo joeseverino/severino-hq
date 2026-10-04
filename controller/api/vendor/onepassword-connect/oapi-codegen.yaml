@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.0/configuration-schema.json
+package: connectapi
+output: connect.gen.go
+generate:
+  models: true
+output-options:
+  overlay:
+    path: ../../api/vendor/onepassword-connect/overlay.yaml
+  # The renderer only reads: a vault, its item listing, one item, and health.
+  include-operation-ids:
+    - GetVaults
+    - GetVaultById
+    - GetVaultItems
+    - GetVaultItemById
+    - GetServerHealth

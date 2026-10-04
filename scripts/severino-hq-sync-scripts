@@ -58,7 +58,15 @@ else
     for item in scripts hq/config deploy docker-compose.yml; do
         cp -a "$APP_DIR/$item" "$stage/$item"
     done
-    sh "$APP_DIR/scripts/root-tree-manifest.sh" "$APP_DIR" >"$stage/$MANIFEST"
+    # The programs under deploy/bin are built into the image and exist in no
+    # checkout, so even this source takes them from the running image.
+    rm -rf "$stage/deploy/bin"
+    image_id="$(docker inspect --format '{{.Image}}' "$CONTAINER")"
+    [ -n "$image_id" ] || abort "could not resolve the running image"
+    cid="$(docker create "$image_id" true)"
+    docker cp "$cid:/app/deploy/bin" "$stage/deploy/bin" || abort "the image ships no /app/deploy/bin"
+    docker rm -f "$cid" >/dev/null; cid=""
+    sh "$stage/scripts/root-tree-manifest.sh" "$stage" >"$stage/$MANIFEST"
     provenance="checkout $(git -C "$APP_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
 fi
 
@@ -67,6 +75,10 @@ chown -R root:root "$stage"
 find "$stage" -type d -exec chmod 0755 {} +
 find "$stage" -type f -exec chmod 0644 {} +
 find "$stage" -type f -name '*.sh' -exec chmod 0755 {} +
+# The programs the image built; a unit that names one that is absent is refused below.
+if [ -d "$stage/deploy/bin" ]; then
+    find "$stage/deploy/bin" -type f -exec chmod 0755 {} +
+fi
 
 [ -s "$stage/$MANIFEST" ] || abort "$MANIFEST is empty"
 if ! sh "$stage/scripts/root-tree-manifest.sh" "$stage" | cmp -s - "$stage/$MANIFEST"; then
