@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -32,7 +31,7 @@ func TestActionRefusalTextIsCappedInTheReport(t *testing.T) {
 	w, b, p, _ := newWorker()
 	b.Pending = []Pending{pending("first")}
 	p.ExecErr = &ProviderError{Message: strings.Repeat("é", ReportTextLimit+50)}
-	if _, err := w.Run(context.Background(), true); err != nil {
+	if _, err := w.Run(t.Context(), true); err != nil {
 		t.Fatal(err)
 	}
 	for _, call := range b.Calls {

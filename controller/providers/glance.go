@@ -157,7 +157,7 @@ func (r *Registry) Glance(ctx context.Context, plan runtime.GlancePlan) (runtime
 		case runtime.GlancePanelIDInfrastructure:
 			reading, err = r.infrastructureGlance(ctx, plan.Targets.Infrastructure)
 		case runtime.GlancePanelIDWeather:
-			reading, err = r.weatherGlance(ctx, plan.Targets.Weather.Point)
+			reading, err = r.weatherGlance(ctx, plan.Targets.Weather)
 		default:
 			continue
 		}
@@ -315,7 +315,7 @@ func dockerStorage(disk dockerDiskUsage) int64 {
 // portainerGlance is each reachable Portainer environment's containers measured
 // against their machine.
 func (r *Registry) portainerGlance(ctx context.Context) ([]GlanceMachine, error) {
-	refs := r.Env.Refs("portainer")
+	refs := r.Env.Refs(runtime.ConnectionProviderPortainer)
 	if len(refs) == 0 {
 		return nil, &ProviderError{Message: "no Portainer connection was supplied"}
 	}
@@ -400,9 +400,6 @@ func containerMetrics(running int64, cpu float64, cores, memoryUsed, memoryTotal
 		{Label: "Docker storage", Value: humanBytes(float64(storage)), Detail: "layers, volumes and build cache"},
 	}
 }
-
-// nwsAPI is the National Weather Service API; SEVERINO_NWS_URL points elsewhere.
-const nwsAPI = "https://api.weather.gov"
 
 // nwsUserAgent is the contact NWS asks every client to send.
 const nwsUserAgent = "Severino-HQ/1.0 (https://github.com/joeseverino/severino-hq)"
@@ -521,12 +518,17 @@ func weatherPoint(raw string) (string, error) {
 	return fmt.Sprintf("%.4f,%.4f", latitude, longitude), nil
 }
 
-func (r *Registry) weatherGlance(ctx context.Context, rawPoint string) (weatherPanel, error) {
-	located, err := weatherPoint(rawPoint)
+// weatherGlance reads the forecast for the plan's point from the API the plan
+// names: HQ states the National Weather Service's address once.
+func (r *Registry) weatherGlance(ctx context.Context, target runtime.GlanceWeatherTarget) (weatherPanel, error) {
+	located, err := weatherPoint(target.Point)
 	if err != nil {
 		return weatherPanel{}, err
 	}
-	api := strings.TrimRight(orDefault(strings.TrimSpace(r.Env["SEVERINO_NWS_URL"]), nwsAPI), "/")
+	api := strings.TrimRight(strings.TrimSpace(target.Endpoint), "/")
+	if api == "" {
+		return weatherPanel{}, &ProviderError{Message: "the glance plan names no weather API"}
+	}
 	headers := map[string]string{"Accept": "application/geo+json", "User-Agent": nwsUserAgent}
 	point, err := getAnswer[nwsPoint](ctx, r, api+"/points/"+located, headers, "weather point")
 	if err != nil {

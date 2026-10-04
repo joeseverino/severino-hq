@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import Field
 
+from ..bridge_contract import keyword
 from ..names import normalized_hostname
 from ..provider_spec import ProviderModel, ProviderSpec, applies
 from .contracts import ServedCertificate
@@ -17,8 +18,9 @@ CADDY_ROUTE_KIND = "caddy.route"
 
 # A Caddy placeholder: text Caddy replaces while it handles each request.
 _PLACEHOLDER = re.compile(r"\{[^{}\s]+\}")
-# The placeholders that stand for the host the request itself names.
-_REQUESTED_HOST = re.compile(r"^\{http\.request\.host(?:port)?\}(?::(?P<port>[0-9]{1,5}))?$")
+# The placeholders that stand for the host the request itself names; its group
+# is the fixed port, when one follows.
+_REQUESTED_HOST = re.compile(keyword("CaddyRequestedHost", "pattern"))
 
 
 def decided_per_request(upstream: Any) -> bool:
@@ -31,12 +33,6 @@ def decided_per_request(upstream: Any) -> bool:
     return bool(_PLACEHOLDER.search(str(upstream or "")))
 
 
-def to_requested_host(upstream: Any) -> bool:
-    """Whether a route forwards to the host each request names, not to a fixed target."""
-
-    return bool(_REQUESTED_HOST.fullmatch(str(upstream or "").strip()))
-
-
 def _hands_off_to(upstream: str) -> str:
     """Where a route sends requests, as a sentence fragment for its readout."""
 
@@ -44,7 +40,7 @@ def _hands_off_to(upstream: str) -> str:
         return "Caddy answers this itself"
     matched = _REQUESTED_HOST.fullmatch(upstream)
     if matched:
-        port = matched.group("port")
+        port = matched.group(1)
         return "the host each request names" + (f", on port {port}" if port else "")
     if decided_per_request(upstream):
         return f"decided per request ({upstream})"
@@ -66,12 +62,12 @@ def served_certificate(record: dict[str, Any]) -> ServedCertificate | None:
 # carrying a newline or a brace would become directives of its own (a second
 # site, a file server, an import), and the typed route would be arbitrary edge
 # configuration. Each is one token: a hostname (a wildcard allowed), an upstream
-# as host:port or scheme://host:port, a plain absolute directory. The controller
-# (controller/providers/caddy.go) checks the same patterns where it writes the file.
-_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
-DOMAIN = rf"^(?:\*\.)?{_LABEL}(?:\.{_LABEL})*\.?$"
-UPSTREAM = r"^(?:(?:https?|h2c)://)?[A-Za-z0-9](?:[A-Za-z0-9._-]*|\[[0-9A-Fa-f:.]+\])(?::[0-9]{1,5})?$"
-DIRECTORY = r"^(?:/[A-Za-z0-9._-]+)+/?$"
+# as host:port or scheme://host:port, a plain absolute directory. The patterns
+# are the bridge contract's, and the controller (controller/providers/caddy.go)
+# checks the same ones where it writes the file.
+DOMAIN = keyword("CaddyRouteInFile", "properties", "domain", "pattern")
+UPSTREAM = keyword("CaddyRouteInFile", "properties", "upstream", "pattern")
+DIRECTORY = keyword("CaddyCertificateDirectory", "pattern")
 
 
 def _resolve(authored: dict[str, Any], context: Any) -> dict[str, Any]:

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,7 +19,7 @@ import (
 // the dispatch rules and none of any provider's behavior.
 func dispatchController(env runtime.Environment, declared runtime.ControllerRegistry) *Controller {
 	r := &Registry{
-		Env: env, actions: map[actionKey]Action{}, readers: map[string]Reader{}, probes: map[string]Probe{},
+		Env: env, actions: map[actionKey]Action{}, readers: map[string]Reader{}, probes: map[runtime.ConnectionProvider]Probe{},
 		zoneIDs: map[string]string{},
 	}
 	return NewController(r, declared)
@@ -31,14 +32,12 @@ func TestExecuteRefusesWritesThatNoManagingConnectionApproves(t *testing.T) {
 	with := func(env runtime.Environment, extra map[string]string) runtime.Environment {
 		merged := runtime.Environment{}
 		for _, source := range []map[string]string{env, extra} {
-			for k, v := range source {
-				merged[k] = v
-			}
+			maps.Copy(merged, source)
 		}
 		return merged
 	}
 	edge := map[string]string{"EDGE_CONNECTION_REF": "edge", "EDGE_HOST": "edge.example.invalid", "EDGE_USER": "deploy", "EDGE_MANAGES": "true"}
-	declared := runtime.ControllerRegistry{ConnectionProviders: map[string][]string{string(dispatchKind): {"adguard"}}}
+	declared := runtime.ControllerRegistry{ConnectionProviders: map[string][]runtime.ConnectionProvider{string(dispatchKind): {"adguard"}}}
 	cases := []struct {
 		name     string
 		env      runtime.Environment
@@ -67,7 +66,7 @@ func TestExecuteRefusesWritesThatNoManagingConnectionApproves(t *testing.T) {
 				ran = true
 				return Result{Changed: true}, nil
 			})
-			_, err := controller.Execute(context.Background(), runtime.Resource{Kind: dispatchKind, Spec: c.spec}, "reconcile", c.apply)
+			_, err := controller.Execute(t.Context(), runtime.Resource{Kind: dispatchKind, Spec: c.spec}, "reconcile", c.apply)
 			if c.want == nil {
 				if err != nil || !ran {
 					t.Fatalf("handler did not run: %v", err)
@@ -88,10 +87,10 @@ func TestExecuteRefusesLockedAndUnsupportedActions(t *testing.T) {
 		t.Fatal("a locked action ran")
 		return Result{}, nil
 	})
-	if _, err := controller.Execute(context.Background(), runtime.Resource{Kind: runtime.ResourceKindMachine}, "reconcile", true); err == nil || err.Error() != "Nothing to observe." {
+	if _, err := controller.Execute(t.Context(), runtime.Resource{Kind: runtime.ResourceKindMachine}, "reconcile", true); err == nil || err.Error() != "Nothing to observe." {
 		t.Fatalf("locked: %v", err)
 	}
-	if _, err := controller.Execute(context.Background(), runtime.Resource{Kind: "unknown.kind"}, "reconcile", false); !errors.Is(err, ErrUnsupported) {
+	if _, err := controller.Execute(t.Context(), runtime.Resource{Kind: "unknown.kind"}, "reconcile", false); !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("unsupported: %v", err)
 	}
 }
@@ -120,7 +119,7 @@ func inventoryController(kinds ...string) *Controller {
 		prefix := strings.ToUpper(vendor)
 		env[prefix+"_CONNECTION_REF"] = vendor
 		declared.Observations[kind] = vendor
-		declared.ConnectionCredentials = append(declared.ConnectionCredentials, vendor)
+		declared.ConnectionCredentials = append(declared.ConnectionCredentials, runtime.ConnectionProvider(vendor))
 	}
 	return dispatchController(env, declared)
 }
@@ -129,13 +128,13 @@ func inventoryController(kinds ...string) *Controller {
 // read as a successful empty read.
 func TestUnconnectedKindSaysConnectedFalseOnTheWire(t *testing.T) {
 	controller := dispatchController(runtime.Environment{}, runtime.ControllerRegistry{
-		Observations: map[string]string{"alpha.thing": "alpha"}, ConnectionCredentials: []string{"alpha"},
+		Observations: map[string]string{"alpha.thing": "alpha"}, ConnectionCredentials: []runtime.ConnectionProvider{"alpha"},
 	})
 	controller.readers["alpha.thing"] = func(context.Context) ([]any, error) {
 		t.Fatal("an unconnected kind was read")
 		return nil, nil
 	}
-	found, err := controller.Inventory(context.Background(), nil)
+	found, err := controller.Inventory(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +144,7 @@ func TestUnconnectedKindSaysConnectedFalseOnTheWire(t *testing.T) {
 	}
 	read := inventoryController("beta.thing")
 	read.readers["beta.thing"] = func(context.Context) ([]any, error) { return []any{}, nil }
-	found, _ = read.Inventory(context.Background(), nil)
+	found, _ = read.Inventory(t.Context(), nil)
 	if data, _ := json.Marshal(found["beta.thing"]); strings.Contains(string(data), "connected") {
 		t.Fatalf("a read kind carries connected: %s", data)
 	}
@@ -168,7 +167,7 @@ func TestReadFailuresBecomeReportFields(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			controller := inventoryController("alpha.thing")
 			controller.readers["alpha.thing"] = func(context.Context) ([]any, error) { return nil, c.err }
-			found, _ := controller.Inventory(context.Background(), nil)
+			found, _ := controller.Inventory(t.Context(), nil)
 			report := found["alpha.thing"]
 			if report.OK || report.Refusal != c.refusal || report.Error != c.text || !utf8.ValidString(report.Error) {
 				t.Fatalf("%+v", report)
@@ -203,7 +202,7 @@ func TestInventoryReadsProviderGroupsConcurrentlyWithoutRacing(t *testing.T) {
 		}
 	}
 	done := controller.BeginSnapshot()
-	found, err := controller.Inventory(context.Background(), nil)
+	found, err := controller.Inventory(t.Context(), nil)
 	done()
 	if err != nil || len(found) != len(kinds) {
 		t.Fatalf("%v %d", err, len(found))
@@ -224,7 +223,7 @@ func TestOnlyReadsTheKindsAsked(t *testing.T) {
 	for _, kind := range []string{"alpha.one", "beta.one"} {
 		controller.readers[kind] = func(context.Context) ([]any, error) { return []any{kind}, nil }
 	}
-	found, _ := controller.Inventory(context.Background(), []runtime.ResourceKind{"beta.one"})
+	found, _ := controller.Inventory(t.Context(), []runtime.ResourceKind{"beta.one"})
 	if _, read := found["alpha.one"]; read || len(found) != 1 {
 		t.Fatalf("%+v", found)
 	}

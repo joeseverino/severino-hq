@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/runtime"
@@ -16,7 +16,7 @@ func (r *Registry) admitTLS() {
 	act(r, runtime.ResourceKindTLSCertificate, "renew", r.tlsRenew, invalidSpec(certificateSpecInvalid), ignoresSpecInPlan())
 	act(r, runtime.ResourceKindTLSUploadedCertificate, "reconcile", r.uploadedReconcile, invalidSpec(certificateSpecInvalid))
 	act(r, runtime.ResourceKindTLSUploadedCertificate, "delete", r.uploadedDelete, invalidSpec(certificateSpecInvalid))
-	r.probe("onepassword", r.probeOnePassword)
+	r.probe(runtime.ConnectionProviderOnePassword, r.probeOnePassword)
 }
 
 const certificateSpecInvalid = "certificate spec is invalid"
@@ -67,7 +67,7 @@ func (r *Registry) cpanelSitesFor(ctx context.Context, consumer TLSConsumer) ([]
 			notHosted = append(notHosted, name)
 		}
 	}
-	sort.Strings(notHosted)
+	slices.Sort(notHosted)
 	if len(notHosted) > 0 {
 		return nil, &ProviderError{Message: consumer.Name + " does not serve " + strings.Join(notHosted, ", ") + "; remove the name from the target, or add it to the hosting account"}
 	}
@@ -205,7 +205,7 @@ func (r *Registry) deployTransaction(ctx context.Context, spec TLSCertificateSpe
 	status.TLSDeployment = deployment
 	status.ArtifactSource = artifactSource
 	status.RenewedFingerprint = expected
-	return Result{Changed: true, Status: status, Conditions: []Condition{condition("Ready", reason, "All TLS consumers serve the certificate.")}, Message: message}, nil
+	return Result{Changed: true, Status: status, Conditions: []Condition{condition(runtime.ConditionReady, reason, "All TLS consumers serve the certificate.")}, Message: message}, nil
 }
 
 func rollbackSource(spec TLSCertificateSpec) (TLSConsumer, bool) {
@@ -241,7 +241,7 @@ func (r *Registry) applyTLSReconcile(ctx context.Context, spec TLSCertificateSpe
 	if consumersServe(spec, observed, expected) {
 		matchEvidence(observed, expected)
 		observed.ArtifactSource = "existing_lineage"
-		return Result{Changed: false, Status: observed, Conditions: []Condition{condition("Ready", "Verified", "All TLS consumers match.")}, Message: "Certificate consumers already match the managed lineage."}, nil
+		return Result{Changed: false, Status: observed, Conditions: []Condition{condition(runtime.ConditionReady, "Verified", "All TLS consumers match.")}, Message: "Certificate consumers already match the managed lineage."}, nil
 	}
 	caddy, ok := rollbackSource(spec)
 	if !ok {
@@ -364,7 +364,7 @@ func (r *Registry) uploadedReconcile(ctx context.Context, spec TLSCertificateSpe
 	}
 	domains := append([]string{}, material.Domains...)
 	if !apply {
-		return Result{Changed: true, Status: UploadedCertificateStatus{CertificateName: spec.CertificateName, Domains: domains}, Conditions: []Condition{condition("Ready", "Planned", "Would install the certificate.")}, Message: "Would install the stored certificate."}, nil
+		return Result{Changed: true, Status: UploadedCertificateStatus{CertificateName: spec.CertificateName, Domains: domains}, Conditions: []Condition{condition(runtime.ConditionReady, "Planned", "Would install the certificate.")}, Message: "Would install the stored certificate."}, nil
 	}
 	target := TLSCertificateSpec{CertificateName: spec.CertificateName, Domains: domains, Consumers: spec.Consumers}
 	plan, err := r.planDeployment(ctx, target)
@@ -375,7 +375,7 @@ func (r *Registry) uploadedReconcile(ctx context.Context, spec TLSCertificateSpe
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Changed: true, Status: UploadedCertificateStatus{CertificateName: spec.CertificateName, Domains: domains, TLSDeployment: deployment}, Conditions: []Condition{condition("Ready", "Installed", "Stored certificate installed.")}, Message: "Stored certificate installed."}, nil
+	return Result{Changed: true, Status: UploadedCertificateStatus{CertificateName: spec.CertificateName, Domains: domains, TLSDeployment: deployment}, Conditions: []Condition{condition(runtime.ConditionReady, "Installed", "Stored certificate installed.")}, Message: "Stored certificate installed."}, nil
 }
 
 // uploadedDelete removes an installed certificate from NPM, or refuses and says
@@ -387,7 +387,7 @@ func (r *Registry) uploadedDelete(ctx context.Context, spec TLSCertificateSpec, 
 			elsewhere = append(elsewhere, consumer.Name)
 		}
 	}
-	sort.Strings(elsewhere)
+	slices.Sort(elsewhere)
 	if len(elsewhere) > 0 {
 		return Result{}, &ProviderError{Message: "HQ can only remove this from Nginx Proxy Manager; take it off " + strings.Join(elsewhere, ", ") + " by hand first, then remove those targets from this resource"}
 	}
@@ -420,11 +420,11 @@ func (r *Registry) uploadedDelete(ctx context.Context, spec TLSCertificateSpec, 
 				named = append(named, item.NiceName)
 			}
 		}
-		sort.Strings(named)
+		slices.Sort(named)
 		if len(named) > 0 {
 			return Result{}, &ProviderError{Message: "NPM holds " + strings.Join(named, ", ") + ", but HQ has no record of installing it, so it was not removed; remove it in NPM if it is HQ's, then remove this again"}
 		}
-		return Result{Changed: false, Status: CertificateRemoval{Removed: true}, Conditions: []Condition{condition("Ready", "Absent", "No such certificate in NPM.")}, Message: "Certificate was already absent from NPM."}, nil
+		return Result{Changed: false, Status: CertificateRemoval{Removed: true}, Conditions: []Condition{condition(runtime.ConditionReady, "Absent", "No such certificate in NPM.")}, Message: "Certificate was already absent from NPM."}, nil
 	}
 	hosts, err := r.npmProxyHostList(ctx, base, headers)
 	if err != nil {
@@ -440,7 +440,7 @@ func (r *Registry) uploadedDelete(ctx context.Context, spec TLSCertificateSpec, 
 			stillBound = append(stillBound, host.DomainNames...)
 		}
 	}
-	sort.Strings(stillBound)
+	slices.Sort(stillBound)
 	if len(stillBound) > 0 {
 		return Result{}, &ProviderError{Message: "still serving " + strings.Join(stillBound, ", ") + "; point those at another certificate before removing this one"}
 	}
@@ -451,5 +451,5 @@ func (r *Registry) uploadedDelete(ctx context.Context, spec TLSCertificateSpec, 
 			}
 		}
 	}
-	return Result{Changed: true, Status: CertificateRemoval{Removed: true}, Conditions: []Condition{condition("Ready", "Removed", "Certificate removed from NPM.")}, Message: "Certificate removed from NPM."}, nil
+	return Result{Changed: true, Status: CertificateRemoval{Removed: true}, Conditions: []Condition{condition(runtime.ConditionReady, "Removed", "Certificate removed from NPM.")}, Message: "Certificate removed from NPM."}, nil
 }

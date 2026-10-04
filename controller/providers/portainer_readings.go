@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"unicode/utf8"
 
 	"github.com/joeseverino/severino-hq/controller/runtime"
+	"golang.org/x/sync/errgroup"
 )
 
 // The readings the Portainer adapter declares: environments, and each Docker
@@ -174,7 +173,7 @@ func (r *Registry) portainerListed(ctx context.Context, ref string) ([]Portainer
 func (r *Registry) portainerEnvironmentReading(ctx context.Context) ([]any, error) {
 	local := r.controllerID()
 	found := []any{}
-	for _, ref := range r.Env.Refs("portainer") {
+	for _, ref := range r.Env.Refs(runtime.ConnectionProviderPortainer) {
 		environments, err := r.portainerListed(ctx, ref)
 		if err != nil {
 			return nil, err
@@ -201,7 +200,7 @@ func (r *Registry) portainerEach(what string, build portainerBuild) Reader {
 	return func(ctx context.Context) ([]any, error) {
 		local := r.controllerID()
 		reachable := []portainerSite{}
-		for _, ref := range r.Env.Refs("portainer") {
+		for _, ref := range r.Env.Refs(runtime.ConnectionProviderPortainer) {
 			environments, err := r.portainerListed(ctx, ref)
 			if err != nil {
 				return nil, err
@@ -220,7 +219,7 @@ func (r *Registry) portainerEach(what string, build portainerBuild) Reader {
 			if err != nil {
 				refusal := portainerRefused(err, what)
 				failures = append(failures, refusal)
-				refuseAt(ctx, "", at.ConnectionRef, at.Host, at.HostAddress, refusal)
+				refuseAt(ctx, runtime.PartWhole, at.ConnectionRef, at.Host, at.HostAddress, refusal)
 			}
 		}
 		if len(reachable) > 0 && len(failures) == len(reachable) {
@@ -247,7 +246,7 @@ func (r *Registry) siteContainers(ctx context.Context, at portainerSite) ([]dock
 
 func sortedStrings(values []string) []string {
 	out := append([]string{}, values...)
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -342,7 +341,7 @@ func (r *Registry) portainerVolumes(ctx context.Context, at portainerSite) ([]an
 		})
 	}
 	binds, sources := mountUsers(containers, "bind")
-	sort.Strings(sources)
+	slices.Sort(sources)
 	for _, source := range sources {
 		found = append(found, PortainerBindRecord{portainerSite: at, Type: "bind", Source: source, UsedBy: binds[source]})
 	}
@@ -418,24 +417,25 @@ type containerInspect struct {
 func (r *Registry) inspectContainers(ctx context.Context, at portainerSite, ids []string) []containerInspect {
 	out := make([]containerInspect, len(ids))
 	var failed atomic.Bool
-	var wg sync.WaitGroup
-	slots := make(chan struct{}, r.inspectLimit())
+	var group errgroup.Group
+	group.SetLimit(r.inspectLimit())
 	for i, id := range ids {
-		slots <- struct{}{}
 		if failed.Load() {
-			<-slots
 			break
 		}
-		wg.Add(1)
-		go func() {
-			defer func() { <-slots; wg.Done() }()
+		// Go waits for a free slot; a failure that freed it starts nothing.
+		group.Go(func() error {
+			if failed.Load() {
+				return nil
+			}
 			out[i].doc, out[i].err = portainerDocker[dockerInspect](ctx, r, at.ConnectionRef, at.EnvironmentID, "/containers/"+id+"/json", "container inspect")
 			if out[i].err != nil {
 				failed.Store(true)
 			}
-		}()
+			return nil
+		})
 	}
-	wg.Wait()
+	group.Wait()
 	return out
 }
 
@@ -446,7 +446,8 @@ func runtimeRecord(at portainerSite, container dockerContainer, inspect dockerIn
 	securityOpt := []string{}
 	for _, option := range nonEmpty(host.SecurityOpt) {
 		if utf8.RuneCountInString(option) > securityOptMax {
-			option = strings.SplitN(option, "=", 2)[0] + "=(profile)"
+			name, _, _ := strings.Cut(option, "=")
+			option = name + "=(profile)"
 		}
 		securityOpt = append(securityOpt, option)
 	}
@@ -471,7 +472,7 @@ func runtimeRecord(at portainerSite, container dockerContainer, inspect dockerIn
 			exposed = append(exposed, n)
 		}
 	}
-	sort.Ints(exposed)
+	slices.Sort(exposed)
 	healthcheck := false
 	if check := config.Healthcheck; check != nil {
 		healthcheck = len(check.Test) > 0 && !slices.Equal(check.Test, []string{"NONE"})
@@ -558,7 +559,7 @@ func (r *Registry) portainerStacksReading(ctx context.Context, at portainerSite)
 		project := projects[name]
 		if project == nil {
 			files := []string{}
-			for _, part := range strings.Split(container.Labels[composeConfigFiles], ",") {
+			for part := range strings.SplitSeq(container.Labels[composeConfigFiles], ",") {
 				if part = strings.TrimSpace(part); part != "" {
 					files = append(files, part)
 				}

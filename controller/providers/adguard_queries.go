@@ -1,17 +1,21 @@
 package providers
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"net/url"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/providers/adguardapi"
+
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 type AdGuardQueryClient struct {
@@ -80,16 +84,9 @@ func (t *queryTally) record(domain, ref string, hours float64, anonymized bool) 
 	}
 	record := AdGuardQuerySummary{ConnectionRef: ref, Domain: domain, Queries: t.queries, Blocked: t.blocked, ClientCount: len(t.clients), LastSeen: last, WindowHours: roundTo(hours, 1)}
 	if !anonymized {
-		keys := []string{}
-		for key := range t.clients {
-			keys = append(keys, key)
-		}
-		sort.Slice(keys, func(i, j int) bool {
-			a, b := t.clients[keys[i]], t.clients[keys[j]]
-			if a.count != b.count {
-				return a.count > b.count
-			}
-			return keys[i] < keys[j]
+		keys := slices.AppendSeq([]string{}, maps.Keys(t.clients))
+		slices.SortFunc(keys, func(a, b string) int {
+			return cmp.Or(cmp.Compare(t.clients[b].count, t.clients[a].count), cmp.Compare(a, b))
 		})
 		clients := []AdGuardQueryClient{}
 		for _, key := range keys[:min(10, len(keys))] {
@@ -183,7 +180,7 @@ func summarizeQueries(get func(string) (json.RawMessage, error), domains []strin
 	for name := range tallies {
 		keys = append(keys, name)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	records := []any{}
 	for _, name := range keys {
 		records = append(records, tallies[name].record(name, ref, hours, anonymized))
@@ -194,7 +191,7 @@ func summarizeQueries(get func(string) (json.RawMessage, error), domains []strin
 func (r *Registry) adguardQueries(ctx context.Context) ([]any, error) {
 	found := []any{}
 	now := r.Now().UTC()
-	for _, ref := range r.refs("adguard") {
+	for _, ref := range r.refs(runtime.ConnectionProviderAdGuard) {
 		get := func(path string) (json.RawMessage, error) { return r.adguardRequest(ctx, ref, path, "GET", nil) }
 		config, err := adguardGet[adguardapi.GetQueryLogConfigResponse](ctx, r, ref, "/control/querylog/config", "query log settings")
 		if err != nil {
@@ -215,7 +212,7 @@ func (r *Registry) adguardQueries(ctx context.Context) ([]any, error) {
 		}
 		anonymized := config.AnonymizeClientIp != nil && *config.AnonymizeClientIp
 		if anonymized {
-			refuse(ctx, "clients", ref, "", &ProviderError{Message: "adguard anonymizes client addresses"})
+			refuse(ctx, runtime.PartClients, ref, "", &ProviderError{Message: "adguard anonymizes client addresses"})
 		}
 		records, err := summarizeQueries(get, domains, ref, now, anonymized)
 		if err != nil {

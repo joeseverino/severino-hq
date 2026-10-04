@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -43,9 +45,7 @@ type tailnetAPIServer struct {
 func newTailnetAPI(t *testing.T, answers map[string]tailnetAnswer) *tailnetAPIServer {
 	t.Helper()
 	api := &tailnetAPIServer{answers: map[string]tailnetAnswer{"POST /oauth/token": {body: `{"access_token":"ts-token"}`}}}
-	for key, answer := range answers {
-		api.answers[key] = answer
-	}
+	maps.Copy(api.answers, answers)
 	api.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		path := strings.TrimPrefix(r.URL.RequestURI(), "/api/v2")
@@ -53,9 +53,7 @@ func newTailnetAPI(t *testing.T, answers map[string]tailnetAnswer) *tailnetAPISe
 		api.mu.Lock()
 		api.seen = append(api.seen, tailnetSeen{method: r.Method, path: path, ifMatch: r.Header.Get("If-Match"), body: string(body)})
 		answer, ok := api.answers[key]
-		for next, replacement := range answer.then {
-			api.answers[next] = replacement
-		}
+		maps.Copy(api.answers, answer.then)
 		api.mu.Unlock()
 		if !ok {
 			answer = tailnetAnswer{status: http.StatusNotFound, body: `{"message":"not found"}`}
@@ -145,7 +143,7 @@ func TestTailnetTokenIsExchangedOncePerSweep(t *testing.T) {
 	api := newTailnetAPI(t, nil)
 	r := tailnetRegistry(t, api)
 	for range 2 {
-		if token, err := r.tailnetToken(context.Background(), "example-tailnet"); err != nil || token != "ts-token" {
+		if token, err := r.tailnetToken(t.Context(), "example-tailnet"); err != nil || token != "ts-token" {
 			t.Fatalf("%q %v", token, err)
 		}
 	}
@@ -173,7 +171,7 @@ func TestTailnetRefusalsAreClassified(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			api := newTailnetAPI(t, map[string]tailnetAnswer{c.key: {status: c.status, body: `{"message":"no"}`}})
 			r := tailnetRegistry(t, api)
-			_, err := r.tailscaleDeviceInventory(context.Background())
+			_, err := r.tailscaleDeviceInventory(t.Context())
 			failure, refusal, reason := runtime.Classify(err)
 			if failure != c.failure || refusal != c.refusal || !strings.Contains(err.Error(), c.scope) {
 				t.Fatalf("%v: %q %q", err, failure, refusal)
@@ -209,7 +207,7 @@ func TestTailnetDeviceReconcile(t *testing.T) {
 			api := newTailnetAPI(t, map[string]tailnetAnswer{"POST /device/nEDGE/key": c.answer})
 			r := tailnetRegistry(t, api)
 			r.Env["SEVERINO_TAILNET_STATUS"] = writeTailnetStatus(t, tailnetStatus)
-			res, err := r.runAction(runtime.ResourceKindTailscaleDevice, "reconcile", context.Background(), c.spec, nil, c.apply)
+			res, err := r.runAction(runtime.ResourceKindTailscaleDevice, "reconcile", t.Context(), c.spec, nil, c.apply)
 			if c.failure != "" || c.name == "unknown device" {
 				if failure, _, _ := runtime.Classify(err); err == nil || failure != c.failure {
 					t.Fatalf("%v %q", err, failure)
@@ -251,7 +249,7 @@ func TestTailscaleApproveRoutes(t *testing.T) {
 			})
 			r := tailnetRegistry(t, api)
 			r.Env["SEVERINO_TAILNET_STATUS"] = writeTailnetStatus(t, tailnetStatus)
-			res, err := r.runAction(runtime.ResourceKindTailscaleDevice, "approve-routes", context.Background(), Object{"name": "an-edge"}, nil, c.apply)
+			res, err := r.runAction(runtime.ResourceKindTailscaleDevice, "approve-routes", t.Context(), Object{"name": "an-edge"}, nil, c.apply)
 			if c.read.status != 0 || c.name == "malformed routes" {
 				if failure, _, _ := runtime.Classify(err); err == nil || failure != c.failure {
 					t.Fatalf("%v %q", err, failure)
@@ -321,7 +319,7 @@ const (
 func policyReconcile(t *testing.T, api *tailnetAPIServer, document string, apply bool) (Result, error) {
 	t.Helper()
 	r := tailnetRegistry(t, api)
-	return r.runAction(runtime.ResourceKindTailscalePolicy, "reconcile", context.Background(), Object{"document": document}, nil, apply)
+	return r.runAction(runtime.ResourceKindTailscalePolicy, "reconcile", t.Context(), Object{"document": document}, nil, apply)
 }
 
 // Stage 1 M1: the write is held to the version the deny check judged, taken
@@ -467,7 +465,7 @@ func TestTailscaleSettingsWithheldIsNullAndRefused(t *testing.T) {
 		if entry.Refusal != runtime.FailureClassPermission {
 			t.Errorf("%#v", entry)
 		}
-		parts = append(parts, entry.Part)
+		parts = append(parts, string(entry.Part))
 	}
 	if !reflect.DeepEqual(parts, []string{"https", "acl_management"}) {
 		t.Fatalf("%v", parts)
@@ -476,7 +474,7 @@ func TestTailscaleSettingsWithheldIsNullAndRefused(t *testing.T) {
 
 func TestTailscaleSettingsOfTheWrongTypeAreAnError(t *testing.T) {
 	api := newTailnetAPI(t, map[string]tailnetAnswer{"GET /tailnet/-/settings": {body: `{"devicesApprovalOn":"yes"}`}})
-	if _, err := tailnetRegistry(t, api).tailscaleSettings(context.Background()); err == nil {
+	if _, err := tailnetRegistry(t, api).tailscaleSettings(t.Context()); err == nil {
 		t.Fatal("a setting of the wrong type is not coerced")
 	}
 }
@@ -487,7 +485,7 @@ func TestTailscaleDNSResolversTakeEitherShape(t *testing.T) {
 		"splitDNS": {"corp.example.com": [{"address": "192.0.2.54", "useWithExitNode": true}]},
 		"searchPaths": ["example.com"],
 		"preferences": {"magicDNS": true, "overrideLocalDNS": true}}`}})
-	records, err := tailnetRegistry(t, api).tailscaleDNS(context.Background())
+	records, err := tailnetRegistry(t, api).tailscaleDNS(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -497,7 +495,7 @@ func TestTailscaleDNSResolversTakeEitherShape(t *testing.T) {
 		t.Fatalf("%#v", records[0])
 	}
 	api.answer("GET /tailnet/-/dns/configuration", tailnetAnswer{body: `{"nameservers": [53]}`})
-	if _, err := tailnetRegistry(t, api).tailscaleDNS(context.Background()); err == nil {
+	if _, err := tailnetRegistry(t, api).tailscaleDNS(t.Context()); err == nil {
 		t.Fatal("a resolver that is neither shape is an error")
 	}
 }
@@ -507,7 +505,7 @@ func TestTailscaleUsersFromTheOfficialModel(t *testing.T) {
 		{"id": "u1", "displayName": "Test User", "loginName": "user@example.com", "role": "owner", "status": "active",
 		 "created": "2026-01-01T00:00:00Z", "lastSeen": "2026-09-01T12:30:00+02:00"},
 		{"displayName": "no id"}]}`}})
-	records, err := tailnetRegistry(t, api).tailscaleUsers(context.Background())
+	records, err := tailnetRegistry(t, api).tailscaleUsers(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -517,7 +515,7 @@ func TestTailscaleUsersFromTheOfficialModel(t *testing.T) {
 		t.Fatalf("%#v", records)
 	}
 	api.answer("GET /tailnet/-/users", tailnetAnswer{body: `{"users": [{"id": "u1", "created": "yesterday"}]}`})
-	if _, err := tailnetRegistry(t, api).tailscaleUsers(context.Background()); err == nil {
+	if _, err := tailnetRegistry(t, api).tailscaleUsers(t.Context()); err == nil {
 		t.Fatal("a timestamp that is not one is an error")
 	}
 }
@@ -533,7 +531,7 @@ const apiDevices = `{"devices": [
 
 func TestDeviceInventoryFromTheAPI(t *testing.T) {
 	api := newTailnetAPI(t, map[string]tailnetAnswer{"GET /tailnet/-/devices?fields=all": {body: apiDevices}})
-	records, err := tailnetRegistry(t, api).tailscaleDeviceInventory(context.Background())
+	records, err := tailnetRegistry(t, api).tailscaleDeviceInventory(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -548,7 +546,7 @@ func TestDeviceInventoryFromTheAPI(t *testing.T) {
 		t.Fatalf("%#v", laptop)
 	}
 	api.answer("GET /tailnet/-/devices?fields=all", tailnetAnswer{body: `{"devices": [{"hostname": "x", "authorized": "yes"}]}`})
-	if _, err := tailnetRegistry(t, api).tailscaleDeviceInventory(context.Background()); err == nil {
+	if _, err := tailnetRegistry(t, api).tailscaleDeviceInventory(t.Context()); err == nil {
 		t.Fatal("a device of the wrong shape is an error, not skipped")
 	}
 }
@@ -557,7 +555,7 @@ func TestDeviceInventoryFromTheLocalReading(t *testing.T) {
 	api := newTailnetAPI(t, map[string]tailnetAnswer{"GET /tailnet/-/devices?fields=all": {body: apiDevices}})
 	r := tailnetRegistry(t, api)
 	r.Env["SEVERINO_TAILNET_STATUS"] = writeTailnetStatus(t, tailnetStatus)
-	records, err := r.tailscaleDeviceInventory(context.Background())
+	records, err := r.tailscaleDeviceInventory(t.Context())
 	if err != nil || len(records) != 3 {
 		t.Fatalf("%v %#v", err, records)
 	}
@@ -567,11 +565,11 @@ func TestDeviceInventoryFromTheLocalReading(t *testing.T) {
 	}
 
 	r.Env["SEVERINO_TAILNET_STATUS"] = writeTailnetStatus(t, `{"Self": "not a node"}`)
-	if _, err := r.tailscaleDeviceInventory(context.Background()); err == nil {
+	if _, err := r.tailscaleDeviceInventory(t.Context()); err == nil {
 		t.Fatal("an unreadable local reading is an error")
 	}
 	r.Env["SEVERINO_TAILNET_STATUS"] = filepath.Join(t.TempDir(), "absent.json")
-	if _, err := r.tailscaleDeviceInventory(context.Background()); err == nil {
+	if _, err := r.tailscaleDeviceInventory(t.Context()); err == nil {
 		t.Fatal("a missing local reading is an error")
 	}
 }
@@ -607,5 +605,18 @@ func TestTailnetPolicyInventoryKeepsWhatWasReadBeforeARefusal(t *testing.T) {
 	}
 	if len(ledger.entries) != 1 || ledger.entries[0].Part != "dns" || ledger.entries[0].Refusal != runtime.FailureClassPermission {
 		t.Fatalf("%#v", ledger.entries)
+	}
+}
+
+// The ports asked about include the one each SSH connection declares, so a
+// host that moved SSH off 22 is still answered for. A connection whose port
+// does not parse adds nothing.
+func TestReachAsksAboutDeclaredSSHPorts(t *testing.T) {
+	r := New(runtime.Environment{
+		"EDGE_CONNECTION_REF": "edge", "EDGE_HOST": "192.0.2.9", "EDGE_USER": "hq", "EDGE_PORT": "2222", "EDGE_HOST_KEY": "ssh-ed25519 AAAA",
+		"ODD_CONNECTION_REF": "odd", "ODD_HOST": "192.0.2.10", "ODD_USER": "hq", "ODD_PORT": "ssh", "ODD_HOST_KEY": "ssh-ed25519 AAAA",
+	}, &fakeHTTP{})
+	if got := r.portsWorthAsking(t.Context()); !slices.Equal(got, []int{22, 53, 80, 443, 2222}) {
+		t.Fatalf("tailnet reach ports = %v", got)
 	}
 }

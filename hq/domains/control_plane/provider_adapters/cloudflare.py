@@ -8,6 +8,7 @@ from typing import Any, Literal, get_args
 
 from pydantic import Field, model_validator
 
+from ..bridge_contract import keyword
 from ..consoles import cloudflare_dashboard
 from ..credential_reads import REGISTRAR_READ
 from ..names import normalized_hostname
@@ -146,7 +147,7 @@ if set(DNS_RECORD_TYPES_BY_ID) != set(get_args(DNSRecordTypeId)):
 
 # One expression, used both to validate a CAA value and to take it apart, so a
 # value the form accepts is one the canonicaliser can parse.
-_CAA_VALUE_PARTS = r'^\s*(\d{1,3})\s+(issue|issuewild|iodef)\s+"([^"]*)"\s*$'
+_CAA_VALUE_PARTS = keyword("CloudflareCAAValue", "pattern")
 
 
 class CloudflareDNSRecordSpec(ProviderModel):
@@ -540,7 +541,7 @@ ZONE = ProviderSpec(
     identity=_zone_identity,
     key_hint=_zone_key_hint,
     declaration_only=True,
-    contains=("cloudflare.dns_record", "zone", "zone"),
+    contains=(DNS_RECORD_KIND, "zone", "zone"),
     parts=(
         ReadingPart(
             "posture", "Zone TLS posture", ("Zone Settings Read (zone)",), "cloudflare_api"

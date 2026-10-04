@@ -746,7 +746,7 @@
         "type": "object",
         "properties": {
           "type": {
-            "type": "string"
+            "$ref": "#/components/schemas/ConditionType"
           },
           "status": {
             "type": "boolean"
@@ -881,7 +881,7 @@
         "type": "object",
         "properties": {
           "part": {
-            "type": "string"
+            "$ref": "#/components/schemas/ReadingPartName"
           },
           "connection_ref": {
             "type": "string"
@@ -1070,11 +1070,16 @@
         "properties": {
           "point": {
             "type": "string"
+          },
+          "endpoint": {
+            "type": "string",
+            "description": "The National Weather Service API the forecast is read from, as HQ's connection states it."
           }
         },
         "additionalProperties": false,
         "required": [
-          "point"
+          "point",
+          "endpoint"
         ]
       },
       "GlancePlanTargets": {
@@ -1319,7 +1324,7 @@
             "additionalProperties": {
               "type": "array",
               "items": {
-                "type": "string"
+                "$ref": "#/components/schemas/ConnectionProvider"
               }
             }
           },
@@ -1333,7 +1338,7 @@
           "connection_credentials": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ConnectionProvider"
             },
             "description": "Providers a connection credential is modelled for."
           },
@@ -1973,6 +1978,211 @@
         "x-enum-varnames": [
           "GlancePanelIDInfrastructure",
           "GlancePanelIDWeather"
+        ]
+      },
+      "CaddyRouteInFile": {
+        "type": "object",
+        "description": "One route in the file HQ writes on a Caddy edge. The file is text, so each value is one token: a hostname (a wildcard allowed) and an upstream as host:port or scheme://host:port. HQ validates a declaration with these patterns and the controller checks them again on the line that writes the file.",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253,
+            "pattern": "^(?:\\*\\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\\.?$"
+          },
+          "upstream": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253,
+            "pattern": "^(?:(?:https?|h2c)://)?[A-Za-z0-9](?:[A-Za-z0-9._-]*|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]{1,5})?$"
+          }
+        },
+        "required": [
+          "domain",
+          "upstream"
+        ],
+        "additionalProperties": false
+      },
+      "CaddyCertificateDirectory": {
+        "type": "string",
+        "description": "The directory a Caddy edge loads delivered certificates from: one plain absolute path.",
+        "maxLength": 500,
+        "pattern": "^(?:/[A-Za-z0-9._-]+)+/?$"
+      },
+      "CaddyRequestedHost": {
+        "type": "string",
+        "description": "An upstream that names the host each request names, with an optional fixed port (the captured group).",
+        "pattern": "^\\{http\\.request\\.host(?:port)?\\}(?::([0-9]{1,5}))?$"
+      },
+      "GitHubDeliveryProduction": {
+        "type": "string",
+        "description": "What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.",
+        "enum": [
+          "Every extension's latest admission, confirmed on GitHub"
+        ],
+        "x-enum-varnames": [
+          "GitHubDeliveryProductionCurrent"
+        ]
+      },
+      "GitHubDeliverySpec": {
+        "type": "object",
+        "description": "A github.delivery declaration. The defaults are the declaration a sweep reports and HQ adopts.",
+        "properties": {
+          "repository": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+            "description": "owner/name of the repository whose composition workflow deploys HQ."
+          },
+          "workflow": {
+            "type": "string",
+            "pattern": "^\\.github/workflows/[A-Za-z0-9_.-]+\\.ya?ml$",
+            "default": ".github/workflows/compose.yml"
+          },
+          "branch": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_./-]+$",
+            "default": "main"
+          },
+          "production": {
+            "$ref": "#/components/schemas/GitHubDeliveryProduction"
+          }
+        },
+        "required": [
+          "repository",
+          "workflow",
+          "branch",
+          "production"
+        ],
+        "additionalProperties": false
+      },
+      "ConnectionProvider": {
+        "type": "string",
+        "description": "A connection provider HQ's registry declares: what a credential is for. Django's contract test holds this to the admitted connections.",
+        "enum": [
+          "adguard",
+          "cloudflare_api",
+          "cloudflare_dns",
+          "github_app",
+          "npm",
+          "onepassword",
+          "portainer",
+          "ssh",
+          "tailscale"
+        ],
+        "x-enum-varnames": [
+          "ConnectionProviderAdGuard",
+          "ConnectionProviderCloudflareAPI",
+          "ConnectionProviderCloudflareDNS",
+          "ConnectionProviderGitHubApp",
+          "ConnectionProviderNPM",
+          "ConnectionProviderOnePassword",
+          "ConnectionProviderPortainer",
+          "ConnectionProviderSSH",
+          "ConnectionProviderTailscale"
+        ]
+      },
+      "ReadingPartName": {
+        "type": "string",
+        "description": "A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares, and Django's contract test holds this to the declared parts.",
+        "enum": [
+          "",
+          "access",
+          "acl_management",
+          "apps",
+          "branch_rules",
+          "clients",
+          "code_scanning",
+          "configuration",
+          "connections",
+          "dead_hosts",
+          "dependabot",
+          "dns",
+          "environments",
+          "file_size",
+          "filtering",
+          "https",
+          "images",
+          "leaked_credentials",
+          "page_rules",
+          "posture",
+          "proxy_hosts",
+          "querylog",
+          "redirection_hosts",
+          "registration",
+          "rewrites",
+          "rules",
+          "runners",
+          "services",
+          "settings",
+          "streams",
+          "upstreams",
+          "variables",
+          "workflow_pins"
+        ],
+        "x-enum-varnames": [
+          "PartWhole",
+          "PartAccess",
+          "PartACLManagement",
+          "PartApps",
+          "PartBranchRules",
+          "PartClients",
+          "PartCodeScanning",
+          "PartConfiguration",
+          "PartConnections",
+          "PartDeadHosts",
+          "PartDependabot",
+          "PartDNS",
+          "PartEnvironments",
+          "PartFileSize",
+          "PartFiltering",
+          "PartHTTPS",
+          "PartImages",
+          "PartLeakedCredentials",
+          "PartPageRules",
+          "PartPosture",
+          "PartProxyHosts",
+          "PartQueryLog",
+          "PartRedirectionHosts",
+          "PartRegistration",
+          "PartRewrites",
+          "PartRules",
+          "PartRunners",
+          "PartServices",
+          "PartSettings",
+          "PartStreams",
+          "PartUpstreams",
+          "PartVariables",
+          "PartWorkflowPins"
+        ]
+      },
+      "TLSCertificateName": {
+        "type": "string",
+        "description": "A certbot lineage name: it becomes --cert-name and a directory under live/. HQ's tls.certificate declaration validates with it and the controller checks it again where it reaches certbot's argv and a path.",
+        "maxLength": 160,
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "TLSCertificateDomain": {
+        "type": "string",
+        "description": "A domain certbot is asked for: DNS labels, optionally under one wildcard. The controller checks it where it reaches certbot's argv.",
+        "pattern": "^(\\*\\.)?([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
+      },
+      "CloudflareCAAValue": {
+        "type": "string",
+        "description": "A CAA record's content as flags, tag and quoted value (the three groups). HQ validates a declared CAA record with it and both sides take the content apart with it.",
+        "pattern": "^\\s*(\\d{1,3})\\s+(issue|issuewild|iodef)\\s+\"([^\"]*)\"\\s*$"
+      },
+      "ConditionType": {
+        "type": "string",
+        "description": "What a condition says of a resource: it is as declared, it differs from the declaration, or it needs attention.",
+        "enum": [
+          "Ready",
+          "Drifted",
+          "Degraded"
+        ],
+        "x-enum-varnames": [
+          "ConditionReady",
+          "ConditionDrifted",
+          "ConditionDegraded"
         ]
       }
     }

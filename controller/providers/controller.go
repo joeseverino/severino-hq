@@ -1,13 +1,13 @@
 package providers
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -72,12 +72,7 @@ func (c *Controller) Uncovered() []string {
 }
 
 func (c *Controller) NeedsMaterial(kind runtime.ResourceKind) bool {
-	for _, found := range c.Declared.MaterialKinds {
-		if found == kind {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.Declared.MaterialKinds, kind)
 }
 
 func (c *Controller) locked(kind runtime.ResourceKind, action string) (string, bool) {
@@ -121,16 +116,16 @@ func (c *Controller) sshRefs() map[string]bool {
 
 // effectiveProvider is the provider a connection acts as: its own when it has
 // a probe, else ssh (or its declared provider) for a transport.
-func (c *Controller) effectiveProvider(ref string, ssh map[string]bool) string {
+func (c *Controller) effectiveProvider(ref string, ssh map[string]bool) runtime.ConnectionProvider {
 	provider := c.Env.Provider(ref)
 	if _, ok := c.probes[provider]; ok {
 		return provider
 	}
 	if ssh[ref] {
 		if declared := strings.TrimSpace(c.Env[c.Env.Prefixes()[ref]+"_PROVIDER"]); declared != "" {
-			return declared
+			return runtime.ConnectionProvider(declared)
 		}
-		return "ssh"
+		return runtime.ConnectionProviderSSH
 	}
 	return provider
 }
@@ -180,10 +175,10 @@ func (c *Controller) refuseUnlessManaged(kind runtime.ResourceKind, spec Object)
 	return nil
 }
 
-var defaultEndpoints = map[string]string{"tailscale": tailnetAPI}
+var defaultEndpoints = map[runtime.ConnectionProvider]string{runtime.ConnectionProviderTailscale: tailnetAPI}
 
 // endpoint is where a connection points: a URL or a host, never a secret.
-func (c *Controller) endpoint(prefix, provider string) string {
+func (c *Controller) endpoint(prefix string, provider runtime.ConnectionProvider) string {
 	for _, name := range []string{"URL", "DIRECTORY_URL"} {
 		if url := strings.TrimSpace(c.Env[prefix+"_"+name]); url != "" {
 			return url
@@ -246,7 +241,7 @@ func (c *Controller) Connections(ctx context.Context, carry []string) ([]runtime
 			probe, viaSSH = c.probeSSH, true
 		}
 		connection := runtime.ConnectionRecord{
-			ConnectionRef: ref, Provider: provider, Endpoint: c.endpoint(prefix, provider),
+			ConnectionRef: ref, Provider: string(provider), Endpoint: c.endpoint(prefix, provider),
 			Manages: c.Env.Manages(ref), Probed: probe != nil, OK: true, Reaches: []string{},
 		}
 		if store := c.store(prefix); len(store) > 0 {
@@ -279,29 +274,25 @@ func (c *Controller) Connections(ctx context.Context, carry []string) ([]runtime
 // providerOf is whose kind this is, so one provider's kinds are read in turn:
 // every kind read by logging in to a machine is the ssh group.
 func (c *Controller) providerOf(kind string) string {
-	if c.Declared.Observations[kind] == "ssh" {
-		return "ssh"
-	}
-	for _, provider := range c.Declared.ConnectionProviders[kind] {
-		if provider == "ssh" {
-			return "ssh"
-		}
+	const ssh = string(runtime.ConnectionProviderSSH)
+	if c.Declared.Observations[kind] == ssh || slices.Contains(c.Declared.ConnectionProviders[kind], runtime.ConnectionProviderSSH) {
+		return ssh
 	}
 	vendor, _, _ := strings.Cut(kind, ".")
 	return vendor
 }
 
 // hasSource is whether anything this controller holds can read the kind.
-func (c *Controller) hasSource(kind string, connected map[string]bool) bool {
-	var needs []string
+func (c *Controller) hasSource(kind string, connected map[runtime.ConnectionProvider]bool) bool {
+	var needs []runtime.ConnectionProvider
 	if provider, ok := c.Declared.Observations[kind]; ok {
-		needs = []string{provider}
+		needs = []runtime.ConnectionProvider{runtime.ConnectionProvider(provider)}
 	} else if providers, ok := c.Declared.ConnectionProviders[kind]; ok {
 		needs = providers
 	} else {
 		return true
 	}
-	credentials := map[string]bool{}
+	credentials := map[runtime.ConnectionProvider]bool{}
 	for _, provider := range c.Declared.ConnectionCredentials {
 		credentials[provider] = true
 	}
@@ -348,7 +339,7 @@ func (c *Controller) Inventory(ctx context.Context, only []runtime.ResourceKind)
 		wantedOnly[string(kind)] = true
 	}
 	ssh := c.sshRefs()
-	connected := map[string]bool{}
+	connected := map[runtime.ConnectionProvider]bool{}
 	for ref := range c.Env.Prefixes() {
 		connected[c.effectiveProvider(ref, ssh)] = true
 	}
@@ -371,9 +362,7 @@ func (c *Controller) Inventory(ctx context.Context, only []runtime.ResourceKind)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for _, kinds := range groups {
-		wg.Add(1)
-		go func(kinds []string) {
-			defer wg.Done()
+		wg.Go(func() {
 			for _, kind := range kinds {
 				began := time.Now()
 				report := c.readKind(ctx, c.readers[kind])
@@ -381,7 +370,7 @@ func (c *Controller) Inventory(ctx context.Context, only []runtime.ResourceKind)
 				found[kind], took[kind] = report, time.Since(began)
 				mu.Unlock()
 			}
-		}(kinds)
+		})
 	}
 	wg.Wait()
 	c.sayIfSlow(took, time.Since(started))
@@ -394,7 +383,7 @@ func (c *Controller) sayIfSlow(took map[string]time.Duration, elapsed time.Durat
 		return
 	}
 	kinds := sortedKeys(took)
-	sort.SliceStable(kinds, func(i, j int) bool { return took[kinds[i]] > took[kinds[j]] })
+	slices.SortStableFunc(kinds, func(a, b string) int { return cmp.Compare(took[b], took[a]) })
 	if len(kinds) > 5 {
 		kinds = kinds[:5]
 	}

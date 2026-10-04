@@ -35,11 +35,11 @@ func (r *Registry) admitAdGuard() {
 	r.reader(runtime.ResourceKindAdGuardClient, r.adguardClients)
 	r.reader(runtime.ResourceKindAdGuardDNS, r.adguardDNS)
 	r.reader(runtime.ResourceKindAdGuardQuerySummary, r.adguardQueries)
-	r.probe("adguard", r.adguardProbe)
+	r.probe(runtime.ConnectionProviderAdGuard, r.adguardProbe)
 }
 
 func (r *Registry) adguardRequest(ctx context.Context, ref, path, method string, payload any) (json.RawMessage, error) {
-	prefix, err := r.Env.Prefix("adguard", ref)
+	prefix, err := r.Env.Prefix(runtime.ConnectionProviderAdGuard, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +140,7 @@ func (r *Registry) adguardReconcile(ctx context.Context, spec AdGuardRewriteSpec
 	}
 	status := AdGuardRewriteStatus{Domain: spec.Domain, Answer: spec.Answer, Enabled: rewriteEnabled(live)}
 	if !status.Enabled {
-		return Result{Changed: changed, Status: status, Conditions: []Condition{condition("Degraded", "Disabled", "The rewrite is disabled in AdGuard, so the name does not resolve. Enable it in AdGuard.")}, Message: "AdGuard rewrite is present but disabled."}, nil
+		return Result{Changed: changed, Status: status, Conditions: []Condition{condition(runtime.ConditionDegraded, "Disabled", "The rewrite is disabled in AdGuard, so the name does not resolve. Enable it in AdGuard.")}, Message: "AdGuard rewrite is present but disabled."}, nil
 	}
 	message := "AdGuard rewrite unchanged."
 	if changed {
@@ -181,7 +181,7 @@ func (r *Registry) adguardDelete(ctx context.Context, spec AdGuardRewriteSpec, _
 
 func (r *Registry) adguardInventory(ctx context.Context) ([]any, error) {
 	found := []any{}
-	for _, ref := range r.refs("adguard") {
+	for _, ref := range r.refs(runtime.ConnectionProviderAdGuard) {
 		rewrites, err := r.adguardRewrites(ctx, ref, true)
 		if err != nil {
 			return nil, err

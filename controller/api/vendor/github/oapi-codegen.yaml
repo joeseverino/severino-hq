@@ -3,6 +3,7 @@ package: githubapi
 output: github.gen.go
 generate:
   models: true
+  server-urls: true
 output-options:
   overlay:
     path: ../../api/vendor/github/overlay.yaml

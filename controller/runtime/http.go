@@ -182,8 +182,7 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 	}}
 	response, err := client.Do(request)
 	if err != nil {
-		var provider *ProviderError
-		if errors.As(err, &provider) {
+		if provider, ok := errors.AsType[*ProviderError](err); ok {
 			return nil, nil, provider
 		}
 		return nil, nil, requestFailure(err)

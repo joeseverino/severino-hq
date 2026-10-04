@@ -5,7 +5,8 @@ The operations are the ``include-operation-ids`` in the vendor directory's
 generator name them once. Each operation keeps its path, method and success
 statuses; its parameters and response bodies go, because only models are
 generated and the provider builds its own requests and reads its own
-envelopes. What the provider decodes and sends is named in ``slice.toml``
+envelopes. The spec's ``servers`` stay, so the provider's base URL is the
+vendor's statement rather than a literal. What the provider decodes and sends is named in ``slice.toml``
 beside them, and the slice keeps those schemas and every component they
 reference, transitively. Run from the vendor directory against the pinned
 upstream file recorded in its UPSTREAM:
@@ -249,6 +250,8 @@ def main(path):
     settings = tomllib.loads((vendor / "slice.toml").read_text(encoding="utf-8"))
     with open(path, encoding="utf-8") as handle:
         spec = json.load(handle)
+    if not spec.get("servers"):
+        raise SystemExit("upstream names no servers")
     wanted = set(operation_ids(vendor / "oapi-codegen.yaml"))
     paths, roots = slice_paths(spec, wanted, settings)
     components = slice_components(spec, paths, roots, settings)
@@ -259,6 +262,7 @@ def main(path):
     slice_spec = {
         "openapi": spec["openapi"],
         "info": {"title": spec["info"]["title"], "version": spec["info"]["version"]},
+        "servers": spec["servers"],
         "paths": dict(sorted(paths.items())),
         "components": dict(sorted(components.items())),
     }

@@ -6,9 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -16,7 +17,9 @@ import (
 	tsapi "tailscale.com/client/tailscale/v2"
 )
 
-// tailnetAPI is the default control server; a connection's <PREFIX>_URL replaces it.
+// tailnetAPI is the default control server; a connection's <PREFIX>_URL
+// replaces it. Tailscale publishes no description to vendor and the official
+// client keeps its default unexported, so this is its one statement here.
 const tailnetAPI = "https://api.tailscale.com/api/v2"
 
 // tailnetClient is one connection's access to the Tailscale API: its base URL
@@ -41,7 +44,7 @@ func (r *Registry) tailnetClient(ctx context.Context, connectionRef string) (tai
 	if err != nil {
 		return tailnetClient{}, err
 	}
-	prefix, err := r.Env.Prefix("tailscale", connectionRef)
+	prefix, err := r.Env.Prefix(runtime.ConnectionProviderTailscale, connectionRef)
 	if err != nil {
 		return tailnetClient{}, err
 	}
@@ -61,9 +64,7 @@ func (c tailnetClient) callHeader(ctx context.Context, path string, extra map[st
 
 func (c tailnetClient) headers(extra map[string]string) map[string]string {
 	headers := map[string]string{"Authorization": "Bearer " + c.token}
-	for name, value := range extra {
-		headers[name] = value
-	}
+	maps.Copy(headers, extra)
 	return headers
 }
 
@@ -247,11 +248,11 @@ func (r *Registry) admitTailscale() {
 	r.reader(runtime.ResourceKindTailscaleSettings, r.tailscaleSettings)
 	r.reader(runtime.ResourceKindTailscaleUser, r.tailscaleUsers)
 
-	r.probe("tailscale", r.tailscaleProbe)
+	r.probe(runtime.ConnectionProviderTailscale, r.tailscaleProbe)
 }
 
 func (r *Registry) tailnetToken(ctx context.Context, connectionRef string) (string, error) {
-	prefix, err := r.Env.Prefix("tailscale", connectionRef)
+	prefix, err := r.Env.Prefix(runtime.ConnectionProviderTailscale, connectionRef)
 	if err != nil {
 		return "", err
 	}
@@ -296,8 +297,7 @@ func (r *Registry) tailnetToken(ctx context.Context, connectionRef string) (stri
 
 // httpStatus is the provider's non-2xx status behind err, or 0.
 func httpStatus(err error) int {
-	var provider *ProviderError
-	if errors.As(err, &provider) {
+	if provider, ok := errors.AsType[*ProviderError](err); ok {
 		return provider.HTTPStatus
 	}
 	return 0
@@ -437,7 +437,7 @@ func nonNil(values []string) []string {
 
 func sortedCopy(values []string) []string {
 	out := append([]string{}, values...)
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -772,9 +772,10 @@ func (r *Registry) tailscaleSettings(ctx context.Context) ([]any, error) {
 		return nil, err
 	}
 	for _, part := range []struct {
-		key, name string
-		value     *bool
-	}{{"httpsEnabled", "https", found.HTTPSEnabled}, {"aclsExternallyManagedOn", "acl_management", found.ACLsExternallyManagedOn}} {
+		key   string
+		name  runtime.ReadingPartName
+		value *bool
+	}{{"httpsEnabled", runtime.PartHTTPS, found.HTTPSEnabled}, {"aclsExternallyManagedOn", runtime.PartACLManagement, found.ACLsExternallyManagedOn}} {
 		if part.value == nil {
 			refuse(ctx, part.name, "", "", &ProviderError{Message: "tailscale withheld " + part.key, Failure: runtime.FailureClassPermission})
 		}

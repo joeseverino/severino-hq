@@ -11,6 +11,10 @@ const (
 	// tlsPort is the port every TLS reading is taken on, named because a failed
 	// reading reports it.
 	tlsPort = 443
+	// dnsPort and httpPort are the other two a tailnet's rules are asked about
+	// on every device, whatever the estate declares.
+	dnsPort  = 53
+	httpPort = 80
 	// tlsDialTimeout bounds one TLS handshake reading a served certificate.
 	tlsDialTimeout = 15 * time.Second
 	// perimeterDialTimeout bounds one "does this port answer" dial.

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/providers/githubapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -24,16 +25,20 @@ import (
 
 const (
 	githubCheckName = "Severino HQ · Production"
-	githubCurrent   = "Every extension's latest admission, confirmed on GitHub"
-	githubCompose   = ".github/workflows/compose.yml"
 	// githubDeploy is where a composition goes after Compose publishes it:
 	// approval, then the host.
 	githubDeploy        = ".github/workflows/deploy.yml"
-	githubMainBranch    = "main"
 	githubDeliveryMark  = "<!-- severino-hq-delivery:%s -->"
 	githubPipelinePage  = 20
 	githubWeb           = "https://github.com"
 	githubComposedImage = "the composed image"
+)
+
+// The declaration a sweep reports when none was written: the contract's
+// defaults, which HQ's own declaration takes from the same text.
+var (
+	githubCompose    = api.MustKeyword("GitHubDeliverySpec", "properties", "workflow", "default")
+	githubMainBranch = api.MustKeyword("GitHubDeliverySpec", "properties", "branch", "default")
 )
 
 // The environment run-controller.sh hands the controller about its own image.
@@ -71,12 +76,7 @@ func (r *Registry) composition() Composition {
 }
 
 // GitHubDeliverySpec is a github.delivery declaration.
-type GitHubDeliverySpec struct {
-	Repository string `json:"repository"`
-	Workflow   string `json:"workflow"`
-	Branch     string `json:"branch"`
-	Production string `json:"production"`
-}
+type GitHubDeliverySpec = runtime.GitHubDeliverySpec
 
 // GitHubDeliveryRecord is the delivery record and a reconcile's status.
 type GitHubDeliveryRecord struct {
@@ -258,7 +258,8 @@ func (r *Registry) pipelineRuns(ctx context.Context, c githubConnection, spec Gi
 	return found, nil
 }
 
-// production is githubCurrent, or what stands between production and it.
+// production is the contract's word for current, or what stands between
+// production and it.
 func production(extensions []extensionDelivery) string {
 	pending := []string{}
 	for _, extension := range extensions {
@@ -267,7 +268,7 @@ func production(extensions []extensionDelivery) string {
 		}
 	}
 	if len(pending) == 0 {
-		return githubCurrent
+		return string(runtime.GitHubDeliveryProductionCurrent)
 	}
 	return strings.Join(pending, "; ")
 }
@@ -301,7 +302,7 @@ func (r *Registry) githubDeliveryInventory(ctx context.Context) ([]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	spec := GitHubDeliverySpec{Repository: repository, Workflow: githubCompose, Branch: githubMainBranch, Production: githubCurrent}
+	spec := GitHubDeliverySpec{Repository: repository, Workflow: githubCompose, Branch: githubMainBranch, Production: runtime.GitHubDeliveryProductionCurrent}
 	extensions, err := r.delivery(ctx, c, spec)
 	if err != nil {
 		return nil, err
@@ -453,11 +454,11 @@ func (r *Registry) githubDeliveryReconcile(ctx context.Context, spec GitHubDeliv
 	conditions := []Condition{}
 	switch {
 	case len(failed) > 0:
-		conditions = append(conditions, condition("Degraded", "NotDelivered", strings.Join(failed, "; ")+". Re-run the composition from its run page."))
+		conditions = append(conditions, condition(runtime.ConditionDegraded, "NotDelivered", strings.Join(failed, "; ")+". Re-run the composition from its run page."))
 	case len(reporting) > 0:
-		conditions = append(conditions, condition("Ready", "Delivering", status.Production+"."))
+		conditions = append(conditions, condition(runtime.ConditionReady, "Delivering", status.Production+"."))
 	default:
-		conditions = append(conditions, condition("Ready", "Current", status.Production+"."))
+		conditions = append(conditions, condition(runtime.ConditionReady, "Current", status.Production+"."))
 	}
 	return Result{Changed: len(reporting) > 0, Status: status, Conditions: conditions, Message: "Delivery reported."}, nil
 }

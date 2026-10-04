@@ -9,6 +9,7 @@ from typing import Annotated, Any, Callable, Literal
 
 from pydantic import Field, field_validator, model_validator
 
+from ..bridge_contract import keyword, limit
 from ..names import certificate_covers, normalized_hostname
 from ..provider_spec import (
     ControllerVerification,
@@ -74,12 +75,9 @@ class OnePasswordPublication(ProviderModel):
 
 
 # A certbot lineage name: it becomes --cert-name and a directory under live/.
-CERTIFICATE_NAME_PATTERN = r"^[a-z0-9][a-z0-9-]*$"
-# A domain certbot is asked for: DNS labels, optionally under one wildcard.
-CERTIFICATE_DOMAIN_PATTERN = (
-    r"^(\*\.)?([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+"
-    r"[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
-)
+# The bridge contract states it, and the controller checks the same pattern
+# where the name reaches certbot.
+CERTIFICATE_NAME_PATTERN = keyword("TLSCertificateName", "pattern")
 
 
 class TLSCertificateSpec(ProviderModel):
@@ -93,7 +91,7 @@ class TLSCertificateSpec(ProviderModel):
     """
 
     certificate_name: str = Field(
-        max_length=160,
+        max_length=limit("TLSCertificateName", "maxLength"),
         pattern=CERTIFICATE_NAME_PATTERN,
         title="Certificate name",
         description="Lowercase, no spaces.",

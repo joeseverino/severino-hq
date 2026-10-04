@@ -9,7 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -123,7 +123,7 @@ func TestPlanDoesNotClaimReportScheduleOrLoadMaterial(t *testing.T) {
 	w, b, p, _ := newWorker()
 	b.Responses["peek"] = pending("operation")
 	p.Material = true
-	code, err := w.Run(context.Background(), false)
+	code, err := w.Run(t.Context(), false)
 	if err != nil || code != 0 {
 		t.Fatalf("%d %v", code, err)
 	}
@@ -133,7 +133,7 @@ func TestPlanDoesNotClaimReportScheduleOrLoadMaterial(t *testing.T) {
 }
 func TestIdleApplyOrder(t *testing.T) {
 	w, b, p, _ := newWorker()
-	code, err := w.Run(context.Background(), true)
+	code, err := w.Run(t.Context(), true)
 	want := []string{"glance-plan", "claim", "sweep-due", "connections", "inventory", "analytics", "schedule", "claim", "steps"}
 	if code != 0 || err != nil || !reflect.DeepEqual(b.actions(), want) {
 		t.Fatalf("%d %v %v", code, err, b.actions())
@@ -145,7 +145,7 @@ func TestIdleApplyOrder(t *testing.T) {
 func TestTargetedSweepDoesNotReadAnalytics(t *testing.T) {
 	w, b, p, _ := newWorker()
 	b.Responses["sweep-due"] = Object{"due": true, "carry": []string{"example-ssh"}, "only_kinds": []string{"example.kind"}}
-	_, err := w.Run(context.Background(), true)
+	_, err := w.Run(t.Context(), true)
 	if err != nil || p.AnalyticsCalls != 0 || !reflect.DeepEqual(p.Only, []ResourceKind{"example.kind"}) || !reflect.DeepEqual(p.Carried, []string{"example-ssh"}) {
 		t.Fatalf("%v %#v", err, p)
 	}
@@ -154,7 +154,7 @@ func TestProviderFailureReportsGenerationAndStillSweeps(t *testing.T) {
 	w, b, p, _ := newWorker()
 	b.Pending = []Pending{pending("first"), pending("second")}
 	p.ExecErr = &ProviderError{Message: "Provider refused.", Status: Object{"partial": true}}
-	code, err := w.Run(context.Background(), true)
+	code, err := w.Run(t.Context(), true)
 	if err != nil || code != 1 || len(p.Apply) != 1 {
 		t.Fatalf("%d %v %#v", code, err, p.Apply)
 	}
@@ -177,7 +177,7 @@ func TestWrappedProviderFailureIsReportedWithItsContext(t *testing.T) {
 	w, b, p, _ := newWorker()
 	b.Pending = []Pending{pending("first")}
 	p.ExecErr = fmt.Errorf("reconcile rewrite: %w", &ProviderError{Message: "provider answered 403", Failure: FailureClassPermission})
-	if code, err := w.Run(context.Background(), true); err != nil || code != 1 {
+	if code, err := w.Run(t.Context(), true); err != nil || code != 1 {
 		t.Fatalf("%d %v", code, err)
 	}
 	for _, call := range b.Calls {
@@ -194,7 +194,7 @@ func TestFailedReportDoesNotPreventSweepOrBecomeSuccess(t *testing.T) {
 	b.Pending = []Pending{pending("first")}
 	want := errors.New("report unavailable")
 	b.Fail["report"] = want
-	code, err := w.Run(context.Background(), true)
+	code, err := w.Run(t.Context(), true)
 	if code != 1 || !errors.Is(err, want) {
 		t.Fatalf("%d %v", code, err)
 	}
@@ -207,7 +207,7 @@ func TestQueueIsBoundedBeforeAndAfterSweep(t *testing.T) {
 	for range 15 {
 		b.Pending = append(b.Pending, pending("operation"))
 	}
-	code, err := w.Run(context.Background(), true)
+	code, err := w.Run(t.Context(), true)
 	if code != 0 || err != nil || len(p.Apply) != 2*ApplyLimit {
 		t.Fatalf("%d %v calls=%d", code, err, len(p.Apply))
 	}
@@ -232,7 +232,7 @@ func TestNetworkFailureIsRetriedAndOnlyPartialOutageForgiven(t *testing.T) {
 				tc.rounds[1] = []ConnectionRecord{{ConnectionRef: "a", OK: true, Probed: true}}
 			}
 			p.Rounds = tc.rounds
-			code, err := w.Run(context.Background(), false)
+			code, err := w.Run(t.Context(), false)
 			if err != nil || code != tc.code || p.ProbeCalls != tc.calls {
 				t.Fatalf("%d %v probes=%d", code, err, p.ProbeCalls)
 			}
@@ -242,7 +242,7 @@ func TestNetworkFailureIsRetriedAndOnlyPartialOutageForgiven(t *testing.T) {
 func TestAnalyticsPlanContainsNoProviderAccountIdentity(t *testing.T) {
 	w, b, p, _ := newWorker()
 	p.Sites = []AnalyticsSiteIdentity{{ConnectionRef: "example", SiteTag: "site"}}
-	_, err := w.Run(context.Background(), true)
+	_, err := w.Run(t.Context(), true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +269,7 @@ func TestPassOutputKeysAreTheContracts(t *testing.T) {
 		for key := range fields {
 			found = append(found, key)
 		}
-		sort.Strings(found)
+		slices.Sort(found)
 		return found
 	}
 	for name, tc := range map[string]struct {

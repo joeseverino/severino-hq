@@ -55,8 +55,7 @@ func (b CommandBridge) Call(ctx context.Context, args []string, payload any, res
 		if ctx.Err() != nil {
 			return &BridgeError{"bridge did not complete before its deadline"}
 		}
-		var exited *exec.ExitError
-		if !errors.As(err, &exited) {
+		if _, ok := errors.AsType[*exec.ExitError](err); !ok {
 			return &BridgeError{"bridge could not start"}
 		}
 		lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")

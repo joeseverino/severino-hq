@@ -62,7 +62,7 @@ func TestMissingSettingDoesNotExposeEnvironment(t *testing.T) {
 // one vendor's credential could be sent to another.
 func TestNamedConnectionMustBeTheProvidersOwn(t *testing.T) {
 	env := Environment{"CLOUDFLARE_DNS_CONNECTION_REF": "dns", "PORTAINER_HOME_CONNECTION_REF": "home", "PORTAINER_HOME_PROVIDER": "portainer"}
-	for _, provider := range []string{"onepassword", "portainer", "tailscale"} {
+	for _, provider := range []ConnectionProvider{ConnectionProviderOnePassword, ConnectionProviderPortainer, ConnectionProviderTailscale} {
 		if _, err := env.Prefix(provider, "dns"); !errors.Is(err, ErrForeignConnection) {
 			t.Errorf("%s took dns: %v", provider, err)
 		}

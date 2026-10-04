@@ -8,7 +8,6 @@ import (
 	"net/netip"
 	"net/url"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -138,7 +137,7 @@ func (r *Registry) admitPortainer() {
 	r.reader(runtime.ResourceKindPortainerImage, r.portainerEach("image list", r.portainerImages))
 	r.reader(runtime.ResourceKindPortainerRuntime, r.portainerEach("container inspect", r.portainerRuntime))
 	r.reader(runtime.ResourceKindPortainerComposeProject, r.portainerEach("stack list", r.portainerStacksReading))
-	r.probe("portainer", r.portainerProbe)
+	r.probe(runtime.ConnectionProviderPortainer, r.portainerProbe)
 	if r.Portainer == nil {
 		r.Portainer = registryPortainer{r}
 	}
@@ -182,7 +181,7 @@ func (r *Registry) isThisRun(labels map[string]string) bool {
 }
 
 func (r *Registry) portainerURL(ref string) (string, error) {
-	prefix, err := r.Env.Prefix("portainer", ref)
+	prefix, err := r.Env.Prefix(runtime.ConnectionProviderPortainer, ref)
 	if err != nil {
 		return "", err
 	}
@@ -198,7 +197,7 @@ func (r *Registry) portainerURL(ref string) (string, error) {
 }
 
 func (r *Registry) portainerHeaders(ref string) (map[string]string, error) {
-	prefix, err := r.Env.Prefix("portainer", ref)
+	prefix, err := r.Env.Prefix(runtime.ConnectionProviderPortainer, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -272,10 +271,10 @@ func lookupIPv4(host string) (string, error) {
 // isIPAddress is a bare or bracketed address, with or without a port.
 func isIPAddress(value string) bool {
 	host := strings.TrimSpace(value)
-	if strings.HasPrefix(host, "[") {
-		host = strings.TrimPrefix(strings.SplitN(host, "]", 2)[0], "[")
+	if bracketed, ok := strings.CutPrefix(host, "["); ok {
+		host, _, _ = strings.Cut(bracketed, "]")
 	} else if strings.Count(host, ":") == 1 {
-		host = host[:strings.LastIndex(host, ":")]
+		host, _, _ = strings.Cut(host, ":")
 	}
 	_, err := netip.ParseAddr(host)
 	return host != "" && err == nil
@@ -445,7 +444,7 @@ func (c dockerContainer) published() ([]int, *int, bool) {
 	for number := range seen {
 		listed = append(listed, number)
 	}
-	sort.Ints(listed)
+	slices.Sort(listed)
 	var single *int
 	if len(listed) == 1 {
 		single = &listed[0]
@@ -563,11 +562,11 @@ func (r *Registry) portainerReconcile(ctx context.Context, spec PortainerStackSp
 	}
 	switch {
 	case apply && len(containers) == 0:
-		return Result{Changed: changed, Status: status, Conditions: []Condition{condition("Degraded", "NotRunning", "The stack exists in Portainer but no container from it is running.")}, Message: "Stack is declared but nothing is running."}, nil
+		return Result{Changed: changed, Status: status, Conditions: []Condition{condition(runtime.ConditionDegraded, "NotRunning", "The stack exists in Portainer but no container from it is running.")}, Message: "Stack is declared but nothing is running."}, nil
 	case len(unreachable) > 0:
-		sort.Strings(unreachable)
+		slices.Sort(unreachable)
 		detail := strings.Join(unreachable, ", ") + " publishes a port on the loopback address, so nothing outside that machine can reach it, including a proxy running in a container on the same host."
-		return Result{Changed: changed, Status: status, Conditions: []Condition{condition("Degraded", "BoundToLoopback", detail)}, Message: "Stack is running but is not reachable."}, nil
+		return Result{Changed: changed, Status: status, Conditions: []Condition{condition(runtime.ConditionDegraded, "BoundToLoopback", detail)}, Message: "Stack is running but is not reachable."}, nil
 	}
 	return result(changed, status, "Reconciled", "Stack is running.", message), nil
 }
@@ -600,7 +599,7 @@ func (r *Registry) portainerDelete(ctx context.Context, spec PortainerStackSpec,
 func (r *Registry) portainerContainerRecords(ctx context.Context) ([]PortainerContainerRecord, error) {
 	local := r.controllerID()
 	records := []PortainerContainerRecord{}
-	for _, ref := range r.Env.Refs("portainer") {
+	for _, ref := range r.Env.Refs(runtime.ConnectionProviderPortainer) {
 		environments, err := r.portainerEnvironments(ctx, ref)
 		if err != nil {
 			return nil, err
@@ -699,9 +698,9 @@ func (r *Registry) portainerCycler(verb string) func(context.Context, PortainerC
 		if verb == "stop" {
 			want = "exited"
 		}
-		kind := "Degraded"
+		kind := runtime.ConditionDegraded
 		if state == want {
-			kind = "Ready"
+			kind = runtime.ConditionReady
 		}
 		shown := state
 		if shown == "" {
@@ -725,6 +724,6 @@ func (r *Registry) portainerProbe(ctx context.Context, ref string) (ProbeResult,
 			reaches = append(reaches, machineName(environment, local))
 		}
 	}
-	sort.Strings(reaches)
+	slices.Sort(reaches)
 	return ProbeResult{Detail: fmt.Sprintf("%d of %d environments reachable.", len(reaches), len(environments)), Reaches: reaches}, nil
 }

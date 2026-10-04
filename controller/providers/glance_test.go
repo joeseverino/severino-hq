@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -28,7 +29,7 @@ func TestEnvironmentGlanceMeasuresRunningContainers(t *testing.T) {
 			"precpu_stats":{"cpu_usage":{"total_usage":50},"system_cpu_usage":0}}`,
 	})
 	r := portainerRegistry(t, server.URL, nil)
-	machines, err := r.portainerGlance(context.Background())
+	machines, err := r.portainerGlance(t.Context())
 	if err != nil || len(machines) != 1 {
 		t.Fatalf("%+v %v", machines, err)
 	}
@@ -92,7 +93,7 @@ func TestGlanceFailedPanelCarriesItsClass(t *testing.T) {
 	r := portainerRegistry(t, server.URL, nil)
 	plan := runtime.GlancePlan{Panels: []runtime.GlancePanelID{runtime.GlancePanelIDInfrastructure},
 		Targets: runtime.GlancePlanTargets{Infrastructure: []runtime.GlanceMachineTarget{{Key: "hq-node"}}}}
-	observations, err := r.Glance(context.Background(), plan)
+	observations, err := r.Glance(t.Context(), plan)
 	if err != nil || len(observations) != 1 {
 		t.Fatalf("%v %v", observations, err)
 	}
@@ -115,7 +116,7 @@ func hostGlanceRegistry(t *testing.T, stdout string) *Registry {
 
 func TestHostGlanceReadsTheTypedReading(t *testing.T) {
 	r := hostGlanceRegistry(t, `{"cpu_percent":12.6,"cores":8,"load_1m":0.42,"memory_used":4294967296,"memory_total":17179869184,"storage_used":53687091200,"storage_total":107374182400}`)
-	machine, err := r.hostGlance(context.Background(), "srv-box", "srv")
+	machine, err := r.hostGlance(t.Context(), "srv-box", "srv")
 	want := GlanceMachine{Key: "srv-box", Status: "good", Summary: "Host load 0.42", Metrics: []GlanceMetric{
 		{Label: "CPU", Value: "13%", Detail: "8 cores"},
 		{Label: "Memory", Value: "25%", Detail: "4.0 GB of 16.0 GB used"},
@@ -126,7 +127,7 @@ func TestHostGlanceReadsTheTypedReading(t *testing.T) {
 	}
 
 	for _, bad := range []string{`not json`, `[]`, `{"cores":"eight"}`} {
-		if _, err := hostGlanceRegistry(t, bad).hostGlance(context.Background(), "srv-box", "srv"); err == nil || !strings.HasPrefix(err.Error(), "host reading from srv: ") {
+		if _, err := hostGlanceRegistry(t, bad).hostGlance(t.Context(), "srv-box", "srv"); err == nil || !strings.HasPrefix(err.Error(), "host reading from srv: ") {
 			t.Errorf("%s: %v", bad, err)
 		}
 	}
@@ -145,10 +146,10 @@ func TestWeatherGlance(t *testing.T) {
 		{"startTime":"2026-07-01T00:00:00-04:00","temperature":70.5,"probabilityOfPrecipitation":{"value":null}}]}}`
 	api.routes["/gridpoints/PHI/1,1/forecast/hourly"] = forecast
 	api.routes["/points/40.0000,-75.0000"] = strings.Replace(api.routes["/points/40.0000,-75.0000"], "SERVER", server.URL, 1)
-	r := New(runtime.Environment{"SEVERINO_NWS_URL": server.URL}, mustClient(t))
+	r := New(runtime.Environment{}, mustClient(t))
 	// NWS takes no API key; the test server asks for one, so send it.
 	r.HTTP = keyed{r.HTTP}
-	panel, err := r.weatherGlance(context.Background(), " 40, -75 ")
+	panel, err := r.weatherGlance(t.Context(), runtime.GlanceWeatherTarget{Point: " 40, -75 ", Endpoint: server.URL})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,9 +173,12 @@ func TestWeatherGlance(t *testing.T) {
 		"north,west": "SEVERINO_NWS_POINT is not numeric",
 		"91,0":       "SEVERINO_NWS_POINT is outside valid coordinates",
 	} {
-		if _, err := r.weatherGlance(context.Background(), point); err == nil || err.Error() != want {
+		if _, err := r.weatherGlance(t.Context(), runtime.GlanceWeatherTarget{Point: point, Endpoint: server.URL}); err == nil || err.Error() != want {
 			t.Errorf("%s: %v", point, err)
 		}
+	}
+	if _, err := r.weatherGlance(t.Context(), runtime.GlanceWeatherTarget{Point: "40,-75"}); err == nil {
+		t.Error("a plan naming no weather API was read")
 	}
 }
 
@@ -192,9 +196,7 @@ type keyed struct{ Transport }
 
 func (k keyed) Request(ctx context.Context, address, method string, headers map[string]string, payload any) (json.RawMessage, error) {
 	with := map[string]string{"X-API-Key": "synthetic"}
-	for name, value := range headers {
-		with[name] = value
-	}
+	maps.Copy(with, headers)
 	return k.Transport.Request(ctx, address, method, with, payload)
 }
 
@@ -213,7 +215,7 @@ func TestHostFirewallReadingIsTyped(t *testing.T) {
 			if err := os.WriteFile(path, []byte(c.body), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			records, err := New(runtime.Environment{"SEVERINO_HOST_FIREWALL": path}, &fakeHTTP{}).hostFirewall(context.Background())
+			records, err := New(runtime.Environment{"SEVERINO_HOST_FIREWALL": path}, &fakeHTTP{}).hostFirewall(t.Context())
 			if c.err == "" {
 				want := HostFirewallRecord{Record: "interface-binding", Interface: "tailscale0", AcceptRequiresInterface: true, ReadAt: "2026-01-01T00:00:00Z"}
 				if err != nil || !reflect.DeepEqual(records, []any{want}) {
@@ -226,7 +228,7 @@ func TestHostFirewallReadingIsTyped(t *testing.T) {
 			}
 		})
 	}
-	if _, err := New(runtime.Environment{}, &fakeHTTP{}).hostFirewall(context.Background()); err == nil {
+	if _, err := New(runtime.Environment{}, &fakeHTTP{}).hostFirewall(t.Context()); err == nil {
 		t.Error("no mounted reading is an error")
 	}
 }
@@ -253,7 +255,7 @@ func TestHostPerimeterChecksPublishedPortsAndSSH(t *testing.T) {
 				return []PublishedContainer{{Host: "edge", Ports: []int{443}}, {Host: "elsewhere", Ports: []int{9999}}}, nil
 			}
 			r.Dial = func(_ context.Context, address string, port int) bool { return address == "203.0.113.5" && port == 443 }
-			records, err := r.hostPerimeter(context.Background())
+			records, err := r.hostPerimeter(t.Context())
 			if c.err {
 				if err == nil || !strings.HasPrefix(err.Error(), "SSH perimeter for edge: decode reading") {
 					t.Fatalf("got %v", err)

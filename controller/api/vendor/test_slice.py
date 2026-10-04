@@ -31,8 +31,8 @@ class SliceTests(unittest.TestCase):
             with self.subTest(schema=schema), self.assertRaisesRegex(SystemExit, "does not have"):
                 slicer.narrow("model", schema, ["stale"])
 
-    def run_slice(self, settings):
-        upstream = {"openapi": "3.0.0", "info": {"title": "Example", "version": "1"}, "paths": {"/example/{id}": {"get": {"operationId": "read", "parameters": [{"name": "id", "in": "path", "required": True, "schema": {"type": "integer"}}, {"name": "unused", "in": "query", "schema": {"type": "string"}}], "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"$ref": slicer.SCHEMAS + "answer"}}}}}}}}, "components": {"schemas": {"answer": {"type": "object", "properties": {"read": {"type": "integer"}}}, "unrelated": {"type": "string"}}}}
+    def run_slice(self, settings, servers=({"url": "https://api.example.com"},)):
+        upstream = {"openapi": "3.0.0", "info": {"title": "Example", "version": "1"}, "servers": list(servers), "paths": {"/example/{id}": {"get": {"operationId": "read", "parameters": [{"name": "id", "in": "path", "required": True, "schema": {"type": "integer"}}, {"name": "unused", "in": "query", "schema": {"type": "string"}}], "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {"$ref": slicer.SCHEMAS + "answer"}}}}}}}}, "components": {"schemas": {"answer": {"type": "object", "properties": {"read": {"type": "integer"}}}, "unrelated": {"type": "string"}}}}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "upstream.json").write_text(json.dumps(upstream))
@@ -54,6 +54,12 @@ class SliceTests(unittest.TestCase):
         self.assertEqual(operation["parameters"], [{"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}])
         self.assertEqual(operation["responses"], {"200": {"description": "ok"}})
         self.assertEqual(set(result["components"]["schemas"]), {"answer"})
+
+    def test_the_slice_keeps_the_servers_and_refuses_a_spec_without_any(self):
+        result = self.run_slice('[decodes]\nread = ["answer"]\n')
+        self.assertEqual(result["servers"], [{"url": "https://api.example.com"}])
+        with self.assertRaisesRegex(SystemExit, "names no servers"):
+            self.run_slice("", servers=())
 
     def test_unreachable_decode_and_stale_configuration_fail(self):
         for settings, message in (

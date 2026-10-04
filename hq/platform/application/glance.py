@@ -27,6 +27,10 @@ from .freshness import DASHBOARD_GLANCE, freshness
 from .connections import machines_once
 from .security import Capability, Principal
 
+# The National Weather Service API. The connection shows it and the glance plan
+# hands it to the controller, which states no address of its own.
+NWS_API = "https://api.weather.gov"
+
 
 
 
@@ -51,7 +55,7 @@ def connection_specs():
                 status="good",
                 status_label="keyless",
                 detail="Public forecasts and alerts; configured points refresh through HQ.",
-                endpoint="https://api.weather.gov",
+                endpoint=NWS_API,
                 credential_model="none",
                 ability_names=("nws.hourly_forecast", "nws.active_alerts"),
                 targets=(ConnectionLink("Dashboard weather", reverse("dashboard")),),
@@ -592,7 +596,7 @@ def dashboard_refresh_plan(controller_id: str) -> dict[str, Any]:
         "panels": panels,
         "targets": {
             "infrastructure": machines,
-            "weather": {"point": configuration.weather_point},
+            "weather": {"point": configuration.weather_point, "endpoint": NWS_API},
         },
     }
 

@@ -85,7 +85,7 @@ func (r *Registry) hostFirewall(context.Context) ([]any, error) {
 // publish and on SSH, which must answer only on the tailnet.
 func (r *Registry) hostPerimeter(ctx context.Context) ([]any, error) {
 	found := []any{}
-	for _, ref := range r.Env.RoleRefs("caddy") {
+	for _, ref := range r.Env.RoleRefs(caddyRole) {
 		output, err := r.commands().SSH(ctx, ref, "perimeter", nil)
 		if err != nil {
 			return nil, err
@@ -97,7 +97,7 @@ func (r *Registry) hostPerimeter(ctx context.Context) ([]any, error) {
 			}
 		}
 		addresses := []string{}
-		for _, address := range strings.Split(reading.PublicAddresses, ",") {
+		for address := range strings.SplitSeq(reading.PublicAddresses, ",") {
 			if address = strings.TrimSpace(address); address != "" {
 				addresses = append(addresses, address)
 			}
@@ -167,15 +167,13 @@ func (r *Registry) answered(ctx context.Context, addresses []string, ports []int
 	var wg sync.WaitGroup
 	for _, address := range addresses {
 		for _, port := range ports {
-			wg.Add(1)
-			go func(address string, port int) {
-				defer wg.Done()
+			wg.Go(func() {
 				if dial(ctx, address, port) {
 					mu.Lock()
 					open[port] = true
 					mu.Unlock()
 				}
-			}(address, port)
+			})
 		}
 	}
 	wg.Wait()

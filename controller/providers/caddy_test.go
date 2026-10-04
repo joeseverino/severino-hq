@@ -77,7 +77,7 @@ func caddyRegistry(roles map[string]string, fleet sshFleet) *Registry {
 
 func routesOf(t *testing.T, r *Registry) map[string]CaddyRouteRecord {
 	t.Helper()
-	records, err := r.caddyRoutes(context.Background())
+	records, err := r.caddyRoutes(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestCaddyHostsAsked(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			r := caddyRegistry(test.roles, test.fleet)
-			records, err := r.caddyRoutes(context.Background())
+			records, err := r.caddyRoutes(t.Context())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -191,7 +191,7 @@ func TestCaddySkippedHostIsAFailedStep(t *testing.T) {
 		"down.example.com": {exits: map[string]int{"routes": 255}},
 		"odd.example.com":  {answers: map[string]string{"routes": `[]`}},
 	})
-	if _, err := r.caddyRoutes(context.Background()); err != nil {
+	if _, err := r.caddyRoutes(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	steps := []string{}
@@ -301,14 +301,14 @@ func TestRenderCaddyRoutes(t *testing.T) {
 		route     CaddyRouteInFile
 		directory string
 	}{
-		{"an upstream that would write directives", CaddyRouteInFile{"a.example.com", "app:80\n}\nevil.example.com {\n\tfile_server"}, ""},
-		{"a domain that would write directives", CaddyRouteInFile{"a.example.com {\n\timport /etc/passwd\n}\nb.example.com", "app:80"}, ""},
-		{"a placeholder never reaches the file", CaddyRouteInFile{"a.example.com", "{http.request.host}:443"}, ""},
-		{"a second directive on the line", CaddyRouteInFile{"a.example.com", "app:8080\r\nimport /etc/passwd"}, ""},
-		{"two upstreams", CaddyRouteInFile{"a.example.com", "app:8080 app:9090"}, ""},
-		{"a quoted upstream", CaddyRouteInFile{"a.example.com", `"app:8080"`}, ""},
-		{"two hostnames", CaddyRouteInFile{"a.example.com, b.example.com", "app:8080"}, ""},
-		{"a directory that is not one plain path", CaddyRouteInFile{"a.example.com", "app:80"}, "/certs\n\troot *"},
+		{"an upstream that would write directives", CaddyRouteInFile{Domain: "a.example.com", Upstream: "app:80\n}\nevil.example.com {\n\tfile_server"}, ""},
+		{"a domain that would write directives", CaddyRouteInFile{Domain: "a.example.com {\n\timport /etc/passwd\n}\nb.example.com", Upstream: "app:80"}, ""},
+		{"a placeholder never reaches the file", CaddyRouteInFile{Domain: "a.example.com", Upstream: "{http.request.host}:443"}, ""},
+		{"a second directive on the line", CaddyRouteInFile{Domain: "a.example.com", Upstream: "app:8080\r\nimport /etc/passwd"}, ""},
+		{"two upstreams", CaddyRouteInFile{Domain: "a.example.com", Upstream: "app:8080 app:9090"}, ""},
+		{"a quoted upstream", CaddyRouteInFile{Domain: "a.example.com", Upstream: `"app:8080"`}, ""},
+		{"two hostnames", CaddyRouteInFile{Domain: "a.example.com, b.example.com", Upstream: "app:8080"}, ""},
+		{"a directory that is not one plain path", CaddyRouteInFile{Domain: "a.example.com", Upstream: "app:80"}, "/certs\n\troot *"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if _, err := renderCaddyRoutes([]CaddyRouteInFile{test.route}, test.directory); err == nil {
@@ -328,11 +328,11 @@ func TestCaddyReconcile(t *testing.T) {
 	spec := Object{"connection_ref": "edge", "domain": "a.example.com", "upstream": "app:80", "certificate_directory": "",
 		"routes": []any{Object{"domain": "a.example.com", "upstream": "app:80"}}}
 
-	plan, err := r.runAction(runtime.ResourceKindCaddyRoute, "reconcile", context.Background(), spec, nil, false)
+	plan, err := r.runAction(runtime.ResourceKindCaddyRoute, "reconcile", t.Context(), spec, nil, false)
 	if err != nil || plan.Changed || plan.Status.(CaddyRouteStatus).Routes != 1 || len(edge.asked) != 0 {
 		t.Fatalf("a plan writes nothing: %v %+v %v", err, plan, edge.asked)
 	}
-	applied, err := r.runAction(runtime.ResourceKindCaddyRoute, "reconcile", context.Background(), spec, nil, true)
+	applied, err := r.runAction(runtime.ResourceKindCaddyRoute, "reconcile", t.Context(), spec, nil, true)
 	if err != nil || !applied.Changed || applied.Conditions[0].Reason != "Written" {
 		t.Fatalf("%v %+v", err, applied)
 	}
@@ -341,11 +341,11 @@ func TestCaddyReconcile(t *testing.T) {
 	}
 
 	bad := Object{"connection_ref": "edge", "routes": []any{Object{"domain": "a.example.com", "upstream": "app:80 {"}}}
-	if _, err := r.runAction(runtime.ResourceKindCaddyRoute, "reconcile", context.Background(), bad, nil, false); err == nil {
+	if _, err := r.runAction(runtime.ResourceKindCaddyRoute, "reconcile", t.Context(), bad, nil, false); err == nil {
 		t.Fatal("a plan renders, and so refuses, what the file writer refuses")
 	}
 	edge.exits = map[string]int{"routes:write": 1}
-	if _, err := r.runAction(runtime.ResourceKindCaddyRoute, "reconcile", context.Background(), spec, nil, true); err == nil {
+	if _, err := r.runAction(runtime.ResourceKindCaddyRoute, "reconcile", t.Context(), spec, nil, true); err == nil {
 		t.Fatal("a write the edge refused reported as written")
 	}
 }

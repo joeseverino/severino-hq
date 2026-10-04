@@ -12,12 +12,17 @@ from typing import Any, Literal
 
 from pydantic import Field
 
+from ..bridge_contract import keyword
 from ..observations.github import PROVIDER
 from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, applies
 
 KIND = "github.delivery"
-CURRENT = "Every extension's latest admission, confirmed on GitHub"
-COMPOSE_WORKFLOW = ".github/workflows/compose.yml"
+# The bridge contract states these; the controller reports a sweep's record
+# with the same defaults, which is what lets `adopts` recognise it.
+_FIELDS = ("GitHubDeliverySpec", "properties")
+CURRENT = keyword("GitHubDeliveryProduction", "enum", 0)
+COMPOSE_WORKFLOW = keyword(*_FIELDS, "workflow", "default")
+MAIN_BRANCH = keyword(*_FIELDS, "branch", "default")
 
 
 def _from_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -41,16 +46,18 @@ def _readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, s
 
 class GitHubDeliverySpec(ProviderModel):
     repository: str = Field(
-        pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+        pattern=keyword(*_FIELDS, "repository", "pattern"),
         title="Host repository",
         description="The repository whose composition workflow deploys HQ.",
     )
     workflow: str = Field(
         default=COMPOSE_WORKFLOW,
-        pattern=r"^\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml$",
+        pattern=keyword(*_FIELDS, "workflow", "pattern"),
         title="Composition workflow",
     )
-    branch: str = Field(default="main", pattern=r"^[A-Za-z0-9_./-]+$", title="Branch")
+    branch: str = Field(
+        default=MAIN_BRANCH, pattern=keyword(*_FIELDS, "branch", "pattern"), title="Branch"
+    )
     production: Literal[CURRENT] = Field(  # type: ignore[valid-type]
         default=CURRENT, title="Production runs"
     )
@@ -70,7 +77,7 @@ DEFINITION = ProviderSpec(
     sample_record={
         "repository": "example/host",
         "workflow": COMPOSE_WORKFLOW,
-        "branch": "main",
+        "branch": MAIN_BRANCH,
         "production": CURRENT,
         "extensions": [],
     },

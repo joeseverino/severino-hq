@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/runtime"
@@ -18,7 +19,7 @@ import (
 // New wires the glance and both published-port readers to the Portainer
 // provider, so all three see the same environments and containers.
 func TestPortainerFeedsGlanceAndPublishedPorts(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	env := runtime.Environment{
 		"PORTAINER_CONNECTION_REF": "portainer-example",
 		"PORTAINER_URL":            "https://example.invalid",
@@ -85,7 +86,7 @@ func (h *inspectCounting) Request(ctx context.Context, address, method string, h
 
 func inspectFixture(count int, failOn string) (*Registry, *inspectCounting) {
 	containers := []any{}
-	for i := 0; i < count; i++ {
+	for i := range count {
 		containers = append(containers, map[string]any{"Id": fmt.Sprintf("c%02d", i), "Names": []any{fmt.Sprintf("/n%02d", i)}})
 	}
 	h := &inspectCounting{fakeHTTP: &fakeHTTP{routes: map[string]any{
@@ -95,28 +96,34 @@ func inspectFixture(count int, failOn string) (*Registry, *inspectCounting) {
 	return New(env, h), h
 }
 
+// The inspects sleep on a synthetic clock: the bubble advances it only once
+// every goroutine is blocked, so the limit is reached exactly and nothing waits.
 func TestPortainerInspectsRunConcurrentlyInOrder(t *testing.T) {
-	r, h := inspectFixture(40, "")
-	site := portainerSite{ConnectionRef: "portainer-example", EnvironmentID: 1}
-	found, err := r.portainerRuntime(context.Background(), site)
-	if err != nil || len(found) != 40 {
-		t.Fatalf("%d records, %v", len(found), err)
-	}
-	for i, record := range found {
-		if want := fmt.Sprintf("n%02d", i); record.(PortainerRuntimeRecord).Container != want {
-			t.Fatalf("record %d is %s, want %s", i, record.(PortainerRuntimeRecord).Container, want)
+	synctest.Test(t, func(t *testing.T) {
+		r, h := inspectFixture(40, "")
+		site := portainerSite{ConnectionRef: "portainer-example", EnvironmentID: 1}
+		found, err := r.portainerRuntime(t.Context(), site)
+		if err != nil || len(found) != 40 {
+			t.Fatalf("%d records, %v", len(found), err)
 		}
-	}
-	if peak := h.peak.Load(); peak < 2 || peak > portainerInspectLimit {
-		t.Fatalf("peak in flight %d, want 2..%d", peak, portainerInspectLimit)
-	}
+		for i, record := range found {
+			if want := fmt.Sprintf("n%02d", i); record.(PortainerRuntimeRecord).Container != want {
+				t.Fatalf("record %d is %s, want %s", i, record.(PortainerRuntimeRecord).Container, want)
+			}
+		}
+		if peak := h.peak.Load(); peak != portainerInspectLimit {
+			t.Fatalf("peak in flight %d, want %d", peak, portainerInspectLimit)
+		}
+	})
 }
 
 func TestPortainerInspectFailureKeepsTheRecordsBeforeIt(t *testing.T) {
-	r, _ := inspectFixture(40, "/containers/c05/json")
-	site := portainerSite{ConnectionRef: "portainer-example", EnvironmentID: 1}
-	found, err := r.portainerRuntime(context.Background(), site)
-	if err == nil || len(found) != 5 {
-		t.Fatalf("%d records, %v; want the 5 before c05 and its error", len(found), err)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		r, _ := inspectFixture(40, "/containers/c05/json")
+		site := portainerSite{ConnectionRef: "portainer-example", EnvironmentID: 1}
+		found, err := r.portainerRuntime(t.Context(), site)
+		if err == nil || len(found) != 5 {
+			t.Fatalf("%d records, %v; want the 5 before c05 and its error", len(found), err)
+		}
+	})
 }

@@ -692,6 +692,15 @@ types generated from `controller/api/hq-controller.openapi.json`. A Go test hold
 the registered readers equal to the contract's `SweptKind`, and Django's contract
 test holds `SweptKind` to the kinds HQ expects a sweep to read.
 
+The bridge contract is written by hand and both sides take it. What the Go
+generator does not emit (a pattern, a default) the controller reads from the
+copy embedded in its binary (`controller/api/contract.go`), and a declaration
+reads from the same file (`hq/domains/control_plane/bridge_contract.py`): the
+Caddyfile token patterns and the `github.delivery` defaults are stated there
+and nowhere else. A keyword the contract does not state stops the controller
+at start and fails the declaration's import. A vendor's base URL is the
+`servers` entry of its vendored description, generated as a constant.
+
 The homelab controller is a separate root-owned systemd oneshot, not a web
 process. It starts a disposable, capability-dropped container from the exact
 scanned HQ image, whose `/usr/local/bin/hq-controller` is the static Go binary

@@ -16,9 +16,9 @@ func TestTailnetFieldsExistInTheOfficialClient(t *testing.T) {
 	reads := []struct {
 		read, official reflect.Type
 	}{
-		{reflect.TypeOf(tailnetSettings{}), reflect.TypeOf(tsapi.TailnetSettings{})},
-		{reflect.TypeOf(tailnetDNSConfiguration{}), reflect.TypeOf(tsapi.DNSConfiguration{})},
-		{reflect.TypeOf(tailnetResolver{}), reflect.TypeOf(tsapi.DNSConfigurationResolver{})},
+		{reflect.TypeFor[tailnetSettings](), reflect.TypeFor[tsapi.TailnetSettings]()},
+		{reflect.TypeFor[tailnetDNSConfiguration](), reflect.TypeFor[tsapi.DNSConfiguration]()},
+		{reflect.TypeFor[tailnetResolver](), reflect.TypeFor[tsapi.DNSConfigurationResolver]()},
 	}
 	for _, pair := range reads {
 		known := map[string]bool{}

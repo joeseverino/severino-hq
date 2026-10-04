@@ -14,11 +14,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/api"
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 var certificateEnd = []byte("-----END CERTIFICATE-----")
@@ -167,18 +169,18 @@ func (r *Registry) acmeDir() (string, error) {
 	return r.Env.Required("HQ", "ACME_DIR")
 }
 
-// certificateName and certificateDomain are TLSCertificateSpec's
-// CERTIFICATE_NAME_PATTERN and CERTIFICATE_DOMAIN_PATTERN
-// (control_plane/provider_adapters/tls.py), checked again where they reach
-// certbot's argv and a path.
+// certificateName and certificateDomain are the contract's patterns, which
+// HQ's tls.certificate declaration takes its name pattern from, checked again
+// where they reach certbot's argv and a path.
 var (
-	certificateName   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
-	certificateDomain = regexp.MustCompile(`^(\*\.)?([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
+	certificateName       = api.MustPattern("TLSCertificateName")
+	certificateNameLength = api.MustLimit("TLSCertificateName", "maxLength")
+	certificateDomain     = api.MustPattern("TLSCertificateDomain")
 )
 
 // lineagePath is where certbot keeps this certificate's lineage, for a name that is one.
 func (r *Registry) lineagePath(spec TLSCertificateSpec) (string, error) {
-	if len([]rune(spec.CertificateName)) > 160 || !certificateName.MatchString(spec.CertificateName) {
+	if len([]rune(spec.CertificateName)) > certificateNameLength || !certificateName.MatchString(spec.CertificateName) {
 		return "", &ProviderError{Message: "the certificate name is not a lineage name"}
 	}
 	acme, err := r.acmeDir()
@@ -281,8 +283,8 @@ func foreignACMEEntry(acmeDir string) string {
 				files = append(files, entry.Name())
 			}
 		}
-		sort.Strings(dirs)
-		sort.Strings(files)
+		slices.Sort(dirs)
+		slices.Sort(files)
 		for _, name := range append(append([]string{}, dirs...), files...) {
 			path := filepath.Join(root, name)
 			info, err := os.Lstat(path)
@@ -331,7 +333,7 @@ func writePrivate(path, text string) error {
 
 // cloudflareToken is the DNS-edit token the ACME DNS-01 challenge uses.
 func (r *Registry) cloudflareToken() (string, error) {
-	prefix, err := r.Env.Prefix("cloudflare_dns", "")
+	prefix, err := r.Env.Prefix(runtime.ConnectionProviderCloudflareDNS, "")
 	if err != nil {
 		return "", err
 	}

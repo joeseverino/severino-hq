@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -74,7 +74,7 @@ func certificateFacts(spec TLSCertificateSpec, status *TLSCertificateStatus) map
 			installed = append(installed, consumer.Name)
 		}
 	}
-	sort.Strings(installed)
+	slices.Sort(installed)
 	expires := status.NotAfter
 	expires = runtime.ISODate(expires)
 	return map[string]string{
@@ -120,7 +120,7 @@ func asWritten(field opField) writtenField {
 }
 
 func (r *Registry) onePasswordToken(ref string) (string, error) {
-	prefix, err := r.Env.Prefix("onepassword", ref)
+	prefix, err := r.Env.Prefix(runtime.ConnectionProviderOnePassword, ref)
 	if err != nil {
 		return "", err
 	}
@@ -180,7 +180,7 @@ func (r *Registry) publishFacts(ctx context.Context, publication OnePasswordPubl
 			changed = append(changed, field.label)
 		}
 	}
-	sort.Strings(changed)
+	slices.Sort(changed)
 	tagged := false
 	for _, tag := range tags {
 		if tag == managedTag {

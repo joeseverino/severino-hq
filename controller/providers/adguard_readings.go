@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/providers/adguardapi"
+
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 type AdGuardPersistentClient struct {
@@ -70,7 +72,7 @@ func clientRecords(payload adguardapi.Clients, ref string) []any {
 
 func (r *Registry) adguardClients(ctx context.Context) ([]any, error) {
 	found := []any{}
-	for _, ref := range r.refs("adguard") {
+	for _, ref := range r.refs(runtime.ConnectionProviderAdGuard) {
 		payload, err := adguardGet[adguardapi.Clients](ctx, r, ref, "/control/clients", "client list")
 		if err != nil {
 			return nil, err
@@ -94,7 +96,7 @@ func upstream(value string) (AdGuardUpstream, bool) {
 	if strings.HasPrefix(line, "[/") && strings.Contains(line, "/]") {
 		scope, rest, _ := strings.Cut(line[2:], "/]")
 		line = strings.TrimSpace(rest)
-		for _, part := range strings.Split(scope, "/") {
+		for part := range strings.SplitSeq(scope, "/") {
 			if name := hostname(part); name != "" {
 				domains = append(domains, name)
 			}
@@ -158,7 +160,7 @@ type AdGuardDNSRecord struct {
 
 func (r *Registry) adguardDNS(ctx context.Context) ([]any, error) {
 	found := []any{}
-	for _, ref := range r.refs("adguard") {
+	for _, ref := range r.refs(runtime.ConnectionProviderAdGuard) {
 		status, err := adguardGet[adguardapi.ServerStatus](ctx, r, ref, "/control/status", "status")
 		if err != nil {
 			return nil, err
@@ -170,7 +172,7 @@ func (r *Registry) adguardDNS(ctx context.Context) ([]any, error) {
 		}
 		record := AdGuardDNSRecord{ConnectionRef: ref, Version: deref(status.Version), Running: status.Running, ProtectionEnabled: status.ProtectionEnabled, DNSAddresses: addresses}
 		if info, err := adguardGet[adguardapi.DNSConfig](ctx, r, ref, "/control/dns_info", "dns settings"); err != nil {
-			refuse(ctx, "upstreams", ref, "", err)
+			refuse(ctx, runtime.PartUpstreams, ref, "", err)
 		} else {
 			upstreams := []AdGuardUpstream{}
 			for _, line := range deref(info.UpstreamDns) {
@@ -181,7 +183,7 @@ func (r *Registry) adguardDNS(ctx context.Context) ([]any, error) {
 			record.AdGuardUpstreamsPart = &AdGuardUpstreamsPart{Upstreams: upstreams, UpstreamMode: string(deref(info.UpstreamMode)), DNSSECEnabled: info.DnssecEnabled}
 		}
 		if info, err := adguardGet[adguardapi.FilterStatus](ctx, r, ref, "/control/filtering/status", "filtering settings"); err != nil {
-			refuse(ctx, "filtering", ref, "", err)
+			refuse(ctx, runtime.PartFiltering, ref, "", err)
 		} else {
 			part := &AdGuardFilteringPart{FilteringEnabled: info.Enabled}
 			for _, filter := range deref(info.Filters) {
@@ -193,7 +195,7 @@ func (r *Registry) adguardDNS(ctx context.Context) ([]any, error) {
 			record.AdGuardFilteringPart = part
 		}
 		if info, err := adguardGet[adguardapi.GetQueryLogConfigResponse](ctx, r, ref, "/control/querylog/config", "query log settings"); err != nil {
-			refuse(ctx, "querylog", ref, "", err)
+			refuse(ctx, runtime.PartQueryLog, ref, "", err)
 		} else {
 			part := &AdGuardQuerylogPart{QuerylogEnabled: info.Enabled, AnonymizeClientIP: info.AnonymizeClientIp}
 			if info.Interval != nil {
@@ -203,7 +205,7 @@ func (r *Registry) adguardDNS(ctx context.Context) ([]any, error) {
 			record.AdGuardQuerylogPart = part
 		}
 		if info, err := adguardGet[adguardapi.RewriteSettings](ctx, r, ref, "/control/rewrite/settings", "rewrite settings"); err != nil {
-			refuse(ctx, "rewrites", ref, "", err)
+			refuse(ctx, runtime.PartRewrites, ref, "", err)
 		} else {
 			record.AdGuardRewritesPart = &AdGuardRewritesPart{RewritesEnabled: info.Enabled}
 		}

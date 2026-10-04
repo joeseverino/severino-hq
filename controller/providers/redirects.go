@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/providers/cfapi"
+
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // Cloudflare redirects as records: which names a rule matches and where it sends
@@ -157,7 +159,7 @@ func pageRuleRecord(rule cfPageRule, zone string) (CloudflareRedirectRecord, boo
 
 // cloudflareRedirectRules is the redirect rules in the zone's dynamic redirect rulesets.
 func (r *Registry) cloudflareRedirectRules(ctx context.Context, zoneID, zone, ref string) ([]CloudflareRedirectRecord, error) {
-	items, err := r.cloudflareList(ctx, "cloudflare_api", "/zones/"+zoneID+"/rulesets", ref, cloudflareAccountPerPage)
+	items, err := r.cloudflareList(ctx, runtime.ConnectionProviderCloudflareAPI, "/zones/"+zoneID+"/rulesets", ref, cloudflareAccountPerPage)
 	if err != nil {
 		return nil, err
 	}
@@ -211,9 +213,9 @@ func (r *Registry) cloudflarePageRedirects(ctx context.Context, zoneID, zone, re
 // on every zone is a refused read.
 func (r *Registry) cloudflareRedirects(ctx context.Context) ([]any, error) {
 	parts := []struct {
-		name string
+		name runtime.ReadingPartName
 		read func(context.Context, string, string, string) ([]CloudflareRedirectRecord, error)
-	}{{"rules", r.cloudflareRedirectRules}, {"page_rules", r.cloudflarePageRedirects}}
+	}{{runtime.PartRules, r.cloudflareRedirectRules}, {runtime.PartPageRules, r.cloudflarePageRedirects}}
 	found := []any{}
 	for _, ref := range r.cloudflareAPIRefs() {
 		zones, err := r.cloudflareAPIZones(ctx, ref)

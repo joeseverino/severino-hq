@@ -203,7 +203,7 @@ func (w *Worker) applyOne(ctx context.Context) (bool, bool, error) {
 	if refusal != nil {
 		message := ReportText(err.Error())
 		result = Result{Status: refusal.Status, Message: message, Conditions: []Condition{
-			{Type: "Degraded", Status: true, Reason: "ProviderError", Message: message},
+			{Type: ConditionDegraded, Status: true, Reason: "ProviderError", Message: message},
 		}}
 	}
 	if result.Status == nil {

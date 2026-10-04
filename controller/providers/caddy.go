@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"cmp"
 	"context"
 	"crypto/x509"
 	"encoding/json"
@@ -8,9 +9,9 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 
+	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -119,10 +120,8 @@ type CaddyRouteSpec struct {
 	Routes               []CaddyRouteInFile `json:"routes"`
 }
 
-type CaddyRouteInFile struct {
-	Domain   string `json:"domain"`
-	Upstream string `json:"upstream"`
-}
+// CaddyRouteInFile is one route of that set.
+type CaddyRouteInFile = runtime.CaddyRouteInFile
 
 // CaddyRouteStatus is what a reconcile reports.
 type CaddyRouteStatus struct {
@@ -230,7 +229,7 @@ func caddyUpstreams(handlers []caddyHandler, found []string) []string {
 
 // requestedHost is an upstream naming the host each request names, with an
 // optional fixed port.
-var requestedHost = regexp.MustCompile(`^\{http\.request\.host(?:port)?\}(?::[0-9]{1,5})?$`)
+var requestedHost = api.MustPattern("CaddyRequestedHost")
 
 func toRequestedHost(upstream string) bool {
 	return requestedHost.MatchString(strings.TrimSpace(upstream))
@@ -327,13 +326,12 @@ func coveringCertificate(domain string, certificates []CaddyCertificate) *CaddyC
 
 // What may reach the Caddyfile. The file is text, so a value carrying a
 // newline or a brace would become directives of its own; each is one token.
-// HQ's caddy.route declaration validates with the same patterns, and they are
-// checked again here, on the line that writes the file.
+// The patterns are the contract's, which HQ's caddy.route declaration validates
+// with, and they are checked again here, on the line that writes the file.
 var (
-	caddyLabel            = `[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?`
-	caddyDomainPattern    = regexp.MustCompile(`^(?:\*\.)?` + caddyLabel + `(?:\.` + caddyLabel + `)*\.?$`)
-	caddyUpstreamPattern  = regexp.MustCompile(`^(?:(?:https?|h2c)://)?[A-Za-z0-9](?:[A-Za-z0-9._-]*|\[[0-9A-Fa-f:.]+\])(?::[0-9]{1,5})?$`)
-	caddyDirectoryPattern = regexp.MustCompile(`^(?:/[A-Za-z0-9._-]+)+/?$`)
+	caddyDomainPattern    = api.MustPattern("CaddyRouteInFile", "properties", "domain")
+	caddyUpstreamPattern  = api.MustPattern("CaddyRouteInFile", "properties", "upstream")
+	caddyDirectoryPattern = api.MustPattern("CaddyCertificateDirectory")
 )
 
 func caddyToken(value string, pattern *regexp.Regexp, what string) error {
@@ -357,7 +355,7 @@ func renderCaddyRoutes(routes []CaddyRouteInFile, certificateDirectory string) (
 			kept = append(kept, route)
 		}
 	}
-	sort.SliceStable(kept, func(i, j int) bool { return kept[i].Domain < kept[j].Domain })
+	slices.SortStableFunc(kept, func(a, b CaddyRouteInFile) int { return cmp.Compare(a.Domain, b.Domain) })
 	blocks := make([]string, 0, len(kept))
 	for _, route := range kept {
 		if err := caddyToken(route.Domain, caddyDomainPattern, "hostname"); err != nil {

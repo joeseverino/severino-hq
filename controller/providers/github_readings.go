@@ -2,12 +2,13 @@ package providers
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"net/url"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -38,21 +39,6 @@ var githubRead = githubapi.AppPermissions{
 	ActionsVariables:     githubapi.AppPermissionsActionsVariablesRead,
 }
 
-// The parts of a repository reading that are refused one at a time, as HQ's
-// github.repository observation declares them.
-const (
-	githubPartCodeScanning = "code_scanning"
-	githubPartDependabot   = "dependabot"
-	githubPartLeaked       = "leaked_credentials"
-	githubPartBranchRules  = "branch_rules"
-	githubPartEnvironments = "environments"
-	githubPartRunners      = "runners"
-	githubPartImages       = "images"
-	githubPartAccess       = "access"
-	githubPartVariables    = "variables"
-	githubPartPins         = "workflow_pins"
-)
-
 // githubReadConcurrency is how many repositories are read at once: each is a
 // couple of dozen requests under a token of its own.
 const githubReadConcurrency = 4
@@ -68,7 +54,8 @@ const (
 )
 
 // githubRegistry is the container registry an app token reads packages from;
-// GitHub's package API does not take an installation token.
+// GitHub's package API does not take an installation token. It is fixed here
+// and never taken from an image reference: the app's token is sent to it.
 const githubRegistry = "ghcr.io"
 
 var (
@@ -296,7 +283,7 @@ func repoGet[T any](ctx context.Context, g *githubRepository, path string) (T, e
 }
 
 // part reads one refusable part: what it read, or ok false with the refusal reported.
-func part[T any](ctx context.Context, g *githubRepository, name string, read func() (T, error)) (T, bool) {
+func part[T any](ctx context.Context, g *githubRepository, name runtime.ReadingPartName, read func() (T, error)) (T, bool) {
 	found, err := read()
 	if err != nil {
 		refuse(ctx, name, g.c.ref, g.name, asRepositoryRefusal(err))
@@ -340,7 +327,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 		ConnectionRef: g.c.ref, Repository: g.name, Private: repo.Private, URL: repo.HTMLURL,
 		DefaultBranch: branch, PushedAt: repo.PushedAt, Head: githubHead(commit),
 	}
-	if uses, ok := part(ctx, g, githubPartPins, func() (githubUsesFound, error) { return g.workflowUses(ctx, branch) }); ok {
+	if uses, ok := part(ctx, g, runtime.PartWorkflowPins, func() (githubUsesFound, error) { return g.workflowUses(ctx, branch) }); ok {
 		record.Pins, record.CalledWorkflows = uses.pins, uses.called
 	}
 	if record.Checks, err = g.checks(ctx, commit.Sha); err != nil {
@@ -387,7 +374,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 		return record, err
 	}
 	record.Artifacts = liveArtifacts(artifacts.Artifacts)
-	if rules, ok := part(ctx, g, githubPartBranchRules, func() (GitHubRules, error) {
+	if rules, ok := part(ctx, g, runtime.PartBranchRules, func() (GitHubRules, error) {
 		found, err := repoGet[[]githubapi.RepositoryRuleDetailed](ctx, g, "/rules/branches/"+url.PathEscape(branch))
 		if err != nil {
 			return GitHubRules{}, err
@@ -396,7 +383,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	}); ok {
 		record.Rules = &rules
 	}
-	record.Environments, _ = part(ctx, g, githubPartEnvironments, func() ([]GitHubEnvironment, error) {
+	record.Environments, _ = part(ctx, g, runtime.PartEnvironments, func() ([]GitHubEnvironment, error) {
 		found, err := repoGet[struct {
 			Environments []githubapi.Environment `json:"environments"`
 		}](ctx, g, "/environments")
@@ -408,7 +395,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	if record.Environments == nil {
 		record.Environments = []GitHubEnvironment{}
 	}
-	record.Runners, _ = part(ctx, g, githubPartRunners, func() ([]GitHubRunner, error) {
+	record.Runners, _ = part(ctx, g, runtime.PartRunners, func() ([]GitHubRunner, error) {
 		found, err := repoGet[struct {
 			Runners []githubapi.Runner `json:"runners"`
 		}](ctx, g, "/actions/runners")
@@ -420,10 +407,10 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	if record.Images, err = g.images(ctx); err != nil {
 		return record, err
 	}
-	if access, ok := part(ctx, g, githubPartAccess, func() (GitHubAccess, error) { return g.access(ctx, repo, raw) }); ok {
+	if access, ok := part(ctx, g, runtime.PartAccess, func() (GitHubAccess, error) { return g.access(ctx, repo, raw) }); ok {
 		record.Access = &access
 	}
-	record.Variables, _ = part(ctx, g, githubPartVariables, func() ([]string, error) {
+	record.Variables, _ = part(ctx, g, runtime.PartVariables, func() ([]string, error) {
 		found, err := repoGet[struct {
 			Variables []githubapi.ActionsVariable `json:"variables"`
 		}](ctx, g, "/actions/variables?per_page="+strconv.Itoa(githubListPage))
@@ -633,39 +620,39 @@ func (g *githubRepository) verifications(ctx context.Context, link string) ([]Gi
 // that part refused, never zero.
 func (g *githubRepository) alerts(ctx context.Context) map[string]map[string]int {
 	found := map[string]map[string]int{}
-	count := func(name string, severities []string) {
+	count := func(name runtime.ReadingPartName, severities []string) {
 		counts := map[string]int{}
 		for _, severity := range severities {
 			counts[strings.ToLower(orDefault(severity, "unknown"))]++
 		}
-		found[name] = counts
+		found[string(name)] = counts
 	}
-	if alerts, ok := part(ctx, g, githubPartCodeScanning, func() ([]githubapi.CodeScanningAlertItems, error) {
+	if alerts, ok := part(ctx, g, runtime.PartCodeScanning, func() ([]githubapi.CodeScanningAlertItems, error) {
 		return repoGet[[]githubapi.CodeScanningAlertItems](ctx, g, "/code-scanning/alerts?state=open&per_page="+strconv.Itoa(githubListPage))
 	}); ok {
 		severities := []string{}
 		for _, alert := range alerts {
 			severities = append(severities, orDefault(string(alert.Rule.SecuritySeverityLevel), string(alert.Rule.Severity)))
 		}
-		count(githubPartCodeScanning, severities)
+		count(runtime.PartCodeScanning, severities)
 	}
-	if alerts, ok := part(ctx, g, githubPartDependabot, func() ([]githubapi.DependabotAlert, error) {
+	if alerts, ok := part(ctx, g, runtime.PartDependabot, func() ([]githubapi.DependabotAlert, error) {
 		return repoGet[[]githubapi.DependabotAlert](ctx, g, "/dependabot/alerts?state=open&per_page="+strconv.Itoa(githubListPage))
 	}); ok {
 		severities := []string{}
 		for _, alert := range alerts {
 			severities = append(severities, string(alert.SecurityAdvisory.Severity))
 		}
-		count(githubPartDependabot, severities)
+		count(runtime.PartDependabot, severities)
 	}
-	if alerts, ok := part(ctx, g, githubPartLeaked, func() ([]githubapi.SecretScanningAlert, error) {
+	if alerts, ok := part(ctx, g, runtime.PartLeakedCredentials, func() ([]githubapi.SecretScanningAlert, error) {
 		return repoGet[[]githubapi.SecretScanningAlert](ctx, g, "/secret-scanning/alerts?state=open&per_page="+strconv.Itoa(githubListPage))
 	}); ok {
 		severities := make([]string, len(alerts))
 		for i := range alerts {
 			severities[i] = "leaked"
 		}
-		count(githubPartLeaked, severities)
+		count(runtime.PartLeakedCredentials, severities)
 	}
 	return found
 }
@@ -678,7 +665,7 @@ func liveArtifacts(artifacts []githubapi.Artifact) []GitHubArtifact {
 			live = append(live, GitHubArtifact{Name: artifact.Name, ExpiresAt: artifact.ExpiresAt, SHA: artifact.WorkflowRun.HeadSha})
 		}
 	}
-	sort.SliceStable(live, func(i, j int) bool { return live[i].ExpiresAt < live[j].ExpiresAt })
+	slices.SortStableFunc(live, func(a, b GitHubArtifact) int { return cmp.Compare(a.ExpiresAt, b.ExpiresAt) })
 	if len(live) > githubArtifactsKept {
 		live = live[:githubArtifactsKept]
 	}
@@ -777,7 +764,7 @@ func githubRunners(runners []githubapi.Runner) []GitHubRunner {
 		for _, label := range runner.Labels {
 			labels = append(labels, label.Name)
 		}
-		sort.Strings(labels)
+		slices.Sort(labels)
 		found = append(found, GitHubRunner{Name: runner.Name, Status: runner.Status, Busy: runner.Busy, Labels: labels})
 	}
 	return found
@@ -1009,7 +996,7 @@ func (g *githubRepository) images(ctx context.Context) ([]GitHubImage, error) {
 		scope := g.name + ":" + image
 		read, err := g.image(ctx, image, token)
 		if err != nil {
-			refuse(ctx, githubPartImages, g.c.ref, scope, asRepositoryRefusal(err))
+			refuse(ctx, runtime.PartImages, g.c.ref, scope, asRepositoryRefusal(err))
 			continue
 		}
 		found = append(found, read)
@@ -1048,6 +1035,6 @@ func (g *githubRepository) image(ctx context.Context, image, token string) (GitH
 			record.Signed = append(record.Signed, digest)
 		}
 	}
-	sort.Strings(record.Signed)
+	slices.Sort(record.Signed)
 	return record, nil
 }

@@ -1,15 +1,20 @@
 package runtime
 
+import "github.com/joeseverino/severino-hq/controller/api"
+
 // Limits on text that crosses into a report, a log line or an error, cut by
 // characters.
 const (
-	ReportTextLimit   = 500 // a failure's text in a report
-	ReasonLimit       = 200 // why one optional read or part was refused
-	VerdictLimit      = 300 // a remote verdict quoted in an error
-	SaidLimit         = 240 // the last line a child printed
-	AnalyticsValueMax = 512 // an analytics dimension value; the contract's maxLength
-	isoDateLength     = 10  // YYYY-MM-DD
+	ReportTextLimit = 500 // a failure's text in a report
+	ReasonLimit     = 200 // why one optional read or part was refused
+	VerdictLimit    = 300 // a remote verdict quoted in an error
+	SaidLimit       = 240 // the last line a child printed
+	isoDateLength   = 10  // YYYY-MM-DD
 )
+
+// AnalyticsValueMax is the longest analytics dimension value the contract
+// accepts.
+var AnalyticsValueMax = api.MustLimit("AnalyticsRow", "properties", "value", "maxLength")
 
 // Clip cuts s to at most n characters. It cuts between characters, never
 // inside a multi-byte one.

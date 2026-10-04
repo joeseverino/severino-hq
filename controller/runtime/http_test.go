@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -27,7 +26,7 @@ func TestRedirectDropsCredentialsOnSameOriginRead(t *testing.T) {
 	}))
 	defer server.Close()
 	h := &HTTPClient{}
-	_, err := h.Request(context.Background(), server.URL+"/first", "GET", map[string]string{"Authorization": "Bearer example", "X-Api-Key": "example"}, nil)
+	_, err := h.Request(t.Context(), server.URL+"/first", "GET", map[string]string{"Authorization": "Bearer example", "X-Api-Key": "example"}, nil)
 	if err != nil || !seen {
 		t.Fatalf("%v reached=%v", err, seen)
 	}
@@ -42,7 +41,7 @@ func TestRedirectRefusesDifferentOriginAndAllWrites(t *testing.T) {
 				http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
 			}))
 			defer origin.Close()
-			_, err := (&HTTPClient{}).Request(context.Background(), origin.URL, method, nil, nil)
+			_, err := (&HTTPClient{}).Request(t.Context(), origin.URL, method, nil, nil)
 			var provider *ProviderError
 			if landed || !errors.As(err, &provider) || provider.Failure != "address" {
 				t.Fatalf("landed=%v error=%v", landed, err)
@@ -66,7 +65,7 @@ func TestProviderResponseFailures(t *testing.T) {
 				_, _ = w.Write([]byte(tc.body))
 			}))
 			defer server.Close()
-			_, err := (&HTTPClient{}).Request(context.Background(), server.URL, "GET", nil, nil)
+			_, err := (&HTTPClient{}).Request(t.Context(), server.URL, "GET", nil, nil)
 			var provider *ProviderError
 			if !errors.As(err, &provider) || provider.Failure != tc.failure {
 				t.Fatalf("%v", err)
@@ -92,16 +91,16 @@ func TestRequestHeaderReadsBodyAndHeaderFromOneAnswer(t *testing.T) {
 		_, _ = w.Write([]byte(`{"read": true}`))
 	}))
 	defer server.Close()
-	data, etag, err := (&HTTPClient{}).RequestHeader(context.Background(), server.URL, nil, "etag")
+	data, etag, err := (&HTTPClient{}).RequestHeader(t.Context(), server.URL, nil, "etag")
 	if err != nil || etag != `"v1"` || string(data) != `{"read": true}` {
 		t.Fatalf("%s %q %v", data, etag, err)
 	}
 	// A body that fails its JSON check still says which version answered.
-	if _, etag, err := (&HTTPClient{}).RequestHeader(context.Background(), server.URL+"/broken", nil, "etag"); err == nil || etag != `"v2"` {
+	if _, etag, err := (&HTTPClient{}).RequestHeader(t.Context(), server.URL+"/broken", nil, "etag"); err == nil || etag != `"v2"` {
 		t.Fatalf("%q %v", etag, err)
 	}
 	var provider *ProviderError
-	if _, _, err := (&HTTPClient{}).RequestHeader(context.Background(), server.URL+"/gone", nil, "etag"); !errors.As(err, &provider) || provider.HTTPStatus != 412 {
+	if _, _, err := (&HTTPClient{}).RequestHeader(t.Context(), server.URL+"/gone", nil, "etag"); !errors.As(err, &provider) || provider.HTTPStatus != 412 {
 		t.Fatalf("%v", err)
 	}
 }
@@ -115,7 +114,7 @@ func TestResponseSizeIsBounded(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	_, err := (&HTTPClient{}).Request(context.Background(), server.URL, "GET", nil, nil)
+	_, err := (&HTTPClient{}).Request(t.Context(), server.URL, "GET", nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "32 MB") {
 		t.Fatal(err)
 	}
@@ -132,7 +131,7 @@ func TestRefusalKeepsItsBody(t *testing.T) {
 		_, _ = w.Write([]byte(`{"success":false,"errors":[{"message":"Content for A record must be a valid IPv4 address"}]}`))
 	}))
 	defer server.Close()
-	_, err := (&HTTPClient{Transport: server.Client().Transport}).Request(context.Background(), server.URL, "GET", nil, nil)
+	_, err := (&HTTPClient{Transport: server.Client().Transport}).Request(t.Context(), server.URL, "GET", nil, nil)
 	var refused *ProviderError
 	if !errors.As(err, &refused) || refused.HTTPStatus != 400 || !strings.Contains(string(refused.Body), "valid IPv4 address") {
 		t.Fatalf("refusal = %#v", err)

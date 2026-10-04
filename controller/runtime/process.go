@@ -22,10 +22,7 @@ type BoundedBuffer struct {
 
 func (b *BoundedBuffer) Write(p []byte) (int, error) {
 	n := len(p)
-	remaining := b.Limit - b.buffer.Len()
-	if remaining < 0 {
-		remaining = 0
-	}
+	remaining := max(b.Limit-b.buffer.Len(), 0)
 	if len(p) > remaining {
 		p = p[:remaining]
 		b.Overflow = true

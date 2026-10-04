@@ -125,7 +125,7 @@ func TestAdguardReconcileAndPlan(t *testing.T) {
 				r := adguardFixture()
 				h := r.HTTP.(*fakeHTTP)
 				h.routes["/control/rewrite/list"] = tc.live
-				result, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "reconcile", context.Background(), Object{"domain": "example.test", "answer": "192.0.2.1"}, tc.observed, apply)
+				result, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "reconcile", t.Context(), Object{"domain": "example.test", "answer": "192.0.2.1"}, tc.observed, apply)
 				if err != nil || result.Changed != tc.changed {
 					t.Fatalf("%#v %v", result, err)
 				}
@@ -147,7 +147,7 @@ func TestAdguardRefusesDuplicateRewriteWithoutWriting(t *testing.T) {
 	r := adguardFixture()
 	h := r.HTTP.(*fakeHTTP)
 	h.routes["/control/rewrite/list"] = []Object{{"domain": "example.test"}, {"domain": "example.test"}}
-	_, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "reconcile", context.Background(), Object{"domain": "example.test", "answer": "192.0.2.1"}, nil, true)
+	_, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "reconcile", t.Context(), Object{"domain": "example.test", "answer": "192.0.2.1"}, nil, true)
 	if err == nil || len(h.requests) != 1 {
 		t.Fatalf("%v %#v", err, h.requests)
 	}
@@ -156,7 +156,7 @@ func TestAdguardDeletePreservesUnrelatedRewrite(t *testing.T) {
 	r := adguardFixture()
 	h := r.HTTP.(*fakeHTTP)
 	h.routes["/control/rewrite/list"] = []Object{{"domain": "example.test", "answer": "192.0.2.1"}, {"domain": "other.test", "answer": "192.0.2.2"}}
-	result, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "delete", context.Background(), Object{"domain": "example.test"}, nil, true)
+	result, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "delete", t.Context(), Object{"domain": "example.test"}, nil, true)
 	if err != nil || !result.Changed || len(h.requests) != 2 {
 		t.Fatalf("%#v %v", result, err)
 	}
@@ -167,7 +167,7 @@ func TestAdguardDeletePreservesUnrelatedRewrite(t *testing.T) {
 func TestAdguardDisabledRewriteIsDegraded(t *testing.T) {
 	r := adguardFixture()
 	r.HTTP.(*fakeHTTP).routes["/control/rewrite/list"] = []Object{{"domain": "example.test", "answer": "192.0.2.1", "enabled": false}}
-	result, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "reconcile", context.Background(), Object{"domain": "example.test", "answer": "192.0.2.1"}, nil, true)
+	result, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "reconcile", t.Context(), Object{"domain": "example.test", "answer": "192.0.2.1"}, nil, true)
 	if err != nil || result.Changed || result.Conditions[0].Type != "Degraded" {
 		t.Fatalf("%#v %v", result, err)
 	}
@@ -233,7 +233,7 @@ func TestDNSOptionalPartFailureDoesNotEraseReadableStatus(t *testing.T) {
 	}
 	h.fail["/control/dns_info"] = &ProviderError{Message: "Refused.", Failure: runtime.FailureClassPermission}
 	ledger := &refusals{}
-	ctx := context.WithValue(context.Background(), refusalKey{}, ledger)
+	ctx := context.WithValue(t.Context(), refusalKey{}, ledger)
 	records, err := r.adguardDNS(ctx)
 	found := asRecords(records)
 	if err != nil || len(found) != 1 || found[0]["running"] != true || len(ledger.entries) != 1 || ledger.entries[0].Part != "upstreams" {
@@ -243,7 +243,7 @@ func TestDNSOptionalPartFailureDoesNotEraseReadableStatus(t *testing.T) {
 
 func TestCommandOutputPastTheLimitIsAFailedStep(t *testing.T) {
 	commands := &Commands{Env: runtime.Environment{"PATH": "/usr/bin:/bin"}}
-	_, err := commands.Run(context.Background(), []string{"sh", "-c", "head -c 16777217 /dev/zero"}, nil, "a step", "edge", nil)
+	_, err := commands.Run(t.Context(), []string{"sh", "-c", "head -c 16777217 /dev/zero"}, nil, "a step", "edge", nil)
 	if err == nil || err.Error() != "a step: output over limit" {
 		t.Fatalf("%v", err)
 	}

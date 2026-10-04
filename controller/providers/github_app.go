@@ -28,9 +28,8 @@ import (
 // within the same sweep.
 
 const (
-	githubAppProvider = "github_app"
 	// githubAPI is the server GitHub's REST description names.
-	githubAPI        = "https://api.github.com"
+	githubAPI        = githubapi.ServerURL
 	githubAPIVersion = "2022-11-28"
 	// GitHub refuses a JWT that expires more than ten minutes out, or one
 	// issued in the future by a skewed clock; backdating absorbs the skew.
@@ -46,14 +45,14 @@ type githubConnection struct {
 }
 
 func (r *Registry) admitGitHub() {
-	r.probe(githubAppProvider, r.githubProbe)
+	r.probe(runtime.ConnectionProviderGitHubApp, r.githubProbe)
 	r.reader(runtime.ResourceKindGitHubRepository, r.githubRepositories)
 	r.reader(runtime.ResourceKindGitHubDelivery, r.githubDeliveryInventory)
 	act(r, runtime.ResourceKindGitHubDelivery, "reconcile", r.githubDeliveryReconcile)
 }
 
 func (r *Registry) githubConnection(ref string) (githubConnection, error) {
-	prefix, err := r.Env.Prefix(githubAppProvider, ref)
+	prefix, err := r.Env.Prefix(runtime.ConnectionProviderGitHubApp, ref)
 	if err != nil {
 		return githubConnection{}, err
 	}
@@ -103,11 +102,11 @@ func (r *Registry) githubJWT(ctx context.Context, c githubConnection) (string, e
 	}
 	now := r.Now()
 	header, _ := json.Marshal(map[string]string{"alg": "RS256", "typ": "JWT"})
-	claims, _ := json.Marshal(map[string]any{
-		"iat": now.Add(-githubJWTBackdate).Unix(),
-		"exp": now.Add(githubJWTLifetime).Unix(),
-		"iss": c.appID,
-	})
+	claims, _ := json.Marshal(struct {
+		Expires  int64  `json:"exp"`
+		IssuedAt int64  `json:"iat"`
+		Issuer   string `json:"iss"`
+	}{now.Add(githubJWTLifetime).Unix(), now.Add(-githubJWTBackdate).Unix(), c.appID})
 	input := base64URL(header) + "." + base64URL(claims)
 	signature, err := r.commands().Run(ctx, []string{"openssl", "dgst", "-sha256", "-sign", key}, []byte(input), "sign for "+c.ref, c.ref, nil)
 	if err != nil {
@@ -124,13 +123,18 @@ func githubHeaders(token string) map[string]string {
 	}
 }
 
+// githubRequest is one request to GitHub's API under a bearer credential.
+func (r *Registry) githubRequest(ctx context.Context, method, path, bearer string, payload any) (json.RawMessage, error) {
+	return r.HTTP.Request(ctx, githubAPI+path, method, githubHeaders(bearer), payload)
+}
+
 // githubAsApp is one request authenticated as the app itself.
 func (r *Registry) githubAsApp(ctx context.Context, c githubConnection, method, path string, payload any) (json.RawMessage, error) {
 	jwt, err := r.githubJWT(ctx, c)
 	if err != nil {
 		return nil, err
 	}
-	return r.HTTP.Request(ctx, githubAPI+path, method, githubHeaders(jwt), payload)
+	return r.githubRequest(ctx, method, path, jwt, payload)
 }
 
 // githubRepositoryName is (owner, repository) from owner/repository.
@@ -238,7 +242,7 @@ func (r *Registry) githubCall(ctx context.Context, c githubConnection, method, p
 	if err != nil {
 		return nil, err
 	}
-	return r.HTTP.Request(ctx, githubAPI+path, method, githubHeaders(token), payload)
+	return r.githubRequest(ctx, method, path, token, payload)
 }
 
 // githubGet decodes one scoped GET into its GitHub type.
@@ -248,7 +252,8 @@ func githubGet[T any](ctx context.Context, r *Registry, c githubConnection, path
 		var zero T
 		return zero, err
 	}
-	return decodeAnswer[T](raw, "GitHub "+strings.SplitN(path, "?", 2)[0])
+	route, _, _ := strings.Cut(path, "?")
+	return decodeAnswer[T](raw, "GitHub "+route)
 }
 
 // githubInstallationRepositories is every repository the app's installations
@@ -276,7 +281,7 @@ func (r *Registry) githubInstallationRepositories(ctx context.Context, c githubC
 			if err != nil {
 				return nil, err
 			}
-			listed, err := r.HTTP.Request(ctx, githubAPI+"/installation/repositories?per_page=100", "GET", githubHeaders(token), nil)
+			listed, err := r.githubRequest(ctx, "GET", "/installation/repositories?per_page=100", token, nil)
 			if err != nil {
 				return nil, err
 			}

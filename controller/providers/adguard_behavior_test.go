@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -48,11 +47,11 @@ func TestAdGuardNullDNSAddressesMeansNoneListening(t *testing.T) {
 			r := adguardServer(t, map[string]string{"/control/status": status}, nil)
 			done := r.BeginSnapshot()
 			defer done()
-			probe, err := r.adguardProbe(context.Background(), "dns")
+			probe, err := r.adguardProbe(t.Context(), "dns")
 			if err != nil || probe.Detail != "AdGuard v0.107.0" {
 				t.Fatalf("%+v %v", probe, err)
 			}
-			records, err := r.adguardDNS(context.Background())
+			records, err := r.adguardDNS(t.Context())
 			if err != nil || len(records) != 1 {
 				t.Fatalf("%v %v", records, err)
 			}
@@ -82,7 +81,7 @@ func TestAdGuardProbeFailures(t *testing.T) {
 				refuse["/control/status"] = c.refuse
 			}
 			r := adguardServer(t, map[string]string{"/control/status": c.status}, refuse)
-			_, err := r.adguardProbe(context.Background(), "dns")
+			_, err := r.adguardProbe(t.Context(), "dns")
 			failure, _, _ := runtime.Classify(err)
 			if err == nil || failure != c.failure {
 				t.Errorf("err = %v (%q), want class %q", err, failure, c.failure)
@@ -99,7 +98,7 @@ func TestAdGuardMalformedRewriteListIsAnError(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := adguardServer(t, map[string]string{"/control/rewrite/list": body}, nil)
-			_, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "reconcile", context.Background(), Object{"domain": "a.example", "answer": "192.0.2.1"}, nil, false)
+			_, err := r.runAction(runtime.ResourceKindAdGuardRewrite, "reconcile", t.Context(), Object{"domain": "a.example", "answer": "192.0.2.1"}, nil, false)
 			if err == nil {
 				t.Error("decoded a malformed rewrite list")
 			}
@@ -126,7 +125,7 @@ func TestAdGuardQueryLogRetentionIsHours(t *testing.T) {
 	}, nil)
 	done := r.BeginSnapshot()
 	defer done()
-	records, err := r.adguardDNS(context.Background())
+	records, err := r.adguardDNS(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}

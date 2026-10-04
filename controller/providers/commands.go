@@ -53,8 +53,7 @@ func execProcess(ctx context.Context, argv []string, stdin []byte, env []string)
 	if stdout.Overflow || stderr.Overflow {
 		return nil, nil, 0, errOutputLimit
 	}
-	var exited *exec.ExitError
-	if errors.As(err, &exited) {
+	if exited, ok := errors.AsType[*exec.ExitError](err); ok {
 		return stdout.Bytes(), stderr.Bytes(), exited.ExitCode(), nil
 	}
 	return stdout.Bytes(), stderr.Bytes(), 0, err
@@ -111,7 +110,7 @@ func startFailure(err error) string {
 
 func lastLine(stderr string) string {
 	lines := []string{}
-	for _, line := range strings.Split(stderr, "\n") {
+	for line := range strings.SplitSeq(stderr, "\n") {
 		if line = strings.TrimSpace(line); line != "" {
 			lines = append(lines, line)
 		}

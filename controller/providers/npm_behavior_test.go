@@ -1,9 +1,9 @@
 package providers
 
 import (
-	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -103,7 +103,7 @@ func TestNPMReconcileDecisions(t *testing.T) {
 				server := newNPMServer(t)
 				server.lists["/api/nginx/proxy-hosts"] = c.live
 				r := npmRegistry(t, npmEnvAt(server.URL))
-				res, err := r.runAction(runtime.ResourceKindNPMProxyHost, "reconcile", context.Background(), sampleProxySpec(), c.observed, apply)
+				res, err := r.runAction(runtime.ResourceKindNPMProxyHost, "reconcile", t.Context(), sampleProxySpec(), c.observed, apply)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -131,7 +131,7 @@ func TestNPMUpdateCarriesNPMsOwnLocationsAndCertificate(t *testing.T) {
 	held = strings.Replace(held, `"certificate_id":0`, `"certificate_id":"12"`, 1)
 	server.lists["/api/nginx/proxy-hosts"] = strings.Replace(held, `"forward_port":8000`, `"forward_port":9000`, 1)
 	r := npmRegistry(t, npmEnvAt(server.URL))
-	if _, err := r.runAction(runtime.ResourceKindNPMProxyHost, "reconcile", context.Background(), sampleProxySpec(), nil, true); err != nil {
+	if _, err := r.runAction(runtime.ResourceKindNPMProxyHost, "reconcile", t.Context(), sampleProxySpec(), nil, true); err != nil {
 		t.Fatal(err)
 	}
 	writes := server.writes()
@@ -154,14 +154,12 @@ func TestNPMWriteUsesTheNamedConnection(t *testing.T) {
 	fallback.lists["/api/nginx/proxy-hosts"] = `[]`
 	named.lists["/api/nginx/proxy-hosts"] = `[]`
 	env := npmEnvAt(fallback.URL)
-	for key, value := range map[string]string{"NPM_HOME_CONNECTION_REF": "proxy-home", "NPM_HOME_PROVIDER": "npm", "NPM_HOME_MANAGES": "true", "NPM_HOME_URL": named.URL, "NPM_HOME_USERNAME": "user", "NPM_HOME_PASSWORD": "synthetic"} {
-		env[key] = value
-	}
+	maps.Copy(env, map[string]string{"NPM_HOME_CONNECTION_REF": "proxy-home", "NPM_HOME_PROVIDER": "npm", "NPM_HOME_MANAGES": "true", "NPM_HOME_URL": named.URL, "NPM_HOME_USERNAME": "user", "NPM_HOME_PASSWORD": "synthetic"})
 	r := npmRegistry(t, env)
 	spec := sampleProxySpec()
 	spec["connection_ref"] = "proxy-home"
 	for _, action := range []string{"reconcile", "delete"} {
-		if _, err := r.runAction(runtime.ResourceKindNPMProxyHost, action, context.Background(), spec, nil, true); err != nil {
+		if _, err := r.runAction(runtime.ResourceKindNPMProxyHost, action, t.Context(), spec, nil, true); err != nil {
 			t.Fatalf("%s: %v", action, err)
 		}
 	}
@@ -190,7 +188,7 @@ func TestNPMRefusesWithoutWriting(t *testing.T) {
 			server.lists["/api/nginx/proxy-hosts"] = c.live
 			spec := sampleProxySpec()
 			c.spec(spec)
-			_, err := npmRegistry(t, npmEnvAt(server.URL)).runAction(runtime.ResourceKindNPMProxyHost, "reconcile", context.Background(), spec, nil, true)
+			_, err := npmRegistry(t, npmEnvAt(server.URL)).runAction(runtime.ResourceKindNPMProxyHost, "reconcile", t.Context(), spec, nil, true)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Errorf("err = %v, want %q", err, c.want)
 			}
@@ -218,7 +216,7 @@ func TestNPMListRefusalsAreClassified(t *testing.T) {
 			r := npmRegistry(t, npmEnvAt(server.URL))
 			done := r.BeginSnapshot()
 			defer done()
-			_, err := r.npmCertificates(context.Background(), "proxy")
+			_, err := r.npmCertificates(t.Context(), "proxy")
 			failure, _, _ := runtime.Classify(err)
 			if err == nil || failure != c.failure || err.Error() != c.message {
 				t.Errorf("err = %v (%q)", err, failure)
@@ -243,7 +241,7 @@ func TestNPMMalformedAnswersAreErrors(t *testing.T) {
 			r := npmRegistry(t, npmEnvAt(server.URL))
 			done := r.BeginSnapshot()
 			defer done()
-			if records, err := r.npmDeadHosts(context.Background(), "proxy"); err == nil {
+			if records, err := r.npmDeadHosts(t.Context(), "proxy"); err == nil {
 				t.Errorf("decoded %+v", records)
 			}
 		})
@@ -258,7 +256,7 @@ func TestNPMProxyHostRecordIsTyped(t *testing.T) {
 	r := npmRegistry(t, npmEnvAt(server.URL))
 	done := r.BeginSnapshot()
 	defer done()
-	found, err := r.npmInventory(context.Background())
+	found, err := r.npmInventory(t.Context())
 	if err != nil || len(found) != 1 {
 		t.Fatalf("%v %v", found, err)
 	}

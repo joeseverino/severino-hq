@@ -9,6 +9,9 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// ServerURL defines the Server URL for https://api.github.com
+const ServerURL = "https://api.github.com"
+
 // Defines values for ActionsDefaultWorkflowPermissions.
 const (
 	ActionsDefaultWorkflowPermissionsRead  ActionsDefaultWorkflowPermissions = "read"

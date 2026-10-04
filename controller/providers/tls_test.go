@@ -137,7 +137,7 @@ func TestReconcileTLSReadsEveryConsumer(t *testing.T) {
 		Object{"kind": "npm", "name": "proxy", "connection_ref": "npm", "verify_domains": []any{"a.example"}},
 		Object{"kind": "cpanel", "name": "host", "connection_ref": "nope", "verify_domains": []any{}},
 	}}
-	result, err := h.r.runAction(runtime.ResourceKindTLSCertificate, "reconcile", context.Background(), spec, nil, false)
+	result, err := h.r.runAction(runtime.ResourceKindTLSCertificate, "reconcile", t.Context(), spec, nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestRenewalDeploysVerifiesAndRollsBack(t *testing.T) {
 	}}
 
 	h.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}}, {"edge.example|a.example": {Cert: "new"}}}
-	result, err := h.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(context.Background()), spec, nil, true)
+	result, err := h.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(t.Context()), spec, nil, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,12 +192,12 @@ func TestRenewalDeploysVerifiesAndRollsBack(t *testing.T) {
 	h2.dialer.certs, h2.command.outcomes, h2.command.lineage = h.dialer.certs, h.command.outcomes, h.command.lineage
 	_ = os.RemoveAll(filepath.Join(env["HQ_ACME_DIR"], "config"))
 	h2.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}}}
-	_, err = h2.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(context.Background()), spec, nil, true)
+	_, err = h2.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(t.Context()), spec, nil, true)
 	want := "certificate deployment failed, rollback succeeded: 1 of 1 TLS consumers did not activate the certificate within 30s: edge still serves the previous certificate at a.example"
 	if err == nil || err.Error() != want {
 		t.Fatalf("rollback: %v", err)
 	}
-	if _, err := h2.r.runAction(runtime.ResourceKindTLSCertificate, "renew", context.Background(), spec, nil, true); err == nil {
+	if _, err := h2.r.runAction(runtime.ResourceKindTLSCertificate, "renew", t.Context(), spec, nil, true); err == nil {
 		t.Fatal("a renewal without a declared verification policy must refuse")
 	}
 }
@@ -208,13 +208,13 @@ func TestCPanelPlanRefusesUnservedNames(t *testing.T) {
 	h := newTLSHarness(t, env)
 	h.command.outcomes["ssh sites"] = fakeOutcome{Stdout: `{"sites":{"a.example":["www.a.example"],"b.example":null}}`}
 	consumer := TLSConsumer{Kind: "cpanel", Name: "host", ConnectionRef: "cpanel", VerifyDomains: []string{"WWW.a.example", "b.example"}, InstallDomains: []string{"a.example"}}
-	_, err := h.r.cpanelSitesFor(context.Background(), consumer)
+	_, err := h.r.cpanelSitesFor(t.Context(), consumer)
 	want := "host would be checked at b.example but installs only on a.example; add those names to the target's install list, or leave it empty to install on every site that serves a checked name"
 	if err == nil || err.Error() != want {
 		t.Fatalf("plan: %v", err)
 	}
 	consumer.InstallDomains = nil
-	sites, err := h.r.cpanelSitesFor(context.Background(), consumer)
+	sites, err := h.r.cpanelSitesFor(t.Context(), consumer)
 	if err != nil || strings.Join(sites, ",") != "a.example,b.example" {
 		t.Fatalf("sites: %v %v", sites, err)
 	}
@@ -294,7 +294,7 @@ func TestRenewalNotVerifiedWhileAConsumerIsUnreadOrUnchecked(t *testing.T) {
 			_ = os.MkdirAll(env["HQ_ACME_DIR"], 0o700)
 			h.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}, "edge.example|b.example": {Cert: "old"}}, c.served}
 			spec := Object{"certificate_name": "a", "domains": []any{"a.example", "b.example"}, "renewal_window_days": 30, "consumers": []any{edge, c.second}}
-			_, err := h.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(context.Background()), spec, nil, true)
+			_, err := h.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(t.Context()), spec, nil, true)
 			if err == nil || !strings.Contains(err.Error(), "rollback succeeded") || !strings.Contains(err.Error(), c.reason) {
 				t.Fatalf("%v", err)
 			}
@@ -355,18 +355,18 @@ func TestTLSObserverVerifiesTheServedCertificate(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	defer server.Close()
 	address := server.Listener.Addr().String()
-	_, err := NetTLSDialer{}.peerAt(context.Background(), "example.com", address)
+	_, err := NetTLSDialer{}.peerAt(t.Context(), "example.com", address)
 	var read *tlsReadError
 	if !errors.As(err, &read) || read.reason != "certificate not trusted for this name" {
 		t.Fatalf("untrusted: %v", err)
 	}
 	caFile := filepath.Join(t.TempDir(), "ca.pem")
 	_ = os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}), 0o600)
-	der, err := NetTLSDialer{CAFile: caFile}.peerAt(context.Background(), "example.com", address)
+	der, err := NetTLSDialer{CAFile: caFile}.peerAt(t.Context(), "example.com", address)
 	if err != nil || len(der) == 0 {
 		t.Fatalf("trusted: %v", err)
 	}
-	if _, err := (NetTLSDialer{CAFile: caFile}).peerAt(context.Background(), "other.example", address); !errors.As(err, &read) {
+	if _, err := (NetTLSDialer{CAFile: caFile}).peerAt(t.Context(), "other.example", address); !errors.As(err, &read) {
 		t.Fatalf("a name the certificate does not cover is refused: %v", err)
 	}
 }

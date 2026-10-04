@@ -157,15 +157,11 @@ func newGitHubHarness(t *testing.T, routes map[string]string, extra runtime.Envi
 		githubFakeAPI + " /repos/example/host/installation":        `{"id":7}`,
 		githubFakeAPI + " /repos/example/ext/installation":         `{"id":7}`,
 	}, status: map[string]int{}, grants: map[string]githubapi.AppsCreateInstallationAccessTokenJSONBody{}}
-	for key, body := range routes {
-		fake.routes[key] = body
-	}
+	maps.Copy(fake.routes, routes)
 	server := httptest.NewServer(fake)
 	t.Cleanup(server.Close)
 	env := runtime.Environment{"GITHUB_APP_CONNECTION_REF": "hq-app", "GITHUB_APP_APP_ID": "12345", "HQ_CONTROLLER_SSH_DIR": t.TempDir()}
-	for key, value := range extra {
-		env[key] = value
-	}
+	maps.Copy(env, extra)
 	h := &githubHarness{githubFake: fake}
 	h.r = New(env, &runtime.HTTPClient{Transport: toFake{server}})
 	h.r.Now = func() time.Time { return time.Unix(1_900_000_000, 0) }
@@ -187,7 +183,7 @@ func TestGitHubAppJWTIsSignedByOpenSSLWithTheConnectionsKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jwt, err := h.r.githubJWT(context.Background(), c)
+	jwt, err := h.r.githubJWT(t.Context(), c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +221,7 @@ func TestGitHubConnectionRefusals(t *testing.T) {
 			r := New(test.env, &fakeHTTP{})
 			c, err := r.githubConnection("")
 			if err == nil {
-				_, err = r.githubJWT(context.Background(), c)
+				_, err = r.githubJWT(t.Context(), c)
 			}
 			if err == nil {
 				t.Fatal("accepted")
@@ -237,7 +233,7 @@ func TestGitHubConnectionRefusals(t *testing.T) {
 func TestGitHubTokensAreScopedAndMintedOncePerSweep(t *testing.T) {
 	h := newGitHubHarness(t, map[string]string{githubFakeAPI + " /repos/example/app": `{}`}, nil)
 	c, _ := h.r.githubConnection("")
-	ctx := context.Background()
+	ctx := t.Context()
 	call := func(perms githubapi.AppPermissions) {
 		t.Helper()
 		if _, err := h.r.githubCall(ctx, c, "GET", "/repos/example/app", []string{"example/app"}, perms, nil); err != nil {
@@ -280,7 +276,7 @@ func TestGitHubProbe(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(h.r.Env["HQ_CONTROLLER_SSH_DIR"], "hq-app.key.pub"), ssh.MarshalAuthorizedKey(key), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	result, err := h.r.githubProbe(context.Background(), "hq-app")
+	result, err := h.r.githubProbe(t.Context(), "hq-app")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +291,7 @@ func TestGitHubProbe(t *testing.T) {
 	}
 
 	h.answer(githubFakeAPI, "/app", `{}`)
-	if _, err := h.r.githubProbe(context.Background(), "hq-app"); func() runtime.FailureClass { f, _, _ := runtime.Classify(err); return f }() != runtime.FailureClassCredential {
+	if _, err := h.r.githubProbe(t.Context(), "hq-app"); func() runtime.FailureClass { f, _, _ := runtime.Classify(err); return f }() != runtime.FailureClassCredential {
 		t.Fatalf("an app GitHub does not name is a refused credential: %v", err)
 	}
 }
@@ -395,7 +391,7 @@ func githubRepositoryRoutes() map[string]string {
 func readRepository(t *testing.T, h *githubHarness) (GitHubRepositoryRecord, []runtime.RefusedPart) {
 	t.Helper()
 	controller := NewController(h.r, runtime.ControllerRegistry{})
-	report := controller.readKind(context.Background(), h.r.readers[string(runtime.ResourceKindGitHubRepository)])
+	report := controller.readKind(t.Context(), h.r.readers[string(runtime.ResourceKindGitHubRepository)])
 	if !report.OK || len(report.Records) != 1 {
 		t.Fatalf("report %+v", report)
 	}
@@ -446,7 +442,7 @@ func TestGitHubRepositoryReading(t *testing.T) {
 	}
 	// A 403 under a token that holds every read permission is a feature the
 	// repository does not offer, never a permission to grant.
-	if len(refused) != 1 || refused[0].Part != githubPartLeaked || refused[0].Scope != "example/app" || refused[0].Refusal == runtime.FailureClassPermission || !strings.HasPrefix(refused[0].Reason, "Not offered") {
+	if len(refused) != 1 || refused[0].Part != runtime.PartLeakedCredentials || refused[0].Scope != "example/app" || refused[0].Refusal == runtime.FailureClassPermission || !strings.HasPrefix(refused[0].Reason, "Not offered") {
 		t.Fatalf("refused %+v", refused)
 	}
 	resolved := 0
@@ -472,23 +468,23 @@ func TestGitHubRepositoryParts(t *testing.T) {
 	for _, test := range []struct {
 		name    string
 		status  map[string]int
-		part    string
+		part    runtime.ReadingPartName
 		check   func(GitHubRepositoryRecord) bool
 		failure runtime.FailureClass
 	}{
 		{"workflows it may not read are that part refused, not no pins",
-			map[string]int{"/contents/.github/workflows?ref=main": 500}, githubPartPins,
+			map[string]int{"/contents/.github/workflows?ref=main": 500}, runtime.PartWorkflowPins,
 			func(r GitHubRepositoryRecord) bool { return r.Pins == nil && r.CalledWorkflows == nil }, runtime.FailureClassUnclassified},
 		{"a repository without workflows has nothing to pin",
 			map[string]int{"/contents/.github/workflows?ref=main": 404, "/contents/.github/actions?ref=main": 404}, "",
 			func(r GitHubRepositoryRecord) bool { return r.Pins != nil && len(r.Pins) == 0 }, ""},
-		{"rules a plan does not offer", map[string]int{"/rules/branches/main": 403}, githubPartBranchRules,
+		{"rules a plan does not offer", map[string]int{"/rules/branches/main": 403}, runtime.PartBranchRules,
 			func(r GitHubRepositoryRecord) bool { return r.Rules == nil }, runtime.FailureClassUnclassified},
-		{"environments refused read as none", map[string]int{"/environments": 403}, githubPartEnvironments,
+		{"environments refused read as none", map[string]int{"/environments": 403}, runtime.PartEnvironments,
 			func(r GitHubRepositoryRecord) bool { return r.Environments != nil && len(r.Environments) == 0 }, runtime.FailureClassUnclassified},
-		{"access refused whole", map[string]int{"/keys?per_page=100": 404}, githubPartAccess,
+		{"access refused whole", map[string]int{"/keys?per_page=100": 404}, runtime.PartAccess,
 			func(r GitHubRepositoryRecord) bool { return r.Access == nil }, runtime.FailureClassUnclassified},
-		{"a refused credential keeps its class", map[string]int{"/actions/variables?per_page=100": 401}, githubPartVariables,
+		{"a refused credential keeps its class", map[string]int{"/actions/variables?per_page=100": 401}, runtime.PartVariables,
 			func(r GitHubRepositoryRecord) bool { return r.Variables == nil }, runtime.FailureClassCredential},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -513,7 +509,7 @@ func TestGitHubRepositoryParts(t *testing.T) {
 	}
 	h := newGitHubHarness(t, githubRepositoryRoutes(), nil)
 	h.refuse(githubFakeAPI, "/repos/example/app/commits/main", 502)
-	report := NewController(h.r, runtime.ControllerRegistry{}).readKind(context.Background(), h.r.readers[string(runtime.ResourceKindGitHubRepository)])
+	report := NewController(h.r, runtime.ControllerRegistry{}).readKind(t.Context(), h.r.readers[string(runtime.ResourceKindGitHubRepository)])
 	if report.OK {
 		t.Fatal("a repository whose head cannot be read fails the reading, never reads as empty")
 	}
@@ -529,7 +525,7 @@ func TestGitHubImagesOfTheComposition(t *testing.T) {
 	if encoded, _ := json.Marshal(record.Images); string(encoded) != `[{"name":"example/app","tags":2,"signed":["012","abc"]}]` {
 		t.Fatalf("images %s", encoded)
 	}
-	if len(refused) != 1 || refused[0].Part != githubPartImages || refused[0].Scope != "example/app:example/app-composed" {
+	if len(refused) != 1 || refused[0].Part != runtime.PartImages || refused[0].Scope != "example/app:example/app-composed" {
 		t.Fatalf("an image the app may not read is refused alone: %+v", refused)
 	}
 	for _, call := range h.recorded() {
@@ -564,7 +560,7 @@ func checkRunsRoute(sha, body string) (string, string) {
 	return githubFakeAPI + " /repos/example/ext/commits/" + sha + "/check-runs?app_id=12345&check_name=Severino+HQ+%C2%B7+Production&filter=latest", body
 }
 
-var deliverySpec = Object{"repository": "example/host", "workflow": ".github/workflows/compose.yml", "branch": "main", "production": githubCurrent}
+var deliverySpec = Object{"repository": "example/host", "workflow": ".github/workflows/compose.yml", "branch": "main", "production": string(runtime.GitHubDeliveryProductionCurrent)}
 
 func TestGitHubDelivery(t *testing.T) {
 	for _, test := range []struct {
@@ -614,16 +610,14 @@ func TestGitHubDelivery(t *testing.T) {
 				key, value := checkRunsRoute(sha, body)
 				routes[key] = value
 			}
-			for key, value := range test.extra {
-				routes[key] = value
-			}
+			maps.Copy(routes, test.extra)
 			h := deliveryHarness(t, routes)
 
-			plan, err := h.r.runAction(runtime.ResourceKindGitHubDelivery, "reconcile", context.Background(), deliverySpec, nil, false)
+			plan, err := h.r.runAction(runtime.ResourceKindGitHubDelivery, "reconcile", t.Context(), deliverySpec, nil, false)
 			if err != nil || len(h.writes()) != 0 {
 				t.Fatalf("a plan writes nothing: %v %v", err, h.writes())
 			}
-			result, err := h.r.runAction(runtime.ResourceKindGitHubDelivery, "reconcile", context.Background(), deliverySpec, nil, true)
+			result, err := h.r.runAction(runtime.ResourceKindGitHubDelivery, "reconcile", t.Context(), deliverySpec, nil, true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -666,7 +660,7 @@ func TestGitHubDeliveryRunBeforeTheAdmissionDoesNotCarryIt(t *testing.T) {
 	key, value := checkRunsRoute(admitted, `{"check_runs":[]}`)
 	routes[key] = value
 	h := deliveryHarness(t, routes)
-	records, err := h.r.githubDeliveryInventory(context.Background())
+	records, err := h.r.githubDeliveryInventory(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -692,16 +686,15 @@ func TestTheRegistryNamesTheComposedExtensions(t *testing.T) {
 
 func TestGitHubDeliveryWithoutASourceRepositoryReadsNothing(t *testing.T) {
 	h := newGitHubHarness(t, nil, nil)
-	records, err := h.r.githubDeliveryInventory(context.Background())
+	records, err := h.r.githubDeliveryInventory(t.Context())
 	if err != nil || len(records) != 0 || len(h.recorded()) != 0 {
 		t.Fatalf("%v %v %v", records, err, h.recorded())
 	}
 }
 
 // The workflows and scripts that report delivery name the check and the
-// comment marker the controller writes, and HQ's declaration adopts the record
-// the controller reads.
-func TestDeliveryNamesAgreeWithThePipelineAndTheDeclaration(t *testing.T) {
+// comment marker the controller writes.
+func TestDeliveryNamesAgreeWithThePipeline(t *testing.T) {
 	read := func(path string) string {
 		t.Helper()
 		data, err := os.ReadFile(filepath.Join("..", "..", path))
@@ -718,11 +711,5 @@ func TestDeliveryNamesAgreeWithThePipelineAndTheDeclaration(t *testing.T) {
 	marker, _, _ := strings.Cut(githubDeliveryMark, "%s")
 	if !strings.Contains(read("scripts/hq-report.sh"), `marker="`+marker+"${COMMIT") {
 		t.Errorf("hq-report.sh does not write the marker %q", marker)
-	}
-	declaration := read("hq/domains/control_plane/provider_adapters/github.py")
-	for _, line := range []string{`CURRENT = "` + githubCurrent + `"`, `COMPOSE_WORKFLOW = "` + githubCompose + `"`} {
-		if !strings.Contains(declaration, line) {
-			t.Errorf("github.py does not declare %s", line)
-		}
 	}
 }

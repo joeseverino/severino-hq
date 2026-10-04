@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/providers/cfapi"
+
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // What a Cloudflare account holds beyond its DNS, each list read once per sweep.
@@ -37,7 +38,7 @@ func cloudflareAccountItems[T any](ctx context.Context, r *Registry, ref, path s
 		return nil, err
 	}
 	items, err := r.cloudflareCachedList(ctx, "cloudflare-account-list:"+ref+":"+path, func() ([]json.RawMessage, error) {
-		return r.cloudflareList(ctx, "cloudflare_api", "/accounts/"+account+path, ref, perPage)
+		return r.cloudflareList(ctx, runtime.ConnectionProviderCloudflareAPI, "/accounts/"+account+path, ref, perPage)
 	})
 	if err != nil {
 		return nil, err
@@ -92,7 +93,7 @@ func (r *Registry) cloudflareD1Databases(ctx context.Context) ([]any, error) {
 			record := CloudflareD1DatabaseRecord{ConnectionRef: ref, AccountID: account, Name: database.Name, UUID: database.UUID, CreatedAt: database.CreatedAt, Version: database.Version}
 			size, err := r.cloudflareD1Size(ctx, account, database.UUID, ref)
 			if err != nil {
-				refuse(ctx, "file_size", ref, record.Name, err)
+				refuse(ctx, runtime.PartFileSize, ref, record.Name, err)
 			}
 			record.FileSize = size
 			found = append(found, record)
@@ -195,7 +196,7 @@ func (r *Registry) cloudflareServiceTokens(ctx context.Context) ([]any, error) {
 		}
 		apps, appsErr := cloudflareAccountItems[cfAccessApp](ctx, r, ref, "/access/apps", cloudflarePerPage)
 		if appsErr != nil {
-			refuse(ctx, "apps", ref, "", appsErr)
+			refuse(ctx, runtime.PartApps, ref, "", appsErr)
 		}
 		for _, token := range tokens {
 			record := CloudflareServiceTokenRecord{ConnectionRef: ref, ID: token.ID, Name: token.Name, ExpiresAt: token.ExpiresAt, CreatedAt: token.CreatedAt}
@@ -226,7 +227,7 @@ func (r *Registry) cloudflareTunnels(ctx context.Context) ([]any, error) {
 			base := "/accounts/" + account + "/cfd_tunnel/" + tunnel.ID
 			record := CloudflareTunnelRecord{ConnectionRef: ref, AccountID: account, ID: tunnel.ID, Name: tunnel.Name, Status: string(tunnel.Status), CreatedAt: tunnel.CreatedAt, ConnsActiveAt: tunnel.ConnsActiveAt}
 			if config, err := cloudflareOptional[cfapi.TunnelConfiguration](r.cloudflareAPIResult(ctx, base+"/configurations", ref)); err != nil {
-				refuse(ctx, "configuration", ref, record.Name, err)
+				refuse(ctx, runtime.PartConfiguration, ref, record.Name, err)
 			} else {
 				source := string(config.Source)
 				ingress := []CloudflareTunnelIngress{}
@@ -238,7 +239,7 @@ func (r *Registry) cloudflareTunnels(ctx context.Context) ([]any, error) {
 				record.ConfigSource, record.Ingress = &source, &ingress
 			}
 			if clients, err := cloudflareOptional[[]cfapi.TunnelTunnelClient](r.cloudflareAPIResult(ctx, base+"/connections", ref)); err != nil {
-				refuse(ctx, "connections", ref, record.Name, err)
+				refuse(ctx, runtime.PartConnections, ref, record.Name, err)
 			} else {
 				connections := []CloudflareTunnelConnection{}
 				for _, client := range clients {
@@ -275,7 +276,7 @@ func (r *Registry) cloudflareEdgeCertificates(ctx context.Context) ([]any, error
 			packs, err := r.cloudflareCertificatePacks(ctx, zone.ID, ref)
 			if err != nil {
 				refused = append(refused, err)
-				refuse(ctx, "", ref, name, err)
+				refuse(ctx, runtime.PartWhole, ref, name, err)
 				continue
 			}
 			for _, pack := range packs {
@@ -297,7 +298,7 @@ func (r *Registry) cloudflareEdgeCertificates(ctx context.Context) ([]any, error
 }
 
 func (r *Registry) cloudflareCertificatePacks(ctx context.Context, zoneID, ref string) ([]cfapi.TLSCertificatesAndHostnamesCertificatePack, error) {
-	items, err := r.cloudflareList(ctx, "cloudflare_api", "/zones/"+zoneID+"/ssl/certificate_packs?status=all", ref, cloudflareAccountPerPage)
+	items, err := r.cloudflareList(ctx, runtime.ConnectionProviderCloudflareAPI, "/zones/"+zoneID+"/ssl/certificate_packs?status=all", ref, cloudflareAccountPerPage)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +332,7 @@ func earliestExpiry(pack cfapi.TLSCertificatesAndHostnamesCertificatePack) strin
 			dates = append(dates, certificate.ExpiresOn)
 		}
 	}
-	sort.Strings(dates)
+	slices.Sort(dates)
 	if len(dates) == 0 {
 		return ""
 	}

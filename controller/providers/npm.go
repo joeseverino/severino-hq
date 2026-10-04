@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/providers/npmapi"
@@ -27,7 +27,7 @@ func (r *Registry) admitNPM() {
 	r.reader(runtime.ResourceKindNPMDeadHost, npmEachConnection(r, r.npmDeadHosts, func(rec *NPMDeadHostRecord, ref *string) { rec.ConnectionRef = ref }))
 	r.reader(runtime.ResourceKindNPMStream, npmEachConnection(r, r.npmStreams, func(rec *NPMStreamRecord, ref *string) { rec.ConnectionRef = ref }))
 	r.reader(runtime.ResourceKindNPMAccessList, npmEachConnection(r, r.npmAccessLists, func(rec *NPMAccessListRecord, ref *string) { rec.ConnectionRef = ref }))
-	r.probe("npm", func(ctx context.Context, ref string) (ProbeResult, error) {
+	r.probe(runtime.ConnectionProviderNPM, func(ctx context.Context, ref string) (ProbeResult, error) {
 		if _, _, err := r.npmSession(ctx, ref); err != nil {
 			return ProbeResult{}, err
 		}
@@ -40,7 +40,7 @@ func (r *Registry) admitNPM() {
 func npmEachConnection[T any](r *Registry, read func(context.Context, string) ([]T, error), stamp func(*T, *string)) Reader {
 	return func(ctx context.Context) ([]any, error) {
 		found := []any{}
-		for _, ref := range r.refs("npm") {
+		for _, ref := range r.refs(runtime.ConnectionProviderNPM) {
 			records, err := read(ctx, ref)
 			if err != nil {
 				return nil, err
@@ -56,7 +56,7 @@ func npmEachConnection[T any](r *Registry, read func(context.Context, string) ([
 }
 
 func (r *Registry) npmSession(ctx context.Context, ref string) (string, map[string]string, error) {
-	prefix, err := r.Env.Prefix("npm", ref)
+	prefix, err := r.Env.Prefix(runtime.ConnectionProviderNPM, ref)
 	if err != nil {
 		return "", nil, err
 	}
@@ -131,8 +131,7 @@ func npmRefused(err error, what, needs string) error {
 	case runtime.FailureClassPermission:
 		return &ProviderError{Message: what + " needs " + needs, Failure: failure}
 	}
-	var provider *ProviderError
-	if errors.As(err, &provider) {
+	if _, ok := errors.AsType[*ProviderError](err); ok {
 		return fmt.Errorf("%s: %w", what, err)
 	}
 	return &ProviderError{Message: what, Err: err}
@@ -162,7 +161,7 @@ func (e npmSessionFailed) Unwrap() error { return e.error }
 // npmFetched is one NPM list endpoint's answer, read once per sweep whichever
 // kinds need it. A sign-in failure comes back as npmSessionFailed.
 func (r *Registry) npmFetched(ctx context.Context, ref, path string) (json.RawMessage, error) {
-	prefix, err := r.Env.Prefix("npm", ref)
+	prefix, err := r.Env.Prefix(runtime.ConnectionProviderNPM, ref)
 	if err != nil {
 		return nil, npmSessionFailed{err}
 	}
@@ -177,8 +176,7 @@ func (r *Registry) npmFetched(ctx context.Context, ref, path string) (json.RawMe
 
 // npmFetchFailure is a list read's failure as the reader reports it.
 func npmFetchFailure(err error, what, needs string) error {
-	var session npmSessionFailed
-	if errors.As(err, &session) {
+	if session, ok := errors.AsType[npmSessionFailed](err); ok {
 		return session.error
 	}
 	return npmRefused(err, what, needs)
@@ -213,7 +211,7 @@ func npmID(id *npmapi.Id, what string) (int, error) {
 
 func sortedNames(names []string) []string {
 	out := append([]string{}, names...)
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -399,8 +397,7 @@ func npmEnrichment[T any](ctx context.Context, r *Registry, src npmSource[T]) ([
 func (r *Registry) npmInventory(ctx context.Context) ([]any, error) {
 	raw, err := r.npmFetched(ctx, "", npmProxyHosts.path)
 	if err != nil {
-		var session npmSessionFailed
-		if errors.As(err, &session) {
+		if session, ok := errors.AsType[npmSessionFailed](err); ok {
 			return nil, session.error
 		}
 		return nil, fmt.Errorf("npm %s: %w", npmProxyHosts.what, err)
@@ -508,21 +505,21 @@ func (r *Registry) npmServes(ctx context.Context, ref string) map[int][]string {
 		}
 	}
 	if hosts, err := npmRead(ctx, r, ref, npmProxyHosts); err != nil {
-		refuse(ctx, "proxy_hosts", ref, "", err)
+		refuse(ctx, runtime.PartProxyHosts, ref, "", err)
 	} else {
 		for _, host := range hosts {
 			add(host.CertificateId, host.Enabled, host.DomainNames)
 		}
 	}
 	if hosts, err := npmRead(ctx, r, ref, npmRedirectionHosts); err != nil {
-		refuse(ctx, "redirection_hosts", ref, "", err)
+		refuse(ctx, runtime.PartRedirectionHosts, ref, "", err)
 	} else {
 		for _, host := range hosts {
 			add(host.CertificateId, host.Enabled, host.DomainNames)
 		}
 	}
 	if hosts, err := npmRead(ctx, r, ref, npmDeadHostsSource); err != nil {
-		refuse(ctx, "dead_hosts", ref, "", err)
+		refuse(ctx, runtime.PartDeadHosts, ref, "", err)
 	} else {
 		for _, host := range hosts {
 			add(host.CertificateId, host.Enabled, host.DomainNames)
@@ -656,7 +653,7 @@ func (r *Registry) npmAccessLists(ctx context.Context, ref string) ([]NPMAccessL
 	}
 	protects := map[int][]string{}
 	if hosts, err := npmRead(ctx, r, ref, npmProxyHosts); err != nil {
-		refuse(ctx, "proxy_hosts", ref, "", err)
+		refuse(ctx, runtime.PartProxyHosts, ref, "", err)
 	} else {
 		for _, host := range hosts {
 			if id := int(host.AccessListId); id > 0 {

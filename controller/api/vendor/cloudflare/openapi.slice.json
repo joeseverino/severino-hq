@@ -4,6 +4,12 @@
   "title": "Cloudflare API",
   "version": "4.0.0"
  },
+ "servers": [
+  {
+   "description": "Client API",
+   "url": "https://api.cloudflare.com/client/v4"
+  }
+ ],
  "paths": {
   "/accounts": {
    "get": {

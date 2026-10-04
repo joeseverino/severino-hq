@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -48,7 +47,7 @@ func TestLargePayloadUsesStdin(t *testing.T) {
 		Args  []string
 		Bytes int
 	}
-	err := b.Call(context.Background(), []string{"inventory"}, Object{"data": strings.Repeat("x", 300000)}, &result)
+	err := b.Call(t.Context(), []string{"inventory"}, Object{"data": strings.Repeat("x", 300000)}, &result)
 	if err != nil || result.Bytes < 300000 {
 		t.Fatalf("%v %#v", err, result)
 	}
@@ -65,7 +64,7 @@ func TestBridgeRefusesInvalidAndTrailingJSON(t *testing.T) {
 	for _, mode := range []string{"bad", "trailing"} {
 		t.Run(mode, func(t *testing.T) {
 			b := childBridge(t)
-			if err := b.Call(context.Background(), []string{mode}, nil, new(Object)); err == nil {
+			if err := b.Call(t.Context(), []string{mode}, nil, new(Object)); err == nil {
 				t.Fatal("accepted invalid output")
 			}
 		})
@@ -73,18 +72,18 @@ func TestBridgeRefusesInvalidAndTrailingJSON(t *testing.T) {
 }
 func TestBridgeExplainsFailureAndBoundsExecution(t *testing.T) {
 	b := childBridge(t)
-	if err := b.Call(context.Background(), []string{"fail"}, nil, nil); err == nil || !strings.Contains(err.Error(), "Unknown kind") {
+	if err := b.Call(t.Context(), []string{"fail"}, nil, nil); err == nil || !strings.Contains(err.Error(), "Unknown kind") {
 		t.Fatal(err)
 	}
 	b.Timeout = 20 * time.Millisecond
-	if err := b.Call(context.Background(), []string{"wait"}, nil, nil); err == nil || !strings.Contains(err.Error(), "deadline") {
+	if err := b.Call(t.Context(), []string{"wait"}, nil, nil); err == nil || !strings.Contains(err.Error(), "deadline") {
 		t.Fatal(err)
 	}
 }
 
 func TestBridgeOutputIsBounded(t *testing.T) {
 	b := childBridge(t)
-	if err := b.Call(context.Background(), []string{"flood"}, nil, nil); err == nil || !strings.Contains(err.Error(), "too much data") {
+	if err := b.Call(t.Context(), []string{"flood"}, nil, nil); err == nil || !strings.Contains(err.Error(), "too much data") {
 		t.Fatal(err)
 	}
 }
@@ -93,7 +92,7 @@ func TestBridgeOutputIsBounded(t *testing.T) {
 func TestBridgeRefusesFieldsTheContractDoesNotDeclare(t *testing.T) {
 	b := childBridge(t)
 	var into IdlePassOutput
-	if err := b.Call(context.Background(), []string{"drift"}, nil, &into); err == nil || !strings.Contains(err.Error(), "undeclared") {
+	if err := b.Call(t.Context(), []string{"drift"}, nil, &into); err == nil || !strings.Contains(err.Error(), "undeclared") {
 		t.Fatalf("%v", err)
 	}
 }

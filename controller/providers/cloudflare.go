@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/providers/cfapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -16,7 +16,7 @@ import (
 // The zone settings worth carrying: how a domain answers over TLS.
 var zonePostureSettings = []string{"ssl", "min_tls_version", "tls_1_3", "always_use_https", "automatic_https_rewrites"}
 
-var caaValueParts = regexp.MustCompile(`^\s*(\d{1,3})\s+(issue|issuewild|iodef)\s+"([^"]*)"\s*$`)
+var caaValueParts = api.MustPattern("CloudflareCAAValue")
 
 func (r *Registry) admitCloudflare() {
 	act(r, runtime.ResourceKindCloudflareDNSRecord, "reconcile", r.cloudflareRecordReconcile)
@@ -30,8 +30,8 @@ func (r *Registry) admitCloudflare() {
 	r.reader(runtime.ResourceKindCloudflareTunnel, r.cloudflareTunnels)
 	r.reader(runtime.ResourceKindCloudflareEdgeCertificate, r.cloudflareEdgeCertificates)
 	r.reader(runtime.ResourceKindCloudflareRedirect, r.cloudflareRedirects)
-	r.probe("cloudflare_dns", r.cloudflareDNSProbe)
-	r.probe("cloudflare_api", r.cloudflareAPIProbe)
+	r.probe(runtime.ConnectionProviderCloudflareDNS, r.cloudflareDNSProbe)
+	r.probe(runtime.ConnectionProviderCloudflareAPI, r.cloudflareAPIProbe)
 }
 
 // cloudflareAutoTTL is the TTL Cloudflare reads as automatic.
@@ -39,7 +39,7 @@ const cloudflareAutoTTL = 1
 
 func (r *Registry) cloudflareZones(ctx context.Context) ([]cfapi.ZonesZone, error) {
 	items, err := r.cloudflareCachedList(ctx, "cloudflare-zones", func() ([]json.RawMessage, error) {
-		return r.cloudflareList(ctx, "cloudflare_dns", "/zones", "", cloudflarePerPage)
+		return r.cloudflareList(ctx, runtime.ConnectionProviderCloudflareDNS, "/zones", "", cloudflarePerPage)
 	})
 	if err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func (r *Registry) cloudflareZoneID(ctx context.Context, zone string) (string, e
 }
 
 func (r *Registry) cloudflareRecords(ctx context.Context, zoneID string) ([]cfRecord, error) {
-	items, err := r.cloudflareList(ctx, "cloudflare_dns", "/zones/"+zoneID+"/dns_records", "", cloudflarePerPage)
+	items, err := r.cloudflareList(ctx, runtime.ConnectionProviderCloudflareDNS, "/zones/"+zoneID+"/dns_records", "", cloudflarePerPage)
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +287,7 @@ func (r *Registry) cloudflareRecordDelete(ctx context.Context, spec CloudflareDN
 func (r *Registry) cloudflareRegistrarDomains(ctx context.Context) map[string]CloudflareRegistration {
 	domains, err := r.cloudflareRegistrations(ctx)
 	if err != nil {
-		refuse(ctx, "registration", "", "", err)
+		refuse(ctx, runtime.PartRegistration, "", "", err)
 		return map[string]CloudflareRegistration{}
 	}
 	found := map[string]CloudflareRegistration{}
@@ -329,7 +329,7 @@ func (r *Registry) cloudflareZonePosture(ctx context.Context, zoneID, zone strin
 			item, err = cloudflareDecode[cfStringSetting](raw, setting+" setting")
 		}
 		if err != nil {
-			refuse(ctx, "posture", "", zone, err)
+			refuse(ctx, runtime.PartPosture, "", zone, err)
 			return map[string]string{}
 		}
 		if item.Value != "" {
@@ -342,7 +342,7 @@ func (r *Registry) cloudflareZonePosture(ctx context.Context, zoneID, zone strin
 // cloudflareZoneInventory reports every zone the credential can see, declared
 // or not: which of them HQ manages is an operator's decision.
 func (r *Registry) cloudflareZoneInventory(ctx context.Context) ([]any, error) {
-	prefix, err := r.Env.Prefix("cloudflare_dns", "")
+	prefix, err := r.Env.Prefix(runtime.ConnectionProviderCloudflareDNS, "")
 	if err != nil {
 		return nil, err
 	}
@@ -400,11 +400,11 @@ func (r *Registry) cloudflareRecordInventory(ctx context.Context) ([]any, error)
 // A probe answers whether the credential still works and what it reaches.
 
 func (r *Registry) cloudflareDNSProbe(ctx context.Context, ref string) (ProbeResult, error) {
-	verification, err := r.cloudflareEnvelope(ctx, "cloudflare_dns", ref, "/user/tokens/verify", "GET", nil)
+	verification, err := r.cloudflareEnvelope(ctx, runtime.ConnectionProviderCloudflareDNS, ref, "/user/tokens/verify", "GET", nil)
 	if err != nil {
 		return ProbeResult{}, err
 	}
-	items, err := r.cloudflareList(ctx, "cloudflare_dns", "/zones", ref, cloudflarePerPage)
+	items, err := r.cloudflareList(ctx, runtime.ConnectionProviderCloudflareDNS, "/zones", ref, cloudflarePerPage)
 	if err != nil {
 		return ProbeResult{}, err
 	}
@@ -416,7 +416,7 @@ func (r *Registry) cloudflareDNSProbe(ctx context.Context, ref string) (ProbeRes
 	for _, zone := range namedZones(zones) {
 		names = append(names, zone.Name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	expires, err := tokenExpiry(verification)
 	if err != nil {
 		return ProbeResult{}, err
@@ -443,7 +443,7 @@ func (r *Registry) cloudflareAPIProbe(ctx context.Context, ref string) (ProbeRes
 	for _, site := range sites {
 		hosts = append(hosts, site.Host)
 	}
-	sort.Strings(hosts)
+	slices.Sort(hosts)
 	measured := "sites"
 	if len(hosts) == 1 {
 		measured = "site"

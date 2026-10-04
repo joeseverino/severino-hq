@@ -10,6 +10,9 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// ServerURLClientAPI defines the Server URL for Client API
+const ServerURLClientAPI = "https://api.cloudflare.com/client/v4"
+
 // Defines values for D1JurisdictionNullable.
 const (
 	D1JurisdictionNullableEu      D1JurisdictionNullable = "eu"

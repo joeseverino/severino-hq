@@ -11,7 +11,7 @@ import (
 	"io"
 	"net"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"syscall"
 	"time"
@@ -147,7 +147,7 @@ func (r *Registry) observeTLS(ctx context.Context, domain, connectHost string) (
 	}
 	digest := sha256.Sum256(der)
 	sans := append([]string{}, certificate.DNSNames...)
-	sort.Strings(sans)
+	slices.Sort(sans)
 	return TLSObservation{
 		Domain:            domain,
 		NotAfter:          stamp(certificate.NotAfter.Truncate(time.Second)),

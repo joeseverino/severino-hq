@@ -2,15 +2,17 @@ package providers
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/runtime"
@@ -29,8 +31,7 @@ var errPolicyNotObject = &ProviderError{Message: "the policy is not a JSON objec
 func policyDocument(raw []byte) (tailnetPolicyDocument, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil {
-		var syntax *json.SyntaxError
-		if errors.As(err, &syntax) {
+		if _, ok := errors.AsType[*json.SyntaxError](err); ok {
 			return nil, &ProviderError{Message: "the policy is not readable JSON", Err: err}
 		}
 		return nil, errPolicyNotObject
@@ -180,15 +181,9 @@ func policyTests(policy tailnetPolicyView) map[testKey]*testEntry {
 }
 
 func sortedTestKeys(tests map[testKey]*testEntry) []testKey {
-	keys := []testKey{}
-	for key := range tests {
-		keys = append(keys, key)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].src != keys[j].src {
-			return keys[i].src < keys[j].src
-		}
-		return keys[i].proto < keys[j].proto
+	keys := slices.AppendSeq([]testKey{}, maps.Keys(tests))
+	slices.SortFunc(keys, func(a, b testKey) int {
+		return cmp.Or(cmp.Compare(a.src, b.src), cmp.Compare(a.proto, b.proto))
 	})
 	return keys
 }
@@ -216,7 +211,7 @@ func refuseWeakerTests(live, document tailnetPolicyView) error {
 			}
 		}
 		if len(dropped) > 0 {
-			sort.Strings(dropped)
+			slices.Sort(dropped)
 			return &ProviderError{Message: fmt.Sprintf("the declared policy no longer tests that %q is denied %q; a live deny is kept, so not applied", pair.src, dropped[0])}
 		}
 	}
@@ -240,11 +235,14 @@ func (c tailnetClient) policyPassesItsTests(ctx context.Context, document tailne
 	if verdict.Message == "" && len(verdict.Data) == 0 {
 		return nil
 	}
-	said := verdict.Message
-	for _, data := range verdict.Data {
-		said += "; " + data.User + ": " + strings.Join(data.Errors, ", ")
+	said := []string{}
+	if verdict.Message != "" {
+		said = append(said, verdict.Message)
 	}
-	return &ProviderError{Message: "the declared policy does not pass its own tests; not applied: " + runtime.Clip(strings.TrimPrefix(said, "; "), runtime.VerdictLimit)}
+	for _, data := range verdict.Data {
+		said = append(said, data.User+": "+strings.Join(data.Errors, ", "))
+	}
+	return &ProviderError{Message: "the declared policy does not pass its own tests; not applied: " + runtime.Clip(strings.Join(said, "; "), runtime.VerdictLimit)}
 }
 
 // writeTailnetPolicy writes the policy, conditional on the version the checks
@@ -280,7 +278,7 @@ func currentPolicy(document tailnetPolicyDocument) Result {
 		return Result{
 			Status: status,
 			Conditions: []Condition{{
-				Type:    "Ready",
+				Type:    runtime.ConditionReady,
 				Status:  false,
 				Reason:  "Untested",
 				Message: "The policy is as declared and carries no tests, so nothing checks what it grants.",
@@ -288,7 +286,7 @@ func currentPolicy(document tailnetPolicyDocument) Result {
 			Message: "Tailnet policy is current and untested.",
 		}
 	}
-	return Result{Status: status, Conditions: []Condition{condition("Ready", "Reconciled", "The policy is as declared.")}, Message: "Tailnet policy is current."}
+	return Result{Status: status, Conditions: []Condition{condition(runtime.ConditionReady, "Reconciled", "The policy is as declared.")}, Message: "Tailnet policy is current."}
 }
 
 func (r *Registry) tailnetPolicyReconcile(ctx context.Context, spec TailnetPolicySpec, _ struct{}, apply bool) (Result, error) {
@@ -338,7 +336,7 @@ func (r *Registry) tailnetPolicyReconcile(ctx context.Context, spec TailnetPolic
 	return Result{
 		Changed:    true,
 		Status:     TailnetPolicyStatus{Applied: true, Document: applied.pretty()},
-		Conditions: []Condition{condition("Ready", "Reconciled", "The policy is as declared.")},
+		Conditions: []Condition{condition(runtime.ConditionReady, "Reconciled", "The policy is as declared.")},
 		Message:    "Tailnet policy applied after its own tests passed.",
 	}, nil
 }
@@ -392,7 +390,7 @@ func (r *Registry) tailnetLock() tailnetLockRef {
 		}
 		lockedOut = append(lockedOut, name)
 	}
-	sort.Strings(lockedOut)
+	slices.Sort(lockedOut)
 	return tailnetLockRef{&TailnetLock{Enabled: status.Enabled, NodeKeySigned: status.NodeKeySigned, TrustedKeys: len(status.TrustedKeys), LockedOut: lockedOut}}
 }
 
@@ -478,11 +476,8 @@ func appConnectors(policy tailnetPolicyView) []TailnetAppConnector {
 }
 
 func sortedKeys[V any](m map[string]V) []string {
-	keys := []string{}
-	for key := range m {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
+	keys := slices.AppendSeq([]string{}, maps.Keys(m))
+	slices.Sort(keys)
 	return keys
 }
 
@@ -501,14 +496,14 @@ func (r *Registry) tailnetPolicyInventory(ctx context.Context) ([]any, error) {
 	}
 
 	// Each part keeps what was read before a refusal stopped it.
-	read := map[string]map[string]json.RawMessage{}
+	read := map[runtime.ReadingPartName]map[string]json.RawMessage{}
 	for _, part := range []struct {
-		name  string
+		name  runtime.ReadingPartName
 		paths []string
 	}{
-		{"settings", []string{"settings"}},
-		{"dns", []string{"dns/preferences", "dns/nameservers", "dns/searchpaths"}},
-		{"services", []string{"services"}},
+		{runtime.PartSettings, []string{"settings"}},
+		{runtime.PartDNS, []string{"dns/preferences", "dns/nameservers", "dns/searchpaths"}},
+		{runtime.PartServices, []string{"services"}},
 	} {
 		merged := map[string]json.RawMessage{}
 		for _, path := range part.paths {
@@ -517,9 +512,7 @@ func (r *Registry) tailnetPolicyInventory(ctx context.Context) ([]any, error) {
 				refuse(ctx, part.name, "", "", err)
 				break
 			}
-			for key, value := range fields {
-				merged[key] = value
-			}
+			maps.Copy(merged, fields)
 		}
 		read[part.name] = merged
 	}
@@ -528,14 +521,12 @@ func (r *Registry) tailnetPolicyInventory(ctx context.Context) ([]any, error) {
 	var services tailnetServices
 	if raw, ok := read["services"]["vipServices"]; ok {
 		if err := json.Unmarshal(raw, &services.VIPServices); err != nil {
-			refuse(ctx, "services", "", "", &ProviderError{Message: "the services answer is unreadable", Err: err})
+			refuse(ctx, runtime.PartServices, "", "", &ProviderError{Message: "the services answer is unreadable", Err: err})
 		}
 	}
 
 	hosts := map[string]string{}
-	for name, address := range policy.Hosts {
-		hosts[name] = address
-	}
+	maps.Copy(hosts, policy.Hosts)
 	groups := []TailnetGroup{}
 	for _, name := range sortedKeys(policy.Groups) {
 		groups = append(groups, TailnetGroup{Name: name, Members: sortedCopy(policy.Groups[name])})
@@ -651,16 +642,22 @@ func (r *Registry) reachByDevice(ctx context.Context, devices []TailscaleDeviceR
 	return found
 }
 
-// tailnetBasePorts are where the answers start; the rest are the ports this
-// estate's containers publish.
-var tailnetBasePorts = []int{standardSSHPort, 53, 80, 443}
+// tailnetBasePorts are asked about on every device: the well-known SSH, DNS,
+// HTTP and TLS ports. The rest are derived from what this estate declares.
+var tailnetBasePorts = []int{standardSSHPort, dnsPort, httpPort, tlsPort}
 
-// portsWorthAsking is the ports something here listens on, plus the usual few.
-// Without Portainer, or with it not answering, the base set still applies.
+// portsWorthAsking is the base ports, the port each SSH connection declares,
+// and the ports this estate's containers publish. Without Portainer, or with
+// it not answering, the rest still applies.
 func (r *Registry) portsWorthAsking(ctx context.Context) []int {
 	seen := map[int]bool{}
 	for _, port := range tailnetBasePorts {
 		seen[port] = true
+	}
+	for _, ref := range r.Env.SSHRefs() {
+		if target, err := r.Env.SSH(ref); err == nil {
+			seen[target.Port] = true
+		}
 	}
 	if r.PublishedContainers != nil {
 		if containers, err := r.PublishedContainers(ctx); err == nil {
@@ -677,6 +674,6 @@ func (r *Registry) portsWorthAsking(ctx context.Context) []int {
 	for port := range seen {
 		ports = append(ports, port)
 	}
-	sort.Ints(ports)
+	slices.Sort(ports)
 	return ports
 }

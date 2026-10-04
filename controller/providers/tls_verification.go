@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -94,7 +94,7 @@ func (r *Registry) tlsConsumerDomains(ctx context.Context, consumer TLSConsumer,
 func (r *Registry) consumerTLSEndpoint(consumer TLSConsumer) (string, error) {
 	switch consumer.Kind {
 	case runtime.TLSConsumerKindNPM:
-		prefix, err := r.Env.Prefix("npm", "")
+		prefix, err := r.Env.Prefix(runtime.ConnectionProviderNPM, "")
 		if err != nil {
 			return "", err
 		}
@@ -159,13 +159,13 @@ func tlsConditions(spec TLSCertificateSpec, observations []TLSObservation, unver
 		fingerprints[item.FingerprintSHA256] = true
 	}
 	if len(fingerprints) > 1 {
-		conditions = append(conditions, Condition{Type: "Drifted", Status: true, Reason: "ConsumerMismatch", Message: "TLS consumers are serving different certificates."})
+		conditions = append(conditions, Condition{Type: runtime.ConditionDrifted, Status: true, Reason: "ConsumerMismatch", Message: "TLS consumers are serving different certificates."})
 	}
 	if daysRemaining <= spec.RenewalWindowDays {
-		conditions = append(conditions, Condition{Type: "Degraded", Status: true, Reason: "ExpiringSoon", Message: fmt.Sprintf("A verified TLS consumer expires in %d days.", daysRemaining)})
+		conditions = append(conditions, Condition{Type: runtime.ConditionDegraded, Status: true, Reason: "ExpiringSoon", Message: fmt.Sprintf("A verified TLS consumer expires in %d days.", daysRemaining)})
 	}
 	if len(unverified) > 0 {
-		conditions = append(conditions, Condition{Type: "Degraded", Status: true, Reason: "ConsumerUnverified", Message: "No verification domain is declared for: " + strings.Join(unverified, ", ")})
+		conditions = append(conditions, Condition{Type: runtime.ConditionDegraded, Status: true, Reason: "ConsumerUnverified", Message: "No verification domain is declared for: " + strings.Join(unverified, ", ")})
 	}
 	if len(unreachable) > 0 {
 		missed := make([]string, 0, len(unreachable))
@@ -176,10 +176,10 @@ func tlsConditions(spec TLSCertificateSpec, observations []TLSObservation, unver
 				missed = append(missed, item.Consumer)
 			}
 		}
-		conditions = append(conditions, Condition{Type: "Degraded", Status: true, Reason: "ConsumerUnreachable", Message: "Could not be read: " + strings.Join(missed, ", ")})
+		conditions = append(conditions, Condition{Type: runtime.ConditionDegraded, Status: true, Reason: "ConsumerUnreachable", Message: "Could not be read: " + strings.Join(missed, ", ")})
 	}
 	if len(conditions) == 0 {
-		return []Condition{condition("Ready", "Verified", "All TLS consumers are current.")}
+		return []Condition{condition(runtime.ConditionReady, "Verified", "All TLS consumers are current.")}
 	}
 	return conditions
 }
@@ -229,7 +229,7 @@ func (r *Registry) reconcileTLS(ctx context.Context, spec TLSCertificateSpec) (R
 	for _, item := range observations {
 		verified = append(verified, item.Domain)
 	}
-	sort.Strings(verified)
+	slices.Sort(verified)
 	status := &TLSCertificateStatus{
 		Issuer:               newest.Issuer,
 		NotAfter:             soonest.NotAfter,
@@ -293,7 +293,7 @@ func unserved(spec TLSCertificateSpec, status *TLSCertificateStatus, expected st
 	}
 	for consumer, names := range stale {
 		names = append([]string{}, names...)
-		sort.Strings(names)
+		slices.Sort(names)
 		found[consumer] = append(found[consumer], consumer+" still serves the previous certificate at "+strings.Join(names, ", "))
 	}
 	missed := map[string][]string{}
@@ -309,7 +309,7 @@ func unserved(spec TLSCertificateSpec, status *TLSCertificateStatus, expected st
 		line := consumer + " could not be read"
 		if len(names) > 0 {
 			names = append([]string{}, names...)
-			sort.Strings(names)
+			slices.Sort(names)
 			line += " at " + strings.Join(names, ", ")
 		}
 		found[consumer] = append(found[consumer], line)
@@ -348,7 +348,7 @@ func (r *Registry) verifyTLSDeployment(ctx context.Context, spec TLSCertificateS
 			for consumer := range failing {
 				consumers = append(consumers, consumer)
 			}
-			sort.Strings(consumers)
+			slices.Sort(consumers)
 			details := []string{}
 			for _, consumer := range consumers {
 				details = append(details, failing[consumer]...)

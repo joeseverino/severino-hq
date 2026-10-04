@@ -68,7 +68,7 @@ func (r *Registry) runAction(kind runtime.ResourceKind, action string, ctx conte
 
 func TestActionsDecodeOnceAtTheBoundary(t *testing.T) {
 	r := New(runtime.Environment{}, &fakeHTTP{})
-	ctx := context.Background()
+	ctx := t.Context()
 	bad := Object{"consumers": "not a list"}
 	if res, err := r.runAction(runtime.ResourceKindTLSCertificate, "renew", ctx, bad, nil, false); err != nil || !res.Changed {
 		t.Fatalf("a renewal plan answers without reading the spec: %v %+v", err, res)

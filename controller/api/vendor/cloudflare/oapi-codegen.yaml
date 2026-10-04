@@ -3,6 +3,7 @@ package: cfapi
 output: cloudflare.gen.go
 generate:
   models: true
+  server-urls: true
 output-options:
   skip-prune: true
   prefer-skip-optional-pointer: true

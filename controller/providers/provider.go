@@ -5,7 +5,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -114,7 +114,7 @@ type Registry struct {
 	Extensions []runtime.AdmittedExtension
 	actions    map[actionKey]Action
 	readers    map[string]Reader
-	probes     map[string]Probe
+	probes     map[runtime.ConnectionProvider]Probe
 	snapshotMu sync.Mutex
 	snapshot   map[string]*cachedRead
 	// refusedCredentials holds, for this sweep, each Cloudflare credential prefix
@@ -136,7 +136,7 @@ func New(env runtime.Environment, transport Transport) *Registry {
 	r := &Registry{
 		Env: env, HTTP: transport, Commands: &Commands{Env: env}, TLS: NetTLSDialer{CAFile: env["HQ_CONTROLLER_CA_FILE"]},
 		Now: time.Now, Monotonic: time.Now, Sleep: sleepContext,
-		actions: map[actionKey]Action{}, readers: map[string]Reader{}, probes: map[string]Probe{}, zoneIDs: map[string]string{},
+		actions: map[actionKey]Action{}, readers: map[string]Reader{}, probes: map[runtime.ConnectionProvider]Probe{}, zoneIDs: map[string]string{},
 	}
 	r.admitAdGuard()
 	r.admitNPM()
@@ -170,9 +170,9 @@ func (r *Registry) reader(kind runtime.ResourceKind, handler Reader) {
 	}
 	r.readers[string(kind)] = handler
 }
-func (r *Registry) probe(provider string, handler Probe) {
+func (r *Registry) probe(provider runtime.ConnectionProvider, handler Probe) {
 	if _, exists := r.probes[provider]; exists {
-		panic("duplicate native controller probe: " + provider)
+		panic("duplicate native controller probe: " + string(provider))
 	}
 	r.probes[provider] = handler
 }
@@ -190,11 +190,11 @@ func (r *Registry) Coverage() Coverage {
 		readers = append(readers, kind)
 	}
 	for provider := range r.probes {
-		probes = append(probes, provider)
+		probes = append(probes, string(provider))
 	}
-	sort.Strings(actions)
-	sort.Strings(readers)
-	sort.Strings(probes)
+	slices.Sort(actions)
+	slices.Sort(readers)
+	slices.Sort(probes)
 	return Coverage{Actions: actions, Readers: readers, Probes: probes}
 }
 
@@ -247,12 +247,12 @@ type refusals struct {
 	entries []runtime.RefusedPart
 }
 
-func refuse(ctx context.Context, part, ref, scope string, err error) {
+func refuse(ctx context.Context, part runtime.ReadingPartName, ref, scope string, err error) {
 	refuseAt(ctx, part, ref, scope, "", err)
 }
 
 // refuseAt reports a refused part whose scope is a machine, with its address.
-func refuseAt(ctx context.Context, part, ref, scope, address string, err error) {
+func refuseAt(ctx context.Context, part runtime.ReadingPartName, ref, scope, address string, err error) {
 	ledger, _ := ctx.Value(refusalKey{}).(*refusals)
 	if ledger == nil {
 		return
@@ -300,13 +300,13 @@ func deref[T any](p *T) T {
 func hostname(value string) string {
 	return strings.TrimRight(strings.ToLower(strings.TrimSpace(value)), ".")
 }
-func condition(kind, reason, message string) Condition {
+func condition(kind runtime.ConditionType, reason, message string) Condition {
 	return Condition{Type: kind, Status: true, Reason: reason, Message: message}
 }
 func result(changed bool, status any, reason, detail, message string) Result {
-	return Result{Changed: changed, Status: status, Conditions: []Condition{condition("Ready", reason, detail)}, Message: message}
+	return Result{Changed: changed, Status: status, Conditions: []Condition{condition(runtime.ConditionReady, reason, detail)}, Message: message}
 }
-func (r *Registry) refs(provider string) []string {
+func (r *Registry) refs(provider runtime.ConnectionProvider) []string {
 	refs := r.Env.Refs(provider)
 	if len(refs) == 0 {
 		return []string{""}

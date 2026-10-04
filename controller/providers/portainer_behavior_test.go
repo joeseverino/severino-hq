@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -87,9 +88,7 @@ func portainerRegistry(t *testing.T, base string, extra runtime.Environment) *Re
 		"PORTAINER_API_TOKEN":      "synthetic",
 		"HQ_CONTROLLER_ID":         "hq-node",
 	}
-	for name, value := range extra {
-		env[name] = value
-	}
+	maps.Copy(env, extra)
 	r := New(env, client)
 	r.Resolve = func(string) (string, error) { return "192.0.2.100", nil }
 	return r
@@ -107,7 +106,7 @@ func TestPortainerEnvironmentsAreTheirMachines(t *testing.T) {
 		{"Id":2,"Name":"edge-vps","URL":"tcp://192.0.2.20:9001","Type":2,"Status":1,"Snapshots":[]},
 		{"Id":3,"Name":"odd","URL":"tcp://192.0.2.30:9001","Type":9,"Status":2}]`})
 	r := portainerRegistry(t, server.URL, nil)
-	found, err := r.portainerEnvironments(context.Background(), "portainer-example")
+	found, err := r.portainerEnvironments(t.Context(), "portainer-example")
 	if err != nil || len(found) != 3 {
 		t.Fatalf("%+v %v", found, err)
 	}
@@ -130,19 +129,19 @@ func TestPortainerMalformedAnswersAreErrors(t *testing.T) {
 		read             func(*Registry) error
 	}{
 		{"environment id as text", "/api/endpoints", `[{"Id":"one","Status":1}]`, func(r *Registry) error {
-			_, err := r.portainerEnvironments(context.Background(), "portainer-example")
+			_, err := r.portainerEnvironments(t.Context(), "portainer-example")
 			return err
 		}},
 		{"snapshot that is not an object", "/api/endpoints", `[{"Id":1,"Status":1,"Snapshots":["not a snapshot"]}]`, func(r *Registry) error {
-			_, err := r.portainerEnvironments(context.Background(), "portainer-example")
+			_, err := r.portainerEnvironments(t.Context(), "portainer-example")
 			return err
 		}},
 		{"public port as text", containersPath, `[{"Id":"a","Ports":[{"PublicPort":"8080"}]}]`, func(r *Registry) error {
-			_, err := r.portainerContainers(context.Background(), "portainer-example", 1)
+			_, err := r.portainerContainers(t.Context(), "portainer-example", 1)
 			return err
 		}},
 		{"label that is not text", containersPath, `[{"Id":"a","Labels":{"com.docker.compose.project":7}}]`, func(r *Registry) error {
-			_, err := r.portainerContainers(context.Background(), "portainer-example", 1)
+			_, err := r.portainerContainers(t.Context(), "portainer-example", 1)
 			return err
 		}},
 	}
@@ -171,7 +170,7 @@ func TestPortainerRefusalsClassify(t *testing.T) {
 		api, server := newPortainerAPI(t, map[string]string{})
 		api.status["/api/endpoints"] = c.code
 		r := portainerRegistry(t, server.URL, nil)
-		_, err := r.portainerEnvironmentReading(context.Background())
+		_, err := r.portainerEnvironmentReading(t.Context())
 		if _, refusal, _ := runtime.Classify(err); refusal != c.refusal || !strings.HasPrefix(err.Error(), c.says) {
 			t.Errorf("%d: %q %v", c.code, refusal, err)
 		}
@@ -190,7 +189,7 @@ func TestPortainerSweepSkipsOnlyThisRun(t *testing.T) {
 			{"Id":"cccccccccccccccc","Names":["/web"],"State":"running"}]`,
 	})
 	r := portainerRegistry(t, server.URL, runtime.Environment{"HQ_CONTROLLER_RUN": "nonce-1"})
-	records, err := r.portainerContainerRecords(context.Background())
+	records, err := r.portainerContainerRecords(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +327,7 @@ func TestPortainerSiteReadings(t *testing.T) {
 		"/api/endpoints/1/docker/images/json": `[{"Id":"sha256:img1","RepoTags":["web:1","<none>:<none>"],"RepoDigests":["web@sha256:d1","<none>@<none>"],"Created":1767355200,"Size":1234},{"Id":""}]`,
 	})
 	r := portainerRegistry(t, server.URL, nil)
-	ctx := context.Background()
+	ctx := t.Context()
 	read := func(kind runtime.ResourceKind) []map[string]any {
 		t.Helper()
 		records, err := r.readers[string(kind)](ctx)
@@ -380,7 +379,7 @@ func TestPortainerEachRefusesPerMachine(t *testing.T) {
 	api.status["/api/endpoints/2/docker/containers/json?all=1"] = 403
 	r := portainerRegistry(t, server.URL, nil)
 	ledger := &refusals{}
-	ctx := context.WithValue(context.Background(), refusalKey{}, ledger)
+	ctx := context.WithValue(t.Context(), refusalKey{}, ledger)
 	records, err := r.readers[string(runtime.ResourceKindPortainerNetwork)](ctx)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("%v %v", records, err)
@@ -391,7 +390,7 @@ func TestPortainerEachRefusesPerMachine(t *testing.T) {
 
 	api.status[containersPath] = 403
 	r = portainerRegistry(t, server.URL, nil)
-	if _, err := r.readers[string(runtime.ResourceKindPortainerNetwork)](context.Background()); err == nil || err.Error() != "network list needs environment access: provider answered 403" {
+	if _, err := r.readers[string(runtime.ResourceKindPortainerNetwork)](t.Context()); err == nil || err.Error() != "network list needs environment access: provider answered 403" {
 		t.Fatalf("every machine refusing refuses the reading: %v", err)
 	}
 }
@@ -433,7 +432,7 @@ func TestPortainerStackReconcileDecisions(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			api, server := newPortainerAPI(t, stackRoutes(c.file, c.stacks, c.containers))
 			r := portainerRegistry(t, server.URL, nil)
-			res, err := r.portainerReconcile(context.Background(), spec, struct{}{}, c.apply)
+			res, err := r.portainerReconcile(t.Context(), spec, struct{}{}, c.apply)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -477,7 +476,7 @@ func TestPortainerStackReconcileRefusals(t *testing.T) {
 			if c.name == "no such machine" {
 				s.Host = "elsewhere"
 			}
-			_, err := r.portainerReconcile(context.Background(), s, struct{}{}, true)
+			_, err := r.portainerReconcile(t.Context(), s, struct{}{}, true)
 			if err == nil || err.Error() != c.want {
 				t.Fatalf("got %v", err)
 			}
@@ -502,8 +501,8 @@ func TestPortainerCyclerReadsBackTheState(t *testing.T) {
 			containersPath:   `[{"Id":"abc","Names":["/other"]},{"Id":"def","Names":["/web"],"State":"` + c.state + `"}]`,
 		})
 		r := portainerRegistry(t, server.URL, nil)
-		res, err := r.portainerCycler(c.verb)(context.Background(), PortainerContainerSpec{ConnectionRef: "portainer-example", Host: "hq-node", Name: "web"}, struct{}{}, true)
-		if err != nil || res.Conditions[0].Type != c.kind || res.Message != "web is "+c.state+"." {
+		res, err := r.portainerCycler(c.verb)(t.Context(), PortainerContainerSpec{ConnectionRef: "portainer-example", Host: "hq-node", Name: "web"}, struct{}{}, true)
+		if err != nil || string(res.Conditions[0].Type) != c.kind || res.Message != "web is "+c.state+"." {
 			t.Errorf("%s: %+v %v", c.verb, res, err)
 		}
 		if writes := api.written(); len(writes) != 1 || writes[0].path != "/api/endpoints/1/docker/containers/def/"+c.verb {
@@ -512,14 +511,14 @@ func TestPortainerCyclerReadsBackTheState(t *testing.T) {
 	}
 	_, server := newPortainerAPI(t, map[string]string{"/api/endpoints": oneLocalEndpoint, containersPath: `[]`})
 	r := portainerRegistry(t, server.URL, nil)
-	if _, err := r.portainerCycler("stop")(context.Background(), PortainerContainerSpec{ConnectionRef: "portainer-example", Host: "hq-node", Name: "web"}, struct{}{}, true); err == nil || err.Error() != `no container named "web" on hq-node` {
+	if _, err := r.portainerCycler("stop")(t.Context(), PortainerContainerSpec{ConnectionRef: "portainer-example", Host: "hq-node", Name: "web"}, struct{}{}, true); err == nil || err.Error() != `no container named "web" on hq-node` {
 		t.Fatalf("got %v", err)
 	}
 }
 
 func TestPortainerProbe(t *testing.T) {
 	_, server := newPortainerAPI(t, map[string]string{"/api/endpoints": `[{"Id":1,"Name":"local","URL":"unix:///x","Status":1},{"Id":2,"Name":"edge","URL":"tcp://192.0.2.20:9001","Status":1},{"Id":3,"Name":"down","URL":"tcp://192.0.2.30:9001","Status":2}]`})
-	probe, err := portainerRegistry(t, server.URL, nil).portainerProbe(context.Background(), "portainer-example")
+	probe, err := portainerRegistry(t, server.URL, nil).portainerProbe(t.Context(), "portainer-example")
 	if err != nil || probe.Detail != "2 of 3 environments reachable." || !reflect.DeepEqual(probe.Reaches, []string{"edge", "hq-node"}) {
 		t.Fatalf("%+v %v", probe, err)
 	}
@@ -528,7 +527,7 @@ func TestPortainerProbe(t *testing.T) {
 // A stack spec field of the wrong type refuses the action at the boundary.
 func TestPortainerStackSpecDecodesStrictly(t *testing.T) {
 	r := New(runtime.Environment{}, &fakeHTTP{})
-	_, err := r.runAction(runtime.ResourceKindPortainerStack, "reconcile", context.Background(), Object{"name": "web", "port": "8080"}, nil, false)
+	_, err := r.runAction(runtime.ResourceKindPortainerStack, "reconcile", t.Context(), Object{"name": "web", "port": "8080"}, nil, false)
 	if err == nil {
 		t.Fatal("a port given as text is refused")
 	}

@@ -12,11 +12,9 @@ from __future__ import annotations
 
 import json
 from io import StringIO
-from pathlib import Path
 from typing import get_args
 from unittest.mock import patch
 
-from django.conf import settings
 from django.core.management import call_command
 from django.test import TestCase
 from jsonschema import Draft202012Validator
@@ -31,6 +29,7 @@ from hq.platform.application.resource_operations import (
     request_reconcile,
 )
 from hq.platform.application.security import cli_principal
+from hq.domains.control_plane.bridge_contract import contract, keyword, limit
 from hq.domains.control_plane.management.commands.infrastructure_controller import ACTIONS
 from hq.domains.control_plane.models import DashboardConfiguration, ManagedResource
 from hq.domains.control_plane.observations import OBSERVATIONS
@@ -40,11 +39,8 @@ from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS
 
 from .test_control_plane import certificate_spec, declare_targets
 
-CONTRACT_PATH = (
-    Path(settings.BASE_DIR) / "controller" / "api" / "hq-controller.openapi.json"
-)
 CONTRACT_URI = "urn:hq:controller-bridge"
-CONTRACT = json.loads(CONTRACT_PATH.read_text())
+CONTRACT = contract()
 SWEPT = set(CONTRACT["components"]["schemas"]["SweptKind"]["enum"])
 REGISTRY = Registry().with_resource(
     CONTRACT_URI, Resource.from_contents(CONTRACT, default_specification=DRAFT202012)
@@ -145,6 +141,26 @@ class ControllerContractTests(TestCase):
         self.assertEqual(set(schemas["FailureClass"]["enum"]), {"", *FAILURES})
         self.assertEqual(set(schemas["Refusal"]["enum"]), {"", *REFUSALS})
 
+    def test_the_contract_names_every_connection_provider(self):
+        from hq.domains.control_plane.provider_adapters import CONNECTIONS
+
+        self.assertEqual(
+            set(CONTRACT["components"]["schemas"]["ConnectionProvider"]["enum"]),
+            set(CONNECTIONS),
+        )
+
+    def test_the_contract_names_every_reading_part(self):
+        from hq.domains.control_plane.reading_parts import parts_of
+
+        declared = {
+            part
+            for kind in set(PROVIDERS) | set(OBSERVATION_KINDS)
+            for part in parts_of(kind)
+        }
+        self.assertEqual(
+            set(CONTRACT["components"]["schemas"]["ReadingPartName"]["enum"]), declared
+        )
+
     def test_the_contract_names_every_tls_consumer_kind(self):
         union, _field = get_args(TLSConsumer)
         kinds = {
@@ -163,6 +179,27 @@ class ControllerContractTests(TestCase):
             set(CONTRACT["components"]["schemas"]["GlancePanelID"]["enum"]),
             {spec.id for spec in panel_specs(configuration)},
         )
+
+    def test_a_declared_spec_matches_the_contracts_schema(self):
+        from hq.domains.control_plane.providers import validate_spec
+
+        delivery = validate_spec("github.delivery", {"repository": "example/host"})
+        _validate(f"{CONTRACT_URI}#/components/schemas/GitHubDeliverySpec", delivery)
+        route = {"domain": "app.example.com", "upstream": "app:8080"}
+        validate_spec("caddy.route", {"connection_ref": "example-edge", **route})
+        _validate(f"{CONTRACT_URI}#/components/schemas/CaddyRouteInFile", route)
+
+    def test_a_keyword_the_contract_does_not_state_is_an_error(self):
+        for path in (
+            ("NoSuchSchema", "pattern"),
+            ("CaddyRouteInFile", "properties", "domain", "default"),
+            ("CaddyRouteInFile", "properties", "domain", "maxLength"),
+            ("GitHubDeliveryProduction", "enum", 1),
+        ):
+            with self.subTest(path=path), self.assertRaises((LookupError, ValueError)):
+                keyword(*path)
+        with self.assertRaises(ValueError):
+            limit("CaddyRouteInFile", "properties", "domain", "pattern")
 
     def test_an_empty_queue(self):
         self.assertIsNone(bridge("peek")["operation"])

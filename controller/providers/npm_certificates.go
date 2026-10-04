@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/providers/npmapi"
@@ -24,9 +25,7 @@ func npmCertificateIDsOf(spec TLSCertificateSpec, observed TLSCertificateObserve
 		}
 	}
 	ids := map[string]int{}
-	for name, id := range observed.NPMCertificateIDs {
-		ids[name] = id
-	}
+	maps.Copy(ids, observed.NPMCertificateIDs)
 	if single := observed.NPMCertificateID; len(ids) == 0 && len(consumers) == 1 && single != nil {
 		ids[consumers[0]] = *single
 	}

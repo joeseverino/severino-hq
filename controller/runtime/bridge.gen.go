@@ -57,6 +57,66 @@ func (e AnalyticsWindowReason) Valid() bool {
 	}
 }
 
+// Defines values for ConditionType.
+const (
+	ConditionDegraded ConditionType = "Degraded"
+	ConditionDrifted  ConditionType = "Drifted"
+	ConditionReady    ConditionType = "Ready"
+)
+
+// Valid indicates whether the value is a known member of the ConditionType enum.
+func (e ConditionType) Valid() bool {
+	switch e {
+	case ConditionDegraded:
+		return true
+	case ConditionDrifted:
+		return true
+	case ConditionReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionProvider.
+const (
+	ConnectionProviderAdGuard       ConnectionProvider = "adguard"
+	ConnectionProviderCloudflareAPI ConnectionProvider = "cloudflare_api"
+	ConnectionProviderCloudflareDNS ConnectionProvider = "cloudflare_dns"
+	ConnectionProviderGitHubApp     ConnectionProvider = "github_app"
+	ConnectionProviderNPM           ConnectionProvider = "npm"
+	ConnectionProviderOnePassword   ConnectionProvider = "onepassword"
+	ConnectionProviderPortainer     ConnectionProvider = "portainer"
+	ConnectionProviderSSH           ConnectionProvider = "ssh"
+	ConnectionProviderTailscale     ConnectionProvider = "tailscale"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionProvider enum.
+func (e ConnectionProvider) Valid() bool {
+	switch e {
+	case ConnectionProviderAdGuard:
+		return true
+	case ConnectionProviderCloudflareAPI:
+		return true
+	case ConnectionProviderCloudflareDNS:
+		return true
+	case ConnectionProviderGitHubApp:
+		return true
+	case ConnectionProviderNPM:
+		return true
+	case ConnectionProviderOnePassword:
+		return true
+	case ConnectionProviderPortainer:
+		return true
+	case ConnectionProviderSSH:
+		return true
+	case ConnectionProviderTailscale:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FailureClass.
 const (
 	FailureClassAddress      FailureClass = "address"
@@ -78,6 +138,21 @@ func (e FailureClass) Valid() bool {
 	case FailureClassPermission:
 		return true
 	case FailureClassUnclassified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GitHubDeliveryProduction.
+const (
+	GitHubDeliveryProductionCurrent GitHubDeliveryProduction = "Every extension's latest admission, confirmed on GitHub"
+)
+
+// Valid indicates whether the value is a known member of the GitHubDeliveryProduction enum.
+func (e GitHubDeliveryProduction) Valid() bool {
+	switch e {
+	case GitHubDeliveryProductionCurrent:
 		return true
 	default:
 		return false
@@ -114,6 +189,117 @@ func (e PassMode) Valid() bool {
 	case PassModeApply:
 		return true
 	case PassModePlan:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReadingPartName.
+const (
+	PartACLManagement     ReadingPartName = "acl_management"
+	PartAccess            ReadingPartName = "access"
+	PartApps              ReadingPartName = "apps"
+	PartBranchRules       ReadingPartName = "branch_rules"
+	PartClients           ReadingPartName = "clients"
+	PartCodeScanning      ReadingPartName = "code_scanning"
+	PartConfiguration     ReadingPartName = "configuration"
+	PartConnections       ReadingPartName = "connections"
+	PartDNS               ReadingPartName = "dns"
+	PartDeadHosts         ReadingPartName = "dead_hosts"
+	PartDependabot        ReadingPartName = "dependabot"
+	PartEnvironments      ReadingPartName = "environments"
+	PartFileSize          ReadingPartName = "file_size"
+	PartFiltering         ReadingPartName = "filtering"
+	PartHTTPS             ReadingPartName = "https"
+	PartImages            ReadingPartName = "images"
+	PartLeakedCredentials ReadingPartName = "leaked_credentials"
+	PartPageRules         ReadingPartName = "page_rules"
+	PartPosture           ReadingPartName = "posture"
+	PartProxyHosts        ReadingPartName = "proxy_hosts"
+	PartQueryLog          ReadingPartName = "querylog"
+	PartRedirectionHosts  ReadingPartName = "redirection_hosts"
+	PartRegistration      ReadingPartName = "registration"
+	PartRewrites          ReadingPartName = "rewrites"
+	PartRules             ReadingPartName = "rules"
+	PartRunners           ReadingPartName = "runners"
+	PartServices          ReadingPartName = "services"
+	PartSettings          ReadingPartName = "settings"
+	PartStreams           ReadingPartName = "streams"
+	PartUpstreams         ReadingPartName = "upstreams"
+	PartVariables         ReadingPartName = "variables"
+	PartWhole             ReadingPartName = ""
+	PartWorkflowPins      ReadingPartName = "workflow_pins"
+)
+
+// Valid indicates whether the value is a known member of the ReadingPartName enum.
+func (e ReadingPartName) Valid() bool {
+	switch e {
+	case PartACLManagement:
+		return true
+	case PartAccess:
+		return true
+	case PartApps:
+		return true
+	case PartBranchRules:
+		return true
+	case PartClients:
+		return true
+	case PartCodeScanning:
+		return true
+	case PartConfiguration:
+		return true
+	case PartConnections:
+		return true
+	case PartDNS:
+		return true
+	case PartDeadHosts:
+		return true
+	case PartDependabot:
+		return true
+	case PartEnvironments:
+		return true
+	case PartFileSize:
+		return true
+	case PartFiltering:
+		return true
+	case PartHTTPS:
+		return true
+	case PartImages:
+		return true
+	case PartLeakedCredentials:
+		return true
+	case PartPageRules:
+		return true
+	case PartPosture:
+		return true
+	case PartProxyHosts:
+		return true
+	case PartQueryLog:
+		return true
+	case PartRedirectionHosts:
+		return true
+	case PartRegistration:
+		return true
+	case PartRewrites:
+		return true
+	case PartRules:
+		return true
+	case PartRunners:
+		return true
+	case PartServices:
+		return true
+	case PartSettings:
+		return true
+	case PartStreams:
+		return true
+	case PartUpstreams:
+		return true
+	case PartVariables:
+		return true
+	case PartWhole:
+		return true
+	case PartWorkflowPins:
 		return true
 	default:
 		return false
@@ -553,6 +739,18 @@ type AppliedOperationOutput struct {
 	Resource  string `json:"resource"`
 }
 
+// CaddyCertificateDirectory The directory a Caddy edge loads delivered certificates from: one plain absolute path.
+type CaddyCertificateDirectory = string
+
+// CaddyRequestedHost An upstream that names the host each request names, with an optional fixed port (the captured group).
+type CaddyRequestedHost = string
+
+// CaddyRouteInFile One route in the file HQ writes on a Caddy edge. The file is text, so each value is one token: a hostname (a wildcard allowed) and an upstream as host:port or scheme://host:port. HQ validates a declaration with these patterns and the controller checks them again on the line that writes the file.
+type CaddyRouteInFile struct {
+	Domain   string `json:"domain"`
+	Upstream string `json:"upstream"`
+}
+
 // Capability defines model for Capability.
 type Capability struct {
 	Action string `json:"action"`
@@ -561,13 +759,24 @@ type Capability struct {
 	Kind ResourceKind `json:"kind"`
 }
 
+// CloudflareCAAValue A CAA record's content as flags, tag and quoted value (the three groups). HQ validates a declared CAA record with it and both sides take the content apart with it.
+type CloudflareCAAValue = string
+
 // Condition defines model for Condition.
 type Condition struct {
 	Message string `json:"message"`
 	Reason  string `json:"reason"`
 	Status  bool   `json:"status"`
-	Type    string `json:"type"`
+
+	// Type What a condition says of a resource: it is as declared, it differs from the declaration, or it needs attention.
+	Type ConditionType `json:"type"`
 }
+
+// ConditionType What a condition says of a resource: it is as declared, it differs from the declaration, or it needs attention.
+type ConditionType string
+
+// ConnectionProvider A connection provider HQ's registry declares: what a credential is for. Django's contract test holds this to the admitted connections.
+type ConnectionProvider string
 
 // ConnectionRecord One connection the controller carries and what its probe found.
 type ConnectionRecord struct {
@@ -603,10 +812,10 @@ type ControllerRegistry struct {
 	Capabilities []Capability `json:"capabilities"`
 
 	// ConnectionCredentials Providers a connection credential is modelled for.
-	ConnectionCredentials []string `json:"connection_credentials"`
+	ConnectionCredentials []ConnectionProvider `json:"connection_credentials"`
 
 	// ConnectionProviders Each resource kind's connection providers.
-	ConnectionProviders map[string][]string `json:"connection_providers"`
+	ConnectionProviders map[string][]ConnectionProvider `json:"connection_providers"`
 
 	// Extensions Each admitted extension the running image composes, which delivery follows.
 	Extensions []AdmittedExtension `json:"extensions"`
@@ -644,6 +853,21 @@ type ForcedRead struct {
 	RequestedAt time.Time      `json:"requested_at"`
 }
 
+// GitHubDeliveryProduction What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.
+type GitHubDeliveryProduction string
+
+// GitHubDeliverySpec A github.delivery declaration. The defaults are the declaration a sweep reports and HQ adopts.
+type GitHubDeliverySpec struct {
+	Branch string `json:"branch"`
+
+	// Production What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.
+	Production GitHubDeliveryProduction `json:"production"`
+
+	// Repository owner/name of the repository whose composition workflow deploys HQ.
+	Repository string `json:"repository"`
+	Workflow   string `json:"workflow"`
+}
+
 // GlanceMachineTarget defines model for GlanceMachineTarget.
 type GlanceMachineTarget struct {
 	Connections []string `json:"connections"`
@@ -672,7 +896,9 @@ type GlancePlanTargets struct {
 
 // GlanceWeatherTarget defines model for GlanceWeatherTarget.
 type GlanceWeatherTarget struct {
-	Point string `json:"point"`
+	// Endpoint The National Weather Service API the forecast is read from, as HQ's connection states it.
+	Endpoint string `json:"endpoint"`
+	Point    string `json:"point"`
 }
 
 // IdlePassOutput The line an apply pass prints when it found nothing to claim.
@@ -771,6 +997,9 @@ type PlannedOperation struct {
 	WouldChange bool   `json:"would_change"`
 }
 
+// ReadingPartName A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares, and Django's contract test holds this to the declared parts.
+type ReadingPartName string
+
 // Refusal Why a provider refused a read: the credential itself, or one permission it lacks. Empty when the reason is unclassified.
 type Refusal string
 
@@ -786,8 +1015,10 @@ type RefusedOperationOutput struct {
 type RefusedPart struct {
 	Address       string `json:"address,omitempty"`
 	ConnectionRef string `json:"connection_ref"`
-	Part          string `json:"part"`
-	Reason        string `json:"reason"`
+
+	// Part A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares, and Django's contract test holds this to the declared parts.
+	Part   ReadingPartName `json:"part"`
+	Reason string          `json:"reason"`
 
 	// Refusal Why a read got no usable answer: a refusal, an address that answered as something other than the API, or nothing answering. Empty when unclassified.
 	Refusal FailureClass `json:"refusal"`
@@ -835,6 +1066,12 @@ type SweepVerdict struct {
 
 // SweptKind A kind the controller reads in a sweep: exactly the kinds it registers a reader for.
 type SweptKind string
+
+// TLSCertificateDomain A domain certbot is asked for: DNS labels, optionally under one wildcard. The controller checks it where it reaches certbot's argv.
+type TLSCertificateDomain = string
+
+// TLSCertificateName A certbot lineage name: it becomes --cert-name and a directory under live/. HQ's tls.certificate declaration validates with it and the controller checks it again where it reaches certbot's argv and a path.
+type TLSCertificateName = string
 
 // TLSConsumerKind Where a certificate is served from: the kinds of TLS consumer a certificate spec declares.
 type TLSConsumerKind string

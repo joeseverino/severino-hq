@@ -151,7 +151,7 @@ func TestZonesReadPastFiftyIsNotTruncated(t *testing.T) {
 				"GET /user/tokens/verify": answer(map[string]any{"status": "active", "expires_on": "2027-01-01T00:00:00Z"}),
 				"GET /zones":              paged(c.total, c.pageCap, c.withTotal, zone),
 			})
-			got, err := c.read(context.Background(), r)
+			got, err := c.read(t.Context(), r)
 			if err != nil || got != c.total {
 				t.Fatalf("read %d of %d zones: %v", got, c.total, err)
 			}
@@ -167,7 +167,7 @@ func TestRefusedCredentialIsNotRetriedThisSweep(t *testing.T) {
 		"GET /accounts": refusing(http.StatusForbidden, 9109, "Cannot use the access token from location: 192.0.2.1"),
 	})
 	end := r.BeginSnapshot()
-	ctx := context.Background()
+	ctx := t.Context()
 	for _, read := range []Reader{r.cloudflarePagesProjects, r.cloudflareD1Databases, r.cloudflareTunnels} {
 		_, err := read(ctx)
 		failure, refusal, reason := runtime.Classify(err)
@@ -207,7 +207,7 @@ func TestCloudflareRefusalClassification(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			r, _ := newCloudflare(t, map[string]http.HandlerFunc{"GET /zones": c.answer, "GET /user/tokens/verify": c.verify})
-			_, err := r.cloudflareZones(context.Background())
+			_, err := r.cloudflareZones(t.Context())
 			if err == nil {
 				t.Fatal("refused, yet no error")
 			}
@@ -273,7 +273,7 @@ func TestMalformedCloudflareAnswersAreErrors(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			r, _ := newCloudflare(t, c.routes)
-			if err := c.read(context.Background(), r); err == nil {
+			if err := c.read(t.Context(), r); err == nil {
 				t.Fatal("a malformed answer read as data")
 			}
 		})
@@ -309,7 +309,7 @@ func TestDNSRecordReconcile(t *testing.T) {
 				"POST /zones/zone000/dns_records":   written,
 				"PUT /zones/zone000/dns_records/r1": written,
 			})
-			res, err := r.cloudflareRecordReconcile(context.Background(), c.spec, CloudflareDNSRecordObserved{}, c.apply)
+			res, err := r.cloudflareRecordReconcile(t.Context(), c.spec, CloudflareDNSRecordObserved{}, c.apply)
 			if (err != nil) != c.err || res.Changed != c.changed {
 				t.Fatalf("%v %+v", err, res)
 			}
@@ -431,7 +431,7 @@ func TestAnalyticsReadsRowsAndVitals(t *testing.T) {
 		}}}}})
 	}
 	r, _ := newCloudflare(t, map[string]http.HandlerFunc{"POST /graphql": graphql})
-	readings, err := r.cloudflareAnalytics(context.Background(), []CloudflareAnalyticsSite{{SiteTag: "site", Host: "example.com", Account: "acct", ConnectionRef: "example-api"}}, nil, 1)
+	readings, err := r.cloudflareAnalytics(t.Context(), []CloudflareAnalyticsSite{{SiteTag: "site", Host: "example.com", Account: "acct", ConnectionRef: "example-api"}}, nil, 1)
 	if err != nil || len(readings.Sites) != 1 {
 		t.Fatalf("%v %+v", err, readings)
 	}
@@ -456,7 +456,7 @@ func TestAnalyticsQueryErrorsAreRefusals(t *testing.T) {
 	r, _ := newCloudflare(t, map[string]http.HandlerFunc{"POST /graphql": func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"data": nil, "errors": []any{map[string]any{"message": "Authentication error"}}})
 	}})
-	_, err := r.cloudflareAnalytics(context.Background(), []CloudflareAnalyticsSite{{SiteTag: "site", Account: "acct", ConnectionRef: "example-api"}}, nil, 1)
+	_, err := r.cloudflareAnalytics(t.Context(), []CloudflareAnalyticsSite{{SiteTag: "site", Account: "acct", ConnectionRef: "example-api"}}, nil, 1)
 	if failure, _, _ := runtime.Classify(err); failure != runtime.FailureClassPermission {
 		t.Fatalf("%v: %q", err, failure)
 	}
@@ -498,7 +498,7 @@ func TestRedirectsReadRulesAndPageRules(t *testing.T) {
 		}),
 	})
 	ledger := &refusals{}
-	records, err := r.cloudflareRedirects(context.WithValue(context.Background(), refusalKey{}, ledger))
+	records, err := r.cloudflareRedirects(context.WithValue(t.Context(), refusalKey{}, ledger))
 	if err != nil || len(ledger.entries) != 0 {
 		t.Fatalf("%v %+v", err, ledger.entries)
 	}
@@ -530,7 +530,7 @@ func TestRedirectsRefusedEverywhereIsARefusedRead(t *testing.T) {
 		"GET /user/tokens/verify":      answer(map[string]any{"status": "active"}),
 	})
 	ledger := &refusals{}
-	_, err := r.cloudflareRedirects(context.WithValue(context.Background(), refusalKey{}, ledger))
+	_, err := r.cloudflareRedirects(context.WithValue(t.Context(), refusalKey{}, ledger))
 	if failure, _, _ := runtime.Classify(err); failure != runtime.FailureClassPermission || !errors.As(err, new(*ProviderError)) {
 		t.Fatalf("%v: %q", err, failure)
 	}
@@ -557,7 +557,7 @@ func TestAccessAppsAndServiceTokens(t *testing.T) {
 		"GET /accounts/acct/access/apps":           answer([]any{app}),
 		"GET /accounts/acct/access/service_tokens": answer([]any{map[string]any{"id": "tok1", "name": "ci", "expires_at": "2027-01-01T00:00:00Z", "client_id": "never read"}, map[string]any{"id": "tok2", "name": "other"}}),
 	})
-	ctx := context.Background()
+	ctx := t.Context()
 	apps, err := r.cloudflareAccessApps(ctx)
 	if err != nil || len(apps) != 1 {
 		t.Fatalf("%v %+v", err, apps)
@@ -590,7 +590,7 @@ func TestCloudflareAccountModelsAndDetailCalls(t *testing.T) {
 		"GET /zones/zone000/ssl/certificate_packs": answer([]any{map[string]any{"id": "cert", "hosts": []string{"example.com"}}}),
 	}
 	r, _ := newCloudflare(t, routes)
-	ctx := context.Background()
+	ctx := t.Context()
 	for _, test := range []struct {
 		name string
 		read Reader
@@ -629,7 +629,7 @@ func TestCloudflareDeleteAppliesOnlyWhenRequested(t *testing.T) {
 				"GET /zones/zone000/dns_records":           answer([]any{map[string]any{"id": "record", "name": "app.example.com", "type": "A", "content": "192.0.2.1"}}),
 				"DELETE /zones/zone000/dns_records/record": answer(map[string]any{"id": "record"}),
 			})
-			result, err := r.cloudflareRecordDelete(context.Background(), CloudflareDNSRecordSpec{Zone: "z000.example", Name: "app.example.com", RecordType: "A"}, CloudflareDNSRecordObserved{RecordID: "record"}, apply)
+			result, err := r.cloudflareRecordDelete(t.Context(), CloudflareDNSRecordSpec{Zone: "z000.example", Name: "app.example.com", RecordType: "A"}, CloudflareDNSRecordObserved{RecordID: "record"}, apply)
 			if err != nil || !result.Changed {
 				t.Fatalf("result %+v: %v", result, err)
 			}

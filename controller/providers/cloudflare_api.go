@@ -17,7 +17,9 @@ import (
 // reads and writes their DNS records, nothing else; cloudflare_api carries the
 // account surface (analytics, zone settings, registration) and no DNS record.
 
-const cloudflareAPIURL = "https://api.cloudflare.com/client/v4"
+// cloudflareAPIURL is the server Cloudflare's API description names; a
+// connection's <PREFIX>_URL replaces it.
+const cloudflareAPIURL = cfapi.ServerURLClientAPI
 
 // List paging. The caps bound a loop a misbehaving endpoint could keep going.
 const (
@@ -80,7 +82,7 @@ func present(raw json.RawMessage) bool {
 	return len(raw) > 0 && string(raw) != "null"
 }
 
-func (r *Registry) cloudflareURL(provider, ref string) (string, error) {
+func (r *Registry) cloudflareURL(provider runtime.ConnectionProvider, ref string) (string, error) {
 	prefix, err := r.Env.Prefix(provider, ref)
 	if err != nil {
 		return "", err
@@ -92,7 +94,7 @@ func (r *Registry) cloudflareURL(provider, ref string) (string, error) {
 	return strings.TrimRight(base, "/"), nil
 }
 
-func (r *Registry) cloudflareHeaders(provider, ref string) (map[string]string, error) {
+func (r *Registry) cloudflareHeaders(provider runtime.ConnectionProvider, ref string) (map[string]string, error) {
 	prefix, err := r.Env.Prefix(provider, ref)
 	if err != nil {
 		return nil, err
@@ -107,7 +109,7 @@ func (r *Registry) cloudflareHeaders(provider, ref string) (map[string]string, e
 // cloudflareEnvelope makes one call and returns the whole envelope. A 200 with
 // success false is a refusal too: a token missing one permission answers with no
 // result, and an account that refused to answer must not read as empty.
-func (r *Registry) cloudflareEnvelope(ctx context.Context, provider, ref, path, method string, payload any) (cfEnvelope, error) {
+func (r *Registry) cloudflareEnvelope(ctx context.Context, provider runtime.ConnectionProvider, ref, path, method string, payload any) (cfEnvelope, error) {
 	prefix, err := r.Env.Prefix(provider, ref)
 	if err != nil {
 		return cfEnvelope{}, err
@@ -199,7 +201,7 @@ func cloudflareRefusal(detail string, status int, verified func() bool) runtime.
 
 // cloudflareVerification is /user/tokens/verify's result for one credential,
 // once per sweep; empty when it does not verify.
-func (r *Registry) cloudflareVerification(ctx context.Context, provider, ref string) cfapi.IamTokenVerifyResponseSingleSegment {
+func (r *Registry) cloudflareVerification(ctx context.Context, provider runtime.ConnectionProvider, ref string) cfapi.IamTokenVerifyResponseSingleSegment {
 	var empty cfapi.IamTokenVerifyResponseSingleSegment
 	prefix, err := r.Env.Prefix(provider, ref)
 	if err != nil {
@@ -231,7 +233,7 @@ func (r *Registry) cloudflareVerification(ctx context.Context, provider, ref str
 	return verified
 }
 
-func (r *Registry) cloudflareVerified(ctx context.Context, provider, ref string) bool {
+func (r *Registry) cloudflareVerified(ctx context.Context, provider runtime.ConnectionProvider, ref string) bool {
 	return r.cloudflareVerification(ctx, provider, ref).Result.Status == "active"
 }
 
@@ -260,17 +262,19 @@ func cloudflareErrors(raw []byte) string {
 
 // cloudflareRequest is the zone-scoped DNS surface, unwrapped to its result.
 func (r *Registry) cloudflareRequest(ctx context.Context, path, method string, payload any) (json.RawMessage, error) {
-	envelope, err := r.cloudflareEnvelope(ctx, "cloudflare_dns", "", path, method, payload)
+	envelope, err := r.cloudflareEnvelope(ctx, runtime.ConnectionProviderCloudflareDNS, "", path, method, payload)
 	return envelope.Result, err
 }
 
 // Account readings go through cloudflare_api. Every list is read once per sweep;
 // per-item requests only where no list carries the field.
 
-func (r *Registry) cloudflareAPIRefs() []string { return r.refs("cloudflare_api") }
+func (r *Registry) cloudflareAPIRefs() []string {
+	return r.refs(runtime.ConnectionProviderCloudflareAPI)
+}
 
 func (r *Registry) cloudflareAPIRequest(ctx context.Context, path, ref string) (cfEnvelope, error) {
-	return r.cloudflareEnvelope(ctx, "cloudflare_api", ref, path, "GET", nil)
+	return r.cloudflareEnvelope(ctx, runtime.ConnectionProviderCloudflareAPI, ref, path, "GET", nil)
 }
 
 func (r *Registry) cloudflareAPIResult(ctx context.Context, path, ref string) (json.RawMessage, error) {
@@ -284,7 +288,7 @@ func (r *Registry) cloudflareAPIResult(ctx context.Context, path, ref string) (j
 // decides when the answer carries it (an endpoint may cap per_page below what
 // was asked, so a short page is not proof of the last one), else a short page
 // ends the list. A null or missing result is an empty page.
-func (r *Registry) cloudflareList(ctx context.Context, provider, path, ref string, perPage int) ([]json.RawMessage, error) {
+func (r *Registry) cloudflareList(ctx context.Context, provider runtime.ConnectionProvider, path, ref string, perPage int) ([]json.RawMessage, error) {
 	collected := []json.RawMessage{}
 	for page := 1; page <= cloudflareMaxPages; page++ {
 		query := url.Values{"per_page": {strconv.Itoa(perPage)}, "page": {strconv.Itoa(page)}}
@@ -362,7 +366,7 @@ func (r *Registry) cloudflareCachedList(ctx context.Context, key string, read fu
 
 func (r *Registry) cloudflareAPIZones(ctx context.Context, ref string) ([]cfapi.ZonesZone, error) {
 	items, err := r.cloudflareCachedList(ctx, "cloudflare-api-zones:"+ref, func() ([]json.RawMessage, error) {
-		return r.cloudflareList(ctx, "cloudflare_api", "/zones", ref, cloudflareAccountPerPage)
+		return r.cloudflareList(ctx, runtime.ConnectionProviderCloudflareAPI, "/zones", ref, cloudflareAccountPerPage)
 	})
 	if err != nil {
 		return nil, err

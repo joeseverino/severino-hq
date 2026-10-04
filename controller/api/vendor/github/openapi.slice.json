@@ -4,6 +4,11 @@
   "title": "GitHub v3 REST API",
   "version": "1.1.4"
  },
+ "servers": [
+  {
+   "url": "https://api.github.com"
+  }
+ ],
  "paths": {
   "/app": {
    "get": {

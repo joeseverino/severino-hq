@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -72,18 +72,20 @@ func (e Environment) Prefixes() map[string]string {
 	return found
 }
 
-func (e Environment) Provider(ref string) string {
+// Provider is the provider a connection declares, else its prefix. The value
+// is the operator's, so it need not be one the contract names.
+func (e Environment) Provider(ref string) ConnectionProvider {
 	prefix := e.Prefixes()[ref]
 	if prefix == "" {
 		return ""
 	}
 	if declared := strings.TrimSpace(e[prefix+"_PROVIDER"]); declared != "" {
-		return declared
+		return ConnectionProvider(declared)
 	}
-	return strings.ToLower(prefix)
+	return ConnectionProvider(strings.ToLower(prefix))
 }
 
-func (e Environment) Prefix(provider, ref string) (string, error) {
+func (e Environment) Prefix(provider ConnectionProvider, ref string) (string, error) {
 	if ref != "" {
 		prefix := e.Prefixes()[ref]
 		if prefix == "" {
@@ -98,24 +100,24 @@ func (e Environment) Prefix(provider, ref string) (string, error) {
 	}
 	refs := e.Refs(provider)
 	if len(refs) > 1 {
-		return "", &ProviderError{Message: provider + " connections", Err: ErrAmbiguousConnection}
+		return "", &ProviderError{Message: string(provider) + " connections", Err: ErrAmbiguousConnection}
 	}
 	if len(refs) == 1 {
 		return e.Prefixes()[refs[0]], nil
 	}
-	return strings.ToUpper(provider), nil
+	return strings.ToUpper(string(provider)), nil
 }
 
-func (e Environment) Refs(provider string) []string {
+func (e Environment) Refs(provider ConnectionProvider) []string {
 	refs := []string{}
 	for ref := range e.Prefixes() {
 		if e.Provider(ref) == provider {
 			refs = append(refs, ref)
 		}
 	}
-	sort.Strings(refs)
+	slices.Sort(refs)
 	if len(refs) == 0 {
-		if ref := strings.TrimSpace(e[strings.ToUpper(provider)+"_CONNECTION_REF"]); ref != "" {
+		if ref := strings.TrimSpace(e[strings.ToUpper(string(provider))+"_CONNECTION_REF"]); ref != "" {
 			refs = append(refs, ref)
 		}
 	}
@@ -129,7 +131,7 @@ func (e Environment) SSHRefs() []string {
 			refs = append(refs, ref)
 		}
 	}
-	sort.Strings(refs)
+	slices.Sort(refs)
 	return refs
 }
 
