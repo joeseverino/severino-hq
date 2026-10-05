@@ -4,9 +4,10 @@ from hq_sdk.plugin import NavigationItem, PluginIntegration, PluginManifest
 
 
 def integration() -> PluginIntegration:
+    from .outbound import work
     from .projections import dashboard_cards, ready
 
-    return PluginIntegration(dashboard=dashboard_cards, health=ready)
+    return PluginIntegration(dashboard=dashboard_cards, health=ready, outbound=work)
 
 plugin = PluginManifest(
     id="example.notes",
@@ -21,4 +22,5 @@ plugin = PluginManifest(
     url_prefix="examples/notes/",
     urlconf="tests.fixtures.example_hq_plugin.urls",
     navigation=(NavigationItem("Example", "example_plugin:index", "example_plugin"),),
+    operator_capabilities=("notes.read", "notes.write"),
 )

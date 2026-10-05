@@ -20,6 +20,7 @@ this table.
 
 from __future__ import annotations
 
+import functools
 import logging
 import socket
 import sys
@@ -81,7 +82,6 @@ _serving: ContextVar[str] = ContextVar("hq_outbound_serving", default="")
 _allowed: ContextVar[str] = ContextVar("hq_outbound_allowed", default="")
 # True while the hook is reporting, so what reporting does is not judged.
 _reporting: ContextVar[bool] = ContextVar("hq_outbound_reporting", default=False)
-_installed = False
 
 
 class OutboundInRequest(RuntimeError):
@@ -108,6 +108,12 @@ def off_request() -> Iterator[None]:
         yield
     finally:
         _serving.reset(token)
+
+
+def serving_request() -> str:
+    """The request this context is serving ("POST /example/"), or ""."""
+
+    return _serving.get()
 
 
 @contextmanager
@@ -155,10 +161,8 @@ def _hook(event: str, args: tuple[Any, ...]) -> None:
         _reporting.reset(token)
 
 
+@functools.cache
 def install() -> None:
     """Add the audit hook, once for the life of the process."""
 
-    global _installed
-    if not _installed:
-        sys.addaudithook(_hook)
-        _installed = True
+    sys.addaudithook(_hook)

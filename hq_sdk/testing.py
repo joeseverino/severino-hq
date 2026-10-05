@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import time
+
 from django.db.models import Manager
 
+from hq.domains.jobs.testing import held_jobs
 from hq.platform.application.demo import demo_scope
 from hq.platform.application.plugin_testing import (
     ComposedPluginTestCase,
@@ -11,6 +14,7 @@ from hq.platform.application.plugin_testing import (
     undefined_style_classes,
 )
 from hq.platform.core.models import AuditLog
+from hq.platform.core.outbound import OutboundInRequest
 from hq_sdk.validation import unsupported_hq_imports
 
 
@@ -31,6 +35,23 @@ def audit_writer() -> Manager[AuditLog]:
     return AuditLog.objects
 
 
+def reaches_out() -> None:
+    """What a network call is to HQ's rule, for the double that stands in for one.
+
+    A test replaces an extension's network client with a double, and a double
+    opens no connection, so the rule that refuses a request reaching out has
+    nothing to refuse and the test proves nothing. Called from the double,
+    this raises ``OutboundInRequest`` when a request is being served and does
+    nothing inside a job, exactly as the real call would.
+
+        with held_jobs() as held:
+            response = self.client.post(url)      # answers; the double is untouched
+            held.run()                            # the job runs it
+    """
+
+    time.sleep(0)
+
+
 # Entering the substituting scope is a test affordance, not part of the
 # contract: production turns it on from the operator's session and a domain
 # only ever reads it. Exposed here so an extension can prove what its own
@@ -39,8 +60,11 @@ def audit_writer() -> Manager[AuditLog]:
 
 __all__ = [
     "ComposedPluginTestCase",
+    "OutboundInRequest",
     "audit_writer",
     "demo_scope",
+    "held_jobs",
+    "reaches_out",
     "sibling",
     "undefined_style_classes",
     "unsupported_hq_imports",

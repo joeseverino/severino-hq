@@ -271,12 +271,12 @@ class WatchingView(PageMixin, TemplateView):
 
     def get_page_actions(self):
         if not self.login:
-            return ()
+            return []
         from hq.platform.application.asks import Ask
         from hq.platform.application.github_profile import standing
 
         found = standing()
-        return (
+        return [
             Ask(
                 "Refresh",
                 reverse("watching_refresh"),
@@ -284,7 +284,7 @@ class WatchingView(PageMixin, TemplateView):
                 status_url=_profile_status(found.since),
                 refresh=WATCHING_REGION,
             ),
-        )
+        ]
 
     def get_context_data(self, **kwargs):
         from hq.platform.application.github_profile import profile

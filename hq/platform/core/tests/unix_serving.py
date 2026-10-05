@@ -41,7 +41,7 @@ def served(application: Any, path: Path) -> Iterator[None]:
             async with serving(application, str(path)):
                 ready.set()
                 await state["stop"].wait()
-        except BaseException as exc:  # noqa: BLE001 - handed to the test's thread
+        except Exception as exc:  # noqa: BLE001 - handed to the test's thread
             state["failure"] = exc
         finally:
             ready.set()

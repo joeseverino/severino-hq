@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from django.http import JsonResponse
-from django.views.generic import DetailView, ListView
+from django.core.exceptions import PermissionDenied
+from django.http import Http404, JsonResponse
+from django.urls import reverse
+from django.views.generic import DetailView, ListView, View
 
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableSort
@@ -79,3 +81,46 @@ class JobStatusView(DetailView):
 
         # The shape every ask's status answers in, with the job's own result.
         return JsonResponse({**job_standing(job).as_json(), "result": job.result})
+
+
+class WorkAskView(View):
+    """Where a control asks for declared outbound work.
+
+    The ask is the work's own capability, so a pressed button is authorized,
+    refused and recorded exactly as the same ask through the API is. The
+    request answers once the job is recorded; the job does the work.
+    """
+
+    def post(self, request, name: str):
+        from hq.platform.application.asks import FAILED, Standing, answer, job_standing
+        from hq.platform.application.capabilities import execute_capability
+        from hq.platform.application.outbound_work import SUBJECT_FIELD, declared_work
+        from hq.platform.application.security import web_principal
+
+        work = declared_work().get(name)
+        if work is None:
+            raise Http404("No such work is declared.")
+        subject = request.POST.get(SUBJECT_FIELD, "")
+        result = execute_capability(
+            name,
+            {},
+            principal=web_principal(request.user),
+            target=subject if work.takes_subject else None,
+        )
+        back = reverse("jobs:list")
+        if not result.get("ok"):
+            error = result.get("error", {})
+            if error.get("code") == "forbidden":
+                raise PermissionDenied(error.get("message", ""))
+            return answer(request, Standing(FAILED, error.get("message", "")), fallback=back)
+        job = Job.objects.filter(pk=result["job"]).first() if result.get("job") else None
+        if job is None:
+            # Another subject's run of the same work holds the one live slot.
+            return answer(request, Standing(FAILED, result.get("message", "")), fallback=back)
+        return answer(
+            request,
+            job_standing(job),
+            fallback=back,
+            status_url=reverse("jobs:status", args=[job.pk]),
+            message=result.get("message", ""),
+        )

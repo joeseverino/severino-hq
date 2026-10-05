@@ -71,6 +71,9 @@ class PluginIntegration:
     # Calendar sources: each a ``CalendarSource`` naming what the domain
     # already knows the date of.
     calendars: Callable[[], Iterable[Any]] | None = None
+    # Work that reaches outside the process: each an ``OutboundWork``. HQ
+    # derives its job, capability, route, control and audit entries.
+    outbound: Callable[[], Iterable[Any]] | None = None
 
 
 @dataclass(frozen=True)
@@ -366,8 +369,10 @@ def clear_plugin_composition_cache() -> None:
 
     _installed_plugins.cache_clear()
     from .integrations import clear_integration_graph_cache
+    from .outbound_work import clear_outbound_work_cache
 
     clear_integration_graph_cache()
+    clear_outbound_work_cache()
 
 
 def installed_plugin_apps() -> list[str]:
@@ -419,6 +424,7 @@ def installed_integrations() -> tuple[tuple[PluginManifest, PluginIntegration], 
                 "search",
                 "health",
                 "calendars",
+                "outbound",
             )
             if (value := getattr(integration, field)) is not None
             and not callable(value)
@@ -630,8 +636,20 @@ def plugin_attention_items() -> tuple[dict[str, Any], ...]:
     )
 
 
+def plugin_outbound_work() -> tuple[Any, ...]:
+    return _provided("outbound")
+
+
 def plugin_capability_specs() -> tuple[Any, ...]:
-    return _provided("capabilities")
+    """What every extension declares, and the capability each piece of its
+    outbound work is asked for through."""
+
+    from .outbound_work import capability_for
+
+    return (
+        *_provided("capabilities"),
+        *(capability_for(work) for work in plugin_outbound_work()),
+    )
 
 
 def plugin_resource_specs() -> tuple[Any, ...]:

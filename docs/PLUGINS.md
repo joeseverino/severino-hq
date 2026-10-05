@@ -23,6 +23,7 @@ def integration():
         overview=domain_overview,
         attention=attention_items,
         calendars=calendar_sources,
+        outbound=outbound_work,
         health=ready,
     )
 
@@ -68,6 +69,7 @@ domain; the SDK owns integration mechanics:
 | Read resources, strict filters, search projection | `hq_sdk.resources` |
 | Capability-gated Django views | `hq_sdk.web` |
 | Audit attribution and summary events | `hq_sdk.audit` |
+| Work that reaches a network or a provider | `hq_sdk.outbound` |
 | Tables, forms, UI projections, global search | matching `hq_sdk.*` module |
 | Synthetic siblings and style checks | `hq_sdk.testing` |
 
@@ -261,7 +263,8 @@ their private package even if the host is their only current consumer.
 
 Integration providers return one frozen `PluginIntegration` containing lazy,
 typed callables for every runtime contribution: capabilities, resources,
-connections, dashboard cards, overview, attention, search, and health. HQ calls
+connections, dashboard cards, overview, attention, search, calendars, outbound
+work, and health. HQ calls
 only the projection a surface needs. A plugin manifest carries static install,
 routing, navigation, and authority metadata plus exactly one executable entry
 point; an extension never registers runtime surfaces independently.
@@ -423,6 +426,99 @@ Dense pages expose their information architecture with
 `data-page-section` on each section. HQ then owns compact horizontal overflow,
 sticky positioning, scroll-aware current state, and fragment history. Labels
 may change; section IDs are durable links.
+
+## Outbound work
+
+A request never waits on anything outside the process. While one is being
+served HQ refuses every connection, name lookup, subprocess and sleep, whichever
+library makes it, so a view or a capability handler that calls a provider
+raises `OutboundInRequest` before the call leaves. An extension does not start
+threads, poll, or expose a status endpoint to get round that. It declares the
+work, and HQ runs it:
+
+```python
+from hq_sdk.outbound import Failed, OutboundWork, ask
+
+
+def look_up(progress, *, subject, principal):
+    progress("Asking the registry.")
+    listed = registry.read(subject)            # the network call
+    if listed is None:
+        raise Failed("The registry lists nothing for this note.")
+    Note.objects.filter(slug=subject).update(listed=listed)
+    progress(f"The registry lists {len(listed)} entries.", force=True)
+    return {"seen": len(listed)}
+
+
+def outbound_work():
+    return (
+        OutboundWork(
+            "notes.lookup",
+            "Look up",
+            "Ask the registry what it lists for one note.",
+            "notes.write",
+            look_up,
+            subject_label="Note",
+        ),
+    )
+```
+
+`PluginIntegration(outbound=outbound_work)` is the one declaration. HQ derives
+the rest:
+
+| Derived | What it is |
+| --- | --- |
+| The job | `run` is called on a job's own thread, where reaching out is allowed. One job of a name is live at a time, held by the database, so a second press or a second caller starts nothing. |
+| The capability | A capability named `notes.lookup`, with the subject as its target. The API, MCP, the command centre and `hq_call` ask through it with the same authorization, approval policy and denial record as any command, and are answered at once with the job's id. A command line waits for the work, because nothing there outlives the command. |
+| The route and status | The control posts to `jobs:ask` and follows `jobs:status`. The extension has no URL, view, template or script for either. |
+| The control | `ask("notes.lookup", note.slug)` is the shared Ask (`partials/_ask.html`), standing as the stored job does: live work is followed, failed work says why until it is asked for again. It may stand among a page's actions. One query. |
+| The audit entries | Who asked, how it ended, how long it took, and the `seen`, `created`, `updated` and `skipped` counts the work returns. |
+
+The page shows what is stored and puts the control beside it:
+
+```python
+context["lookup"] = ask("notes.lookup", note.slug, refresh="#note-listing")
+```
+
+```django
+{% include "partials/_ask.html" with ask=lookup %}
+```
+
+`refresh` names the part of the page the result shows in; it is fetched again
+when the work ends. Without one the page loads again.
+
+Three rules keep the work honest:
+
+- **Store, then say.** The work writes its result where the page reads it and
+  ends with a sentence (`progress(..., force=True)`), which is what the control
+  says when it is done. A failure the operator can act on is `Failed("...")`:
+  the sentence is shown where the work was asked for and nothing stored is
+  touched. Any other exception is a fault, kept with its traceback.
+- **Refuse from what HQ holds.** `refuse(subject)` returns why the work cannot
+  be asked for right now, or `""`. The control is drawn unusable with that
+  reason and an ask is refused with it before a job is recorded. It runs inside
+  requests, so it reads the database and nothing else.
+- **One at a time is the duplicate guard.** Work that costs money or is not
+  idempotent at the provider relies on the one-live-job rule rather than on a
+  check of its own. A name is the unit: declare two names for two things that
+  may run together.
+
+A management command a timer runs calls `run_now("notes.lookup", principal=...)`:
+the same job row, rule and audit entry, run to its end on the calling thread.
+It is refused inside a request.
+
+The SDK exports nothing that enters one of HQ's declared outbound exceptions
+or leaves the request, and a test holds that. Work reaches out because HQ runs
+it off the request, and only there. A credential the work uses is still read
+by the web process; running as a job changes when the call is made, not who
+holds the credential.
+
+In an extension's tests, `hq_sdk.testing.held_jobs` records each job a request
+starts and holds its work until the test says `run()`, and
+`hq_sdk.testing.reaches_out()` called from a network double makes the double
+subject to the rule, so a test that drives a view proves the view answered
+without reaching it. `example_hq_plugin` and
+`hq/platform/application/tests/test_outbound_work.py` show both.
 
 ## Calendar sources
 

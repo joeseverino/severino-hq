@@ -3,8 +3,21 @@
 {% block content %}
 {% include "partials/_page_head.html" with title="Example Notes" lede="A minimal plugin composed entirely from the HQ UI contract." %}
 {% include "partials/_kpi_grid.html" with label="Notes summary" items=example_metrics %}
-<section class="card">
+<section class="card" id="example-notes">
   <div class="section-head"><h2>Notes</h2></div>
-  {% include "partials/_empty_state.html" with message="No notes have been created." %}
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th scope="col">Note</th><th scope="col">The registry lists</th><th scope="col"></th></tr></thead>
+      <tbody>
+        {% for note in notes %}
+        <tr>
+          <td>{{ note.slug }}</td>
+          <td>{% if note.entries %}{{ note.entries|join:", " }}{% else %}<span class="muted">Not looked up</span>{% endif %}</td>
+          <td>{% include "partials/_ask.html" with ask=note.lookup %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}

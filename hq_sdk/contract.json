@@ -593,6 +593,61 @@
         ]
       }
     },
+    "outbound": {
+      "Failed": {
+        "bases": [
+          "RuntimeError"
+        ],
+        "constructor": null,
+        "kind": "class",
+        "members": {}
+      },
+      "OutboundWork": {
+        "bases": [],
+        "constructor": [
+          "name",
+          "label",
+          "summary",
+          "required_capability",
+          "run",
+          "subject_label=",
+          "subject_help=",
+          "subject_resource=",
+          "refuse=",
+          "effect=",
+          "execution_notes="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "takes_subject": {
+            "kind": "property"
+          }
+        }
+      },
+      "ask": {
+        "kind": "function",
+        "parameters": [
+          "name",
+          "subject=",
+          "*",
+          "label=",
+          "title=",
+          "refresh=",
+          "primary=",
+          "compact="
+        ]
+      },
+      "run_now": {
+        "kind": "function",
+        "parameters": [
+          "name",
+          "subject=",
+          "*",
+          "principal"
+        ]
+      }
+    },
     "pages": {
       "Page": {
         "bases": [],
@@ -713,7 +768,8 @@
           "attention=",
           "search=",
           "health=",
-          "calendars="
+          "calendars=",
+          "outbound="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -1047,6 +1103,14 @@
           }
         }
       },
+      "OutboundInRequest": {
+        "bases": [
+          "RuntimeError"
+        ],
+        "constructor": null,
+        "kind": "class",
+        "members": {}
+      },
       "audit_writer": {
         "kind": "function",
         "parameters": []
@@ -1056,6 +1120,14 @@
         "parameters": [
           "showing"
         ]
+      },
+      "held_jobs": {
+        "kind": "function",
+        "parameters": []
+      },
+      "reaches_out": {
+        "kind": "function",
+        "parameters": []
       },
       "sibling": {
         "kind": "function",

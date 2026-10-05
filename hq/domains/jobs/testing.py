@@ -29,6 +29,10 @@ class HeldJobs:
     def run(self) -> None:
         """Run every held job to its end, as its thread would have."""
 
+        # Inside a request this would do the work the request was held from.
+        serving = runner.serving_request()
+        if serving:
+            raise runner.OutboundInRequest(f"{serving} tried to run the jobs it started.")
         waiting, self.waiting = self.waiting, []
         # The test's connection is the only one that can see the job.
         with mock.patch.object(runner, "close_old_connections"), mock.patch.object(runner, "connection"):
