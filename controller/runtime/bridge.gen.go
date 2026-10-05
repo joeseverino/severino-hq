@@ -385,6 +385,7 @@ const (
 	ResourceKindHostFirewall                 ResourceKind = "host.firewall"
 	ResourceKindHostPerimeter                ResourceKind = "host.perimeter"
 	ResourceKindHostRenderStatus             ResourceKind = "host.render_status"
+	ResourceKindHostUnit                     ResourceKind = "host.unit"
 	ResourceKindMachine                      ResourceKind = "machine"
 	ResourceKindNPMAccessList                ResourceKind = "npm.access_list"
 	ResourceKindNPMCertificate               ResourceKind = "npm.certificate"
@@ -462,6 +463,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindHostPerimeter:
 		return true
 	case ResourceKindHostRenderStatus:
+		return true
+	case ResourceKindHostUnit:
 		return true
 	case ResourceKindMachine:
 		return true
@@ -552,6 +555,7 @@ const (
 	SweptHostFirewall                 SweptKind = "host.firewall"
 	SweptHostPerimeter                SweptKind = "host.perimeter"
 	SweptHostRenderStatus             SweptKind = "host.render_status"
+	SweptHostUnit                     SweptKind = "host.unit"
 	SweptNPMAccessList                SweptKind = "npm.access_list"
 	SweptNPMCertificate               SweptKind = "npm.certificate"
 	SweptNPMDeadHost                  SweptKind = "npm.dead_host"
@@ -614,6 +618,8 @@ func (e SweptKind) Valid() bool {
 	case SweptHostPerimeter:
 		return true
 	case SweptHostRenderStatus:
+		return true
+	case SweptHostUnit:
 		return true
 	case SweptNPMAccessList:
 		return true
@@ -968,6 +974,57 @@ type GlanceWeatherTarget struct {
 	// Endpoint The National Weather Service API the forecast is read from, as HQ's connection states it.
 	Endpoint string `json:"endpoint"`
 	Point    string `json:"point"`
+}
+
+// HostUnitRecord One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships, and the controller reports no other. Each string is a unit name, one of systemd's state words or an instant in UTC; none is a path, a command line or an environment.
+type HostUnitRecord struct {
+	// Activates Unit: the unit a timer or path starts.
+	Activates string `json:"activates,omitempty"`
+
+	// Active ActiveState: active, inactive, activating, deactivating, failed and the like.
+	Active string `json:"active"`
+
+	// Condition ConditionResult: yes or no, whether the unit's conditions held when last checked. A start whose conditions do not hold is skipped without failing.
+	Condition string `json:"condition,omitempty"`
+
+	// ConditionAt ConditionTimestamp: when the conditions were last checked.
+	ConditionAt string `json:"condition_at,omitempty"`
+
+	// EndedAt InactiveEnterTimestamp: when the unit last became inactive or failed, on this boot.
+	EndedAt string `json:"ended_at,omitempty"`
+
+	// FileState UnitFileState: whether the unit file is enabled, static or disabled. Absent for a unit with no file.
+	FileState string `json:"file_state,omitempty"`
+
+	// LastTriggerAt LastTriggerUSec: when a timer last started its unit.
+	LastTriggerAt string `json:"last_trigger_at,omitempty"`
+
+	// Load LoadState: loaded, or why systemd holds no configuration for it (not-found, masked, error, bad-setting).
+	Load string `json:"load"`
+
+	// MainCode ExecMainCode: how the main process of the last run ended, as the kernel's code (1 exited, 2 killed, 3 dumped).
+	MainCode int `json:"main_code,omitempty"`
+
+	// MainStatus ExecMainStatus: the exit status or signal number of the main process of the last run.
+	MainStatus int `json:"main_status,omitempty"`
+
+	// NextElapseAt NextElapseUSecRealtime: when a timer with a calendar schedule next elapses.
+	NextElapseAt string `json:"next_elapse_at,omitempty"`
+
+	// ReadAt When the launcher asked systemd.
+	ReadAt string `json:"read_at"`
+
+	// Result Result: success, or why the last run failed (exit-code, signal, timeout and the like).
+	Result string `json:"result,omitempty"`
+
+	// StartedAt InactiveExitTimestamp: when the last start began, on this boot.
+	StartedAt string `json:"started_at,omitempty"`
+
+	// Sub SubState: the unit type's own word for the same state, such as waiting or elapsed for a timer.
+	Sub string `json:"sub"`
+
+	// Unit Id: the unit's name.
+	Unit string `json:"unit"`
 }
 
 // IdlePassOutput The line an apply pass prints when it found nothing to claim.

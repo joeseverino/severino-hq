@@ -20,8 +20,9 @@ import (
 	"github.com/joeseverino/severino-hq/controller/secretstatus"
 )
 
-// Readings of the host the controller runs on: its firewall, its perimeter
-// and what its secret renderers say about their own runs.
+// Readings of the host the controller runs on: its firewall, its perimeter,
+// what its secret renderers say about their own runs and, in host_units.go,
+// the state of its systemd units.
 
 // PublishedContainer is a container the sweep found and the ports it publishes.
 // Host is the environment's connection ref, HostAddress its address.
@@ -55,6 +56,8 @@ func (r *Registry) admitHostReadings() {
 	r.reader(runtime.ResourceKindHostPerimeter, r.hostPerimeter)
 	r.reader(runtime.ResourceKindHostRenderStatus, r.hostRenderStatus)
 	r.readsHeld(runtime.ResourceKindHostRenderStatus, func() bool { return r.Env[renderStatusEnv] != "" })
+	r.reader(runtime.ResourceKindHostUnit, r.hostUnits)
+	r.readsHeld(runtime.ResourceKindHostUnit, func() bool { return r.Env[hostUnitsEnv] != "" })
 }
 
 // renderStatusEnv names the status documents run-controller.sh mounts, as

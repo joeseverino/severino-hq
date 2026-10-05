@@ -998,16 +998,19 @@ in each fails if a call comes to cost a process again.
 - **No bridge, no pass.** While the web container is restarting or being
   replaced there is no socket, or nothing listening on it. The pass fails with
   that reason and the next one runs; nothing weaker is tried.
-- **Scheduled work is one more action.** What the host does on a schedule
+- **Scheduled work is one more action.** What the host asks HQ for by name
   (prune routine audit events, delete expired sessions, read the contact
-  inbox, pull the content index, read the public registries) is declared once, in
-  `hq/platform/application/scheduled_work.py`. A timer runs
+  inbox, pull the content index, read the public registries, read the unit
+  state after a failure) is declared once, in
+  `hq/platform/application/scheduled_work.py`. A unit runs
   `hq-controller job NAME` inside the web container
   (`severino-hq-job@.service`); the running process does the work as a job and
   answers how it ended, so a failed job is a failed unit and every run has a
-  row. No timer starts a Python process, a test holds the shipped timers to
-  the declared names, and HQ starts the same job itself when it learns
-  something is due sooner.
+  row. A timer asks on its schedule. A unit that fails asks for `units.read`
+  through `OnFailure=`, which has the controller read `host.unit` at once
+  (`docs/DERIVED_FACTS.md`, "The controller's own machine"). No unit starts a
+  Python process, a test holds the shipped units to the declared names, and HQ
+  starts the same job itself when it learns something is due sooner.
 
 The disposable container runs as the same unprivileged UID as the web
 process, which is what lets it reach the socket; the root-owned systemd

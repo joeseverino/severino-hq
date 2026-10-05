@@ -7,6 +7,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BeforeValidator, Field
 
+from ..bridge_contract import keyword, limit
 from .contract import ObservationRecord, ObservationSpec
 
 class HostFirewallRecord(ObservationRecord):
@@ -113,9 +114,47 @@ class HostRenderStatusRecord(ObservationRecord):
     status: SecretRenderStatus | None = None
 
 
+# A unit's name, one of systemd's state words and an instant in UTC, each as
+# the bridge contract states it for the controller, which checks them first.
+UNIT_NAME = keyword("HostUnitRecord", "properties", "unit", "pattern")
+UNIT_WORD = keyword("HostUnitRecord", "properties", "active", "pattern")
+UNIT_INSTANT = keyword("HostUnitRecord", "properties", "read_at", "pattern")
+
+UnitName = Annotated[str, Field(pattern=UNIT_NAME, max_length=limit("HostUnitRecord", "properties", "unit", "maxLength"))]
+UnitWord = Annotated[str, Field(pattern=UNIT_WORD)]
+UnitInstant = Annotated[str, Field(pattern=UNIT_INSTANT)]
+
+
+class HostUnitRecord(ObservationRecord):
+    """One systemd unit as ``systemctl show`` states it (``HostUnitRecord`` in
+    the bridge contract).
+
+    It holds a unit's name, state words, an exit status and instants: nothing
+    a unit runs, is given or reads.
+    """
+
+    unit: UnitName
+    load: UnitWord
+    file_state: UnitWord | Literal[""] = ""
+    active: UnitWord
+    sub: UnitWord
+    result: UnitWord | Literal[""] = ""
+    main_code: int = Field(default=0, ge=0)
+    main_status: int = Field(default=0, ge=0)
+    started_at: UnitInstant | Literal[""] = ""
+    ended_at: UnitInstant | Literal[""] = ""
+    condition: UnitWord | Literal[""] = ""
+    condition_at: UnitInstant | Literal[""] = ""
+    last_trigger_at: UnitInstant | Literal[""] = ""
+    next_elapse_at: UnitInstant | Literal[""] = ""
+    activates: UnitName | Literal[""] = ""
+    read_at: UnitInstant
+
+
 FIREWALL_KIND = "host.firewall"
 PERIMETER_KIND = "host.perimeter"
 RENDER_STATUS_KIND = "host.render_status"
+UNIT_KIND = "host.unit"
 
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
@@ -142,5 +181,13 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         HostRenderStatusRecord,
         title=lambda record: str(record.get("renderer", "")),
         relation="Credentials rendered by",
+    ),
+    ObservationSpec(
+        UNIT_KIND,
+        "host",
+        "Unit state",
+        HostUnitRecord,
+        title=lambda record: str(record.get("unit", "")),
+        relation="Unit run by",
     ),
 )

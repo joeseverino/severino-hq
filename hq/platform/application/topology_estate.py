@@ -492,13 +492,14 @@ def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
 
 
 def _derived_from_readings(nodes, edges, resources, estate: _Estate) -> None:
-    """What provider-specific joins add: container edges, and image, render status and certificate facts."""
+    """What provider-specific joins add: container edges, and image, render status, unit and certificate facts."""
 
-    from . import certificate_expiry, docker_estate, render_status_findings
+    from . import certificate_expiry, docker_estate, render_status_findings, unit_findings
 
     if estate.machine_ids:
         docker_estate.add(nodes, edges, resources, estate.machine)
     render_status_findings.add(nodes, estate.machine)
+    unit_findings.add(nodes, estate.machine)
     by_ref, by_provider = _reader_index(nodes)
     certificate_expiry.add(
         nodes,

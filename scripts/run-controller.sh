@@ -11,6 +11,8 @@ readonly app_dir="${SEVERINO_HQ_APP_DIR:-/opt/apps/severino-hq}"
 script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 # shellcheck source=scripts/lib/controller-env.sh
 . "${script_dir}/lib/controller-env.sh"
+# shellcheck source=scripts/lib/systemd-units.sh
+. "${script_dir}/lib/systemd-units.sh"
 readonly mode="${1:-}"
 readonly container="${HQ_CONTAINER:-severino-hq}"
 readonly acme_dir="${app_dir}/secrets/acme"
@@ -268,6 +270,28 @@ done <<EOF
 hq=${controller_runtime_dir}/status.json
 EOF
 set -- "$@" --env "SEVERINO_RENDER_STATUS=${render_status}"
+
+# The state of the units this repository ships, as systemd holds it, so a unit
+# that failed, a timer that stopped and a unit that was never installed reach
+# HQ instead of staying in this machine's journal. The units are the ones under
+# deploy/systemd beside this script, in the tree root owns, and the question
+# is a fixed list of properties (scripts/lib/systemd-units.sh): states,
+# results and instants, and nothing a unit runs or is given.
+#
+# Asked here and passed in as a file, on the same terms as the readings above:
+# the manager's socket is read and write, so the container is handed the
+# answer and never the socket. The reading is named whether or not systemd
+# answered, so a machine where it did not is a reading HQ could not take, and
+# says so.
+runtime_units="${run_dir}/units"
+if units_state "${script_dir}/../deploy/systemd" > "${runtime_units}" 2>/dev/null \
+    && [ -s "${runtime_units}" ]; then
+    chown 10001:10001 "${runtime_units}"
+    chmod 0400 "${runtime_units}"
+    set -- "$@" \
+        --mount "type=bind,source=${runtime_units},target=/run/severino-hq/units,readonly"
+fi
+set -- "$@" --env SEVERINO_HOST_UNITS=/run/severino-hq/units
 
 # No connection reaches the container's environment: Docker writes a
 # container's resolved environment to disk and shows it in `docker inspect`.

@@ -1,10 +1,12 @@
-"""Work the host does on a schedule, declared once.
+"""Work the host asks HQ for by name, declared once.
 
-A timer asks for one of these by name over the bridge socket and the running
+A unit asks for one of these by name over the bridge socket and the running
 process does it as a job (``hq.domains.jobs``): one at a time, with a row that
-says how it ended and an audit entry. The schedule is the timer's; what the
-work is, and that it exists, is declared here and nowhere else. A timer naming
-anything else is refused, and a test holds the shipped timers to this list.
+says how it ended and an audit entry. A timer asks on its schedule, and a unit
+that failed asks through ``OnFailure=``. When it is asked is the unit's; what
+the work is, and that it exists, is declared here and nowhere else. A unit
+naming anything else is refused, and a test holds the shipped units to this
+list.
 
 HQ starts the same work itself when it learns something is due sooner than the
 timer would find it (``start``).
@@ -90,12 +92,26 @@ def _public_registry(progress: Any) -> dict[str, Any]:
     return refresh(principal=cli_principal())
 
 
+def _unit_state(progress: Any) -> dict[str, Any]:
+    """Have the controller read the machine's units now: a unit there failed.
+
+    The failed unit is not named and need not be. The reading says which.
+    """
+
+    from hq.domains.control_plane.observations.host import UNIT_KIND
+
+    from .cadence import request_reading
+
+    return {"asked": UNIT_KIND, "rung": request_reading(UNIT_KIND)}
+
+
 SCHEDULED: tuple[ScheduledWork, ...] = (
     ScheduledWork("audit.prune", "Prune routine audit events", prune_audit),
     ScheduledWork("contacts.inbox", "Read the contact inbox", _contacts_inbox),
     ScheduledWork("content.sync", "Pull the site content index", _content_index),
     ScheduledWork("registry.refresh", "Read public registry records", _public_registry),
     ScheduledWork("sessions.clear", "Delete expired sessions", _clear_sessions),
+    ScheduledWork("units.read", "Read unit state after a failure", _unit_state),
 )
 
 ACTOR = "timer"

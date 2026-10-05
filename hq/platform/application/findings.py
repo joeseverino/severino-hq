@@ -53,6 +53,7 @@ from . import (
     registration_findings,
     render_status_findings,
     tailnet_findings,
+    unit_findings,
 )
 from .action_links import (
     ActionLink,
@@ -176,6 +177,7 @@ RULE_MODULES = (
     connection_findings,
     credential_findings,
     render_status_findings,
+    unit_findings,
     certificate_expiry,
     registration_findings,
     controller_findings,

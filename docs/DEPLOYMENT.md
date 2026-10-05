@@ -214,6 +214,20 @@ daily `severino-hq-script-drift` check compares the same set, byte for byte,
 with `/etc/systemd/system`, and names each file that differs. A drop-in the host
 adds beside a shipped one is the host's and is not compared.
 
+A unit that fails is reported to HQ, and no unit is wired for that by hand.
+`deploy/systemd/severino-hq-.service.d/10-on-failure.conf` (and the same file
+for timers and paths) is in the drop-in directory systemd reads for every unit
+whose name begins `severino-hq-`, and sets
+`OnFailure=severino-hq-job@units.read.service`. Two units carry an empty
+drop-in of the same name in their own directory, which replaces it for them,
+because either would otherwise start itself again whenever it failed: the unit
+a failure starts, and the controller, which the read's doorbell starts.
+`scripts/test-systemd-units.sh` holds every shipped unit to the prefix, the
+exemptions to exactly those a loop requires, and no unit to an `OnFailure=` of
+its own. HQ learns of a controller that fails from its silence. The state of
+every shipped unit is also read on each sweep (`host.unit`), so a unit that
+was never installed or a timer that was never enabled is a finding too.
+
 The same activation gate performs an authenticated pull of the live
 `example.com` content index before installing and enabling its persistent
 daily timer. Cloudflare Access credentials come from uppercase fields on the

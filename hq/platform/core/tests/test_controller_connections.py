@@ -28,7 +28,7 @@ LAUNCH_VARIABLES = {
     "HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_CONTROLLER_IMAGE",
     "SEVERINO_HQ_SOURCE_REPOSITORY", "HQ_CONTROLLER_CA_FILE",
     "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK", "SEVERINO_HOST_FIREWALL",
-    "SEVERINO_RENDER_STATUS",
+    "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS",
 }
 
 
@@ -236,6 +236,7 @@ class LauncherTests(Host):
         self.stub("chown", "exit 0\n")
         self.stub("curl", "exit 1\n")
         self.stub("nft", "exit 1\n")
+        self.stub("systemctl", "exit 1\n")
         # install -d makes a directory; otherwise it copies with the mode given.
         self.stub("install", '''
 mode=""; directory=0
@@ -277,6 +278,9 @@ case "$1" in
                 type=bind,source=*,target=/run/severino-hq/render-status/hq.json,readonly)
                     source="${argument#type=bind,source=}"
                     cp -p "${source%%,target=*}" "$FIXTURES/mounted-render-status" ;;
+                type=bind,source=*,target=/run/severino-hq/units,readonly)
+                    source="${argument#type=bind,source=}"
+                    cp -p "${source%%,target=*}" "$FIXTURES/mounted-units" ;;
             esac
         done ;;
 esac
@@ -384,6 +388,61 @@ esac
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(message, result.stderr)
                 self.assertFalse((self.root / "docker-args").exists())
+
+    UNITS = "SEVERINO_HOST_UNITS=/run/severino-hq/units"
+
+    def test_the_unit_state_is_asked_of_systemd_and_mounted_read_only(self):
+        shutil.copy(ROOT / "scripts" / "fixtures" / "systemctl", self.bin / "systemctl")
+        state = self.root / "unit-state"
+        state.mkdir()
+        (state / "severino-hq-backup.service").write_text(
+            "LoadState=loaded\nActiveState=failed\nSubState=failed\nResult=exit-code\n"
+        )
+        self.env.update({"TEST_UNIT_STATE": str(state), "TEST_SYSTEMCTL_LOG": str(self.root / "systemctl-log")})
+
+        result = self.launch()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        arguments = self.arguments()
+        self.assertIn(self.UNITS, arguments)
+        mounts = [a for a in arguments if "target=/run/severino-hq/units" in a]
+        self.assertEqual(len(mounts), 1)
+        self.assertTrue(mounts[0].startswith(f"type=bind,source={self.runtime}/run."))
+        self.assertTrue(mounts[0].endswith(",target=/run/severino-hq/units,readonly"))
+        mounted = self.root / "mounted-units"
+        self.assertEqual(mounted.stat().st_mode & 0o777, 0o400)
+        blocks = mounted.read_text().split("\n\n")
+        self.assertIn("Id=severino-hq-backup.service\nLoadState=loaded\nActiveState=failed", blocks[1])
+        # Every unit the repository ships is asked about, and each instance of
+        # the job template a shipped file starts; the template itself is not.
+        asked = {block.splitlines()[0].removeprefix("Id=") for block in blocks}
+        shipped = {path.name for path in (ROOT / "deploy" / "systemd").iterdir() if path.is_file()}
+        self.assertEqual(
+            {name for name in shipped if not name.endswith(".example") and "@." not in name},
+            {name for name in asked if "@" not in name},
+        )
+        self.assertIn("severino-hq-job@audit.prune.service", asked)
+        self.assertNotIn("severino-hq-job@.service", asked)
+        # The question is a fixed list of states, results and instants, asked
+        # in UTC: nothing a unit runs, is given or reads.
+        zone, verb, *options = (self.root / "systemctl-log").read_text().splitlines()
+        self.assertEqual((zone, verb), ("TZ=UTC", "show"))
+        self.assertIn("--timestamp=unix", options)
+        (properties,) = [o.removeprefix("--property=") for o in options if o.startswith("--property=")]
+        for name in properties.split(","):
+            with self.subTest(property=name):
+                self.assertNotRegex(name, r"(?i)environment|exec(?!Main(Code|Status)$)|credential|path|directory|file(?!State$)")
+        self.assertEqual(options[options.index("--") + 1 :], sorted(asked))
+
+    def test_a_machine_where_systemd_does_not_answer_is_still_named(self):
+        # Named without a mount: the controller reports the reading as one it
+        # could not take, where an unnamed one would read as not connected.
+        result = self.launch()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        arguments = self.arguments()
+        self.assertIn(self.UNITS, arguments)
+        self.assertFalse([a for a in arguments if "target=/run/severino-hq/units" in a])
 
     RENDER_STATUS = "SEVERINO_RENDER_STATUS=hq=/run/severino-hq/render-status/hq.json"
 

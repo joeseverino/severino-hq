@@ -1,4 +1,4 @@
-"""Scheduled work: declared once, done as a job, asked for by the shipped timers."""
+"""Scheduled work: declared once, done as a job, asked for by the shipped units."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from .. import scheduled_work
 from ..scheduled_work import SCHEDULED, ScheduledWork
 
 UNITS = Path(settings.BASE_DIR) / "deploy" / "systemd"
-INSTANCE = re.compile(r"^Unit=severino-hq-job@(?P<name>.+)\.service$", re.MULTILINE)
+INSTANCE = re.compile(r"^(?:Unit|OnFailure)=severino-hq-job@(?P<name>.+)\.service$", re.MULTILINE)
 
 
 def declared(run) -> mock._patch:
@@ -74,20 +74,64 @@ class StartTests(TransactionTestCase):
             self.assertFalse(scheduled_work.start("example.work"))
 
 
-class ShippedTimerTests(TestCase):
-    """The timers and the declarations name the same work, each exactly once."""
+class ShippedUnitTests(TestCase):
+    """The shipped units and the declarations name the same work: a timer
+    starts it on a schedule, or a failed unit starts it through OnFailure."""
 
-    def asked_for(self) -> list[str]:
-        return sorted(
+    def asked_for(self) -> set[str]:
+        return {
             match["name"]
-            for timer in UNITS.glob("*.timer")
-            for match in INSTANCE.finditer(timer.read_text())
-        )
+            for unit in UNITS.rglob("*")
+            if unit.is_file() and not unit.name.endswith(".example")
+            for match in INSTANCE.finditer(unit.read_text())
+        }
 
-    def test_every_timer_asks_for_declared_work_and_all_of_it_is_asked_for(self):
-        self.assertEqual(self.asked_for(), sorted(work.name for work in SCHEDULED))
+    def test_every_unit_asks_for_declared_work_and_all_of_it_is_asked_for(self):
+        self.assertEqual(self.asked_for(), {work.name for work in SCHEDULED})
+
+    def test_each_timer_starts_work_of_its_own(self):
+        started = [
+            match["name"] for timer in UNITS.glob("*.timer") for match in INSTANCE.finditer(timer.read_text())
+        ]
+        self.assertEqual(len(started), len(set(started)))
 
     def test_nothing_shipped_starts_a_process_in_the_web_container_for_it(self):
         for unit in UNITS.glob("*.service"):
             with self.subTest(unit=unit.name):
                 self.assertNotIn("manage.py", unit.read_text())
+
+
+class UnitFailureTests(TestCase):
+    """A failed unit asks for the machine's units to be read, and for nothing else."""
+
+    def test_the_read_is_asked_for_and_the_doorbell_rung(self):
+        from hq.domains.control_plane.models import ReadRequest
+        from hq.domains.control_plane.observations.host import UNIT_KIND
+
+        from .. import cadence
+
+        with mock.patch.object(cadence, "ring_doorbell", return_value=True) as doorbell:
+            answer = scheduled_work.run("units.read")
+
+        self.assertEqual(answer["state"], "succeeded")
+        doorbell.assert_called_once_with()
+        self.assertEqual(list(ReadRequest.objects.values_list("connection_ref", "kind")), [("", UNIT_KIND)])
+        self.assertEqual(Job.objects.get(pk=answer["job"]).result, {"asked": UNIT_KIND, "rung": True})
+        # The sweep it causes reads that kind alone, whatever the cadence says.
+        with mock.patch.object(cadence, "sweep_interval", return_value=cadence.slowest_sweep_interval()):
+            from hq.platform.application.inventory_testing import store
+
+            store("host.firewall", {"record": "interface-binding"})
+            verdict = cadence.sweep_due("example-controller")
+        self.assertEqual((verdict["due"], verdict["only_kinds"]), (True, [UNIT_KIND]))
+
+    def test_a_doorbell_that_cannot_be_rung_leaves_the_request_for_the_timer(self):
+        from hq.domains.control_plane.models import ReadRequest
+
+        from .. import cadence
+
+        with mock.patch.object(cadence, "ring_doorbell", return_value=False):
+            answer = scheduled_work.run("units.read")
+
+        self.assertEqual(answer["state"], "succeeded")
+        self.assertEqual(ReadRequest.objects.count(), 1)

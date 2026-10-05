@@ -12,8 +12,8 @@ the controller that read it, and the rules here read those facts.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
-from dataclasses import dataclass, fields, replace
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -23,11 +23,12 @@ from hq.domains.control_plane.observations.host import (
     RENDER_STATUS_KIND,
 )
 
-from .derivations import passed, since
+from .derivations import passed
 from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, fact_values
 from .moments import duration
+from .reading_facts import FactRow, ago as _when, rows_of, state_on_controller, stated
 from .timestamps import moment
-from .topology_model import TopologyNode, derived_id
+from .topology_model import TopologyNode
 from .ui import counted
 
 # The fact a node carries per renderer its controller reported. Neither it nor
@@ -91,8 +92,10 @@ SYNC_UNREPORTED = "not reported"
 
 
 @dataclass(frozen=True)
-class Rendering:
+class Rendering(FactRow):
     """One renderer as its fact carries it: words and instants, in field order."""
+
+    KEY = RENDER_STATUS
 
     renderer: str = ""
     state: str = RENDER_UNREADABLE
@@ -106,16 +109,6 @@ class Rendering:
     # never reached Connect.
     sync: str = ""
     sync_read_at: str = ""
-
-    @property
-    def fact(self) -> tuple[str, str]:
-        return RENDER_STATUS, "|".join(getattr(self, field.name) for field in fields(self))
-
-    @classmethod
-    def of(cls, value: str) -> Rendering:
-        names = [field.name for field in fields(cls)]
-        parts = (value.split("|") + [""] * len(names))[: len(names)]
-        return cls(**dict(zip(names, parts)))
 
     @property
     def name(self) -> str:
@@ -177,59 +170,41 @@ def _rendering(record: dict[str, Any]) -> Rendering:
     )
 
 
-def _renderings(snapshot: Any) -> Iterator[Rendering]:
-    """What one stored reading says: a record per renderer, and the reading's
-    own failure as a renderer nobody could name."""
-
-    if not snapshot.reachable:
-        yield Rendering(reason="unread")
-        return
-    for record in snapshot.records or ():
-        yield _rendering(record)
-    if snapshot.error:
-        yield Rendering(reason="refused")
-
-
 def add(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
-    """One fact per renderer, on the node of the controller that read it.
+    """One fact per renderer, on the node of the controller that read it."""
 
-    ``machine`` names the machine node a controller folded into. A reading
-    whose controller no node stands for gets a node of its own, so a renderer
-    that went quiet is never dropped for want of somewhere to say it.
+    state_on_controller(
+        nodes,
+        machine,
+        RENDER_STATUS_KIND,
+        lambda snapshot: rows_of(snapshot, _rendering, lambda reason: Rendering(reason=reason)),
+    )
+
+
+def _stated(estate: FindingEstate):
+    return stated(estate, Rendering)
+
+
+def failed_units(node: TopologyNode) -> frozenset[str]:
+    """The units on ``node`` whose renderer says its last run failed.
+
+    ``render-failing`` says that failure with its class, so a rule that reads
+    unit state leaves these to it.
     """
 
-    from .facts import snapshots_of
-
-    for snapshot in snapshots_of(RENDER_STATUS_KIND):
-        found = tuple(rendering.fact for rendering in _renderings(snapshot))
-        if not found:
-            continue
-        controller = str(getattr(snapshot, "controller_id", "") or "")
-        node_id = derived_id("controller", controller)
-        if node_id not in nodes:
-            node_id = machine(controller) or node_id
-        node = nodes.get(node_id) or TopologyNode(
-            id=node_id, kind="controller", label=controller or "The controller", subtitle="Controller"
-        )
-        nodes[node_id] = replace(node, facts=node.facts + found)
+    return frozenset(
+        unit
+        for rendering in stated_on(node)
+        if rendering.failed and (unit := RENDERER_UNITS.get(rendering.renderer))
+    )
 
 
-def _stated(estate: FindingEstate) -> Iterator[tuple[TopologyNode, tuple[Rendering, ...]]]:
-    for node in estate.nodes():
-        values = fact_values(node, RENDER_STATUS)
-        if values:
-            yield node, tuple(Rendering.of(value) for value in values)
+def stated_on(node: TopologyNode) -> tuple[Rendering, ...]:
+    return tuple(Rendering.of(value) for value in fact_values(node, RENDER_STATUS))
 
 
 def _names(renderings: tuple[Rendering, ...]) -> str:
     return ", ".join(rendering.name for rendering in renderings)
-
-
-def _when(stamp: str, now: datetime) -> str:
-    """An instant as an age, in words that hold until the age reads differently."""
-
-    when = moment(stamp)
-    return f"{duration(since(when, now=now))} ago" if when is not None else "never"
 
 
 def _run_again(renderings: tuple[Rendering, ...], label: str) -> tuple[OperatorStep, ...]:

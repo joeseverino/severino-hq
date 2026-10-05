@@ -509,6 +509,19 @@ def request_delivery_read() -> bool:
         or ManagedResource.objects.filter(kind=kind).exists()
     ):
         return False
+    return request_reading(kind)
+
+
+def request_reading(kind: str) -> bool:
+    """Ask for one kind to be read on the controller's next run, and start one.
+
+    For HQ and the host to ask on what they have just learned, not for a
+    person: nobody's activity is noted, so the idle cadence is untouched and
+    the sweep this causes reads the one kind. The request is stored whether or
+    not the doorbell could be rung; the controller's timer finds it within its
+    floor. The answer is whether it was rung.
+    """
+
     ReadRequest.objects.update_or_create(
         connection_ref="", kind=kind, defaults={"requested_at": timezone.now()}
     )
