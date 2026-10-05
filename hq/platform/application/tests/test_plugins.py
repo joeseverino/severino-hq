@@ -99,6 +99,17 @@ class PluginContractTests(TestCase):
                 with self.subTest(path=path.name):
                     self.assertEqual(int(found), PLUGIN_API_VERSION)
 
+    def test_every_host_path_the_admission_action_reads_exists(self):
+        """An extension's admission checks this repository out as ``host``."""
+
+        root = Path(__file__).resolve().parents[4]
+        sources = (root / ".github" / "actions" / "admit-plugin" / "action.yml", *(root / ".github" / "workflows").glob("*.yml"))
+        named = {path for source in sources for path in re.findall(r"\bhost/([A-Za-z0-9_./-]+\.[a-z]+)", source.read_text())}
+        self.assertIn("hq/platform/application/plugins.py", named)
+        for path in sorted(named):
+            with self.subTest(path=path):
+                self.assertTrue((root / path).exists())
+
     def load(self, manifest=VALID):
         clear_plugin_composition_cache()
         env = mock.patch.dict(
