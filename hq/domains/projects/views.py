@@ -1,7 +1,5 @@
-from django.contrib import messages
 from django.http import Http404
 from django.db.models import Case, Count, IntegerField, Q, Value, When
-from django.shortcuts import redirect
 from django.urls import reverse, reverse_lazy
 from django.views.generic import (
     TemplateView,
@@ -15,12 +13,10 @@ from django.views.generic import (
 
 from hq.platform.application.projects import (
     NotFoundError,
-    refresh_project,
 )
 from hq.domains.projects.github import github_repository
 from hq.platform.application.security import web_principal
 from hq.platform.application.timestamps import moment
-from hq.platform.application.ui import counted
 from hq.platform.application.pages import PageAction, PageMixin, record_trail
 from hq.platform.application.tables import (
     TableColumn,
@@ -117,42 +113,47 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
 
 
 class ProjectRefreshView(View):
-    """Fetch metadata (like last push) from GitHub for a project."""
+    """Start a refresh of the project's outside metadata. The request answers
+    once the job is recorded; the job reads GitHub and the published site."""
 
     def post(self, request, slug: str):
+        from hq.domains.jobs.runner import JobConflict
+        from hq.platform.application.asks import FAILED, Standing, answer, job_standing
+        from hq.platform.application.projects import request_project_refresh
+
+        back = reverse("projects:detail", args=[slug])
         try:
-            result = refresh_project(slug, principal=web_principal(request.user))
+            job = request_project_refresh(
+                slug, principal=web_principal(request.user), requested_by=request.user
+            )
         except NotFoundError as exc:
             raise Http404(str(exc)) from exc
-        content = result["content"]
-        if content and content["ok"]:
-            messages.success(
-                request,
-                f"Synced {counted(content['total'], 'content item', 'content items')} "
-                f"({content['created']} new, {content['updated']} updated).",
-            )
-        elif content:
-            messages.error(request, f"Content sync failed: {content['error']}")
-
-        _report_github(request, result)
-        return redirect("projects:detail", slug=slug)
+        except JobConflict:
+            return answer(request, Standing(FAILED, "A project refresh is already running."), fallback=back)
+        return answer(
+            request,
+            job_standing(job),
+            fallback=back,
+            status_url=reverse("jobs:status", args=[job.pk]),
+            message=f"{job.label} started. This page shows what it found when it ends.",
+        )
 
 
-def _report_github(request, result) -> None:
-    """Say what the refresh did about GitHub: the App's read asked for, or the
-    public read it fell back to."""
+def refresh_ask(project):
+    """The project's Refresh control, standing as its last refresh does."""
 
-    app = result.get("github_app")
-    if app and app["ok"]:
-        messages.success(request, app["message"])
-        return
-    if app:
-        messages.warning(request, f"The GitHub App was not asked to read: {app['error']}")
-    github = result["github"]
-    if github and github["ok"]:
-        messages.success(request, "Synced GitHub project metadata.")
-    elif github:
-        messages.warning(request, github["error"])
+    from hq.domains.jobs.models import Job
+    from hq.platform.application.asks import Ask, Standing, job_standing
+    from hq.platform.application.projects import REFRESH_JOB
+
+    job = Job.objects.filter(kind=REFRESH_JOB, state__in=("queued", "running")).first()
+    mine = job is not None and job.request.get("project") == project.slug
+    return Ask(
+        "Refresh",
+        reverse("projects:refresh", args=[project.slug]),
+        standing=job_standing(job) if mine else Standing(),
+        status_url=reverse("jobs:status", args=[job.pk]) if mine else "",
+    )
 
 
 class ProjectPage(PageMixin):
@@ -221,13 +222,7 @@ class ProjectDetailView(PageMixin, DetailView):
         project = self.object
         actions = []
         if github_repository(project.repository_url):
-            actions.append(
-                PageAction(
-                    "Refresh",
-                    reverse("projects:refresh", args=[project.slug]),
-                    method="post",
-                )
-            )
+            actions.append(refresh_ask(project))
         actions += [
             PageAction("Edit", reverse("projects:edit", args=[project.slug])),
             PageAction(
@@ -274,10 +269,22 @@ class WatchingView(PageMixin, TemplateView):
     def get_page_lede(self) -> str:
         return "What you star on GitHub, with each project's latest release and security advisories."
 
-    def get_page_actions(self) -> tuple[PageAction, ...]:
+    def get_page_actions(self):
         if not self.login:
             return ()
-        return (PageAction("Refresh", reverse("watching_refresh"), method="post"),)
+        from hq.platform.application.asks import Ask
+        from hq.platform.application.github_profile import standing
+
+        found = standing()
+        return (
+            Ask(
+                "Refresh",
+                reverse("watching_refresh"),
+                standing=found,
+                status_url=_profile_status(found.since),
+                refresh=WATCHING_REGION,
+            ),
+        )
 
     def get_context_data(self, **kwargs):
         from hq.platform.application.github_profile import profile
@@ -315,26 +322,42 @@ class WatchingView(PageMixin, TemplateView):
         ]
 
 
+# The part of the Watching page a finished read is shown in.
+WATCHING_REGION = "[data-watching]"
+
+
+def _profile_status(asked) -> str:
+    from hq.platform.application.asks import read_status_url
+    from hq.platform.application.github_profile import KIND
+
+    return read_status_url((KIND,), asked) if asked is not None else ""
+
+
 class WatchingRefreshView(View):
+    """Ask the controller to read your GitHub profile now. Nothing is read here:
+    the request answers once the ask is stored, and the page follows it."""
+
     def post(self, request):
-        from hq.platform.application.github_profile import refresh
-        from hq.platform.application.github_public import GitHubReadError
+        from hq.platform.application.asks import FAILED, Standing, answer, read_standing
+        from hq.platform.application.github_profile import KIND, request_read
         from hq.platform.application.linked_accounts import GITHUB, linked_login
         from hq.platform.application.security import AuthorizationError
 
         login = linked_login(request.user, GITHUB)
+        back = reverse("watching")
         if not login:
-            messages.error(request, "Your sign-in names no GitHub account.")
-            return redirect("watching")
+            return answer(request, Standing(FAILED, "Your sign-in names no GitHub account."), fallback=back)
         try:
-            refresh(login, principal=web_principal(request.user), force=True)
+            asked = request_read(login, principal=web_principal(request.user))
         except AuthorizationError:
-            messages.error(request, "You may not read from GitHub.")
-        except GitHubReadError as exc:
-            messages.warning(request, str(exc))
-        else:
-            messages.success(request, f"Read @{login} from GitHub.")
-        return redirect("watching")
+            return answer(request, Standing(FAILED, "You may not read from GitHub."), fallback=back)
+        return answer(
+            request,
+            read_standing((KIND,), asked),
+            fallback=back,
+            status_url=_profile_status(asked),
+            message=f"Asked the controller to read @{login} from GitHub. This page shows it when it reports.",
+        )
 
 
 class PostureView(PageMixin, TemplateView):

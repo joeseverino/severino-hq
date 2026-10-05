@@ -239,6 +239,17 @@ def swept(kind: str) -> bool:
     return declared is not None and not declared.unobserved_reason
 
 
+def every_sweep(kind: str) -> bool:
+    """Whether every sweep reads ``kind``: swept, and on no slower clock of its
+    own. A kind on its own clock is carried by the sweeps between its reads, so
+    its age says nothing about whether a sweep is due or has happened."""
+
+    from hq.domains.control_plane.observations import OBSERVATIONS
+
+    reading = OBSERVATIONS.get(kind)
+    return swept(kind) and (reading is None or reading.every is None)
+
+
 def sweep_due(controller_id: str = "") -> dict[str, object]:
     """Whether the controller should sweep now, and why.
 
@@ -272,7 +283,7 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
             for kind, observed_at, updated_at in ProviderInventory.objects.values_list(
                 "kind", "observed_at", "updated_at"
             )
-            if swept(kind)
+            if every_sweep(kind)
         ),
         default=None,
     )
@@ -358,7 +369,9 @@ def connection_providers(connection_ref: str) -> tuple[str, ...]:
     )
 
 
-def _forced_kinds(connection_ref: str, kind: str) -> tuple[str, ...] | None:
+def forced_kinds(connection_ref: str, kind: str) -> tuple[str, ...] | None:
+    """The kinds a read of one connection or one kind forces; None is every kind."""
+
     from .credential_sight import fed_kinds
 
     if kind:
@@ -383,8 +396,9 @@ def _answered(
     if read.connection_ref and probed.get(read.connection_ref, asked) <= asked:
         return False
     if read.kinds is None:
-        # Every kind: answered once something was stored and all of it is newer.
-        return bool(stored) and min(stored.values()) > asked
+        # Every kind: answered once all a sweep reads was stored after it.
+        swept_at = [at for kind, at in stored.items() if every_sweep(kind)]
+        return bool(swept_at) and min(swept_at) > asked
     return all(stored.get(kind, asked) > asked for kind in read.kinds)
 
 
@@ -408,7 +422,7 @@ def forced_reads() -> tuple[ForcedRead, ...]:
             request.connection_ref,
             request.kind,
             request.requested_at,
-            _forced_kinds(request.connection_ref, request.kind),
+            forced_kinds(request.connection_ref, request.kind),
         )
         for request in requests
     )

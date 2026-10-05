@@ -18,6 +18,7 @@ from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.models import AuditLog
 from hq.domains.projects.models import Project
 from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
+from .ui import counted
 from hq.domains.content.content_sync import ContentSyncError, sync_content_index
 from .sensitivity import safe_doc_ids
 from .domains import records_of
@@ -240,6 +241,66 @@ def _record_push(
     return {"ok": True, "last_push_at": pushed_at.isoformat()}
 
 
+REFRESH_JOB = "project.refresh"
+
+
+def refresh_summary(result: dict[str, Any]) -> str:
+    """What a refresh did, in a sentence a person reads when it ends."""
+
+    said = []
+    content = result.get("content")
+    if content and content["ok"]:
+        said.append(
+            f"Synced {counted(content['total'], 'content item', 'content items')} "
+            f"({content['created']} new, {content['updated']} updated)."
+        )
+    elif content:
+        said.append(f"Content sync failed: {content['error']}")
+    app, github = result.get("github_app"), result.get("github")
+    if app and app["ok"]:
+        said.append(app["message"])
+    else:
+        if app:
+            said.append(f"The GitHub App was not asked to read: {app['error']}")
+        if github and github["ok"]:
+            said.append("Synced GitHub project metadata.")
+        elif github:
+            said.append(github["error"])
+    return " ".join(said)
+
+
+def request_project_refresh(slug: str, *, principal: Principal, requested_by: Any = None) -> Any:
+    """Start a project's refresh as a job and return it at once.
+
+    A refresh can wait on GitHub and on the published site, so no request does
+    it: the job runs ``refresh_project`` on its own thread and says what it did
+    as its last note. One refresh runs at a time (``jobs.runner.JobConflict``).
+    """
+
+    from hq.domains.jobs.runner import start
+
+    principal.require(records_of("projects").write)
+    try:
+        project = Project.objects.only("name").get(slug=slug)
+    except Project.DoesNotExist as exc:
+        raise NotFoundError(f"Project {slug!r} was not found.") from exc
+
+    def work(progress: Any) -> dict[str, Any]:
+        progress("Reading what the project's sources say.")
+        result = refresh_project(slug, principal=principal)
+        progress(refresh_summary(result), force=True)
+        return result
+
+    return start(
+        REFRESH_JOB,
+        f"Refresh {project.name}",
+        work,
+        actor=principal.actor,
+        requested_by=requested_by,
+        request={"project": slug},
+    )
+
+
 def execute_project_refresh(
     command: ProjectRefreshCommand,
     *,
@@ -247,10 +308,21 @@ def execute_project_refresh(
     current_slug: str,
     expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    """Capability-shaped entry point for the existing project refresh use case."""
+    """Capability-shaped entry point: starts the refresh and says where it runs."""
+
+    from hq.domains.jobs.runner import JobConflict
 
     del command, expected_updated_at
-    return refresh_project(current_slug, principal=principal)
+    try:
+        job = request_project_refresh(current_slug, principal=principal)
+    except JobConflict:
+        return {"ok": True, "started": False, "message": "A project refresh is already running."}
+    return {
+        "ok": True,
+        "started": True,
+        "job": str(job.pk),
+        "message": f"{job.label} started; the job reports what it found.",
+    }
 
 
 @transaction.atomic

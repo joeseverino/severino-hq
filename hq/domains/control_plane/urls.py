@@ -22,6 +22,7 @@ urlpatterns = [
         name="connections",
     ),
     path("connections/read/", connection_views.ReadNowView.as_view(), name="read_now"),
+    path("connections/read/status/", connection_views.ReadStatusView.as_view(), name="read_status"),
     # Before <slug:key>: the controller's own page.
     path("controller/", controller_views.ControllerView.as_view(), name="controller"),
     # Before <slug:key>, like the rest: an open page asking for its own readings.

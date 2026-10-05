@@ -243,6 +243,61 @@ as an option (new receipt, new documentation, new content: about 165 ms) spend
 it rendering 4,000 `<option>` elements; that is a change to the form, not to a
 query.
 
+### What a request waits on
+
+Nothing outside the process. A page or a button answers from what HQ holds;
+work that reaches a network, starts a process or sleeps happens where waiting
+costs nobody:
+
+- **A reading of the outside world is the controller's.** It holds the
+  credentials and the egress, and reads concurrently. The web side stores a
+  read request (`hq.platform.application.cadence.request_reads`), rings the
+  doorbell and answers; the reading arrives through the sweep's ingest. A
+  reading whose provider rations calls keeps a clock of its own
+  (`ObservationSpec.every`): HQ tells the controller when it is due, and the
+  sweeps between carry it without a call. `github.profile` is the example: the
+  profile and stars behind Watching, read without a credential, at a cost the
+  bridge contract's `GitHubProfileBounds` states once.
+- **Long local work is a job** (`hq/domains/jobs/`): its own thread, progress
+  notes, a heartbeat, one live job per kind. A project's refresh is one.
+
+The request that asks answers at once, in one shape for both
+(`hq.platform.application.asks`): how the work stands, and while it is live
+the address of a status resource, with 202. `partials/_ask.html` draws the
+control and one script behaviour follows it; `docs/DESIGN.md` has the
+interaction.
+
+The rule is held by the interpreter rather than by review
+(`hq/platform/core/outbound.py`). Python raises an audit event whenever any
+library opens a connection, resolves a name, starts a process or sleeps. While
+a request is being served that event raises `OutboundInRequest`, so the call
+never leaves, whichever library made it. A place a request must wait is a named
+entry in `ALLOWED` with its reason, entered with `allowed("name")`: signing in
+(bounded by `OIDC_TIMEOUT`), a public lookup an operator asked for by name, and
+the contact submissions that exist only in the site's database.
+`RequestNeverWaitsTests` holds the entries to the places listed.
+`SEVERINO_OUTBOUND_IN_REQUEST=report` logs `outbound.in_request` and lets the
+call go, for a composition whose extensions still reach out from a request; an
+extension moves that work to `hq_sdk.jobs`.
+
+`bench_pages` measures actions as it measures pages: every route that answers a
+POST is one, `ACTIONS` names what each is posted, and one with no entry is
+listed under "Actions not exercised" with `UNSAFE`'s reason where it cannot be
+posted against a scratch database. An action is posted inside a transaction
+that is rolled back, with the doorbell unrung and a job's work held, so the
+time is the request's own. `hq/platform/core/tests/test_action_budgets.py` pins
+each converted action's queries at two sizes of estate and asserts it answers
+before the work it asked for.
+
+Measured 2026-10-04 on an 8 GB M3, Python 3.13, scale 0.25 (median ms, queries):
+
+| Action | Before | After | Queries after |
+| --- | ---: | ---: | ---: |
+| Watching: Refresh | 30,031 (production, read in the request) | 3.7 | 23 |
+| Project: Refresh | one GitHub call, and a site fetch for the index project, in the request | 2.2 | 13 |
+| Connections: Read now | answered with a redirect | 3.4 | 20 |
+| A page asking for its readings | answered as JSON | 9.5 | 17 |
+
 This is the important scaling property: a fourth interface does not create a
 fourth implementation.
 

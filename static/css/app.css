@@ -4939,6 +4939,19 @@ form[data-clean] .save-bar { display: none; }
 /* What a page says while its own readings are being read, and once they are
    in: one quiet line, never a banner. */
 .visit-status { margin: 0 0 var(--space-5); color: var(--muted); font-size: var(--text-xs); }
+/* An ask: a button and how the work it asked for stands (partials/_ask.html).
+   Inline, so it sits wherever a button does; the note wraps under the button
+   in a narrow box rather than pushing the row wide. The note is empty until
+   something was asked, and an empty one takes no room. */
+.ask { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); min-inline-size: 0; }
+.ask-quiet { display: block; }
+.ask-said { display: inline-flex; flex-wrap: wrap; gap: var(--space-3); min-inline-size: 0; color: var(--muted); font-size: var(--text-xs); }
+.ask-note { overflow-wrap: anywhere; }
+.ask-note:empty, .ask-elapsed:empty { display: none; }
+.ask-elapsed { font-variant-numeric: tabular-nums; }
+.ask[data-ask-state="failed"] .ask-note { color: var(--danger); }
+/* Busy keeps the button focusable, so it is marked rather than disabled. */
+.ask [aria-disabled="true"] { cursor: progress; opacity: .6; }
 /* The dashboard's readings: how this request arrived, whether the controller
    still is, and what the estate reports. One row of equals: the same mark, the
    same lead and the same quiet line under it, spaced rather than ruled apart,

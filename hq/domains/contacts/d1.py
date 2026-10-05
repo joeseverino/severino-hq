@@ -30,6 +30,7 @@ from hq.platform.application.connection_contracts import (
 )
 from hq.platform.application.security import Capability
 from hq.platform.core.errors import UpstreamUnavailable
+from hq.platform.core.outbound import allowed
 
 
 class D1Error(UpstreamUnavailable):
@@ -220,7 +221,7 @@ def query(sql: str, params: list | None = None) -> list[dict]:
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
+        with allowed("contacts.d1"), urllib.request.urlopen(request, timeout=10) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         # An HTTPError is the error response itself, socket included, and

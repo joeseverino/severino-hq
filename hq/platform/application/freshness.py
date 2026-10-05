@@ -66,6 +66,8 @@ def cadence(kind: str = "") -> Cadence:
         from .public_registry import read_every
 
         return Cadence(read_every(kind), missed=2)
+    if spec is not None and spec.every is not None:
+        return Cadence(spec.every, missed=2)
     # A controller reads on the sweep, whose slowest interval is the idle one.
     return Cadence(slowest_sweep_interval())
 

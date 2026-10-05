@@ -87,6 +87,18 @@ def record_inventory(
             # rest of the sweep is still true, and refusing it would make a
             # controller upgrade take the whole inventory down.
             continue
+        if report.get("carried"):
+            # A kind on its own clock that was not due: nothing was asked of
+            # the provider, so what HQ holds is untouched. A refusal reported
+            # with it (the provider's allowance is spent) is an attempt, and
+            # is stored as one beside the records it could not replace.
+            parts = clean_refused_parts(kind, report.get("refused_parts"))
+            if parts:
+                ProviderInventory.objects.filter(kind=kind).update(
+                    refused_parts=parts, controller_id=controller_id, updated_at=observed_at
+                )
+                stored.append(kind)
+            continue
         reached = bool(report.get("ok", True))
         connected = bool(report.get("connected", True))
         records = report.get("records") or []

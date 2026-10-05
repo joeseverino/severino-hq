@@ -24,6 +24,7 @@ from django.utils import timezone
 from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.facets import Counts, Failure, Timing
 from hq.platform.core.models import AuditLog
+from hq.platform.core.outbound import off_request
 
 from .models import Job
 
@@ -111,6 +112,12 @@ def start(
 
 
 def _run(job_id, work: Callable[[Progress], dict[str, Any]]) -> None:
+    # A job is nobody's request: it may wait on whatever its work needs.
+    with off_request():
+        _work(job_id, work)
+
+
+def _work(job_id, work: Callable[[Progress], dict[str, Any]]) -> None:
     close_old_connections()
     started = timezone.now()
     Job.objects.filter(pk=job_id).update(

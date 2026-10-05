@@ -6,32 +6,23 @@ from django.http import Http404, JsonResponse
 from django.views import View
 
 from hq.platform.application.security import web_principal
-from hq.platform.application.visit_refresh import SUBJECTS, request_visit_refresh, visit_state
+from hq.platform.application.visit_refresh import SUBJECTS, request_visit_refresh
 
 # A hostname's limit, which is the longest thing a subject is named by.
 NAME_LIMIT = 253
-# Generous for a signed list of kinds, and far short of a request line's limit.
-WATCH_LIMIT = 4000
 
 
 class VisitRefreshView(View):
-    """Ask for what one page is assembled from, or say whether it is being read.
+    """Ask for what one page is assembled from.
 
     The page says which page it is; what that means is HQ's to work out. A POST
     asks, behind the session, the CSRF token and the capability Read now
-    needs, and hands back what to watch for, signed. A GET only reports on
-    that, so opening or prefetching a link reads nothing and can ask about
-    nothing HQ did not hand out.
+    needs, and answers as every ask does: how the read stands, and the signed
+    address that says so while it is live (``ReadStatusView``). There is no
+    GET, so opening or prefetching a link reads nothing.
     """
 
-    http_method_names = ["get", "post"]
-
-    def get(self, request):
-        watch = str(request.GET.get("watch", ""))
-        found = visit_state(watch) if 0 < len(watch) <= WATCH_LIMIT else None
-        if found is None:
-            raise Http404("Nothing to watch.")
-        return JsonResponse(found)
+    http_method_names = ["post"]
 
     def post(self, request):
         subject = str(request.POST.get("subject", ""))
@@ -41,4 +32,4 @@ class VisitRefreshView(View):
         found = request_visit_refresh(subject, name, principal=web_principal(request.user))
         if found is None:
             raise Http404("No such page.")
-        return JsonResponse(found)
+        return JsonResponse(found, status=202 if found["live"] else 200)

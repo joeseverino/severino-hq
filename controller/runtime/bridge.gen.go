@@ -200,6 +200,7 @@ const (
 	PartACLManagement     ReadingPartName = "acl_management"
 	PartAccess            ReadingPartName = "access"
 	PartApps              ReadingPartName = "apps"
+	PartAvatar            ReadingPartName = "avatar"
 	PartBranchRules       ReadingPartName = "branch_rules"
 	PartClients           ReadingPartName = "clients"
 	PartCodeScanning      ReadingPartName = "code_scanning"
@@ -240,6 +241,8 @@ func (e ReadingPartName) Valid() bool {
 	case PartAccess:
 		return true
 	case PartApps:
+		return true
+	case PartAvatar:
 		return true
 	case PartBranchRules:
 		return true
@@ -344,6 +347,7 @@ const (
 	ResourceKindCloudflareTunnel             ResourceKind = "cloudflare.tunnel"
 	ResourceKindCloudflareZone               ResourceKind = "cloudflare.zone"
 	ResourceKindGitHubDelivery               ResourceKind = "github.delivery"
+	ResourceKindGitHubProfile                ResourceKind = "github.profile"
 	ResourceKindGitHubRepository             ResourceKind = "github.repository"
 	ResourceKindHQRequestPath                ResourceKind = "hq.request_path"
 	ResourceKindHostFirewall                 ResourceKind = "host.firewall"
@@ -413,6 +417,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindCloudflareZone:
 		return true
 	case ResourceKindGitHubDelivery:
+		return true
+	case ResourceKindGitHubProfile:
 		return true
 	case ResourceKindGitHubRepository:
 		return true
@@ -506,6 +512,7 @@ const (
 	SweptCloudflareTunnel             SweptKind = "cloudflare.tunnel"
 	SweptCloudflareZone               SweptKind = "cloudflare.zone"
 	SweptGitHubDelivery               SweptKind = "github.delivery"
+	SweptGitHubProfile                SweptKind = "github.profile"
 	SweptGitHubRepository             SweptKind = "github.repository"
 	SweptHostFirewall                 SweptKind = "host.firewall"
 	SweptHostPerimeter                SweptKind = "host.perimeter"
@@ -561,6 +568,8 @@ func (e SweptKind) Valid() bool {
 	case SweptCloudflareZone:
 		return true
 	case SweptGitHubDelivery:
+		return true
+	case SweptGitHubProfile:
 		return true
 	case SweptGitHubRepository:
 		return true
@@ -819,7 +828,10 @@ type ControllerRegistry struct {
 
 	// Extensions Each admitted extension the running image composes, which delivery follows.
 	Extensions []AdmittedExtension `json:"extensions"`
-	Locked     []LockedAction      `json:"locked"`
+
+	// GithubProfiles Whose public GitHub profile the controller reads, and whether to read now. The accounts are the ones a person's sign-in names. The profile keeps a slower clock than the sweep, which HQ holds: due says the reading is old enough or somebody asked.
+	GithubProfiles GitHubProfilePlan `json:"github_profiles"`
+	Locked         []LockedAction    `json:"locked"`
 
 	// MaterialKinds Kinds whose work needs material HQ holds.
 	MaterialKinds []ResourceKind `json:"material_kinds"`
@@ -866,6 +878,22 @@ type GitHubDeliverySpec struct {
 	// Repository owner/name of the repository whose composition workflow deploys HQ.
 	Repository string `json:"repository"`
 	Workflow   string `json:"workflow"`
+}
+
+// GitHubProfileBounds The bounds of a github.profile record, stated here for both sides. GitHub allows an address 60 anonymous calls an hour, and one account costs the profile, the stars and the picture, then a release call and an advisory call for each watched repository: 3 + 2 x watched.maxItems.
+type GitHubProfileBounds struct {
+	// Avatar The picture as a data: URI, so a page loads no image from another host.
+	Avatar string `json:"avatar,omitempty"`
+
+	// Watched The newest starred repositories, each with its latest release and published advisories.
+	Watched []any `json:"watched,omitempty"`
+}
+
+// GitHubProfilePlan Whose public GitHub profile the controller reads, and whether to read now. The accounts are the ones a person's sign-in names. The profile keeps a slower clock than the sweep, which HQ holds: due says the reading is old enough or somebody asked.
+type GitHubProfilePlan struct {
+	// Accounts GitHub logins.
+	Accounts []string `json:"accounts"`
+	Due      bool     `json:"due"`
 }
 
 // GlanceMachineTarget defines model for GlanceMachineTarget.
@@ -915,6 +943,9 @@ type Inventory map[string]KindReport
 
 // KindReport defines model for KindReport.
 type KindReport struct {
+	// Carried True when the kind keeps its own clock and was neither due nor asked for: nothing was asked of the provider, and HQ keeps the last records and when they were read.
+	Carried bool `json:"carried,omitempty"`
+
 	// Connected False when nothing this controller holds can read the kind; absent means it was read.
 	Connected *bool  `json:"connected,omitempty"`
 	Error     string `json:"error,omitempty"`

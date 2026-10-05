@@ -1,0 +1,25 @@
+{% comment %}
+A "do this now" control, from `ask` (application.asks.Ask): a button, and how
+the work it last asked for stands.
+
+  {% include "partials/_ask.html" with ask=ask %}
+
+The button posts and the request answers at once; the work happens outside it.
+Without script that is a form post back to this page, which draws the control
+as the stored state has it. With script the same post is answered in place and
+the control follows `data-ask-status` until the work ends, then fetches the
+part of the page `data-ask-refresh` names. Either way a page loaded while the
+work is live resumes following it.
+
+The note is the live region, and only a change of state changes it. The
+elapsed time ticks beside it, outside the region, so it is not read out every
+second. A busy button stays focusable (`aria-disabled`), so focus is not
+dropped by the thing the operator just pressed.
+{% endcomment %}
+<span class="ask" data-ask data-ask-state="{{ ask.standing.state }}"{% if ask.standing.live and ask.status_url %} data-ask-status="{{ ask.status_url }}"{% endif %}{% if ask.refresh %} data-ask-refresh="{{ ask.refresh }}"{% endif %}{% if ask.standing.live %} aria-busy="true"{% endif %}>
+  {% ask_button ask extra %}
+  <span class="ask-said">
+    <span class="ask-note" role="status" data-ask-note>{% if ask.standing.state != "idle" %}{{ ask.standing.note }}{% endif %}</span>
+    <span class="ask-elapsed" data-ask-elapsed aria-hidden="true"{% if ask.standing.live %} data-seconds="{{ ask.standing.seconds }}"{% endif %}></span>
+  </span>
+</span>

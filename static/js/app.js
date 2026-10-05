@@ -883,117 +883,273 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   });
 })();
 
-// A page about one thing asks for that thing's readings when it is opened.
-// Only while the page is showing: a tab in the background asks for nothing,
-// and asks again when it is brought back, which costs nothing if HQ finds the
-// readings still fresh. The server decides what is read and whether it is due;
-// this only says the page is being looked at, and follows the answer.
+// Asked-for work: one behaviour for every "do this now".
 //
-// When the reading lands the page is loaded again, so everything on it is the
-// same reading and every enhancement is bound as on any other load. Not under
-// somebody's hands, though: once the page has been touched it says a newer
-// reading is in and leaves showing it to them. And never twice running: a page
-// that reloaded itself a moment ago says so instead, whatever the server
-// answers, so no answer can turn an open page into a loop.
+// A request never does the work. It stores the ask and answers at once with
+// how the work stands and the address of a status resource (202 while it is
+// live); the controller or a job does the work, and the control follows that
+// resource until it ends. A read the controller takes, a job, and the readings
+// a page asks for when it is opened are all this: `[data-ask]`, drawn by
+// partials/_ask.html, _job_progress.html and _visit_refresh.html.
+//
+//   data-ask-status   the status resource, present while the work is live, so
+//                     a page loaded mid-flight resumes following it
+//   data-ask-refresh  a selector for the part of the page the result shows
+//                     in, fetched again when the work ends; without one the
+//                     page is loaded again
+//   [data-ask-button] the button that asks; a form[data-ask-auto] asks when
+//                     the page is showing, with nobody pressing anything
+//   data-ask-outcome  the page draws how the work ended, failure included
+//   [data-ask-note]   the live region: it changes only when the state does
+//   [data-ask-elapsed] ticks beside it, outside the region
+//
+// Polling rather than a socket: one small question every couple of seconds
+// while something is live. A persistent connection would be a second transport
+// to run and secure for a question that fits in a query.
 (() => {
-  const form = document.querySelector("form[data-visit-refresh]");
-  if (!form) return;
-  const status = document.querySelector("[data-visit-status]");
-  const POLL_MS = 4000;
-  const LIMIT_MS = 180_000;
+  const POLL_MS = 2000;
+  // A tab nobody is looking at should not spend the night asking.
+  const HIDDEN_POLL_MS = 15000;
+  // Past this the work's own status has long since said how it ended.
+  const FOLLOW_LIMIT_MS = 60 * 60 * 1000;
   const RELOAD_GAP_MS = 120_000;
-  const reloadedKey = `hq.visit.reloaded:${window.location.pathname}`;
-  let busy = false;
+  const reloadedKey = `hq.ask.reloaded:${window.location.pathname}`;
+  // Status resource -> the controls following it. A control drawn twice (a
+  // head's button and its copy in the narrow menu) is one poll.
+  const following = new Map();
+
   let touched = false;
   ["pointerdown", "keydown", "wheel", "touchstart"].forEach((type) =>
     document.addEventListener(type, () => { touched = true; }, { once: true, passive: true, capture: true }),
   );
   const showing = () => document.visibilityState === "visible";
+  const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-  const say = (text, reload = false) => {
-    if (!status) return;
-    status.replaceChildren(text);
-    if (reload) {
-      const link = document.createElement("a");
-      link.href = window.location.href;
-      link.textContent = "Show it";
-      status.append(" ", link);
+  const elapsed = (seconds) => {
+    if (seconds < 60) return `${seconds} s`;
+    return `${Math.floor(seconds / 60)} min ${String(seconds % 60).padStart(2, "0")} s`;
+  };
+  const tick = (control) => {
+    const slot = control.querySelector("[data-ask-elapsed]");
+    if (!slot) return;
+    const since = Number(control.dataset.askSince || 0);
+    slot.textContent = since ? elapsed(Math.max(0, Math.round((Date.now() - since) / 1000))) : "";
+  };
+  window.setInterval(() => document.querySelectorAll("[data-ask][data-ask-since]").forEach(tick), 1000);
+
+  const say = (control, text) => {
+    const note = control.querySelector("[data-ask-note]");
+    if (!note) return;
+    // Written only when it changes: a live region reads out every write.
+    if (note.textContent !== text) note.textContent = text;
+    if (control.matches(".ask-quiet")) note.hidden = !text;
+  };
+
+  // Draws one standing on a control. Everything a control shows comes through
+  // here, from the server's first answer to the last poll.
+  const draw = (control, standing) => {
+    control.dataset.askState = standing.state;
+    if (standing.live) {
+      control.setAttribute("aria-busy", "true");
+      if (!control.dataset.askSince) {
+        control.dataset.askSince = String(Date.now() - (standing.seconds || 0) * 1000);
+      }
+    } else {
+      control.removeAttribute("aria-busy");
+      delete control.dataset.askSince;
+      delete control.dataset.askStatus;
     }
-    status.hidden = !text;
+    control.querySelectorAll("[data-ask-button]").forEach((button) => {
+      // Busy, not disabled: a disabled button drops the focus it holds.
+      if (standing.live) button.setAttribute("aria-disabled", "true");
+      else button.removeAttribute("aria-disabled");
+    });
+    say(control, standing.note || "");
+    tick(control);
+    const label = control.querySelector("[data-ask-label]");
+    if (label && standing.label) label.textContent = standing.label;
+    const bar = control.querySelector("[data-ask-bar]");
+    if (bar) {
+      const known = standing.percent !== null && standing.percent !== undefined;
+      bar.parentElement.classList.toggle("job-bar-unknown", !known);
+      if (known) {
+        bar.style.setProperty("--at", `${standing.percent}%`);
+        bar.parentElement.setAttribute("aria-valuenow", String(standing.percent));
+      } else {
+        bar.parentElement.removeAttribute("aria-valuenow");
+      }
+    }
   };
 
   // sessionStorage can be unavailable; then the page never reloads itself.
   const reloadedRecently = () => {
     try {
-      const at = Number(window.sessionStorage.getItem(reloadedKey) || 0);
-      return Date.now() - at < RELOAD_GAP_MS;
+      return Date.now() - Number(window.sessionStorage.getItem(reloadedKey) || 0) < RELOAD_GAP_MS;
     } catch (_error) {
       return true;
     }
   };
-  const land = () => {
-    if (touched || !showing() || reloadedRecently()) {
-      say("A newer reading is in.", true);
-      return;
-    }
+  // The whole page again, so everything on it is the same reading. Not under
+  // somebody's hands, and never twice running: then it says the result is in
+  // and leaves showing it to them.
+  const reload = (control) => {
+    const offer = () => {
+      const note = control.querySelector("[data-ask-note]");
+      if (!note) return;
+      const link = document.createElement("a");
+      link.href = window.location.href;
+      link.textContent = "Show it";
+      note.replaceChildren("A newer reading is in. ", link);
+      note.hidden = false;
+    };
+    if (touched || !showing() || reloadedRecently()) return offer();
     try {
       window.sessionStorage.setItem(reloadedKey, String(Date.now()));
     } catch (_error) {
-      say("A newer reading is in.", true);
-      return;
+      return offer();
     }
     window.location.reload();
   };
 
-  // What the server said, or null when it did not answer as expected: an
-  // expired session, an error, a page that is gone. Null is not "the reading
-  // is in", so nothing follows from it.
-  const answer = async (response) => (response.ok ? response.json() : null);
+  // The named part of this page as the server draws it now, swapped in place.
+  const refresh = async (selector) => {
+    const response = await hqFetch(window.location.href, { credentials: "same-origin", renewSession: false });
+    if (!response.ok) throw new Error("no page");
+    const next = hqParseDocument(await response.text());
+    const fresh = [...next.querySelectorAll(selector)];
+    const shown = [...document.querySelectorAll(selector)];
+    if (!fresh.length || fresh.length !== shown.length) throw new Error("no region");
+    shown.forEach((region, index) => region.replaceWith(fresh[index]));
+    resume(document);
+  };
 
-  const follow = async (watch) => {
-    const until = Date.now() + LIMIT_MS;
-    const query = new URLSearchParams({ watch });
-    while (showing() && Date.now() < until) {
-      await new Promise((resolve) => window.setTimeout(resolve, POLL_MS));
-      const found = await answer(
-        await hqFetch(`${form.action}?${query}`, { credentials: "same-origin", renewSession: false }),
-      );
-      if (!found) break;
-      if (found.pending) continue;
-      land();
+  const land = async (control, standing) => {
+    draw(control, standing);
+    // A failure is said where it was asked. A surface that draws the outcome
+    // itself (`data-ask-outcome`) is loaded again however the work ended.
+    if (standing.state !== "done" && !("askOutcome" in control.dataset)) return;
+    const selector = control.dataset.askRefresh;
+    if (!selector) return reload(control);
+    try {
+      await refresh(selector);
+    } catch (_error) {
+      reload(control);
+    }
+  };
+
+  const follow = async (url) => {
+    const until = Date.now() + FOLLOW_LIMIT_MS;
+    const controls = () => following.get(url) || new Set();
+    try {
+      while (Date.now() < until) {
+        await wait(showing() ? POLL_MS : HIDDEN_POLL_MS);
+        let standing = null;
+        try {
+          const response = await hqFetch(url, { credentials: "same-origin", renewSession: false });
+          // Gone or refused is an end; anything else is a container
+          // restarting under us, which will answer again.
+          if (response.status === 404 || response.status === 403) break;
+          if (response.ok) standing = await response.json();
+        } catch (_error) {
+          standing = null;
+        }
+        if (!standing) continue;
+        if (standing.live) {
+          controls().forEach((control) => draw(control, standing));
+          continue;
+        }
+        const waiting = [...controls()];
+        following.delete(url);
+        // One control lands it, so one fetch refreshes the page; the rest
+        // only say so.
+        waiting.slice(1).forEach((control) => draw(control, standing));
+        if (waiting.length) await land(waiting[0], standing);
+        return;
+      }
+      controls().forEach((control) => draw(control, { state: "idle", live: false, note: "" }));
+    } finally {
+      following.delete(url);
+    }
+  };
+
+  const watch = (control, url) => {
+    control.dataset.askStatus = url;
+    const controls = following.get(url);
+    if (controls) {
+      controls.add(control);
       return;
     }
-    // Unanswered, or no longer being watched: say nothing rather than leave a
-    // promise on the page.
-    say("");
+    following.set(url, new Set([control]));
+    follow(url);
   };
 
-  const ask = async () => {
-    if (busy || !showing()) return;
-    busy = true;
+  // A control the server drew mid-flight is followed from where it stands.
+  const resume = (root) => {
+    root.querySelectorAll("[data-ask][data-ask-status]").forEach((control) => {
+      const seconds = Number(control.querySelector("[data-ask-elapsed]")?.dataset.seconds || 0);
+      if (!control.dataset.askSince) control.dataset.askSince = String(Date.now() - seconds * 1000);
+      tick(control);
+      if (!following.get(control.dataset.askStatus)?.has(control)) watch(control, control.dataset.askStatus);
+    });
+  };
+
+  // Posts an ask and takes up its answer. `quiet` is an ask nobody pressed:
+  // it says nothing until there is something to wait for, and never takes the
+  // page away to sign in.
+  const ask = async (control, action, body, { quiet = false } = {}) => {
+    if (control.getAttribute("aria-busy") === "true") return;
+    if (!quiet) draw(control, { state: "queued", live: true, note: "Asking…", seconds: 0 });
     try {
-      const found = await answer(
-        await hqFetch(form.action, {
-          method: "POST",
-          body: new FormData(form),
-          credentials: "same-origin",
-          // Looking at a page is not a request to leave it for a sign-in.
-          renewSession: false,
-        }),
-      );
-      if (found && found.pending && found.watch) {
-        say("Reading now…");
-        await follow(found.watch);
+      const response = await hqFetch(action, {
+        method: "POST",
+        body,
+        credentials: "same-origin",
+        renewSession: !quiet,
+      });
+      const standing = response.ok ? await response.json() : null;
+      if (!standing) throw new Error("no answer");
+      if (standing.live && standing.status) {
+        // Every copy of the control on the page follows the same work.
+        document.querySelectorAll("[data-ask]").forEach((other) => {
+          const button = other.querySelector("[data-ask-button]");
+          const same = other === control || (button && button.formAction === action && !quiet);
+          if (!same) return;
+          draw(other, standing);
+          watch(other, standing.status);
+        });
+        return;
       }
+      if (quiet && standing.state === "idle") return;
+      await land(control, standing);
     } catch (_error) {
-      say("");
-    } finally {
-      busy = false;
+      if (!quiet) draw(control, { state: "failed", live: false, note: "The request could not be sent." });
     }
   };
 
-  ask();
-  document.addEventListener("visibilitychange", ask);
+  document.addEventListener("submit", (event) => {
+    const button = event.submitter;
+    const control = button?.closest?.("[data-ask]");
+    if (!control || !button.matches("[data-ask-button]")) return;
+    event.preventDefault();
+    const body = new FormData(event.target);
+    if (button.name) body.set(button.name, button.value);
+    ask(control, button.formAction, body);
+  });
+
+  // Only while the page is showing: a tab in the background asks for nothing,
+  // and asks again when it is brought back, which costs nothing if HQ finds
+  // the readings still fresh. The server decides what is read and whether it
+  // is due; this only says the page is being looked at.
+  const askAuto = () => {
+    if (!showing()) return;
+    document.querySelectorAll("[data-ask] form[data-ask-auto]").forEach((form) => {
+      ask(form.closest("[data-ask]"), form.action, new FormData(form), { quiet: true });
+    });
+  };
+
+  resume(document);
+  askAuto();
+  document.addEventListener("visibilitychange", askAuto);
 })();
 
 // Calendar paging without a page load. The links and forms work on their own:
@@ -1096,59 +1252,6 @@ document.addEventListener("keydown", (event) => {
   event.preventDefault();
   control.click();
 });
-
-// Job progress. A job runs off the request thread, so the page that started
-// it has to ask how it is going.
-//
-// Polling rather than a socket: one small question every couple of seconds,
-// for a minute or two, a few times a week. A persistent connection would be a
-// second transport to run and secure for a question that fits in a query.
-(() => {
-  const panel = document.querySelector(".job-progress[data-job]");
-  if (!panel) return;
-
-  const bar = panel.querySelector("[data-job-bar]");
-  const note = panel.querySelector("[data-job-note]");
-  const state = panel.querySelector("[data-job-state]");
-  // Backs off when the tab is hidden: a phone left on this page overnight
-  // should not spend the night asking.
-  const interval = () => (document.hidden ? 15000 : 2000);
-  let stop = false;
-
-  const tick = async () => {
-    if (stop) return;
-    try {
-      const response = await hqFetch(panel.dataset.job, {
-        credentials: "same-origin",
-      });
-      if (response.ok) {
-        const job = await response.json();
-        state.textContent = job.label;
-        if (job.note) note.textContent = job.note;
-        if (job.percent === null) {
-          panel.querySelector(".job-bar").classList.add("job-bar-unknown");
-        } else {
-          panel.querySelector(".job-bar").classList.remove("job-bar-unknown");
-          bar.style.setProperty("--at", `${job.percent}%`);
-        }
-        panel.dataset.state = job.state;
-        if (!job.live) {
-          stop = true;
-          // One reload, so the surface renders the outcome its own way. The
-          // partial does not know what a finished job has to say.
-          window.location.reload();
-          return;
-        }
-      }
-    } catch {
-      // A failed poll is not a failed job. Keep asking: the usual cause is
-      // the container being restarted under us, and it will answer again.
-    }
-    window.setTimeout(tick, interval());
-  };
-  window.setTimeout(tick, interval());
-})();
-
 
 // A list field's own controls. The rows are real inputs whether or not this
 // runs (one spare row is always rendered) so this only adds the

@@ -155,11 +155,50 @@ class RefreshButtonTests(TestCase):
         self.client.force_login(get_user_model().objects.create_user(username="operator", password="x"))
         Project.objects.create(name="Alpha", slug="alpha", repository_url="https://github.com/example/alpha")
 
-    def test_the_button_asks_the_app_and_says_so(self):
+    def test_the_button_starts_a_job_and_answers_before_any_of_it_runs(self):
+        from hq.domains.jobs.models import Job
+        from hq.domains.jobs.testing import held_jobs
+
         read_by_app()
 
-        response = self.client.post(reverse("projects:refresh", args=["alpha"]), follow=True)
+        with held_jobs() as jobs:
+            response = self.client.post(
+                reverse("projects:refresh", args=["alpha"]), headers={"x-requested-with": "XMLHttpRequest"}
+            )
+            answer = response.json()
+            # Answered with the work still to do: nothing was asked of anyone.
+            self.assertEqual((response.status_code, answer["state"], answer["live"]), (202, "queued", True))
+            self.assertFalse(ReadRequest.objects.exists())
+            page = self.client.get(reverse("projects:detail", args=["alpha"]))
+            self.assertContains(page, f'data-ask-status="{answer["status"]}"')
+            jobs.run()
 
         self.assertEqual(list(ReadRequest.objects.values_list("connection_ref", flat=True)), [REF])
+        ended = self.client.get(answer["status"]).json()
+        self.assertEqual((ended["state"], ended["live"]), ("done", False))
+        self.assertIn(REF, ended["note"])
+        self.assertEqual(Job.objects.get().request, {"project": "alpha"})
+
+    def test_without_script_the_button_returns_to_a_page_that_says_it_is_in_hand(self):
+        from hq.domains.jobs.testing import held_jobs
+
+        with held_jobs():
+            response = self.client.post(reverse("projects:refresh", args=["alpha"]), follow=True)
+
+        self.assertRedirects(response, reverse("projects:detail", args=["alpha"]))
         shown = [str(message) for message in response.context["messages"]]
-        self.assertTrue(any(REF in message for message in shown), shown)
+        self.assertTrue(any("Refresh Alpha started" in message for message in shown), shown)
+        self.assertContains(response, 'aria-disabled="true"')
+
+    def test_a_second_refresh_while_one_runs_is_refused_and_says_why(self):
+        from hq.domains.jobs.testing import held_jobs
+
+        with held_jobs():
+            self.client.post(reverse("projects:refresh", args=["alpha"]))
+            again = self.client.post(
+                reverse("projects:refresh", args=["alpha"]), headers={"x-requested-with": "XMLHttpRequest"}
+            )
+
+        self.assertEqual(again.status_code, 200)
+        self.assertEqual(again.json()["state"], "failed")
+        self.assertIn("already running", again.json()["note"])

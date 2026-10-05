@@ -1506,3 +1506,95 @@ class RouteOwnerTests(SimpleTestCase):
             finally:
                 set_script_prefix("/")
         self.assertEqual(reverse("dashboard"), django_reverse("dashboard"))
+
+
+class RequestNeverWaitsTests(SimpleTestCase):
+    """A request answers from what HQ holds. It never reaches a network,
+    starts a process or sleeps: the interpreter refuses it (``core.outbound``),
+    whichever library the call came through."""
+
+    ROOT = Path(__file__).resolve().parents[4]
+    # Where each declared exception is entered. An entry here is a place a
+    # request may wait: adding one is a decision, with its reason in ``ALLOWED``.
+    ENTERED = {
+        "oidc": {"hq/platform/core/oidc.py"},
+        "lookup": {"hq/platform/application/lookup.py"},
+        "contacts.d1": {"hq/domains/contacts/d1.py"},
+    }
+
+    def sources(self):
+        paths = [
+            path
+            for package in ("hq", "hq_sdk")
+            for path in sorted((self.ROOT / package).rglob("*.py"))
+            if "tests" not in path.parts and not path.name.startswith("test")
+        ]
+        self.assertTrue(paths, "no source was found to check")
+        for path in paths:
+            yield path.relative_to(self.ROOT).as_posix(), path.read_text(encoding="utf-8")
+
+    def test_every_request_is_served_under_the_rule(self):
+        import time
+        from unittest import mock
+
+        from django.conf import settings
+        from django.http import HttpResponse
+        from django.test import RequestFactory
+
+        from hq.platform.core.middleware import RequestContextMiddleware
+        from hq.platform.core.outbound import OutboundInRequest
+
+        def view(request):
+            time.sleep(0)
+            return HttpResponse("never")
+
+        # First in the stack but for the network check, so every other
+        # middleware and every view runs inside it.
+        self.assertEqual(settings.MIDDLEWARE.index("hq.platform.core.middleware.RequestContextMiddleware"), 1)
+        with (
+            mock.patch("hq.platform.core.middleware.note_activity"),
+            mock.patch("hq.platform.core.middleware.note_arrival"),
+            self.assertRaises(OutboundInRequest),
+        ):
+            RequestContextMiddleware(view)(RequestFactory().get("/example/"))
+
+    def test_an_exception_is_declared_with_its_reason_and_entered_only_where_listed(self):
+        from hq.platform.core.outbound import ALLOWED
+
+        entered: dict[str, set[str]] = {}
+        for relative, source in self.sources():
+            if "allowed(" not in source:
+                continue
+            for node in ast.walk(ast.parse(source)):
+                if not (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id == "allowed"
+                ):
+                    continue
+                argument = node.args[0] if node.args else None
+                name = argument.value if isinstance(argument, ast.Constant) else "<not a literal>"
+                entered.setdefault(str(name), set()).add(relative)
+
+        self.assertEqual(entered, self.ENTERED)
+        self.assertEqual(set(ALLOWED), set(self.ENTERED))
+        for name, reason in ALLOWED.items():
+            self.assertGreater(len(reason), 60, name)
+
+    def test_only_a_job_leaves_the_request_that_started_it(self):
+        leaving = {relative for relative, source in self.sources() if "off_request" in source}
+
+        self.assertEqual(leaving, {"hq/platform/core/outbound.py", "hq/domains/jobs/runner.py"})
+
+    def test_asked_for_work_is_followed_by_one_script_behaviour(self):
+        script = (self.ROOT / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        templates = "\n".join(
+            path.read_text(encoding="utf-8") for path in sorted((self.ROOT / "templates").rglob("*.html"))
+        )
+
+        # The controls that ask for work outside the request are all an ask.
+        for partial in ("_ask.html", "_job_progress.html", "_visit_refresh.html"):
+            self.assertIn("data-ask", (self.ROOT / "templates" / "partials" / partial).read_text(encoding="utf-8"))
+        for retired in ("data-job=", "data-visit-refresh", "data-job-note", "data-visit-status"):
+            self.assertNotIn(retired, script + templates)
+        self.assertEqual(script.count("[data-ask][data-ask-status]"), 1)

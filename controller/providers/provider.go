@@ -112,6 +112,10 @@ type Registry struct {
 	ControllerID string
 	// Extensions is each admitted extension the running image composes, from HQ's registry.
 	Extensions []runtime.AdmittedExtension
+	// Profiles is whose public GitHub profile to read and whether it is due, from HQ's registry.
+	Profiles runtime.GitHubProfilePlan
+	// Picture GETs an image of at most limit bytes: its kind and its bytes. Nil fetches over HTTPS.
+	Picture    func(ctx context.Context, address string, limit int) (string, []byte, error)
 	actions    map[actionKey]Action
 	readers    map[string]Reader
 	probes     map[runtime.ConnectionProvider]Probe
@@ -147,6 +151,7 @@ func New(env runtime.Environment, transport Transport) *Registry {
 	r.admitTLS()
 	r.admitCaddy()
 	r.admitGitHub()
+	r.admitGitHubProfile()
 	return r
 }
 

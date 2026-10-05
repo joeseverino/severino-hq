@@ -517,9 +517,11 @@ def controller_registry() -> dict[str, Any]:
 
     A controller that cannot import these declarations asks for them: which
     actions it may apply, which it must refuse and why, which kinds need material
-    HQ holds, which connections can read each kind, and which extensions the
-    image composes.
+    HQ holds, which connections can read each kind, which extensions the image
+    composes, and whose public GitHub profile is due a read.
     """
+
+    from .github_profile import plan as github_profiles
 
     registry = controller_capability_registry()
     return {
@@ -546,4 +548,5 @@ def controller_registry() -> dict[str, Any]:
         },
         "connection_credentials": sorted(CONNECTION_CREDENTIALS),
         "extensions": [dict(source) for source in admitted_sources()],
+        "github_profiles": github_profiles(),
     }

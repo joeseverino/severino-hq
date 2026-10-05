@@ -261,6 +261,26 @@ cannot name a connection or a kind. When the reading lands the page loads
 again, once; or, if somebody has touched it or it reloaded a moment ago, it
 says a newer reading is in and leaves showing it to them.
 
+**Asked-for work is an ask.** A button that starts work which outlives the
+request is `partials/_ask.html`, from an `Ask`
+(`hq/platform/application/asks.py`), and may stand wherever a `PageAction`
+does. Pressing it posts; the request stores the ask and answers at once; the
+control then says how the work stands. The note beside the button is a live
+region (`role="status"`) that changes only when the state does, and the elapsed
+time ticks next to it outside the region, so nothing is read out every second.
+While its own work is live the button is `aria-disabled`, not disabled: it
+keeps the focus the operator just gave it and ignores a second press. When the
+work ends the part of the page named by the ask's `refresh` selector is fetched
+again and swapped in place; without one the page loads again, though not under
+somebody's hands and never twice running. A failure is said in the note, where
+it was asked. Without script the same button is a form post back to the page,
+which draws the control from what is stored, so a page loaded while the work is
+live says so and resumes following it. A job's panel (`_job_progress.html`) and
+the readings a page asks for when it opens (`_visit_refresh.html`) are the same
+ask drawn differently; one behaviour in `app.js` follows all three.
+*Gates:* `RequestNeverWaitsTests.test_asked_for_work_is_followed_by_one_script_behaviour`;
+`hq/platform/core/tests/test_action_budgets.py`.
+
 ## Adding UI
 
 1. Find the primitive. Most pages are a head, a band or card of facts, and a

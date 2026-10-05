@@ -8,3 +8,7 @@ class CoreConfig(AppConfig):
 
     def ready(self):
         from . import checks, signals  # noqa: F401
+        from .outbound import install
+
+        # From here on a request cannot wait on anything outside the process.
+        install()

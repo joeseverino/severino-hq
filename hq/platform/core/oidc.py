@@ -45,8 +45,11 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         the provider, so it has to be told why it stopped (``sso_failed``).
         """
 
+        from hq.platform.core.outbound import allowed
+
         try:
-            return super().authenticate(request, **kwargs)
+            with allowed("oidc"):
+                return super().authenticate(request, **kwargs)
         except requests.RequestException as exc:
             status = getattr(getattr(exc, "response", None), "status_code", None)
             reason = (

@@ -236,6 +236,11 @@ SILENCED_SYSTEM_CHECKS = [] if SECURE_SSL_REDIRECT else ["security.W008"]
 # Where the browser sends a policy violation. One path, named once, because the
 # policy references it and the URLconf has to route it.
 SEVERINO_CSP_REPORT_PATH = "/csp-report/"
+# What happens when a request reaches for a network, a process or a timer
+# (hq.platform.core.outbound): "refuse" raises before the call leaves; "report"
+# logs it as outbound.in_request and lets it go, for a composition whose
+# extensions have not yet moved such work to a job.
+SEVERINO_OUTBOUND_IN_REQUEST = os.environ.get("SEVERINO_OUTBOUND_IN_REQUEST", "refuse")
 
 # Django owns the browser security boundary. Scripts are limited to same-origin
 # assets or per-response nonces; objects and framing are disabled outright.
@@ -628,6 +633,9 @@ OIDC_CREATE_USER = env_bool("SEVERINO_OIDC_CREATE_USER", default=True)
 # say why rather than going straight back to the provider in a loop.
 LOGIN_REDIRECT_URL_FAILURE = "/accounts/login/?sso_failed=1"
 OIDC_USE_PKCE = True
+# Signing in waits on the provider, and nothing waits without a bound: every
+# call the exchange makes (token, keys, userinfo) gives up after this long.
+OIDC_TIMEOUT = env_int("SEVERINO_OIDC_TIMEOUT_SECONDS", 10)
 OIDC_STORE_ACCESS_TOKEN = False
 OIDC_STORE_ID_TOKEN = False
 OIDC_AUTHENTICATION_CALLBACK_URL = "oidc_authentication_callback"

@@ -1,4 +1,5 @@
-"""Readings through the GitHub App: each repository its installation covers.
+"""Readings of GitHub: each repository the App's installation covers, and the
+public profile of each account a sign-in names.
 
 One record per repository, as the App's read-only token sees it: the default
 branch's head and its checks, open pull requests, the latest run of each
@@ -12,8 +13,12 @@ read, so the schema has nowhere to put them.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
+from pydantic import Field
+
+from ..bridge_contract import limit
 from .contract import ObservationRecord, ObservationSpec, ReadingPart
 
 PROVIDER = "github_app"
@@ -77,6 +82,43 @@ class RepositoryRecord(ObservationRecord):
     called_workflows: list[str] | None = None
 
 
+# What GitHub shows anyone, so no credential reads it: the provider is GitHub
+# itself, not a connection.
+PUBLIC_PROVIDER = "github"
+PROFILE_KIND = "github.profile"
+# GitHub rations anonymous calls by the hour (the bridge contract's
+# ``GitHubProfileBounds`` states what one read costs), and a profile changes
+# slowly, so it is read this often and when somebody asks.
+PROFILE_EVERY = timedelta(hours=6)
+AVATAR = ReadingPart("avatar", "Profile picture")
+_PROFILE_BOUNDS = ("GitHubProfileBounds", "properties")
+
+
+class ProfileRecord(ObservationRecord):
+    login: str
+    name: str = ""
+    bio: str = ""
+    url: str = ""
+    followers: int = 0
+    following: int = 0
+    public_repos: int = 0
+    created_at: str = ""
+    company: str = ""
+    location: str = ""
+    website: str = ""
+    social: str = ""
+    public_gists: int = 0
+    hireable: bool = False
+    # A ``data:`` URI: a page loads no image from another host.
+    avatar: str = Field(default="", max_length=limit(*_PROFILE_BOUNDS, "avatar", "maxLength"))
+    # How many repositories the account stars, of which the newest are watched.
+    starred: int = 0
+    # ``{name, url, description, language, stars, starred_at, release, advisories}``.
+    watched: list[dict[str, Any]] = Field(
+        default=[], max_length=limit(*_PROFILE_BOUNDS, "watched", "maxItems")
+    )
+
+
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
         REPOSITORY_KIND,
@@ -101,5 +143,16 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         title=lambda record: str(record.get("repository", "")),
         relation="Built from repository",
         console=lambda record: str(record.get("url", "")),
+    ),
+    ObservationSpec(
+        PROFILE_KIND,
+        PUBLIC_PROVIDER,
+        "GitHub profile",
+        ProfileRecord,
+        parts=(AVATAR,),
+        title=lambda record: str(record.get("login", "")),
+        relation="Public profile of",
+        console=lambda record: str(record.get("url", "")),
+        every=PROFILE_EVERY,
     ),
 )

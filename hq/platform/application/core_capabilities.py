@@ -88,7 +88,8 @@ CORE_CAPABILITY_SPECS = (
         target_label="Project slug",
         target_help="The project whose external metadata to refresh.",
         execution_notes=(
-            "Read the selected project's registered repository URL.",
+            "Start the refresh as a job and answer at once with the job's id; the "
+            "work runs outside the request.",
             "Where the GitHub App reads the repository, ask the controller to read that "
             "connection now, through infrastructure.controller.refresh.",
             "For a repository the App does not read, read its last push from GitHub's "

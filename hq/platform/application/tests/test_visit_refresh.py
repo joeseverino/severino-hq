@@ -19,7 +19,8 @@ from hq.domains.control_plane.models import ManagedResource, ProviderConnection,
 from .. import visit_refresh
 from ..freshness import VISIT_EVERY
 from ..security import Capability, Principal, cli_principal
-from ..visit_refresh import Reads, askable, request_visit_refresh, visit_state
+from ..asks import Standing, read_standing, watched
+from ..visit_refresh import Reads, askable, request_visit_refresh
 
 DIRECTORY = Path(tempfile.mkdtemp())
 (DIRECTORY / "heartbeat").touch()
@@ -61,6 +62,19 @@ def page(*kinds: str):
     )
 
 
+# What a page is told when nothing is being read for it.
+NOTHING_ASKED = {**Standing().as_json(), "requested": [], "status": ""}
+
+
+def followed(status: str) -> Standing:
+    """How the read behind a status address stands, as its resource would say."""
+
+    from ..timestamps import moment
+
+    found = watched(status.partition("watch=")[2])
+    return read_standing(found["read"], moment(found["asked"]), connection_ref=found["ref"])
+
+
 @MARKERS
 class VisitRefreshTests(TestCase):
     def ask(self, name: str = "known", principal: Principal | None = None):
@@ -73,7 +87,7 @@ class VisitRefreshTests(TestCase):
             result = self.ask()
 
         self.assertEqual(result["requested"], [FAST])
-        self.assertTrue(result["pending"])
+        self.assertTrue(result["live"])
         self.assertEqual(asked(), {FAST})
         self.assertEqual(len(rung), 1)
 
@@ -83,7 +97,7 @@ class VisitRefreshTests(TestCase):
         with page(FAST), self.captureOnCommitCallbacks(execute=True) as rung:
             results = [self.ask() for _ in range(5)]
 
-        self.assertTrue(all(result["requested"] == [] and not result["pending"] for result in results))
+        self.assertTrue(all(result["requested"] == [] and not result["live"] for result in results))
         self.assertEqual(asked(), set())
         self.assertEqual(rung, [])
 
@@ -95,7 +109,7 @@ class VisitRefreshTests(TestCase):
 
         self.assertEqual(first["requested"], [FAST])
         self.assertEqual(second["requested"], [])
-        self.assertTrue(second["pending"])
+        self.assertTrue(second["live"])
         self.assertEqual(ReadRequest.objects.count(), 1)
 
     def test_several_kinds_are_one_ask_and_one_doorbell(self):
@@ -161,7 +175,7 @@ class VisitRefreshTests(TestCase):
             result = self.ask()
 
         # And npm.proxy_host was never stored, so nothing has shown it is read.
-        self.assertEqual(result, {"ok": True, "requested": [], "pending": False, "watch": ""})
+        self.assertEqual(result, NOTHING_ASKED)
         self.assertEqual(asked(), set())
 
     def test_a_page_hq_does_not_have_asks_for_nothing(self):
@@ -180,7 +194,7 @@ class VisitRefreshTests(TestCase):
         with page(FAST):
             result = self.ask(principal=reader)
 
-        self.assertEqual(result, {"ok": True, "requested": [], "pending": False, "watch": ""})
+        self.assertEqual(result, NOTHING_ASKED)
 
     def test_with_no_controller_arriving_nothing_is_asked_or_promised(self):
         store(FAST, age=OLD)
@@ -191,39 +205,42 @@ class VisitRefreshTests(TestCase):
         ):
             result = self.ask()
 
-        self.assertEqual(result, {"ok": True, "requested": [], "pending": False, "watch": ""})
+        self.assertEqual(result, NOTHING_ASKED)
         self.assertEqual(asked(), set())
 
     def test_the_page_is_told_what_to_watch_for_and_when_it_has_arrived(self):
         store(FAST, age=OLD)
 
         with page(FAST):
-            watch = self.ask()["watch"]
+            status = self.ask()["status"]
 
-        self.assertEqual(visit_state(watch), {"ok": True, "pending": True})
+        self.assertTrue(followed(status).live)
         # The controller reads it, successfully or not: either is an answer.
         ProviderInventory.objects.filter(kind=FAST).update(updated_at=timezone.now() + timedelta(seconds=1))
-        self.assertEqual(visit_state(watch), {"ok": True, "pending": False})
+        self.assertFalse(followed(status).live)
         # And once answered the page is not due again, so it cannot reload twice.
         store(FAST, age=OLD, attempted=timedelta(0))
         with page(FAST):
             self.assertEqual(self.ask()["requested"], [])
 
     def test_a_watch_hq_did_not_sign_is_not_honoured(self):
-        forged = signing.dumps([FAST], salt="some.other.salt")
+        from ..asks import _WATCH_SALT
 
-        for watch in ("", "not-a-token", forged, signing.dumps("a string", salt=visit_refresh._WATCH_SALT)):
+        forged = signing.dumps({"read": [FAST]}, salt="some.other.salt")
+
+        for watch in ("", "not-a-token", forged, signing.dumps("a string", salt=_WATCH_SALT)):
             with self.subTest(watch=watch[:20]):
-                self.assertIsNone(visit_state(watch))
+                self.assertIsNone(watched(watch))
 
     def test_what_asking_costs_grows_with_the_kinds_asked_for_and_no_faster(self):
-        """Deciding is a fixed handful of queries. What grows is one audited
-        write per kind asked for; nothing is worked out again for each."""
+        """Deciding is a fixed handful of queries, the last of them saying how
+        the read stands. What grows is one audited write per kind asked for;
+        nothing is worked out again for each."""
 
         few, many = (FAST,), (FAST, "npm.proxy_host", "tailscale.device", "adguard.dns", "npm.redirect")
         for kind in many:
             store(kind, age=OLD)
-        decide, per_write = 7, 13
+        decide, per_write = 8, 13
 
         with page(*few), self.assertNumQueries(decide + per_write * len(few)):
             self.ask()
@@ -401,8 +418,8 @@ class VisitRefreshViewTests(TestCase):
             found = self.post().json()
 
         self.assertEqual(found["requested"], [FAST])
-        self.assertTrue(found["pending"])
-        self.assertEqual(self.client.get(self.url, {"watch": found["watch"]}).json(), {"ok": True, "pending": True})
+        self.assertTrue(found["live"])
+        self.assertEqual(self.client.get(found["status"]).json()["state"], found["state"])
 
     def test_opening_or_prefetching_the_address_reads_nothing(self):
         self.client.force_login(self.user)
@@ -410,7 +427,10 @@ class VisitRefreshViewTests(TestCase):
         with page(FAST):
             for query in ({}, {"subject": "example", "name": "known"}, {"watch": "forged"}, {"watch": "x" * 5000}):
                 with self.subTest(query=sorted(query)):
-                    self.assertEqual(self.client.get(self.url, query).status_code, 404)
+                    self.assertEqual(self.client.get(self.url, query).status_code, 405)
+                    self.assertEqual(
+                        self.client.get(reverse("control_plane:read_status"), query).status_code, 404
+                    )
 
         self.assertEqual(asked(), set())
 
@@ -444,6 +464,6 @@ class VisitRefreshViewTests(TestCase):
 
         response = self.client.get(reverse("control_plane:service", args=["example.test"]))
 
-        self.assertContains(response, "data-visit-refresh")
+        self.assertContains(response, "data-ask-auto")
         self.assertContains(response, 'name="subject" value="service"')
         self.assertContains(response, 'name="name" value="example.test"')

@@ -64,7 +64,8 @@ class JobStatusView(DetailView):
     """One job's state, as JSON, for a page that is watching it.
 
     Polled every couple of seconds for as long as the page is open, so it
-    reads one row and renders no template.
+    reads one row and renders no template. It answers as ``asks.Standing``
+    does, so the control that follows a controller's read follows a job.
     """
 
     model = Job
@@ -74,17 +75,7 @@ class JobStatusView(DetailView):
         if job.is_stale:
             reap(job.kind)
             job.refresh_from_db()
-        return JsonResponse(
-            {
-                "state": job.state,
-                "label": job.get_state_display(),
-                "percent": job.percent,
-                "note": job.note,
-                "live": job.is_live,
-                "seconds": round(job.duration_seconds or 0),
-                "result": job.result,
-                # The last line only. The whole traceback is on the job and
-                # in the audit log; a progress panel wants the sentence.
-                "error": job.error.strip().splitlines()[-1] if job.error else "",
-            }
-        )
+        from hq.platform.application.asks import job_standing
+
+        # The shape every ask's status answers in, with the job's own result.
+        return JsonResponse({**job_standing(job).as_json(), "result": job.result})

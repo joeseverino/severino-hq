@@ -22,6 +22,7 @@ from hq.platform.application.cadence import note_activity
 from hq.platform.application.demo import demo_scope
 
 import hq.platform.core.logging as request_logging
+from hq.platform.core.outbound import serving
 from hq.platform.application import request_context
 
 
@@ -93,7 +94,10 @@ class RequestContextMiddleware:
         bound = request_context.bind(request)
         started = monotonic()
         try:
-            response = self.get_response(request)
+            # Everything a request does is held to answering from what HQ
+            # holds: see `core.outbound`.
+            with serving(request):
+                response = self.get_response(request)
             response["X-Request-ID"] = request_id
             # Django has settings for the other browser-boundary headers but
             # not these three. HQ uses none of these APIs, and an operator

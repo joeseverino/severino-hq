@@ -535,9 +535,13 @@ run that still uses a tag, and the setting applies as much to what a called work
 uses, which HQ does not read, so the item says to check those first. A repository
 whose workflows were not read gets the reason instead.
 
-Watching reads the signed-in person's own GitHub profile and the repositories
-they star from GitHub's public API, credential-free: whose profile is the login
-their sign-in claims (`hq.platform.application.linked_accounts`), never one typed into HQ.
+Watching shows the signed-in person's own GitHub profile and the repositories
+they star: the controller's `github.profile` reading, taken from GitHub's
+public API without a credential. Whose profile is the login their sign-in
+claims (`hq.platform.application.linked_accounts`), never one typed into HQ:
+`hq.platform.application.github_profile.plan` hands the controller those
+accounts and says when the reading is due, since it keeps a slower clock than
+the sweep. Refresh asks for a read now; no request reads GitHub.
 
 ## Machine roles
 

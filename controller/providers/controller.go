@@ -38,6 +38,7 @@ var (
 
 func NewController(r *Registry, declared runtime.ControllerRegistry) *Controller {
 	r.Extensions = declared.Extensions
+	r.Profiles = declared.GithubProfiles
 	return &Controller{Registry: r, Declared: declared}
 }
 
@@ -284,6 +285,10 @@ func (c *Controller) providerOf(kind string) string {
 
 // hasSource is whether anything this controller holds can read the kind.
 func (c *Controller) hasSource(kind string, connected map[runtime.ConnectionProvider]bool) bool {
+	if runtime.ResourceKind(kind) == runtime.ResourceKindGitHubProfile {
+		// Read without a credential: the accounts HQ names are the source.
+		return len(c.Profiles.Accounts) > 0
+	}
 	var needs []runtime.ConnectionProvider
 	if provider, ok := c.Declared.Observations[kind]; ok {
 		needs = []runtime.ConnectionProvider{runtime.ConnectionProvider(provider)}
@@ -315,6 +320,9 @@ func (c *Controller) hasSource(kind string, connected map[runtime.ConnectionProv
 func (c *Controller) readKind(ctx context.Context, reader Reader) runtime.KindReport {
 	ledger := &refusals{}
 	records, err := reader(context.WithValue(ctx, refusalKey{}, ledger))
+	if errors.Is(err, errCarried) {
+		return runtime.KindReport{OK: true, Records: []any{}, Carried: true, RefusedParts: ledger.entries}
+	}
 	if err != nil {
 		_, refusal, reason := runtime.Classify(err)
 		report := runtime.KindReport{OK: false, Records: []any{}, Error: runtime.ReportText(err.Error()), Refusal: refusal}

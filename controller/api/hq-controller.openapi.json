@@ -940,6 +940,10 @@
             "items": {
               "$ref": "#/components/schemas/RefusedPart"
             }
+          },
+          "carried": {
+            "type": "boolean",
+            "description": "True when the kind keeps its own clock and was neither due nor asked for: nothing was asked of the provider, and HQ keeps the last records and when they were read."
           }
         },
         "additionalProperties": false,
@@ -1348,6 +1352,9 @@
             "items": {
               "$ref": "#/components/schemas/AdmittedExtension"
             }
+          },
+          "github_profiles": {
+            "$ref": "#/components/schemas/GitHubProfilePlan"
           }
         },
         "additionalProperties": false,
@@ -1359,7 +1366,8 @@
           "connection_providers",
           "observations",
           "connection_credentials",
-          "extensions"
+          "extensions",
+          "github_profiles"
         ]
       },
       "AnalyticsSiteReading": {
@@ -1593,6 +1601,7 @@
           "cloudflare.tunnel",
           "cloudflare.zone",
           "github.delivery",
+          "github.profile",
           "github.repository",
           "host.firewall",
           "host.perimeter",
@@ -1645,6 +1654,7 @@
           "ResourceKindCloudflareTunnel",
           "ResourceKindCloudflareZone",
           "ResourceKindGitHubDelivery",
+          "ResourceKindGitHubProfile",
           "ResourceKindGitHubRepository",
           "ResourceKindHostFirewall",
           "ResourceKindHostPerimeter",
@@ -1701,6 +1711,7 @@
           "cloudflare.tunnel",
           "cloudflare.zone",
           "github.delivery",
+          "github.profile",
           "github.repository",
           "host.firewall",
           "host.perimeter",
@@ -1739,6 +1750,7 @@
           "SweptCloudflareTunnel",
           "SweptCloudflareZone",
           "SweptGitHubDelivery",
+          "SweptGitHubProfile",
           "SweptGitHubRepository",
           "SweptHostFirewall",
           "SweptHostPerimeter",
@@ -2055,6 +2067,50 @@
         ],
         "additionalProperties": false
       },
+      "GitHubProfilePlan": {
+        "type": "object",
+        "description": "Whose public GitHub profile the controller reads, and whether to read now. The accounts are the ones a person's sign-in names. The profile keeps a slower clock than the sweep, which HQ holds: due says the reading is old enough or somebody asked.",
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9-]{1,39}$"
+            },
+            "description": "GitHub logins."
+          },
+          "due": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "accounts",
+          "due"
+        ]
+      },
+      "GitHubProfileBounds": {
+        "type": "object",
+        "description": "The bounds of a github.profile record, stated here for both sides. GitHub allows an address 60 anonymous calls an hour, and one account costs the profile, the stars and the picture, then a release call and an advisory call for each watched repository: 3 + 2 x watched.maxItems.",
+        "properties": {
+          "watched": {
+            "type": "array",
+            "maxItems": 15,
+            "description": "The newest starred repositories, each with its latest release and published advisories.",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "x-go-type": "any"
+            }
+          },
+          "avatar": {
+            "type": "string",
+            "maxLength": 90000,
+            "description": "The picture as a data: URI, so a page loads no image from another host."
+          }
+        },
+        "additionalProperties": false
+      },
       "ConnectionProvider": {
         "type": "string",
         "description": "A connection provider HQ's registry declares: what a credential is for. Django's contract test holds this to the admitted connections.",
@@ -2089,6 +2145,7 @@
           "access",
           "acl_management",
           "apps",
+          "avatar",
           "branch_rules",
           "clients",
           "code_scanning",
@@ -2124,6 +2181,7 @@
           "PartAccess",
           "PartACLManagement",
           "PartApps",
+          "PartAvatar",
           "PartBranchRules",
           "PartClients",
           "PartCodeScanning",

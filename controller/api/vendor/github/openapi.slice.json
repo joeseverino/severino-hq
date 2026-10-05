@@ -96,6 +96,17 @@
     }
    }
   },
+  "/rate_limit": {
+   "get": {
+    "operationId": "rate-limit/get",
+    "parameters": [],
+    "responses": {
+     "200": {
+      "description": "Response"
+     }
+    }
+   }
+  },
   "/repos/{owner}/{repo}": {
    "get": {
     "operationId": "repos/get",
@@ -1494,6 +1505,34 @@
     }
    }
   },
+  "/repos/{owner}/{repo}/releases/latest": {
+   "get": {
+    "operationId": "repos/get-latest-release",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Response"
+     }
+    }
+   }
+  },
   "/repos/{owner}/{repo}/rules/branches/{branch}": {
    "get": {
     "operationId": "repos/get-branch-rules",
@@ -1544,6 +1583,74 @@
      },
      {
       "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Response"
+     }
+    }
+   }
+  },
+  "/repos/{owner}/{repo}/security-advisories": {
+   "get": {
+    "operationId": "security-advisories/list-repository-advisories",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Response"
+     }
+    }
+   }
+  },
+  "/users/{username}": {
+   "get": {
+    "operationId": "users/get-by-username",
+    "parameters": [
+     {
+      "name": "username",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Response"
+     }
+    }
+   }
+  },
+  "/users/{username}/starred": {
+   "get": {
+    "operationId": "activity/list-repos-starred-by-user",
+    "parameters": [
+     {
+      "name": "username",
       "in": "path",
       "required": true,
       "schema": {
@@ -2698,6 +2805,82 @@
      "environment"
     ]
    },
+   "public-user": {
+    "title": "Public User",
+    "description": "Public User",
+    "type": "object",
+    "properties": {
+     "login": {
+      "type": "string"
+     },
+     "avatar_url": {
+      "type": "string"
+     },
+     "html_url": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string",
+      "nullable": true
+     },
+     "company": {
+      "type": "string",
+      "nullable": true
+     },
+     "blog": {
+      "type": "string",
+      "nullable": true
+     },
+     "location": {
+      "type": "string",
+      "nullable": true
+     },
+     "hireable": {
+      "type": "boolean",
+      "nullable": true
+     },
+     "bio": {
+      "type": "string",
+      "nullable": true
+     },
+     "twitter_username": {
+      "type": "string",
+      "nullable": true
+     },
+     "public_repos": {
+      "type": "integer"
+     },
+     "public_gists": {
+      "type": "integer"
+     },
+     "followers": {
+      "type": "integer"
+     },
+     "following": {
+      "type": "integer"
+     },
+     "created_at": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "avatar_url",
+     "html_url",
+     "login",
+     "bio",
+     "blog",
+     "company",
+     "followers",
+     "following",
+     "hireable",
+     "location",
+     "name",
+     "public_gists",
+     "public_repos",
+     "created_at"
+    ],
+    "additionalProperties": false
+   },
    "pull-request-simple": {
     "title": "Pull Request Simple",
     "description": "Pull Request Simple",
@@ -2853,6 +3036,91 @@
      }
     ]
    },
+   "rate-limit": {
+    "title": "Rate Limit",
+    "type": "object",
+    "properties": {
+     "remaining": {
+      "type": "integer"
+     },
+     "reset": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "remaining",
+     "reset"
+    ]
+   },
+   "rate-limit-overview": {
+    "title": "Rate Limit Overview",
+    "description": "Rate Limit Overview",
+    "type": "object",
+    "properties": {
+     "resources": {
+      "type": "object",
+      "properties": {
+       "core": {
+        "$ref": "#/components/schemas/rate-limit"
+       },
+       "graphql": {
+        "$ref": "#/components/schemas/rate-limit"
+       },
+       "search": {
+        "$ref": "#/components/schemas/rate-limit"
+       },
+       "code_search": {
+        "$ref": "#/components/schemas/rate-limit"
+       },
+       "source_import": {
+        "$ref": "#/components/schemas/rate-limit"
+       },
+       "integration_manifest": {
+        "$ref": "#/components/schemas/rate-limit"
+       },
+       "actions_runner_registration": {
+        "$ref": "#/components/schemas/rate-limit"
+       },
+       "scim": {
+        "$ref": "#/components/schemas/rate-limit"
+       },
+       "dependency_snapshots": {
+        "$ref": "#/components/schemas/rate-limit"
+       },
+       "dependency_sbom": {
+        "$ref": "#/components/schemas/rate-limit"
+       },
+       "code_scanning_autofix": {
+        "$ref": "#/components/schemas/rate-limit"
+       },
+       "copilot_usage_records": {
+        "$ref": "#/components/schemas/rate-limit"
+       }
+      },
+      "required": [
+       "core",
+       "search"
+      ]
+     }
+    },
+    "required": [
+     "resources"
+    ],
+    "x-github-breaking-changes": [
+     {
+      "changeset": "remove_rate_limit_rate",
+      "patch": {
+       "properties": {
+        "rate": null
+       },
+       "required": [
+        "resources"
+       ]
+      },
+      "version": "2026-03-10"
+     }
+    ]
+   },
    "release": {
     "title": "Release",
     "description": "A release.",
@@ -2885,10 +3153,31 @@
      "full_name": {
       "type": "string",
       "example": "octocat/Hello-World"
+     },
+     "html_url": {
+      "type": "string",
+      "example": "https://github.com/octocat/Hello-World"
+     },
+     "description": {
+      "type": "string",
+      "example": "This your first repo!",
+      "nullable": true
+     },
+     "language": {
+      "type": "string",
+      "nullable": true
+     },
+     "stargazers_count": {
+      "type": "integer",
+      "example": 80
      }
     },
     "required": [
-     "full_name"
+     "description",
+     "full_name",
+     "html_url",
+     "language",
+     "stargazers_count"
     ],
     "x-github-breaking-changes": [
      {
@@ -2988,6 +3277,93 @@
         "watchers_count",
         "created_at",
         "updated_at"
+       ]
+      },
+      "version": "2026-03-10"
+     }
+    ]
+   },
+   "repository-advisory": {
+    "description": "A repository security advisory.",
+    "type": "object",
+    "properties": {
+     "ghsa_id": {
+      "type": "string",
+      "description": "The GitHub Security Advisory ID."
+     },
+     "cve_id": {
+      "type": "string",
+      "description": "The Common Vulnerabilities and Exposures (CVE) ID.",
+      "nullable": true
+     },
+     "html_url": {
+      "type": "string",
+      "description": "The URL for the advisory."
+     },
+     "summary": {
+      "type": "string",
+      "description": "A short summary of the advisory.",
+      "maxLength": 1024
+     },
+     "severity": {
+      "type": "string",
+      "description": "The severity of the advisory.",
+      "nullable": true,
+      "enum": [
+       "critical",
+       "high",
+       "medium",
+       "low"
+      ]
+     },
+     "published_at": {
+      "type": "string",
+      "description": "The date and time of when the advisory was published, in ISO 8601 format.",
+      "nullable": true
+     }
+    },
+    "required": [
+     "ghsa_id",
+     "cve_id",
+     "html_url",
+     "summary",
+     "severity",
+     "published_at"
+    ],
+    "additionalProperties": false,
+    "x-github-breaking-changes": [
+     {
+      "changeset": "deprecate_cvss",
+      "patch": {
+       "properties": {
+        "cvss": null
+       },
+       "required": [
+        "ghsa_id",
+        "cve_id",
+        "url",
+        "html_url",
+        "summary",
+        "description",
+        "severity",
+        "author",
+        "publisher",
+        "identifiers",
+        "state",
+        "created_at",
+        "updated_at",
+        "published_at",
+        "closed_at",
+        "withdrawn_at",
+        "submission",
+        "vulnerabilities",
+        "cwes",
+        "cwe_ids",
+        "credits",
+        "credits_detailed",
+        "collaborating_users",
+        "collaborating_teams",
+        "private_fork"
        ]
       },
       "version": "2026-03-10"
@@ -3313,6 +3689,23 @@
     },
     "required": [
      "login"
+    ]
+   },
+   "starred-repository": {
+    "title": "Starred Repository",
+    "description": "Starred Repository",
+    "type": "object",
+    "properties": {
+     "starred_at": {
+      "type": "string"
+     },
+     "repo": {
+      "$ref": "#/components/schemas/repository"
+     }
+    },
+    "required": [
+     "starred_at",
+     "repo"
     ]
    },
    "team": {
