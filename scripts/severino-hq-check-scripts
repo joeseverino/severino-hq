@@ -61,6 +61,13 @@ elif [ -n "$drifted" ]; then
     echo "drift: install-controller.sh installs the shipped set; the next deploy runs it" >&2
     rc=1
 fi
+if retired="$(units_retired "$LIB/deploy/systemd" "$SYSTEMD_DIR")" && [ -n "$retired" ]; then
+    for f in $retired; do
+        echo "drift: $SYSTEMD_DIR/$f is not shipped by this release" >&2
+    done
+    echo "drift: install-controller.sh removes what a release drops; the next deploy runs it" >&2
+    rc=1
+fi
 
 # The deploy pulls the checkout as the Actions runner's account.
 # shellcheck source=scripts/lib/checkout.sh

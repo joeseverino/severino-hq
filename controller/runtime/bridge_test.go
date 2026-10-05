@@ -391,7 +391,7 @@ func TestAReplacedSocketIsCheckedAgainOnEveryCall(t *testing.T) {
 
 func TestABridgeWithNoSocketNamedIsNotBuilt(t *testing.T) {
 	_, err := NewSocketBridge("")
-	refusedWith(t, err, "HQ_BRIDGE_SOCKET")
+	refusedWith(t, err, "SEVERINO_BRIDGE_SOCKET")
 }
 
 // The budget a per-call process would break: a bridge call is a request on a

@@ -35,6 +35,17 @@ if units_shipped "${fixture}/absent" >/dev/null 2>&1; then
     fail "units_shipped accepted a directory that does not exist"
 fi
 
+# What an earlier release left: this repository's prefix, a unit suffix, top
+# level, and not shipped. Another owner's unit and a host's drop-in are not.
+left="${fixture}/left"
+mkdir -p "${left}/a.service.d" "${left}/severino-hq-old.service.d"
+for f in a.service a.timer other.service severino-hq-old.service severino-hq-old.path \
+    severino-hq-notes.txt a.service.d/10-x.conf severino-hq-old.service.d/10-host.conf; do
+    : >"${left}/${f}"
+done
+[ "$(units_retired "${walk}" "${left}" | tr '\n' ' ')" = "severino-hq-old.path severino-hq-old.service " ] ||
+    fail "units_retired returned: $(units_retired "${walk}" "${left}" | tr '\n' ' ')"
+
 # 2. The drift check, run as the host runs it, against a relocated host.
 lib="${fixture}/lib"
 etc="${fixture}/etc"
@@ -93,6 +104,13 @@ for drifted in severino-hq-audit-prune.timer \
     severino-hq-script-drift.timer; do
     grep -qF "${etc}/${drifted}" "${fixture}/err" || fail "drift in ${drifted} was not reported"
 done
+# A unit this release dropped is named too: it would keep running.
+: >"${etc}/severino-hq-retired.service"
+if check; then
+    fail "a unit no release ships passed the check"
+fi
+grep -qF "${etc}/severino-hq-retired.service is not shipped" "${fixture}/err" ||
+    fail "a retired unit was not reported"
 for ignored in 10-estate.conf 20-connect.conf 20-credential-mount.conf .example; do
     if grep -qF "${ignored}" "${fixture}/err"; then
         fail "${ignored} was reported as drift"

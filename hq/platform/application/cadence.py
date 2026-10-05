@@ -490,18 +490,6 @@ def ring_doorbell() -> bool:
     return True
 
 
-def ring_registry_doorbell() -> bool:
-    """Tell the host a sweep found an image or digest HQ has not read, so it
-    starts ``refresh_public_registry`` now rather than at the daily floor.
-    Carries nothing, like the controller's."""
-
-    try:
-        _touch(_path("SEVERINO_REGISTRY_DOORBELL", "registry-doorbell"))
-    except OSError:
-        return False
-    return True
-
-
 def request_delivery_read() -> bool:
     """Ask for a read of ``github.delivery`` as HQ boots on a new image.
 

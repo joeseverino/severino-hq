@@ -178,7 +178,7 @@ reading may be reused while one answer is assembled and is discarded when that
 scope exits, eliminating repeated joins/counts without serving process-cached
 state to a later request. The dashboard's contact rows, unread total, and
 upstream health likewise arrive from one D1 request, which
-`manage.py refresh_contacts_inbox` makes hourly
+the scheduled `contacts.inbox` job makes hourly
 (`severino-hq-contacts-inbox.timer`) and a D1 write repeats after it changes a
 submission. Pages, the header count and search read the stored result.
 
@@ -991,6 +991,16 @@ in each fails if a call comes to cost a process again.
 - **No bridge, no pass.** While the web container is restarting or being
   replaced there is no socket, or nothing listening on it. The pass fails with
   that reason and the next one runs; nothing weaker is tried.
+- **Scheduled work is one more action.** What the host does on a schedule
+  (prune routine audit events, read the contact inbox, pull the content index,
+  read the public registries) is declared once, in
+  `hq/platform/application/scheduled_work.py`. A timer runs
+  `hq-controller job NAME` inside the web container
+  (`severino-hq-job@.service`); the running process does the work as a job and
+  answers how it ended, so a failed job is a failed unit and every run has a
+  row. No timer starts a Python process, a test holds the shipped timers to
+  the declared names, and HQ starts the same job itself when it learns
+  something is due sooner.
 
 The disposable container runs as the same unprivileged UID as the web
 process, which is what lets it reach the socket; the root-owned systemd

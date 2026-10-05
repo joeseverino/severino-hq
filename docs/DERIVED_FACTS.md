@@ -412,11 +412,10 @@ machine answering at its address (`policy_links`).
 RDAP needs no credential, so HQ reads it rather than a controller:
 `registry.address` (who holds a public address) and `registry.domain` (a
 domain's registrar and expiry), in `hq/domains/control_plane/observations/public_registry.py`.
-`hq.platform.application.public_registry.refresh` runs from `manage.py refresh_public_registry`,
-never from a page: the host starts it once a day, and at once when HQ rings
-its doorbell (`/run/severino-hq/registry-doorbell`, watched by
-`severino-hq-public-registry.path`) because a sweep found an image or a digest
-HQ has not read. It reads only subjects that are due, a bounded number at a
+`hq.platform.application.public_registry.refresh` runs as the scheduled
+`registry.refresh` job, never from a page: a timer asks for it once a day, and
+HQ starts it at once when a sweep found an image or a digest HQ has not read.
+It reads only subjects that are due, a bounded number at a
 time, and stores them through the same ingest as a sweep, so a run with nothing
 due makes no request. Each reading stands as long as what it reads is slow to
 change (`READ_EVERY`): who holds an address or registers a domain, a week; tags,

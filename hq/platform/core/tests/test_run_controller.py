@@ -51,7 +51,7 @@ class ControllerBinaryTests(SimpleTestCase):
     def test_the_container_reaches_hq_through_the_bridge_socket_and_holds_nothing_of_its_own(self):
         script = SCRIPT.read_text()
 
-        self.assertIn('--env "HQ_BRIDGE_SOCKET=${bridge_socket}"', script)
+        self.assertIn('--env "SEVERINO_BRIDGE_SOCKET=${bridge_socket}"', script)
         # No interpreter is started to reach HQ, and nothing of HQ's is mounted
         # for one to read: not its database, not its application environment.
         for absent in ("HQ_IN_PROCESS", "manage.py", "target=/data", "severino_hq_env", "docker exec"):

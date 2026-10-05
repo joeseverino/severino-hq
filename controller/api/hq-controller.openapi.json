@@ -696,6 +696,46 @@
           }
         }
       }
+    },
+    "/job": {
+      "post": {
+        "operationId": "job",
+        "summary": "Do one piece of scheduled work to its end, as a job.",
+        "x-bridge-action": "job",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "description": "The scheduled work, as HQ declares it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOutcome"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2432,6 +2472,46 @@
         "maximum": 3600,
         "default": 300,
         "description": "How long a claimed operation is leased, in seconds. The controller sends the default; HQ applies it when none is sent."
+      },
+      "JobOutcome": {
+        "type": "object",
+        "description": "How one piece of scheduled work ended. Running means a job of this kind was already live.",
+        "required": [
+          "name",
+          "state",
+          "note"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/JobState"
+          },
+          "note": {
+            "type": "string"
+          },
+          "job": {
+            "type": "string"
+          }
+        }
+      },
+      "JobState": {
+        "type": "string",
+        "description": "How a job stands when HQ answers for it.",
+        "enum": [
+          "succeeded",
+          "failed",
+          "lost",
+          "running"
+        ],
+        "x-enum-varnames": [
+          "JobStateSucceeded",
+          "JobStateFailed",
+          "JobStateLost",
+          "JobStateRunning"
+        ]
       }
     }
   }

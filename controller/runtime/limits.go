@@ -15,6 +15,9 @@ const (
 	MultipartTimeout = 30 * time.Second
 	// BridgeTimeout bounds one call into Django.
 	BridgeTimeout = 3 * time.Minute
+	// JobTimeout bounds one piece of scheduled work, which HQ does to its end
+	// before answering.
+	JobTimeout = 30 * time.Minute
 	// CommandTimeout bounds one local tool or SSH call.
 	CommandTimeout = 180 * time.Second
 	// SSHConnectTimeoutSeconds is ssh's ConnectTimeout, in the seconds ssh takes.

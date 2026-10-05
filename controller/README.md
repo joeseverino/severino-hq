@@ -11,13 +11,17 @@ The bridge is HTTP on a Unix socket HQ's running process serves, described by
 message types generated from it; `runtime/bridge.go` adds the deadline, the
 size bound and the strict decoding, and `runtime/bridge_socket.go` dials only a
 socket this account can trust: its own, mode 0600, in its own private
-directory, answered by its own uid. `HQ_BRIDGE_SOCKET` names the path. No
+directory, answered by its own uid. `SEVERINO_BRIDGE_SOCKET` names the path. No
 process is started to reach HQ, and a bridge that is not there fails the pass.
 
 `cmd/hq-controller` is a one-shot process. Without `--apply` it produces a
 preflight plan; `--apply` claims and executes queued operations. Reconciliation
 requires a connection that declares the relevant `manages` capability. Named
 connections must belong to the requested provider.
+
+`hq-controller job NAME` asks HQ for one piece of scheduled work over the same
+socket and exits as the job ended. A timer runs it inside the web container;
+it loads no connection and links into no provider call.
 
 `cmd/hq-secrets` is a separate binary: the renderer root runs on the host to
 read the vault through 1Password Connect and install what the consumers read

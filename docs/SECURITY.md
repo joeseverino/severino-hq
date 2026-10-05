@@ -97,8 +97,8 @@
   counted per surface, source and reason per minute. Credentials are never
   recorded.
 - Routine machine events (a connection probed by a sweep) are deleted after
-  `SEVERINO_AUDIT_ROUTINE_DAYS` (30 by default) by the daily `prune_audit`
-  timer. Only the types listed in `hq.platform.core.audit.ROUTINE_EVENTS` are eligible, and
+  `SEVERINO_AUDIT_ROUTINE_DAYS` (30 by default) by the daily `audit.prune`
+  job. Only the types listed in `hq.platform.core.audit.ROUTINE_EVENTS` are eligible, and
   only when no user is attached. Logins, refusals, settings changes, deletions
   and every change to a resource or credential are kept indefinitely.
 - Request-user attribution uses an ASGI-safe context variable, preventing one

@@ -185,6 +185,30 @@ func (e GlancePanelID) Valid() bool {
 	}
 }
 
+// Defines values for JobState.
+const (
+	JobStateFailed    JobState = "failed"
+	JobStateLost      JobState = "lost"
+	JobStateRunning   JobState = "running"
+	JobStateSucceeded JobState = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the JobState enum.
+func (e JobState) Valid() bool {
+	switch e {
+	case JobStateFailed:
+		return true
+	case JobStateLost:
+		return true
+	case JobStateRunning:
+		return true
+	case JobStateSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PassMode.
 const (
 	PassModeApply PassMode = "apply"
@@ -958,6 +982,19 @@ type IdlePassOutput struct {
 // Inventory One sweep: each kind read, by kind name.
 type Inventory map[string]KindReport
 
+// JobOutcome How one piece of scheduled work ended. Running means a job of this kind was already live.
+type JobOutcome struct {
+	Job  string `json:"job,omitempty"`
+	Name string `json:"name"`
+	Note string `json:"note"`
+
+	// State How a job stands when HQ answers for it.
+	State JobState `json:"state"`
+}
+
+// JobState How a job stands when HQ answers for it.
+type JobState string
+
 // KindReport defines model for KindReport.
 type KindReport struct {
 	// Carried True when the kind keeps its own clock and was neither due nor asked for: nothing was asked of the provider, and HQ keeps the last records and when they were read.
@@ -1193,6 +1230,12 @@ type GlancePlanParams struct {
 type InventoryParams struct {
 	// ControllerID The reporting controller.
 	ControllerID string `form:"controller-id" json:"controller-id"`
+}
+
+// JobParams defines parameters for Job.
+type JobParams struct {
+	// Name The scheduled work, as HQ declares it.
+	Name string `form:"name" json:"name"`
 }
 
 // MaterialParams defines parameters for Material.
@@ -1483,6 +1526,11 @@ type ClientInterface interface {
 	// Corresponds with POST /inventory (the `Inventory` operationId).
 	Inventory(ctx context.Context, params *InventoryParams, body InventoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// Job Do one piece of scheduled work to its end, as a job.
+	//
+	// Corresponds with POST /job (the `Job` operationId).
+	Job(ctx context.Context, params *JobParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// Material Certificate material for one resource.
 	//
 	// Corresponds with POST /material (the `Material` operationId).
@@ -1742,6 +1790,21 @@ func (c *Client) InventoryWithBody(ctx context.Context, params *InventoryParams,
 // Corresponds with POST /inventory (the `Inventory` operationId).
 func (c *Client) Inventory(ctx context.Context, params *InventoryParams, body InventoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewInventoryRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Job Do one piece of scheduled work to its end, as a job.
+//
+// Corresponds with POST /job (the `Job` operationId).
+func (c *Client) Job(ctx context.Context, params *JobParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewJobRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2357,6 +2420,56 @@ func NewInventoryRequestWithBody(server string, params *InventoryParams, content
 	return req, nil
 }
 
+// NewJobRequest constructs an http.Request for the Job method
+func NewJobRequest(server string, params *JobParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/job")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "name", params.Name, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewMaterialRequest constructs an http.Request for the Material method
 func NewMaterialRequest(server string, params *MaterialParams) (*http.Request, error) {
 	var err error
@@ -2857,6 +2970,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /inventory (the `Inventory` operationId).
 	InventoryWithResponse(ctx context.Context, params *InventoryParams, body InventoryJSONRequestBody, reqEditors ...RequestEditorFn) (*InventoryResponse, error)
 
+	// JobWithResponse Do one piece of scheduled work to its end, as a job.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /job (the `Job` operationId).
+	JobWithResponse(ctx context.Context, params *JobParams, reqEditors ...RequestEditorFn) (*JobResponse, error)
+
 	// MaterialWithResponse Certificate material for one resource.
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -3299,6 +3419,54 @@ func (r InventoryResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r InventoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type JobResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *JobOutcome
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r JobResponse) GetJSON200() *JobOutcome {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r JobResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r JobResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r JobResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r JobResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r JobResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -3810,6 +3978,19 @@ func (c *ClientWithResponses) InventoryWithResponse(ctx context.Context, params 
 	return ParseInventoryResponse(rsp)
 }
 
+// JobWithResponse Do one piece of scheduled work to its end, as a job.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /job (the `Job` operationId).
+func (c *ClientWithResponses) JobWithResponse(ctx context.Context, params *JobParams, reqEditors ...RequestEditorFn) (*JobResponse, error) {
+	rsp, err := c.Job(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseJobResponse(rsp)
+}
+
 // MaterialWithResponse Certificate material for one resource.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -4174,6 +4355,39 @@ func ParseInventoryResponse(rsp *http.Response) (*InventoryResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Acknowledgement
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseJobResponse parses an HTTP response from a JobWithResponse call
+func ParseJobResponse(rsp *http.Response) (*JobResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &JobResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest JobOutcome
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

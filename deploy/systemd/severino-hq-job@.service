@@ -1,0 +1,22 @@
+[Unit]
+Description=Severino HQ scheduled work: %i
+Wants=network-online.target
+After=network-online.target docker.service severino-hq.service
+
+[Service]
+Type=oneshot
+# One request on HQ's bridge socket, made inside the web container as its own
+# account. The running process does the work as a job and answers how it ended:
+# a failed job fails this unit. The instance name is the work's name, and HQ
+# refuses one it does not declare.
+ExecStart=/usr/bin/docker exec severino-hq hq-controller job %i
+# Past the caller's own bound on one job, so the answer is the job's and not
+# systemd's.
+TimeoutStartSec=35min
+
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes

@@ -39,7 +39,7 @@ const problemLimit = 64 << 10
 // NewSocketBridge is the bridge at a socket path, reached as this account.
 func NewSocketBridge(path string) (*SocketBridge, error) {
 	if path == "" {
-		return nil, &BridgeError{"HQ_BRIDGE_SOCKET must name HQ's bridge socket"}
+		return nil, &BridgeError{"SEVERINO_BRIDGE_SOCKET must name HQ's bridge socket"}
 	}
 	transport := &http.Transport{
 		DialContext: DialTrusted(path, os.Geteuid()),
@@ -181,6 +181,15 @@ func (b *SocketBridge) Schedule(ctx context.Context, controllerID string) error 
 	return b.call(ctx, nil, nil, func(ctx context.Context, _ string, _ io.Reader) (*http.Response, error) {
 		return b.client.Schedule(ctx, &ScheduleParams{ControllerID: controllerID})
 	})
+}
+
+// Job asks HQ to do one piece of scheduled work and answers how it ended.
+func (b *SocketBridge) Job(ctx context.Context, name string) (JobOutcome, error) {
+	var outcome JobOutcome
+	err := b.call(ctx, nil, &outcome, func(ctx context.Context, _ string, _ io.Reader) (*http.Response, error) {
+		return b.client.Job(ctx, &JobParams{Name: name})
+	})
+	return outcome, err
 }
 
 func (b *SocketBridge) SweepDue(ctx context.Context, controllerID string) (SweepVerdict, error) {

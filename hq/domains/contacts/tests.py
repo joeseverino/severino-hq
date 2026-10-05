@@ -219,22 +219,19 @@ class InboxTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
 
-    def test_the_timer_command_reads_d1_even_when_fresh(self):
-        from io import StringIO
-
-        from django.core.management import call_command
+    def test_the_scheduled_read_reads_d1_even_when_fresh(self):
+        from hq.platform.application import scheduled_work
 
         from . import inbox
 
         with patch("hq.domains.contacts.d1.get_dashboard_state", return_value=([], 3)):
             inbox.refresh()
-        out = StringIO()
         with patch("hq.domains.contacts.d1.get_dashboard_state", return_value=([], 5)) as read:
-            call_command("refresh_contacts_inbox", stdout=out)
+            answer = scheduled_work.run("contacts.inbox")
 
         read.assert_called_once_with(limit=inbox.KEPT_LIMIT)
         self.assertEqual(inbox.unread(), (5, "ok"))
-        self.assertIn('"unread": 5', out.getvalue())
+        self.assertEqual(answer["state"], "succeeded")
 
     def test_search_matches_stored_names_without_reading_d1(self):
         from . import inbox

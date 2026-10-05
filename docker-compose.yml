@@ -75,8 +75,6 @@ services:
       # (not what to do, not who asked) so the host may watch it and start the
       # controller without HQ gaining any way to reach out.
       SEVERINO_CONTROLLER_DOORBELL: /run/severino-hq/controller-doorbell
-      # The same, for an image or digest a sweep found that HQ has not read.
-      SEVERINO_REGISTRY_DOORBELL: /run/severino-hq/registry-doorbell
       # The Unix socket HQ serves the controller's bridge on: the contract
       # in controller/api, answered by the process that is already running, so
       # a controller call starts nothing. Not a network listener, and not

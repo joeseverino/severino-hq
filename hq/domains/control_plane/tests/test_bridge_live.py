@@ -172,7 +172,7 @@ class ControllerPassTests(TransactionTestCase):
             [str(controller_binary()), *arguments],
             env={
                 "PATH": os.environ.get("PATH", ""),
-                "HQ_BRIDGE_SOCKET": str(socket or self.socket),
+                "SEVERINO_BRIDGE_SOCKET": str(socket or self.socket),
                 "HQ_CONTROLLER_ID": "example-controller",
             },
             capture_output=True, text=True, timeout=120, check=False,

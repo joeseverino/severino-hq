@@ -24,7 +24,7 @@ REFERENCE = "sentinel-connection"
 
 # Every variable the launcher may set: a path, a name, an image or a nonce.
 LAUNCH_VARIABLES = {
-    "HQ_CONTROLLER_RUN", "HQ_BRIDGE_SOCKET", "HQ_CONTROLLER_CONNECTIONS",
+    "HQ_CONTROLLER_RUN", "SEVERINO_BRIDGE_SOCKET", "HQ_CONTROLLER_CONNECTIONS",
     "HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_CONTROLLER_IMAGE",
     "SEVERINO_HQ_SOURCE_REPOSITORY", "HQ_CONTROLLER_CA_FILE",
     "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK", "SEVERINO_HOST_FIREWALL",
@@ -357,12 +357,12 @@ esac
         result = self.launch("--apply")
         self.assertEqual(result.returncode, 0, result.stderr)
         arguments = self.arguments()
-        self.assertIn("HQ_BRIDGE_SOCKET=/run/hq-bridge/bridge.sock", arguments)
+        self.assertIn("SEVERINO_BRIDGE_SOCKET=/run/hq-bridge/bridge.sock", arguments)
         self.assertIn("type=volume,source=example-bridge,target=/run/hq-bridge,readonly", arguments)
         # One way to HQ: nothing else names a bridge, a socket or a container to exec into.
         self.assertEqual([a for a in arguments if "bridge" in a.lower()], [
             "type=volume,source=example-bridge,target=/run/hq-bridge,readonly",
-            "HQ_BRIDGE_SOCKET=/run/hq-bridge/bridge.sock",
+            "SEVERINO_BRIDGE_SOCKET=/run/hq-bridge/bridge.sock",
         ])
         self.assertFalse([a for a in arguments if "docker.sock" in a])
 

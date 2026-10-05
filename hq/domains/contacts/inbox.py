@@ -3,7 +3,7 @@
 Submissions stay in D1; HQ keeps the unread count and, for the newest
 submissions, the id, date, submitter name, status and country. The dashboard,
 the header count and the search page read that stored copy. D1 is read by
-`refresh`, which the `refresh_contacts_inbox` timer runs every few minutes and
+`refresh`, which the scheduled `contacts.inbox` job runs every hour and
 a write to D1 runs after it changes a submission; no GET reads D1 for these.
 """
 

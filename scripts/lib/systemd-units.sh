@@ -48,3 +48,21 @@ units_drifted() {
         cmp -s "$1/${f}" "$2/${f}" || printf '%s\n' "${f}"
     done
 }
+
+# Print each unit file in $2 that carries this repository's prefix and is not
+# shipped in $1: what an earlier release installed and this one has dropped.
+# Left in place it would keep running what the release no longer ships. Top
+# level only; drop-ins beside a shipped unit are the host's to own.
+units_retired() {
+    shipped="$(units_shipped "$1")" || return 1
+    for installed in "$2"/severino-hq-*; do
+        [ -f "${installed}" ] || continue
+        f="${installed##*/}"
+        case "${f}" in
+            *.service | *.socket | *.mount | *.automount | *.swap | *.target | \
+                *.path | *.timer | *.slice) ;;
+            *) continue ;;
+        esac
+        printf '%s\n' "${shipped}" | grep -Fxq -- "${f}" || printf '%s\n' "${f}"
+    done
+}

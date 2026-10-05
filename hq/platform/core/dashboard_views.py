@@ -145,7 +145,7 @@ class DashboardView(TemplateView):
             # line that arrives after it is a line that visibly changes.
             request_connection=request_path(self.request).connection,
             controller=controller_standing(),
-            # The stored rows, kept by the refresh_contacts_inbox timer: reading
+            # The stored rows, kept by the scheduled contacts.inbox job: reading
             # them asks no one, so the card is drawn with the page.
             recent_contacts=[
                 ListRow(

@@ -749,7 +749,6 @@ SEVERINO_REQUEST_PATH_SECONDS = env_int("SEVERINO_REQUEST_PATH_SECONDS", 300)
 # Where HQ leaves each marker. The doorbell has to be somewhere the host can
 # watch; the in-use marker is read only by HQ and defaults beside the database.
 SEVERINO_CONTROLLER_DOORBELL = os.environ.get("SEVERINO_CONTROLLER_DOORBELL", "")
-SEVERINO_REGISTRY_DOORBELL = os.environ.get("SEVERINO_REGISTRY_DOORBELL", "")
 SEVERINO_ACTIVITY_MARKER = os.environ.get("SEVERINO_ACTIVITY_MARKER", "")
 # The Unix socket the controller bridge is served on, in a directory only this
 # account can enter. Unset, the process serves no bridge; set, it serves one or

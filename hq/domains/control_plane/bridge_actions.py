@@ -30,6 +30,7 @@ from hq.platform.application.controller import (
 from hq.platform.application.glance import dashboard_refresh_plan, record_dashboard_observations
 from hq.platform.application.infrastructure import controller_contract
 from hq.platform.application.inventory import record_connections, record_step_failures
+from hq.platform.application.scheduled_work import run as run_scheduled
 from hq.platform.application.security import cli_principal
 from hq.platform.application.sweep import record_sweep
 
@@ -111,6 +112,11 @@ def _registry(parameters: Parameters, payload: Any) -> Any:
     return controller_registry()
 
 
+def _job(parameters: Parameters, payload: Any) -> Any:
+    del payload
+    return run_scheduled(parameters["name"])
+
+
 def _schedule(parameters: Parameters, payload: Any) -> Any:
     del payload
     return schedule_automatic_operations(parameters["controller-id"])
@@ -143,4 +149,5 @@ ACTIONS: tuple[Action, ...] = (
     Action("glance", _recorded(record_dashboard_observations)),
     Action("report", _report),
     Action("registry", _registry),
+    Action("job", _job),
 )

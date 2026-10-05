@@ -242,7 +242,7 @@ case "${bridge_volume}" in
 esac
 set -- "$@" \
     --mount "type=volume,source=${bridge_volume},target=${bridge_dir},readonly" \
-    --env "HQ_BRIDGE_SOCKET=${bridge_socket}"
+    --env "SEVERINO_BRIDGE_SOCKET=${bridge_socket}"
 
 # What each secret renderer on this machine says about its own runs, so HQ can
 # tell fresh secrets from a renderer that keeps failing while the files it left

@@ -65,17 +65,17 @@ def record_sweep(
 
 
 def _ring_for_new_images(payload: dict[str, Any]) -> None:
-    """Ring the registry doorbell, once the sweep is stored, when it found an
+    """Start the registry read, once the sweep is stored, when it found an
     image or a digest HQ has not read, so it is read in minutes, not tomorrow."""
 
     from hq.domains.control_plane.observations.portainer import IMAGE_KIND
     from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
-    from .cadence import ring_registry_doorbell
+    from . import scheduled_work
     from .public_registry import registry_due
 
     if (CONTAINER_KIND in payload or IMAGE_KIND in payload) and registry_due():
-        transaction.on_commit(ring_registry_doorbell)
+        transaction.on_commit(lambda: scheduled_work.start("registry.refresh"))
 
 
 def _adoptable_kinds() -> tuple[str, ...]:

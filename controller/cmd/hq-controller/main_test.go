@@ -41,6 +41,9 @@ func (s *stubBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.calls = append(s.calls, call{action, r.URL.Query(), payload})
 	s.mu.Unlock()
 	answer, known := responses[action]
+	if action == "job" {
+		answer, known = jobs[r.URL.Query().Get("name")]
+	}
 	if r.Method != http.MethodPost || !known {
 		http.Error(w, "no such action", http.StatusNotFound)
 		return
@@ -89,6 +92,14 @@ var responses = map[string]any{
 	"steps":       map[string]any{"ok": true},
 	"glance":      map[string]any{"ok": true},
 	"analytics":   map[string]any{"ok": true},
+}
+
+// jobs is what the stub answers for each piece of scheduled work asked of it.
+var jobs = map[string]any{
+	"audit.prune":      runtime.JobOutcome{Name: "audit.prune", State: runtime.JobStateSucceeded, Note: "", Job: "7b6c"},
+	"content.sync":     runtime.JobOutcome{Name: "content.sync", State: runtime.JobStateFailed, Note: "The index did not answer."},
+	"contacts.inbox":   runtime.JobOutcome{Name: "contacts.inbox", State: runtime.JobStateLost, Note: "The job did not finish."},
+	"registry.refresh": runtime.JobOutcome{Name: "registry.refresh", State: runtime.JobStateRunning, Note: "Already running."},
 }
 
 func setUp(t *testing.T) (binary string, bridge *stubBridge) {
@@ -229,7 +240,7 @@ func TestBridgeFailure(t *testing.T) {
 	}{
 		{"HQ is not serving", func() { os.Remove(bridge.Socket) }, "no socket at its path"},
 		{"something else is here", func() { os.WriteFile(bridge.Socket, nil, 0o600) }, "not a socket"},
-		{"no socket is named", func() { bridge.Socket = "" }, "HQ_BRIDGE_SOCKET"},
+		{"no socket is named", func() { bridge.Socket = "" }, "SEVERINO_BRIDGE_SOCKET"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.arrange()
@@ -237,6 +248,39 @@ func TestBridgeFailure(t *testing.T) {
 			last := lines[len(lines)-1]
 			if code != 1 || !strings.Contains(last, `"ok":false`) || !strings.Contains(last, tc.want) {
 				t.Fatalf("exit %d, output %v", code, lines)
+			}
+		})
+	}
+}
+
+// TestJob asks HQ for one piece of scheduled work and exits as it ended: work
+// done or already under way is success, work that failed or was lost fails
+// the unit that asked, and nothing but the bridge is called.
+func TestJob(t *testing.T) {
+	binary, bridge := setUp(t)
+	for _, tc := range []struct {
+		args []string
+		code int
+		want string
+	}{
+		{[]string{"job", "audit.prune"}, 0, `"state":"succeeded"`},
+		{[]string{"job", "registry.refresh"}, 0, `"state":"running"`},
+		{[]string{"job", "content.sync"}, 1, "The index did not answer."},
+		{[]string{"job", "contacts.inbox"}, 1, `"state":"lost"`},
+		{[]string{"job", "no.such"}, 1, `"ok":false`},
+		{[]string{"job"}, 2, "usage"},
+		{[]string{"job", "audit.prune", "extra"}, 2, "usage"},
+	} {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			before := len(bridge.Calls())
+			code, calls, lines := runBinary(t, binary, bridge, tc.args...)
+			if code != tc.code || len(lines) == 0 || !strings.Contains(lines[len(lines)-1], tc.want) {
+				t.Fatalf("exit %d, output %v", code, lines)
+			}
+			for _, made := range calls[before:] {
+				if made.Action != "job" || made.Query.Get("name") != tc.args[1] {
+					t.Fatalf("called %s %v", made.Action, made.Query)
+				}
 			}
 		})
 	}

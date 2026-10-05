@@ -206,7 +206,7 @@ the `SEVERINO_MCP_ENABLE_*` switches gate writes, not these reads.
 | Findings | Findings | `/findings/`, `get_findings` | yes | yes | yes | no |
 | Connections | Connections | `/connections/`, `list_connections` | yes | yes | yes | no |
 | Registry import | none | `hq.import` capability | yes | yes | yes | yes |
-| Public registry refresh | none | `manage.py refresh_public_registry` | no | no | yes | no |
+| Public registry refresh | none | the scheduled `registry.refresh` job; `manage.py refresh_public_registry --force` by hand | no | no | yes | no |
 
 `connection.standing` returns the estate half of the connections page. The
 page also shows how the request being answered reached HQ (network admission,
