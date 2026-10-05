@@ -17,6 +17,7 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 
+from hq.platform.application.derivations import uncached
 from ..dashboard import operating_snapshot
 from ..resource_operations import operation_summary
 from ..resource_context import get_managed_resource
@@ -375,6 +376,8 @@ class DashboardProjectionTests(TestCase):
         with (
             patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")),
             CaptureQueriesContext(connection) as queries,
+            # What the snapshot costs to derive; a stored answer costs less.
+            uncached(),
         ):
             operating_snapshot(principal=cli_principal())
         return queries

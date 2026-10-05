@@ -13,14 +13,13 @@ from .timestamps import moment
 def elapsed(stamp: str) -> str:
     """A provider's timestamp as an age, or as the fact that there is none."""
 
-    from datetime import datetime, timezone as _tz
-
+    from .derivations import reached
     from .ui import MISSING
 
     found = moment(stamp)
     if found is None:
         return MISSING
-    if found > datetime.now(_tz.utc):
+    if not reached(found):
         return "just now"
     return ago(found)
 
@@ -33,8 +32,14 @@ def ago(moment) -> str:
     ``when_exact`` says, and the ``when`` filter puts it behind the age.
     """
 
+    from datetime import datetime
+
     from django.utils.timesince import timesince
 
+    from .derivations import since
+
+    if isinstance(moment, datetime):
+        since(moment)
     age = timesince(moment, depth=1)
     return "just now" if age.startswith("0\xa0minutes") or age.startswith("0 minutes") else f"{age} ago"
 
@@ -73,11 +78,11 @@ def when_day(value) -> str:
 
     from datetime import datetime
 
-    from django.utils import timezone
+    from .derivations import today
 
     if isinstance(value, datetime):
         value = _local(value)
-    this_year = value.year == timezone.localdate().year
+    this_year = value.year == today().year
     return _written(value, DAY_FORMAT if this_year else DAY_YEAR_FORMAT)
 
 

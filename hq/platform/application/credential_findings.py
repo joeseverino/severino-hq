@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.utils import timezone
 
 from hq.domains.control_plane.provider_adapters.contracts import (
     ADDRESS_FAILURE,
@@ -19,6 +18,7 @@ from hq.domains.control_plane.provider_adapters.contracts import (
     REFUSALS,
 )
 
+from .derivations import reached
 from .timestamps import moment
 from .ui import counted
 from .finding_model import FindingRule, OperatorStep, built_findings, fact_values
@@ -197,7 +197,7 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
         when = moment(stamp)
         if when is None:
             continue
-        expired = when <= timezone.now()
+        expired = reached(when)
         found.append(
             dict(
                 rule="credential-expiring",

@@ -246,11 +246,57 @@ no connection ref:
 
 `outcome` is `rendered`, `current` or `failed`; a failure carries its class in
 `failure` and leaves `last_success` as it was. `connect` is what `/health`
-reported, reduced to short words. A reader should treat an old `last_success.at`,
-a `failed` attempt, or a `sync` status other than `ACTIVE` as stale secrets.
-Nothing in HQ reads this document yet: the directory is root-only, so the
-natural path is the one the tailnet and firewall readings take, a file the
-launcher mounts into the controller for a provider to report.
+reported, reduced to short words. Every string in the document besides its
+times is one short word (`WordPattern`).
+
+The type is declared once, in `controller/secretstatus`, which imports nothing
+of the renderer or the controller. The renderer writes it and the controller
+reads it with the same strict decoder (`secretstatus.Decode`): an unknown or
+repeated member, another `schema_version`, an outcome that is not one of the
+three, or a string that is not a short word is refused.
+
+### How HQ reads it
+
+The directory is root-only, so the document takes the path the tailnet and
+firewall readings take. `scripts/run-controller.sh` copies it into the run's
+private directory, gives the copy to the controller's account with mode 0400,
+bind-mounts it read-only at `/run/severino-hq/render-status/<name>.json` and
+passes `SEVERINO_RENDER_STATUS`, a comma-separated list of
+`<name>=<path>` pairs. The name is a fixed word the launcher chooses per
+renderer (`hq` for this one) and is all HQ is told of where a document came
+from. A name is passed whether or not its document exists.
+
+The controller reports each as one record of the `host.render_status` reading:
+the renderer's name, `state` `read` with the document, or `state` `unreadable`
+with one reason word (`missing`, `unreadable`, `oversized`, `invalid`). A
+document that cannot be read is a record, not a refused read, so HQ can say
+which renderer went quiet. HQ stores it through a schema that admits only the
+fields above and stores any string that is not a short word as `unreadable`.
+
+What is mounted holds no secret, and the mount adds no way to write: the
+controller receives a copy it cannot change, of a file only root can write,
+from a directory it never sees. A local account that could write the document
+is already root. The document is reported to HQ as data and decides nothing
+there: the worst a forged one can do is raise or hide the findings below.
+
+`hq/platform/application/render_status_findings.py` raises, on the machine the
+controller runs on:
+
+| Finding | When | Severity |
+|---|---|---|
+| `render-failing` | the last run failed; names the class | attention; serious once the last success is past the allowance |
+| `render-stale` | the last recorded run did not fail, and nothing confirmed the files current within 3 hours 15 minutes or read them in full within 27 hours 15 minutes: the renderer is not running, or fails before it takes the lock and so records nothing | serious |
+| `connect-sync-stalled` | Connect's `sync` dependency is not `ACTIVE`, or is not reported | attention |
+| `render-status-unread` | the document is missing or was refused | attention |
+
+The allowance is three runs at their latest: the timer starts the renderer
+every hour, up to five minutes late (`deploy/systemd/severino-hq-secrets.timer`),
+so three runs take at most 3 hours 15 minutes, and a renderer two runs behind
+is raised as the third falls due. A full read is forced every 24 hours
+(`FullEvery`), so it is overdue that allowance later. Both are measured against
+now and not against when the reading was taken: a controller that cannot start
+because its secrets are gone still raises them. Each finding names the command
+to run on the machine for a renderer whose unit HQ knows (`RENDERER_UNITS`).
 
 ## Minting observer credentials
 

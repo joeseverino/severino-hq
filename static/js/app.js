@@ -167,20 +167,23 @@ if (actionMenu) {
       badge.hidden = count === 0;
     });
   };
-  const remember = (count) => {
+  const remember = (count, etag = "") => {
     try {
-      sessionStorage.setItem(STORE_KEY, JSON.stringify({ count, at: Date.now() }));
+      sessionStorage.setItem(STORE_KEY, JSON.stringify({ count, etag, at: Date.now() }));
     } catch (_error) {
       // Storage refused: the next page asks again.
     }
   };
-  const recalled = () => {
+  const stored = () => {
     try {
-      const stored = JSON.parse(sessionStorage.getItem(STORE_KEY) || "null");
-      return stored && Date.now() - stored.at < TTL_MS ? stored.count : null;
+      return JSON.parse(sessionStorage.getItem(STORE_KEY) || "null");
     } catch (_error) {
       return null;
     }
+  };
+  const recalled = () => {
+    const last = stored();
+    return last && Date.now() - last.at < TTL_MS ? last.count : null;
   };
 
   if (actionMenu.dataset.actionCountFresh !== undefined) {
@@ -188,15 +191,22 @@ if (actionMenu) {
   } else if (recalled() !== null) {
     paint(recalled());
   } else {
-    hqFetch(actionMenu.dataset.actionCountUrl, {
-      headers: { Accept: "application/json" },
-      renewSession: false,
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload) => {
-        if (payload) {
-          paint(payload.count);
-          remember(payload.count);
+    // The last answer's validator goes with the question: an unchanged queue
+    // is answered 304 and the count already held is kept.
+    const last = stored();
+    const headers = { Accept: "application/json" };
+    if (last && last.etag) headers["If-None-Match"] = last.etag;
+    hqFetch(actionMenu.dataset.actionCountUrl, { headers, renewSession: false })
+      .then((response) => {
+        if (response.status === 304 && last) return { count: last.count, etag: last.etag };
+        if (!response.ok) return null;
+        const etag = response.headers.get("ETag") || "";
+        return response.json().then((payload) => ({ count: payload.count, etag }));
+      })
+      .then((answer) => {
+        if (answer) {
+          paint(answer.count);
+          remember(answer.count, answer.etag);
         }
       })
       .catch(() => {});

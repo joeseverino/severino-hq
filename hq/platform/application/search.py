@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from django.db import connection
-from django.db.models import Case, IntegerField, Q, QuerySet, Value, When
-from django.db.models.expressions import RawSQL
+from django.db.models import CharField, F, IntegerField, Q, QuerySet, Value
+from django.db.models.functions import Cast
 
 from hq.platform.search_index.backends import SnippetParts, search_backend
 from hq.platform.application.search_contracts import SearchDefinition
@@ -15,10 +15,6 @@ from .resources import resource_search_capabilities
 from .security import AuthorizationError, Capability, Principal, require_all
 
 MAX_SEARCH_RESULTS = 5000
-# Precise relevance ordering only matters for results a human will actually
-# scan. Ranking every match would compile one CASE branch per id: thousands
-# of bound parameters per query for ordering nobody sees past the first pages.
-RELEVANCE_WINDOW = 500
 
 # Every scope is readable with the baseline READ capability except the audit
 # trail: it is a security log, and free-text search over it is strictly more
@@ -76,43 +72,52 @@ def search_ids(
 def apply_search(
     queryset: QuerySet, *, scope: str, query: str, principal: Principal
 ) -> QuerySet:
-    """Filter a domain queryset while retaining relevance as its default order."""
-    head_ids = search_ids(scope, query, principal=principal, limit=RELEVANCE_WINDOW)
-    if not head_ids:
-        # Annotated even though it is empty, because what this function
-        # promises its caller is a queryset that can be ordered by relevance,
-        # and that promise holds for an empty result too: `order_by("_search_rank")`
-        # resolves the name against the model whether or not a row is built.
-        return queryset.none().annotate(
-            _search_rank=Value(RELEVANCE_WINDOW, output_field=IntegerField())
-        )
-    definition = BY_SCOPE[scope]
-    identifier_field = definition.identifier_field
-    # Rank the head of the result set exactly; everything past the window
-    # shares one bucket and falls back to the pk tiebreak the table layer
-    # appends, so pagination stays deterministic without a giant CASE.
-    relevance = Case(
-        *[
-            When(**{identifier_field: object_id, "then": position})
-            for position, object_id in enumerate(head_ids)
-        ],
-        default=RELEVANCE_WINDOW,
-        output_field=IntegerField(),
+    """Filter a domain queryset while retaining relevance as its default order.
+
+    ``_search_rank`` is the row's position among the index's ranked hits, the
+    same order ``search_ids`` and ``global_search`` return, so ordering by it
+    is total and a page boundary never moves. The index states it in SQL: the
+    statement carries the same few parameters however many rows match.
+    """
+    _authorize(scope, principal)
+    identifier_field = BY_SCOPE[scope].identifier_field
+    if not _fts5_available():
+        return _apply_fallback_search(queryset, scope, query, principal)
+    position = search_backend.position(
+        scope=scope,
+        query=query,
+        limit=MAX_SEARCH_RESULTS,
+        identifier=Cast(F(identifier_field), CharField()),
     )
-    if _fts5_available():
-        # Membership via an FTS subquery: three bound parameters regardless of
-        # match count, instead of one parameter per id in a giant IN list.
-        sql, params = search_backend.search_sql(
-            scope=scope, query=query, limit=MAX_SEARCH_RESULTS
-        )
-        membership = RawSQL(sql, params)
-    else:
-        membership = search_ids(
-            scope, query, principal=principal, limit=MAX_SEARCH_RESULTS
-        )
-    return queryset.filter(
-        **{f"{identifier_field}__in": membership}
-    ).annotate(_search_rank=relevance)
+    if position is None:
+        return _no_matches(queryset)
+    return queryset.annotate(_search_rank=position).filter(_search_rank__isnull=False)
+
+
+def _no_matches(queryset: QuerySet) -> QuerySet:
+    """An empty result that can still be ordered by relevance.
+
+    ``order_by("_search_rank")`` resolves the name against the model whether
+    or not a row is built, so the annotation is part of what an empty result
+    promises.
+    """
+    return queryset.none().annotate(
+        _search_rank=Value(0, output_field=IntegerField())
+    )
+
+
+def _apply_fallback_search(
+    queryset: QuerySet, scope: str, query: str, principal: Principal
+) -> QuerySet:
+    """Without an index there is no rank: every match ties, and the caller's
+    tie-break (the table layer's primary key) is the whole order."""
+    ids = search_ids(scope, query, principal=principal, limit=MAX_SEARCH_RESULTS)
+    if not ids:
+        return _no_matches(queryset)
+    identifier_field = BY_SCOPE[scope].identifier_field
+    return queryset.filter(**{f"{identifier_field}__in": ids}).annotate(
+        _search_rank=Value(0, output_field=IntegerField())
+    )
 
 
 def _fallback_snippet(definition: SearchDefinition, instance, query: str) -> SnippetParts:
@@ -153,15 +158,22 @@ def _marked(text: str, query: str) -> SnippetParts:
     return [(body[:150], False)] if body else []
 
 
-def _scope_hits(
-    definition: SearchDefinition, query: str, limit: int
-) -> list[tuple[str, SnippetParts | None]]:
-    """Ranked (object_id, snippet) hits from whichever backend is active."""
+def _hits_by_scope(
+    scopes: list[str], query: str, limit: int
+) -> dict[str, list[tuple[str, SnippetParts | None]]]:
+    """Ranked (object_id, snippet) hits per scope from whichever backend is active.
+
+    The index answers every scope in one statement. A scope with no hit is
+    absent, so it costs its caller no record fetch.
+    """
     if _fts5_available():
-        return search_backend.search_snippets(
-            scope=definition.scope, query=query, limit=limit
-        )
-    return [(object_id, None) for object_id in _fallback_ids(definition, query, limit)]
+        return search_backend.search_scopes(scopes=scopes, query=query, limit=limit)
+    hits = {}
+    for scope in scopes:
+        object_ids = _fallback_ids(BY_SCOPE[scope], query, limit)
+        if object_ids:
+            hits[scope] = [(object_id, None) for object_id in object_ids]
+    return hits
 
 
 def _fallback_ids(definition: SearchDefinition, query: str, limit: int) -> list[str]:
@@ -214,31 +226,23 @@ def global_search(
         return _global_search(query, principal=principal, limit_per_scope=limit_per_scope)
 
 
+def _may_search(scope: str, principal: Principal) -> bool:
+    try:
+        _authorize(scope, principal)
+    except AuthorizationError:
+        return False
+    return True
+
+
 def _global_search(query: str, *, principal: Principal, limit_per_scope: int) -> dict:
+    # Authorization decides which scopes the index is asked about, so a scope
+    # the principal may not search is never read, not read and then dropped.
+    permitted = [scope for scope in BY_SCOPE if _may_search(scope, principal)]
+    hits_by_scope = _hits_by_scope(permitted, query, limit_per_scope)
     groups = []
-    total = 0
-    for scope, definition in BY_SCOPE.items():
-        try:
-            _authorize(scope, principal)
-        except AuthorizationError:
-            continue
-        hits = _scope_hits(definition, query, limit_per_scope)
-        records = _fetch_records(definition, [object_id for object_id, _ in hits])
-        items = []
-        for object_id, snippet in hits:
-            record = records.get(object_id)
-            if record is None:
-                continue
-            items.append(
-                {
-                    "id": object_id,
-                    "title": definition.title(record),
-                    "badge": definition.badge(record),
-                    "url": definition.url(record),
-                    "timestamp": definition.timestamp(record),
-                    "snippet": _snippet(definition, record, query, snippet),
-                }
-            )
+    for scope in permitted:
+        definition = BY_SCOPE[scope]
+        items = _global_items(definition, query, hits_by_scope.get(scope, []))
         groups.append(
             {
                 "scope": scope,
@@ -247,8 +251,33 @@ def _global_search(query: str, *, principal: Principal, limit_per_scope: int) ->
                 "items": items,
             }
         )
-        total += len(items)
-    return {"query": query, "total": total, "groups": groups}
+    return {
+        "query": query,
+        "total": sum(group["count"] for group in groups),
+        "groups": groups,
+    }
+
+
+def _global_items(
+    definition: SearchDefinition,
+    query: str,
+    hits: list[tuple[str, SnippetParts | None]],
+) -> list[dict]:
+    if not hits:
+        return []
+    records = _fetch_records(definition, [object_id for object_id, _ in hits])
+    return [
+        {
+            "id": object_id,
+            "title": definition.title(record),
+            "badge": definition.badge(record),
+            "url": definition.url(record),
+            "timestamp": definition.timestamp(record),
+            "snippet": _snippet(definition, record, query, snippet),
+        }
+        for object_id, snippet in hits
+        if (record := records.get(object_id)) is not None
+    ]
 
 
 def search_records(
@@ -257,7 +286,7 @@ def search_records(
     """Adapter-neutral JSON result for CLI, TUI, and remote delivery surfaces."""
     _authorize(scope, principal)
     definition = BY_SCOPE[scope]
-    hits = _scope_hits(definition, query, limit)
+    hits = _hits_by_scope([scope], query, limit).get(scope, [])
     records = _fetch_records(definition, [object_id for object_id, _ in hits])
     items = []
     for object_id, snippet in hits:

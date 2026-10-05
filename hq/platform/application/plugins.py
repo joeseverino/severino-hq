@@ -587,9 +587,15 @@ def gather_attention(
             if status not in ATTENTION_ORDER:
                 continue
             gathered.append({"item": item, "source": label, "source_id": source_id})
+    return ordered_attention(gathered)
+
+
+def ordered_attention(entries: Iterable[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
+    """Gathered entries in the one order every surface shows them."""
+
     return tuple(
         sorted(
-            gathered,
+            entries,
             key=lambda entry: (
                 ATTENTION_ORDER.index(entry["item"].status),
                 entry["source"],

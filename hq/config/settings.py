@@ -453,6 +453,24 @@ TEMPLATES = [
 WSGI_APPLICATION = "hq.config.wsgi.application"
 
 
+# ----- Caches ------------------------------------------------------------------
+
+CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+    # What the estate pages derive, keyed by the revisions of the tables each
+    # fact reads (hq.platform.application.derivations). In the database, so
+    # every process sees one copy and a value stored inside a transaction
+    # commits or rolls back with the rows and revisions it was derived from.
+    "derived": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "hq_derived",
+        "TIMEOUT": 24 * 60 * 60,
+        # A fact is stored once per revision it was derived at, and an old
+        # revision is never asked for again: a small table, culled by halves.
+        "OPTIONS": {"MAX_ENTRIES": 120, "CULL_FREQUENCY": 2},
+    },
+}
+
 # ----- Database ----------------------------------------------------------------
 
 DATABASES = {

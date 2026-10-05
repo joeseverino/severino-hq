@@ -6,7 +6,9 @@ Builds Django's test database (never the real one), fills it with
 ``hq.platform.core.bench.seed``, then requests each page as a signed-in
 operator through the whole middleware stack. Reports median and p95 wall time,
 the query count, how many of those queries repeat one already made in the same
-request, and the response size.
+request, how many derivations the request ran, and the response size. The
+timed requests follow three others, so a page is measured as it is served
+between two changes of what it derives from.
 
 The pages are read from the URL configuration: every route that answers a GET.
 A route that takes arguments is requested with the seeded record ``SAMPLES``
@@ -41,6 +43,7 @@ from django.test import Client, override_settings
 from django.test.utils import CaptureQueriesContext, setup_databases, teardown_databases
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
 
+from hq.platform.application.derivations import counting
 from hq.platform.application.resources import describe_resources
 from hq.platform.application.security import host_capabilities
 from hq.platform.core.bench import ZONES, Seeded, seed
@@ -169,6 +172,8 @@ class Result:
     queries: int
     repeated: int
     kilobytes: float
+    # Derivations the measured request ran, rather than being served a stored answer.
+    derived: int = 0
 
 
 def _routes(patterns=None, prefix: str = "") -> Iterator[tuple[str, URLPattern]]:
@@ -319,7 +324,7 @@ def _measure(client: Client, page: str, url: str, rounds: int) -> tuple[Result, 
         # A streamed body is part of what the page costs.
         size = len(response.getvalue())
         times.append((time.perf_counter() - started) * 1000)
-    with CaptureQueriesContext(connection) as captured:
+    with counting() as (ran, _served), CaptureQueriesContext(connection) as captured:
         client.get(url).getvalue()
     statements = [query["sql"] for query in captured.captured_queries]
     times.sort()
@@ -333,6 +338,7 @@ def _measure(client: Client, page: str, url: str, rounds: int) -> tuple[Result, 
             queries=len(statements),
             repeated=len(statements) - len(set(statements)),
             kilobytes=round(size / 1024, 1),
+            derived=sum(ran.values()),
         ),
         statements,
     )
@@ -396,12 +402,12 @@ class Command(BaseCommand):
         self, results: list[Result], left: list[tuple[str, str]], unexercised: list[tuple[str, str]]
     ) -> None:
         self.stdout.write(
-            f"\n{'page':58s} {'status':>6s} {'median':>9s} {'p95':>9s} {'queries':>7s} {'repeat':>6s} {'KB':>8s}"
+            f"\n{'page':58s} {'status':>6s} {'median':>9s} {'p95':>9s} {'queries':>7s} {'repeat':>6s} {'derive':>6s} {'KB':>8s}"
         )
         for result in sorted(results, key=lambda result: -result.median_ms):
             self.stdout.write(
                 f"{result.page[:58]:58s} {result.status:6d} {result.median_ms:7.2f}ms {result.p95_ms:7.2f}ms "
-                f"{result.queries:7d} {result.repeated:6d} {result.kilobytes:8.1f}"
+                f"{result.queries:7d} {result.repeated:6d} {result.derived:6d} {result.kilobytes:8.1f}"
             )
         self.stdout.write("\nNot benched:")
         for name, reason in left:

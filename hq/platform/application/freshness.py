@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from django.utils import timezone
+from .derivations import reached
 
 CURRENT = "current"
 DUE = "due"
@@ -106,10 +106,9 @@ def freshness(kind: str, observed_at: datetime | None, now: datetime | None = No
     found = cadence(kind)
     if observed_at is None:
         return Freshness(NEVER, None, found.stale_after)
-    age = (now or timezone.now()) - observed_at
-    if age >= found.stale_after:
+    if reached(observed_at + found.stale_after, now=now):
         state = STALE
-    elif age >= found.every:
+    elif reached(observed_at + found.every, now=now):
         state = DUE
     else:
         state = CURRENT

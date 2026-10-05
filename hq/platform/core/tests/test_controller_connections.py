@@ -28,6 +28,7 @@ LAUNCH_VARIABLES = {
     "HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_CONTROLLER_IMAGE",
     "SEVERINO_HQ_SOURCE_REPOSITORY", "HQ_CONTROLLER_CA_FILE",
     "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK", "SEVERINO_HOST_FIREWALL",
+    "SEVERINO_RENDER_STATUS",
 }
 
 
@@ -273,6 +274,9 @@ case "$1" in
                 type=bind,source=*,target=/run/secrets/controller-connections.json,readonly)
                     source="${argument#type=bind,source=}"
                     cp "${source%%,target=*}" "$FIXTURES/mounted-connections" ;;
+                type=bind,source=*,target=/run/severino-hq/render-status/hq.json,readonly)
+                    source="${argument#type=bind,source=}"
+                    cp -p "${source%%,target=*}" "$FIXTURES/mounted-render-status" ;;
             esac
         done ;;
 esac
@@ -380,6 +384,51 @@ esac
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(message, result.stderr)
                 self.assertFalse((self.root / "docker-args").exists())
+
+    RENDER_STATUS = "SEVERINO_RENDER_STATUS=hq=/run/severino-hq/render-status/hq.json"
+
+    def test_the_renderers_status_is_mounted_read_only_as_a_copy(self):
+        status = self.runtime / "status.json"
+        status.write_text('{"schema_version":1,"last_attempt":{"at":"2026-01-01T00:00:00Z","outcome":"current"}}\n')
+        status.chmod(0o644)
+
+        result = self.launch()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        arguments = self.arguments()
+        self.assertIn(self.RENDER_STATUS, arguments)
+        mounts = [a for a in arguments if "target=/run/severino-hq/render-status/" in a]
+        self.assertEqual(len(mounts), 1)
+        # The run's own copy, never the document and never its directory.
+        self.assertTrue(mounts[0].startswith(f"type=bind,source={self.runtime}/run."))
+        self.assertTrue(mounts[0].endswith(",target=/run/severino-hq/render-status/hq.json,readonly"))
+        mounted = self.root / "mounted-render-status"
+        self.assertEqual(mounted.read_text(), status.read_text())
+        self.assertEqual(mounted.stat().st_mode & 0o777, 0o400)
+        self.assertFalse([a for a in arguments if a.endswith(f"source={self.runtime},target") or f"source={self.runtime}," in a])
+
+    def test_a_renderer_with_no_status_is_still_named(self):
+        # Named without a mount: the controller reports the document missing,
+        # which HQ raises, where an unnamed renderer would be silence.
+        for name, prepare in (
+            ("absent", lambda: None),
+            ("a link", lambda: (self.runtime / "status.json").symlink_to(self.document)),
+            ("a directory", lambda: (self.runtime / "status.json").mkdir()),
+        ):
+            with self.subTest(name=name):
+                prepare()
+                result = self.launch()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                arguments = self.arguments()
+                self.assertIn(self.RENDER_STATUS, arguments)
+                self.assertFalse([a for a in arguments if "target=/run/severino-hq/render-status/" in a])
+                self.assertNotIn(SENTINEL, "\n".join(arguments))
+                status = self.runtime / "status.json"
+                if status.is_symlink():
+                    status.unlink()
+                # The recorder's copy of the document is read-only; the next
+                # launch writes it again.
+                (self.root / "mounted-connections").unlink()
 
     def test_the_launcher_never_sources_or_forwards_connection_values(self):
         script = LAUNCHER.read_text()

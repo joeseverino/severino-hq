@@ -31,6 +31,7 @@ from hq.domains.control_plane.provider_adapters.cloudflare import (
     DNS_RECORD_TYPES_BY_ID,
 )
 
+from hq.platform.application.derivations import uncached
 from ..adoption_testing import managing_everything
 from ..infrastructure import PolicyError, save_managed_resource, suggest_key
 from ..adoption import (
@@ -1121,7 +1122,7 @@ class DomainPageCostTests(TestCase):
         self._zone_with(count)
         user = get_user_model().objects.create_user(f"op{count}", password="x" * 20)
         self.client.force_login(user)
-        with CaptureQueriesContext(connection) as captured:
+        with CaptureQueriesContext(connection) as captured, uncached():
             response = self.client.get(
                 reverse("zones:detail", kwargs={"zone": "example.com"})
             )

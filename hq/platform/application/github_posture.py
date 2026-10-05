@@ -18,8 +18,8 @@ from datetime import timedelta
 from typing import Any, Callable
 
 from hq.platform.application.routes import reverse
-from django.utils import timezone
 
+from .derivations import passed
 from .github_estate import Repository, repositories
 from .github_estate import attention as repository_attention
 from .item_help import cannot_help, commands
@@ -63,7 +63,7 @@ def _keys_read_only(repo: Repository) -> bool | None:
 
 def _idle(key: dict[str, Any]) -> bool:
     seen = moment(key.get("last_used") or key.get("created_at") or "")
-    return seen is not None and seen < timezone.now() - timedelta(days=KEY_IDLE_DAYS)
+    return seen is not None and passed(seen + timedelta(days=KEY_IDLE_DAYS))
 
 
 def _keys_in_use(repo: Repository) -> bool | None:

@@ -5,8 +5,7 @@ from __future__ import annotations
 from hq.platform.application.routes import reverse
 from django.views.generic import TemplateView
 
-from hq.platform.application.findings import derive_findings, finding_layout, finding_rules, rule_for
-from hq.platform.application.topology import derive_topology
+from hq.platform.application.findings import estate_findings, finding_layout, finding_rules, rule_for
 from hq.platform.application.security import web_principal
 from hq.platform.application.pages import PageAction, PageMixin
 
@@ -26,13 +25,10 @@ class FindingsView(PageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         principal = web_principal(self.request.user)
-        topology = derive_topology(principal=principal)
         requested_rule = self.request.GET.get("rule", "").strip()
         active_rule = rule_for(requested_rule)
-        raised = derive_findings(
-            topology,
-            principal=principal,
-            rule=active_rule.name if active_rule else "",
+        raised = estate_findings(
+            principal=principal, rule=active_rule.name if active_rule else ""
         )
         entries = []
         for finding in raised:

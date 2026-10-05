@@ -18,7 +18,7 @@ from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, T
 
 from .credential_sight import READABLE, Sight, credential_sight
 from .entity_links import EntityLink
-from .findings import derive_findings, serialize_finding
+from .findings import estate_findings, serialize_finding
 from .finding_model import Finding
 from .policy_links import PolicyName, PolicyNames, tagged
 from .projection import projection_scope
@@ -172,7 +172,7 @@ def _findings(principal: Principal) -> tuple[Finding, ...]:
     }
     return tuple(
         finding
-        for finding in derive_findings(topology, principal=principal)
+        for finding in estate_findings(principal=principal)
         if finding.subject in subjects or finding.scope in TAILNET_KINDS
     )
 

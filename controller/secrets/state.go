@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
+	"github.com/joeseverino/severino-hq/controller/secretstatus"
 )
 
 const stateName = ".render-state.json"
@@ -34,9 +35,9 @@ type state struct {
 	// Salt keys every digest below: they cover secrets, so none is a bare hash.
 	Salt string `json:"salt"`
 	// Inputs covers the registry and the configuration.
-	Inputs string      `json:"inputs"`
-	Files  []installed `json:"files"`
-	Counts Counts      `json:"counts"`
+	Inputs string              `json:"inputs"`
+	Files  []installed         `json:"files"`
+	Counts secretstatus.Counts `json:"counts"`
 }
 
 // installed is one file as the render left it.

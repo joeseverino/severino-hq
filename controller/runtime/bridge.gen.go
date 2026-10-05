@@ -360,6 +360,7 @@ const (
 	ResourceKindHQRequestPath                ResourceKind = "hq.request_path"
 	ResourceKindHostFirewall                 ResourceKind = "host.firewall"
 	ResourceKindHostPerimeter                ResourceKind = "host.perimeter"
+	ResourceKindHostRenderStatus             ResourceKind = "host.render_status"
 	ResourceKindMachine                      ResourceKind = "machine"
 	ResourceKindNPMAccessList                ResourceKind = "npm.access_list"
 	ResourceKindNPMCertificate               ResourceKind = "npm.certificate"
@@ -435,6 +436,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindHostFirewall:
 		return true
 	case ResourceKindHostPerimeter:
+		return true
+	case ResourceKindHostRenderStatus:
 		return true
 	case ResourceKindMachine:
 		return true
@@ -524,6 +527,7 @@ const (
 	SweptGitHubRepository             SweptKind = "github.repository"
 	SweptHostFirewall                 SweptKind = "host.firewall"
 	SweptHostPerimeter                SweptKind = "host.perimeter"
+	SweptHostRenderStatus             SweptKind = "host.render_status"
 	SweptNPMAccessList                SweptKind = "npm.access_list"
 	SweptNPMCertificate               SweptKind = "npm.certificate"
 	SweptNPMDeadHost                  SweptKind = "npm.dead_host"
@@ -584,6 +588,8 @@ func (e SweptKind) Valid() bool {
 	case SweptHostFirewall:
 		return true
 	case SweptHostPerimeter:
+		return true
+	case SweptHostRenderStatus:
 		return true
 	case SweptNPMAccessList:
 		return true

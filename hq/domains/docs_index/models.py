@@ -16,7 +16,6 @@ from django.conf import settings
 from django.db import models
 from django.db.models import Q
 from django.urls import reverse
-from django.utils import timezone
 
 from hq.platform.core.models import TimestampedModel
 
@@ -37,7 +36,9 @@ class DocumentationQuerySet(models.QuerySet):
         clear, which is the one thing a queue must never contain.
         """
         review_days = getattr(settings, "SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180)
-        cutoff = timezone.localdate() - timedelta(days=review_days)
+        from hq.platform.application.derivations import today
+
+        cutoff = today() - timedelta(days=review_days)
         return self.filter(
             Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=cutoff),
             status=self.model.Status.ACTIVE,

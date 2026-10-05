@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 
+from .derivations import passed, present
 from .contracts import SCOPE_NAME, endpoint_has_private_parts
 # Declared next to the domains that emit them, so a gateway can import the
 # record without importing this reader. Re-exported here as the one name
@@ -175,7 +176,7 @@ def connection_lifecycle(
         return "configured"
     if timezone.is_naive(observed):
         observed = timezone.make_aware(observed)
-    if now - observed > timedelta(hours=stale_after_hours):
+    if passed(observed + timedelta(hours=stale_after_hours), now=now):
         return "stale"
     if authority == "missing":
         return "unauthorized"
@@ -443,7 +444,7 @@ def _connection_view(
         instance,
         authority,
         stale_after_hours=spec.stale_after_hours,
-        now=timezone.now(),
+        now=present(),
     )
     return ConnectionView(
         instance,

@@ -236,12 +236,119 @@ Measured 2026-10-04 on an 8 GB M3, Python 3.14, the lower of two paired runs
 | API `topology` | 86.3 | 68.6 | 61 | 17 |
 | API `action.items` | 104.9 | 84.8 | 70 | 26 |
 
-What remains is not query cost. The infrastructure pages spend their time
-deriving the topology, services and findings in Python on each request (SQL is
-under 5 ms of the dashboard's 121). The record forms that offer every expense
-as an option (new receipt, new documentation, new content: about 165 ms) spend
-it rendering 4,000 `<option>` elements; that is a change to the form, not to a
-query.
+The same pages once their derivations are stored (below), the audit capture is
+taken lazily and search reads the index once. Measured 2026-10-04 on the same
+machine and method: two paired runs of 15 rounds, the lower median of each
+side. The median difference between two runs of one tree was 1 ms; pages not
+listed moved by less than twice their own spread. "Derived" is how many
+derivations the measured request ran: every page between two changes of the
+estate runs none, where each ran the topology, the catalogue, the findings and
+the queue it needed.
+
+| Page | Before | After | Queries before | Queries after | Derived after |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Dashboard (`/`) | 118.6 | 45.0 | 53 | 44 | 0 |
+| Action items | 140.2 | 62.1 | 27 | 7 | 0 |
+| Action item count (header) | 83.8 | 7.4 | 25 | 5 | 0 |
+| Action item count, validator presented (304) | 83.8 | 0.6 | 25 | 3 | 0 |
+| Findings | 113.2 | 45.8 | 17 | 6 | 0 |
+| Topology | 96.3 | 41.1 | 17 | 6 | 0 |
+| Topology node | 79.8 | 20.9 | 15 | 4 | 0 |
+| Services | 59.8 | 47.3 | 16 | 14 | 0 |
+| One service | 64.2 | 26.8 | 21 | 19 | 0 |
+| One machine | 57.0 | 19.5 | 21 | 20 | 0 |
+| One resource | 51.4 | 12.7 | 20 | 18 | 0 |
+| One domain | 59.2 | 23.2 | 25 | 22 | 0 |
+| Tailnet | 73.2 | 15.2 | 19 | 14 | 0 |
+| Calendar | 36.5 | 20.8 | 16 | 14 | 0 |
+| Search (`?q=example`) | 123.3 | 47.2 | 32 | 22 | 0 |
+| Search (`?q=purchase`) | 79.6 | 27.7 | 25 | 15 | 0 |
+| Expenses, searched | 35.5 | 17.8 | 9 | 8 | 0 |
+| Audit log, searched | 47.3 | 34.0 | 8 | 7 | 0 |
+| Expenses CSV | 173.2 | 114.7 | 10 | 10 | 0 |
+| New receipt | 162.8 | 125.9 | 6 | 6 | 0 |
+| API `findings` | 78.4 | 12.4 | 17 | 6 | 0 |
+| API `topology` | 68.9 | 13.8 | 17 | 6 | 0 |
+| API `action.items` | 85.8 | 7.5 | 26 | 6 | 0 |
+
+The first request after a change derives what it needs and stores it, about
+five statements per derivation on top of the reads. One change of the estate
+costs seven derivations in all, whichever pages ask first: the queue, the
+catalogue, the relation graph, and the topology and findings once for the
+queue's reader and once for the operator's.
+`hq/platform/core/tests/test_page_budgets.py` pins both: the queries of each
+stored page at two sizes with no derivation run, and the derivations a change
+costs.
+
+### Derived once per change
+
+The topology, the service catalogue, the findings and the action queue are
+functions of a few tables, of who is reading, and of the clock. They are
+declared as such, once, and computed once per change of those inputs rather
+than once per request:
+
+```python
+@derivation("estate.topology", reads=ESTATE_READS, vary=estate_variant)
+def _derive(principal): ...
+```
+
+`hq.platform.application.derivations` answers a call from the projection in
+progress, then from the `derived` cache, then by running the function and
+storing what it returned. The cache is Django's database cache, in the same
+SQLite file, so every process reads one copy and a value stored inside a
+transaction commits or rolls back with the rows it was derived from. The key is
+the derivation's name, what `vary` returns for the arguments, and the revision
+of every table in `reads`.
+
+**Revisions.** `core.Revision` holds one counter per table. Three triggers on
+every model table (insert, update, delete) move it inside the writing
+statement, so `save()`, `QuerySet.update()`, `bulk_create()`, a cascade and raw
+SQL all move it, in a transaction or in autocommit, and a counter never commits
+apart from its rows. `hq.platform.core.revisions.install` puts the triggers on
+after every `migrate` (SQLite drops them when a migration rebuilds a table),
+creates the cache table and clears it, so a value derived by the previous
+build is never read by the next. Reading the revisions also reads which
+triggers exist, in one statement; a table without its triggers has no
+revision, and its derivations run on every call.
+
+**The clock.** A derivation does not read the clock. It asks `reached`,
+`passed`, `since`, `whole` or `today` (and `expiry.days_until`), and each
+answer records the moment it stops being true. A stored value carries the
+earliest such moment and is derived again after it: a certificate crosses its
+warning threshold, a reading goes stale and "3 hours ago" becomes "4 hours ago"
+on time, with no write. Ages a template prints (`|when`) are rendered per
+request from the stored timestamp.
+
+**What else it varies by.** `estate_variant`: the reader (a projection is
+narrowed to what they may see), the address and port the request reached HQ on,
+and whether HQ is in use, which sets the sweep interval a finding quotes.
+A person's pins and set-aside items are applied after the derivation.
+
+**It fails toward deriving.** Revisions that cannot be read, a missing
+trigger, an unreadable cache or a value that does not load all mean the
+function runs. A derivation that reads a table it did not declare is logged
+and never stored; one that calls another must declare the other's tables or
+the call raises. `test_derivations` holds every declared derivation to its
+`reads` over the bench estate, forbids a direct clock read inside one, and
+writes a row every way Django can to show the revision moves.
+
+The declared derivations are `estate.topology`, `estate.relations`,
+`estate.findings`, `estate.services` and `attention.queue` (the host's whole
+queue; an extension's items are gathered per request and merged in). A new one
+is a decorator and a line in `SAMPLES` in that test. `derivations.uncached()`
+runs a block with the store bypassed, for budgets on what a derivation itself
+costs.
+
+**The header's count** (`/action-items/count/`) answers a conditional request.
+Its `ETag` names the queue's key, the person, the revision of their set-aside
+rows and the second the answer stops holding; a request that presents it while
+all of that stands is answered `304` from three queries without composing the
+queue. A queue that includes an extension's items carries no validator.
+
+What a stored page still costs is its own reads and its template: the
+findings page renders 700 KB, and the record forms that offer every expense as
+an option (new receipt, new documentation, new content) render 4,000
+`<option>` elements. Those are changes to the page, not to a derivation.
 
 ### What a request waits on
 
@@ -323,6 +430,22 @@ cannot search are omitted from the result, not rendered empty. Contact submissio
 in Cloudflare D1, not the local database; the web view merges the stored inbox
 rows (matched by submitter name) as an eighth group beside the registry scopes.
 Email and message text are searched on the contacts page, which reads D1.
+
+Ranking is stated once, in the backend: FTS5's `rank` (bm25, lower is better),
+then object id compared as text, numbered per scope with `ROW_NUMBER()`. Every
+read is that statement. `global_search` asks it about every scope the principal
+may search in one query, keeps the first hits of each scope, and reads their
+`snippet()` from a second reference to the FTS table, because an FTS5 auxiliary
+function is only valid in the query that reads the table with `MATCH`; a scope
+with no hit costs no record fetch, and a scope the principal lacks is never in
+the statement. A searched list annotates each row with its position among those
+hits (`_search_rank`, NULL for a row that is not a hit) through a subquery whose
+ranking is materialized once, so the statement has the same three parameters
+whether three rows match or five thousand, and the list's order is the index's
+order for every match. Equal ranks are ordered by object id as text, so `10`
+precedes `9`: one rule for every scope, independent of how the index stores its
+rows. Without the FTS table there is no rank: the ORM fallback matches by
+substring and a list falls back to primary-key order.
 
 `search_index.SearchDocument` is a derived relational projection. On SQLite,
 an FTS5 external-content table indexes that projection with Unicode tokenization

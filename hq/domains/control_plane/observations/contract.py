@@ -141,6 +141,11 @@ class ObservationSpec:
     # facts the findings read off that connection's node.
     facts: Callable[[Mapping[str, Any]], tuple[tuple[str, str], ...]] = lambda record: ()
 
+    def __reduce__(self) -> tuple[Any, tuple[str]]:
+        # A spec is a declaration, not data. A stored value that refers to one
+        # keeps its kind, and loading it finds the registered spec again.
+        return (_registered, (self.kind,))
+
     @property
     def joins_hostnames(self) -> bool:
         return self.hostnames is not _none
@@ -191,6 +196,12 @@ class ObservationSpec:
             except ValidationError:
                 refused += 1
         return kept, refused
+
+
+def _registered(kind: str) -> ObservationSpec:
+    from . import OBSERVATIONS
+
+    return OBSERVATIONS[kind]
 
 
 def registry(specs: tuple[ObservationSpec, ...]) -> Mapping[str, ObservationSpec]:

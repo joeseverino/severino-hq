@@ -322,6 +322,21 @@ class UpstreamReading(models.Model):
     observed_at = models.DateTimeField()
 
 
+class Revision(models.Model):
+    """How many times one table has been written.
+
+    The database keeps the count: a trigger on each table moves its row inside
+    the writing statement's own transaction (``hq.platform.core.revisions``), so
+    a count can never disagree with the rows it counts.
+    """
+
+    name = models.CharField(max_length=160, primary_key=True)
+    value = models.PositiveBigIntegerField(default=0)
+
+    def __str__(self) -> str:
+        return f"{self.name}@{self.value}"
+
+
 class Appearance(models.Model):
     """How one person wants HQ drawn. No row means follow the operating system.
 

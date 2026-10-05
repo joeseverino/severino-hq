@@ -21,6 +21,7 @@ from hq.domains.control_plane.models import (
 )
 from hq.domains.projects.models import Project
 
+from hq.platform.application.derivations import uncached
 from ..dashboard import dashboard_highlights, operating_snapshot
 from ..projection import projection_scope
 
@@ -175,6 +176,8 @@ def dashboard_queries() -> list[str]:
         mock.patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")),
         CaptureQueriesContext(database) as queries,
         projection_scope(),
+        # What the page costs to derive; a stored answer costs less.
+        uncached(),
     ):
         operating_snapshot(principal=cli_principal())
         dashboard_highlights()

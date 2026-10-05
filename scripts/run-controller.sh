@@ -244,6 +244,31 @@ set -- "$@" \
     --mount "type=volume,source=${bridge_volume},target=${bridge_dir},readonly" \
     --env "HQ_BRIDGE_SOCKET=${bridge_socket}"
 
+# What each secret renderer on this machine says about its own runs, so HQ can
+# tell fresh secrets from a renderer that keeps failing while the files it left
+# keep everything running. A status document holds times, versions, counts and
+# short words, and no secret (docs/SECRETS.md). It sits in the root-only
+# directory beside the secrets, so a copy is mounted and never the directory.
+#
+# One line per renderer, name=document. The name is a fixed word chosen here
+# and is all HQ is told of where a document came from. Every name is passed
+# whether or not its document exists: a renderer that left none is a finding
+# in HQ, where an unnamed one would be silence.
+render_status=""
+while IFS='=' read -r renderer_name renderer_document; do
+    renderer_target="/run/severino-hq/render-status/${renderer_name}.json"
+    render_status="${render_status}${render_status:+,}${renderer_name}=${renderer_target}"
+    if [ -f "${renderer_document}" ] && [ ! -L "${renderer_document}" ]; then
+        renderer_copy="${run_dir}/render-status-${renderer_name}.json"
+        install -o 10001 -g 10001 -m 0400 "${renderer_document}" "${renderer_copy}"
+        set -- "$@" \
+            --mount "type=bind,source=${renderer_copy},target=${renderer_target},readonly"
+    fi
+done <<EOF
+hq=${controller_runtime_dir}/status.json
+EOF
+set -- "$@" --env "SEVERINO_RENDER_STATUS=${render_status}"
+
 # No connection reaches the container's environment: Docker writes a
 # container's resolved environment to disk and shows it in `docker inspect`.
 # The controller reads them from the document mounted above, by the path

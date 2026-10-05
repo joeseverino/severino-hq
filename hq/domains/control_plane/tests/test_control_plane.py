@@ -1110,7 +1110,7 @@ class InfrastructureViewsTests(TestCase):
     def test_findings_render_only_offers_the_projection_authorized(self):
         from hq.platform.application.action_links import ActionLink
         from hq.platform.application.finding_model import Finding
-        from hq.platform.application.topology_model import Topology, TopologyNode
+        from hq.platform.application.topology_model import TopologyNode
 
         subject = TopologyNode(
             "controller:one",
@@ -1129,12 +1129,8 @@ class InfrastructureViewsTests(TestCase):
                 ActionLink("impact", "Trace impact", "read", "/topology/?trace"),
             ),
         )
-        with (
-            patch(
-                "hq.domains.control_plane.finding_views.derive_topology",
-                return_value=Topology((subject,), ()),
-            ),
-            patch("hq.domains.control_plane.finding_views.derive_findings", return_value=(finding,)),
+        with patch(
+            "hq.domains.control_plane.finding_views.estate_findings", return_value=(finding,)
         ):
             response = self.client.get(reverse("control_plane:findings"))
 

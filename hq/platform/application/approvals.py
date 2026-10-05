@@ -55,6 +55,7 @@ from hq.domains.control_plane.models import ApprovalRequest, ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.core.audit import operation_context
 
+from .derivations import reached
 from .entity_links import entity_link
 from .security import AuthorizationError, Principal, internal_principal, is_interactive
 
@@ -428,13 +429,12 @@ def pending(*, limit: int | None = 50) -> tuple[ApprovalRequest, ...]:
     for a queue that is almost always empty.
     """
 
-    now = timezone.now()
     waiting = tuple(
         ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING).order_by(
             "created_at"
         )[:limit]
     )
-    lapsed = tuple(held.pk for held in waiting if held.expires_at <= now)
+    lapsed = tuple(held.pk for held in waiting if reached(held.expires_at))
     if lapsed:
         lapse_unanswered(lapsed)
     return tuple(held for held in waiting if held.pk not in lapsed)

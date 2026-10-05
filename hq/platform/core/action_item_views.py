@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
+import time
+
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils.decorators import method_decorator
+from django.views.decorators.http import condition
 from django.views.generic import TemplateView, View
 
 from hq.platform.application import action_items as queue_state
 from hq.platform.application.dashboard import work_queue
+from hq.platform.application.derivations import table_revisions
+from hq.platform.application.domains import attention_key, attention_standing
+from hq.platform.core.models import ActionItemRead
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import safe_next
 from hq.platform.application.pages import PageMixin
@@ -77,12 +86,68 @@ class ActionItemsView(PageMixin, TemplateView):
         return context
 
 
+def _count_base(request) -> str | None:
+    """What the header's count is derived from now; None when that is not known.
+
+    The key the queue is answered under, the person, and the revision of their
+    set-aside rows.
+    """
+
+    queue = attention_key()
+    aside = table_revisions((ActionItemRead._meta.db_table,))
+    if queue is None or aside is None:
+        return None
+    return hashlib.sha256(f"{queue}|{request.user.pk}|{aside[0]}".encode()).hexdigest()
+
+
+# A validator: what the count was derived from, then the second it stops holding.
+_VALIDATOR = re.compile(r'^"([0-9a-f]{64})-(\d{1,12})"$')
+
+
+def _count_etag(request) -> str | None:
+    """The validator the request presented, if it still vouches for the count.
+
+    It does when nothing the count reads has been written since and the moment
+    the answer stops holding has not come. Anything else is None, and the count
+    is composed: an unknown state is never answered "not modified".
+    """
+
+    presented = _VALIDATOR.match(request.headers.get("If-None-Match", ""))
+    if presented is None or presented[1] != _count_base(request):
+        return None
+    if time.time() >= int(presented[2]):
+        return None
+    return presented[0]
+
+
+def _count_validator(request) -> str | None:
+    """The validator for the count this request just composed."""
+
+    base, queue = _count_base(request), attention_standing()
+    if base is None or queue is None:
+        return None
+    # An answer with no moment of its own is asked about again within the day.
+    until = int(queue.until.timestamp()) if queue.until else int(time.time()) + 24 * 60 * 60
+    return f'"{base}-{until}"'
+
+
+@method_decorator(condition(etag_func=_count_etag), name="get")
 class ActionItemCountView(View):
-    """How many items wait, for the header, fetched after the page rather than during it."""
+    """How many items wait, for the header, fetched after the page rather than during it.
+
+    A request carrying the validator of an answer that still stands is
+    answered 304 from the table revisions alone, without composing the queue.
+    """
 
     def get(self, request):
         count = queue_state.waiting_count(work_queue(), request.user)
-        return JsonResponse({"count": count})
+        response = JsonResponse({"count": count})
+        validator = _count_validator(request)
+        if validator:
+            response.headers["ETag"] = validator
+        # Kept by the browser, and asked about before every reuse.
+        response.headers["Cache-Control"] = "private, no-cache"
+        return response
 
 
 class ActionItemAsideView(View):

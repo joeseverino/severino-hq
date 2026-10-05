@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 import os
 import tempfile
@@ -40,6 +40,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
 
+from .derivations import holds_until
 from .moments import duration
 from .security import Capability, Principal
 
@@ -101,10 +102,13 @@ def recently_used(now: float | None = None) -> bool:
     marker = _path("SEVERINO_ACTIVITY_MARKER", "hq-activity")
     window = _seconds("SEVERINO_ACTIVE_WINDOW_SECONDS", 900)
     try:
-        age = (time.time() if now is None else now) - marker.stat().st_mtime
+        touched = marker.stat().st_mtime
     except OSError:
         return False
-    return age <= window
+    if (time.time() if now is None else now) - touched > window:
+        return False
+    holds_until(datetime.fromtimestamp(touched + window, tz=dt_timezone.utc))
+    return True
 
 
 def note_controller() -> None:

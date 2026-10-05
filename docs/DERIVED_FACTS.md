@@ -158,6 +158,29 @@ of `npm.certificate` (which names each certificate serves) and of
 `npm.access_list` (which names it guards). A 401 is a refused credential and a
 403 a missing permission (`runtime.StatusFailure`).
 
+### The controller's own machine
+
+Two readings are of the machine a controller runs on and need no credential:
+root reads a fact on the host and `scripts/run-controller.sh` mounts the
+answer into the controller read-only, naming it in an environment variable.
+The controller never holds the ruleset or the directory the fact came from. A
+fact the launcher does not name is a kind that reads `Not connected`
+(`hasSource` in `controller/providers/controller.go`).
+
+`host.firewall` is whether HQ's port must arrive on the tailnet interface, one
+distilled record (`SEVERINO_HOST_FIREWALL`).
+
+`host.render_status` is what each secret renderer on the machine says about
+its own runs (`SEVERINO_RENDER_STATUS`, a list of `<name>=<path>`
+pairs): one record per renderer the launcher names, holding the renderer's
+status document as `controller/secretstatus` declares it, or `state`
+`unreadable` with one reason word when there is no document to read. The
+record holds times, versions, counts and short words, and the schema stores
+any other string as `unreadable`. Its findings (`render-failing`,
+`render-stale`, `connect-sync-stalled`, `render-status-unread`) sit on
+the node of the controller that took the reading, or the machine it folded
+into; see `docs/SECRETS.md`, "How HQ reads it".
+
 ## Facts about a subject
 
 `hq.platform.application.facts` is the join engine. Every page that attaches a reading to

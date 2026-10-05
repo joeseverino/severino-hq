@@ -19,11 +19,10 @@ nothing: it is not a failed read.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import MappingProxyType, SimpleNamespace
 from typing import Any, Callable, Iterable, Iterator, Mapping
 
-from django.utils import timezone
 
 from hq.domains.control_plane.names import in_zone, certificate_covers, normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS, ObservationSpec
@@ -32,6 +31,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_spec import expiry_phrase
 
+from .derivations import passed
 from .entity_links import kind_label
 from .freshness import stale_after
 from .locate import host_of
@@ -191,7 +191,7 @@ class Joined:
     def stale(self) -> bool:
         if self.observed_at is None:
             return False
-        return self.observed_at < timezone.now() - stale_after(self.kind)
+        return passed(self.observed_at + stale_after(self.kind))
 
     @property
     def unread(self) -> str:
@@ -605,7 +605,6 @@ def facts_about(hostnames: Iterable[str], addresses: Iterable[str]) -> tuple[Fac
     subject = Subject.of(hostnames, addresses)
     if not subject:
         return ()
-    now = timezone.now()
     found = [
         *_reading_facts(subject),
         *_part_facts(subject),
@@ -614,15 +613,15 @@ def facts_about(hostnames: Iterable[str], addresses: Iterable[str]) -> tuple[Fac
         *_tailnet_facts(subject),
     ]
     return tuple(
-        _aged(fact, now - stale_after(fact.source_kind))
+        _aged(fact, stale_after(fact.source_kind))
         for fact in sorted(found, key=lambda f: (f.source_label, f.connection_ref))
     )
 
 
-def _aged(fact: Fact, stale_before: datetime) -> Fact:
+def _aged(fact: Fact, stale_after: timedelta) -> Fact:
     if fact.state != OBSERVED or fact.observed_at is None:
         return fact
-    if fact.observed_at >= stale_before:
+    if not passed(fact.observed_at + stale_after):
         return fact
     return Fact(
         label=fact.label,

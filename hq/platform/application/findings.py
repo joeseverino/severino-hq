@@ -37,10 +37,10 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
 
-from django.utils import timezone
 
 from hq.domains.control_plane.providers import PROVIDERS
 
+from .derivations import present
 from . import (
     certificate_expiry,
     connection_findings,
@@ -51,6 +51,7 @@ from . import (
     docker_estate,
     perimeter_findings,
     registration_findings,
+    render_status_findings,
     tailnet_findings,
 )
 from .action_links import (
@@ -70,7 +71,9 @@ from .finding_model import (
     is_observable,
     parse_stamp,
 )
-from .security import Principal
+from .security import Capability, Principal
+from .derivations import derivation
+from .derived_inputs import ESTATE_READS, estate_variant
 from .topology import derive_topology
 from .topology_model import (
     JOINED_KINDS,
@@ -155,7 +158,7 @@ def _estate(topology: Topology) -> FindingEstate:
     by_id = {node.id: node for node in topology.nodes}
     return FindingEstate(
         topology,
-        timezone.now(),
+        present(),
         latest,
         observed,
         governed,
@@ -172,6 +175,7 @@ RULE_MODULES = (
     perimeter_findings,
     connection_findings,
     credential_findings,
+    render_status_findings,
     certificate_expiry,
     registration_findings,
     controller_findings,
@@ -493,6 +497,22 @@ def derive_findings(
     )
 
 
+def estate_findings(*, principal: Principal, rule: str = "") -> tuple[Any, ...]:
+    """Every finding the topology ``principal`` may see supports."""
+
+    principal.require(Capability.READ)
+    return _estate_findings(principal, rule)
+
+
+@derivation(
+    "estate.findings",
+    reads=ESTATE_READS,
+    vary=lambda principal, rule: (estate_variant(principal), rule),
+)
+def _estate_findings(principal: Principal, rule: str) -> tuple[Any, ...]:
+    return derive_findings(derive_topology(principal=principal), principal=principal, rule=rule)
+
+
 def serialize_finding(finding: Finding) -> dict[str, Any]:
     return {
         "id": claim_identity(
@@ -532,11 +552,7 @@ def findings(*, principal: Principal, rule: str = "") -> dict[str, Any]:
     """The serialized claims, for machine delivery adapters."""
 
     selected = rule_for(rule) if rule else None
-    raised = derive_findings(
-        derive_topology(principal=principal),
-        principal=principal,
-        rule=selected.name if selected else "",
-    )
+    raised = estate_findings(principal=principal, rule=selected.name if selected else "")
     counts: dict[str, int] = {}
     for finding in raised:
         counts[finding.severity] = counts.get(finding.severity, 0) + 1
@@ -604,7 +620,7 @@ def auto_remediable(*, principal: Principal, limit: int = 10) -> tuple[Repair, .
         return ()
 
     topology = derive_topology(principal=principal)
-    raised = derive_findings(topology, principal=principal)
+    raised = estate_findings(principal=principal)
 
     # A kind the sweep never reached: the fault is the sweep. Repairing each
     # record of it would queue the whole class against a provider that is not

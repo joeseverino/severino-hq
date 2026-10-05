@@ -311,6 +311,8 @@ func (c *Controller) hasSource(kind string, connected map[runtime.ConnectionProv
 		return c.Env["SEVERINO_TAILNET_STATUS"] != ""
 	case runtime.ResourceKindHostFirewall:
 		return c.Env["SEVERINO_HOST_FIREWALL"] != ""
+	case runtime.ResourceKindHostRenderStatus:
+		return c.Env[renderStatusEnv] != ""
 	}
 	return false
 }
