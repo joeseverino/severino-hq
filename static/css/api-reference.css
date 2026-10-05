@@ -1,0 +1,161 @@
+/* The API reference (/api/docs/): the vendored viewer, drawn in HQ's terms.
+
+   The viewer reads its look from `--scalar-*` custom properties and keeps its
+   own rules in cascade layers it declares after app.css's, so they outrank
+   every layered HQ rule. This sheet is unlayered, which outranks both, and
+   is loaded by this page only. It holds no colour, size or face of its own:
+   every value is an app.css token, and each colour token already carries its
+   light and dark halves, so the reference follows `color-scheme` with the
+   rest of the page and needs no second palette. */
+
+/* The reference is the page: it runs edge to edge under the header and
+   brings its own gutters. It is also its own stacking context, so nothing the
+   viewer pins or floats can be drawn over HQ's header. */
+.content:has(> .api-reference) { max-width: none; padding: 0; overflow-x: visible; isolation: isolate; }
+.content > .api-reference { margin: 0; }
+
+/* Said until the viewer has mounted. */
+.api-reference-loading { margin: 0; padding: var(--content-pad); color: var(--muted); }
+.api-reference-loading:has(+ .api-reference:not(:empty)) { display: none; }
+
+:root {
+  --scalar-font: var(--font);
+  --scalar-font-code: var(--font-mono);
+
+  /* The viewer's steps, each on the nearest step of HQ's scale. */
+  --scalar-heading-1: var(--text-4xl);
+  --scalar-heading-2: var(--text-2xl);
+  --scalar-heading-3: var(--text-xl);
+  --scalar-heading-4: var(--text-lg);
+  --scalar-heading-5: var(--text-md);
+  --scalar-heading-6: var(--text-md);
+  --scalar-page-description: var(--text-lg);
+  --scalar-paragraph: var(--text-md);
+  --scalar-small: var(--text-sm);
+  --scalar-mini: var(--text-xs);
+  --scalar-micro: var(--text-2xs);
+  --scalar-font-size-1: var(--text-3xl);
+  --scalar-font-size-2: var(--text-lg);
+  --scalar-font-size-3: var(--text-md);
+  --scalar-font-size-4: var(--text-sm);
+  --scalar-font-size-5: var(--text-xs);
+  --scalar-font-size-6: var(--text-xs);
+  --scalar-font-size-7: var(--text-3xs);
+
+  /* HQ's weights: 500 for a label, 600 for a heading, 700 for the brand. */
+  --scalar-semibold: 500;
+  --scalar-bold: 600;
+  --scalar-font-medium: 500;
+  --scalar-font-bold: 600;
+
+  /* A hairline is a whole pixel, and a frame's corner is one of two radii. */
+  --scalar-border-width: 1px;
+  --scalar-radius: var(--radius-sm);
+  --scalar-radius-md: var(--radius-sm);
+  --scalar-radius-lg: var(--radius);
+  --scalar-radius-xl: var(--radius);
+  --scalar-radius-2xl: var(--radius);
+  --scalar-radius-3xl: var(--radius);
+
+  --scalar-sidebar-indent: var(--space-8);
+  --scalar-sidebar-padding: var(--space-6);
+
+  --scalar-text-decoration: none;
+  --scalar-text-decoration-hover: underline;
+}
+
+/* The viewer scopes its colours to the mode class it puts on <body>. Both
+   classes take the same tokens: which half shows is `color-scheme`'s call. */
+.light-mode, .dark-mode {
+  /* The page, a surface on it, and the tint a pointed-at row takes. */
+  --scalar-background-1: var(--bg);
+  --scalar-background-2: var(--surface);
+  --scalar-background-3: var(--bg-tint);
+  --scalar-background-accent: var(--accent-tint);
+  --scalar-border-color: var(--line);
+
+  /* Muted ink clears 4.5:1 on every surface; nothing here is fainter. */
+  --scalar-color-1: var(--ink);
+  --scalar-color-2: var(--muted);
+  --scalar-color-3: var(--muted);
+  --scalar-color-accent: var(--accent);
+  --scalar-link-color: var(--accent-2);
+  --scalar-link-color-hover: var(--accent);
+
+  /* An HTTP method is said in a status ink, so GET and POST read apart
+     without a hue HQ uses nowhere else. */
+  --scalar-color-blue: var(--accent-2);
+  --scalar-color-green: var(--ok);
+  --scalar-color-orange: var(--attn);
+  --scalar-color-yellow: var(--warn);
+  --scalar-color-red: var(--danger);
+  --scalar-color-purple: var(--tone-special-ink);
+  --scalar-color-query: var(--accent-2);
+  --scalar-color-alert: var(--warn);
+  --scalar-color-danger: var(--danger);
+  --scalar-background-alert: var(--tone-caution-wash);
+  --scalar-background-danger: var(--tone-critical-wash);
+
+  --scalar-button-1: var(--accent);
+  --scalar-button-1-hover: var(--accent-2);
+  --scalar-button-1-color: var(--accent-ink);
+
+  --scalar-tooltip-background: var(--surface);
+  --scalar-tooltip-color: var(--ink);
+  --scalar-shadow-1: var(--shadow-sm);
+  --scalar-shadow-2: var(--shadow-pop);
+  --scalar-scrollbar-color: var(--line-strong);
+  --scalar-scrollbar-color-active: var(--muted-2);
+  /* A raised layer is a lighter surface in HQ, never a brightened one. */
+  --scalar-lifted-brightness: 1;
+  --scalar-backdrop-brightness: 1;
+
+  /* The sidebar is navigation, so it is drawn as the header is: on the
+     surface, muted until pointed at, the open section tinted. */
+  --scalar-sidebar-background-1: var(--surface);
+  --scalar-sidebar-border-color: var(--line);
+  --scalar-sidebar-color-1: var(--ink);
+  --scalar-sidebar-color-2: var(--muted);
+  --scalar-sidebar-color-active: var(--ink);
+  --scalar-sidebar-item-hover-background: var(--bg-tint);
+  --scalar-sidebar-item-hover-color: var(--ink);
+  --scalar-sidebar-item-active-background: var(--bg-tint);
+  --scalar-sidebar-indent-border: var(--line);
+  --scalar-sidebar-indent-border-hover: var(--line-strong);
+  --scalar-sidebar-indent-border-active: var(--accent);
+  --scalar-sidebar-search-background: var(--surface-2);
+  --scalar-sidebar-search-border-color: var(--line);
+  --scalar-sidebar-search-color: var(--muted);
+}
+
+/* The viewer's own utilities are unlayered and scoped two classes deep, so a
+   rule that takes something away names one class more. */
+
+/* The trail bar names the section in view only when that section sits two
+   levels deep; for every other section the viewer falls back to the first
+   such trail in the document, which describes nothing on screen. The sidebar
+   already marks the section in view, so the bar is not drawn. */
+.api-reference .scalar-app .context-bar { display: none; }
+
+/* What is left of the sidebar's foot once its controls are configured away is
+   a link out to the vendor. */
+.api-reference .scalar-app .darklight-reference { display: none; }
+
+/* A group has no operations of its own: its section is its heading, over the
+   domains it holds, with no empty list beside it. */
+.api-reference .scalar-app .endpoints-card:not(:has(a)) { display: none; }
+
+/* One sample language is offered, so there is nothing to choose between. */
+.api-reference .scalar-app .scalar-reference-intro-clients { display: none; }
+
+@media print {
+  /* Paper has no navigation: the sidebar and the bar that opens it are not
+     printed, and the content takes the sheet. */
+  .api-reference .scalar-app .t-doc__sidebar,
+  .api-reference .scalar-app .references-header { display: none; }
+}
+
+/* Without script nothing is loading; the page says where the document is. */
+@media (scripting: none) {
+  .api-reference-loading { display: none; }
+}

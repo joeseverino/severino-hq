@@ -93,6 +93,11 @@
   --route-band-4: light-dark(#3f9268, #62bc8d);
   --route-band-5: light-dark(#0e7f9c, #42b3cf);
 
+  /* Typefaces: one for reading, one for anything read character by
+     character. Named so a vendored widget can be handed the same two. */
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
   /* Space scale: the even rungs only. An odd value is drift, since a one-pixel
      change to padding is visible in a dense table in a way a half-pixel change
      to type is not. 1px is deliberately absent: it is a hairline rule, not a
@@ -309,7 +314,7 @@ html, body { margin: 0; padding: 0; }
    overruns, so equal type needs this. */
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
+  font-family: var(--font);
   font-size: var(--text-md);
   line-height: 1.5;
   color: var(--ink);
@@ -324,7 +329,7 @@ body {
 }
 a { color: var(--accent-2); text-decoration: none; }
 a:hover { color: var(--accent); text-decoration: underline; }
-code { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; background: var(--bg-tint); padding: 1px var(--space-2); border-radius: 4px; color: var(--ink-2); }
+code { font-family: var(--font-mono); font-size: .88em; background: var(--bg-tint); padding: 1px var(--space-2); border-radius: 4px; color: var(--ink-2); }
 pre code { background: transparent; padding: 0; color: inherit; }
 /* A chip that is a link reads as one: the link colour, underlined on hover. */
 a code { color: var(--accent-2); }
@@ -1080,7 +1085,7 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 .zone-switch-note { font-size: var(--text-2xs); font-weight: 500; opacity: 0.75; }
 /* A record's value is data, not prose: an IPv4 address broken across lines to
    fit a narrow column is unreadable, and the table already scrolls. */
-.zone-value { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--text-xs); overflow-wrap: normal; }
+.zone-value { font-family: var(--font-mono); font-size: var(--text-xs); overflow-wrap: normal; }
 /* A status pill is a label, not a paragraph: wrapped, it grows the row it sits
    in. The table already scrolls horizontally, so the label stays whole. */
 .data-table .pill { white-space: nowrap; }
@@ -4094,7 +4099,7 @@ kbd {
   flex: 1 1 auto;
   min-width: 0;
   padding: var(--space-3) 0;
-  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   overflow-wrap: anywhere;
 }
 
@@ -4153,7 +4158,7 @@ kbd {
    file. Monospace because it is structured text where alignment carries
    meaning, and nowrap-free so long lines wrap rather than hide. */
 textarea.code {
-  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-xs); line-height: 1.5; tab-size: 2;
 }
 
@@ -4745,7 +4750,7 @@ textarea.code {
 .topology-relation-kind {
   grid-area: 2 / 3 / 3 / 4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: var(--text-3xs); color: var(--muted-2);
-  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 .topology-relation .pill { flex: 0 0 auto; }
 .btn.compact { min-height: 30px; padding: var(--space-2) var(--space-4); font-size: var(--text-xs); }

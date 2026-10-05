@@ -252,9 +252,11 @@
     {% block content %}{% endblock %}
   </main>
 
+  {% block site_footer %}
   <footer class="site-footer">
     <span>{{ SITE_NAME }} · Unauthorized Access is Strictly Prohibited</span>
   </footer>
+  {% endblock %}
 
   {% if user.is_authenticated %}
     {% comment %}

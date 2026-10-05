@@ -22,6 +22,7 @@ from django.urls import reverse
 from jsonschema import ValidationError
 
 from hq.platform.application.capabilities import capability_registry, describe_capabilities
+from hq.platform.application.domains import all_domains
 from hq.platform.application.resources import resource_registry
 
 from . import openapi, views
@@ -149,6 +150,46 @@ class DocumentTests(SimpleTestCase):
         projects = self.document["paths"]["/api/v2/resources/projects/"]["get"]
         self.assertEqual(projects["tags"], ["hq.projects", "api.v2"])
         self.assertEqual(tags["hq.projects"]["parent"], "nav.build")
+
+    def test_tags_stand_in_the_order_of_the_bar(self):
+        """A group where its first domain is, its domains after it, the rest in place."""
+
+        domains = {domain.id: domain for domain in all_domains()}
+        tags = self.document["tags"]
+        self.assertEqual(tags[0]["name"], openapi.API_TAG)
+        placed = [tag["name"] for tag in tags if tag["name"] in domains]
+        self.assertEqual(
+            placed,
+            sorted(placed, key=lambda name: (domains[name].bar_order, domains[name].label)),
+        )
+        seen: list[str] = []
+        for tag in tags:
+            if "parent" in tag:
+                self.assertIn(tag["parent"], seen)
+            seen.append(tag["name"])
+        groups = [tag["name"] for tag in tags if tag["name"].startswith("nav.")]
+        parents = [tag["parent"] for tag in tags if "parent" in tag]
+        self.assertEqual(groups, list(dict.fromkeys(parents)))
+
+    def test_every_operation_has_a_name_short_enough_for_a_sidebar(self):
+        """A summary is a title; the sentence about it is the description."""
+
+        for path, item in self.document["paths"].items():
+            for method, operation in item.items():
+                with self.subTest(path=path, method=method):
+                    self.assertLessEqual(len(operation["summary"]), 48)
+                    self.assertFalse(operation["summary"].endswith("."))
+
+    def test_only_nav_tags_are_sections(self):
+        """A badge marks operations; a viewer is told not to list it as a section."""
+
+        for tag in self.document["tags"][1:]:
+            with self.subTest(tag=tag["name"]):
+                self.assertEqual(tag.get("x-scalar-ignore", False), tag["kind"] != "nav")
+        badges = [tag["name"] for tag in self.document["tags"] if tag.get("kind") == "badge"]
+        self.assertEqual(badges, [openapi.VERSION_TAG])
+        for _, _, operation in _operations(self.document):
+            self.assertNotIn(operation["tags"][0], badges)
 
     def test_local_schema_definitions_are_hoisted(self):
         components = openapi._Components()

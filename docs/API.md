@@ -122,6 +122,36 @@ curl -s https://hq.example.com/api/v2/capabilities/example.import/ \
 | `GET` | `/api/v2/topology/` | The permitted live graph, optionally narrowed by lens or a bounded dependency trace |
 | `GET` | `/api/v2/findings/` | Evidence-backed claims with stable IDs, causal rollups, authorized remedies, and derived understand → act → verify workflows |
 
+### The reference
+
+`/api/docs/` (System > API) renders the document for the signed-in operator in
+a vendored viewer (`static/vendor/scalar`, pinned in `UPSTREAM`). It is a
+reference, not a client:
+
+- **Structure** is the document's own tags, nothing page-specific. Tags stand
+  in the order of HQ's navigation: a group (`kind: nav`) where its first
+  domain is, each domain under it by `parent`, a domain outside every group
+  in its own place. The version tag is a badge (`kind: badge`) and carries
+  `x-scalar-ignore`, the form the viewer reads, so it is no section.
+- **Appearance** is HQ's tokens, handed to the viewer's theme variables by
+  `static/css/api-reference.css`. That sheet holds no colour, size or face of
+  its own, and both of the viewer's modes take the same tokens, so the page
+  follows the operator's theme (`data-theme` on `<html>`, else the system's)
+  with no toggle of its own.
+- **No request is sent from the page.** The API takes a bearer token from the
+  identity provider and never the browser session, so the viewer's request
+  client and its token field are off. Samples are curl, written against the
+  origin serving the page; the generated CLI and TypeScript client are the way
+  to call the API.
+- **Search** covers the reference only and says so; ⌘K stays HQ's.
+- **Nothing is fetched from, or links to, the vendor.** The policy is HQ's
+  minus Trusted Types, which the viewer cannot satisfy.
+
+`hq/platform/api/test_reference.py` holds the configuration and the sheet to
+the bundle (every option and variable is one the bundle reads, every sample
+target it ships is hidden but curl), and `ReferenceBrowserTests` in the browser
+gate holds what is drawn. After replacing the bundle, both say what moved.
+
 `/api/` is exempt from the session-login redirect but **not** from
 authentication. An anonymous request gets `401` with a `WWW-Authenticate`
 header, never a 302 to an HTML login page: a Shortcut cannot fill one in, and

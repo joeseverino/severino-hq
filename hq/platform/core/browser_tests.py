@@ -16,6 +16,7 @@ core/tests/test_browser_selectors.py fails when one names nothing the templates
 render. JavaScript below queries by tag only.
 """
 
+import json
 import mimetypes
 import os
 import tempfile
@@ -23,9 +24,11 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.contrib.staticfiles import finders
 from django.db import transaction
-from django.test import SimpleTestCase
+from django.test import Client, SimpleTestCase
+from django.urls import reverse
 
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES, build_dense_estate, render_dense_pages
 from hq.platform.core.tests.test_browser_fixtures import PAGES, build_estate, render_pages
@@ -88,6 +91,8 @@ SELECTORS = {
     "tile_detached": "dialog, [data-menu], .topology-map",
     # A disclosure in the page, which the tile check opens to lay out.
     "disclosure": "main details:not([data-menu])",
+    # Where the API reference mounts its viewer.
+    "reference": "#api-reference-root",
     # A band's cells. Stats inside a card are the one band laid out with real
     # gaps instead of padded cells, so the KPI band is not listed.
     "band_cell": (
@@ -675,20 +680,27 @@ _ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr')].map((row) => 
 }))"""
 
 
-class LayoutBrowserTests(SimpleTestCase):
+class BrowserGate(SimpleTestCase):
+    """A browser over pages rendered once, every request answered locally.
+
+    A subclass says what it renders (``render``); the browser then asks only
+    for those paths and for static files.
+    """
+
     databases = {"default"}
+
+    @classmethod
+    def render(cls):
+        """Path to response body, for every page this class opens."""
+
+        raise NotImplementedError
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
         # Rendered, and rolled back, before the browser starts: Django refuses
         # database access while Playwright's event loop runs on this thread.
-        with transaction.atomic():
-            cls.pages = render_pages(build_estate())
-            transaction.set_rollback(True)
-        with transaction.atomic():
-            cls.pages |= render_dense_pages(build_dense_estate())
-            transaction.set_rollback(True)
+        cls.pages = cls.render()
         try:
             from playwright.sync_api import sync_playwright
         except ImportError as exc:
@@ -731,7 +743,9 @@ class LayoutBrowserTests(SimpleTestCase):
         path = urlsplit(route.request.url).path
         name = path.strip("/")
         if name in self.pages:
-            route.fulfill(content_type="text/html", body=self.pages[name])
+            route.fulfill(
+                content_type=mimetypes.guess_type(name)[0] or "text/html", body=self.pages[name]
+            )
             return
         if path.startswith(settings.STATIC_URL):
             asset = finders.find(path.removeprefix(settings.STATIC_URL))
@@ -757,6 +771,18 @@ class LayoutBrowserTests(SimpleTestCase):
     def open(self, name, width):
         self.page.set_viewport_size({"width": width, "height": 900})
         self.page.goto(f"{ORIGIN}/{name}/", wait_until="load")
+
+
+class LayoutBrowserTests(BrowserGate):
+    @classmethod
+    def render(cls):
+        with transaction.atomic():
+            pages = render_pages(build_estate())
+            transaction.set_rollback(True)
+        with transaction.atomic():
+            pages |= render_dense_pages(build_dense_estate())
+            transaction.set_rollback(True)
+        return pages
 
     def each(self, check):
         """Run ``check(name)`` on every page at every width, one subtest each."""
@@ -1135,3 +1161,259 @@ class LayoutBrowserTests(SimpleTestCase):
             self.assertEqual(self.page.evaluate(_UNPADDED_CELLS, SELECTORS["band_cell"]), [])
 
         self.across(check)
+
+
+# The API reference: a vendored viewer mounted inside HQ's frame. Its markup is
+# the vendor's, so the probes below find it by tag and ARIA, never by class.
+REFERENCE = "api/docs"
+REFERENCE_DARK = "api/docs/dark"
+# Where the viewer keeps its sidebar open beside the content.
+REFERENCE_DESKTOP = (1024, 1360)
+REFERENCE_PHONE = 375
+# The viewer is one large script: parsing it takes longer than a page's load.
+REFERENCE_READY = 30_000
+_REFERENCE_MOUNTED = "() => document.querySelector('main main h1') !== null"
+# The sidebar as drawn: each top-level entry, and what stands under a group.
+_REFERENCE_OUTLINE = """() => [...document.querySelectorAll('aside > ul > li')].map((item) => {
+  const said = (el) => el.textContent.trim();
+  const link = item.querySelector(':scope > a, :scope > div > a');
+  if (link) return [link.getAttribute('href'), said(link), []];
+  return ['', [...item.children].filter((part) => part.tagName !== 'UL').map(said).join(''),
+    [...item.querySelectorAll(':scope > ul > li > div > a')].map(said)];
+})"""
+# What stands over HQ's header, what of the viewer's is pinned under it, and
+# any trail the viewer is showing.
+_REFERENCE_FRAME = """(root) => {
+  const header = document.querySelector('header');
+  const bar = header.getBoundingClientRect();
+  const over = [0.05, 0.25, 0.5, 0.75, 0.95]
+    .map((share) => document.elementFromPoint(bar.left + bar.width * share, bar.top + bar.height / 2))
+    .filter((el) => !header.contains(el))
+    .map((el) => el.tagName.toLowerCase());
+  const pinned = [...document.querySelector(root).querySelectorAll('aside, nav, header, [data-scalar-scroll-header]')]
+    .filter((el) => el.checkVisibility() && ['sticky', 'fixed'].includes(getComputedStyle(el).position))
+    .map((el) => [el.tagName.toLowerCase(), Math.round(el.getBoundingClientRect().top)])
+    .filter(([, top]) => top < Math.round(bar.bottom) - 1);
+  const trails = [...document.querySelectorAll('nav[aria-label="Breadcrumb"]')]
+    .filter((el) => el.checkVisibility())
+    .map((el) => el.textContent.trim());
+  return {header: Math.round(bar.top), over, pinned, trails,
+    sideways: document.documentElement.scrollWidth - document.documentElement.clientWidth};
+}"""
+# What the viewer paints, beside what HQ paints.
+_REFERENCE_PAINT = """() => {
+  const behind = (el) => {
+    for (let up = el; up; up = up.parentElement) {
+      const colour = getComputedStyle(up).backgroundColor;
+      if (!/rgba\\(0, 0, 0, 0\\)|transparent/.test(colour)) return colour;
+    }
+    return '';
+  };
+  const title = document.querySelector('main main h1');
+  const page = getComputedStyle(document.body);
+  return {
+    mode: document.body.className,
+    page: page.backgroundColor, viewer: behind(title),
+    ink: page.color, title: getComputedStyle(title).color,
+    face: page.fontFamily, title_face: getComputedStyle(title).fontFamily,
+    header: behind(document.querySelector('header')), sidebar: behind(document.querySelector('aside')),
+  };
+}"""
+_REFERENCE_CHROME = """() => ({
+  said: document.querySelector('main').innerText,
+  leaves: [...document.querySelectorAll('main a[href]')]
+    .filter((a) => a.origin !== location.origin && a.checkVisibility())
+    .map((a) => a.href),
+  search: document.querySelector('aside button').innerText,
+})"""
+_REFERENCE_FOLLOW = """(title) => {
+  const link = [...document.querySelectorAll('aside a[href]')]
+    .find((a) => a.textContent.trim().startsWith(title));
+  if (!link) return false;
+  link.click();
+  return true;
+}"""
+_REFERENCE_HEADING = """(title) => {
+  const heading = [...document.querySelectorAll('main main h2, main main h3')]
+    .find((h) => h.textContent.includes(title) && h.checkVisibility());
+  if (!heading) return null;
+  return {top: Math.round(heading.getBoundingClientRect().top),
+    floor: Math.round(document.querySelector('header').getBoundingClientRect().bottom),
+    window: innerHeight, hash: location.hash};
+}"""
+_REFERENCE_OPEN_MENU = "(root) => document.querySelector(root).querySelector('header button').click()"
+
+
+def reference_outline(document):
+    """The sidebar HQ's own document declares: groups, and the domains under each."""
+
+    under: dict[str, list[str]] = {}
+    for tag in document["tags"]:
+        if "parent" in tag:
+            under.setdefault(tag["parent"], []).append(tag["summary"])
+    return [
+        [tag["summary"], under.get(tag["name"], [])]
+        for tag in document["tags"]
+        if "parent" not in tag and tag.get("kind") != "badge"
+    ]
+
+
+class ReferenceBrowserTests(BrowserGate):
+    """The API reference reads as a page of HQ's, at every width and in both themes."""
+
+    @classmethod
+    def render(cls):
+        with transaction.atomic():
+            client = Client()
+            client.force_login(get_user_model().objects.create_user(username="operator"))
+            document = reverse("hq_api:openapi")
+            page = reverse("api_reference:reference")
+            # The document the viewer reads, and the count the header asks for.
+            pages = {
+                url.strip("/"): client.get(url).content.decode()
+                for url in (page, document, reverse("action_item_count"))
+            }
+            client.post(reverse("theme"), {"theme": "dark"})
+            pages[REFERENCE_DARK] = client.get(page).content.decode()
+            transaction.set_rollback(True)
+        cls.document = json.loads(pages[document.strip("/")])
+        return pages
+
+    def start(self, **options):
+        options.setdefault("java_script_enabled", True)
+        super().start(**options)
+        self.errors = []
+        self.requests = []
+        self.refused = []
+        self.page.on("pageerror", lambda error: self.errors.append(str(error)))
+        self.page.on(
+            "console",
+            lambda message: self.errors.append(message.text) if message.type == "error" else None,
+        )
+        self.page.on("request", lambda request: self.requests.append(request.url))
+        self.page.on(
+            "response",
+            lambda response: self.refused.append(response.url) if response.status >= 400 else None,
+        )
+
+    def visit(self, width, name=REFERENCE, fragment=""):
+        self.page.set_viewport_size({"width": width, "height": 900})
+        self.page.goto(f"{ORIGIN}/{name}/{fragment}", wait_until="load")
+        self.page.wait_for_function(_REFERENCE_MOUNTED, timeout=REFERENCE_READY)
+
+    def frame(self):
+        return self.page.evaluate(_REFERENCE_FRAME, SELECTORS["reference"])
+
+    def assert_framed(self, frame):
+        """HQ's header on top, the viewer's pinned parts below it, no trail, no sideways scroll."""
+
+        self.assertEqual(frame["header"], 0)
+        self.assertEqual(frame["over"], [])
+        self.assertEqual(frame["pinned"], [])
+        self.assertEqual(frame["trails"], [])
+        self.assertLessEqual(frame["sideways"], 1)
+
+    def test_the_sidebar_is_hqs_navigation(self):
+        """The groups and domains the document declares, in its order, and nothing else:
+        no section for the version badge, none for the schemas."""
+
+        self.visit(1360)
+        drawn = [
+            [title, under]
+            for href, title, under in self.page.evaluate(_REFERENCE_OUTLINE)
+            if not href.startswith("#description")
+        ]
+        self.assertEqual(drawn, reference_outline(self.document))
+        self.assertTrue(any(under for _, under in drawn))
+
+    def test_the_header_is_never_covered_and_no_trail_is_shown(self):
+        for width in REFERENCE_DESKTOP:
+            self.visit(width)
+            height = self.page.evaluate("() => document.documentElement.scrollHeight")
+            for offset in (0, 600, height // 2, height):
+                with self.subTest(width=width, offset=offset):
+                    self.page.evaluate("(y) => window.scrollTo(0, y)", offset)
+                    self.page.wait_for_timeout(150)
+                    self.assert_framed(self.frame())
+
+    def test_a_phone_reaches_the_sidebar_under_the_header(self):
+        self.visit(REFERENCE_PHONE)
+        self.assert_framed(self.frame())
+        self.page.evaluate(_REFERENCE_OPEN_MENU, SELECTORS["reference"])
+        self.page.wait_for_timeout(300)
+        self.assert_framed(self.frame())
+        entries = self.page.evaluate(_REFERENCE_OUTLINE)
+        self.assertGreater(len(entries), 1)
+
+    def assert_painted_as_hq(self, paint, mode):
+        self.assertIn(mode, paint["mode"].split())
+        self.assertEqual(paint["viewer"], paint["page"])
+        self.assertEqual(paint["sidebar"], paint["header"])
+        self.assertEqual(paint["title"], paint["ink"])
+        self.assertEqual(paint["title_face"], paint["face"])
+
+    def test_both_themes_are_painted_from_hqs_tokens(self):
+        """The system's theme when none is chosen, the chosen one when it is."""
+
+        painted = {}
+        for scheme in ("light", "dark"):
+            with self.subTest(scheme=scheme):
+                self.start(color_scheme=scheme)
+                self.visit(1360)
+                painted[scheme] = self.page.evaluate(_REFERENCE_PAINT)
+                self.assert_painted_as_hq(painted[scheme], f"{scheme}-mode")
+                report = self.page.evaluate(
+                    _CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_TEXT_CONTRAST]
+                )
+                self.assertGreater(report["sampled"], 0)
+                self.assertEqual(report["found"], [])
+        self.assertNotEqual(painted["light"]["page"], painted["dark"]["page"])
+        with self.subTest(chosen="dark", system="light"):
+            self.start(color_scheme="light")
+            self.visit(1360, REFERENCE_DARK)
+            self.assertEqual(self.page.evaluate(_REFERENCE_PAINT), painted["dark"])
+
+    def test_the_viewer_offers_only_what_works_here(self):
+        """One search that says it is the reference's, no request sent from the page,
+        no token asked for, no way out to the vendor, and nothing fetched from it."""
+
+        self.visit(1360)
+        chrome = self.page.evaluate(_REFERENCE_CHROME)
+        for words in ("Test Request", "Bearer Token", "Open API Client", "Powered by", "Client Libraries"):
+            with self.subTest(words=words):
+                self.assertNotIn(words, chrome["said"])
+        self.assertEqual(chrome["leaves"], [])
+        self.assertIn("Search the reference", chrome["search"])
+        self.assertFalse(chrome["search"].strip().lower().endswith("k"))
+        self.assertEqual([url for url in self.requests if not url.startswith(ORIGIN)], [])
+        self.assertEqual(self.refused, [])
+        self.assertEqual(self.errors, [])
+
+    def test_a_link_to_an_operation_survives_a_reload(self):
+        tag = next(tag for tag in self.document["tags"] if "parent" in tag)
+        title = next(
+            operation["summary"]
+            for item in self.document["paths"].values()
+            for operation in item.values()
+            if operation["tags"][0] == tag["name"]
+        )
+
+        def landed():
+            self.page.wait_for_timeout(1500)
+            heading = self.page.evaluate(_REFERENCE_HEADING, title)
+            self.assertIsNotNone(heading)
+            self.assertGreaterEqual(heading["top"], heading["floor"])
+            self.assertLess(heading["top"], heading["window"] * 0.6)
+            return heading["hash"]
+
+        self.visit(1360)
+        self.assertTrue(self.page.evaluate(_REFERENCE_FOLLOW, tag["summary"]))
+        self.page.wait_for_timeout(500)
+        self.assertTrue(self.page.evaluate(_REFERENCE_FOLLOW, title))
+        fragment = landed()
+        self.assertNotEqual(fragment, "")
+        self.page.reload(wait_until="load")
+        self.page.wait_for_function(_REFERENCE_MOUNTED, timeout=REFERENCE_READY)
+        self.assertEqual(landed(), fragment)
+        self.assertEqual(self.refused, [])
+        self.assertEqual(self.errors, [])
