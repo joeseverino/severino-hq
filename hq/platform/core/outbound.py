@@ -122,6 +122,10 @@ def allowed(name: str) -> Iterator[None]:
 
     if name not in ALLOWED:
         raise ValueError(f"{name!r} is not an outbound exception HQ declares.")
+    # A page fetched on a guess asks nothing outside the process.
+    from . import speculation
+
+    speculation.refuse(f"it reaches outside the process ({name})")
     token = _allowed.set(name)
     try:
         yield

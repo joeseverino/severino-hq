@@ -26,7 +26,9 @@ as not exercised, with ``UNSAFE``'s reason where there is one.
 
 from __future__ import annotations
 
+import functools
 import json
+import re
 import statistics
 import time
 from collections import Counter
@@ -53,6 +55,7 @@ SKIPPED = {
     "health_live": "probe",
     "health_ready": "probe",
     "csp_report": "browser report sink",
+    "speculation_rules": "the browser's rule document",
     "login": "signed out",
     "logout": "signed out",
     "oidc_authentication_callback": "identity provider handshake",
@@ -313,18 +316,50 @@ def _machine_client() -> Iterator[dict[str, str]]:
         yield {"Authorization": "Bearer bench"}
 
 
-def _measure(client: Client, page: str, url: str, rounds: int) -> tuple[Result, list[str]]:
+# A region that names the part of its page it is: `data-fragment` (its
+# address; empty for the page it is on), then `data-fragment-name`.
+_PART = re.compile(
+    r'\bdata-fragment(?:="([^"]*)")?(?=\s)[^>]*?\bdata-fragment-name="(\w+)"'
+)
+
+
+def _asked_again(client: Client, page: str, url: str) -> list[tuple[str, str, dict[str, str]]]:
+    """The narrower questions a browser asks of ``url`` after loading it.
+
+    Each part the page says it answers by name, asked for alone, and the page
+    asked about with the validator it handed out. Read from the response, so a
+    page that gains a part or a validator is measured without being listed.
+    """
+
+    response = client.get(url)
+    if response.status_code != 200:
+        return []
+    body = response.getvalue().decode(errors="replace")
+    path = url.split("?")[0]
+    again = [
+        (f"{page} #{name}", url, {"X-Fragment": name})
+        for name in sorted({name for address, name in _PART.findall(body) if address in ("", path)})
+    ]
+    if "ETag" in response:
+        again.append((f"{page}, validator presented", url, {"If-None-Match": response["ETag"]}))
+    return again
+
+
+def _measure(
+    client: Client, page: str, url: str, rounds: int, headers: dict[str, str] | None = None
+) -> tuple[Result, list[str]]:
+    get = functools.partial(client.get, url, headers=headers)
     for _ in range(3):
-        response = client.get(url)
+        response = get()
     times = []
     for _ in range(rounds):
         started = time.perf_counter()
-        response = client.get(url)
+        response = get()
         # A streamed body is part of what the page costs.
         size = len(response.getvalue())
         times.append((time.perf_counter() - started) * 1000)
     with counting() as (ran, _served), CaptureQueriesContext(connection) as captured:
-        client.get(url).getvalue()
+        get().getvalue()
     statements = [query["sql"] for query in captured.captured_queries]
     times.sort()
     return (
@@ -375,10 +410,15 @@ class Command(BaseCommand):
         with _machine_client() as headers:
             client = Client(headers=headers, raise_request_exception=False)
             client.force_login(seeded.user)
+            wanted = [(page, url, None) for page, url in pages if options["only"] in page]
+            asked = [
+                again
+                for page, url, _ in wanted
+                for again in _asked_again(client, page, url)
+            ]
             results = [
-                self._said(options, *_measure(client, page, url, options["rounds"]))
-                for page, url in pages
-                if options["only"] in page
+                self._said(options, *_measure(client, page, url, options["rounds"], headers))
+                for page, url, headers in wanted + asked
             ]
             with _held_outside():
                 results += [

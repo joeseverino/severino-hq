@@ -1662,3 +1662,95 @@ class RequestNeverWaitsTests(SimpleTestCase):
         for retired in ("data-job=", "data-visit-refresh", "data-job-note", "data-visit-status"):
             self.assertNotIn(retired, script + templates)
         self.assertEqual(script.count("[data-ask][data-ask-status]"), 1)
+
+
+class FragmentPrimitiveTests(SimpleTestCase):
+    """Reads are one component: `static/js/fragment.js` and the part it asks for.
+
+    A script that parses a response itself, or keeps its own timer to ask
+    again, is a second fetch-and-swap with its own focus, session and failure
+    behaviour. Both are refused here, so the next read is an attribute on an
+    element rather than a function in a page's script.
+    """
+
+    ROOT = Path(__file__).resolve().parents[4]
+    PRIMITIVE = "fragment.js"
+    # What only the primitive does: turn a response into markup, and ask again
+    # on a timer.
+    REFUSED = {
+        "reads a response body as text": r"\.text\(\)",
+        "parses markup": r"DOMParser|parseFromString|insertAdjacentHTML|\.innerHTML\b|\.outerHTML\s*=",
+        "keeps its own interval": r"\bsetInterval\(",
+        "sleeps in a loop": r"setTimeout\(\s*resolve\b",
+        "opens its own stream": r"\bEventSource\b|\bXMLHttpRequest\(",
+        "fetches outside the session boundary": r"(?<![\w.])fetch\(|window\.fetch\(",
+    }
+    # The attributes of the hand-rolled reads the primitive replaced.
+    RETIRED = (
+        "data-deferred",
+        "data-live-form",
+        "data-whatif",
+        "data-connection-source",
+        "data-connection-slot",
+        "data-dashboard-glance",
+        "data-calendar-source",
+        "X-Command-Center",
+    )
+
+    def scripts(self) -> dict[str, str]:
+        found = {
+            path.name: path.read_text(encoding="utf-8")
+            for path in sorted((self.ROOT / "static" / "js").glob("*.js"))
+        }
+        self.assertIn(self.PRIMITIVE, found)
+        self.assertGreater(len(found), 1)
+        return found
+
+    def test_only_the_primitive_parses_a_response_or_asks_again_on_a_timer(self):
+        for name, source in self.scripts().items():
+            if name == self.PRIMITIVE:
+                continue
+            for what, pattern in self.REFUSED.items():
+                with self.subTest(script=name, rule=what):
+                    self.assertIsNone(
+                        re.search(pattern, source),
+                        f"{name} {what}; a read is a `data-fragment` region or "
+                        "`hqFragment.swap`, and a poll is `hqEvery`",
+                    )
+
+    def test_the_primitive_is_one_fetch_one_parser_and_one_timer(self):
+        source = self.scripts()[self.PRIMITIVE]
+
+        self.assertEqual(source.count("window.fetch("), 1)
+        self.assertEqual(source.count("parseFromString("), 1)
+        self.assertEqual(source.count("window.setTimeout("), 1)
+        self.assertNotIn("setInterval(", source)
+        # The parser is not handed out: nothing outside the closure can reach it.
+        self.assertIn("return { swap, reveal, fail };", source)
+        self.assertFalse(re.search(r"window\.\w+\s*=\s*parse\b", source), "the parser left the closure")
+
+    def test_the_primitive_loads_before_the_scripts_that_use_it(self):
+        base = (self.ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+        order = [base.index(f"js/{name}") for name in (self.PRIMITIVE, "app.js", "tables.js")]
+
+        self.assertEqual(order, sorted(order))
+
+    def test_every_part_a_template_names_is_one_a_template_defines(self):
+        sources = [
+            path.read_text(encoding="utf-8")
+            for path in sorted((self.ROOT / "templates").rglob("*.html"))
+        ]
+        named = {name for text in sources for name in re.findall(r'data-fragment-name="(\w+)"', text)}
+        defined = {name for text in sources for name in re.findall(r"{% partialdef (\w+)", text)}
+
+        self.assertTrue(named)
+        self.assertEqual(named - defined, set())
+
+    def test_the_reads_it_replaced_stay_gone(self):
+        texts = dict(self.scripts())
+        for path in sorted((self.ROOT / "templates").rglob("*.html")):
+            texts[str(path.relative_to(self.ROOT))] = path.read_text(encoding="utf-8")
+        for name, text in texts.items():
+            for retired in self.RETIRED:
+                with self.subTest(file=name, retired=retired):
+                    self.assertNotIn(retired, text)

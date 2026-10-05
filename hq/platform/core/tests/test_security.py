@@ -948,7 +948,7 @@ class BrowserBoundaryTests(TestCase):
                 with self.subTest(file=name, sink=sink):
                     self.assertLessEqual(
                         text.count(f"{sink}("),
-                        1 if name == "app.js" else 0,
+                        1 if name == "fragment.js" else 0,
                         f"{name} reaches a Trusted Types sink outside the helper",
                     )
 
@@ -958,9 +958,10 @@ class BrowserBoundaryTests(TestCase):
         root = Path(__file__).resolve().parents[4] / "static" / "js"
         sources = {path.name: path.read_text("utf-8") for path in root.glob("*.js")}
 
-        self.assertEqual(sources["app.js"].count("window.fetch("), 1)
-        self.assertNotIn("fetch(", sources["tables.js"])
-        self.assertIn("window.hqFetch(", sources["tables.js"])
+        self.assertEqual(sources["fragment.js"].count("window.fetch("), 1)
+        for name in ("app.js", "tables.js"):
+            self.assertNotIn("window.fetch(", sources[name], name)
+            self.assertNotRegex(sources[name], r"(?<![\w.])fetch\(", name)
 
     def test_the_policy_names_somewhere_to_report_a_violation(self):
         response = self.client.get("/accounts/login/")

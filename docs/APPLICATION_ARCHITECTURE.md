@@ -287,6 +287,33 @@ queue's reader and once for the operator's.
 stored page at two sizes with no derivation run, and the derivations a change
 costs.
 
+### A part of a page
+
+A page that changes one region does not fetch itself to do it. The region
+asks for its part by name (`X-Fragment`), the view renders that
+`{% partialdef %}` of the page's template, and a part whose inputs are known
+by revision answers "unchanged" with 304 (`hq.platform.application.fragments`;
+`docs/DESIGN.md` has the contract). `bench_pages` reads each page it requests
+for the parts it names and the validator it hands out, and measures those
+beside the page, so a new part is measured without being listed.
+
+Measured 2026-10-04 on an 8 GB M3, Python 3.13, scale 1.0, 15 rounds (median
+ms, queries, kilobytes). "Page" is what the same interaction fetched when it
+took the whole document.
+
+| Interaction | Page | Part | Queries | KB |
+| --- | ---: | ---: | --- | --- |
+| Dashboard: page the month | 53.8 | 20.6 | 44 to 12 | 166.6 to 72.5 |
+| Dashboard: save the links | 53.8 | 9.6 | 44 to 9 | 166.6 to 31.9 |
+| Dashboard: a glance poll that finds nothing written | 2.7 | 0.6 (304) | 6 to 3 | 1.8 to 0 |
+| Calendar: page the month, check a source | 27.0 | 21.2 | 14 to 12 | 92.7 to 77.5 |
+| Connection dialog | 14.2 | 10.2 | 12 to 10 | 43.9 to 29.0 |
+| Policy test, asked again | 21.5 | 14.3 | 14 to 12 | 18.1 to 0.1 |
+
+`hq/platform/application/tests/test_fragments.py` holds the dashboard to
+composing only the part asked for, and the poll to answering 304 until
+something is written.
+
 ### Derived once per change
 
 The topology, the service catalogue, the findings and the action queue are

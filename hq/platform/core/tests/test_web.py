@@ -591,7 +591,7 @@ class SearchPageTests(_AuthedTestCase):
             response = self.client.get(
                 "/search/",
                 {"q": "certificate"},
-                HTTP_X_COMMAND_CENTER="palette",
+                HTTP_X_FRAGMENT="palette",
             )
 
         content = response.content.decode()
@@ -614,7 +614,7 @@ class SearchPageTests(_AuthedTestCase):
         response = self.client.get(
             "/search/",
             {"q": "Palette record target"},
-            HTTP_X_COMMAND_CENTER="palette",
+            HTTP_X_FRAGMENT="palette",
         )
 
         content = response.content.decode()
@@ -631,7 +631,7 @@ class SearchPageTests(_AuthedTestCase):
         response = self.client.get(
             "/search/",
             {"q": "Palette content target"},
-            HTTP_X_COMMAND_CENTER="palette",
+            HTTP_X_FRAGMENT="palette",
         )
 
         content = response.content.decode()
@@ -849,7 +849,10 @@ class DashboardWorkflowTests(_AuthedTestCase):
         # so no card appears and then changes.
         self.assertContains(page, "One call")
         self.assertContains(page, "3 unread")
-        self.assertNotContains(page, "data-deferred")
+        # Inside the page itself; the connection dialog every page carries
+        # reads only when it is opened.
+        main = page.content.decode().split("<main", 1)[1].split("</main>", 1)[0]
+        self.assertNotIn("data-fragment-load", main)
 
     def test_an_empty_contact_feed_draws_no_card(self):
         with patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page called D1")):
@@ -869,7 +872,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertContains(page, found.summary)
         self.assertContains(page, found.transport)
         # It opens the panel, and is a plain link to it without script.
-        self.assertContains(page, 'data-connection-source="%s"' % reverse("connection"))
+        self.assertContains(page, 'data-modal-open="connection"')
 
     def test_dashboard_routes_infrastructure_findings_to_their_evidence(self):
         from hq.domains.control_plane.models import ManagedResource

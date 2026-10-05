@@ -260,6 +260,22 @@ def table_revisions(tables: frozenset[str] | tuple[str, ...]) -> tuple[int, ...]
     return None if found is None else found.of(sorted(tables))
 
 
+def every_revision() -> str | None:
+    """One key that moves when any counted table is written; None when not kept.
+
+    For an answer assembled from more tables than it is worth naming: it is
+    "unchanged" only while nothing at all was written.
+    """
+
+    from hq.platform.core.revisions import read
+
+    found = read_once("derivation.revisions", read)
+    if found is None:
+        return None
+    counts = found.of(sorted(found.counts))
+    return None if counts is None else ".".join(map(str, counts))
+
+
 def _store():
     from django.core.cache import caches
 

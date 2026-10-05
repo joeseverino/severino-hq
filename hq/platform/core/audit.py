@@ -20,6 +20,7 @@ from uuid import UUID
 from django.db.models.signals import post_delete, post_init, post_save
 from django.dispatch import receiver
 
+from . import speculation
 from .facets import as_metadata as facet_metadata
 from .middleware import get_current_user
 from .models import AuditLog
@@ -330,6 +331,9 @@ def record_event(
     without its audit record would violate their contract.
     """
 
+    # A page fetched on a guess does nothing worth recording, so it does not
+    # get as far as recording it.
+    speculation.refuse("it does something the audit log records")
     user = user or get_current_user()
     if user is not None and not getattr(user, "is_authenticated", False):
         user = None

@@ -1,0 +1,52 @@
+{% comment %}
+The answer to the policy test. The tailnet page answers it alone as its
+`whatif` part, so asking again from the dialog costs one part, not a page.
+{% endcomment %}
+<div id="whatif-result" data-fragment="{% url 'control_plane:tailnet' %}" data-fragment-name="whatif">
+{% if verdict %}
+  <p class="verdict">
+    <span class="pill pill-{% if not verdict.known %}unprobed{% elif verdict.allowed %}reachable{% else %}unreachable{% endif %}">{{ verdict.label }}</span>
+    {{ verdict.detail }}
+  </p>
+  {% if verdict.rules %}
+    {% comment %}
+    The rule, not only its conclusion. An answer an operator cannot trace back
+    to a line of policy is one they have to take on faith, and the next thing
+    they want is to go and change it.
+    {% endcomment %}
+    <table class="data-table compact-table">
+      <thead><tr><th>Rule</th><th>Admits</th><th>To</th></tr></thead>
+      <tbody>
+        {% for rule in verdict.rules %}
+          <tr>
+            <td>{% if rule.line %}line {{ rule.line }}{% else %}{% empty_value %}{% endif %}</td>
+            <td>{% for who in rule.who %}<code>{{ who }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+            <td>{% for to in rule.to %}<code>{{ to }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+  {% if proposal and policy_declaration %}
+    {% comment %}
+    The refusal and the fix, together. Nobody reads "not allowed" and stops
+    there: the next question is always what it would take, so the grant that
+    would allow it is written out in the policy's own terms and the editor is
+    one click away. It is not applied here: changing the tailnet's access
+    policy is a decision, not a side effect of asking a question.
+    {% endcomment %}
+    <p class="muted">Grant needed to allow it:</p>
+    <table class="data-table compact-table">
+      <thead><tr><th>From</th><th>To</th><th>On</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>{% for src in proposal.src %}<code>{{ src }}</code>{% endfor %}</td>
+          <td>{% for dst in proposal.dst %}<code>{{ dst }}</code>{% endfor %}</td>
+          <td>{% for ip in proposal.ip %}<code>{{ ip }}</code>{% endfor %}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><a class="btn" href="{% url 'control_plane:edit' policy_declaration %}">Open the policy editor &rarr;</a></p>
+  {% endif %}
+{% endif %}
+</div>

@@ -87,9 +87,10 @@ class PublicAddressViewTests(TestCase):
         self.assertRedirects(response, reverse("connection"), fetch_redirect_response=False)
         look.assert_not_called()
 
-    def test_the_connection_panel_loads_the_fragment_through_the_deferred_loader(self):
+    def test_the_connection_panel_loads_the_fragment_as_a_placeholder(self):
         from django.template.loader import get_template
 
         source = get_template("core/_connection_panel.html").template.source
-        self.assertIn('data-deferred="{% url \'tool_public_address\' %}?address=', source)
-        self.assertIn("data-deferred-failure=", source)
+        self.assertIn('data-fragment="{% url \'tool_public_address\' %}?address=', source)
+        self.assertIn("data-fragment-load", source)
+        self.assertIn("data-fragment-failure=", source)

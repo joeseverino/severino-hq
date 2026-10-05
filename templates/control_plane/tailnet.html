@@ -156,5 +156,6 @@
   {% include "partials/_empty_state.html" with message="Tailnet policy not read yet." %}
 {% endif %}
 
+{% partialdef whatif %}{% include "control_plane/_whatif_result.html" %}{% endpartialdef %}
 {% include "partials/_modal.html" with id="whatif" title="Policy test" lede="Check whether the policy allows a connection. Tailscale evaluates it." body_template="control_plane/_whatif_form.html" %}
 {% endblock %}

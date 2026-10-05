@@ -1,56 +1,16 @@
 "use strict";
 
-// The one place in HQ where a string becomes markup.
-//
-// Progressive enhancement here is server-rendered HTML: a fragment is fetched
-// and swapped in, so parsing a response is unavoidable, and
-// `DOMParser.parseFromString` is a Trusted Types sink, which is exactly the
-// point. The content policy names one policy and does not allow duplicates,
-// so this is the only one that can ever exist on the page. Every other sink
-// still throws, and script that gets itself onto the page cannot mint the
-// permission to reach one, because the name is already taken and the object
-// below is not reachable from anywhere else.
-//
-// What it accepts is narrow by construction rather than by inspection: every
-// caller passes the body of a same-origin response HQ itself rendered. A
-// string from anywhere else has no route to here.
-const hqParseDocument = (() => {
-  let policy = { createHTML: (html) => html };
-  try {
-    policy = window.trustedTypes.createPolicy("hq-fragment", {
-      createHTML: (html) => html,
-    });
-  } catch {
-    // A browser without Trusted Types, or a policy already created. Parsing
-    // still has to work either way; where the browser does enforce, the
-    // pass-through is what the sink refuses.
-  }
-  return (html) =>
-    new DOMParser().parseFromString(policy.createHTML(html), "text/html");
-})();
-
-// Every enhanced request crosses the session boundary the same way. When an
-// OIDC session needs renewal, the server returns the provider URL instead of
-// letting fetch follow a cross-origin redirect that CSP correctly blocks.
-// `renewSession` decides whether a request is allowed to take the page away.
-// A request the operator made can: they asked for something, and renewing is
-// the way to get it. A background one must not: the provider returns to the
-// address that triggered the renewal, so a renewing background fetch would
-// land the operator on the JSON that fetch wanted.
-const hqFetch = async (input, options = {}) => {
-  const { renewSession = true, ...rest } = options;
-  const headers = new Headers(rest.headers);
-  headers.set("X-Requested-With", "XMLHttpRequest");
-  const response = await window.fetch(input, { ...rest, headers });
-  const refreshUrl =
-    response.status === 403 ? response.headers.get("refresh_url") : "";
-  if (refreshUrl && renewSession) {
-    window.location.assign(refreshUrl);
-    return new Promise(() => {});
-  }
-  return response;
-};
-window.hqFetch = hqFetch;
+// Moving between pages fades (`@view-transition` in the stylesheet). A
+// transition the browser gives up on, because the window changed size or the
+// page was hidden, is not an error: the page is simply shown.
+["pagereveal", "pageswap"].forEach((type) =>
+  window.addEventListener(type, (event) => {
+    const transition = event.viewTransition;
+    [transition?.ready, transition?.finished, transition?.updateCallbackDone].forEach((step) =>
+      step?.catch(() => {}),
+    );
+  }),
+);
 
 // Disclosure menus that dismiss on an outside click or Escape. One selector
 // covers every such menu, so adding another is handled by construction rather
@@ -457,6 +417,8 @@ document.addEventListener("click", (event) => {
     if (typeof dialog?.showModal === "function") {
       event.preventDefault();
       dialog.showModal();
+      // What the dialog holds back until it is open is fetched now.
+      hqFragment.reveal(dialog);
     }
     return;
   }
@@ -483,7 +445,6 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
   let results = form.querySelector("[data-command-center-results]");
   let options = [];
   let activeIndex = -1;
-  let requestController;
   let debounceTimer;
 
   const setActive = (index, { scroll = true } = {}) => {
@@ -520,55 +481,15 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
   };
 
   const load = async () => {
-    requestController?.abort();
-    requestController = new AbortController();
     const url = new URL(form.action, window.location.href);
     if (input.value.trim()) url.searchParams.set("q", input.value.trim());
-    form.classList.add("is-loading");
     try {
-      const response = await hqFetch(url, {
-        credentials: "same-origin",
-        headers: { "X-Command-Center": "palette" },
-        signal: requestController.signal,
-      });
-      const next = hqParseDocument(await response.text()).querySelector(
-        "[data-command-center-results]",
-      );
-      if (!next) {
-        // Not a results fragment: almost always the sign-in page after the
-        // session ended underneath an open tab. Say so rather than sit on
-        // "Loading".
-        results.replaceChildren();
-        const message = document.createElement("p");
-        message.className = "notice notice-attention";
-        const signIn =
-          response.redirected &&
-          new URL(response.url).pathname.startsWith("/accounts/login/");
-        if (signIn) {
-          message.textContent = "Your session has ended. ";
-          const link = document.createElement("a");
-          link.href = response.url;
-          link.textContent = "Sign in again";
-          message.append(link);
-        } else {
-          message.textContent = "Could not load results. Press Enter to search.";
-        }
-        results.append(message);
-        return;
-      }
-      results.replaceWith(next);
-      results = next;
+      await hqFragment.swap(results, { url });
+      results = form.querySelector("[data-command-center-results]");
       bindResults();
     } catch (error) {
-      if (error.name !== "AbortError") {
-        results.replaceChildren();
-        const message = document.createElement("p");
-        message.className = "notice notice-attention";
-        message.textContent = "Could not load results. Press Enter to search.";
-        results.append(message);
-      }
-    } finally {
-      form.classList.remove("is-loading");
+      // Typing on makes its own request; the one it replaced is not a failure.
+      if (error.name !== "AbortError") hqFragment.fail(results, error);
     }
   };
 
@@ -601,7 +522,6 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
   });
   dialog?.addEventListener("close", () => {
     input.setAttribute("aria-expanded", "false");
-    requestController?.abort();
     clearTimeout(debounceTimer);
     setActive(-1, { scroll: false });
   });
@@ -626,157 +546,6 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
     window.location.assign(active.href);
   });
 });
-
-// One muted line in a connection-style row list: the failure row every loader
-// here shows.
-const hqNoteRow = (text) => {
-  const row = document.createElement("div");
-  row.className = "conn-row";
-  const note = document.createElement("span");
-  note.className = "conn-row-note";
-  note.textContent = text;
-  row.append(note);
-  return row;
-};
-
-// A panel whose content comes from somewhere slow is fetched after the page, so
-// the page never waits on it; one inside a closed disclosure is fetched when
-// the disclosure opens, so the page never carries what nobody opened. An empty
-// answer leaves nothing behind. A failed one shows the slot's
-// `data-deferred-failure` line if it has one, and otherwise leaves whatever the
-// slot held for a page without script.
-const hqLoadDeferred = async (slot) => {
-  if (slot.dataset.deferredLoading) return;
-  slot.dataset.deferredLoading = "true";
-  const failure = slot.dataset.deferredFailure;
-  try {
-    const response = await hqFetch(slot.dataset.deferred, {
-      credentials: "same-origin",
-      renewSession: false,
-    });
-    if (!response.ok) {
-      if (failure) slot.replaceChildren(hqNoteRow(failure));
-      return;
-    }
-    const panel = hqParseDocument(await response.text()).body;
-    slot.replaceWith(...panel.childNodes);
-  } catch (_error) {
-    if (failure) slot.replaceChildren(hqNoteRow(failure));
-    else if (!slot.childElementCount) slot.remove();
-  }
-};
-document.querySelectorAll("[data-deferred]").forEach((slot) => {
-  if (!slot.closest("details:not([open])")) hqLoadDeferred(slot);
-});
-document.addEventListener(
-  "toggle",
-  (event) => {
-    const disclosure = event.target;
-    if (!(disclosure instanceof HTMLDetailsElement) || !disclosure.open) return;
-    disclosure.querySelectorAll("[data-deferred]").forEach((slot) => {
-      if (slot.closest("details:not([open])") === null) hqLoadDeferred(slot);
-    });
-  },
-  true,
-);
-
-// At-a-glance readings are refreshed on request. The button posts a refresh of
-// every panel; opening the page on a due reading posts one for the due
-// panels only. Either way the current reading stays up, marked as refreshing,
-// and this follows the controller's answer in place until it lands, the page
-// is hidden, or a few minutes pass. Reading the glance never requests anything.
-const GLANCE_POLL_MS = 3000;
-const GLANCE_POLL_LIMIT_MS = 180_000;
-const hqBindDashboardGlance = (root) => {
-  const form = root.querySelector("[data-dashboard-glance-refresh]");
-  if (!form || form.dataset.bound === "true") return;
-  form.dataset.bound = "true";
-
-  const replace = async (current, response) => {
-    const next = hqParseDocument(await response.text()).querySelector(
-      "[data-dashboard-glance]",
-    );
-    if (!next) return current;
-    const currentPanels = current.querySelector(".glance-panels");
-    const nextPanels = next.querySelector(".glance-panels");
-    if (!currentPanels || !nextPanels) return current;
-    // Only a panel that changed is swapped, so a poll that finds nothing new
-    // leaves the page exactly as it was, and an open popover stays open.
-    const shown = new Map(
-      [...currentPanels.querySelectorAll("[data-panel]")].map((panel) => [panel.dataset.panel, panel]),
-    );
-    const order = (panels) => [...panels.querySelectorAll("[data-panel]")].map((panel) => panel.dataset.panel).join();
-    const markup = (panel) => {
-      const copy = panel.cloneNode(true);
-      copy.removeAttribute("open");
-      return copy.outerHTML;
-    };
-    nextPanels.querySelectorAll("[data-panel]").forEach((panel) => {
-      const was = shown.get(panel.dataset.panel);
-      if (was) panel.open = was.open;
-    });
-    if (order(currentPanels) !== order(nextPanels)) {
-      currentPanels.replaceWith(nextPanels);
-      return current;
-    }
-    nextPanels.querySelectorAll("[data-panel]").forEach((panel) => {
-      const was = shown.get(panel.dataset.panel);
-      if (markup(was) !== markup(panel)) was.replaceWith(panel);
-    });
-    return current;
-  };
-
-  // Only a refresh someone asked for spins the button; the one a due reading
-  // starts on load shows on the panel's own dot.
-  const follow = async (firstResponse, { asked = false } = {}) => {
-    let current = root;
-    if (asked) current.classList.add("is-loading");
-    current.setAttribute("aria-busy", "true");
-    try {
-      current = await replace(current, await firstResponse());
-      const until = Date.now() + GLANCE_POLL_LIMIT_MS;
-      while (
-        current.querySelector("[data-refreshing]") &&
-        Date.now() < until &&
-        document.visibilityState === "visible"
-      ) {
-        await new Promise((resolve) => window.setTimeout(resolve, GLANCE_POLL_MS));
-        current = await replace(
-          current,
-          // A tick is not a request to leave the page.
-          await hqFetch(current.dataset.source, {
-            credentials: "same-origin",
-            renewSession: false,
-          }),
-        );
-      }
-    } catch (_error) {
-      const status = current.querySelector("[data-dashboard-glance-status]");
-      if (status) status.textContent = "At-a-glance refresh failed.";
-    } finally {
-      current.classList.remove("is-loading");
-      current.removeAttribute("aria-busy");
-    }
-  };
-
-  const post = (fields, options) => {
-    const body = new FormData(form);
-    Object.entries(fields).forEach(([name, value]) => body.set(name, value));
-    return hqFetch(form.action, { method: "POST", body, credentials: "same-origin", ...options });
-  };
-
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    follow(() => post({}), { asked: true });
-  });
-
-  if (root.querySelector(".glance-panel.is-due")) {
-    // Opening the page is not a request to stay signed in.
-    follow(() => post({ scope: "stale" }, { renewSession: false }));
-  }
-};
-
-document.querySelectorAll("[data-dashboard-glance]").forEach(hqBindDashboardGlance);
 
 // Dropzones. The file input already is the click and drop target, so this adds
 // only what the browser will not: the drag highlight, and telling the operator
@@ -914,8 +683,9 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
 //   [data-ask-elapsed] ticks beside it, outside the region
 //
 // Polling rather than a socket: one small question every couple of seconds
-// while something is live. A persistent connection would be a second transport
-// to run and secure for a question that fits in a query.
+// while something is live, asked by the one loop every poll shares (`hqEvery`).
+// A persistent connection would be a second transport to run and secure for a
+// question that fits in a query.
 (() => {
   const POLL_MS = 2000;
   // A tab nobody is looking at should not spend the night asking.
@@ -933,7 +703,6 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
     document.addEventListener(type, () => { touched = true; }, { once: true, passive: true, capture: true }),
   );
   const showing = () => document.visibilityState === "visible";
-  const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
   const elapsed = (seconds) => {
     if (seconds < 60) return `${seconds} s`;
@@ -945,7 +714,7 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
     const since = Number(control.dataset.askSince || 0);
     slot.textContent = since ? elapsed(Math.max(0, Math.round((Date.now() - since) / 1000))) : "";
   };
-  window.setInterval(() => document.querySelectorAll("[data-ask][data-ask-since]").forEach(tick), 1000);
+  hqEvery(() => document.querySelectorAll("[data-ask][data-ask-since]").forEach(tick), { ms: 1000 });
 
   const say = (control, text) => {
     const note = control.querySelector("[data-ask-note]");
@@ -1022,16 +791,8 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   };
 
   // The named part of this page as the server draws it now, swapped in place.
-  const refresh = async (selector) => {
-    const response = await hqFetch(window.location.href, { credentials: "same-origin", renewSession: false });
-    if (!response.ok) throw new Error("no page");
-    const next = hqParseDocument(await response.text());
-    const fresh = [...next.querySelectorAll(selector)];
-    const shown = [...document.querySelectorAll(selector)];
-    if (!fresh.length || fresh.length !== shown.length) throw new Error("no region");
-    shown.forEach((region, index) => region.replaceWith(fresh[index]));
-    resume(document);
-  };
+  // Nobody pressed anything for it, so it never takes the page away.
+  const refresh = (selector) => hqFragment.swap([selector], { renew: false });
 
   const land = async (control, standing) => {
     draw(control, standing);
@@ -1047,39 +808,35 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
     }
   };
 
-  const follow = async (url) => {
-    const until = Date.now() + FOLLOW_LIMIT_MS;
+  const follow = (url) => {
     const controls = () => following.get(url) || new Set();
-    try {
-      while (Date.now() < until) {
-        await wait(showing() ? POLL_MS : HIDDEN_POLL_MS);
-        let standing = null;
-        try {
-          const response = await hqFetch(url, { credentials: "same-origin", renewSession: false });
-          // Gone or refused is an end; anything else is a container
-          // restarting under us, which will answer again.
-          if (response.status === 404 || response.status === 403) break;
-          if (response.ok) standing = await response.json();
-        } catch (_error) {
-          standing = null;
-        }
-        if (!standing) continue;
+    const end = () => {
+      controls().forEach((control) => draw(control, { state: "idle", live: false, note: "" }));
+      following.delete(url);
+      return false;
+    };
+    hqEvery(
+      async () => {
+        const response = await hqFetch(url, { credentials: "same-origin", renewSession: false });
+        // Gone or refused is an end; anything else is a container restarting
+        // under us, which will answer again.
+        if (response.status === 404 || response.status === 403) return end();
+        if (!response.ok) throw new Error(String(response.status));
+        const standing = await response.json();
         if (standing.live) {
           controls().forEach((control) => draw(control, standing));
-          continue;
+          return true;
         }
         const waiting = [...controls()];
         following.delete(url);
         // One control lands it, so one fetch refreshes the page; the rest
         // only say so.
         waiting.slice(1).forEach((control) => draw(control, standing));
-        if (waiting.length) await land(waiting[0], standing);
-        return;
-      }
-      controls().forEach((control) => draw(control, { state: "idle", live: false, note: "" }));
-    } finally {
-      following.delete(url);
-    }
+        if (waiting.length) await land(waiting[0], standing).catch(() => {});
+        return false;
+      },
+      { ms: POLL_MS, hiddenMs: HIDDEN_POLL_MS, limitMs: FOLLOW_LIMIT_MS, expired: end },
+    );
   };
 
   const watch = (control, url) => {
@@ -1160,75 +917,8 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   resume(document);
   askAuto();
   document.addEventListener("visibilitychange", askAuto);
-})();
-
-// Calendar paging without a page load. The links and forms work on their own:
-// this only replaces the calendar in place so the rest of the page, the scroll
-// position and the keyboard focus stay where they were. A card swaps itself;
-// the calendar page swaps its whole region, so the month, the day and the
-// list of calendars always agree.
-(() => {
-  const region = (element) => element.closest("[data-calendar], .calendar-card");
-
-  const swap = async (element, url, init = {}) => {
-    const current = region(element);
-    if (!current || !current.id) return false;
-    // X-Fragment asks the view for the card alone, without building the rest
-    // of the page.
-    const response = await hqFetch(url, {
-      credentials: "same-origin",
-      headers: { "X-Fragment": "calendar" },
-      ...init,
-    });
-    if (!response.ok) return false;
-    const parsed = hqParseDocument(await response.text());
-    const next = parsed.getElementById(current.id);
-    if (!next) return false;
-    const focused = document.activeElement;
-    const key = focused && current.contains(focused)
-      ? focused.getAttribute("href") || focused.closest("form")?.getAttribute("action")
-      : null;
-    current.replaceWith(next);
-    // replaceState, not pushState: paging months is not a place worth putting
-    // between the operator and the Back button.
-    history.replaceState(null, "", response.redirected ? response.url : url);
-    if (key) {
-      next.querySelector(`[href="${CSS.escape(key)}"], form[action="${CSS.escape(key)}"] button`)?.focus();
-    }
-    return true;
-  };
-
-  const fallback = (url) => {
-    window.location.href = url;
-  };
-
-  document.addEventListener("click", (event) => {
-    const link = event.target.closest(".calendar-nav a, [data-calendar] a[href]");
-    if (!link || event.metaKey || event.ctrlKey || event.shiftKey) return;
-    // Within the calendar, only what opens the calendar again opens in place:
-    // a record's own page is a page.
-    if (link.closest("[data-calendar]") && new URL(link.href).pathname !== window.location.pathname) return;
-    event.preventDefault();
-    // Any failure falls through to the ordinary navigation the link already is.
-    swap(link, link.href)
-      .then((done) => {
-        if (!done) fallback(link.href);
-      })
-      .catch(() => fallback(link.href));
-  });
-
-  // Checking a calendar: the form posts, the server redirects back to the
-  // month, and that page is what replaces this one.
-  document.addEventListener("submit", (event) => {
-    const form = event.target.closest("[data-calendar] form[data-calendar-source]");
-    if (!form) return;
-    event.preventDefault();
-    swap(form, form.action, { method: "POST", body: new FormData(form) })
-      .then((done) => {
-        if (!done) form.submit();
-      })
-      .catch(() => form.submit());
-  });
+  // A part of the page drawn again may hold work already under way.
+  document.addEventListener("hq:fragment", () => resume(document));
 })();
 
 // A field shown only when another field's value calls for it:
@@ -1248,6 +938,7 @@ const hqBindWhen = (root) => {
   });
 };
 hqBindWhen(document);
+document.addEventListener("hq:fragment", (event) => hqBindWhen(event.target));
 
 // A key that works a control: any link or button carrying data-hotkey, while
 // nothing is being typed. The control stays the source of truth, so a key
@@ -1316,50 +1007,6 @@ document.querySelectorAll("form.form").forEach((form) => {
   form.addEventListener("click", () => setTimeout(review, 0));
 });
 
-// A form that saves where it stands. The markup submits normally without this
-// file, so the feature is the reload it removes rather than the saving itself:
-// a preference panel that navigates the whole page to record two checkboxes
-// throws away the scroll position and everything else on screen.
-//
-// One selector, so the next such form is handled by construction. What it
-// replaces on success is named by the form, not assumed, because "the thing
-// this edits" is not derivable from the form itself.
-document.addEventListener("submit", (event) => {
-  const form = event.target.closest("form[data-live-form]");
-  if (!form || !window.fetch) return;
-  event.preventDefault();
-  const status = form.querySelector("[data-live-status]");
-  const buttons = form.querySelectorAll("button");
-  buttons.forEach((button) => (button.disabled = true));
-  if (status) status.textContent = "Saving…";
-  hqFetch(form.action, {
-    method: "POST",
-    body: new FormData(form),
-    credentials: "same-origin",
-  })
-    .then((response) => {
-      if (!response.ok) throw new Error(String(response.status));
-      return response.text();
-    })
-    .then((html) => {
-      // The server answers with the panel it just changed, so the page shows
-      // what was stored rather than what the browser believes was stored.
-      const parsed = hqParseDocument(html);
-      const fresh = parsed.querySelector(".ext-links");
-      const current = document.querySelector(".ext-links");
-      if (fresh && current) current.replaceWith(fresh);
-      form.closest("details[data-menu]")?.removeAttribute("open");
-      form.closest("dialog")?.close();
-      if (status) status.textContent = "";
-    })
-    .catch(() => {
-      // Saying so and leaving the panel open, rather than closing over a
-      // change that did not happen.
-      if (status) status.textContent = "Could not save.";
-    })
-    .finally(() => buttons.forEach((button) => (button.disabled = false)));
-});
-
 // Cancel restores what was stored and closes, without asking the server for a
 // page it already has.
 document.addEventListener("click", (event) => {
@@ -1376,72 +1023,13 @@ document.addEventListener("click", (event) => {
   cancel.closest("details[data-menu]")?.removeAttribute("open");
 });
 
-// Reachability, answered in place. The form is a real GET to a page that
-// renders the same answer, so it works without this; what this adds is not
-// losing the dialog, the machine behind it and the scroll position on every
-// further question.
-document.addEventListener("submit", (event) => {
-  const form = event.target.closest("form[data-whatif]");
-  if (!form || !window.fetch) return;
-  const slot = form.parentElement.querySelector("[data-whatif-result]");
-  if (!slot) return;
-  event.preventDefault();
-  const query = new URLSearchParams(new FormData(form)).toString();
-  slot.setAttribute("aria-busy", "true");
-  hqFetch(`${form.action}?${query}`, {
-    credentials: "same-origin",
-  })
-    .then((response) => (response.ok ? response.text() : Promise.reject(response)))
-    .then((html) => {
-      const parsed = hqParseDocument(html);
-      const fresh = parsed.querySelector("[data-whatif-result]");
-      if (fresh) slot.replaceWith(fresh);
-    })
-    .catch(() => {
-      // The answer is a page away either way, so a failure here submits for
-      // real rather than leaving the question looking unanswered.
-      form.removeAttribute("data-whatif");
-      form.submit();
-    });
-});
-
-// The connection panel, fetched the first time it is opened. It reads the
-// tailnet inventory and evaluates the access policy, and it sits behind a
-// control on every page, so paying for it on every page render would be
-// paying for it almost always to go unread.
-document.addEventListener("click", (event) => {
-  const opener = event.target.closest("[data-connection-source]");
-  if (!opener || !window.fetch) return;
-  const dialog = document.getElementById("modal-connection");
-  const slot = dialog?.querySelector("[data-connection-slot]");
-  if (!slot) return;
-  hqFetch(opener.dataset.connectionSource, {
-    credentials: "same-origin",
-  })
-    .then((response) => (response.ok ? response.text() : Promise.reject(response)))
-    .then((html) => {
-      const panel = hqParseDocument(html).querySelector(
-        "[data-connection-panel]",
-      );
-      if (!panel) return;
-      slot.replaceWith(panel);
-      hqWatchRoundTrip(panel);
-      hqShowResponseHeaders(panel);
-    })
-    .catch(() => {
-      // The same answer is a page away, and a dialog stuck on "reading" is
-      // worse than a navigation.
-      window.location.assign(opener.dataset.connectionSource);
-    });
-});
-
 // Round trip, actually measured rather than reported. Everything else in that
 // panel is read from the last sweep and says so; this one is taken now, from
 // the browser reading it, which is the only place the number means anything.
 // It keeps sampling while the panel is open, because a peering is a live thing
 // and a single figure printed once reads like a stored one.
 const hqRoundTrip = (() => {
-  let timer = null;
+  let stopSampling = null;
 
   const sample = (endpoint) => {
     const started = performance.now();
@@ -1486,9 +1074,9 @@ const hqRoundTrip = (() => {
 
   const start = (slot, endpoint) => {
     const runs = [];
+    // Sampled by the shared loop, which leaves a hidden tab alone: nobody is
+    // reading the figure there.
     const tick = () => {
-      // A hidden tab has nobody reading the figure.
-      if (document.visibilityState !== "visible") return Promise.resolve();
       return sample(endpoint)
         .then((run) => {
           runs.push(run);
@@ -1500,13 +1088,14 @@ const hqRoundTrip = (() => {
           stop();
         });
     };
+    stop();
     tick();
-    timer = window.setInterval(tick, 3000);
+    stopSampling = hqEvery(tick, { ms: 3000 });
   };
 
   const stop = () => {
-    if (timer !== null) window.clearInterval(timer);
-    timer = null;
+    stopSampling?.();
+    stopSampling = null;
   };
 
   return { start, stop };
@@ -1523,6 +1112,14 @@ const hqWatchRoundTrip = (root) => {
 document.addEventListener("DOMContentLoaded", () => {
   const panel = document.querySelector("[data-connection-panel]");
   if (panel && !panel.closest("dialog")) hqWatchRoundTrip(panel);
+});
+
+// The panel a dialog fetched when it opened is measured the same way.
+document.addEventListener("hq:fragment", (event) => {
+  const panel = event.target.closest("[data-connection-panel]");
+  if (!panel || panel !== event.target) return;
+  hqWatchRoundTrip(panel);
+  hqShowResponseHeaders(panel);
 });
 
 document.getElementById("modal-connection")?.addEventListener("close", () => {
@@ -1557,6 +1154,17 @@ const HQ_POLICY_DIRECTIVES = [
   ["base-uri 'self'", "Injected markup cannot re-point every relative URL"],
   ["form-action 'self'", "A form cannot be made to submit somewhere else"],
 ];
+
+// One muted line in a connection-style row list.
+const hqNoteRow = (text) => {
+  const row = document.createElement("div");
+  row.className = "conn-row";
+  const note = document.createElement("span");
+  note.className = "conn-row-note";
+  note.textContent = text;
+  row.append(note);
+  return row;
+};
 
 const hqShowResponseHeaders = (root) => {
   const slot = root.querySelector("[data-response-headers]");
@@ -1613,31 +1221,6 @@ const hqShowResponseHeaders = (root) => {
       slot.replaceChildren(hqNoteRow("The response could not be read back."));
     });
 };
-
-// The address fragment loads through hqLoadDeferred when its disclosure opens
-// and serves only what HQ holds. Its button posts the lookup and swaps the
-// answer in place.
-document.addEventListener("submit", async (event) => {
-  const form = event.target.closest?.("form[data-public-address-lookup]");
-  const panel = form?.closest("[data-public-address]");
-  if (!panel) return;
-  event.preventDefault();
-  form.querySelector("button")?.setAttribute("disabled", "");
-  try {
-    const response = await hqFetch(form.action, {
-      method: "POST",
-      body: new FormData(form),
-      credentials: "same-origin",
-    });
-    const next = response.ok
-      ? hqParseDocument(await response.text()).querySelector("[data-public-address]")
-      : null;
-    if (!next) throw new Error("no answer");
-    panel.replaceWith(next);
-  } catch (_error) {
-    panel.replaceChildren(hqNoteRow("The lookup could not be reached."));
-  }
-});
 
 // The compact admission rail is an index into the evidence below it. A normal
 // link remains the no-script fallback; when enhanced, open the exact control
@@ -1699,7 +1282,6 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
   const reset = workspace.querySelector("[data-topology-reset]");
   let focused = nodes.some((node) => node.dataset.topologyNode === workspace.dataset.focus)
     ? workspace.dataset.focus : "";
-  let detailRequest = 0;
 
   const rememberFocus = (nodeId) => {
     const url = new URL(window.location.href);
@@ -1728,7 +1310,6 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
   };
 
   // The selected node's body, from the same view a focused page renders.
-  // Only the newest request lands, so quick selections never interleave.
   const loadDetail = async (node) => {
     if (!detail) return;
     if (!node) {
@@ -1741,31 +1322,18 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
       showDetail(true);
       return;
     }
-    const request = ++detailRequest;
     detail.dataset.topologyDetail = node.dataset.topologyNode;
-    detail.setAttribute("aria-busy", "true");
     showDetail(true);
     try {
-      const response = await hqFetch(node.dataset.topologyBody, {
-        credentials: "same-origin",
-        renewSession: false,
+      // The region takes its newest question only, so quick selections never
+      // interleave.
+      await hqFragment.swap(detail, { url: node.dataset.topologyBody, inner: true, renew: false });
+    } catch (error) {
+      if (error.name === "AbortError") return;
+      hqFragment.fail(detail, {
+        ...error,
+        link: { href: node.querySelector("[data-topology-select]")?.href || "#map", label: "Open details" },
       });
-      if (request !== detailRequest) return;
-      if (!response.ok) throw new Error(String(response.status));
-      const body = hqParseDocument(await response.text()).body;
-      if (request !== detailRequest) return;
-      detail.replaceChildren(...body.childNodes);
-    } catch (_error) {
-      if (request !== detailRequest) return;
-      const fallback = document.createElement("p");
-      const link = document.createElement("a");
-      link.href = node.querySelector("[data-topology-select]")?.href || "#map";
-      link.textContent = "Open details";
-      fallback.className = "muted";
-      fallback.append("Details did not load. ", link);
-      detail.replaceChildren(fallback);
-    } finally {
-      if (request === detailRequest) detail.removeAttribute("aria-busy");
     }
   };
 

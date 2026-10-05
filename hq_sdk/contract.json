@@ -684,7 +684,9 @@
         }
       },
       "PageMixin": {
-        "bases": [],
+        "bases": [
+          "FragmentMixin"
+        ],
         "constructor": [],
         "kind": "class",
         "members": {

@@ -203,16 +203,15 @@
           {% comment %}
           Places to go, after the things to set. Connection is a real link to
           the page that answers this, so it works with the dialog closed,
-          unopenable, or bookmarked. The dialog fetches the same page and
-          lifts the panel out of it. The dot carries which network this
+          unopenable, or bookmarked. The dialog asks the same page for the
+          panel alone. The dot carries which network this
           request came over; the word stays put so the control does not change
           shape depending on where you are sitting.
           {% endcomment %}
           <div class="menu-places">
             <a class="menu-item menu-item-split conn-badge-{{ CONNECTION_CHANNEL.id }}"
                href="{% url 'connection' %}"
-               data-modal-open="connection"
-               data-connection-source="{% url 'connection' %}">
+               data-modal-open="connection">
               <span>Connection</span>
               <span class="menu-item-status"><span class="conn-dot" aria-hidden="true"></span><span class="menu-item-note">{{ CONNECTION_CHANNEL.label }}</span></span>
             </a>
@@ -267,6 +266,7 @@
     {% include "partials/_modal.html" with id="connection" title="This connection" lede="How this request reached HQ, and what had to hold for it to arrive." body_template="core/_connection_loading.html" modal_class="modal-wide" %}
   {% endif %}
 
+  <script src="{% static 'js/fragment.js' %}" defer></script>
   <script src="{% static 'js/app.js' %}" defer></script>
   <script src="{% static 'js/tables.js' %}" defer></script>
   {% block scripts_extra %}{% endblock %}

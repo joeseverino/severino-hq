@@ -203,6 +203,12 @@ than styling a page.
   framework or dependency for behavior the platform already provides.
 - Keep interactions immediate, keyboard accessible, responsive, and stable
   under partial replacement. Preserve focus and browser history intentionally.
+- A part of a page that is fetched, refreshed or polled is a `data-fragment`
+  region answered from a `{% partialdef %}` (`docs/DESIGN.md`, "A read is a
+  fragment"). No script parses a response or keeps a timer of its own.
+- A GET has no effect. Pages are prefetched on press, and a speculative
+  request is refused wherever HQ records or reaches out
+  (`hq/platform/core/speculation.py`).
 - Avoid N+1 queries. Prefetch relation panels and add a query-budget regression
   test for a projection that can grow with data or plugins.
 - Scripts are deferred; shared assets are content-versioned, compressed, and

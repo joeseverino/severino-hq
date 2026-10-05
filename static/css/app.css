@@ -691,7 +691,6 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 /* A link in look: the panel's one action besides going somewhere. */
 .glance-refresh { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; color: var(--accent); font: inherit; cursor: pointer; }
 .glance-refresh:hover { border: 0; background: none; text-decoration: underline; }
-.dashboard-glance.is-loading .glance-refresh { pointer-events: none; opacity: .5; }
 
 /* A page declares its sections; the shell owns how they are traversed. Like
    the global navigation this is one row at every width, horizontally
@@ -2808,7 +2807,7 @@ a.kpi:hover { background: var(--surface-2); }
   overscroll-behavior: contain;
   scrollbar-width: thin;
 }
-.command-center-palette.is-loading .command-center-results { opacity: .62; }
+.command-center-results[aria-busy="true"] { opacity: .62; }
 .command-center-options { display: grid; gap: var(--space-5); }
 .command-center-group h3 {
   position: sticky;
@@ -4956,7 +4955,8 @@ form[data-clean] .save-bar { display: none; }
 .ask-elapsed { font-variant-numeric: tabular-nums; }
 .ask[data-ask-state="failed"] .ask-note { color: var(--danger); }
 /* Busy keeps the button focusable, so it is marked rather than disabled. */
-.ask [aria-disabled="true"] { cursor: progress; opacity: .6; }
+.ask [aria-disabled="true"],
+form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity: .6; }
 /* The dashboard's readings: how this request arrived, whether the controller
    still is, and what the estate reports. One row of equals: the same mark, the
    same lead and the same quiet line under it, spaced rather than ruled apart,
@@ -5403,4 +5403,20 @@ form[data-clean] .save-bar { display: none; }
     }
     .control-summary > .control-metric > :not(.control-label):not(strong) { flex: 1 1 100%; }
   }
+}
+
+/* Moving between pages. Both pages opt in, so a same-origin navigation fades
+   the new document in over the old instead of flashing to blank between them.
+   The header is its own layer and is not animated: the old one is dropped and
+   the new one stands at once, so only what is under it changes. Outside any
+   cascade layer: `@view-transition` is a rule about the document. Skipped
+   whole for a reader who asks for less motion, and by a browser that does not
+   know the rule. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+  .site-header { view-transition-name: site-header; }
+  ::view-transition-old(site-header) { display: none; }
+  ::view-transition-new(site-header) { animation: none; }
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation-duration: 120ms; }
 }

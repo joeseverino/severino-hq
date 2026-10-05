@@ -11,11 +11,13 @@ from django.utils import timezone
 from django.views.generic import TemplateView, View
 
 from hq.platform.application import action_items as queue_state
+from hq.platform.application import fragments
 from hq.platform.application.cadence import controller_standing
 from hq.platform.application.calendar import calendar_month, month_of
 from hq.platform.application.calendar_entries import calendar_choices
 from hq.platform.application.outward_links import link_choices, outward_links
 from hq.platform.application.dashboard import dashboard_highlights, operating_snapshot
+from hq.platform.application.derivations import every_revision
 from hq.platform.application.glance import (
     dashboard_configuration,
     dashboard_panels,
@@ -73,11 +75,44 @@ class DashboardLinkChoiceView(View):
         return redirect(safe_next(request) or reverse("dashboard"))
 
 
-class DashboardView(TemplateView):
+class DashboardView(fragments.FragmentMixin, TemplateView):
     template_name = "dashboard.html"
+
+    # A part of the dashboard asked for by name is composed alone: paging the
+    # month or saving the links reads what that card shows and nothing else.
+    def _calendar(self) -> dict:
+        today = timezone.localdate()
+        month = month_of(self.request.GET.get("month"), today)
+        return {
+            "calendar": calendar_month(
+                month, choices=calendar_choices(self.request.user), today=today
+            ),
+            "calendar_paging": {
+                "previous": f"?month={(month - timedelta(days=1)):%Y-%m}",
+                "next": f"?month={(month + timedelta(days=32)):%Y-%m}",
+                "today": "?",
+            },
+        }
+
+    def _links(self) -> dict:
+        # Consoles come from the connections a controller reported. Anything
+        # else an operator wants here is a fact about their installation and is
+        # named in their environment: an address written into this file is
+        # published to everyone who clones it and true for nobody else.
+        external_links, _ = outward_links(self.request.user)
+        return {
+            "external_links": external_links,
+            "external_choices": link_choices(self.request.user),
+        }
+
+    PARTS = {"calendar": _calendar, "links": _links}
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+        part = self.PARTS.get(fragments.requested(self.request))
+        if part is not None:
+            ctx.update(part(self))
+            return ctx
         snapshot = operating_snapshot(principal=web_principal(self.request.user))
         highlights = dashboard_highlights()
         glance = glance_context()
@@ -100,12 +135,6 @@ class DashboardView(TemplateView):
         if name := self.request.user.first_name:
             greeting = f"{greeting}, {name}"
 
-        # Consoles come from the connections a controller reported. Anything
-        # else an operator wants here is a fact about their installation and is
-        # named in their environment: an address written into this file is
-        # published to everyone who clones it and true for nobody else.
-        external_links, _ = outward_links(self.request.user)
-        external_choices = link_choices(self.request.user)
         # Projected here, not in operating_snapshot(): that snapshot is also the
         # MCP payload, and a transport contract must not carry a UI shape.
         content_rows = [
@@ -128,17 +157,9 @@ class DashboardView(TemplateView):
             for item in snapshot["recent_published"]
         ]
 
-        today = timezone.localdate()
-        month = month_of(self.request.GET.get("month"), today)
         ctx.update(
-            calendar=calendar_month(
-                month, choices=calendar_choices(self.request.user), today=today
-            ),
-            calendar_paging={
-                "previous": f"?month={(month - timedelta(days=1)):%Y-%m}",
-                "next": f"?month={(month + timedelta(days=32)):%Y-%m}",
-                "today": "?",
-            },
+            **self._calendar(),
+            **self._links(),
             greeting=greeting,
             # The reading the connection panel opens on, so the header and the
             # panel cannot disagree about a request. Rendered with the page: a
@@ -161,8 +182,6 @@ class DashboardView(TemplateView):
             published_rows=published_rows,
             active_project_count=snapshot["kpis"]["active_projects"],
             active_projects=snapshot["active_projects"],
-            external_links=external_links,
-            external_choices=external_choices,
             draft_content_count=snapshot["kpis"]["draft_content"],
             action_queue_count=action_queue_count,
             notice_count=len(told),
@@ -187,7 +206,11 @@ class DashboardGlanceView(View):
     template_name = "core/_dashboard_glance.html"
 
     def get(self, request):
-        return render(request, self.template_name, glance_context())
+        """The strip as it stands; "unchanged" to a poll while nothing was written."""
+
+        return fragments.render(
+            request, self.template_name, glance_context, revision=every_revision()
+        )
 
     def post(self, request):
         """Request a refresh: of every panel, or with ``scope=stale`` of stale ones.

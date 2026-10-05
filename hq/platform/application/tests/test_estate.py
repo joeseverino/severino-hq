@@ -132,7 +132,7 @@ class SearchFindsTheEstateTests(TestCase):
                                        spec={"name": "example-host"})
 
         response = self.client.get(
-            reverse("search"), {"q": "example-host"}, headers={"X-Command-Center": "palette"}
+            reverse("search"), {"q": "example-host"}, headers={"X-Fragment": "palette"}
         )
 
         content = response.content.decode()

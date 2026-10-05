@@ -22,6 +22,7 @@ from hq.platform.application.cadence import note_activity
 from hq.platform.application.demo import demo_scope
 
 import hq.platform.core.logging as request_logging
+from hq.platform.core import speculation
 from hq.platform.core.outbound import serving
 from hq.platform.application import request_context
 
@@ -101,8 +102,10 @@ class RequestContextMiddleware:
         try:
             # Everything a request does is held to answering from what HQ
             # holds: see `core.outbound`.
+            # A page fetched on a guess is further held to having no effect:
+            # see `core.speculation`.
             with serving(request):
-                response = self.get_response(request)
+                response = speculation.answer(request, self.get_response)
             response["X-Request-ID"] = request_id
             # Django has settings for the other browser-boundary headers but
             # not these three. HQ uses none of these APIs, and an operator
@@ -148,6 +151,12 @@ class RequestContextMiddleware:
         finally:
             request_context.unbind(bound)
             request_logging.reset_request_id(token)
+
+    def process_view(self, request, view_func, view_args, view_kwargs):
+        return speculation.before_view(request, view_func)
+
+    def process_exception(self, request, exception):
+        return speculation.on_exception(exception)
 
 
 def get_current_user():

@@ -256,7 +256,7 @@ SEVERINO_OUTBOUND_IN_REQUEST = os.environ.get("SEVERINO_OUTBOUND_IN_REQUEST", "r
 #
 # `trusted-types` names exactly one policy and does not permit duplicates. HQ's
 # progressive enhancement is server-rendered HTML swapped in, so one place does
-# have to turn a response body into markup; `hq-fragment` in `static/js/app.js`
+# have to turn a response body into markup; `hq-fragment` in `static/js/fragment.js`
 # is that place and the only one. Because the name is taken and cannot be
 # claimed twice, script that gets onto the page cannot create a policy of its
 # own to reach a sink with, which is the property that makes a single

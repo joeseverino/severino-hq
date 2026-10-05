@@ -235,7 +235,7 @@ they stay visible and stay in the same table.
         </header>
         <strong>{{ control.evidence }}</strong>
         <p>{{ control.detail }}</p>
-        {% if control.id == "edge" %}<a href="{% url 'connection' %}" data-modal-open="connection" data-connection-source="{% url 'connection' %}">Inspect request path</a>{% endif %}
+        {% if control.id == "edge" %}<a href="{% url 'connection' %}" data-modal-open="connection">Inspect request path</a>{% endif %}
       </article>
     {% endfor %}
   </div>

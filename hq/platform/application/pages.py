@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .fragments import FragmentMixin
 from .ui import PageNavigation
 
 
@@ -104,8 +105,12 @@ def record_trail(list_crumb: tuple[str, str], record, label) -> tuple[tuple[str,
     return tuple(crumbs)
 
 
-class PageMixin:
-    """Declare a page's head on the view; ``page.html`` renders it."""
+class PageMixin(FragmentMixin):
+    """Declare a page's head on the view; ``page.html`` renders it.
+
+    A page answers one named part of itself to a request that asks for it
+    (`hq.platform.application.fragments`).
+    """
 
     page_title = ""
     page_lede = ""
