@@ -247,7 +247,7 @@ run_failure() {
 # The units that start release work on their own, the controller's path unit
 # and the secret refresh among them, are stopped before anything changes and
 # each one that was active is started again.
-readonly held="severino-hq-controller.timer severino-hq-controller.path severino-hq-content-sync.timer severino-hq-secrets.timer severino-hq-script-drift.timer"
+readonly held="severino-hq-controller.timer severino-hq-controller.path severino-hq-audit-prune.timer severino-hq-contacts-inbox.timer severino-hq-content-sync.timer severino-hq-public-registry.timer severino-hq-secrets.timer severino-hq-script-drift.timer"
 line_of() { grep -n -- "$1" "${log_file}" | head -n 1 | cut -d: -f1; }
 # Each is a unit the repository ships, and the controller's every trigger is held.
 for unit in ${held}; do
@@ -255,7 +255,7 @@ for unit in ${held}; do
 done
 for trigger in "${repo_dir}"/deploy/systemd/*.timer "${repo_dir}"/deploy/systemd/*.path; do
     if grep -qx -e 'Unit=severino-hq-controller.service' -e 'Unit=severino-hq-secrets.service' \
-        -e 'Unit=severino-hq-script-drift.service' "${trigger}"; then
+        -e 'Unit=severino-hq-script-drift.service' -e 'Unit=severino-hq-job@.*\.service' "${trigger}"; then
         case " ${held} " in
             *" $(basename "${trigger}") "*) ;;
             *) echo "$(basename "${trigger}") starts release work and is not held by the deploy." >&2; exit 1 ;;

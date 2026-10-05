@@ -1,5 +1,5 @@
 {
-  "api_version": 3,
+  "api_version": 4,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -828,11 +828,61 @@
           "last="
         ]
       },
+      "derivation": {
+        "kind": "function",
+        "parameters": [
+          "name",
+          "*",
+          "reads",
+          "vary="
+        ]
+      },
+      "passed": {
+        "kind": "function",
+        "parameters": [
+          "moment",
+          "*",
+          "now="
+        ]
+      },
+      "present": {
+        "kind": "function",
+        "parameters": []
+      },
+      "reached": {
+        "kind": "function",
+        "parameters": [
+          "moment",
+          "*",
+          "now="
+        ]
+      },
       "read_once": {
         "kind": "function",
         "parameters": [
           "key",
           "loader"
+        ]
+      },
+      "since": {
+        "kind": "function",
+        "parameters": [
+          "moment",
+          "*",
+          "now="
+        ]
+      },
+      "today": {
+        "kind": "function",
+        "parameters": []
+      },
+      "whole": {
+        "kind": "function",
+        "parameters": [
+          "since",
+          "unit",
+          "*",
+          "now="
         ]
       }
     },

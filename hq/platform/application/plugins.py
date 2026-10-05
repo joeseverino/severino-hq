@@ -15,7 +15,7 @@ from hq.platform.application.routes import reverse
 
 from .ui import STATUS_VALUES, DomainOverview
 
-PLUGIN_API_VERSION = 3
+PLUGIN_API_VERSION = 4
 
 # The manifest fields plugin API 1 named runtime providers with; API 2 has the
 # single integration_provider entry point. A wheel that passes one fails in

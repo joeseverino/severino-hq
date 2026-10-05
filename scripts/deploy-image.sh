@@ -19,13 +19,13 @@ readonly lib_dir="${SEVERINO_HQ_LIB_DIR:-/usr/local/lib/severino-hq}"
 readonly sync_program="${SEVERINO_HQ_SBIN_DIR:-/usr/local/sbin}/severino-hq-sync-scripts"
 # Every unit that starts work needing the root-owned tree and the running
 # image to be one release, or that acts on the web container: the controller's
-# timer and the path unit HQ's doorbell fires, the content sync, the secret
+# timer and the path unit HQ's doorbell fires, every scheduled job, the secret
 # refresh, which restarts the web container when its environment changed, and
 # the check of the tree against the image. Each is held from before the image
 # is replaced until the release has installed itself, so nothing of the
 # previous release is started against the new image, and nothing restarts the
 # container while its health is being read.
-readonly held_units="severino-hq-controller.timer severino-hq-controller.path severino-hq-content-sync.timer severino-hq-secrets.timer severino-hq-script-drift.timer"
+readonly held_units="severino-hq-controller.timer severino-hq-controller.path severino-hq-audit-prune.timer severino-hq-contacts-inbox.timer severino-hq-content-sync.timer severino-hq-public-registry.timer severino-hq-secrets.timer severino-hq-script-drift.timer"
 # What those units start. A run already in flight is given this long to end
 # against the release it began with before the image is replaced.
 readonly held_services="severino-hq-controller.service severino-hq-secrets.service"

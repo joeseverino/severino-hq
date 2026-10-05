@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=3,
+    api_version=4,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -519,6 +519,28 @@ starts and holds its work until the test says `run()`, and
 subject to the rule, so a test that drives a view proves the view answered
 without reaching it. `example_hq_plugin` and
 `hq/platform/application/tests/test_outbound_work.py` show both.
+
+## Derived reads
+
+`hq_sdk.reads` is how an extension's page stays cheap without a cache of its
+own. `read_once` shares one read among the functions assembling a page.
+`derivation` keeps a computed fact across requests until a table it reads is
+written:
+
+```python
+from hq_sdk.reads import derivation, today
+
+@derivation("example.overview", reads=("example.Session", "example.Goal"))
+def overview():
+    return _summarise(as_of=today())
+```
+
+HQ counts writes to every model table in the writing transaction, an
+extension's included, so nothing is invalidated by hand and nothing is served
+older than its rows. A derivation reads the clock through `today`, `reached`,
+`passed`, `since` and `whole`, which also record when the answer stops being
+true. An extension does not keep a process-level cache, a `cache.set` or a
+timestamp table beside this.
 
 ## Calendar sources
 
