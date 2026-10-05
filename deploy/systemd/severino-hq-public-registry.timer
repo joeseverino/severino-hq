@@ -2,15 +2,15 @@
 Description=Daily public registry read for Severino HQ
 
 [Timer]
-# The floor, not the cadence: a new image or digest is read when a sweep finds
-# it (the .path unit). This catches what changes with no sweep to notice: a new
+# The floor, not the cadence: HQ starts the read itself when a sweep finds a new
+# image or digest. This catches what changes with no sweep to notice: a new
 # release, a new advisory, a vulnerability published against a package that
 # already runs. A run with nothing due makes no request.
 OnBootSec=10min
 OnCalendar=daily
 RandomizedDelaySec=1h
 Persistent=yes
-Unit=severino-hq-public-registry.service
+Unit=severino-hq-job@registry.refresh.service
 
 [Install]
 WantedBy=timers.target

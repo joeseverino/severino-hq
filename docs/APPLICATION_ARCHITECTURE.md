@@ -178,7 +178,7 @@ reading may be reused while one answer is assembled and is discarded when that
 scope exits, eliminating repeated joins/counts without serving process-cached
 state to a later request. The dashboard's contact rows, unread total, and
 upstream health likewise arrive from one D1 request, which
-`manage.py refresh_contacts_inbox` makes hourly
+the scheduled `contacts.inbox` job makes hourly
 (`severino-hq-contacts-inbox.timer`) and a D1 write repeats after it changes a
 submission. Pages, the header count and search read the stored result.
 
@@ -210,6 +210,13 @@ bench seeds first.
 
 Timings move with the machine; query counts do not. Compare two trees by
 running them back to back and reading the counts first.
+
+A running HQ says the same of each request. Every response carries
+`Server-Timing: app;dur=<ms>`, the application's own time, which a browser's
+network panel shows beside the request, and the access log line
+(`severino.request`, `duration_ms`) is written from the same measurement. A
+request at or over `SLOW_REQUEST_MS` (`hq/platform/core/middleware.py`) is
+logged as a warning, so it is found at any log level.
 `hq/platform/core/tests/test_page_budgets.py` pins the counts below against the
 same seed, at two sizes where a per-row read would show.
 
@@ -236,12 +243,201 @@ Measured 2026-10-04 on an 8 GB M3, Python 3.14, the lower of two paired runs
 | API `topology` | 86.3 | 68.6 | 61 | 17 |
 | API `action.items` | 104.9 | 84.8 | 70 | 26 |
 
-What remains is not query cost. The infrastructure pages spend their time
-deriving the topology, services and findings in Python on each request (SQL is
-under 5 ms of the dashboard's 121). The record forms that offer every expense
-as an option (new receipt, new documentation, new content: about 165 ms) spend
-it rendering 4,000 `<option>` elements; that is a change to the form, not to a
-query.
+The same pages once their derivations are stored (below), the audit capture is
+taken lazily and search reads the index once. Measured 2026-10-04 on the same
+machine and method: two paired runs of 15 rounds, the lower median of each
+side. The median difference between two runs of one tree was 1 ms; pages not
+listed moved by less than twice their own spread. "Derived" is how many
+derivations the measured request ran: every page between two changes of the
+estate runs none, where each ran the topology, the catalogue, the findings and
+the queue it needed.
+
+| Page | Before | After | Queries before | Queries after | Derived after |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Dashboard (`/`) | 118.6 | 45.0 | 53 | 44 | 0 |
+| Action items | 140.2 | 62.1 | 27 | 7 | 0 |
+| Action item count (header) | 83.8 | 7.4 | 25 | 5 | 0 |
+| Action item count, validator presented (304) | 83.8 | 0.6 | 25 | 3 | 0 |
+| Findings | 113.2 | 45.8 | 17 | 6 | 0 |
+| Topology | 96.3 | 41.1 | 17 | 6 | 0 |
+| Topology node | 79.8 | 20.9 | 15 | 4 | 0 |
+| Services | 59.8 | 47.3 | 16 | 14 | 0 |
+| One service | 64.2 | 26.8 | 21 | 19 | 0 |
+| One machine | 57.0 | 19.5 | 21 | 20 | 0 |
+| One resource | 51.4 | 12.7 | 20 | 18 | 0 |
+| One domain | 59.2 | 23.2 | 25 | 22 | 0 |
+| Tailnet | 73.2 | 15.2 | 19 | 14 | 0 |
+| Calendar | 36.5 | 20.8 | 16 | 14 | 0 |
+| Search (`?q=example`) | 123.3 | 47.2 | 32 | 22 | 0 |
+| Search (`?q=purchase`) | 79.6 | 27.7 | 25 | 15 | 0 |
+| Expenses, searched | 35.5 | 17.8 | 9 | 8 | 0 |
+| Audit log, searched | 47.3 | 34.0 | 8 | 7 | 0 |
+| Expenses CSV | 173.2 | 114.7 | 10 | 10 | 0 |
+| New receipt | 162.8 | 125.9 | 6 | 6 | 0 |
+| API `findings` | 78.4 | 12.4 | 17 | 6 | 0 |
+| API `topology` | 68.9 | 13.8 | 17 | 6 | 0 |
+| API `action.items` | 85.8 | 7.5 | 26 | 6 | 0 |
+
+The first request after a change derives what it needs and stores it, about
+five statements per derivation on top of the reads. One change of the estate
+costs seven derivations in all, whichever pages ask first: the queue, the
+catalogue, the relation graph, and the topology and findings once for the
+queue's reader and once for the operator's.
+`hq/platform/core/tests/test_page_budgets.py` pins both: the queries of each
+stored page at two sizes with no derivation run, and the derivations a change
+costs.
+
+### A part of a page
+
+A page that changes one region does not fetch itself to do it. The region
+asks for its part by name (`X-Fragment`), the view renders that
+`{% partialdef %}` of the page's template, and a part whose inputs are known
+by revision answers "unchanged" with 304 (`hq.platform.application.fragments`;
+`docs/DESIGN.md` has the contract). `bench_pages` reads each page it requests
+for the parts it names and the validator it hands out, and measures those
+beside the page, so a new part is measured without being listed.
+
+Measured 2026-10-04 on an 8 GB M3, Python 3.13, scale 1.0, 15 rounds (median
+ms, queries, kilobytes). "Page" is what the same interaction fetched when it
+took the whole document.
+
+| Interaction | Page | Part | Queries | KB |
+| --- | ---: | ---: | --- | --- |
+| Dashboard: page the month | 53.8 | 20.6 | 44 to 12 | 166.6 to 72.5 |
+| Dashboard: save the links | 53.8 | 9.6 | 44 to 9 | 166.6 to 31.9 |
+| Dashboard: a glance poll that finds nothing written | 2.7 | 0.6 (304) | 6 to 3 | 1.8 to 0 |
+| Calendar: page the month, check a source | 27.0 | 21.2 | 14 to 12 | 92.7 to 77.5 |
+| Connection dialog | 14.2 | 10.2 | 12 to 10 | 43.9 to 29.0 |
+| Policy test, asked again | 21.5 | 14.3 | 14 to 12 | 18.1 to 0.1 |
+
+`hq/platform/application/tests/test_fragments.py` holds the dashboard to
+composing only the part asked for, and the poll to answering 304 until
+something is written.
+
+### Derived once per change
+
+The topology, the service catalogue, the findings and the action queue are
+functions of a few tables, of who is reading, and of the clock. They are
+declared as such, once, and computed once per change of those inputs rather
+than once per request:
+
+```python
+@derivation("estate.topology", reads=ESTATE_READS, vary=estate_variant)
+def _derive(principal): ...
+```
+
+`hq.platform.application.derivations` answers a call from the projection in
+progress, then from the `derived` cache, then by running the function and
+storing what it returned. The cache is Django's database cache, in the same
+SQLite file, so every process reads one copy and a value stored inside a
+transaction commits or rolls back with the rows it was derived from. The key is
+the derivation's name, what `vary` returns for the arguments, and the revision
+of every table in `reads`.
+
+**Revisions.** `core.Revision` holds one counter per table. Three triggers on
+every model table (insert, update, delete) move it inside the writing
+statement, so `save()`, `QuerySet.update()`, `bulk_create()`, a cascade and raw
+SQL all move it, in a transaction or in autocommit, and a counter never commits
+apart from its rows. `hq.platform.core.revisions.install` puts the triggers on
+after every `migrate` (SQLite drops them when a migration rebuilds a table),
+creates the cache table and clears it, so a value derived by the previous
+build is never read by the next. Reading the revisions also reads which
+triggers exist, in one statement; a table without its triggers has no
+revision, and its derivations run on every call.
+
+**The clock.** A derivation does not read the clock. It asks `reached`,
+`passed`, `since`, `whole` or `today` (and `expiry.days_until`), and each
+answer records the moment it stops being true. A stored value carries the
+earliest such moment and is derived again after it: a certificate crosses its
+warning threshold, a reading goes stale and "3 hours ago" becomes "4 hours ago"
+on time, with no write. Ages a template prints (`|when`) are rendered per
+request from the stored timestamp.
+
+**What else it varies by.** `estate_variant`: the reader (a projection is
+narrowed to what they may see), the address and port the request reached HQ on,
+and whether HQ is in use, which sets the sweep interval a finding quotes.
+A person's pins and set-aside items are applied after the derivation.
+
+**It fails toward deriving.** Revisions that cannot be read, a missing
+trigger, an unreadable cache or a value that does not load all mean the
+function runs. A derivation that reads a table it did not declare is logged
+and never stored; one that calls another must declare the other's tables or
+the call raises. `test_derivations` holds every declared derivation to its
+`reads` over the bench estate, forbids a direct clock read inside one, and
+writes a row every way Django can to show the revision moves.
+
+The declared derivations are `estate.topology`, `estate.relations`,
+`estate.findings`, `estate.services` and `attention.queue` (the host's whole
+queue; an extension's items are gathered per request and merged in). A new one
+is a decorator and a line in `SAMPLES` in that test. `derivations.uncached()`
+runs a block with the store bypassed, for budgets on what a derivation itself
+costs.
+
+**The header's count** (`/action-items/count/`) answers a conditional request.
+Its `ETag` names the queue's key, the person, the revision of their set-aside
+rows and the second the answer stops holding; a request that presents it while
+all of that stands is answered `304` from three queries without composing the
+queue. A queue that includes an extension's items carries no validator.
+
+What a stored page still costs is its own reads and its template: the
+findings page renders 700 KB, and the record forms that offer every expense as
+an option (new receipt, new documentation, new content) render 4,000
+`<option>` elements. Those are changes to the page, not to a derivation.
+
+### What a request waits on
+
+Nothing outside the process. A page or a button answers from what HQ holds;
+work that reaches a network, starts a process or sleeps happens where waiting
+costs nobody:
+
+- **A reading of the outside world is the controller's.** It holds the
+  credentials and the egress, and reads concurrently. The web side stores a
+  read request (`hq.platform.application.cadence.request_reads`), rings the
+  doorbell and answers; the reading arrives through the sweep's ingest. A
+  reading whose provider rations calls keeps a clock of its own
+  (`ObservationSpec.every`): HQ tells the controller when it is due, and the
+  sweeps between carry it without a call. `github.profile` is the example: the
+  profile and stars behind Watching, read without a credential, at a cost the
+  bridge contract's `GitHubProfileBounds` states once.
+- **Long local work is a job** (`hq/domains/jobs/`): its own thread, progress
+  notes, a heartbeat, one live job per kind. A project's refresh is one.
+
+The request that asks answers at once, in one shape for both
+(`hq.platform.application.asks`): how the work stands, and while it is live
+the address of a status resource, with 202. `partials/_ask.html` draws the
+control and one script behaviour follows it; `docs/DESIGN.md` has the
+interaction.
+
+The rule is held by the interpreter rather than by review
+(`hq/platform/core/outbound.py`). Python raises an audit event whenever any
+library opens a connection, resolves a name, starts a process or sleeps. While
+a request is being served that event raises `OutboundInRequest`, so the call
+never leaves, whichever library made it. A place a request must wait is a named
+entry in `ALLOWED` with its reason, entered with `allowed("name")`: signing in
+(bounded by `OIDC_TIMEOUT`), a public lookup an operator asked for by name, and
+the contact submissions that exist only in the site's database.
+`RequestNeverWaitsTests` holds the entries to the places listed.
+`SEVERINO_OUTBOUND_IN_REQUEST=report` logs `outbound.in_request` and lets the
+call go, for a composition whose extensions still reach out from a request; an
+extension moves that work to `hq_sdk.jobs`.
+
+`bench_pages` measures actions as it measures pages: every route that answers a
+POST is one, `ACTIONS` names what each is posted, and one with no entry is
+listed under "Actions not exercised" with `UNSAFE`'s reason where it cannot be
+posted against a scratch database. An action is posted inside a transaction
+that is rolled back, with the doorbell unrung and a job's work held, so the
+time is the request's own. `hq/platform/core/tests/test_action_budgets.py` pins
+each converted action's queries at two sizes of estate and asserts it answers
+before the work it asked for.
+
+Measured 2026-10-04 on an 8 GB M3, Python 3.13, scale 0.25 (median ms, queries):
+
+| Action | Before | After | Queries after |
+| --- | ---: | ---: | ---: |
+| Watching: Refresh | 30,031 (production, read in the request) | 3.7 | 23 |
+| Project: Refresh | one GitHub call, and a site fetch for the index project, in the request | 2.2 | 13 |
+| Connections: Read now | answered with a redirect | 3.4 | 20 |
+| A page asking for its readings | answered as JSON | 9.5 | 17 |
 
 This is the important scaling property: a fourth interface does not create a
 fourth implementation.
@@ -268,6 +464,22 @@ cannot search are omitted from the result, not rendered empty. Contact submissio
 in Cloudflare D1, not the local database; the web view merges the stored inbox
 rows (matched by submitter name) as an eighth group beside the registry scopes.
 Email and message text are searched on the contacts page, which reads D1.
+
+Ranking is stated once, in the backend: FTS5's `rank` (bm25, lower is better),
+then object id compared as text, numbered per scope with `ROW_NUMBER()`. Every
+read is that statement. `global_search` asks it about every scope the principal
+may search in one query, keeps the first hits of each scope, and reads their
+`snippet()` from a second reference to the FTS table, because an FTS5 auxiliary
+function is only valid in the query that reads the table with `MATCH`; a scope
+with no hit costs no record fetch, and a scope the principal lacks is never in
+the statement. A searched list annotates each row with its position among those
+hits (`_search_rank`, NULL for a row that is not a hit) through a subquery whose
+ranking is materialized once, so the statement has the same three parameters
+whether three rows match or five thousand, and the list's order is the index's
+order for every match. Equal ranks are ordered by object id as text, so `10`
+precedes `9`: one rule for every scope, independent of how the index stores its
+rows. Without the FTS table there is no rank: the ORM fallback matches by
+substring and a list falls back to primary-key order.
 
 `search_index.SearchDocument` is a derived relational projection. On SQLite,
 an FTS5 external-content table indexes that projection with Unicode tokenization
@@ -455,7 +667,7 @@ everything would make the system less honest, not more unified.
 The one exception to "nothing secret" is a certificate an operator generated
 themselves and asked HQ to install. It is sealed with a key held outside the
 database, refused outright when that key is absent, read only by the controller
-through its own bridge command, and absent from every serializer. Provider
+through its own bridge action, and absent from every serializer. Provider
 credentials remain outside the web container entirely.
 
 The vault emits a validated manifest; HQ never walks the vault and never stores
@@ -749,26 +961,88 @@ types generated from `controller/api/hq-controller.openapi.json`. A Go test hold
 the registered readers equal to the contract's `SweptKind`, and Django's contract
 test holds `SweptKind` to the kinds HQ expects a sweep to read.
 
-The bridge contract is written by hand and both sides take it. What the Go
-generator does not emit (a pattern, a default) the controller reads from the
+The bridge contract is written by hand and both sides take it. The
+controller's client (every path, parameter and message type) is generated from
+it, and HQ's bridge application builds its routes and parses each request from
+the same document, so an action, a parameter or a limit exists once. What the
+Go generator does not emit (a pattern, a default) the controller reads from the
 copy embedded in its binary (`controller/api/contract.go`), and a declaration
 reads from the same file (`hq/domains/control_plane/bridge_contract.py`): the
-Caddyfile token patterns and the `github.delivery` defaults are stated there
-and nowhere else. A keyword the contract does not state stops the controller
-at start and fails the declaration's import. A vendor's base URL is the
+Caddyfile token patterns, the `github.delivery` defaults, the claim lease and
+the largest message either side accepts are stated there and nowhere else. A
+keyword the contract does not state stops the controller at start and fails
+the declaration's import. A vendor's base URL is the
 `servers` entry of its vendored description, generated as a constant.
 
 The homelab controller is a separate root-owned systemd oneshot, not a web
 process. It starts a disposable, capability-dropped container from the exact
 scanned HQ image, whose `/usr/local/bin/hq-controller` is the static Go binary
 built in the image's `controller` stage, so the host needs no toolchain and
-cannot drift from the deployed application. The binary reaches HQ through the
-same image's `manage.py infrastructure_controller` (`HQ_IN_PROCESS=1`). Provider variables, the ACME lineage, and
-deployment identities enter only that short-lived container; they never enter
-the web container. The disposable container runs as the same unprivileged UID
-as the application data owner; the root-owned systemd launcher projects
-short-lived, owner-scoped copies of its environment and SSH identities. Plan
-mode authenticates and peeks without leasing work.
+cannot drift from the deployed application. Provider variables, the ACME
+lineage, and deployment identities enter only that short-lived container; they
+never enter the web container. HQ's database and application environment never
+enter the controller's.
+
+The binary reaches HQ through the bridge: the contract's actions as HTTP on a
+Unix socket that HQ's running process serves (`SEVERINO_BRIDGE_SOCKET`). Django
+is already started, so a call costs the work it asks for and starts nothing.
+Measured with the real Django side on a development machine, one call takes
+about a millisecond and an idle applying pass of ten calls about 40 ms, where a
+process per call took 2.8 seconds and the same pass 20 to 29; on a host where
+starting Django takes seven seconds the difference is larger. `go test -bench
+BridgeCall ./runtime` and the pass in
+`hq/domains/control_plane/tests/test_bridge_live.py` reproduce it, and a budget
+in each fails if a call comes to cost a process again.
+
+- **One listener, one application.** `hq/domains/control_plane/bridge_application.py`
+  is an ASGI application of its own, served by a second listener in the web
+  process (`hq/platform/core/unix_server.py`) and given to nothing else. It is
+  not a route of the web application, it refuses a request that arrived on a
+  network listener, and it serves no web route. The controller starts no
+  process to reach HQ and has no other way to.
+- **The socket is the authorization.** It is in a directory only the web
+  account can enter (a volume of its own, mounted read-only into the
+  controller's container), it is that account's with mode 0600, and each side
+  asks the kernel who the other is (`SO_PEERCRED`): HQ drops a connection from
+  any other uid before reading it, and the controller refuses a directory, a
+  socket or a listener that is not its own account's, a link, or a wider mode.
+  No credential crosses the bridge in either direction.
+- **Bounded.** A request or an answer over the contract's `BridgeBody` size is
+  refused on both sides, every call has a deadline (`BridgeTimeout`), and a
+  refusal is an RFC 9457 problem the controller reports as a `BridgeError`.
+  A call the controller gave up on may still finish in HQ; a claim that was
+  never received expires with its lease.
+- **Held to the contract.** Every payload is validated against the schema the
+  contract declares for its operation (`bridge_contract.Operation.violation`,
+  JSON Schema 2020-12) before an action sees it, so an action reads a member
+  as the type the contract gives it and coerces nothing. A report with one
+  member that departs is refused whole with status 422 and the JSON Pointer of
+  that member, as the controller refuses an answer it cannot decode. The
+  refusal names the member and the keyword, never the value.
+- **Calls may run together.** Each runs on a thread with a database connection
+  of its own, and SQLite orders the writes: transactions begin `IMMEDIATE` and
+  a writer waits up to the busy timeout for the one ahead of it.
+- **No bridge, no pass.** While the web container is restarting or being
+  replaced there is no socket, or nothing listening on it. The pass fails with
+  that reason and the next one runs; nothing weaker is tried.
+- **Scheduled work is one more action.** What the host asks HQ for by name
+  (prune routine audit events, delete expired sessions, read the contact
+  inbox, pull the content index, read the public registries, read the unit
+  state after a failure) is declared once, in
+  `hq/platform/application/scheduled_work.py`. A unit runs
+  `hq-controller job NAME` inside the web container
+  (`severino-hq-job@.service`); the running process does the work as a job and
+  answers how it ended, so a failed job is a failed unit and every run has a
+  row. A timer asks on its schedule. A unit that fails asks for `units.read`
+  through `OnFailure=`, which has the controller read `host.unit` at once
+  (`docs/DERIVED_FACTS.md`, "The controller's own machine"). No unit starts a
+  Python process, a test holds the shipped units to the declared names, and HQ
+  starts the same job itself when it learns something is due sooner.
+
+The disposable container runs as the same unprivileged UID as the web
+process, which is what lets it reach the socket; the root-owned systemd
+launcher projects short-lived, owner-scoped copies of its connections and SSH
+identities. Plan mode authenticates and peeks without leasing work.
 Apply mode first schedules due work, then claims only explicitly supported
 kind/action pairs. The validated capability document declares which actions are
 automatic; a generic scheduler derives reconciliation for generation/health

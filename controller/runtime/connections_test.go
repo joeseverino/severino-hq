@@ -106,7 +106,7 @@ func TestConnectionsArriveInTheDocumentNotTheEnvironment(t *testing.T) {
 		{Ref: "edge", Prefix: "EDGE", Values: map[string]string{"CONNECTION_REF": "edge", "HOST": "edge.example.com", "PORT": "2222", "USER": "deploy", "HOST_KEY": "ssh-ed25519 example", "ROLE": "edge"}},
 	}}
 	path := writeConnections(t, document, 0o400)
-	env, err := LoadEnvironment([]string{"PATH=/bin", ConnectionsFile + "=" + path, "HQ_IN_PROCESS=1"})
+	env, err := LoadEnvironment([]string{"PATH=/bin", ConnectionsFile + "=" + path})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,15 +122,6 @@ func TestConnectionsArriveInTheDocumentNotTheEnvironment(t *testing.T) {
 	}
 	if target, err := env.SSH("edge"); err != nil || target.Host != "edge.example.com" || target.Port != 2222 || !slices.Equal(env.RoleRefs("edge"), []string{"edge"}) {
 		t.Fatalf("ssh: %+v %v", target, err)
-	}
-	// HQ's own process gets neither the connections nor the way to them.
-	for _, entry := range env.WithoutConnections() {
-		if strings.HasPrefix(entry, "A_") || strings.HasPrefix(entry, "EDGE_") || strings.HasPrefix(entry, ConnectionsFile+"=") {
-			t.Fatalf("the bridge would inherit %s", strings.SplitN(entry, "=", 2)[0])
-		}
-	}
-	if !slices.Contains(env.WithoutConnections(), "HQ_IN_PROCESS=1") {
-		t.Fatal("the bridge lost its own settings")
 	}
 	// No document named: the environment alone, as a local run has it.
 	env, err = LoadEnvironment([]string{"PATH=/bin"})

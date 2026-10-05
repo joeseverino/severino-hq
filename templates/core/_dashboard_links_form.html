@@ -1,4 +1,4 @@
-<form method="post" action="{% url 'dashboard_links' %}" data-live-form>
+<form method="post" action="{% url 'dashboard_links' %}" data-fragment-target="dashboard-links" data-fragment-busy="Saving…" data-fragment-failure="Could not save.">
   {% csrf_token %}
   <input type="hidden" name="next" value="{% url 'dashboard' %}">
   <ul class="ext-choices">
@@ -15,6 +15,6 @@
   <div class="ext-chooser-actions">
     <button type="submit" class="btn primary">Save</button>
     <a class="btn" href="{% url 'dashboard' %}" data-live-cancel>Cancel</a>
-    <span class="ext-chooser-status muted" data-live-status role="status"></span>
+    <span class="ext-chooser-status muted" data-fragment-status role="status"></span>
   </div>
 </form>

@@ -1,7 +1,9 @@
 """Delete routine machine audit events past their retention window.
 
 Only the (action, object type) pairs in ``core.audit.ROUTINE_EVENTS`` are
-eligible. Prints counts only.
+eligible. Prints counts only. The daily run is the ``audit.prune`` job
+(``application.scheduled_work``); this is the same work by hand, and the way
+to count what it would delete.
 """
 
 from __future__ import annotations
@@ -9,9 +11,9 @@ from __future__ import annotations
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from hq.platform.application.scheduled_work import prune_audit
 from hq.platform.application.ui import counted
-from hq.platform.core.audit import prune_routine, record_operation
-from hq.platform.core.models import AuditLog
+from hq.platform.core.audit import prune_routine
 
 
 class Command(BaseCommand):
@@ -23,7 +25,6 @@ class Command(BaseCommand):
             action="store_true",
             help="Count what would be deleted and delete nothing.",
         )
-        parser.add_argument("--batch", type=int, default=1000)
 
     def handle(self, *args, **options):
         days = int(settings.SEVERINO_AUDIT_ROUTINE_DAYS)
@@ -34,15 +35,7 @@ class Command(BaseCommand):
                 f"{counted(days, 'day')} would be deleted."
             )
             return
-        deleted = prune_routine(days=days, batch=max(1, options["batch"]))
-        if deleted:
-            record_operation(
-                "audit.prune",
-                f"Deleted {counted(deleted, 'routine event', 'routine events')} older than "
-                f"{counted(days, 'day')}.",
-                action=AuditLog.Action.DELETED,
-                metadata={"deleted": deleted, "days": days},
-            )
+        deleted = prune_audit()["deleted"]
         self.stdout.write(
             f"{counted(deleted, 'routine event', 'routine events')} older than {counted(days, 'day')} deleted."
         )

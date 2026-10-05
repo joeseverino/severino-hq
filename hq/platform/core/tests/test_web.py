@@ -58,7 +58,8 @@ User = get_user_model()
 
 
 class AuthGateTests(TestCase):
-    def test_health_probes_are_anonymous_and_operational(self):
+    @patch("hq.platform.core.health_views.collected", return_value=True)
+    def test_health_probes_are_anonymous_and_operational(self, _collected):
         live = self.client.get("/health/live/")
         ready = self.client.get("/health/ready/")
 
@@ -78,7 +79,7 @@ class AuthGateTests(TestCase):
         # What this test is for is that readiness answers anonymously and
         # reports the host as healthy. It is not for how many extensions
         # happen to be composed alongside it.
-        for name in ("database", "migrations", "storage"):
+        for name in ("database", "migrations", "storage", "assets"):
             self.assertIs(payload["checks"].get(name), True, name)
         self.assertTrue(
             all(payload["checks"].values()),
@@ -92,6 +93,39 @@ class AuthGateTests(TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["status"], "unavailable")
         self.assertFalse(response.json()["checks"]["storage"])
+
+    def test_readiness_fails_closed_without_collected_assets(self):
+        """A start collects nothing, so an image built without its assets is not ready."""
+
+        with tempfile.TemporaryDirectory() as root, override_settings(
+            DEBUG=False,
+            STATIC_LIVE=False,
+            STATIC_ROOT=root,
+            STORAGES={
+                **settings.STORAGES,
+                "staticfiles": {
+                    **settings.STORAGES["staticfiles"],
+                    "BACKEND": "hq.platform.core.static.HashedStaticStorage",
+                },
+            },
+        ):
+            empty = self.client.get("/health/ready/")
+            call_command("collectstatic", interactive=False, verbosity=0)
+            collected = self.client.get("/health/ready/")
+            modes = {path.stat().st_mode & 0o777 for path in Path(root).rglob("*") if path.is_file()}
+
+        self.assertEqual(empty.status_code, 503)
+        self.assertIs(empty.json()["checks"]["assets"], False)
+        self.assertIs(collected.json()["checks"]["assets"], True)
+        self.assertEqual(collected.status_code, 200)
+        # Root collects into the image and another account serves from it.
+        self.assertEqual(modes, {0o644})
+
+    @override_settings(STATIC_LIVE=True)
+    def test_serving_live_needs_nothing_collected(self):
+        with patch("hq.platform.core.health_views.collected", return_value=False):
+            response = self.client.get("/health/ready/")
+        self.assertIs(response.json()["checks"]["assets"], True)
 
     def test_anonymous_dashboard_redirects_to_login(self):
         response = self.client.get("/")
@@ -108,6 +142,35 @@ class AuthGateTests(TestCase):
         response = self.client.get("/accounts/login/")
         self.assertEqual(response.status_code, 200)
         self.assertRegex(response["X-Request-ID"], r"^[0-9a-f]{32}$")
+
+    def test_every_response_says_how_long_the_application_took(self):
+        with self.assertLogs("severino.request", "INFO") as logged:
+            response = self.client.get("/accounts/login/")
+        self.assertRegex(response["Server-Timing"], r"^app;dur=\d+(\.\d+)?$")
+        [record] = [record for record in logged.records if getattr(record, "event", "") == "http.request"]
+        # One measurement: the header and the access log cannot disagree.
+        self.assertEqual(response["Server-Timing"], f"app;dur={record.duration_ms}")
+        self.assertEqual((record.levelname, record.getMessage()), ("INFO", "request completed"))
+        self.assertIn("Server-Timing", self.client.get("/health/live/"))
+
+    def test_a_slow_request_is_logged_as_a_warning(self):
+        from hq.platform.core import middleware
+
+        # Two readings of the clock, a threshold apart: the request's start and its end.
+        clock = iter((100.0, 100.0 + middleware.SLOW_REQUEST_MS / 1000))
+        with (
+            patch.object(middleware, "monotonic", lambda: next(clock)),
+            self.assertLogs("severino.request", "WARNING") as logged,
+        ):
+            response = self.client.get("/health/live/")
+        [record] = logged.records
+        self.assertEqual((record.levelname, record.getMessage()), ("WARNING", "slow request"))
+        self.assertEqual((record.path, record.duration_ms), ("/health/live/", float(middleware.SLOW_REQUEST_MS)))
+        self.assertEqual(response["Server-Timing"], f"app;dur={float(middleware.SLOW_REQUEST_MS)}")
+
+    def test_a_probe_answered_in_time_is_not_logged(self):
+        with self.assertNoLogs("severino.request", "INFO"):
+            self.client.get("/health/live/")
 
     def test_login_page_enforces_native_content_security_policy(self):
         response = self.client.get("/accounts/login/")
@@ -528,7 +591,7 @@ class SearchPageTests(_AuthedTestCase):
             response = self.client.get(
                 "/search/",
                 {"q": "certificate"},
-                HTTP_X_COMMAND_CENTER="palette",
+                HTTP_X_FRAGMENT="palette",
             )
 
         content = response.content.decode()
@@ -551,7 +614,7 @@ class SearchPageTests(_AuthedTestCase):
         response = self.client.get(
             "/search/",
             {"q": "Palette record target"},
-            HTTP_X_COMMAND_CENTER="palette",
+            HTTP_X_FRAGMENT="palette",
         )
 
         content = response.content.decode()
@@ -568,7 +631,7 @@ class SearchPageTests(_AuthedTestCase):
         response = self.client.get(
             "/search/",
             {"q": "Palette content target"},
-            HTTP_X_COMMAND_CENTER="palette",
+            HTTP_X_FRAGMENT="palette",
         )
 
         content = response.content.decode()
@@ -786,7 +849,10 @@ class DashboardWorkflowTests(_AuthedTestCase):
         # so no card appears and then changes.
         self.assertContains(page, "One call")
         self.assertContains(page, "3 unread")
-        self.assertNotContains(page, "data-deferred")
+        # Inside the page itself; the connection dialog every page carries
+        # reads only when it is opened.
+        main = page.content.decode().split("<main", 1)[1].split("</main>", 1)[0]
+        self.assertNotIn("data-fragment-load", main)
 
     def test_an_empty_contact_feed_draws_no_card(self):
         with patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page called D1")):
@@ -806,7 +872,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertContains(page, found.summary)
         self.assertContains(page, found.transport)
         # It opens the panel, and is a plain link to it without script.
-        self.assertContains(page, 'data-connection-source="%s"' % reverse("connection"))
+        self.assertContains(page, 'data-modal-open="connection"')
 
     def test_dashboard_routes_infrastructure_findings_to_their_evidence(self):
         from hq.domains.control_plane.models import ManagedResource

@@ -79,7 +79,10 @@ class ControllerPageTests(TestCase):
         asked = {"resource": resource, "action": "reconcile", "requested_actor": "someone", "requested_interface": "web"}
         OperationRequest.objects.create(**asked, idempotency_key="waiting")
         OperationRequest.objects.create(
-            **asked, idempotency_key="finished", state=OperationRequest.State.SUCCEEDED
+            **asked,
+            idempotency_key="finished",
+            state=OperationRequest.State.SUCCEEDED,
+            completed_at=timezone.now(),
         )
         store("adguard.rewrite")
         ReadRequest.objects.create(kind="adguard.rewrite")

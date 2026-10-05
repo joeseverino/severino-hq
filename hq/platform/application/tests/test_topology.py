@@ -17,6 +17,7 @@ from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.control_plane.topology_views import TopologyView
 
+from hq.platform.application.derivations import uncached
 from ..action_links import topology_investigation_links, topology_url
 from ..command_center import command_center
 from ..connections import (
@@ -901,7 +902,10 @@ class TopologyLensTests(TestCase):
         self.assertEqual(unknown["summary"], whole["summary"])
 
     def test_a_lens_costs_no_extra_query(self):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with (
+            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()),
+            uncached(),
+        ):
             with CaptureQueriesContext(database_connection) as whole:
                 serialized_topology(principal=READ)
             with CaptureQueriesContext(database_connection) as narrowed:

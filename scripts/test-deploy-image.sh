@@ -1,5 +1,5 @@
 #!/bin/sh
-# Prove failed deployments restore the previously active controller timers, and
+# Prove deployments hold and restore the units that start release work, and
 # that the script refuses the inputs a sudoers rule would otherwise let a caller
 # choose.
 
@@ -75,9 +75,21 @@ exit 0
 EOF
 
 # The script runs as root and calls these directly rather than through sudo.
+# `is-active` answers from the test: every held unit is active unless named in
+# TEST_INACTIVE_UNITS, and a service is running only for the first
+# TEST_RUNS_IN_FLIGHT times it is asked about.
 cat >"${bin_dir}/systemctl" <<'EOF'
 #!/bin/sh
 echo "systemctl $*" >>"${TEST_LOG}"
+if [ "$1" = "is-active" ]; then
+    for unit do :; done
+    case " ${TEST_INACTIVE_UNITS:-} " in *" ${unit} "*) exit 3 ;; esac
+    case "${unit}" in
+        *.service)
+            asked="$(grep -c "^systemctl is-active --quiet ${unit}\$" "${TEST_LOG}")"
+            [ "${asked}" -le "${TEST_RUNS_IN_FLIGHT:-0}" ] || exit 3 ;;
+    esac
+fi
 exit 0
 EOF
 
@@ -179,6 +191,8 @@ deploy() {
         TEST_VERIFY_FAIL="${TEST_VERIFY_FAIL:-0}" \
         TEST_IMAGE_COMPOSE="${image_compose}" \
         TEST_IMAGE_SYNC="${image_sync}" \
+        TEST_INACTIVE_UNITS="${TEST_INACTIVE_UNITS:-}" \
+        TEST_RUNS_IN_FLIGHT="${TEST_RUNS_IN_FLIGHT:-0}" \
         "${repo_dir}/scripts/deploy-image.sh" "${2:-${good_image}}" </dev/null
 }
 
@@ -227,8 +241,46 @@ run_failure() {
         echo "Expected deployment to fail." >&2
         exit 1
     fi
-    grep -q "systemctl start severino-hq-controller.timer" "${log_file}"
-    grep -q "systemctl start severino-hq-content-sync.timer" "${log_file}"
+    assert_held_and_restored
+}
+
+# The units that start release work on their own, the controller's path unit
+# and the secret refresh among them, are stopped before anything changes and
+# each one that was active is started again.
+readonly held="severino-hq-controller.timer severino-hq-controller.path severino-hq-audit-prune.timer severino-hq-contacts-inbox.timer severino-hq-content-sync.timer severino-hq-public-registry.timer severino-hq-secrets.timer severino-hq-sessions-clear.timer severino-hq-script-drift.timer"
+line_of() { grep -n -- "$1" "${log_file}" | head -n 1 | cut -d: -f1; }
+# Each is a unit the repository ships, and the controller's every trigger is held.
+for unit in ${held}; do
+    [ -f "${repo_dir}/deploy/systemd/${unit}" ] || { echo "${unit} is held and not shipped." >&2; exit 1; }
+done
+for trigger in "${repo_dir}"/deploy/systemd/*.timer "${repo_dir}"/deploy/systemd/*.path; do
+    if grep -qx -e 'Unit=severino-hq-controller.service' -e 'Unit=severino-hq-secrets.service' \
+        -e 'Unit=severino-hq-script-drift.service' -e 'Unit=severino-hq-job@.*\.service' "${trigger}"; then
+        case " ${held} " in
+            *" $(basename "${trigger}") "*) ;;
+            *) echo "$(basename "${trigger}") starts release work and is not held by the deploy." >&2; exit 1 ;;
+        esac
+    fi
+done
+assert_held_and_restored() {
+    grep -qx "systemctl stop ${held}" "${log_file}" || {
+        echo "The deploy did not hold every unit that starts release work." >&2; exit 1; }
+    for unit in ${held}; do
+        grep -qx "systemctl start ${unit}" "${log_file}" || {
+            echo "${unit} was held and not restored." >&2; exit 1; }
+    done
+}
+# Held before the image is pulled or replaced, and started again only after
+# the last thing the deploy does to the container or the root tree.
+assert_held_for_the_whole_window() {
+    stopped="$(line_of "^systemctl stop ${held}\$")"
+    first_change="$(line_of '^docker compose ')"
+    first_start="$(line_of '^systemctl start ')"
+    last_change="$(grep -n -e '^docker compose ' -e '^release installer' -e '^install ' "${log_file}" | tail -n 1 | cut -d: -f1)"
+    if [ -z "${stopped}" ] || [ "${stopped}" -ge "${first_change}" ] || [ "${first_start}" -le "${last_change}" ]; then
+        echo "A held unit could fire between the image swap and the release's install." >&2
+        exit 1
+    fi
 }
 
 refuses() {
@@ -303,6 +355,10 @@ unset TEST_CONTROLLER_FAIL
 assert_new_compose_applied
 assert_release_installed_itself
 assert_staging_cleaned
+# Nothing of the previous release runs against the new image: the path unit and
+# the timers are held from before the pull until the release installed itself.
+assert_held_and_restored
+assert_held_for_the_whole_window
 if [ "$(grep -c " up -d " "${log_file}")" -ne 1 ]; then
     echo "A healthy deploy recreated the container more than once." >&2
     exit 1
@@ -318,6 +374,51 @@ printf 'previous compose\n' >"${lib_dir}/docker-compose.yml"
 printf 'previous scripts\n' >"${lib_dir}/version"
 previous_installer
 rm -f "${lib_dir}/only-in-the-release"
+
+# A failed activation holds the units again before rolling back, and they are
+# started only once the previous image and tree are back.
+run_failure 0
+assert_held_for_the_whole_window
+[ "$(grep -c "^systemctl stop ${held}\$" "${log_file}")" -eq 2 ] || {
+    echo "The units were not held again for the rollback." >&2; exit 1; }
+
+# A unit that was not active before the deploy is not started by it.
+TEST_INACTIVE_UNITS="severino-hq-controller.path severino-hq-secrets.timer"
+export TEST_INACTIVE_UNITS
+: >"${log_file}"
+if deploy 1; then
+    echo "Expected deployment to fail." >&2
+    exit 1
+fi
+unset TEST_INACTIVE_UNITS
+for unit in severino-hq-controller.path severino-hq-secrets.timer; do
+    if grep -qx "systemctl start ${unit}" "${log_file}"; then
+        echo "${unit} was inactive before the deploy and was started by it." >&2
+        exit 1
+    fi
+done
+grep -qx "systemctl start severino-hq-controller.timer" "${log_file}"
+grep -qx "systemctl start severino-hq-content-sync.timer" "${log_file}"
+
+# A run already in flight is waited for before the image is replaced, and a run
+# that never ends does not hold the deploy for ever.
+TEST_RUNS_IN_FLIGHT=2
+export TEST_RUNS_IN_FLIGHT
+: >"${log_file}"
+deploy 1 2>/dev/null && { echo "Expected deployment to fail." >&2; exit 1; }
+[ "$(grep -c '^systemctl is-active --quiet severino-hq-controller.service$' "${log_file}")" -eq 3 ] || {
+    echo "The deploy did not wait for the controller run in flight." >&2; exit 1; }
+drained="$(grep -n '^systemctl is-active --quiet severino-hq-controller.service$' "${log_file}" | tail -n 1 | cut -d: -f1)"
+[ "${drained}" -lt "$(line_of '^docker compose ')" ] || {
+    echo "The image was replaced under a run in flight." >&2; exit 1; }
+TEST_RUNS_IN_FLIGHT=1000000
+: >"${log_file}"
+if deploy 1 2>"${work_dir}/drain.err"; then echo "Expected deployment to fail." >&2; exit 1; fi
+unset TEST_RUNS_IN_FLIGHT
+grep -q "still going" "${work_dir}/drain.err" || {
+    echo "A run that outlasted the wait was not reported." >&2; exit 1; }
+[ "$(grep -c '^systemctl is-active --quiet severino-hq-controller.service$' "${log_file}")" -eq 36 ] || {
+    echo "The wait for a run in flight is not bounded at three minutes." >&2; exit 1; }
 
 # A failed health check restores the prior compose file with the prior image,
 # and never reaches controller activation, so the lib tree is untouched.

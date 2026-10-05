@@ -3,15 +3,15 @@ package runtime
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
+	"mime/multipart"
 	"net"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"os"
 	"strings"
@@ -56,20 +56,30 @@ type MultipartFile struct {
 // Multipart is a request payload sent as multipart/form-data, in part order.
 type Multipart []MultipartFile
 
-func (m Multipart) encode() ([]byte, string) {
-	token := make([]byte, 16)
-	_, _ = rand.Read(token)
-	boundary := "----severino-hq-" + hex.EncodeToString(token)
+// partContentType is what each part declares: every upload here is PEM.
+const partContentType = "application/x-pem-file"
+
+// encode writes the parts with mime/multipart, which quotes a field name or
+// filename that could otherwise end its header.
+func (m Multipart) encode() ([]byte, string, error) {
 	var body bytes.Buffer
-	for _, part := range m {
-		body.WriteString("--" + boundary + "\r\n")
-		body.WriteString(`Content-Disposition: form-data; name="` + part.Field + `"; filename="` + part.Filename + "\"\r\n")
-		body.WriteString("Content-Type: application/x-pem-file\r\n\r\n")
-		body.Write(part.Content)
-		body.WriteString("\r\n")
+	writer := multipart.NewWriter(&body)
+	for _, file := range m {
+		header := textproto.MIMEHeader{}
+		header.Set("Content-Disposition", multipart.FileContentDisposition(file.Field, file.Filename))
+		header.Set("Content-Type", partContentType)
+		part, err := writer.CreatePart(header)
+		if err != nil {
+			return nil, "", err
+		}
+		if _, err := part.Write(file.Content); err != nil {
+			return nil, "", err
+		}
 	}
-	body.WriteString("--" + boundary + "--\r\n")
-	return body.Bytes(), "multipart/form-data; boundary=" + boundary
+	if err := writer.Close(); err != nil {
+		return nil, "", err
+	}
+	return body.Bytes(), writer.FormDataContentType(), nil
 }
 
 // requestFailure classifies a request that got no answer. The address is
@@ -129,7 +139,11 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 	if payload != nil {
 		switch p := payload.(type) {
 		case Multipart:
-			body, contentType = p.encode()
+			var err error
+			body, contentType, err = p.encode()
+			if err != nil {
+				return nil, nil, &ProviderError{Message: "provider request could not be encoded"}
+			}
 		case url.Values:
 			body = []byte(p.Encode())
 			contentType = "application/x-www-form-urlencoded"

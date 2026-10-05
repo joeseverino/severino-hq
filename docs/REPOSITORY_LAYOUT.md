@@ -59,7 +59,8 @@ select it with `SEVERINO_DATABASE_PATH` until moving it. Stop the application,
 make a SQLite backup that includes committed WAL contents, and verify the new
 database before selecting its path. Keep the source database until the restored
 application and migrations have been checked. Collected static assets can be
-regenerated with `manage.py collectstatic`.
+regenerated with `manage.py collectstatic`; an image collects its own when it
+is built.
 
 ## Import boundary
 

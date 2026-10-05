@@ -1,6 +1,10 @@
 package runtime
 
-import "time"
+import (
+	"time"
+
+	"github.com/joeseverino/severino-hq/controller/api"
+)
 
 // Timeouts and intervals, each defined once.
 const (
@@ -11,6 +15,9 @@ const (
 	MultipartTimeout = 30 * time.Second
 	// BridgeTimeout bounds one call into Django.
 	BridgeTimeout = 3 * time.Minute
+	// JobTimeout bounds one piece of scheduled work, which HQ does to its end
+	// before answering.
+	JobTimeout = 30 * time.Minute
 	// CommandTimeout bounds one local tool or SSH call.
 	CommandTimeout = 180 * time.Second
 	// SSHConnectTimeoutSeconds is ssh's ConnectTimeout, in the seconds ssh takes.
@@ -20,5 +27,11 @@ const (
 	SlowSweep = 60 * time.Second
 )
 
-// MaxBridgeOutput bounds what the bridge may print before the call is refused.
-const MaxBridgeOutput = 64 << 20
+// MaxBridgeOutput bounds one bridge message in either direction: a payload
+// over it is not sent and an answer over it is refused. The contract states
+// it, and HQ's bridge application enforces the same number.
+var MaxBridgeOutput = api.MustLimit("BridgeBody", "maxLength")
+
+// ClaimLeaseSeconds is how long a claimed operation is leased: the contract's
+// default, which HQ applies to a claim that names none.
+var ClaimLeaseSeconds = api.MustLimit("LeaseSeconds", "default")

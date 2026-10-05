@@ -6,6 +6,7 @@ from dataclasses import replace
 
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
+from .derivations import passed, since
 from .cadence import slowest_sweep_interval as _slowest_sweep_interval, sweep_interval
 from .topology_lenses import _STALE_AFTER
 from .infrastructure import DRIFT_LABEL
@@ -138,9 +139,9 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
     interval = _slowest_sweep_interval() * _KIND_SILENT_AFTER
     found = []
     for kind_key, newest in sorted(estate.latest_by_kind.items()):
-        silent = estate.now - newest
-        if silent <= interval or not is_observable(kind_key):
+        if not passed(newest + interval, now=estate.now) or not is_observable(kind_key):
             continue
+        silent = since(newest, now=estate.now)
         # Staleness is a statement about declarations, and a kind HQ declares
         # nothing of has none to be stale. An inventory also carries rows
         # written on their own schedule by something that is not the sweep;

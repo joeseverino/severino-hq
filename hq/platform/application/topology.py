@@ -32,6 +32,8 @@ from .action_links import (
 from .entity_links import entity_link, kind_label
 from .infrastructure import is_drifted, resource_health
 from .resource_capabilities import removals_pending, resource_capabilities
+from .derivations import derivation
+from .derived_inputs import ESTATE_READS, estate_variant
 from .security import Capability, Principal
 from .topology_model import (
     Topology,
@@ -519,7 +521,6 @@ def relation_graph(*, principal: Principal) -> RelationGraph:
     Read once per projection, so every page section shares one derivation.
     """
 
-    from .projection import read_once
     from .topology_estate import add_estate
 
     principal.require(Capability.READ)
@@ -537,12 +538,19 @@ def relation_graph(*, principal: Principal) -> RelationGraph:
             Topology(tuple(nodes.values()), tuple(edges.values())), subjects
         )
 
-    capabilities = ",".join(sorted(str(item) for item in principal.capabilities))
-    return read_once(
-        f"topology.relations:{principal.actor}:{principal.interface}:{capabilities}", build
-    )
+    return _relations(principal, build)
 
 
+@derivation(
+    "estate.relations",
+    reads=ESTATE_READS,
+    vary=lambda principal, build: estate_variant(principal),
+)
+def _relations(principal: Principal, build: Any) -> RelationGraph:
+    return build()
+
+
+@derivation("estate.topology", reads=ESTATE_READS, vary=estate_variant)
 def _derive(principal: Principal) -> Topology:
     from .topology_estate import add_estate
 

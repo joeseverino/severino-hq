@@ -1,4 +1,8 @@
-"""ASGI entrypoint for the HQ web UI and tailnet-only MCP endpoint."""
+"""ASGI entrypoint for the HQ web UI and tailnet-only MCP endpoint.
+
+The controller bridge is started from here and served elsewhere: on a private
+Unix socket, never on this application's listener.
+"""
 
 import contextlib
 import os
@@ -18,11 +22,10 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hq.config.settings")
 django_application = get_asgi_application()
 # Wrapped, because this mount sits above the Django stack and so never reaches
 # the middleware that refuses untrusted callers everywhere else.
+# No compressor: the image build compressed each asset once and the mount sends
+# that copy.
 static_application = TrustedNetworkASGI(
-    GZipMiddleware(
-        CachedStaticFiles(directory=settings.STATIC_ROOT, check_dir=False),
-        minimum_size=500,
-    )
+    CachedStaticFiles(directory=settings.STATIC_ROOT, check_dir=False)
 )
 # LowercaseHeaders inside the compressor, not outside it: the compressor has to
 # see names it can match, and by the time the response leaves it the damage
@@ -82,16 +85,34 @@ mcp_application = MCPBoundary(
 
 
 @contextlib.asynccontextmanager
+async def bridge_serving():
+    """The controller bridge, on its own listener for as long as the web application runs.
+
+    The bridge application is given to that listener and to nothing below: it
+    is not a route here, so no network request reaches it. A socket path that
+    cannot be served safely stops the process from starting.
+    """
+
+    if not settings.SEVERINO_BRIDGE_SOCKET:
+        yield
+        return
+    from hq.domains.control_plane.bridge_application import application as bridge_application
+    from hq.platform.core.unix_server import serving
+
+    async with serving(bridge_application, settings.SEVERINO_BRIDGE_SOCKET):
+        yield
+
+
+@contextlib.asynccontextmanager
 async def lifespan(app):
-    async with mcp.session_manager.run():
+    async with mcp.session_manager.run(), bridge_serving():
         yield
 
 
 application = Starlette(
     routes=[
         Mount("/mcp", app=mcp_application),
-        # Serve collected assets on the native async path. WhiteNoise remains
-        # the WSGI fallback, but its synchronous iterator never reaches Uvicorn.
+        # Collected assets, on the native async path and before the Django stack.
         Mount(settings.STATIC_URL.rstrip("/"), app=static_application),
         Mount("/", app=compressed_django_application),
     ],

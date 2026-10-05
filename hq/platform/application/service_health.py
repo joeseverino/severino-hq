@@ -105,10 +105,9 @@ def hq_findings() -> tuple[Any, ...]:
 
 def _hq_findings() -> tuple[Any, ...]:
     from .connections import machines_once
-    from .findings import derive_findings
+    from .findings import estate_findings
     from .hq_self import hq_service
     from .security import Capability, Principal
-    from .topology import derive_topology
 
     own = hq_service(catalog=machines_once())
     if own is None:
@@ -119,6 +118,6 @@ def _hq_findings() -> tuple[Any, ...]:
     reader = Principal("hq-health", "internal", frozenset({Capability.READ}))
     return tuple(
         finding
-        for finding in derive_findings(derive_topology(principal=reader), principal=reader)
+        for finding in estate_findings(principal=reader)
         if finding.subject in subjects or finding.subject.startswith("controller:")
     )

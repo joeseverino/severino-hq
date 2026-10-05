@@ -30,9 +30,12 @@ from .plugins import (
     NavigationItem,
     PluginIntegration,
     gather_attention,
+    ordered_attention,
     gather_cards,
     installed_integrations,
 )
+from .derivations import Standing, derivation, standing, standing_key
+from .derived_inputs import QUEUE_READS, estate_variant
 from .projection import read_once
 
 # Order bands. Below HOST_ORDER_FLOOR is reserved for extension-supplied
@@ -768,10 +771,53 @@ def domain_attention_items() -> tuple[dict[str, Any], ...]:
     excluded here the same way they are for extensions.
     """
 
+    extensions = gather_attention(
+        (domain.id, domain.label, domain.integration.attention)
+        for domain in all_domains()
+        if domain.origin != "host"
+    )
+    # One order for both: an extension's entries are merged in by the same key.
+    return ordered_attention((*_host_attention(), *extensions))
+
+
+@derivation("attention.queue", reads=QUEUE_READS, vary=estate_variant)
+def _host_attention() -> tuple[dict[str, Any], ...]:
+    """What the host's own sections report, derived once per change of the estate."""
+
     return gather_attention(
         (domain.id, domain.label, domain.integration.attention)
         for domain in all_domains()
+        if domain.origin == "host"
     )
+
+
+def attention_standing() -> Standing | None:
+    """What the composed queue was derived at; None when that is not known.
+
+    Known only while every item comes from the host's derivation. An extension
+    that reports work derives it on its own, so the queue it joins is composed
+    on every request and vouched for by nothing.
+    """
+
+    if any(
+        domain.integration.attention is not None
+        for domain in all_domains()
+        if domain.origin != "host"
+    ):
+        return None
+    return standing(_host_attention)
+
+
+def attention_key() -> str | None:
+    """The key the host's queue is answered under now, under the same condition."""
+
+    if any(
+        domain.integration.attention is not None
+        for domain in all_domains()
+        if domain.origin != "host"
+    ):
+        return None
+    return standing_key(_host_attention)
 
 
 def domain_dashboard_cards() -> tuple[dict[str, Any], ...]:

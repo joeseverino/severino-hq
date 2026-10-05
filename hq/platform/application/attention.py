@@ -31,7 +31,7 @@ from hq.domains.receipts.models import Receipt
 
 from .entity_links import entity_link
 from .estate import subject_link
-from .findings import derive_findings, rule_for
+from .findings import estate_findings, rule_for
 from .infrastructure import enabled_resources, resource_health
 from .item_help import cannot_help, commands, finding_plan, remedy_link
 from .projection import read_once
@@ -486,7 +486,7 @@ def infrastructure() -> tuple[Insight, ...]:
     # connection, a domain, a machine) is a fact already observed.
     findings = tuple(
         finding
-        for finding in derive_findings(topology, principal=principal)
+        for finding in estate_findings(principal=principal)
         if (
             finding.subject.removeprefix("resource:") in actionable_keys
             if finding.subject.startswith("resource:")

@@ -91,10 +91,22 @@ func StatusFailure(code int) FailureClass {
 	return FailureClassUnclassified
 }
 
-// Bridge calls only the host's declared management-command actions. Payloads
-// travel over stdin, never process arguments.
+// Bridge is HQ as the worker sees it: one method per action of the contract
+// the worker calls, and nothing else.
 type Bridge interface {
-	Call(context.Context, []string, any, any) error
+	Peek(ctx context.Context, capabilities []string) (Pending, error)
+	Claim(ctx context.Context, controllerID string, capabilities []string) (Pending, error)
+	Material(ctx context.Context, resource string) (Material, error)
+	Report(ctx context.Context, controllerID, operation string, report ControllerReport) error
+	Schedule(ctx context.Context, controllerID string) error
+	SweepDue(ctx context.Context, controllerID string) (SweepVerdict, error)
+	GlancePlan(ctx context.Context, controllerID string) (GlancePlan, error)
+	Glance(ctx context.Context, controllerID string, observations GlanceObservations) error
+	Connections(ctx context.Context, controllerID string, records []ConnectionRecord) error
+	Inventory(ctx context.Context, controllerID string, inventory Inventory) error
+	AnalyticsPlan(ctx context.Context, sites []AnalyticsSiteIdentity) (AnalyticsPlan, error)
+	Analytics(ctx context.Context, controllerID string, readings AnalyticsReadings) error
+	Steps(ctx context.Context, controllerID string, failures []StepFailure) error
 }
 
 // Providers owns external I/O. The worker owns order, claims and reports.

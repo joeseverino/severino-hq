@@ -22,7 +22,6 @@ from .names import in_zone, normalized_hostname
 from .observations import OBSERVATIONS, ReadingPart
 from .provider_adapters.contracts import (
     CREDENTIAL_REFUSAL,
-    FAILURES,
     PERMISSION_REFUSAL,
 )
 
@@ -91,24 +90,24 @@ class PartRefusal:
         return bool(self.address) and self.address in addresses
 
 
-def clean_refused_parts(kind: str, raw: Any) -> list[dict[str, str]]:
-    """What a controller reported as refused parts, as stored: declared parts
-    only, a known refusal or none, bounded text. Anything else is dropped."""
+def clean_refused_parts(
+    kind: str, reported: Iterable[Mapping[str, Any]] | None
+) -> list[dict[str, str]]:
+    """The contract's ``RefusedPart``s a controller reported, as stored: the
+    parts this kind declares, with bounded text. A part it does not declare is
+    dropped."""
 
-    if not isinstance(raw, (list, tuple)):
-        return []
     parts = parts_of(kind)
     found: list[dict[str, str]] = []
-    for entry in raw:
-        if not isinstance(entry, Mapping) or str(entry.get("part", "")) not in parts:
+    for entry in reported or ():
+        if entry["part"] not in parts:
             continue
-        refusal = str(entry.get("refusal", "") or "")
         cleaned = {
-            "part": str(entry.get("part", "")),
-            "refusal": refusal if refusal in FAILURES else "",
-            "reason": str(entry.get("reason", "") or "")[:_REASON_LENGTH],
-            "scope": str(entry.get("scope", "") or "").strip().lower()[:_SCOPE_LENGTH],
-            "connection_ref": str(entry.get("connection_ref", "") or "")[:_REF_LENGTH],
+            "part": entry["part"],
+            "refusal": entry["refusal"],
+            "reason": entry["reason"][:_REASON_LENGTH],
+            "scope": entry["scope"].strip().lower()[:_SCOPE_LENGTH],
+            "connection_ref": entry["connection_ref"][:_REF_LENGTH],
         }
         address = _address(entry.get("address"))
         if address:

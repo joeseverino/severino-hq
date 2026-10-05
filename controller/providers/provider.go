@@ -112,8 +112,13 @@ type Registry struct {
 	ControllerID string
 	// Extensions is each admitted extension the running image composes, from HQ's registry.
 	Extensions []runtime.AdmittedExtension
+	// Profiles is whose public GitHub profile to read and whether it is due, from HQ's registry.
+	Profiles runtime.GitHubProfilePlan
+	// Picture GETs an image of at most limit bytes: its kind and its bytes. Nil fetches over HTTPS.
+	Picture    func(ctx context.Context, address string, limit int) (string, []byte, error)
 	actions    map[actionKey]Action
 	readers    map[string]Reader
+	held       map[string]heldSource
 	probes     map[runtime.ConnectionProvider]Probe
 	snapshotMu sync.Mutex
 	snapshot   map[string]*cachedRead
@@ -136,7 +141,7 @@ func New(env runtime.Environment, transport Transport) *Registry {
 	r := &Registry{
 		Env: env, HTTP: transport, Commands: &Commands{Env: env}, TLS: NetTLSDialer{CAFile: env["HQ_CONTROLLER_CA_FILE"]},
 		Now: time.Now, Monotonic: time.Now, Sleep: sleepContext,
-		actions: map[actionKey]Action{}, readers: map[string]Reader{}, probes: map[runtime.ConnectionProvider]Probe{}, zoneIDs: map[string]string{},
+		actions: map[actionKey]Action{}, readers: map[string]Reader{}, held: map[string]heldSource{}, probes: map[runtime.ConnectionProvider]Probe{}, zoneIDs: map[string]string{},
 	}
 	r.admitAdGuard()
 	r.admitNPM()
@@ -147,6 +152,7 @@ func New(env runtime.Environment, transport Transport) *Registry {
 	r.admitTLS()
 	r.admitCaddy()
 	r.admitGitHub()
+	r.admitGitHubProfile()
 	return r
 }
 
@@ -170,6 +176,34 @@ func (r *Registry) reader(kind runtime.ResourceKind, handler Reader) {
 	}
 	r.readers[string(kind)] = handler
 }
+
+// heldSource is a kind read from something this controller was given, not
+// only through a connection: a file mounted for it, a plan HQ sent.
+type heldSource struct {
+	has func() bool
+	// only is a kind no connection reads: what is held is its whole source.
+	only bool
+}
+
+// readsHeld declares, beside the kind's reader, that it can also be read
+// from what this controller holds when no connection reads it.
+func (r *Registry) readsHeld(kind runtime.ResourceKind, has func() bool) {
+	r.declareHeld(kind, heldSource{has: has})
+}
+
+// readsOnlyHeld declares that the kind is read from what this controller
+// holds and from nothing else, whatever connections exist.
+func (r *Registry) readsOnlyHeld(kind runtime.ResourceKind, has func() bool) {
+	r.declareHeld(kind, heldSource{has: has, only: true})
+}
+
+func (r *Registry) declareHeld(kind runtime.ResourceKind, source heldSource) {
+	if _, exists := r.held[string(kind)]; exists {
+		panic("duplicate native controller held source: " + string(kind))
+	}
+	r.held[string(kind)] = source
+}
+
 func (r *Registry) probe(provider runtime.ConnectionProvider, handler Probe) {
 	if _, exists := r.probes[provider]; exists {
 		panic("duplicate native controller probe: " + string(provider))

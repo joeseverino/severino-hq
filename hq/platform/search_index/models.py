@@ -16,9 +16,3 @@ class SearchDocument(models.Model):
                 name="search_document_scope_object_unique",
             )
         ]
-        indexes = [
-            models.Index(
-                fields=("scope", "object_id"),
-                name="search_idx_scope_obj",
-            )
-        ]

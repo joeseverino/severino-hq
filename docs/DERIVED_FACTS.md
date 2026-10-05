@@ -158,6 +158,66 @@ of `npm.certificate` (which names each certificate serves) and of
 `npm.access_list` (which names it guards). A 401 is a refused credential and a
 403 a missing permission (`runtime.StatusFailure`).
 
+### The controller's own machine
+
+Three readings are of the machine a controller runs on and need no credential:
+root reads a fact on the host and `scripts/run-controller.sh` mounts the
+answer into the controller read-only, naming it in an environment variable.
+The controller never holds the ruleset or the directory the fact came from. A
+fact the launcher does not name is a kind that reads `Not connected`
+(`hasSource` in `controller/providers/controller.go`).
+
+`host.firewall` is whether HQ's port must arrive on the tailnet interface, one
+distilled record (`SEVERINO_HOST_FIREWALL`).
+
+`host.render_status` is what each secret renderer on the machine says about
+its own runs (`SEVERINO_RENDER_STATUS`, a list of `<name>=<path>`
+pairs): one record per renderer the launcher names, holding the renderer's
+status document as `controller/secretstatus` declares it, or `state`
+`unreadable` with one reason word when there is no document to read. The
+record holds times, versions, counts and short words, and the schema stores
+any other string as `unreadable`. Its findings (`render-failing`,
+`render-stale`, `connect-sync-stalled`, `render-status-unread`) sit on
+the node of the controller that took the reading, or the machine it folded
+into; see `docs/SECRETS.md`, "How HQ reads it".
+
+`host.unit` is the state of every systemd unit the repository ships, as
+systemd holds it (`SEVERINO_HOST_UNITS`): one record per unit. The set is
+derived, never listed. `units_reported` in `scripts/lib/systemd-units.sh` walks
+`deploy/systemd` in the root-owned tree: each shipped unit that is not a
+template, and each instance of a shipped template that a shipped file starts
+through `Unit=` or `OnFailure=`. A unit added to the directory is read the day
+it is installed. The launcher asks `systemctl show` for a fixed list of
+properties (`units_properties`, where each is explained) and mounts what it
+printed; the controller parses that text, keeps exactly those properties and
+refuses a value that is not a unit name, one of systemd's state words, a
+number or an instant. `HostUnitRecord` in the bridge contract is the record:
+it holds no command line, environment or path, and a unit that is not
+installed is a record saying so. Each record carries when it was read, and a
+unit's state is judged as of then.
+
+`hq/platform/application/unit_findings.py` raises, on the same node:
+
+| Finding | When | Severity |
+|---|---|---|
+| `unit-failed` | systemd holds a unit as failed; names its result and exit status | serious |
+| `unit-not-installed` | a shipped unit is not loaded (not found, masked), its file is disabled, or a timer or path is not active | serious |
+| `timer-stalled` | an active timer is not running its unit: nothing is scheduled, it was more than two hours behind its own next elapse when read, its unit's condition did not hold, or its unit had been starting for more than two hours | serious |
+| `unit-state-unread` | the launcher mounted no answer, or the answer was refused | attention |
+
+The rules name no unit. A renderer whose own status says its run failed is
+`render-failing`'s to report, with the class of the failure, so `unit-failed`
+leaves that unit out and one failure is one finding. `host.render_status`
+stays a reading of its own for what systemd cannot know: why a render failed,
+when the installed files were last confirmed, and whether Connect is syncing.
+
+A unit that fails does not wait for the next sweep. Every shipped unit carries
+`OnFailure=severino-hq-job@units.read.service` through one drop-in per unit
+type in the directory systemd reads for every name with the repository's
+prefix (`deploy/systemd/severino-hq-.service.d/`). That starts the scheduled
+work `units.read`, which stores a read request for `host.unit` and rings the
+controller's doorbell, so the sweep that follows reads that one kind.
+
 ## Facts about a subject
 
 `hq.platform.application.facts` is the join engine. Every page that attaches a reading to
@@ -389,11 +449,10 @@ machine answering at its address (`policy_links`).
 RDAP needs no credential, so HQ reads it rather than a controller:
 `registry.address` (who holds a public address) and `registry.domain` (a
 domain's registrar and expiry), in `hq/domains/control_plane/observations/public_registry.py`.
-`hq.platform.application.public_registry.refresh` runs from `manage.py refresh_public_registry`,
-never from a page: the host starts it once a day, and at once when HQ rings
-its doorbell (`/run/severino-hq/registry-doorbell`, watched by
-`severino-hq-public-registry.path`) because a sweep found an image or a digest
-HQ has not read. It reads only subjects that are due, a bounded number at a
+`hq.platform.application.public_registry.refresh` runs as the scheduled
+`registry.refresh` job, never from a page: a timer asks for it once a day, and
+HQ starts it at once when a sweep found an image or a digest HQ has not read.
+It reads only subjects that are due, a bounded number at a
 time, and stores them through the same ingest as a sweep, so a run with nothing
 due makes no request. Each reading stands as long as what it reads is slow to
 change (`READ_EVERY`): who holds an address or registers a domain, a week; tags,
@@ -535,9 +594,13 @@ run that still uses a tag, and the setting applies as much to what a called work
 uses, which HQ does not read, so the item says to check those first. A repository
 whose workflows were not read gets the reason instead.
 
-Watching reads the signed-in person's own GitHub profile and the repositories
-they star from GitHub's public API, credential-free: whose profile is the login
-their sign-in claims (`hq.platform.application.linked_accounts`), never one typed into HQ.
+Watching shows the signed-in person's own GitHub profile and the repositories
+they star: the controller's `github.profile` reading, taken from GitHub's
+public API without a credential. Whose profile is the login their sign-in
+claims (`hq.platform.application.linked_accounts`), never one typed into HQ:
+`hq.platform.application.github_profile.plan` hands the controller those
+accounts and says when the reading is due, since it keeps a slower clock than
+the sweep. Refresh asks for a read now; no request reads GitHub.
 
 ## Machine roles
 

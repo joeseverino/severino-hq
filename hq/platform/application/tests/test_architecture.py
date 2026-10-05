@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import gzip
 import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -92,18 +93,23 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         # Outermost, because this mount is above the Django stack and would
         # otherwise be the one thing an untrusted caller could still fetch.
         self.assertIsInstance(static_route.app, TrustedNetworkASGI)
-        compressed = static_route.app.app
-        self.assertIsInstance(compressed, GZipMiddleware)
-        self.assertIsInstance(compressed.app, StaticFiles)
-        self.assertIsInstance(compressed.app, CachedStaticFiles)
+        # Nothing between the gate and the files: an asset is compressed when
+        # the image is built, never while it is served.
+        self.assertIsInstance(static_route.app.app, StaticFiles)
+        self.assertIsInstance(static_route.app.app, CachedStaticFiles)
         self.assertEqual(django_route.path, "")
         self.assertIsInstance(django_route.app, GZipMiddleware)
+
+    def test_static_assets_have_one_server(self):
+        from django.conf import settings
+
+        serving = [name for name in settings.MIDDLEWARE if "static" in name.lower() or "whitenoise" in name.lower()]
+        self.assertEqual(serving, [], "/static/ is served by the ASGI mount alone")
 
     @override_settings(STATIC_LIVE=False)
     def test_versioned_static_assets_are_compressed_and_immutable(self):
         async def request(root):
-            app = GZipMiddleware(CachedStaticFiles(directory=root), minimum_size=500)
-            transport = httpx.ASGITransport(app=app)
+            transport = httpx.ASGITransport(app=CachedStaticFiles(directory=root))
             async with httpx.AsyncClient(
                 transport=transport, base_url="http://testserver"
             ) as client:
@@ -114,12 +120,17 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
 
         with TemporaryDirectory() as directory:
             Path(directory, "bundle.0123456789ab.css").write_text("a" * 2000, encoding="utf-8")
+            compressed = gzip.compress(b"a" * 2000, mtime=0)
+            Path(directory, "bundle.0123456789ab.css.gz").write_bytes(compressed)
             manifest = SimpleNamespace(hashed_files={"bundle.css": "bundle.0123456789ab.css"})
             with patch("hq.platform.core.static.staticfiles_storage", manifest):
                 response = async_to_sync(request)(directory)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["content-encoding"], "gzip")
+        # The copy collectstatic wrote, byte for byte: nothing compressed it again.
+        self.assertEqual(response.headers["content-length"], str(len(compressed)))
+        self.assertEqual(response.text, "a" * 2000)
         self.assertEqual(
             response.headers["cache-control"],
             "public, max-age=31536000, immutable",
@@ -1237,6 +1248,59 @@ class CountedTests(SimpleTestCase):
         self.assertEqual(rendered, "1 thing needs you")
 
 
+class InterfaceTextTests(SimpleTestCase):
+    """What HQ and its extensions show people, read from source in one pass.
+
+    A gate reads it, here. A running HQ never does: a system check runs before
+    every management command, at every container start.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from hq.platform.core import interface_text
+
+        super().setUpClass()
+        cls.reading = interface_text.read()
+
+    def _places(self, found):
+        return [f"{path}:{line}" + (f": {why[0]}" if why else "") for path, line, *why in found]
+
+    def test_the_pass_read_the_source(self):
+        self.assertGreater(self.reading.files, 300, "The interface text pass read almost nothing")
+
+    def test_no_em_dash_in_interface_text(self):
+        """Rewrite the sentence. For a missing value use `or_empty` or MISSING."""
+        self.assertEqual(self._places(self.reading.em_dashes), [])
+
+    def test_no_plural_built_by_hand(self):
+        """Use counted(n, one, many) or {{ n|counted:"one,many" }}."""
+        self.assertEqual(self._places(self.reading.hand_plurals), [])
+
+    def test_no_form_opened_inside_another(self):
+        """Close the outer form first, or point the control at a form with form="id"."""
+        self.assertEqual(self._places(self.reading.nested_forms), [])
+
+    def test_every_counted_phrase_agrees(self):
+        """Give both forms: counted(n, "zone band", "zone bands")."""
+        self.assertEqual(self._places(self.reading.unagreeable_counts), [])
+
+    def test_no_system_check_that_runs_by_default_reads_source(self):
+        import inspect
+
+        from django.core.checks.registry import registry
+
+        reads_source = re.compile(r"\b(ast\.parse|rglob|os\.walk|read_text|interface_text)\b")
+        checked = 0
+        for check in registry.get_checks(include_deployment_checks=False):
+            module = inspect.getmodule(check)
+            if module is None or not module.__name__.startswith("hq"):
+                continue
+            checked += 1
+            with self.subTest(check=f"{module.__name__}.{check.__name__}"):
+                self.assertIsNone(reads_source.search(inspect.getsource(module)))
+        self.assertGreater(checked, 0, "No HQ system check was examined")
+
+
 class PostButtonTests(SimpleTestCase):
     """A post_button submits the one shared form, so it needs none of its own."""
 
@@ -1506,3 +1570,187 @@ class RouteOwnerTests(SimpleTestCase):
             finally:
                 set_script_prefix("/")
         self.assertEqual(reverse("dashboard"), django_reverse("dashboard"))
+
+
+class RequestNeverWaitsTests(SimpleTestCase):
+    """A request answers from what HQ holds. It never reaches a network,
+    starts a process or sleeps: the interpreter refuses it (``core.outbound``),
+    whichever library the call came through."""
+
+    ROOT = Path(__file__).resolve().parents[4]
+    # Where each declared exception is entered. An entry here is a place a
+    # request may wait: adding one is a decision, with its reason in ``ALLOWED``.
+    ENTERED = {
+        "oidc": {"hq/platform/core/oidc.py"},
+        "lookup": {"hq/platform/application/lookup.py"},
+        "contacts.d1": {"hq/domains/contacts/d1.py"},
+    }
+
+    def sources(self):
+        paths = [
+            path
+            for package in ("hq", "hq_sdk")
+            for path in sorted((self.ROOT / package).rglob("*.py"))
+            if "tests" not in path.parts and not path.name.startswith("test")
+        ]
+        self.assertTrue(paths, "no source was found to check")
+        for path in paths:
+            yield path.relative_to(self.ROOT).as_posix(), path.read_text(encoding="utf-8")
+
+    def test_every_request_is_served_under_the_rule(self):
+        import time
+        from unittest import mock
+
+        from django.conf import settings
+        from django.http import HttpResponse
+        from django.test import RequestFactory
+
+        from hq.platform.core.middleware import RequestContextMiddleware
+        from hq.platform.core.outbound import OutboundInRequest
+
+        def view(request):
+            time.sleep(0)
+            return HttpResponse("never")
+
+        # First in the stack but for the network check, so every other
+        # middleware and every view runs inside it.
+        self.assertEqual(settings.MIDDLEWARE.index("hq.platform.core.middleware.RequestContextMiddleware"), 1)
+        with (
+            mock.patch("hq.platform.core.middleware.note_activity"),
+            mock.patch("hq.platform.core.middleware.note_arrival"),
+            self.assertRaises(OutboundInRequest),
+        ):
+            RequestContextMiddleware(view)(RequestFactory().get("/example/"))
+
+    def test_an_exception_is_declared_with_its_reason_and_entered_only_where_listed(self):
+        from hq.platform.core.outbound import ALLOWED
+
+        entered: dict[str, set[str]] = {}
+        for relative, source in self.sources():
+            if "allowed(" not in source:
+                continue
+            for node in ast.walk(ast.parse(source)):
+                if not (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id == "allowed"
+                ):
+                    continue
+                argument = node.args[0] if node.args else None
+                name = argument.value if isinstance(argument, ast.Constant) else "<not a literal>"
+                entered.setdefault(str(name), set()).add(relative)
+
+        self.assertEqual(entered, self.ENTERED)
+        self.assertEqual(set(ALLOWED), set(self.ENTERED))
+        for name, reason in ALLOWED.items():
+            self.assertGreater(len(reason), 60, name)
+
+    def test_only_a_job_leaves_the_request_that_started_it(self):
+        leaving = {relative for relative, source in self.sources() if "off_request" in source}
+
+        self.assertEqual(leaving, {"hq/platform/core/outbound.py", "hq/domains/jobs/runner.py"})
+
+    def test_asked_for_work_is_followed_by_one_script_behaviour(self):
+        script = (self.ROOT / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        templates = "\n".join(
+            path.read_text(encoding="utf-8") for path in sorted((self.ROOT / "templates").rglob("*.html"))
+        )
+
+        # The controls that ask for work outside the request are all an ask.
+        for partial in ("_ask.html", "_job_progress.html", "_visit_refresh.html"):
+            self.assertIn("data-ask", (self.ROOT / "templates" / "partials" / partial).read_text(encoding="utf-8"))
+        for retired in ("data-job=", "data-visit-refresh", "data-job-note", "data-visit-status"):
+            self.assertNotIn(retired, script + templates)
+        self.assertEqual(script.count("[data-ask][data-ask-status]"), 1)
+
+
+class FragmentPrimitiveTests(SimpleTestCase):
+    """Reads are one component: `static/js/fragment.js` and the part it asks for.
+
+    A script that parses a response itself, or keeps its own timer to ask
+    again, is a second fetch-and-swap with its own focus, session and failure
+    behaviour. Both are refused here, so the next read is an attribute on an
+    element rather than a function in a page's script.
+    """
+
+    ROOT = Path(__file__).resolve().parents[4]
+    PRIMITIVE = "fragment.js"
+    # What only the primitive does: turn a response into markup, and ask again
+    # on a timer.
+    REFUSED = {
+        "reads a response body as text": r"\.text\(\)",
+        "parses markup": r"DOMParser|parseFromString|insertAdjacentHTML|\.innerHTML\b|\.outerHTML\s*=",
+        "keeps its own interval": r"\bsetInterval\(",
+        "sleeps in a loop": r"setTimeout\(\s*resolve\b",
+        "opens its own stream": r"\bEventSource\b|\bXMLHttpRequest\(",
+        "fetches outside the session boundary": r"(?<![\w.])fetch\(|window\.fetch\(",
+    }
+    # The attributes of the hand-rolled reads the primitive replaced.
+    RETIRED = (
+        "data-deferred",
+        "data-live-form",
+        "data-whatif",
+        "data-connection-source",
+        "data-connection-slot",
+        "data-dashboard-glance",
+        "data-calendar-source",
+        "X-Command-Center",
+    )
+
+    def scripts(self) -> dict[str, str]:
+        found = {
+            path.name: path.read_text(encoding="utf-8")
+            for path in sorted((self.ROOT / "static" / "js").glob("*.js"))
+        }
+        self.assertIn(self.PRIMITIVE, found)
+        self.assertGreater(len(found), 1)
+        return found
+
+    def test_only_the_primitive_parses_a_response_or_asks_again_on_a_timer(self):
+        for name, source in self.scripts().items():
+            if name == self.PRIMITIVE:
+                continue
+            for what, pattern in self.REFUSED.items():
+                with self.subTest(script=name, rule=what):
+                    self.assertIsNone(
+                        re.search(pattern, source),
+                        f"{name} {what}; a read is a `data-fragment` region or "
+                        "`hqFragment.swap`, and a poll is `hqEvery`",
+                    )
+
+    def test_the_primitive_is_one_fetch_one_parser_and_one_timer(self):
+        source = self.scripts()[self.PRIMITIVE]
+
+        self.assertEqual(source.count("window.fetch("), 1)
+        self.assertEqual(source.count("parseFromString("), 1)
+        self.assertEqual(source.count("window.setTimeout("), 1)
+        self.assertNotIn("setInterval(", source)
+        # The parser is not handed out: nothing outside the closure can reach it.
+        self.assertIn("return { swap, reveal, fail };", source)
+        self.assertFalse(re.search(r"window\.\w+\s*=\s*parse\b", source), "the parser left the closure")
+
+    def test_the_primitive_loads_before_the_scripts_that_use_it(self):
+        base = (self.ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+        order = [base.index(f"js/{name}") for name in (self.PRIMITIVE, "app.js", "tables.js")]
+
+        self.assertEqual(order, sorted(order))
+
+    def test_every_part_a_template_names_is_one_a_template_defines(self):
+        sources = [
+            path.read_text(encoding="utf-8")
+            for path in sorted((self.ROOT / "templates").rglob("*.html"))
+        ]
+        named = {name for text in sources for name in re.findall(r'data-fragment-name="(\w+)"', text)}
+        defined = {name for text in sources for name in re.findall(r"{% partialdef (\w+)", text)}
+
+        self.assertTrue(named)
+        self.assertEqual(named - defined, set())
+
+    def test_the_reads_it_replaced_stay_gone(self):
+        texts = dict(self.scripts())
+        for path in sorted((self.ROOT / "templates").rglob("*.html")):
+            texts[str(path.relative_to(self.ROOT))] = path.read_text(encoding="utf-8")
+        for name, text in texts.items():
+            for retired in self.RETIRED:
+                with self.subTest(file=name, retired=retired):
+                    self.assertNotIn(retired, text)

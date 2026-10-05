@@ -9,6 +9,8 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from .rules import singleton
+
 
 @functools.cache
 def _model_labels() -> dict[str, str]:
@@ -260,6 +262,9 @@ class AgentAccess(models.Model):
     )
     changed_at = models.DateTimeField(null=True, blank=True)
 
+    class Meta:
+        constraints = [singleton("agent_access_is_one_row")]
+
     def __str__(self) -> str:
         return "agents paused" if self.paused else "agents allowed"
 
@@ -320,6 +325,21 @@ class UpstreamReading(models.Model):
     key = models.CharField(max_length=100, primary_key=True)
     value = models.JSONField()
     observed_at = models.DateTimeField()
+
+
+class Revision(models.Model):
+    """How many times one table has been written.
+
+    The database keeps the count: a trigger on each table moves its row inside
+    the writing statement's own transaction (``hq.platform.core.revisions``), so
+    a count can never disagree with the rows it counts.
+    """
+
+    name = models.CharField(max_length=160, primary_key=True)
+    value = models.PositiveBigIntegerField(default=0)
+
+    def __str__(self) -> str:
+        return f"{self.name}@{self.value}"
 
 
 class Appearance(models.Model):

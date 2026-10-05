@@ -16,6 +16,9 @@ Environment=SEVERINO_BACKUP_RETENTION_DAYS=30
 # comment in severino-hq-controller.service for why root does not execute
 # out of the deploy checkout.
 ExecStart=/usr/local/lib/severino-hq/scripts/backup.sh
+# A backup is seconds. A oneshot has no start timeout of its own, and one
+# that hangs keeps its timer from ever firing again.
+TimeoutStartSec=30min
 
 NoNewPrivileges=yes
 PrivateDevices=yes

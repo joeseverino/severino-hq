@@ -240,6 +240,7 @@ func (r *Registry) admitTailscale() {
 	act(r, runtime.ResourceKindTailscaleDevice, "reconcile", r.tailscaleDeviceReconcile)
 	act(r, runtime.ResourceKindTailscaleDevice, "approve-routes", r.tailscaleApproveRoutes)
 	r.reader(runtime.ResourceKindTailscaleDevice, r.tailscaleDeviceInventory)
+	r.readsHeld(runtime.ResourceKindTailscaleDevice, func() bool { return r.Env["SEVERINO_TAILNET_STATUS"] != "" })
 
 	act(r, runtime.ResourceKindTailscalePolicy, "reconcile", r.tailnetPolicyReconcile)
 	r.reader(runtime.ResourceKindTailscalePolicy, r.tailnetPolicyInventory)

@@ -1,5 +1,4 @@
 (() => {
-  let requestController = null;
   let searchTimer = null;
   let tableLocation = `${window.location.pathname}${window.location.search}`;
 
@@ -604,34 +603,6 @@
     });
   }
 
-  // A refresh replaces the toolbar, which would otherwise steal focus from
-  // the search box mid-typing. Remember what was focused and the live value,
-  // the user may have typed past what this response's server render reflects.
-  function captureFocus() {
-    const active = document.activeElement;
-    if (!active || !active.name || !active.closest("[data-table-toolbar]")) return null;
-    return {
-      name: active.name,
-      value: active.value,
-      isText: active.type === "search" || active.type === "text",
-      start: active.selectionStart,
-      end: active.selectionEnd,
-    };
-  }
-
-  function restoreFocus(memo) {
-    if (!memo) return;
-    const revived = document.querySelector(
-      `[data-table-toolbar] [name="${CSS.escape(memo.name)}"]`,
-    );
-    if (!revived) return;
-    if (memo.isText) revived.value = memo.value;
-    revived.focus({ preventScroll: true });
-    if (memo.isText && typeof memo.start === "number") {
-      revived.setSelectionRange(memo.start, memo.end);
-    }
-  }
-
   // Auto table layout recomputes column widths from whichever rows are
   // visible, so sorting or paging makes columns jitter. Pin the incoming
   // table to the current widths; a full page load re-derives natural widths.
@@ -661,47 +632,37 @@
     return `${window.location.pathname}?${params.toString()}`;
   }
 
+  // The parts of a list page that a search, a sort or a page turn changes.
+  // Every match is replaced pairwise, so a page with more than one table
+  // swaps all of them; one the answer no longer has is removed.
+  const TABLE_PARTS = [
+    "[data-table-toolbar]",
+    "[data-table-selection]",
+    ".table-scroll",
+    ".pagination",
+    "[data-search-results]",
+  ];
+
+  // The fetch, the swap, focus and the address bar are the fragment
+  // primitive's. This adds only what a table knows: the columns it is holding.
   async function refreshTable(url, { history = "push" } = {}) {
-    requestController?.abort();
-    const controller = new AbortController();
-    requestController = controller;
-    const main = document.querySelector("main");
-    main.setAttribute("aria-busy", "true");
     try {
-      const response = await window.hqFetch(url, { signal: controller.signal });
-      if (!response.ok) throw new Error(`Table request failed: ${response.status}`);
-      const next = hqParseDocument(await response.text());
-      const focusMemo = captureFocus();
-      preserveDisclosureState(next, url);
-      pinColumnWidths(next);
-      const selectors = [
-        "[data-table-toolbar]",
-        "[data-table-selection]",
-        ".table-scroll",
-        ".pagination",
-        "[data-search-results]",
-      ];
-      // Replace every match pairwise so pages with more than one table
-      // (e.g. control_plane resource list) swap all of them, not just the first.
-      selectors.forEach((selector) => {
-        const nextNodes = next.querySelectorAll(selector);
-        document.querySelectorAll(selector).forEach((currentNode, index) => {
-          const nextNode = nextNodes[index];
-          if (nextNode) currentNode.replaceWith(nextNode);
-          else currentNode.remove();
-        });
+      await hqFragment.swap(TABLE_PARTS, {
+        url,
+        strict: false,
+        busy: document.querySelector("main"),
+        before: (next) => {
+          preserveDisclosureState(next, url);
+          pinColumnWidths(next);
+        },
+        title: true,
+        history,
       });
-      document.title = next.title;
-      if (history === "push") window.history.pushState({}, "", url);
-      if (history === "replace") window.history.replaceState({}, "", url);
       tableLocation = `${window.location.pathname}${window.location.search}`;
       initializeSelection();
-      restoreFocus(focusMemo);
       markTables();
     } catch (error) {
       if (error.name !== "AbortError") window.location.assign(url);
-    } finally {
-      if (requestController === controller) main.removeAttribute("aria-busy");
     }
   }
 

@@ -1,5 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
+{% comment %}The palette's results: the part this page answers to the command center.{% endcomment %}
+{% partialdef palette %}{% include "core/_command_center_results.html" %}{% endpartialdef %}
 <form class="filter-bar search-page-form" method="get" data-table-toolbar>
   <input type="search" name="q" value="{{ q }}" placeholder="Search records, resources, connections, and commands…" aria-label="Search records, resources, connections, and commands" autofocus>
   <button type="submit">Find</button>

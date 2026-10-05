@@ -6,14 +6,19 @@ requires-python = ">=3.13,<3.15"
 # tblib lets composed parallel suites report real tracebacks.
 dependencies = [
     "argon2-cffi>=25.1,<26",
-    "cryptography>=50.0.1,<51",
+    "cryptography>=50.0.2,<51",
     "defusedxml>=0.7,<0.8",
     "django>=6.1.1,<6.2",
     "httpx>=0.28,<1",
+    # Imported directly: the bridge and MCP hold payloads to their schemas.
+    "jsonschema>=4.26.0,<5",
     "mcp>=1.30.0,<2",
     "mozilla-django-oidc>=5.0.2,<6.0",
     "pydantic>=2.13.5,<3",
     "pyjwt>=2.15.1,<3",
+    "referencing>=0.37.0,<1",
+    # Imported directly: the ASGI application, its static mount and the bridge.
+    "starlette>=1.3.1,<2",
     "tblib>=3,<4",
     "uvicorn>=0.54.0,<1",
     "whitenoise>=6.12.0",
@@ -33,9 +38,9 @@ tools = [
     "hypothesis==6.168.3",
     "mypy==2.3.1",
     "openapi-spec-validator==0.9.0",
-    "ruff==0.16.9",
+    "ruff==0.16.10",
     "schemathesis==4.29.1",
-    "uv==0.12.20",
+    "uv==0.12.21",
 ]
 browser = [
     "playwright==1.63.0",
@@ -60,7 +65,7 @@ max-complexity = 15
 
 [tool.mypy]
 python_version = "3.13"
-files = ["hq/platform/application/security.py", "hq/platform/application/integration_specs.py", "hq/platform/application/plugins.py", "hq/platform/application/capabilities.py", "hq/platform/application/resources.py", "hq/platform/application/sensitivity.py", "hq/platform/application/domains.py", "hq/platform/application/records.py", "hq/domains/control_plane/connection_kinds.py", "hq/domains/control_plane/credential_reads.py", "hq/domains/control_plane/names.py", "hq/domains/control_plane/provider_adapters/cloudflare.py", "hq/domains/control_plane/provider_adapters/declarations.py", "hq/domains/control_plane/provider_adapters/portainer.py", "hq/domains/control_plane/provider_adapters/tailscale.py", "hq/domains/control_plane/provider_adapters/tls.py", "hq/domains/control_plane/provider_spec.py", "hq/domains/control_plane/providers.py", "hq_sdk", "hq/platform/api", "hq/platform/mcp"]
+files = ["hq/platform/application/security.py", "hq/platform/application/integration_specs.py", "hq/platform/application/plugins.py", "hq/platform/application/outbound_work.py", "hq/platform/application/capabilities.py", "hq/platform/application/resources.py", "hq/platform/application/sensitivity.py", "hq/platform/application/domains.py", "hq/platform/application/records.py", "hq/domains/control_plane/bridge_actions.py", "hq/domains/control_plane/bridge_application.py", "hq/domains/control_plane/bridge_contract.py", "hq/platform/core/unix_server.py", "hq/domains/control_plane/connection_kinds.py", "hq/domains/control_plane/credential_reads.py", "hq/domains/control_plane/names.py", "hq/domains/control_plane/provider_adapters/cloudflare.py", "hq/domains/control_plane/provider_adapters/declarations.py", "hq/domains/control_plane/provider_adapters/portainer.py", "hq/domains/control_plane/provider_adapters/tailscale.py", "hq/domains/control_plane/provider_adapters/tls.py", "hq/domains/control_plane/provider_spec.py", "hq/domains/control_plane/providers.py", "hq_sdk", "hq/platform/api", "hq/platform/mcp"]
 exclude = "(^|/)(tests\\.py|test_[^/]*\\.py|migrations/)"
 follow_imports = "silent"
 plugins = ["mypy_django_plugin.main"]
@@ -75,7 +80,7 @@ enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 django_settings_module = "hq.config.settings_typecheck"
 
 [[tool.mypy.overrides]]
-module = ["hq.platform.application.security", "hq.platform.application.integration_specs", "hq.platform.application.plugins", "hq.platform.application.capabilities", "hq.platform.application.resources", "hq.platform.application.sensitivity", "hq.platform.application.domains", "hq.platform.application.records", "hq.domains.control_plane.connection_kinds", "hq.domains.control_plane.credential_reads", "hq.domains.control_plane.names", "hq.domains.control_plane.provider_adapters.cloudflare", "hq.domains.control_plane.provider_adapters.declarations", "hq.domains.control_plane.provider_adapters.portainer", "hq.domains.control_plane.provider_adapters.tailscale", "hq.domains.control_plane.provider_adapters.tls", "hq.domains.control_plane.provider_spec", "hq.domains.control_plane.providers", "hq_sdk.*", "hq.platform.api.*", "hq.platform.mcp.*"]
+module = ["hq.platform.application.security", "hq.platform.application.integration_specs", "hq.platform.application.plugins", "hq.platform.application.outbound_work", "hq.platform.application.capabilities", "hq.platform.application.resources", "hq.platform.application.sensitivity", "hq.platform.application.domains", "hq.platform.application.records", "hq.domains.control_plane.bridge_actions", "hq.domains.control_plane.bridge_application", "hq.domains.control_plane.bridge_contract", "hq.platform.core.unix_server", "hq.domains.control_plane.connection_kinds", "hq.domains.control_plane.credential_reads", "hq.domains.control_plane.names", "hq.domains.control_plane.provider_adapters.cloudflare", "hq.domains.control_plane.provider_adapters.declarations", "hq.domains.control_plane.provider_adapters.portainer", "hq.domains.control_plane.provider_adapters.tailscale", "hq.domains.control_plane.provider_adapters.tls", "hq.domains.control_plane.provider_spec", "hq.domains.control_plane.providers", "hq_sdk.*", "hq.platform.api.*", "hq.platform.mcp.*"]
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 disallow_untyped_decorators = true

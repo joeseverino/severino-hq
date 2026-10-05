@@ -80,3 +80,38 @@ def lead_action(actions):
         or next((action for action in actions if not getattr(action, "danger", False)), None)
         or (actions[0] if actions else None)
     )
+
+
+@register.filter
+def as_ask(action):
+    """An emitted ActionLink that asks for work, as the control that follows it:
+    a row's Read now. It stands idle until pressed; the page's script follows
+    what the press started."""
+    from dataclasses import asdict, is_dataclass
+
+    from hq.platform.application.asks import Ask
+
+    values = asdict(action) if is_dataclass(action) else action
+    return Ask(values["label"], values["url"], title=values.get("reason", ""), compact=True)
+
+
+@register.simple_tag
+def ask_button(ask, extra=""):
+    """The button of an ``application.asks.Ask``: a ``post_button`` the page's
+    script may answer in place. Busy is ``aria-disabled``, which keeps focus."""
+
+    attributes = {
+        "name": ask.name,
+        "value": ask.value,
+        "title": ask.title,
+        "aria-disabled": "true" if ask.standing.live else "",
+    }
+    return format_html(
+        '<button type="submit" form="{}" formaction="{}" class="{}" data-ask-button{}{}>{}</button>',
+        POST_FORM_ID,
+        ask.url,
+        " ".join(part for part in (ask.css, extra) if part),
+        format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
+        mark_safe(" disabled") if ask.disabled else "",
+        ask.label,
+    )

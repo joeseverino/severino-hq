@@ -24,8 +24,9 @@ And nothing is asked for that could not be answered. A request nothing answers
 forces sweeps until it expires, so only a kind the sweep reads and has stored,
 while a controller is arriving to read it, is ever asked for.
 
-Asking is ``cadence.request_reads``, which is how a read is requested. This
-decides when to ask and for what, and nothing about how.
+Asking is ``cadence.request_reads``, which is how a read is requested, and how
+the read stands is ``asks.read_standing``, which is how any asked-for read is
+followed. This decides when to ask and for what, and nothing about how.
 """
 
 from __future__ import annotations
@@ -35,23 +36,15 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from django.core import signing
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.platform.core.audit import operation_context
 
+from .asks import Standing, read_standing, read_status_url
 from .cadence import controller_standing, forced_reads, request_reads
 from .freshness import PAGE_VISIT, freshness
 from .security import Capability, Principal
-
-# What a page watches for, handed back signed so the page can ask whether it
-# has arrived without HQ working the page out again, and without the page
-# being able to ask about anything else.
-_WATCH_SALT = "hq.platform.application.visit_refresh.watch"
-# Longer than a page waits for its reading.
-_WATCH_SECONDS = 15 * 60
-
 
 @dataclass(frozen=True)
 class Reads:
@@ -149,40 +142,30 @@ def _due(kinds: tuple[str, ...], now: datetime) -> list[str]:
     ]
 
 
-def _watching(kinds: tuple[str, ...]) -> list[str]:
-    """Of ``kinds``, the ones a read request is still waiting on."""
+def _watching(kinds: tuple[str, ...]) -> tuple[list[str], datetime | None]:
+    """Of ``kinds``, the ones a read request is still waiting on, and when the
+    earliest of those was asked for."""
 
-    waiting = {
-        kind
-        for read in forced_reads()
-        for kind in ((read.kind,) if read.kind else read.kinds or ())
-    }
-    return [kind for kind in kinds if kind in waiting]
+    waiting: dict[str, datetime] = {}
+    for read in forced_reads():
+        for kind in (read.kind,) if read.kind else read.kinds or ():
+            waiting[kind] = min(read.requested_at, waiting.get(kind, read.requested_at))
+    found = [kind for kind in kinds if kind in waiting]
+    return found, min((waiting[kind] for kind in found), default=None)
 
 
-def _answer(requested: list[str], watching: list[str]) -> dict[str, Any]:
+def _answer(requested: list[str], kinds: tuple[str, ...]) -> dict[str, Any]:
+    """How the page's readings stand, and where to follow them while one is
+    being read: the shape every ask answers in."""
+
+    watching, asked = _watching(kinds) if kinds else ([], None)
+    if asked is None:
+        return {**Standing().as_json(), "requested": requested, "status": ""}
     return {
-        "ok": True,
+        **read_standing(watching, asked).as_json(),
         "requested": requested,
-        "pending": bool(watching),
-        "watch": signing.dumps(watching, salt=_WATCH_SALT) if watching else "",
+        "status": read_status_url(watching, asked),
     }
-
-
-def visit_state(watch: str) -> dict[str, Any] | None:
-    """Whether what a page was told to watch for is still being read.
-
-    Asks for nothing and works nothing out: ``watch`` is what the POST handed
-    back. None for one HQ did not sign, or signed too long ago.
-    """
-
-    try:
-        kinds = signing.loads(watch, salt=_WATCH_SALT, max_age=_WATCH_SECONDS)
-    except signing.BadSignature:
-        return None
-    if not isinstance(kinds, list) or not all(isinstance(kind, str) for kind in kinds):
-        return None
-    return {"ok": True, "pending": bool(_watching(tuple(kinds)))}
 
 
 def request_visit_refresh(subject: str, name: str, *, principal: Principal) -> dict[str, Any] | None:
@@ -205,9 +188,9 @@ def request_visit_refresh(subject: str, name: str, *, principal: Principal) -> d
         # Nobody is there to read it, or nobody entitled is asking. Asking
         # would leave a request that forces sweeps when the controller
         # returns, and a page promising a reading that is not coming.
-        return _answer([], [])
+        return _answer([], ())
     with operation_context(
         interface=principal.interface, actor=principal.actor, operation="visit.refresh"
     ):
         requested = list(request_reads(_due(reads.kinds, timezone.now()), principal=principal))
-    return _answer(requested, _watching(reads.kinds))
+    return _answer(requested, reads.kinds)

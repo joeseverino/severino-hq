@@ -13,6 +13,9 @@ User=root
 # to write there, and what root runs should not be writable by what deploys.
 WorkingDirectory=/usr/local/lib/severino-hq
 ExecStart=/usr/local/lib/severino-hq/scripts/run-controller.sh --apply
+# A pass is seconds to a few minutes. A oneshot has no start timeout of its own, and one
+# that hangs keeps its timer from ever firing again.
+TimeoutStartSec=30min
 
 NoNewPrivileges=yes
 PrivateTmp=yes

@@ -87,6 +87,85 @@ def path_of(url: str) -> str:
 # ----- Recording -------------------------------------------------------------
 
 
+# What a reported row and a reported day of vitals carry besides their grain,
+# named as the columns they are stored in.
+_ROW_COLUMNS = ("pageviews", "visits", "sample_interval")
+_VITALS_COLUMNS = (
+    "largest_contentful_paint_ms",
+    "interaction_to_next_paint_ms",
+    "first_contentful_paint_ms",
+    "time_to_first_byte_ms",
+    "cumulative_layout_shift",
+    "lcp_good",
+    "lcp_needs_improvement",
+    "lcp_poor",
+    "inp_good",
+    "inp_needs_improvement",
+    "inp_poor",
+    "cls_good",
+    "cls_needs_improvement",
+    "cls_poor",
+    "sample_interval",
+)
+
+
+def _restate(model: Any, grain: tuple[str, ...], columns: tuple[str, ...], rows: dict) -> None:
+    """Store ``rows``, one per grain: a new one is inserted, and one already
+    stored takes ``columns`` and the moment it was restated and keeps the rest.
+
+    One statement per batch, by the unique constraint on ``grain``.
+    """
+
+    model.objects.bulk_create(
+        list(rows.values()),
+        update_conflicts=True,
+        unique_fields=grain,
+        # ``observed_at`` is set on every write, so a restated day says when.
+        update_fields=(*columns, "observed_at"),
+    )
+
+
+def _restate_rows(site: AnalyticsSite, reported: list[dict[str, Any]]) -> int:
+    """Store one site's reported counts; how many were taken."""
+
+    taken = 0
+    rows: dict[tuple[Any, ...], RumDaily] = {}
+    for row in reported:
+        day = _as_date(row["date"])
+        value = row["value"].strip()
+        # A count with no day or no value has no grain to be stored at.
+        if not day or not value:
+            continue
+        taken += 1
+        # A grain reported twice is stored as the report last said it.
+        rows[(day, row["dimension"], value)] = RumDaily(
+            site=site,
+            date=day,
+            dimension=row["dimension"],
+            value=value,
+            **{column: row[column] for column in _ROW_COLUMNS},
+        )
+    _restate(RumDaily, ("site", "date", "dimension", "value"), _ROW_COLUMNS, rows)
+    return taken
+
+
+def _restate_vitals(site: AnalyticsSite, reported: list[dict[str, Any]]) -> int:
+    """Store one site's reported days of vitals; how many were taken."""
+
+    taken = 0
+    days: dict[date, VitalsDaily] = {}
+    for reading in reported:
+        day = _as_date(reading["date"])
+        if not day:
+            continue
+        taken += 1
+        days[day] = VitalsDaily(
+            site=site, date=day, **{column: reading[column] for column in _VITALS_COLUMNS}
+        )
+    _restate(VitalsDaily, ("site", "date"), _VITALS_COLUMNS, days)
+    return taken
+
+
 @transaction.atomic
 def record_analytics(
     payload: dict[str, Any], *, principal: Principal, controller_id: str = ""
@@ -101,6 +180,10 @@ def record_analytics(
 
     Idempotent by construction: the grain is unique, so re-running a sweep
     (or replaying an older one) restates a day rather than doubling it.
+
+    ``payload`` is the contract's ``AnalyticsReadings``, which the bridge holds
+    every report to before this runs: counts are integers no less than zero, a
+    sample interval is at least one, and a dimension is one HQ stores.
     """
 
     # The same capability every controller report carries. Analytics arrives by
@@ -108,12 +191,11 @@ def record_analytics(
     # for it would mean two answers to "may this controller report".
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
 
-    sites = payload.get("sites") or []
     recorded = {"sites": 0, "coverage": 0, "rows": 0, "vitals": 0}
-    for entry in sites:
-        site_tag = str(entry.get("site_tag", "")).strip()
-        host = normalized_hostname(str(entry.get("host", "")))
-        connection_ref = str(entry.get("connection_ref", ""))[:100]
+    for entry in payload["sites"]:
+        site_tag = entry["site_tag"].strip()
+        host = normalized_hostname(entry["host"])
+        connection_ref = entry["connection_ref"][:100]
         if not site_tag or not host:
             continue
         site, _ = AnalyticsSite.objects.update_or_create(
@@ -125,8 +207,8 @@ def record_analytics(
         )
         recorded["sites"] += 1
 
-        start = _as_date(entry.get("start"))
-        end = _as_date(entry.get("end"))
+        start = _as_date(entry["start"])
+        end = _as_date(entry["end"])
         if start and end and start <= end and (end - start).days < MAX_QUERY_DAYS:
             covered = [
                 AnalyticsCoverage(site=site, date=start + timedelta(days=offset))
@@ -135,59 +217,8 @@ def record_analytics(
             AnalyticsCoverage.objects.bulk_create(covered, ignore_conflicts=True)
             recorded["coverage"] += len(covered)
 
-        for row in entry.get("rows") or []:
-            day = _as_date(row.get("date"))
-            dimension = str(row.get("dimension", ""))
-            value = str(row.get("value", "")).strip()
-            if not day or not value or dimension not in RumDaily.Dimension.values:
-                continue
-            RumDaily.objects.update_or_create(
-                site=site,
-                date=day,
-                dimension=dimension,
-                value=value[:512],
-                defaults={
-                    "pageviews": max(int(row.get("pageviews") or 0), 0),
-                    "visits": max(int(row.get("visits") or 0), 0),
-                    "sample_interval": max(int(row.get("sample_interval") or 1), 1),
-                },
-            )
-            recorded["rows"] += 1
-
-        for reading in entry.get("vitals") or []:
-            day = _as_date(reading.get("date"))
-            if not day:
-                continue
-            VitalsDaily.objects.update_or_create(
-                site=site,
-                date=day,
-                defaults={
-                    column: reading.get(column)
-                    for column in (
-                        "largest_contentful_paint_ms",
-                        "interaction_to_next_paint_ms",
-                        "first_contentful_paint_ms",
-                        "time_to_first_byte_ms",
-                        "cumulative_layout_shift",
-                    )
-                }
-                | {
-                    column: max(int(reading.get(column) or 0), 0)
-                    for column in (
-                        "lcp_good",
-                        "lcp_needs_improvement",
-                        "lcp_poor",
-                        "inp_good",
-                        "inp_needs_improvement",
-                        "inp_poor",
-                        "cls_good",
-                        "cls_needs_improvement",
-                        "cls_poor",
-                    )
-                }
-                | {"sample_interval": max(int(reading.get("sample_interval") or 1), 1)},
-            )
-            recorded["vitals"] += 1
+        recorded["rows"] += _restate_rows(site, entry["rows"])
+        recorded["vitals"] += _restate_vitals(site, entry["vitals"])
 
     return {"ok": True, "recorded": recorded, "observed_at": timezone.now().isoformat()}
 
@@ -227,12 +258,9 @@ def analytics_plan(sites: list[dict[str, Any]]) -> dict[str, Any]:
     identities = tuple(
         sorted(
             {
-                (
-                    str(item.get("connection_ref", ""))[:100],
-                    str(item.get("site_tag", "")).strip(),
-                )
+                (item["connection_ref"][:100], item["site_tag"].strip())
                 for item in sites
-                if str(item.get("site_tag", "")).strip()
+                if item["site_tag"].strip()
             }
         )
     )

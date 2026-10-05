@@ -5,8 +5,7 @@ connection panel opens on, and a link to that panel, so it works without script.
 {% endcomment %}
 <a class="glance-panel-head dash-reading dash-connection conn-badge-{{ connection.channel.id }}"
    href="{% url 'connection' %}"
-   data-modal-open="connection"
-   data-connection-source="{% url 'connection' %}">
+   data-modal-open="connection">
   <span class="glance-symbol">{% include "partials/_icon.html" with name="network" %}</span>
   <span class="glance-lead"><span class="conn-dot" aria-hidden="true"></span><strong>{{ connection.channel.label }}</strong></span>
   <span class="glance-caption">

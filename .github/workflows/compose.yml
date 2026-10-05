@@ -660,6 +660,7 @@ jobs:
           RUN ! command -v pip && ! python -c 'import pip'
           ENV SEVERINO_HQ_PLUGINS=${SEVERINO_HQ_PLUGIN_REFERENCES} \
               SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION=0
+          RUN /app/scripts/collect-assets.sh
           USER severino
           DOCKERFILE
 

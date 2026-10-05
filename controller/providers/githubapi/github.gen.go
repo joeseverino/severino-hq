@@ -498,6 +498,30 @@ func (e JobStepsStatus) Valid() bool {
 	}
 }
 
+// Defines values for RepositoryAdvisorySeverity.
+const (
+	RepositoryAdvisorySeverityCritical RepositoryAdvisorySeverity = "critical"
+	RepositoryAdvisorySeverityHigh     RepositoryAdvisorySeverity = "high"
+	RepositoryAdvisorySeverityLow      RepositoryAdvisorySeverity = "low"
+	RepositoryAdvisorySeverityMedium   RepositoryAdvisorySeverity = "medium"
+)
+
+// Valid indicates whether the value is a known member of the RepositoryAdvisorySeverity enum.
+func (e RepositoryAdvisorySeverity) Valid() bool {
+	switch e {
+	case RepositoryAdvisorySeverityCritical:
+		return true
+	case RepositoryAdvisorySeverityHigh:
+		return true
+	case RepositoryAdvisorySeverityLow:
+		return true
+	case RepositoryAdvisorySeverityMedium:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RepositoryRuleDetailed0ParametersAllowedMergeMethods.
 const (
 	RepositoryRuleDetailed0ParametersAllowedMergeMethodsMerge  RepositoryRuleDetailed0ParametersAllowedMergeMethods = "merge"
@@ -1442,6 +1466,25 @@ type PendingDeployment struct {
 	} `json:"environment"`
 }
 
+// PublicUser Public User
+type PublicUser struct {
+	AvatarURL       string `json:"avatar_url"`
+	Bio             string `json:"bio"`
+	Blog            string `json:"blog"`
+	Company         string `json:"company"`
+	CreatedAt       string `json:"created_at"`
+	Followers       int    `json:"followers"`
+	Following       int    `json:"following"`
+	Hireable        bool   `json:"hireable"`
+	HTMLURL         string `json:"html_url"`
+	Location        string `json:"location"`
+	Login           string `json:"login"`
+	Name            string `json:"name"`
+	PublicGists     int    `json:"public_gists"`
+	PublicRepos     int    `json:"public_repos"`
+	TwitterUsername string `json:"twitter_username,omitempty"`
+}
+
 // PullRequestSimple Pull Request Simple
 type PullRequestSimple struct {
 	// Draft Indicates whether or not the pull request is a draft.
@@ -1479,6 +1522,30 @@ type PullRequestSimple struct {
 	User NullableSimpleUser `json:"user"`
 }
 
+// RateLimit defines model for rate-limit.
+type RateLimit struct {
+	Remaining int `json:"remaining"`
+	Reset     int `json:"reset"`
+}
+
+// RateLimitOverview Rate Limit Overview
+type RateLimitOverview struct {
+	Resources struct {
+		ActionsRunnerRegistration RateLimit `json:"actions_runner_registration,omitempty"`
+		CodeScanningAutofix       RateLimit `json:"code_scanning_autofix,omitempty"`
+		CodeSearch                RateLimit `json:"code_search,omitempty"`
+		CopilotUsageRecords       RateLimit `json:"copilot_usage_records,omitempty"`
+		Core                      RateLimit `json:"core"`
+		DependencySbom            RateLimit `json:"dependency_sbom,omitempty"`
+		DependencySnapshots       RateLimit `json:"dependency_snapshots,omitempty"`
+		Graphql                   RateLimit `json:"graphql,omitempty"`
+		IntegrationManifest       RateLimit `json:"integration_manifest,omitempty"`
+		Scim                      RateLimit `json:"scim,omitempty"`
+		Search                    RateLimit `json:"search"`
+		SourceImport              RateLimit `json:"source_import,omitempty"`
+	} `json:"resources"`
+}
+
 // Release A release.
 type Release struct {
 	HTMLURL     string `json:"html_url"`
@@ -1492,9 +1559,43 @@ type Release struct {
 
 // Repository A repository on GitHub.
 type Repository struct {
+	// Description Example: This your first repo!
+	Description string `json:"description"`
+
 	// FullName Example: octocat/Hello-World
 	FullName string `json:"full_name"`
+
+	// HTMLURL Example: https://github.com/octocat/Hello-World
+	HTMLURL  string `json:"html_url"`
+	Language string `json:"language"`
+
+	// StargazersCount Example: 80
+	StargazersCount int `json:"stargazers_count"`
 }
+
+// RepositoryAdvisory A repository security advisory.
+type RepositoryAdvisory struct {
+	// CveID The Common Vulnerabilities and Exposures (CVE) ID.
+	CveID string `json:"cve_id"`
+
+	// GhsaID The GitHub Security Advisory ID.
+	GhsaID string `json:"ghsa_id"`
+
+	// HTMLURL The URL for the advisory.
+	HTMLURL string `json:"html_url"`
+
+	// PublishedAt The date and time of when the advisory was published, in ISO 8601 format.
+	PublishedAt string `json:"published_at"`
+
+	// Severity The severity of the advisory.
+	Severity RepositoryAdvisorySeverity `json:"severity"`
+
+	// Summary A short summary of the advisory.
+	Summary string `json:"summary"`
+}
+
+// RepositoryAdvisorySeverity The severity of the advisory.
+type RepositoryAdvisorySeverity string
 
 // RepositoryRuleDetailed A repository rule with ruleset details.
 type RepositoryRuleDetailed struct {
@@ -1721,6 +1822,13 @@ type ShaPinningRequired = bool
 type SimpleUser struct {
 	// Login Example: octocat
 	Login string `json:"login"`
+}
+
+// StarredRepository Starred Repository
+type StarredRepository struct {
+	// Repo A repository on GitHub.
+	Repo      Repository `json:"repo"`
+	StarredAt string     `json:"starred_at"`
 }
 
 // Team Groups of organization members that gives permissions on specified repositories.

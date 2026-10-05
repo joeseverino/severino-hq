@@ -48,6 +48,8 @@ from .facts import Joined, Readings, Subject, readings as stored_readings
 from .infrastructure import enabled_resources
 from .locate import host_of, split_endpoint
 from .naming import name_context
+from .derivations import derivation
+from .derived_inputs import ESTATE_READS, estate_variant
 from .projection import read_once
 from .reach import UNKNOWN, Reach, reach_of
 from .service_declarations import Claim, declarations, runtime_claim
@@ -304,14 +306,9 @@ def _certificates_in_use() -> dict[str, dict[str, Any]]:
     return found
 
 
-def _service_catalog(favorites: tuple[str, ...]) -> tuple[Service, ...]:
-    """Every hostname HQ declares, assembled from the resources that name it.
-
-    ``favorites`` is the operator's own order for the handful they keep at the
-    top. Applied here rather than in a template so every surface that lists
-    services agrees about what comes first, and so the ordering never becomes
-    a property of a Service: it is a fact about a person, not a hostname.
-    """
+@derivation("estate.services", reads=ESTATE_READS, vary=estate_variant)
+def _service_catalog() -> tuple[Service, ...]:
+    """Every hostname HQ declares, assembled from the resources that name it."""
 
     (
         declared, covering, origins, aliases, alias_claims, machines, answers, routed,
@@ -321,7 +318,7 @@ def _service_catalog(favorites: tuple[str, ...]) -> tuple[Service, ...]:
     by_target: dict[str, list[str]] = {}
     for alias, target in sorted(aliases.items()):
         by_target.setdefault(target, []).append(alias)
-    found = tuple(
+    return tuple(
         _assemble(
             hostname,
             facets,
@@ -335,7 +332,6 @@ def _service_catalog(favorites: tuple[str, ...]) -> tuple[Service, ...]:
         )
         for hostname, facets in sorted(declared.items())
     )
-    return ordered_services(found, favorites)
 
 
 def ordered_services(
@@ -361,11 +357,17 @@ def ordered_services(
 
 
 def service_catalog(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:
-    """Every derived service, read once while a larger projection is assembled."""
+    """Every derived service, the operator's favorites first.
+
+    ``favorites`` is the operator's own order for the handful they keep at the
+    top. Applied here rather than in a template so every surface that lists
+    services agrees about what comes first, and so the ordering never becomes
+    a property of a Service: it is a fact about a person, not a hostname.
+    """
 
     return read_once(
         f"services.catalog:{'|'.join(favorites)}",
-        lambda: _service_catalog(favorites),
+        lambda: ordered_services(_service_catalog(), favorites),
     )
 
 

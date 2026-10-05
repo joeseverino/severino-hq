@@ -13,10 +13,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Mapping
 
-from django.utils import timezone
 
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 
+from .derivations import reached, whole
 from .containers import SERIOUS
 from .expiry import days_until
 from .github_public import github_repository
@@ -260,15 +260,16 @@ def _waiting(repo: Repository) -> list[Insight]:
     items = []
     for run in repo.waiting or ():
         started = moment(run.get("created_at", ""))
-        waited = timezone.now() - started if started else timedelta(0)
+        hours = max(0, whole(started, timedelta(hours=1))) if started else 0
+        serious = bool(started) and reached(started + WAITING_SERIOUS_AFTER)
         where = ", ".join(run.get("environments") or ()) or "an environment"
         items.append(
             Insight(
-                status="serious" if waited >= WAITING_SERIOUS_AFTER else "attention",
+                status="serious" if serious else "attention",
                 eyebrow="GitHub",
                 family="Deployments awaiting approval",
                 key=f"github-waiting:{repo.name}:{run.get('id')}",
-                value=f"{int(waited.total_seconds() // 3600)}h",
+                value=f"{hours}h",
                 title=f"{run.get('name') or 'A run'} waits for your approval to deploy to {where}",
                 body=f"{repo.short} · {run.get('sha', '')[:7]}",
                 action="Review deployment",

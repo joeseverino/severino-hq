@@ -14,12 +14,13 @@ authoritative for human and agentic development in this public repository.
    push first and run `mise run preflight --remote`: it reads every check
    GitHub ran on that commit instead of running `mise run ci`.
 
-Setup is [mise](https://mise.jdx.dev) and `mise install`: the pinned tools, at
-the versions in `mise.toml` and the checksums in `mise.lock`. Python
-dependencies come from `uv.lock` through `uv run --locked`, so no virtualenv is
-made by hand. Every gate is a task in `mise.toml` named `<job>:<gate>`;
+Setup is [mise](https://mise.jdx.dev), `mise install` and uv on the PATH: the
+pinned tools, at the versions in `mise.toml` and the checksums in `mise.lock`.
+Python dependencies come from `uv.lock` through `uv run --locked`, so no
+virtualenv is made by hand. uv's own pin is in `pyproject.toml` with its hashes
+in `uv.lock`, which is the uv the pipeline installs. Every gate is a task in `mise.toml` named `<job>:<gate>`;
 `mise tasks` lists them and `mise run checks:ruff` runs one. Outside a task,
-run a command with the same tools as `mise exec -- uv run --locked python
+run a command with the same dependencies as `uv run --locked python
 manage.py ...`.
 
 `mise run fast [BASE]` is the inner loop: the changed files against the merge
@@ -150,6 +151,14 @@ same review, and should fail when its path matches nothing rather than pass.
 - Reject unknown input; Pydantic plugin commands inherit `StrictCommand`.
 - Enforce authorization in the shared capability/view layer, not ad hoc in a
   template or handler.
+- A rule one row must keep on its own is a `Rule` in the model's
+  `Meta.constraints` (`hq/platform/core/rules.py`): the database refuses the
+  row from every writer, and `full_clean` reports it beside its field, from
+  that one declaration. Never restate it in `clean()` or a service. Adding one
+  to a table that holds rows fails the migration if a row breaks it, and the
+  container migrates on boot: run `manage.py constraint_preflight --path
+  <database>` against the production data first (it reads only), and give
+  each constraint its own migration operation.
 - Every mutation is atomic and audit-attributed. Machine writes are safely
   retryable with durable idempotency.
 - Plugin IDs, routes, Django apps, distributions, providers, grants, and
@@ -194,6 +203,12 @@ than styling a page.
   framework or dependency for behavior the platform already provides.
 - Keep interactions immediate, keyboard accessible, responsive, and stable
   under partial replacement. Preserve focus and browser history intentionally.
+- A part of a page that is fetched, refreshed or polled is a `data-fragment`
+  region answered from a `{% partialdef %}` (`docs/DESIGN.md`, "A read is a
+  fragment"). No script parses a response or keeps a timer of its own.
+- A GET has no effect. Pages are prefetched on press, and a speculative
+  request is refused wherever HQ records or reaches out
+  (`hq/platform/core/speculation.py`).
 - Avoid N+1 queries. Prefetch relation panels and add a query-budget regression
   test for a projection that can grow with data or plugins.
 - Scripts are deferred; shared assets are content-versioned, compressed, and

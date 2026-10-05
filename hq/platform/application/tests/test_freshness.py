@@ -22,7 +22,7 @@ from ..freshness import (
     freshness,
     stale_after,
 )
-from ..inventory import record_connections
+from ..report_testing import report_connections
 from ..security import cli_principal
 
 
@@ -80,11 +80,11 @@ class CarriedConnectionTests(TestCase):
     """An SSH connection carried between probes is still reported each pass."""
 
     def test_a_carried_connection_is_reported_now_and_probed_earlier(self):
-        record_connections([ssh_report()], principal=cli_principal(), controller_id="c")
+        report_connections([ssh_report()], principal=cli_principal(), controller_id="c")
         earlier = timezone.now() - timedelta(minutes=48)
         ProviderConnection.objects.update(observed_at=earlier, reported_at=earlier)
 
-        record_connections(
+        report_connections(
             [ssh_report(carried=True, probed=False)],
             principal=cli_principal(),
             controller_id="c",
@@ -102,7 +102,7 @@ class CarriedConnectionTests(TestCase):
         self.assertEqual(reading.probed_at, earlier)
 
     def test_a_probed_connection_has_no_separate_probe_time(self):
-        record_connections([ssh_report()], principal=cli_principal(), controller_id="c")
+        report_connections([ssh_report()], principal=cli_principal(), controller_id="c")
 
         from ..connections import connection_readings
 

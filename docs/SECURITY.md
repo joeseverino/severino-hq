@@ -13,7 +13,13 @@
 - Django authentication required on **every** URL except `/accounts/login/`,
   `/accounts/logout/`, `/oidc/`, and `/static/`.
 - No public registration. New users are created via `manage.py createsuperuser`
-  or Django admin only.
+  only.
+- No Django admin. `django.contrib.admin` is not installed and nothing is
+  routed under `/admin/`: it writes a model directly, with no capability,
+  approval or audit attribution, and every write in HQ goes through the
+  capability policy. A test holds that. An account's staff and superuser
+  flags are shown in the account menu and the connection panel and authorize
+  nothing.
 
 ## What v1 does for you out of the box
 
@@ -60,13 +66,10 @@
   XSS sink cannot execute even if one is introduced, and `trusted-types 'none'`
   means no policy can be declared to opt back out. It costs nothing today
   because every dynamic node HQ builds uses `createElement`/`textContent`.
-  Django admin's bundled jQuery cannot meet it, so `hq.platform.core.admin_site` puts
-  every admin view under `csp_override` with that one directive dropped and
-  nothing else; a test asserts the relaxation stays that narrow. The API
-  reference at `/api/docs/` is the other exception, for the same reason: the
+  The API reference at `/api/docs/` is the one exception: the
   vendored Scalar bundle (`static/vendor/scalar`, version and SHA-256 in
   `UPSTREAM`, checked by a test) renders through `innerHTML`. Its policy is
-  derived the same way (`SEVERINO_API_REFERENCE_CSP`), keeps scripts to
+  derived from the main one (`SEVERINO_API_REFERENCE_CSP`), keeps scripts to
   `'self'` with no inline code or `eval`, and fetches nothing off-origin.
 - Violations are reported back. The policy carries `report-to` and `report-uri`
   pointing at `/csp-report/`, which records the directive, the blocked URI and
@@ -97,10 +100,13 @@
   counted per surface, source and reason per minute. Credentials are never
   recorded.
 - Routine machine events (a connection probed by a sweep) are deleted after
-  `SEVERINO_AUDIT_ROUTINE_DAYS` (30 by default) by the daily `prune_audit`
-  timer. Only the types listed in `hq.platform.core.audit.ROUTINE_EVENTS` are eligible, and
+  `SEVERINO_AUDIT_ROUTINE_DAYS` (30 by default) by the daily `audit.prune`
+  job. Only the types listed in `hq.platform.core.audit.ROUTINE_EVENTS` are eligible, and
   only when no user is attached. Logins, refusals, settings changes, deletions
   and every change to a resource or credential are kept indefinitely.
+- Sessions are database rows with a 12-hour age. The daily
+  `sessions.clear` job runs Django's `clearsessions`, which deletes the ones
+  past their expiry.
 - Request-user attribution uses an ASGI-safe context variable, preventing one
   concurrent request's identity from leaking into another request's audit row.
 - Server-generated request IDs connect response headers to structured JSON
@@ -215,9 +221,14 @@
       `SEVERINO_SECRET_STORE_KEY`, which lives on the env item and not in the
       database; storing is refused outright when that key is absent, never
       downgraded to plaintext. The material is read only by the controller,
-      through a bridge command of its own so it does not ride in the contract
-      that `export` prints, and it appears in no serializer, no API response,
+      through a bridge action of its own so it does not ride in the contract
+      that `export` answers with, and it appears in no serializer, no API response,
       and not in the reply to the upload that supplied it.
+- [ ] The controller bridge listens on its Unix socket only: no web route
+      reaches a bridge action, the socket's directory admits the web account
+      alone, and both ends refuse a peer that is another uid. The controller's
+      container mounts that directory read-only and holds neither HQ's
+      database nor its application environment.
 - [ ] Provider credentials remain outside the web container entirely. The
       controller report guard rejects any status carrying a key named
       `private`, `secret`, `token`, `password`, or `credential`.

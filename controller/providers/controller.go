@@ -38,6 +38,7 @@ var (
 
 func NewController(r *Registry, declared runtime.ControllerRegistry) *Controller {
 	r.Extensions = declared.Extensions
+	r.Profiles = declared.GithubProfiles
 	return &Controller{Registry: r, Declared: declared}
 }
 
@@ -284,6 +285,10 @@ func (c *Controller) providerOf(kind string) string {
 
 // hasSource is whether anything this controller holds can read the kind.
 func (c *Controller) hasSource(kind string, connected map[runtime.ConnectionProvider]bool) bool {
+	held, local := c.held[kind]
+	if local && held.only {
+		return held.has()
+	}
 	var needs []runtime.ConnectionProvider
 	if provider, ok := c.Declared.Observations[kind]; ok {
 		needs = []runtime.ConnectionProvider{runtime.ConnectionProvider(provider)}
@@ -301,13 +306,7 @@ func (c *Controller) hasSource(kind string, connected map[runtime.ConnectionProv
 			return true
 		}
 	}
-	switch runtime.ResourceKind(kind) {
-	case runtime.ResourceKindTailscaleDevice:
-		return c.Env["SEVERINO_TAILNET_STATUS"] != ""
-	case runtime.ResourceKindHostFirewall:
-		return c.Env["SEVERINO_HOST_FIREWALL"] != ""
-	}
-	return false
+	return local && held.has()
 }
 
 // readKind is one kind's report: its records and any parts refused while they
@@ -315,6 +314,9 @@ func (c *Controller) hasSource(kind string, connected map[runtime.ConnectionProv
 func (c *Controller) readKind(ctx context.Context, reader Reader) runtime.KindReport {
 	ledger := &refusals{}
 	records, err := reader(context.WithValue(ctx, refusalKey{}, ledger))
+	if errors.Is(err, errCarried) {
+		return runtime.KindReport{OK: true, Records: []any{}, Carried: true, RefusedParts: ledger.entries}
+	}
 	if err != nil {
 		_, refusal, reason := runtime.Classify(err)
 		report := runtime.KindReport{OK: false, Records: []any{}, Error: runtime.ReportText(err.Error()), Refusal: refusal}

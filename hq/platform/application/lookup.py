@@ -20,6 +20,7 @@ import re
 from typing import Any, Callable
 
 from hq.domains.control_plane.dns_lookup import LookupUnavailable, registry, resolve
+from hq.platform.core.outbound import allowed
 from hq.domains.control_plane.names import normalized_hostname
 
 from django.utils.timezone import now
@@ -161,7 +162,8 @@ def look_up_name(
         raise ValueError("That is not a hostname.")
     # Resolve at execution time so scoped replacements also cover registry calls.
     resolver = resolver or resolve
-    payload = resolver("api/dns", {"domain": wanted, "types": ",".join(RECORD_TYPES)})
+    with allowed("lookup"):
+        payload = resolver("api/dns", {"domain": wanted, "types": ",".join(RECORD_TYPES)})
     records = payload.get("records")
     server = payload.get("server")
     answers = [
@@ -259,7 +261,8 @@ def look_up_address(
     # other down with it. One answering is a better panel than none, and which
     # one failed is visible in what is missing.
     try:
-        answer = resolver("api/reverse-dns", {"ip": str(parsed)})
+        with allowed("lookup"):
+            answer = resolver("api/reverse-dns", {"ip": str(parsed)})
     except LookupUnavailable:
         reading["note"] = "Reverse DNS could not be read."
     else:
@@ -282,7 +285,8 @@ def look_up_address(
             reading["note"] = str(answer.get("error") or "No PTR record exists.")
 
     try:
-        held = allocations(str(parsed))
+        with allowed("lookup"):
+            held = allocations(str(parsed))
     except LookupUnavailable:
         reading["allocation"] = {}
     else:

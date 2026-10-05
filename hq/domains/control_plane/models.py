@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
 from hq.platform.core.models import TimestampedModel
+from hq.platform.core.rules import Rule, one_of, singleton
 
 
 class ManagedResource(TimestampedModel):
@@ -37,6 +38,20 @@ class ManagedResource(TimestampedModel):
         indexes = [
             models.Index(fields=("kind", "enabled")),
             models.Index(fields=("last_observed_at",)),
+        ]
+        constraints = [
+            Rule(
+                condition=models.Q(generation__gte=1),
+                name="resource_generation_starts_at_one",
+                violation_error_message="A generation starts at 1.",
+                field="generation",
+            ),
+            Rule(
+                condition=models.Q(observed_generation__lte=models.F("generation")),
+                name="resource_observed_no_later_than_declared",
+                violation_error_message="A resource is observed at a generation it has reached.",
+                field="observed_generation",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -246,6 +261,9 @@ class DashboardConfiguration(TimestampedModel):
     weather_point = models.CharField(max_length=64, blank=True)
     weather_label = models.CharField(max_length=40, default="Weather")
 
+    class Meta:
+        constraints = [singleton("dashboard_configuration_is_one_row")]
+
 
 class DashboardMachine(TimestampedModel):
     """A machine selected for the dashboard, ordered independently of its state."""
@@ -304,6 +322,14 @@ class CertificateMaterial(TimestampedModel):
         return f"material for {self.resource_id}"
 
 
+class OperationState(models.TextChoices):
+    QUEUED = "queued", "Queued"
+    CLAIMED = "claimed", "Claimed"
+    SUCCEEDED = "succeeded", "Succeeded"
+    FAILED = "failed", "Failed"
+    CANCELLED = "cancelled", "Cancelled"
+
+
 class OperationRequest(TimestampedModel):
     class Action(models.TextChoices):
         RECONCILE = "reconcile", "Reconcile"
@@ -322,12 +348,8 @@ class OperationRequest(TimestampedModel):
         # operator, about a route the machine is already offering.
         APPROVE_ROUTES = "approve-routes", "Approve advertised routes"
 
-    class State(models.TextChoices):
-        QUEUED = "queued", "Queued"
-        CLAIMED = "claimed", "Claimed"
-        SUCCEEDED = "succeeded", "Succeeded"
-        FAILED = "failed", "Failed"
-        CANCELLED = "cancelled", "Cancelled"
+    # Declared above the model so a rule in ``Meta`` can name its values.
+    State = OperationState
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     resource = models.ForeignKey(
@@ -365,11 +387,46 @@ class OperationRequest(TimestampedModel):
                 fields=("resource", "action"),
                 condition=models.Q(state__in=("queued", "claimed")),
                 name="one_active_operation_per_resource_action",
-            )
+            ),
+            one_of("state", OperationState, "operation_state_is_declared"),
+            Rule(
+                condition=~models.Q(state="claimed")
+                | (~models.Q(claimed_by="") & models.Q(lease_expires_at__isnull=False)),
+                name="operation_claimed_names_its_claim",
+                violation_error_message="A claimed operation names its controller and its lease.",
+                field="state",
+            ),
+            Rule(
+                condition=~models.Q(state="queued")
+                | models.Q(claimed_by="", claimed_at__isnull=True, lease_expires_at__isnull=True),
+                name="operation_queued_has_no_claim",
+                violation_error_message="A queued operation is claimed by nobody.",
+                field="state",
+            ),
+            Rule(
+                # Finished exactly when it says when.
+                condition=models.Q(
+                    state__in=("succeeded", "failed", "cancelled"), completed_at__isnull=False
+                )
+                | models.Q(state__in=("queued", "claimed"), completed_at__isnull=True),
+                name="operation_finished_says_when",
+                violation_error_message="An operation has a completion time exactly when it has finished.",
+                field="state",
+            ),
         ]
 
     def __str__(self) -> str:
         return f"{self.resource.key}: {self.action} ({self.state})"
+
+
+class ApprovalState(models.TextChoices):
+    PENDING = "pending", "Waiting for a person"
+    APPROVED = "approved", "Approved and applied"
+    REJECTED = "rejected", "Rejected"
+    EXPIRED = "expired", "Lapsed unanswered"
+    # Decided by nobody: the thing it described changed underneath it, so
+    # the approval that was asked for no longer covers what would happen.
+    STALE = "stale", "Superseded by a later change"
 
 
 class ApprovalRequest(TimestampedModel):
@@ -399,14 +456,8 @@ class ApprovalRequest(TimestampedModel):
     it is clicked six weeks later.
     """
 
-    class State(models.TextChoices):
-        PENDING = "pending", "Waiting for a person"
-        APPROVED = "approved", "Approved and applied"
-        REJECTED = "rejected", "Rejected"
-        EXPIRED = "expired", "Lapsed unanswered"
-        # Decided by nobody: the thing it described changed underneath it, so
-        # the approval that was asked for no longer covers what would happen.
-        STALE = "stale", "Superseded by a later change"
+    # Declared above the model so a rule in ``Meta`` can name its values.
+    State = ApprovalState
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     capability = models.CharField(max_length=64)
@@ -455,7 +506,26 @@ class ApprovalRequest(TimestampedModel):
                 fields=("capability", "target", "content_fingerprint"),
                 condition=models.Q(state="pending"),
                 name="one_pending_approval_per_requested_change",
-            )
+            ),
+            one_of("state", ApprovalState, "approval_state_is_declared"),
+            Rule(
+                # Pending exactly while nothing has settled it.
+                condition=models.Q(state="pending", decided_at__isnull=True)
+                | (~models.Q(state="pending") & models.Q(decided_at__isnull=False)),
+                name="approval_settled_says_when",
+                violation_error_message="A request has a decision time exactly when it is no longer pending.",
+                field="state",
+            ),
+            Rule(
+                # A person decides an approval or a rejection, and nothing else.
+                condition=(
+                    models.Q(state__in=("approved", "rejected")) & ~models.Q(decided_actor="")
+                )
+                | (~models.Q(state__in=("approved", "rejected")) & models.Q(decided_actor="")),
+                name="approval_decision_names_who_decided",
+                violation_error_message="An approval or a rejection names who decided it, and nothing else does.",
+                field="state",
+            ),
         ]
 
     def __str__(self) -> str:

@@ -13,13 +13,13 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest, P
 from hq.platform.core.audit import CONNECTION_AUDIT_TYPE
 from hq.platform.core.models import AuditLog
 
-from ..inventory import record_connections
+from ..report_testing import report_connections
 from ..security import cli_principal
 
 
 class ConnectionEventTests(TestCase):
     def test_a_probe_is_a_routine_event_on_its_connection(self):
-        record_connections(
+        report_connections(
             [{"connection_ref": "example-dns", "provider": "cloudflare_dns", "ok": True}],
             principal=cli_principal(),
             controller_id="example-controller",
@@ -33,7 +33,7 @@ class ConnectionEventTests(TestCase):
 
     def test_an_unchanged_probe_writes_nothing_and_a_change_is_recorded(self):
         def sweep(ok):
-            record_connections(
+            report_connections(
                 [{"connection_ref": "example-dns", "provider": "cloudflare_dns", "ok": ok}],
                 principal=cli_principal(),
                 controller_id="example-controller",
@@ -51,7 +51,7 @@ class ConnectionEventTests(TestCase):
 
     def test_starting_to_manage_is_a_kept_settings_change(self):
         def sweep(manages):
-            record_connections(
+            report_connections(
                 [{"connection_ref": "example-dns", "provider": "cloudflare_dns",
                   "ok": True, "manages": manages}],
                 principal=cli_principal(),
@@ -70,14 +70,14 @@ class ConnectionEventTests(TestCase):
         self.assertEqual([event.summary for event in changes], ["Allowed to manage its records"])
 
     def test_a_carried_connection_was_not_asked_and_writes_nothing(self):
-        record_connections(
+        report_connections(
             [{"connection_ref": "example-ssh", "provider": "ssh", "ok": True}],
             principal=cli_principal(),
             controller_id="example-controller",
         )
         AuditLog.objects.all().delete()
 
-        record_connections(
+        report_connections(
             [{"connection_ref": "example-ssh", "provider": "ssh", "carried": True}],
             principal=cli_principal(),
             controller_id="example-controller",

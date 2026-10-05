@@ -464,6 +464,10 @@ def glance_context(
     return {
         "dashboard_panels": panels,
         "dashboard_can_refresh": any(panel["refreshable"] for panel in panels),
+        # The strip is asked again for as long as a reading is on its way, and
+        # asks for the due ones itself when the page opens.
+        "dashboard_refreshing": any(panel.get("refreshing") for panel in panels),
+        "dashboard_due": any(panel.get("due") for panel in panels),
         "dashboard_glance_settings": configuration,
     }
 

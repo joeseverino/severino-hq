@@ -3,16 +3,17 @@ A running job, and what it is doing.
 
   {% include "partials/_job_progress.html" with job=job %}
 
-Polls the job's own status endpoint until it stops being live, then reloads the
+An ask's standing (partials/_ask.html) drawn as a panel: the page's script
+follows the job's status resource until it stops being live, then loads the
 page once so the surface can render the outcome however it likes. The partial
 deliberately does not try to render the result itself: what a finished import
 has to say is the extension's business, and a shared partial guessing at it
 would be wrong for every extension after the first.
 {% endcomment %}
-<div class="job-progress card" data-job="{% url 'jobs:status' job.pk %}" data-state="{{ job.state }}">
+<div class="job-progress card" data-ask data-ask-outcome{% if job.is_live %} data-ask-status="{% url 'jobs:status' job.pk %}" aria-busy="true"{% endif %} data-ask-state="{{ job.state }}" data-state="{{ job.state }}">
   <div class="job-progress-head">
     <strong>{{ job.label }}</strong>
-    <span class="job-state" data-job-state>{{ job.get_state_display }}</span>
+    <span class="job-state" data-ask-label>{{ job.get_state_display }}</span>
   </div>
   {% comment %}
   A determinate bar where the work knows how far along it is and an
@@ -23,7 +24,7 @@ would be wrong for every extension after the first.
        role="progressbar" aria-label="{{ job.label }}"
        {% if job.percent is not None %}aria-valuenow="{{ job.percent }}"{% endif %}
        aria-valuemin="0" aria-valuemax="100">
-    <i data-job-bar {% if job.percent is not None %}style="--at: {{ job.percent }}%"{% endif %}></i>
+    <i data-ask-bar {% if job.percent is not None %}style="--at: {{ job.percent }}%"{% endif %}></i>
   </div>
-  <p class="job-note" data-job-note>{{ job.note|default:"Starting…" }}</p>
+  <p class="job-note" role="status" data-ask-note>{{ job.note|default:"Starting…" }}</p>
 </div>

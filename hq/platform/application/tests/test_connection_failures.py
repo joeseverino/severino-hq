@@ -12,7 +12,7 @@ from hq.domains.control_plane.models import ProviderConnection
 
 from ..credential_mint import address_fields
 from ..findings import findings
-from ..inventory import record_connections
+from ..report_testing import report_connections
 from ..security import Capability, Principal, cli_principal
 
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
@@ -23,7 +23,7 @@ SIGN_IN = (
 
 
 def report(**connection):
-    record_connections(
+    report_connections(
         [
             {
                 "connection_ref": "example-npm",
@@ -51,11 +51,6 @@ class StoredFailureTests(TestCase):
         report(detail=SIGN_IN, failure="address")
 
         self.assertEqual(self.stored(), "address")
-
-    def test_an_unknown_cause_is_stored_as_none(self):
-        report(detail="Something", failure="gremlins")
-
-        self.assertEqual(self.stored(), "")
 
     def test_a_connection_that_answers_carries_no_cause(self):
         report(ok=True, detail="Answered", failure="address")

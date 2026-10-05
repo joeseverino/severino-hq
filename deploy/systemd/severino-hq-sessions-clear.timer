@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily removal of expired Severino HQ sessions
+
+[Timer]
+OnBootSec=25min
+OnCalendar=daily
+RandomizedDelaySec=30min
+Persistent=yes
+Unit=severino-hq-job@sessions.clear.service
+
+[Install]
+WantedBy=timers.target

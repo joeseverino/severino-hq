@@ -16,7 +16,8 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Callable, Iterator, Mapping, TypeVar
 
-from django.db.models import Q
+from django.conf import settings
+from django.db.models import FETCH_PEERS, FETCH_RAISE, Q, QuerySet
 
 # The most rows any single read will return, whatever a caller asks for.
 #
@@ -137,6 +138,22 @@ def iso(value: Any) -> str | None:
     return value.isoformat() if value else None
 
 
+def guarded(queryset: QuerySet) -> QuerySet:
+    """A list read's queryset, with a fetch its rows did not plan for caught.
+
+    A foreign key, a one-to-one or a deferred field read from a row that did
+    not fetch it costs a query per row. Under test and in development that
+    read raises ``FieldFetchBlocked``, so the missing ``select_related`` is
+    found by the first test that renders the list. In production it is fetched
+    once for every row of the page, never once per row and never as an error.
+
+    Django's fetch modes do not reach the queries of a reverse foreign key or
+    many-to-many manager; a query budget holds those.
+    """
+
+    return queryset.fetch_mode(FETCH_RAISE if settings.SEVERINO_STRICT_FETCH else FETCH_PEERS)
+
+
 def listing(model, serialize, *, search: tuple[str, ...], status=None, query=None,
             limit: int = 50) -> dict[str, Any]:
     """One list read: an optional status, an optional text match, one page.
@@ -146,7 +163,7 @@ def listing(model, serialize, *, search: tuple[str, ...], status=None, query=Non
     technologies it uses. Nothing else about the read differs.
     """
 
-    qs = model.objects.all()
+    qs = guarded(model.objects.all())
     if status:
         qs = qs.filter(status=status)
     if query:

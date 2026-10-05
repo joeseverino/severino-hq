@@ -16,9 +16,9 @@ from django.conf import settings
 from django.db import models
 from django.db.models import Q
 from django.urls import reverse
-from django.utils import timezone
 
 from hq.platform.core.models import TimestampedModel
+from hq.platform.core.rules import Rule
 
 
 class DocumentationQuerySet(models.QuerySet):
@@ -37,7 +37,9 @@ class DocumentationQuerySet(models.QuerySet):
         clear, which is the one thing a queue must never contain.
         """
         review_days = getattr(settings, "SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180)
-        cutoff = timezone.localdate() - timedelta(days=review_days)
+        from hq.platform.application.derivations import today
+
+        cutoff = today() - timedelta(days=review_days)
         return self.filter(
             Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=cutoff),
             status=self.model.Status.ACTIVE,
@@ -47,6 +49,23 @@ class DocumentationQuerySet(models.QuerySet):
                 self.model.DocType.TASK,
             )
         )
+
+
+class DocStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    ACTIVE = "active", "Active"
+    DEPRECATED = "deprecated", "Deprecated"
+    ARCHIVED = "archived", "Archived"
+
+
+class DocTaskStatus(models.TextChoices):
+    # A task doc carries its own lifecycle (the importer writes these into the
+    # same status field). Mirrors the schema's task_statuses: guarded in tests.
+    OPEN = "open", "Open"
+    ACTIVE = "active", "Active"
+    PARKED = "parked", "Parked"
+    DONE = "done", "Done"
+    WONTFIX = "wontfix", "Won't fix"
 
 
 class DocumentationRecord(TimestampedModel):
@@ -71,23 +90,12 @@ class DocumentationRecord(TimestampedModel):
         LOCAL_MAC = "local_mac", "Local Mac"
         OTHER = "other", "Other"
 
-    class Status(models.TextChoices):
-        DRAFT = "draft", "Draft"
-        ACTIVE = "active", "Active"
-        DEPRECATED = "deprecated", "Deprecated"
-        ARCHIVED = "archived", "Archived"
-
-    class TaskStatus(models.TextChoices):
-        # A task doc carries its own lifecycle (the importer writes these into the
-        # same status field). Mirrors the schema's task_statuses: guarded in tests.
-        OPEN = "open", "Open"
-        ACTIVE = "active", "Active"
-        PARKED = "parked", "Parked"
-        DONE = "done", "Done"
-        WONTFIX = "wontfix", "Won't fix"
+    # Declared above the model so the rule in ``Meta`` can name their values.
+    Status = DocStatus
+    TaskStatus = DocTaskStatus
 
     # The status field holds a standard doc status OR a task lifecycle status.
-    # Union the two, deduped by value (both declare "active"), so admin/forms
+    # Union the two, deduped by value (both declare "active"), so forms
     # accept and label every value the importer writes instead of rejecting a
     # task's "open"/"done". Guarded against the schema union in tests.
     STATUS_CHOICES = list(dict.fromkeys([*Status.choices, *TaskStatus.choices]))
@@ -175,6 +183,21 @@ class DocumentationRecord(TimestampedModel):
             models.Index(fields=("environment",)),
             models.Index(fields=("sensitivity",)),
             models.Index(fields=("last_reviewed",)),
+        ]
+        constraints = [
+            Rule(
+                # A task carries the task lifecycle; every other doc the doc one.
+                condition=(
+                    Q(doc_type="task", status__in=DocTaskStatus.values)
+                    | (~Q(doc_type="task") & Q(status__in=DocStatus.values))
+                ),
+                name="documentation_status_fits_its_type",
+                violation_error_message=(
+                    f"A task is one of: {', '.join(DocTaskStatus.values)}. "
+                    f"Any other doc is one of: {', '.join(DocStatus.values)}."
+                ),
+                field="status",
+            ),
         ]
         verbose_name = "Documentation record"
 

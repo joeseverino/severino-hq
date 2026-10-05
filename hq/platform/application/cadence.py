@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 import os
 import tempfile
@@ -40,6 +40,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
 
+from .derivations import holds_until
 from .moments import duration
 from .security import Capability, Principal
 
@@ -101,10 +102,13 @@ def recently_used(now: float | None = None) -> bool:
     marker = _path("SEVERINO_ACTIVITY_MARKER", "hq-activity")
     window = _seconds("SEVERINO_ACTIVE_WINDOW_SECONDS", 900)
     try:
-        age = (time.time() if now is None else now) - marker.stat().st_mtime
+        touched = marker.stat().st_mtime
     except OSError:
         return False
-    return age <= window
+    if (time.time() if now is None else now) - touched > window:
+        return False
+    holds_until(datetime.fromtimestamp(touched + window, tz=dt_timezone.utc))
+    return True
 
 
 def note_controller() -> None:
@@ -239,6 +243,17 @@ def swept(kind: str) -> bool:
     return declared is not None and not declared.unobserved_reason
 
 
+def every_sweep(kind: str) -> bool:
+    """Whether every sweep reads ``kind``: swept, and on no slower clock of its
+    own. A kind on its own clock is carried by the sweeps between its reads, so
+    its age says nothing about whether a sweep is due or has happened."""
+
+    from hq.domains.control_plane.observations import OBSERVATIONS
+
+    reading = OBSERVATIONS.get(kind)
+    return swept(kind) and (reading is None or reading.every is None)
+
+
 def sweep_due(controller_id: str = "") -> dict[str, object]:
     """Whether the controller should sweep now, and why.
 
@@ -272,7 +287,7 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
             for kind, observed_at, updated_at in ProviderInventory.objects.values_list(
                 "kind", "observed_at", "updated_at"
             )
-            if swept(kind)
+            if every_sweep(kind)
         ),
         default=None,
     )
@@ -358,7 +373,9 @@ def connection_providers(connection_ref: str) -> tuple[str, ...]:
     )
 
 
-def _forced_kinds(connection_ref: str, kind: str) -> tuple[str, ...] | None:
+def forced_kinds(connection_ref: str, kind: str) -> tuple[str, ...] | None:
+    """The kinds a read of one connection or one kind forces; None is every kind."""
+
     from .credential_sight import fed_kinds
 
     if kind:
@@ -383,8 +400,9 @@ def _answered(
     if read.connection_ref and probed.get(read.connection_ref, asked) <= asked:
         return False
     if read.kinds is None:
-        # Every kind: answered once something was stored and all of it is newer.
-        return bool(stored) and min(stored.values()) > asked
+        # Every kind: answered once all a sweep reads was stored after it.
+        swept_at = [at for kind, at in stored.items() if every_sweep(kind)]
+        return bool(swept_at) and min(swept_at) > asked
     return all(stored.get(kind, asked) > asked for kind in read.kinds)
 
 
@@ -408,7 +426,7 @@ def forced_reads() -> tuple[ForcedRead, ...]:
             request.connection_ref,
             request.kind,
             request.requested_at,
-            _forced_kinds(request.connection_ref, request.kind),
+            forced_kinds(request.connection_ref, request.kind),
         )
         for request in requests
     )
@@ -472,18 +490,6 @@ def ring_doorbell() -> bool:
     return True
 
 
-def ring_registry_doorbell() -> bool:
-    """Tell the host a sweep found an image or digest HQ has not read, so it
-    starts ``refresh_public_registry`` now rather than at the daily floor.
-    Carries nothing, like the controller's."""
-
-    try:
-        _touch(_path("SEVERINO_REGISTRY_DOORBELL", "registry-doorbell"))
-    except OSError:
-        return False
-    return True
-
-
 def request_delivery_read() -> bool:
     """Ask for a read of ``github.delivery`` as HQ boots on a new image.
 
@@ -503,6 +509,19 @@ def request_delivery_read() -> bool:
         or ManagedResource.objects.filter(kind=kind).exists()
     ):
         return False
+    return request_reading(kind)
+
+
+def request_reading(kind: str) -> bool:
+    """Ask for one kind to be read on the controller's next run, and start one.
+
+    For HQ and the host to ask on what they have just learned, not for a
+    person: nobody's activity is noted, so the idle cadence is untouched and
+    the sweep this causes reads the one kind. The request is stored whether or
+    not the doorbell could be rung; the controller's timer finds it within its
+    floor. The answer is whether it was rung.
+    """
+
     ReadRequest.objects.update_or_create(
         connection_ref="", kind=kind, defaults={"requested_at": timezone.now()}
     )

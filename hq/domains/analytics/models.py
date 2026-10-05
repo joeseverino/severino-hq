@@ -24,6 +24,19 @@ from __future__ import annotations
 
 from django.db import models
 
+from hq.platform.core.rules import Rule
+
+
+def _sampled(name: str) -> Rule:
+    """A sample interval counts events per sample, so it is at least one."""
+
+    return Rule(
+        condition=models.Q(sample_interval__gte=1),
+        name=name,
+        violation_error_message="A sample interval is at least 1.",
+        field="sample_interval",
+    )
+
 
 class AnalyticsSite(models.Model):
     """One Web Analytics site, as the credential reports it.
@@ -136,6 +149,7 @@ class RumDaily(models.Model):
                 fields=("site", "date", "dimension", "value"),
                 name="analytics_rumdaily_unique_grain",
             ),
+            _sampled("analytics_rumdaily_sample_interval"),
         )
         indexes = (
             # The three shapes every read model asks for: one breakdown over a
@@ -205,6 +219,7 @@ class VitalsDaily(models.Model):
             models.UniqueConstraint(
                 fields=("site", "date"), name="analytics_vitalsdaily_unique_day"
             ),
+            _sampled("analytics_vitalsdaily_sample_interval"),
         )
 
     def __str__(self) -> str:

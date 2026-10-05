@@ -1,14 +1,16 @@
 {% extends "page.html" %}
 {% comment %}
-Your GitHub profile and what you watch there, from application.github_profile.
+Your GitHub profile and what you watch there, from application.github_profile:
+the controller's last github.profile reading. Refresh asks it to read again.
 Yours because your sign-in names the account; a page that let you type a login
 would be a page about anybody.
 {% endcomment %}
 {% block page %}
+<div data-watching>
 {% if not login %}
   {% include "partials/_empty_state.html" with message="Your sign-in names no GitHub account. Add a github claim with your login to your Pocket ID user, then sign in again." %}
 {% elif not profile %}
-  {% include "partials/_empty_state.html" with message="Not read from GitHub yet. Refresh reads it now." %}
+  {% include "partials/_empty_state.html" with message="Not read from GitHub yet. The controller reads it on its next pass; Refresh asks for it now." %}
 {% else %}
   <section class="gh-profile" aria-label="Your GitHub profile">
     {% if profile.avatar %}<img class="gh-avatar" src="{{ profile.avatar }}" alt="" width="64" height="64">{% endif %}
@@ -69,4 +71,5 @@ would be a page about anybody.
     </dd></div>
   </dl>
 {% endif %}
+</div>
 {% endblock %}

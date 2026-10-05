@@ -6,7 +6,7 @@ OnBootSec=5min
 OnCalendar=daily
 RandomizedDelaySec=15min
 Persistent=yes
-Unit=severino-hq-content-sync.service
+Unit=severino-hq-job@content.sync.service
 
 [Install]
 WantedBy=timers.target

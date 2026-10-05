@@ -16,6 +16,7 @@ core/tests/test_browser_selectors.py fails when one names nothing the templates
 render. JavaScript below queries by tag only.
 """
 
+import json
 import mimetypes
 import os
 import tempfile
@@ -23,9 +24,11 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.contrib.staticfiles import finders
 from django.db import transaction
-from django.test import SimpleTestCase
+from django.test import Client, SimpleTestCase
+from django.urls import reverse
 
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES, build_dense_estate, render_dense_pages
 from hq.platform.core.tests.test_browser_fixtures import PAGES, build_estate, render_pages
@@ -52,6 +55,12 @@ ORIGIN = "http://hq.example.test"
 AUDIT = Path(settings.BASE_DIR) / "scripts" / "layout-audit.js"
 
 SELECTORS = {
+    # The fragment primitive: a placeholder's failure line, the disclosure
+    # holding one, and the calendar it pages in place.
+    "fragment_failure": "main > [data-fragment-load] > .notice",
+    "fragment_fold": "details:has(> [data-fragment-load]) > summary",
+    "calendar_period": "#calendar-period",
+    "calendar_next": '#calendar a[rel="next"]',
     "decisions": "[data-attention-item]",
     "decision_family": "details[data-queue-family] > summary strong",
     "decision_title": ".attention-title",
@@ -88,6 +97,8 @@ SELECTORS = {
     "tile_detached": "dialog, [data-menu], .topology-map",
     # A disclosure in the page, which the tile check opens to lay out.
     "disclosure": "main details:not([data-menu])",
+    # Where the API reference mounts its viewer.
+    "reference": "#api-reference-root",
     # A band's cells. Stats inside a card are the one band laid out with real
     # gaps instead of padded cells, so the KPI band is not listed.
     "band_cell": (
@@ -675,20 +686,27 @@ _ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr')].map((row) => 
 }))"""
 
 
-class LayoutBrowserTests(SimpleTestCase):
+class BrowserGate(SimpleTestCase):
+    """A browser over pages rendered once, every request answered locally.
+
+    A subclass says what it renders (``render``); the browser then asks only
+    for those paths and for static files.
+    """
+
     databases = {"default"}
+
+    @classmethod
+    def render(cls):
+        """Path to response body, for every page this class opens."""
+
+        raise NotImplementedError
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
         # Rendered, and rolled back, before the browser starts: Django refuses
         # database access while Playwright's event loop runs on this thread.
-        with transaction.atomic():
-            cls.pages = render_pages(build_estate())
-            transaction.set_rollback(True)
-        with transaction.atomic():
-            cls.pages |= render_dense_pages(build_dense_estate())
-            transaction.set_rollback(True)
+        cls.pages = cls.render()
         try:
             from playwright.sync_api import sync_playwright
         except ImportError as exc:
@@ -731,7 +749,9 @@ class LayoutBrowserTests(SimpleTestCase):
         path = urlsplit(route.request.url).path
         name = path.strip("/")
         if name in self.pages:
-            route.fulfill(content_type="text/html", body=self.pages[name])
+            route.fulfill(
+                content_type=mimetypes.guess_type(name)[0] or "text/html", body=self.pages[name]
+            )
             return
         if path.startswith(settings.STATIC_URL):
             asset = finders.find(path.removeprefix(settings.STATIC_URL))
@@ -757,6 +777,18 @@ class LayoutBrowserTests(SimpleTestCase):
     def open(self, name, width):
         self.page.set_viewport_size({"width": width, "height": 900})
         self.page.goto(f"{ORIGIN}/{name}/", wait_until="load")
+
+
+class LayoutBrowserTests(BrowserGate):
+    @classmethod
+    def render(cls):
+        with transaction.atomic():
+            pages = render_pages(build_estate())
+            transaction.set_rollback(True)
+        with transaction.atomic():
+            pages |= render_dense_pages(build_dense_estate())
+            transaction.set_rollback(True)
+        return pages
 
     def each(self, check):
         """Run ``check(name)`` on every page at every width, one subtest each."""
@@ -1135,3 +1167,395 @@ class LayoutBrowserTests(SimpleTestCase):
             self.assertEqual(self.page.evaluate(_UNPADDED_CELLS, SELECTORS["band_cell"]), [])
 
         self.across(check)
+
+
+# The API reference: a vendored viewer mounted inside HQ's frame. Its markup is
+# the vendor's, so the probes below find it by tag and ARIA, never by class.
+REFERENCE = "api/docs"
+REFERENCE_DARK = "api/docs/dark"
+# Where the viewer keeps its sidebar open beside the content.
+REFERENCE_DESKTOP = (1024, 1360)
+REFERENCE_PHONE = 375
+# The viewer is one large script: parsing it takes longer than a page's load.
+REFERENCE_READY = 30_000
+_REFERENCE_MOUNTED = "() => document.querySelector('main main h1') !== null"
+# The sidebar as drawn: each top-level entry, and what stands under a group.
+_REFERENCE_OUTLINE = """() => [...document.querySelectorAll('aside > ul > li')].map((item) => {
+  const said = (el) => el.textContent.trim();
+  const link = item.querySelector(':scope > a, :scope > div > a');
+  if (link) return [link.getAttribute('href'), said(link), []];
+  return ['', [...item.children].filter((part) => part.tagName !== 'UL').map(said).join(''),
+    [...item.querySelectorAll(':scope > ul > li > div > a')].map(said)];
+})"""
+# What stands over HQ's header, what of the viewer's is pinned under it, and
+# any trail the viewer is showing.
+_REFERENCE_FRAME = """(root) => {
+  const header = document.querySelector('header');
+  const bar = header.getBoundingClientRect();
+  const over = [0.05, 0.25, 0.5, 0.75, 0.95]
+    .map((share) => document.elementFromPoint(bar.left + bar.width * share, bar.top + bar.height / 2))
+    .filter((el) => !header.contains(el))
+    .map((el) => el.tagName.toLowerCase());
+  const pinned = [...document.querySelector(root).querySelectorAll('aside, nav, header, [data-scalar-scroll-header]')]
+    .filter((el) => el.checkVisibility() && ['sticky', 'fixed'].includes(getComputedStyle(el).position))
+    .map((el) => [el.tagName.toLowerCase(), Math.round(el.getBoundingClientRect().top)])
+    .filter(([, top]) => top < Math.round(bar.bottom) - 1);
+  const trails = [...document.querySelectorAll('nav[aria-label="Breadcrumb"]')]
+    .filter((el) => el.checkVisibility())
+    .map((el) => el.textContent.trim());
+  return {header: Math.round(bar.top), over, pinned, trails,
+    sideways: document.documentElement.scrollWidth - document.documentElement.clientWidth};
+}"""
+# What the viewer paints, beside what HQ paints.
+_REFERENCE_PAINT = """() => {
+  const behind = (el) => {
+    for (let up = el; up; up = up.parentElement) {
+      const colour = getComputedStyle(up).backgroundColor;
+      if (!/rgba\\(0, 0, 0, 0\\)|transparent/.test(colour)) return colour;
+    }
+    return '';
+  };
+  const title = document.querySelector('main main h1');
+  const page = getComputedStyle(document.body);
+  return {
+    mode: document.body.className,
+    page: page.backgroundColor, viewer: behind(title),
+    ink: page.color, title: getComputedStyle(title).color,
+    face: page.fontFamily, title_face: getComputedStyle(title).fontFamily,
+    header: behind(document.querySelector('header')), sidebar: behind(document.querySelector('aside')),
+  };
+}"""
+_REFERENCE_CHROME = """() => ({
+  said: document.querySelector('main').innerText,
+  leaves: [...document.querySelectorAll('main a[href]')]
+    .filter((a) => a.origin !== location.origin && a.checkVisibility())
+    .map((a) => a.href),
+  search: document.querySelector('aside button').innerText,
+})"""
+_REFERENCE_FOLLOW = """(title) => {
+  const link = [...document.querySelectorAll('aside a[href]')]
+    .find((a) => a.textContent.trim().startsWith(title));
+  if (!link) return false;
+  link.click();
+  return true;
+}"""
+_REFERENCE_HEADING = """(title) => {
+  const heading = [...document.querySelectorAll('main main h2, main main h3')]
+    .find((h) => h.textContent.includes(title) && h.checkVisibility());
+  if (!heading) return null;
+  return {top: Math.round(heading.getBoundingClientRect().top),
+    floor: Math.round(document.querySelector('header').getBoundingClientRect().bottom),
+    window: innerHeight, hash: location.hash};
+}"""
+_REFERENCE_OPEN_MENU = "(root) => document.querySelector(root).querySelector('header button').click()"
+
+
+def reference_outline(document):
+    """The sidebar HQ's own document declares: groups, and the domains under each."""
+
+    under: dict[str, list[str]] = {}
+    for tag in document["tags"]:
+        if "parent" in tag:
+            under.setdefault(tag["parent"], []).append(tag["summary"])
+    return [
+        [tag["summary"], under.get(tag["name"], [])]
+        for tag in document["tags"]
+        if "parent" not in tag and tag.get("kind") != "badge"
+    ]
+
+
+class ReferenceBrowserTests(BrowserGate):
+    """The API reference reads as a page of HQ's, at every width and in both themes."""
+
+    @classmethod
+    def render(cls):
+        with transaction.atomic():
+            client = Client()
+            client.force_login(get_user_model().objects.create_user(username="operator"))
+            document = reverse("hq_api:openapi")
+            page = reverse("api_reference:reference")
+            # The document the viewer reads, and the count the header asks for.
+            pages = {
+                url.strip("/"): client.get(url).content.decode()
+                for url in (page, document, reverse("action_item_count"))
+            }
+            client.post(reverse("theme"), {"theme": "dark"})
+            pages[REFERENCE_DARK] = client.get(page).content.decode()
+            transaction.set_rollback(True)
+        cls.document = json.loads(pages[document.strip("/")])
+        return pages
+
+    def start(self, **options):
+        options.setdefault("java_script_enabled", True)
+        super().start(**options)
+        self.errors = []
+        self.requests = []
+        self.refused = []
+        self.page.on("pageerror", lambda error: self.errors.append(str(error)))
+        self.page.on(
+            "console",
+            lambda message: self.errors.append(message.text) if message.type == "error" else None,
+        )
+        self.page.on("request", lambda request: self.requests.append(request.url))
+        self.page.on(
+            "response",
+            lambda response: self.refused.append(response.url) if response.status >= 400 else None,
+        )
+
+    def visit(self, width, name=REFERENCE, fragment=""):
+        self.page.set_viewport_size({"width": width, "height": 900})
+        self.page.goto(f"{ORIGIN}/{name}/{fragment}", wait_until="load")
+        self.page.wait_for_function(_REFERENCE_MOUNTED, timeout=REFERENCE_READY)
+
+    def frame(self):
+        return self.page.evaluate(_REFERENCE_FRAME, SELECTORS["reference"])
+
+    def assert_framed(self, frame):
+        """HQ's header on top, the viewer's pinned parts below it, no trail, no sideways scroll."""
+
+        self.assertEqual(frame["header"], 0)
+        self.assertEqual(frame["over"], [])
+        self.assertEqual(frame["pinned"], [])
+        self.assertEqual(frame["trails"], [])
+        self.assertLessEqual(frame["sideways"], 1)
+
+    def test_the_sidebar_is_hqs_navigation(self):
+        """The groups and domains the document declares, in its order, and nothing else:
+        no section for the version badge, none for the schemas."""
+
+        self.visit(1360)
+        drawn = [
+            [title, under]
+            for href, title, under in self.page.evaluate(_REFERENCE_OUTLINE)
+            if not href.startswith("#description")
+        ]
+        self.assertEqual(drawn, reference_outline(self.document))
+        self.assertTrue(any(under for _, under in drawn))
+
+    def test_the_header_is_never_covered_and_no_trail_is_shown(self):
+        for width in REFERENCE_DESKTOP:
+            self.visit(width)
+            height = self.page.evaluate("() => document.documentElement.scrollHeight")
+            for offset in (0, 600, height // 2, height):
+                with self.subTest(width=width, offset=offset):
+                    self.page.evaluate("(y) => window.scrollTo(0, y)", offset)
+                    self.page.wait_for_timeout(150)
+                    self.assert_framed(self.frame())
+
+    def test_a_phone_reaches_the_sidebar_under_the_header(self):
+        self.visit(REFERENCE_PHONE)
+        self.assert_framed(self.frame())
+        self.page.evaluate(_REFERENCE_OPEN_MENU, SELECTORS["reference"])
+        self.page.wait_for_timeout(300)
+        self.assert_framed(self.frame())
+        entries = self.page.evaluate(_REFERENCE_OUTLINE)
+        self.assertGreater(len(entries), 1)
+
+    def assert_painted_as_hq(self, paint, mode):
+        self.assertIn(mode, paint["mode"].split())
+        self.assertEqual(paint["viewer"], paint["page"])
+        self.assertEqual(paint["sidebar"], paint["header"])
+        self.assertEqual(paint["title"], paint["ink"])
+        self.assertEqual(paint["title_face"], paint["face"])
+
+    def test_both_themes_are_painted_from_hqs_tokens(self):
+        """The system's theme when none is chosen, the chosen one when it is."""
+
+        painted = {}
+        for scheme in ("light", "dark"):
+            with self.subTest(scheme=scheme):
+                self.start(color_scheme=scheme)
+                self.visit(1360)
+                painted[scheme] = self.page.evaluate(_REFERENCE_PAINT)
+                self.assert_painted_as_hq(painted[scheme], f"{scheme}-mode")
+                report = self.page.evaluate(
+                    _CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_TEXT_CONTRAST]
+                )
+                self.assertGreater(report["sampled"], 0)
+                self.assertEqual(report["found"], [])
+        self.assertNotEqual(painted["light"]["page"], painted["dark"]["page"])
+        with self.subTest(chosen="dark", system="light"):
+            self.start(color_scheme="light")
+            self.visit(1360, REFERENCE_DARK)
+            self.assertEqual(self.page.evaluate(_REFERENCE_PAINT), painted["dark"])
+
+    def test_the_viewer_offers_only_what_works_here(self):
+        """One search that says it is the reference's, no request sent from the page,
+        no token asked for, no way out to the vendor, and nothing fetched from it."""
+
+        self.visit(1360)
+        chrome = self.page.evaluate(_REFERENCE_CHROME)
+        for words in ("Test Request", "Bearer Token", "Open API Client", "Powered by", "Client Libraries"):
+            with self.subTest(words=words):
+                self.assertNotIn(words, chrome["said"])
+        self.assertEqual(chrome["leaves"], [])
+        self.assertIn("Search the reference", chrome["search"])
+        self.assertFalse(chrome["search"].strip().lower().endswith("k"))
+        self.assertEqual([url for url in self.requests if not url.startswith(ORIGIN)], [])
+        self.assertEqual(self.refused, [])
+        self.assertEqual(self.errors, [])
+
+    def test_a_link_to_an_operation_survives_a_reload(self):
+        tag = next(tag for tag in self.document["tags"] if "parent" in tag)
+        title = next(
+            operation["summary"]
+            for item in self.document["paths"].values()
+            for operation in item.values()
+            if operation["tags"][0] == tag["name"]
+        )
+
+        def landed():
+            self.page.wait_for_timeout(1500)
+            heading = self.page.evaluate(_REFERENCE_HEADING, title)
+            self.assertIsNotNone(heading)
+            self.assertGreaterEqual(heading["top"], heading["floor"])
+            self.assertLess(heading["top"], heading["window"] * 0.6)
+            return heading["hash"]
+
+        self.visit(1360)
+        self.assertTrue(self.page.evaluate(_REFERENCE_FOLLOW, tag["summary"]))
+        self.page.wait_for_timeout(500)
+        self.assertTrue(self.page.evaluate(_REFERENCE_FOLLOW, title))
+        fragment = landed()
+        self.assertNotEqual(fragment, "")
+        self.page.reload(wait_until="load")
+        self.page.wait_for_function(_REFERENCE_MOUNTED, timeout=REFERENCE_READY)
+        self.assertEqual(landed(), fragment)
+        self.assertEqual(self.refused, [])
+        self.assertEqual(self.errors, [])
+
+
+# A region that polls and names its parts, a placeholder behind a closed
+# disclosure, and one whose address answers a whole page.
+_FRAGMENT_PROBE = f"""<!doctype html><html><head><title>Probe</title>
+<script defer src="{settings.STATIC_URL}js/fragment.js"></script>
+</head><body><main>
+<section data-fragment="/probe-strip/" data-fragment-poll="1">
+<details data-fragment-part="first"><summary>First</summary>as drawn</details>
+<details data-fragment-part="second"><summary>Second</summary>as drawn</details>
+</section>
+<details data-probe="fold"><summary>More</summary>
+<div data-fragment="/probe-slot/" data-fragment-load data-fragment-failure="Could not be read.">waiting</div>
+</details>
+<div data-fragment="/probe-page/" data-fragment-load data-fragment-failure="Could not be read.">waiting</div>
+</main></body></html>"""
+_PROBE_STRIP = """<section data-fragment="/probe-strip/"{poll}>
+<details data-fragment-part="first"><summary>First</summary>as drawn</details>
+<details data-fragment-part="second"><summary>Second</summary>read again</details>
+</section>"""
+_PROBE_STATE = """(failure) => ({
+  first: document.querySelector('[data-fragment-part="first"]').kept === true,
+  firstOpen: document.querySelector('[data-fragment-part="first"]').open,
+  second: document.querySelector('[data-fragment-part="second"]').textContent,
+  polling: document.querySelector('[data-fragment-poll]') !== null,
+  slot: document.querySelector('[data-probe="fold"]').textContent,
+  page: [...document.querySelectorAll(failure)].map((line) => line.textContent),
+  titles: document.querySelectorAll('main title, main main').length,
+})"""
+
+
+class FragmentBrowserTests(BrowserGate):
+    """The fragment primitive, in a browser: what it swaps, keeps and stops."""
+
+    @classmethod
+    def render(cls):
+        with transaction.atomic():
+            client = Client()
+            client.force_login(get_user_model().objects.create_superuser(username="operator"))
+            url = reverse("calendar:month")
+            page = client.get(url)
+            following = page.context["next_url"]
+            cls.calendar, cls.following = url, following
+            answers = {
+                (url, ""): page.content.decode(),
+                (following, "calendar"): client.get(
+                    following, headers={"X-Fragment": "calendar"}
+                ).content.decode(),
+                (reverse("action_item_count"), ""): '{"count": 0}',
+            }
+            transaction.set_rollback(True)
+        return answers
+
+    def start(self, **options):
+        options.setdefault("java_script_enabled", True)
+        super().start(**options)
+        self.errors = []
+        self.asked = []
+        self.strip = [' data-fragment-poll="1"', ""]
+        self.page.on("pageerror", lambda error: self.errors.append(str(error)))
+
+    def respond(self, route):
+        request = route.request
+        parts = urlsplit(request.url)
+        address = parts.path + (f"?{parts.query}" if parts.query else "")
+        part = request.headers.get("x-fragment", "")
+        self.asked.append((address, part))
+        if parts.path == "/probe/":
+            return route.fulfill(content_type="text/html", body=_FRAGMENT_PROBE)
+        if parts.path == "/probe-strip/":
+            poll = self.strip.pop(0) if self.strip else ""
+            return route.fulfill(content_type="text/html", body=_PROBE_STRIP.format(poll=poll))
+        if parts.path == "/probe-slot/":
+            return route.fulfill(content_type="text/html", body="<p>read when opened</p>")
+        if parts.path == "/probe-page/":
+            return route.fulfill(content_type="text/html", body=_FRAGMENT_PROBE)
+        if (address, part) in self.pages:
+            return route.fulfill(content_type="text/html", body=self.pages[(address, part)])
+        if parts.path.startswith(settings.STATIC_URL):
+            return super().respond(route)
+        return route.fulfill(status=404, body="Not in the synthetic fixture")
+
+    def test_a_polled_region_takes_only_what_changed_and_stops_when_told(self):
+        self.page.goto(f"{ORIGIN}/probe/", wait_until="load")
+        self.page.evaluate(
+            "() => { const first = document.querySelector('[data-fragment-part=\"first\"]');"
+            " first.kept = true; first.open = true; }"
+        )
+        self.page.wait_for_function("() => document.querySelector('[data-fragment-poll]') === null")
+        state = self.page.evaluate(_PROBE_STATE, SELECTORS["fragment_failure"])
+
+        # The part that did not change is the same node, still open; the one
+        # that did was replaced.
+        self.assertTrue(state["first"])
+        self.assertTrue(state["firstOpen"])
+        self.assertEqual(state["second"].strip(), "Secondread again")
+        asked = self.asked.count(("/probe-strip/", ""))
+        self.page.wait_for_timeout(2500)
+        self.assertEqual(self.asked.count(("/probe-strip/", "")), asked)
+        self.assertEqual(self.errors, [])
+
+    def test_a_placeholder_waits_for_its_disclosure_and_refuses_a_whole_page(self):
+        self.page.goto(f"{ORIGIN}/probe/", wait_until="load")
+        self.page.wait_for_selector(SELECTORS["fragment_failure"])
+        state = self.page.evaluate(_PROBE_STATE, SELECTORS["fragment_failure"])
+
+        self.assertNotIn(("/probe-slot/", ""), self.asked)
+        self.assertEqual(state["page"], ["Could not be read."])
+        self.assertEqual(state["titles"], 0)
+
+        self.page.locator(SELECTORS["fragment_fold"]).click()
+        self.page.wait_for_function(
+            "() => document.querySelector('[data-probe=\"fold\"]').textContent.includes('read when opened')"
+        )
+        self.assertEqual(self.asked.count(("/probe-slot/", "")), 1)
+        self.assertEqual(self.errors, [])
+
+    def test_paging_the_calendar_asks_for_its_part_and_keeps_the_page(self):
+        self.page.goto(f"{ORIGIN}{self.calendar}", wait_until="load")
+        was = self.page.locator(SELECTORS["calendar_period"]).text_content()
+        self.page.evaluate("() => { window.kept = true; }")
+        self.page.locator(SELECTORS["calendar_next"]).focus()
+        self.page.keyboard.press("Enter")
+        self.page.wait_for_function(
+            "([period, was]) => document.querySelector(period).textContent !== was",
+            arg=[SELECTORS["calendar_period"], was],
+        )
+
+        self.assertIn((self.following, "calendar"), self.asked)
+        self.assertTrue(self.page.evaluate("() => window.kept === true"))
+        self.assertTrue(self.page.url.endswith(self.following))
+        # The keyboard is where it was: on the control that was pressed.
+        self.assertEqual(
+            self.page.evaluate("() => document.activeElement.getAttribute('rel')"), "next"
+        )
+        self.assertEqual(self.errors, [])

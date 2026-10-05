@@ -49,8 +49,9 @@ A domain's own calendar stays on its pages.
 {% if dashboard_charts or not calendar.empty %}
 <section class="dashboard-patterns" aria-label="Trends and the month">
   {% for chart in dashboard_charts %}{% include "partials/_stacked_bar_chart.html" with chart=chart %}{% endfor %}
+  {% partialdef calendar inline %}
   {% if not calendar.empty %}
-  <section class="card calendar-month is-compact" id="dashboard-calendar" data-calendar aria-labelledby="dashboard-calendar-title">
+  <section class="card calendar-month is-compact" id="dashboard-calendar" data-fragment data-fragment-name="calendar" data-fragment-links data-fragment-history="replace" aria-labelledby="dashboard-calendar-title">
     <div class="section-head">
       <h2 id="dashboard-calendar-title"><a href="{% url 'calendar:month' %}?month={{ calendar.month|date:'Y-m' }}">{{ calendar.month|date:"F Y" }}</a></h2>
       <nav class="calendar-nav" aria-label="Change month">
@@ -62,6 +63,7 @@ A domain's own calendar stays on its pages.
     {% include "calendars/_month_grid.html" %}
   </section>
   {% endif %}
+  {% endpartialdef %}
 </section>
 {% endif %}
 
@@ -116,7 +118,8 @@ A domain's own calendar stays on its pages.
 {% if external_links or external_choices %}
 <section class="dash-links" aria-label="Links">
   <h2>Links</h2>
-  <ul class="ext-links">
+  {% partialdef links inline %}
+  <ul class="ext-links" id="dashboard-links" data-fragment data-fragment-name="links">
     {% for l in external_links %}
       <li>
         <a href="{{ l.href }}" target="_blank" rel="noopener" title="{{ l.sub }}">
@@ -126,6 +129,7 @@ A domain's own calendar stays on its pages.
       </li>
     {% endfor %}
   </ul>
+  {% endpartialdef %}
   {% comment %}
   A link to the links page, which does the same job without script; with it
   the page opens as a dialog, which cannot fall off the bottom of the page.

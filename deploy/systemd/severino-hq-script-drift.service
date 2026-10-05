@@ -7,6 +7,9 @@ Type=oneshot
 # From the root-owned tree every deploy refreshes. Through /bin/sh because the
 # sync leaves only *.sh executable.
 ExecStart=/bin/sh /usr/local/lib/severino-hq/scripts/severino-hq-check-scripts
+# The check reads files and one image. A oneshot has no start timeout of its own, and one
+# that hangs keeps its timer from ever firing again.
+TimeoutStartSec=10min
 NoNewPrivileges=yes
 ProtectHome=yes
 PrivateTmp=yes

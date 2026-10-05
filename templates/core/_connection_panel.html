@@ -184,8 +184,9 @@ page it falls back to. Nothing here knows which one it is in.
                 About <code>{{ connection.peering.address }}</code>
               </summary>
               <div class="conn-rows"
-                   data-deferred="{% url 'tool_public_address' %}?address={{ connection.peering.address|urlencode }}"
-                   data-deferred-failure="The lookup could not be reached.">
+                   data-fragment="{% url 'tool_public_address' %}?address={{ connection.peering.address|urlencode }}"
+                   data-fragment-load
+                   data-fragment-failure="The lookup could not be reached.">
                 <div class="conn-row">
                   <span class="conn-row-note">Read when you open this, not when the page is built.</span>
                 </div>

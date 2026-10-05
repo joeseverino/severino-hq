@@ -31,6 +31,7 @@ from ..adoption import (
 )
 from ..sweep import record_sweep
 from ..adoption_testing import managing_everything
+from ..report_testing import refused_part
 from ..infrastructure import NotFoundError
 from ..security import cli_principal
 
@@ -795,7 +796,7 @@ class ADeletedContainerIsForgottenTests(TestCase):
         self.assertIn("b-web", self.names())
 
     def test_a_refused_or_failed_listing_retires_nothing(self):
-        self.sweep({**A_COMPOSED_CONTAINER, "name": "a-db"}, refused_parts=["stacks"])
+        self.sweep({**A_COMPOSED_CONTAINER, "name": "a-db"}, refused_parts=[refused_part("")])
         self.assertIn("a-web", self.names())
         record_sweep(
             {"portainer.container": {"ok": False, "records": [], "error": "down"}},

@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
-from django.urls import Resolver404, URLPattern, URLResolver, get_resolver, resolve, reverse
+from django.urls import Resolver404, URLPattern, URLResolver, get_resolver, resolve
 from django.urls.resolvers import RoutePattern
 from django.utils import timezone
 
@@ -399,10 +399,7 @@ def _sampled_routes(patterns=None, prefix="/"):
 
 
 def _sent_to_sign_in(response, view) -> bool:
-    """A redirect to sign in, carrying where to come back to.
-
-    The admin names its own login page, which HQ routes to the one sign-in.
-    """
+    """A redirect to sign in, carrying where to come back to."""
 
     if response.status_code != 302:
         return False
@@ -439,12 +436,40 @@ class RouteExposureTests(SimpleTestCase):
 class AnonymousSweepTests(TestCase):
     """Ask for everything without a credential; nothing may answer."""
 
-    def test_the_admin_password_form_is_not_a_second_door(self):
-        """One sign-in path, so one set of rules governs every attempt."""
+    def test_there_is_no_admin_site(self):
+        """Every write goes through the capability policy. Django's admin
+        writes a model directly, with no capability, approval or audit
+        attribution, so it is not installed, not routed and not registered."""
 
-        response = Client().get("/admin/login/", REMOTE_ADDR="127.0.0.1")
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(response["Location"].startswith("/accounts/login/"))
+        from pathlib import Path
+
+        from django.apps import apps
+
+        self.assertFalse(apps.is_installed("django.contrib.admin"))
+        self.assertFalse(any(route.startswith("admin/") for route, _view in _routes()))
+        root = Path(settings.BASE_DIR)
+        imports = re.compile(
+            r"^\s*(from django\.contrib\.admin\b|import django\.contrib\.admin\b"
+            r"|from django\.contrib import [^\n]*\badmin\b)",
+            re.MULTILINE,
+        )
+        registered = [
+            str(path.relative_to(root))
+            for package in ("hq", "hq_sdk")
+            for path in (root / package).rglob("*.py")
+            if imports.search(path.read_text())
+        ]
+        self.assertEqual(registered, [])
+        for user in (None, get_user_model().objects.create_superuser("root-example", password="unused-test-pass")):
+            client = Client()
+            if user is not None:
+                client.force_login(user)
+            for path in ("/admin/", "/admin/login/", "/admin/core/auditlog/"):
+                with self.subTest(path=path, signed_in=user is not None):
+                    response = client.get(path, REMOTE_ADDR="127.0.0.1")
+                    self.assertIn(response.status_code, (302, 404))
+                    if response.status_code == 302:
+                        self.assertTrue(response["Location"].startswith("/accounts/login/"))
 
     def test_only_the_reviewed_surface_answers_without_a_session(self):
         """Every route in the composed URLconf, asked for without a session.
@@ -576,7 +601,8 @@ class StaticCachingTests(SimpleTestCase):
             ),
         ):
             name = "app.0123456789ab.js" if versioned else "app.js"
-            response = asyncio.run(files.get_response(name, {}))
+            scope = {"type": "http", "method": "GET", "headers": []}
+            response = asyncio.run(files.get_response(name, scope))
         return response.headers["Cache-Control"]
 
     def test_production_pins_a_versioned_asset_forever(self):
@@ -625,6 +651,144 @@ def _returns(value):
         return value
 
     return _get_response
+
+
+class PrecompressedStaticTests(SimpleTestCase):
+    """An asset is compressed once, when it is collected, and that copy is what is sent."""
+
+    BODY = "body { color: red }\n" * 200
+    # Not the gzip of BODY: what arrives shows which file was read.
+    COPY = "precompressed"
+
+    def _get(self, path, *, live=False, copy=True, **headers):
+        import gzip
+        import os
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        import httpx
+        from asgiref.sync import async_to_sync
+        from starlette.applications import Starlette
+        from starlette.routing import Mount
+
+        from hq.platform.core.static import CachedStaticFiles
+
+        async def request(root):
+            # Mounted, as production mounts it, so a refusal is a response.
+            app = Starlette(routes=[Mount("/", app=CachedStaticFiles(directory=root))])
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+                return await client.get(path, headers={"Accept-Encoding": "identity", **headers})
+
+        manifest = SimpleNamespace(hashed_files={"app.css": "app.0123456789ab.css"})
+        with tempfile.TemporaryDirectory() as root:
+            for name in ("app.css", "app.0123456789ab.css"):
+                Path(root, name).write_text(self.BODY, encoding="utf-8")
+                if copy:
+                    Path(root, f"{name}.gz").write_bytes(gzip.compress(self.COPY.encode(), mtime=0))
+            for written in Path(root).iterdir():
+                # A validator is the file's time and size: the same in every scratch tree.
+                os.utime(written, (1_700_000_000, 1_700_000_000))
+            with (
+                override_settings(STATIC_LIVE=live, STATICFILES_DIRS=[root]),
+                patch("hq.platform.core.static.staticfiles_storage", manifest),
+            ):
+                return async_to_sync(request)(root)
+
+    def test_a_request_that_takes_gzip_gets_the_collected_copy(self):
+        response = self._get("/app.0123456789ab.css", **{"Accept-Encoding": "br, gzip"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.text, self.COPY)
+        self.assertEqual(response.headers["content-encoding"], "gzip")
+        self.assertEqual(response.headers["content-type"], "text/css; charset=utf-8")
+        self.assertEqual(response.headers["vary"], "Accept-Encoding")
+        self.assertEqual(response.headers["cache-control"], "public, max-age=31536000, immutable")
+        self.assertEqual(response.headers["cross-origin-resource-policy"], "same-origin")
+        self.assertEqual(response.headers["x-content-type-options"], "nosniff")
+
+    def test_an_unhashed_name_is_compressed_but_never_pinned(self):
+        response = self._get("/app.css", **{"Accept-Encoding": "gzip"})
+        self.assertEqual(response.text, self.COPY)
+        self.assertEqual(response.headers["cache-control"], "public, max-age=3600")
+
+    def test_a_request_that_refuses_gzip_gets_the_asset_itself(self):
+        for accepted in ("identity", "br", "gzip;q=0", "gzip; q=0.0", ""):
+            with self.subTest(accepted=accepted):
+                response = self._get("/app.0123456789ab.css", **{"Accept-Encoding": accepted})
+                self.assertEqual(response.text, self.BODY)
+                self.assertNotIn("content-encoding", response.headers)
+                # Still varies: the same name has a compressed representation.
+                self.assertEqual(response.headers["vary"], "Accept-Encoding")
+                self.assertEqual(
+                    response.headers["cache-control"], "public, max-age=31536000, immutable"
+                )
+
+    def test_an_asset_with_no_copy_is_sent_as_it_is(self):
+        response = self._get("/app.0123456789ab.css", copy=False, **{"Accept-Encoding": "gzip"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.text, self.BODY)
+        self.assertNotIn("content-encoding", response.headers)
+
+    def test_a_copy_already_held_is_not_sent_again(self):
+        first = self._get("/app.0123456789ab.css", **{"Accept-Encoding": "gzip"})
+        again = self._get(
+            "/app.0123456789ab.css",
+            **{"Accept-Encoding": "gzip", "If-None-Match": first.headers["etag"]},
+        )
+        self.assertEqual(again.status_code, 304)
+        self.assertEqual(again.content, b"")
+        self.assertEqual(again.headers["vary"], "Accept-Encoding")
+        self.assertEqual(again.headers["cache-control"], "public, max-age=31536000, immutable")
+
+    def test_each_representation_has_its_own_validator(self):
+        compressed = self._get("/app.0123456789ab.css", **{"Accept-Encoding": "gzip"})
+        plain = self._get("/app.0123456789ab.css")
+        self.assertNotEqual(compressed.headers["etag"], plain.headers["etag"])
+
+    def test_a_missing_asset_is_not_found_either_way(self):
+        for accepted in ("gzip", "identity"):
+            with self.subTest(accepted=accepted):
+                response = self._get("/absent.css", **{"Accept-Encoding": accepted})
+                self.assertEqual(response.status_code, 404)
+
+    def test_a_write_is_refused_before_any_lookup(self):
+        import asyncio
+
+        from starlette.exceptions import HTTPException
+
+        from hq.platform.core.static import CachedStaticFiles
+
+        scope = {"type": "http", "method": "POST", "headers": [(b"accept-encoding", b"gzip")]}
+        with override_settings(STATIC_LIVE=False), self.assertRaises(HTTPException) as refused:
+            asyncio.run(CachedStaticFiles(directory=".", check_dir=False).get_response("app.css", scope))
+        self.assertEqual(refused.exception.status_code, 405)
+
+    def test_serving_live_reads_the_source_and_never_a_copy(self):
+        response = self._get("/app.css", live=True, **{"Accept-Encoding": "gzip"})
+        self.assertEqual(response.text, self.BODY)
+        self.assertNotIn("content-encoding", response.headers)
+        self.assertEqual(response.headers["cache-control"], "no-cache")
+
+    def test_what_takes_gzip(self):
+        from hq.platform.core.static import accepts_gzip
+
+        cases = {
+            "gzip": True,
+            "GZIP": True,
+            "deflate, gzip;q=0.5, br": True,
+            "*": True,
+            "": False,
+            "identity": False,
+            "gzip;q=0": False,
+            "gzip;q=nonsense": False,
+            "xgzip": False,
+        }
+        for header, expected in cases.items():
+            with self.subTest(header=header):
+                scope = {"type": "http", "headers": [(b"accept-encoding", header.encode())]}
+                self.assertIs(accepts_gzip(scope), expected)
+        self.assertIs(accepts_gzip({"type": "http", "headers": []}), False)
 
 
 @override_settings(SEVERINO_TRUSTED_PROXIES=[PROXY])
@@ -784,7 +948,7 @@ class BrowserBoundaryTests(TestCase):
                 with self.subTest(file=name, sink=sink):
                     self.assertLessEqual(
                         text.count(f"{sink}("),
-                        1 if name == "app.js" else 0,
+                        1 if name == "fragment.js" else 0,
                         f"{name} reaches a Trusted Types sink outside the helper",
                     )
 
@@ -794,9 +958,10 @@ class BrowserBoundaryTests(TestCase):
         root = Path(__file__).resolve().parents[4] / "static" / "js"
         sources = {path.name: path.read_text("utf-8") for path in root.glob("*.js")}
 
-        self.assertEqual(sources["app.js"].count("window.fetch("), 1)
-        self.assertNotIn("fetch(", sources["tables.js"])
-        self.assertIn("window.hqFetch(", sources["tables.js"])
+        self.assertEqual(sources["fragment.js"].count("window.fetch("), 1)
+        for name in ("app.js", "tables.js"):
+            self.assertNotIn("window.fetch(", sources[name], name)
+            self.assertNotRegex(sources[name], r"(?<![\w.])fetch\(", name)
 
     def test_the_policy_names_somewhere_to_report_a_violation(self):
         response = self.client.get("/accounts/login/")
@@ -808,28 +973,6 @@ class BrowserBoundaryTests(TestCase):
         response = self.client.get("/accounts/login/")
 
         self.assertEqual(response["Cross-Origin-Resource-Policy"], "same-origin")
-
-    def test_the_admin_keeps_the_policy_minus_only_what_it_cannot_meet(self):
-        """The scoped exception, pinned so it stays scoped.
-
-        Admin's bundled jQuery writes HTML through `innerHTML`, so it cannot
-        run under Trusted Types. The relaxation is allowed to remove that and
-        nothing else: a second directive quietly joining it would make the
-        admin a hole in a policy the rest of the application still advertises.
-        """
-
-        application = self.client.get("/accounts/login/")
-        self.client.force_login(
-            get_user_model().objects.create_superuser("admin-example", password="unused-test-pass")
-        )
-        # The site's own page and a generated per-model one.
-        for path in (reverse("admin:index"), reverse("admin:core_auditlog_changelist")):
-            with self.subTest(path=path):
-                admin = self.client.get(path)
-                self.assertEqual(admin.status_code, 200)
-                relaxed = set(_directives(application["Content-Security-Policy"]))
-                relaxed -= set(_directives(admin["Content-Security-Policy"]))
-                self.assertEqual(relaxed, {"require-trusted-types-for", "trusted-types"})
 
 
 def _directives(policy):
@@ -980,6 +1123,10 @@ class CanonicalEntryTests(TestCase):
         it would make the container permanently unhealthy.
         """
 
-        response = self.client.get("/health/ready/", REMOTE_ADDR="127.0.0.1")
+        from unittest.mock import patch
+
+        # Ready, as the image is: this is about the redirect, not the assets.
+        with patch("hq.platform.core.health_views.collected", return_value=True):
+            response = self.client.get("/health/ready/", REMOTE_ADDR="127.0.0.1")
 
         self.assertEqual(response.status_code, 200)

@@ -132,8 +132,7 @@ a destructive one is only its colour.
 by HQ from sign-on, never loaded from the provider by a page), their name,
 what the account may do, and how long ago they signed in, in hours or days.
 Then what can be set: the two switches share a line, names over tracks, and
-the theme has its row. Then where the menu leads. The Admin link is offered
-only to an account the admin would let in.
+the theme has its row. Then where the menu leads.
 
 **One disclosure.** Every `details` that is not a menu shows the same mark,
 turned when open. A section that folds (`section-fold`) uses its heading as the
@@ -260,6 +259,83 @@ A page in a background tab asks for nothing, a GET never does, and the request
 cannot name a connection or a kind. When the reading lands the page loads
 again, once; or, if somebody has touched it or it reloaded a moment ago, it
 says a newer reading is in and leaves showing it to them.
+
+**Asked-for work is an ask.** A button that starts work which outlives the
+request is `partials/_ask.html`, from an `Ask`
+(`hq/platform/application/asks.py`), and may stand wherever a `PageAction`
+does. Pressing it posts; the request stores the ask and answers at once; the
+control then says how the work stands. The note beside the button is a live
+region (`role="status"`) that changes only when the state does, and the elapsed
+time ticks next to it outside the region, so nothing is read out every second.
+While its own work is live the button is `aria-disabled`, not disabled: it
+keeps the focus the operator just gave it and ignores a second press. When the
+work ends the part of the page named by the ask's `refresh` selector is fetched
+again and swapped in place; without one the page loads again, though not under
+somebody's hands and never twice running. A failure is said in the note, where
+it was asked. Without script the same button is a form post back to the page,
+which draws the control from what is stored, so a page loaded while the work is
+live says so and resumes following it. A job's panel (`_job_progress.html`) and
+the readings a page asks for when it opens (`_visit_refresh.html`) are the same
+ask drawn differently; one behaviour in `app.js` follows all three.
+*Gates:* `RequestNeverWaitsTests.test_asked_for_work_is_followed_by_one_script_behaviour`;
+`hq/platform/core/tests/test_action_budgets.py`.
+
+**A read is a fragment.** A part of a page that is fetched after the page,
+refreshed in place or asked again is a *region*: an element that says where it
+comes from, and nothing else. `static/js/fragment.js` is the one script that
+fetches a part, parses it and puts it in place, and the one timer that asks
+again.
+
+| On the element | Means |
+| --- | --- |
+| `data-fragment="<url>"` | a region, and the address that answers it; empty for the page it is on |
+| `data-fragment-name="<part>"` | the part asked for by name, sent as `X-Fragment` |
+| `data-fragment-load` | a placeholder, fetched when the page is up or when the disclosure or dialog around it opens |
+| `data-fragment-poll="<seconds>"` | asked again for as long as the server keeps drawing the attribute |
+| `data-fragment-part="<key>"` | inside a region: replaced one by one, and only when changed |
+| `data-fragment-links` | links and forms inside that lead to the region's own page are answered in place |
+| `data-fragment-history="replace"` | an in-place answer updates the address bar |
+| `data-fragment-failure`, `data-fragment-fallback` | what the region says when it cannot be had, and the page that answers the same thing |
+| `data-fragment-target="<id>"` on a link or form | its answer belongs in that region; empty for the region it is inside |
+
+On the server a part is `{% partialdef name inline %}` in the page's own
+template, so the page and the part are one definition. Any `PageMixin` view
+answers a request that names a part with the part alone
+(`hq.platform.application.fragments`); a view that does not know the name
+answers the page and the region is found in it by its id, so a region never
+depends on its server having been taught about it. A view may compose only
+what the part shows (the dashboard does for its calendar and links). A part
+whose inputs are known by revision answers an unchanged question with 304.
+
+A swap keeps what the reader did: the keyboard stays on the control that was
+pressed, a disclosure with an id stays as it was, the page does not scroll,
+and the region is `aria-busy` while it waits. A newer question for a region
+ends the older one. A question that fails falls back to the link or form it
+enhanced; a post is never sent twice, and says what went wrong beside the
+form. A session that ended says so and offers the way back in. A hidden tab
+is not polled, and a region that fails is asked less often.
+
+Script that needs a part calls `hqFragment.swap(region, {url})`; script that
+needs to ask again calls `hqEvery(work, {ms})`. After a swap the new content
+hears `hq:fragment`, which is where a behaviour binds to it.
+*Gates:* `FragmentPrimitiveTests` (no other script reads a response as text,
+parses markup or keeps an interval; every named part is defined);
+`FragmentBrowserTests` (browser).
+
+**Moving between pages is not a flash.** A same-origin navigation fades the
+new page in under a header that does not move (`@view-transition`, with the
+header as its own unanimated layer), in browsers that have it and for readers
+who have not asked for less motion. Every page names one set of speculation
+rules by header: a link to a page of HQ's is prefetched when the pointer or
+finger goes down on it, so the document is arriving while the click completes.
+Prefetch only, never prerender, and only on press, so a page is never held
+fetched and unread while the operator changes what it would show. A
+speculative request has no effect: `hq.platform.core.speculation` refuses one
+at every route that answers without a session, at the audit writer and at the
+outbound boundary, and the rules leave out those routes and any link that is a
+download, a dialog or a region answered in place.
+*Gate:* `hq/platform/core/tests/test_speculation.py`, which prefetches every
+page and fails on one that writes.
 
 ## Adding UI
 

@@ -10,6 +10,7 @@ import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
+from .derivations import holds_until, present
 from .timestamps import moment
 
 DEFAULT_RENEWAL_WINDOW_DAYS = 30
@@ -24,10 +25,16 @@ def days_until(when: datetime, now: datetime | None = None) -> int:
 
     if when.tzinfo is None:
         when = when.replace(tzinfo=timezone.utc)
-    left = (when - (now or datetime.now(timezone.utc))).total_seconds() / 86400
-    if left < 0:
-        return math.floor(left)
-    return max(1, math.floor(left + 0.5)) if left > 0 else 0
+    left = (when - (now or present())).total_seconds() / 86400
+    if left > 0:
+        days = max(1, math.floor(left + 0.5))
+        # N holds while N - 0.5 <= left; 1 holds until the moment itself.
+        holds_until(when - timedelta(days=days - 0.5) if days > 1 else when)
+        return days
+    days = math.floor(left)
+    # Past by k days, and by k + 1 a day after that.
+    holds_until(when + timedelta(days=-days))
+    return days
 
 
 def renewal_window(spec: Mapping[str, Any]) -> int:

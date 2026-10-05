@@ -13,6 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import TemplateView, View
 
+from hq.platform.application import fragments
 from hq.platform.application.agent_access import set_agents_paused
 from hq.platform.application.appearance import set_theme
 from hq.platform.application.avatars import avatar_of
@@ -265,11 +266,6 @@ class SearchView(PageMixin, TemplateView):
         "audit": 100,
     }
 
-    def get_template_names(self):
-        if self.request.headers.get("X-Command-Center") == "palette":
-            return ["core/_command_center_results.html"]
-        return super().get_template_names()
-
     def _palette_groups(self, discovery):
         remaining = self.palette_result_limit
         groups = []
@@ -314,7 +310,7 @@ class SearchView(PageMixin, TemplateView):
         contacts: list = []
         total = 0
         principal = web_principal(self.request.user)
-        palette_request = self.request.headers.get("X-Command-Center") == "palette"
+        palette_request = fragments.requested(self.request) == "palette"
         # One scope, so records search and discovery share the machine and
         # connection reads they both make.
         with projection_scope():

@@ -27,7 +27,7 @@ from django.urls import URLPattern, URLResolver, get_resolver
 # Routes that are not pages: machine endpoints, downloads, and anything that
 # acts when fetched.
 SKIPPED = re.compile(
-    r"^/(api|mcp|static|media|admin|accounts|oidc|health|csp-report)/"
+    r"^/(api|mcp|static|media|accounts|oidc|health|csp-report)/"
     r"|/(export|download|report|count|glance|logout|refresh|callback|complete)/"
     r"|\.(json|csv|md|pem|txt|ics)$"
 )

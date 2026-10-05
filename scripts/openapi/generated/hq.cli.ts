@@ -822,7 +822,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "api",
     "name": "rootV2",
-    "summary": "What this is, and what the presented credential may actually do.",
+    "summary": "API root",
     "method": "GET",
     "path": "/api/v2/",
     "positionals": [],
@@ -854,7 +854,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "api",
     "name": "capabilitiesV2",
-    "summary": "Every capability HQ has, flagged by whether this token may run it.",
+    "summary": "List capabilities",
     "method": "GET",
     "path": "/api/v2/capabilities/",
     "positionals": [],
@@ -2567,7 +2567,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "api",
     "name": "executeV2",
-    "summary": "Run one HQ capability, replaying machine writes by idempotency key.",
+    "summary": "Run a capability",
     "method": "POST",
     "path": "/api/v2/capabilities/{name}/",
     "positionals": [
@@ -2653,7 +2653,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "api",
     "name": "connectionsV2",
-    "summary": "Connection contracts plus the safe state this token may inspect.",
+    "summary": "Connections",
     "method": "GET",
     "path": "/api/v2/connections/",
     "positionals": [],
@@ -2685,7 +2685,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "api",
     "name": "findingsV2",
-    "summary": "What HQ currently claims is wrong, with the evidence and a remedy.",
+    "summary": "Findings",
     "method": "GET",
     "path": "/api/v2/findings/",
     "positionals": [],
@@ -2726,7 +2726,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "api",
     "name": "openapiV2",
-    "summary": "This API as an OpenAPI 3.2 document, derived from its routes and registries.",
+    "summary": "OpenAPI document",
     "method": "GET",
     "path": "/api/v2/openapi.json",
     "positionals": [],
@@ -2753,7 +2753,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "api",
     "name": "resourcesV2",
-    "summary": "Every readable resource, including operations this token may use.",
+    "summary": "List resources",
     "method": "GET",
     "path": "/api/v2/resources/",
     "positionals": [],
@@ -4282,7 +4282,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "api",
     "name": "resourceListV2",
-    "summary": "List one resource through its declared, schema-validated query.",
+    "summary": "List a resource",
     "method": "GET",
     "path": "/api/v2/resources/{name}/",
     "positionals": [
@@ -4320,7 +4320,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "api",
     "name": "resourceDetailV2",
-    "summary": "Get one resource record through its declared identifier contract.",
+    "summary": "Get a resource record",
     "method": "GET",
     "path": "/api/v2/resources/{name}/{identifier}/",
     "positionals": [
@@ -4365,7 +4365,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "api",
     "name": "topologyV2",
-    "summary": "The live permitted infrastructure graph and its canonical actions.",
+    "summary": "Topology",
     "method": "GET",
     "path": "/api/v2/topology/",
     "positionals": [],

@@ -120,7 +120,7 @@ install -d -o root -g root -m 0700 "${private_log_dir}"
 "${private_run}" \
     "Content index preflight" \
     "${private_log_dir}/content-index-preflight.log" \
-    docker exec severino-hq python manage.py sync_content_index --json
+    docker exec severino-hq hq-controller job content.sync
 
 set --
 for f in ${shipped}; do
@@ -129,6 +129,12 @@ for f in ${shipped}; do
     # What is enabled is every timer and path shipped: those are the units that
     # start work, and a service is only ever started by one of them.
     case "${f}" in */*) ;; *.timer | *.path) set -- "$@" "${f}" ;; esac
+done
+# A unit an earlier release installed and this one no longer ships is stopped
+# and removed, so nothing keeps running on the word of a release that is gone.
+for f in $(units_retired "${unit_dir}" "${systemd_dir}"); do
+    systemctl disable --now "${f}" 2>/dev/null || true
+    rm -f "${systemd_dir}/${f}"
 done
 systemctl daemon-reload
 systemctl enable --now "$@"

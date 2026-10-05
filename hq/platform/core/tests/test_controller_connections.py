@@ -24,10 +24,11 @@ REFERENCE = "sentinel-connection"
 
 # Every variable the launcher may set: a path, a name, an image or a nonce.
 LAUNCH_VARIABLES = {
-    "HQ_CONTROLLER_RUN", "HQ_IN_PROCESS", "HQ_MANAGE_PY", "HQ_CONTROLLER_CONNECTIONS",
+    "HQ_CONTROLLER_RUN", "SEVERINO_BRIDGE_SOCKET", "HQ_CONTROLLER_CONNECTIONS",
     "HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_CONTROLLER_IMAGE",
-    "SEVERINO_HQ_SOURCE_REPOSITORY", "SEVERINO_REGISTRY_DOORBELL", "HQ_CONTROLLER_CA_FILE",
+    "SEVERINO_HQ_SOURCE_REPOSITORY", "HQ_CONTROLLER_CA_FILE",
     "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK", "SEVERINO_HOST_FIREWALL",
+    "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS",
 }
 
 
@@ -235,6 +236,7 @@ class LauncherTests(Host):
         self.stub("chown", "exit 0\n")
         self.stub("curl", "exit 1\n")
         self.stub("nft", "exit 1\n")
+        self.stub("systemctl", "exit 1\n")
         # install -d makes a directory; otherwise it copies with the mode given.
         self.stub("install", '''
 mode=""; directory=0
@@ -260,6 +262,8 @@ case "$1" in
     inspect)
         case "$*" in
             *Config.Image*) echo example-image ;;
+            *Config.Env*) printf '%s\\n' ${BRIDGE_ENV-PATH=/usr/bin SEVERINO_BRIDGE_SOCKET=/run/hq-bridge/bridge.sock} ;;
+            *.Type*) printf '%s\\n' "/data example-volume" "${BRIDGE_MOUNT-/run/hq-bridge example-bridge}" ;;
             *Mounts*) echo example-volume ;;
             *) echo https://github.com/example/example ;;
         esac ;;
@@ -271,6 +275,12 @@ case "$1" in
                 type=bind,source=*,target=/run/secrets/controller-connections.json,readonly)
                     source="${argument#type=bind,source=}"
                     cp "${source%%,target=*}" "$FIXTURES/mounted-connections" ;;
+                type=bind,source=*,target=/run/severino-hq/render-status/hq.json,readonly)
+                    source="${argument#type=bind,source=}"
+                    cp -p "${source%%,target=*}" "$FIXTURES/mounted-render-status" ;;
+                type=bind,source=*,target=/run/severino-hq/units,readonly)
+                    source="${argument#type=bind,source=}"
+                    cp -p "${source%%,target=*}" "$FIXTURES/mounted-units" ;;
             esac
         done ;;
 esac
@@ -315,9 +325,9 @@ esac
         # The run's staging is gone when the launcher returns.
         self.assertEqual(list(self.runtime.glob("run.*")), [])
 
-    def test_the_application_environment_is_copied_under_the_shared_lock(self):
-        # The renderer rewrites it in place, truncating first, under the
-        # exclusive lock: a copy taken outside the shared one can be cut short.
+    def test_the_document_is_copied_under_the_shared_lock(self):
+        # The renderer replaces it under the exclusive lock: a copy taken
+        # outside the shared one could mix two generations.
         self.stub("flock", 'echo lock >>"$FIXTURES/order"\n')
         install = (self.bin / "install").read_text().replace(
             "set -eu\n", 'set -eu\necho "install $*" >>"$FIXTURES/order"\n', 1)
@@ -326,12 +336,158 @@ esac
         self.assertEqual(result.returncode, 0, result.stderr)
         order = (self.root / "order").read_text().splitlines()
         copies = [i for i, line in enumerate(order)
-                  if line.startswith("install ") and line.endswith("/env") and "severino_hq_env" in line]
+                  if line.startswith("install ") and line.endswith("/connections.json")]
         self.assertEqual(len(copies), 1, order)
         self.assertLess(order.index("lock"), copies[0])
         script = LAUNCHER.read_text()
-        self.assertLess(script.index("controller_ssh_lock shared"), script.index('"${app_env}" "${runtime_app_env}"'))
-        self.assertLess(script.index('"${app_env}" "${runtime_app_env}"'), script.index("exec 8>&-"))
+        self.assertLess(script.index("controller_ssh_lock shared"), script.index('"${controller_connections}" "${runtime_connections}"'))
+        self.assertLess(script.index('"${controller_connections}" "${runtime_connections}"'), script.index("exec 8>&-"))
+
+    def test_nothing_of_hqs_own_is_given_to_the_container(self):
+        # HQ's database and application environment stay with HQ: the
+        # container that holds every provider credential gets neither.
+        (self.runtime / "web" / "severino_hq_env").write_text("DJANGO_SECRET_KEY='sentinel-application-secret'\n")
+        result = self.launch("--apply")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        launched = "\n".join(self.arguments())
+        # Nor the doorbells: HQ rings them itself, from the process that records the sweep.
+        for absent in ("target=/data", "severino_hq_env", "example-volume", "sentinel-application-secret",
+                       "doorbell", "source=/run/severino-hq,", str(self.app)):
+            with self.subTest(absent=absent):
+                self.assertNotIn(absent, launched.replace(f"{self.app}/secrets/acme", ""))
+        self.assertEqual(list(self.runtime.glob("run.*")), [])
+
+    def test_the_bridge_is_the_web_containers_socket_on_its_volume_read_only(self):
+        result = self.launch("--apply")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        arguments = self.arguments()
+        self.assertIn("SEVERINO_BRIDGE_SOCKET=/run/hq-bridge/bridge.sock", arguments)
+        self.assertIn("type=volume,source=example-bridge,target=/run/hq-bridge,readonly", arguments)
+        # One way to HQ: nothing else names a bridge, a socket or a container to exec into.
+        self.assertEqual([a for a in arguments if "bridge" in a.lower()], [
+            "type=volume,source=example-bridge,target=/run/hq-bridge,readonly",
+            "SEVERINO_BRIDGE_SOCKET=/run/hq-bridge/bridge.sock",
+        ])
+        self.assertFalse([a for a in arguments if "docker.sock" in a])
+
+    def test_a_web_container_that_serves_no_bridge_stops_the_launch(self):
+        for name, change, message in (
+            ("no socket named", {"BRIDGE_ENV": "PATH=/usr/bin"}, "names no socket"),
+            ("an empty setting", {"BRIDGE_ENV": "SEVERINO_BRIDGE_SOCKET="}, "names no socket"),
+            ("a relative path", {"BRIDGE_ENV": "SEVERINO_BRIDGE_SOCKET=bridge.sock"}, "names no socket"),
+            ("a path that climbs", {"BRIDGE_ENV": "SEVERINO_BRIDGE_SOCKET=/run/hq-bridge/../x/bridge.sock"}, "not a plain path"),
+            ("a path with an option in it", {"BRIDGE_ENV": "SEVERINO_BRIDGE_SOCKET=/run/x,readonly=false/b.sock"}, "not a plain path"),
+            ("a directory that is no volume", {"BRIDGE_MOUNT": "/run/elsewhere example-bridge"}, "not a volume"),
+            ("no volume at all", {"BRIDGE_MOUNT": ""}, "not a volume"),
+        ):
+            with self.subTest(name=name):
+                original = self.env.copy()
+                self.env.update(change)
+                result = self.launch("--apply")
+                self.env = original
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+                self.assertFalse((self.root / "docker-args").exists())
+
+    UNITS = "SEVERINO_HOST_UNITS=/run/severino-hq/units"
+
+    def test_the_unit_state_is_asked_of_systemd_and_mounted_read_only(self):
+        shutil.copy(ROOT / "scripts" / "fixtures" / "systemctl", self.bin / "systemctl")
+        state = self.root / "unit-state"
+        state.mkdir()
+        (state / "severino-hq-backup.service").write_text(
+            "LoadState=loaded\nActiveState=failed\nSubState=failed\nResult=exit-code\n"
+        )
+        self.env.update({"TEST_UNIT_STATE": str(state), "TEST_SYSTEMCTL_LOG": str(self.root / "systemctl-log")})
+
+        result = self.launch()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        arguments = self.arguments()
+        self.assertIn(self.UNITS, arguments)
+        mounts = [a for a in arguments if "target=/run/severino-hq/units" in a]
+        self.assertEqual(len(mounts), 1)
+        self.assertTrue(mounts[0].startswith(f"type=bind,source={self.runtime}/run."))
+        self.assertTrue(mounts[0].endswith(",target=/run/severino-hq/units,readonly"))
+        mounted = self.root / "mounted-units"
+        self.assertEqual(mounted.stat().st_mode & 0o777, 0o400)
+        blocks = mounted.read_text().split("\n\n")
+        self.assertIn("Id=severino-hq-backup.service\nLoadState=loaded\nActiveState=failed", blocks[1])
+        # Every unit the repository ships is asked about, and each instance of
+        # the job template a shipped file starts; the template itself is not.
+        asked = {block.splitlines()[0].removeprefix("Id=") for block in blocks}
+        shipped = {path.name for path in (ROOT / "deploy" / "systemd").iterdir() if path.is_file()}
+        self.assertEqual(
+            {name for name in shipped if not name.endswith(".example") and "@." not in name},
+            {name for name in asked if "@" not in name},
+        )
+        self.assertIn("severino-hq-job@audit.prune.service", asked)
+        self.assertNotIn("severino-hq-job@.service", asked)
+        # The question is a fixed list of states, results and instants, asked
+        # in UTC: nothing a unit runs, is given or reads.
+        zone, verb, *options = (self.root / "systemctl-log").read_text().splitlines()
+        self.assertEqual((zone, verb), ("TZ=UTC", "show"))
+        self.assertIn("--timestamp=unix", options)
+        (properties,) = [o.removeprefix("--property=") for o in options if o.startswith("--property=")]
+        for name in properties.split(","):
+            with self.subTest(property=name):
+                self.assertNotRegex(name, r"(?i)environment|exec(?!Main(Code|Status)$)|credential|path|directory|file(?!State$)")
+        self.assertEqual(options[options.index("--") + 1 :], sorted(asked))
+
+    def test_a_machine_where_systemd_does_not_answer_is_still_named(self):
+        # Named without a mount: the controller reports the reading as one it
+        # could not take, where an unnamed one would read as not connected.
+        result = self.launch()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        arguments = self.arguments()
+        self.assertIn(self.UNITS, arguments)
+        self.assertFalse([a for a in arguments if "target=/run/severino-hq/units" in a])
+
+    RENDER_STATUS = "SEVERINO_RENDER_STATUS=hq=/run/severino-hq/render-status/hq.json"
+
+    def test_the_renderers_status_is_mounted_read_only_as_a_copy(self):
+        status = self.runtime / "status.json"
+        status.write_text('{"schema_version":1,"last_attempt":{"at":"2026-01-01T00:00:00Z","outcome":"current"}}\n')
+        status.chmod(0o644)
+
+        result = self.launch()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        arguments = self.arguments()
+        self.assertIn(self.RENDER_STATUS, arguments)
+        mounts = [a for a in arguments if "target=/run/severino-hq/render-status/" in a]
+        self.assertEqual(len(mounts), 1)
+        # The run's own copy, never the document and never its directory.
+        self.assertTrue(mounts[0].startswith(f"type=bind,source={self.runtime}/run."))
+        self.assertTrue(mounts[0].endswith(",target=/run/severino-hq/render-status/hq.json,readonly"))
+        mounted = self.root / "mounted-render-status"
+        self.assertEqual(mounted.read_text(), status.read_text())
+        self.assertEqual(mounted.stat().st_mode & 0o777, 0o400)
+        self.assertFalse([a for a in arguments if a.endswith(f"source={self.runtime},target") or f"source={self.runtime}," in a])
+
+    def test_a_renderer_with_no_status_is_still_named(self):
+        # Named without a mount: the controller reports the document missing,
+        # which HQ raises, where an unnamed renderer would be silence.
+        for name, prepare in (
+            ("absent", lambda: None),
+            ("a link", lambda: (self.runtime / "status.json").symlink_to(self.document)),
+            ("a directory", lambda: (self.runtime / "status.json").mkdir()),
+        ):
+            with self.subTest(name=name):
+                prepare()
+                result = self.launch()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                arguments = self.arguments()
+                self.assertIn(self.RENDER_STATUS, arguments)
+                self.assertFalse([a for a in arguments if "target=/run/severino-hq/render-status/" in a])
+                self.assertNotIn(SENTINEL, "\n".join(arguments))
+                status = self.runtime / "status.json"
+                if status.is_symlink():
+                    status.unlink()
+                # The recorder's copy of the document is read-only; the next
+                # launch writes it again.
+                (self.root / "mounted-connections").unlink()
 
     def test_the_launcher_never_sources_or_forwards_connection_values(self):
         script = LAUNCHER.read_text()

@@ -30,6 +30,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
+from .derivations import passed, present
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +189,7 @@ def _current(item: dict[str, Any], now: datetime) -> bool:
     from .timestamps import moment
 
     seen = moment(str(item.get("last_seen") or ""))
-    return seen is not None and now - seen <= WINDOW
+    return seen is not None and not passed(seen + WINDOW, now=now)
 
 
 # ----- Reading it back -----------------------------------------------------------
@@ -236,7 +237,7 @@ def arrivals(snapshots=()) -> dict[str, Arrival]:
 
     from .timestamps import moment
 
-    now = timezone.now()
+    now = present()
     found: dict[str, Arrival] = {}
     for snapshot in snapshots:
         for item in snapshot.records or ():

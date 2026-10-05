@@ -24,6 +24,7 @@ from django.utils import timezone
 from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.facets import Counts, Failure, Timing
 from hq.platform.core.models import AuditLog
+from hq.platform.core.outbound import OutboundInRequest, off_request, serving_request
 
 from .models import Job
 
@@ -76,6 +77,30 @@ class JobConflict(RuntimeError):
     """A live job of this kind already exists."""
 
 
+class Failed(RuntimeError):
+    """The work ended without doing what was asked, and this is why.
+
+    Work raises it with a sentence for whoever asked: the job ends failed and
+    that sentence is what its control says. Any other exception is a fault,
+    kept with its traceback.
+    """
+
+
+def _record(kind, label, *, actor, requested_by, request) -> Job:
+    try:
+        with transaction.atomic():
+            return Job.objects.create(
+                kind=kind,
+                label=label,
+                actor=actor,
+                requested_by=requested_by,
+                request=request or {},
+                state=Job.State.QUEUED,
+            )
+    except Exception as exc:  # unique constraint: one live job per kind
+        raise JobConflict(f"A {kind} job is already running.") from exc
+
+
 def start(
     kind: str,
     label: str,
@@ -90,19 +115,7 @@ def start(
     `work` is called with a `Progress`; whatever it returns is stored as the
     job's result.
     """
-    try:
-        with transaction.atomic():
-            job = Job.objects.create(
-                kind=kind,
-                label=label,
-                actor=actor,
-                requested_by=requested_by,
-                request=request or {},
-                state=Job.State.QUEUED,
-            )
-    except Exception as exc:  # unique constraint: one live job per kind
-        raise JobConflict(f"A {kind} job is already running.") from exc
-
+    job = _record(kind, label, actor=actor, requested_by=requested_by, request=request)
     thread = threading.Thread(
         target=_run, args=(job.pk, work), name=f"job:{kind}", daemon=True
     )
@@ -110,8 +123,45 @@ def start(
     return job
 
 
+def run(
+    kind: str,
+    label: str,
+    work: Callable[[Progress], dict[str, Any]],
+    *,
+    actor: str = "",
+    requested_by=None,
+    request: dict | None = None,
+) -> Job:
+    """Record the job and run it to its end on the calling thread.
+
+    For a process with nobody waiting on it and nothing to outlive: a command
+    a timer runs exits when it returns, which would end a job's thread with
+    it. The row, the one-live-job rule and the audit entry are the same as
+    `start` gives. A request is refused: it would be waiting on the work.
+    """
+    serving = serving_request()
+    if serving:
+        raise OutboundInRequest(
+            f"{serving} tried to run the {kind} job itself. A request starts a "
+            "job and answers at once."
+        )
+    job = _record(kind, label, actor=actor, requested_by=requested_by, request=request)
+    _work(job.pk, work, own_connection=False)
+    job.refresh_from_db()
+    return job
+
+
 def _run(job_id, work: Callable[[Progress], dict[str, Any]]) -> None:
-    close_old_connections()
+    # A job is nobody's request: it may wait on whatever its work needs.
+    with off_request():
+        _work(job_id, work)
+
+
+def _work(job_id, work: Callable[[Progress], dict[str, Any]], *, own_connection=True) -> None:
+    # A job's thread has a database connection of its own, closed when the
+    # work ends; work run on the caller's thread leaves the caller's alone.
+    if own_connection:
+        close_old_connections()
     started = timezone.now()
     Job.objects.filter(pk=job_id).update(
         state=Job.State.RUNNING, started_at=started, heartbeat_at=started
@@ -156,32 +206,29 @@ def _run(job_id, work: Callable[[Progress], dict[str, Any]]) -> None:
                 finished_at=ended,
                 heartbeat_at=ended,
             )
+        except Failed as said:
+            # A stated outcome, not a fault: the sentence is the whole record.
+            _fail(job, str(said) or "The job did not finish.", Failure(message=str(said)[:400], kind="Failed"))
         except Exception:
             # The whole traceback, not just the message: nobody can reproduce
             # a background failure by running it again from a terminal.
             detail = traceback.format_exc()
-            ended = timezone.now()
-            _audit(
-                job,
-                AuditLog.Action.FAILED,
-                "failed",
-                {},
-                ended,
-                facets=(
-                    Failure(
-                        message=detail.strip().splitlines()[-1][:400],
-                        kind=detail.strip().splitlines()[-1].split(":")[0][:80],
-                    ),
-                ),
-            )
-            Job.objects.filter(pk=job_id).update(
-                state=Job.State.FAILED,
-                error=detail[-8000:],
-                finished_at=ended,
-                heartbeat_at=ended,
-            )
+            last = detail.strip().splitlines()[-1]
+            _fail(job, detail[-8000:], Failure(message=last[:400], kind=last.split(":")[0][:80]))
         finally:
-            connection.close()
+            if own_connection:
+                connection.close()
+
+
+def _fail(job: Job, error: str, failure: Failure) -> None:
+    ended = timezone.now()
+    _audit(job, AuditLog.Action.FAILED, "failed", {}, ended, facets=(failure,))
+    Job.objects.filter(pk=job.pk).update(
+        state=Job.State.FAILED,
+        error=error,
+        finished_at=ended,
+        heartbeat_at=ended,
+    )
 
 
 

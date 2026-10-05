@@ -13,7 +13,7 @@ from django.utils import timezone
 from hq.platform.core.models import AuditLog
 
 from .models import HEARTBEAT_GRACE, Job
-from .runner import JobConflict, Progress, reap, start
+from .runner import Failed, JobConflict, Progress, reap, run, start
 
 
 class JobRunnerTests(TransactionTestCase):
@@ -222,3 +222,53 @@ class JobStatusViewTests(TestCase):
         response = self.client.get(reverse("jobs:status", args=[job.pk]))
 
         self.assertEqual(response.status_code, 302)
+
+
+class RunOnTheCallingThreadTests(TestCase):
+    """A command a timer runs has no thread that outlives it."""
+
+    def test_the_job_has_ended_when_run_returns(self):
+        job = run("test.inline", "Inline", lambda progress: {"seen": 3}, actor="timer")
+
+        self.assertEqual((job.state, job.result, job.percent), ("succeeded", {"seen": 3}, 100))
+        ended = AuditLog.objects.filter(operation_id=str(job.pk), action=AuditLog.Action.IMPORTED).get()
+        self.assertEqual(ended.metadata["counts"], {"seen": 3})
+
+    def test_it_takes_the_same_slot_as_a_started_job(self):
+        Job.objects.create(kind="test.inline", label="Already", state=Job.State.RUNNING)
+
+        with self.assertRaises(JobConflict):
+            run("test.inline", "Inline", lambda progress: {})
+
+    def test_a_request_may_not_run_a_job_itself(self):
+        from django.test import RequestFactory
+
+        from hq.platform.core.outbound import OutboundInRequest, serving
+
+        ran = []
+        with serving(RequestFactory().post("/example/")), self.assertRaises(OutboundInRequest):
+            run("test.inline", "Inline", lambda progress: ran.append(1) or {})
+
+        self.assertEqual((ran, Job.objects.count()), ([], 0))
+
+    def test_failed_is_the_sentence_the_control_says(self):
+        from hq.platform.application.asks import job_standing
+
+        def work(progress):
+            raise Failed("The registry lists nothing for it.")
+
+        job = run("test.inline", "Inline", work)
+
+        self.assertEqual((job.state, job.error), ("failed", "The registry lists nothing for it."))
+        self.assertEqual(job_standing(job).note, "The registry lists nothing for it.")
+        failed = AuditLog.objects.filter(operation_id=str(job.pk), action=AuditLog.Action.FAILED).get()
+        self.assertEqual(failed.metadata["failure"], {"message": "The registry lists nothing for it.", "kind": "Failed"})
+
+    def test_any_other_exception_keeps_its_traceback(self):
+        def work(progress):
+            raise OSError("connection reset")
+
+        job = run("test.inline", "Inline", work)
+
+        self.assertEqual(job.state, "failed")
+        self.assertIn("Traceback", job.error)

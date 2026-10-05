@@ -3,9 +3,9 @@
 RDAP, an image registry's public tags, labels and attestations, the releases
 and advisories on the GitHub repository an image is built from, and OSV's
 vulnerability database need no credential, so HQ reads them rather than a
-controller. ``refresh`` runs from ``manage.py refresh_public_registry``, which
-the host starts once a day and whenever HQ rings its doorbell because a sweep
-found an image or digest it has not read (``ring_registry_doorbell``). It reads
+controller. ``refresh`` runs as the scheduled ``registry.refresh`` job, which
+a timer asks for once a day and HQ starts itself when a sweep finds an image
+or digest it has not read. It reads
 only subjects that are due, at most a budget of them, and stores the result
 through the same ingest as a sweep. Pages read the stored reading through
 ``application.facts`` and never wait on a registry.

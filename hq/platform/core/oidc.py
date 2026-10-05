@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
+from django.contrib.auth import BACKEND_SESSION_KEY, get_user_model
 from django.core.exceptions import PermissionDenied, SuspiciousOperation
 
 import logging
@@ -45,8 +45,11 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         the provider, so it has to be told why it stopped (``sso_failed``).
         """
 
+        from hq.platform.core.outbound import allowed
+
         try:
-            return super().authenticate(request, **kwargs)
+            with allowed("oidc"):
+                return super().authenticate(request, **kwargs)
         except requests.RequestException as exc:
             status = getattr(getattr(exc, "response", None), "status_code", None)
             reason = (
@@ -274,6 +277,12 @@ class HQSessionRefresh(SessionRefresh):
         self.OIDC_EXEMPT_URLS = [*self.OIDC_EXEMPT_URLS, *self.PROBES]
 
     def process_request(self, request):
+        # A session signed in through a backend this release does not have is
+        # signed out: Django already reads it so. It is ended here, before the
+        # refresh tries to import a path that was renamed or removed.
+        backend = request.session.get(BACKEND_SESSION_KEY)
+        if backend and backend not in settings.AUTHENTICATION_BACKENDS:
+            request.session.flush()
         response = super().process_request(request)
         if response is not None and request.headers.get("x-requested-with") == "XMLHttpRequest":
             request.session["oidc_login_next"] = _page_behind(request)

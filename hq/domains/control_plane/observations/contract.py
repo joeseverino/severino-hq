@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
+from datetime import timedelta
 from types import MappingProxyType
 from typing import Any
 
@@ -109,6 +110,10 @@ class ObservationSpec:
     issuer: Callable[[Mapping[str, Any]], str] = _blank
     # One of ``READERS``.
     read_by: str = "controller"
+    # A clock of its own, slower than the sweep's, for a reading whose provider
+    # rations calls: read when it is this old or somebody asks, and carried by
+    # every sweep between. None reads on every sweep.
+    every: timedelta | None = None
     # The provider console page for a record, built only from ids the record
     # stores (an account id, a name). Blank when the record lacks them.
     console: Callable[[Mapping[str, Any]], str] = _blank
@@ -135,6 +140,11 @@ class ObservationSpec:
     # What a record tells about the connection that read it, as ``(key, value)``
     # facts the findings read off that connection's node.
     facts: Callable[[Mapping[str, Any]], tuple[tuple[str, str], ...]] = lambda record: ()
+
+    def __reduce__(self) -> tuple[Any, tuple[str]]:
+        # A spec is a declaration, not data. A stored value that refers to one
+        # keeps its kind, and loading it finds the registered spec again.
+        return (_registered, (self.kind,))
 
     @property
     def joins_hostnames(self) -> bool:
@@ -188,6 +198,12 @@ class ObservationSpec:
         return kept, refused
 
 
+def _registered(kind: str) -> ObservationSpec:
+    from . import OBSERVATIONS
+
+    return OBSERVATIONS[kind]
+
+
 def registry(specs: tuple[ObservationSpec, ...]) -> Mapping[str, ObservationSpec]:
     found: dict[str, ObservationSpec] = {}
     for spec in specs:
@@ -201,6 +217,8 @@ def registry(specs: tuple[ObservationSpec, ...]) -> Mapping[str, ObservationSpec
             raise ValueError(f"{spec.kind!r}: unknown facet {spec.facet!r}.")
         if spec.read_by not in READERS:
             raise ValueError(f"{spec.kind!r}: read_by is one of {READERS}.")
+        if spec.every is not None and spec.read_by != "controller":
+            raise ValueError(f"{spec.kind!r}: only a controller's reading keeps its own clock.")
         if spec.connects is not None and spec.containers is _none:
             raise ValueError(f"{spec.kind!r}: connects needs the containers it names.")
         _check_parts(spec)

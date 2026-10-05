@@ -152,7 +152,7 @@ they stay visible and stay in the same table.
                   <a class="connection-direct-action{% if action.effect == 'destructive' %} is-destructive{% endif %}" href="{{ action.url }}"{% if action.reason %} aria-label="{{ action.label }}: {{ action.reason }}"{% endif %}>{{ action.label }}</a>
                 {% endif %}
               {% endfor %}
-              {% if row.read_now %}{% post_button row.read_now.label row.read_now.url css="btn compact" title=row.read_now.reason %}{% endif %}
+              {% if row.read_now %}{% include "partials/_ask.html" with ask=row.read_now|as_ask %}{% endif %}
               {% if not connection.recommended_action and not connection.row_actions and not row.read_now %}{% empty_value %}{% endif %}
             </td>
           </tr>
@@ -235,7 +235,7 @@ they stay visible and stay in the same table.
         </header>
         <strong>{{ control.evidence }}</strong>
         <p>{{ control.detail }}</p>
-        {% if control.id == "edge" %}<a href="{% url 'connection' %}" data-modal-open="connection" data-connection-source="{% url 'connection' %}">Inspect request path</a>{% endif %}
+        {% if control.id == "edge" %}<a href="{% url 'connection' %}" data-modal-open="connection">Inspect request path</a>{% endif %}
       </article>
     {% endfor %}
   </div>

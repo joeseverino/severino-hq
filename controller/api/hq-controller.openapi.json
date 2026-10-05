@@ -3,7 +3,7 @@
   "info": {
     "title": "HQ controller bridge",
     "version": "1.0.0",
-    "description": "The contract between Severino HQ and its infrastructure controller. Each path is one bridge action (today the infrastructure_controller management command, payload on stdin, JSON on stdout). Go types are generated from components/schemas; Django's tests validate every action's output against them."
+    "description": "The contract between Severino HQ and its infrastructure controller. Each path is one bridge action: a POST over HTTP on HQ's private Unix socket, parameters in the query, the payload as the JSON body, the answer as JSON, and a refusal as an RFC 9457 problem. Go types and the controller's client are generated from this document; HQ's bridge application takes its routes, parameters and limits from it, and Django's tests validate every action against it."
   },
   "paths": {
     "/claim": {
@@ -25,11 +25,9 @@
             "name": "lease-seconds",
             "in": "query",
             "required": false,
-            "description": "Lease length, 30 to 3600.",
+            "description": "Lease length in seconds.",
             "schema": {
-              "type": "integer",
-              "minimum": 30,
-              "maximum": 3600
+              "$ref": "#/components/schemas/LeaseSeconds"
             }
           },
           {
@@ -47,11 +45,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Pending"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -80,11 +88,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Pending"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -110,11 +128,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Contract"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -140,11 +168,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -179,11 +217,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -219,11 +267,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -249,11 +307,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SweepVerdict"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -279,11 +347,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -322,11 +400,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -362,11 +450,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -395,11 +493,21 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AnalyticsPlan"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -438,11 +546,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -478,11 +596,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GlancePlan"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -508,11 +636,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -537,11 +675,61 @@
         "x-bridge-action": "registry",
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ControllerRegistry"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/job": {
+      "post": {
+        "operationId": "job",
+        "summary": "Do one piece of scheduled work to its end, as a job.",
+        "x-bridge-action": "job",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "description": "The scheduled work, as HQ declares it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOutcome"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -940,6 +1128,10 @@
             "items": {
               "$ref": "#/components/schemas/RefusedPart"
             }
+          },
+          "carried": {
+            "type": "boolean",
+            "description": "True when the kind keeps its own clock and was neither due nor asked for: nothing was asked of the provider, and HQ keeps the last records and when they were read."
           }
         },
         "additionalProperties": false,
@@ -1348,6 +1540,9 @@
             "items": {
               "$ref": "#/components/schemas/AdmittedExtension"
             }
+          },
+          "github_profiles": {
+            "$ref": "#/components/schemas/GitHubProfilePlan"
           }
         },
         "additionalProperties": false,
@@ -1359,7 +1554,8 @@
           "connection_providers",
           "observations",
           "connection_credentials",
-          "extensions"
+          "extensions",
+          "github_profiles"
         ]
       },
       "AnalyticsSiteReading": {
@@ -1436,13 +1632,16 @@
             "x-go-type-skip-optional-pointer": false
           },
           "pageviews": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "visits": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "sample_interval": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           }
         },
         "additionalProperties": false,
@@ -1467,7 +1666,8 @@
             "x-go-type-skip-optional-pointer": false
           },
           "sample_interval": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "cumulative_layout_shift": {
             "type": [
@@ -1483,7 +1683,8 @@
               "null"
             ],
             "x-go-type-skip-optional-pointer": false,
-            "description": "p75 in milliseconds; null when there were no samples."
+            "description": "p75 in milliseconds; null when there were no samples.",
+            "minimum": 0
           },
           "interaction_to_next_paint_ms": {
             "type": [
@@ -1491,7 +1692,8 @@
               "null"
             ],
             "x-go-type-skip-optional-pointer": false,
-            "description": "p75 in milliseconds; null when there were no samples."
+            "description": "p75 in milliseconds; null when there were no samples.",
+            "minimum": 0
           },
           "first_contentful_paint_ms": {
             "type": [
@@ -1499,7 +1701,8 @@
               "null"
             ],
             "x-go-type-skip-optional-pointer": false,
-            "description": "p75 in milliseconds; null when there were no samples."
+            "description": "p75 in milliseconds; null when there were no samples.",
+            "minimum": 0
           },
           "time_to_first_byte_ms": {
             "type": [
@@ -1507,34 +1710,44 @@
               "null"
             ],
             "x-go-type-skip-optional-pointer": false,
-            "description": "p75 in milliseconds; null when there were no samples."
+            "description": "p75 in milliseconds; null when there were no samples.",
+            "minimum": 0
           },
           "lcp_good": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "lcp_needs_improvement": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "lcp_poor": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "inp_good": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "inp_needs_improvement": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "inp_poor": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "cls_good": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "cls_needs_improvement": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "cls_poor": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           }
         },
         "additionalProperties": false,
@@ -1593,9 +1806,12 @@
           "cloudflare.tunnel",
           "cloudflare.zone",
           "github.delivery",
+          "github.profile",
           "github.repository",
           "host.firewall",
           "host.perimeter",
+          "host.render_status",
+          "host.unit",
           "hq.request_path",
           "machine",
           "network",
@@ -1645,9 +1861,12 @@
           "ResourceKindCloudflareTunnel",
           "ResourceKindCloudflareZone",
           "ResourceKindGitHubDelivery",
+          "ResourceKindGitHubProfile",
           "ResourceKindGitHubRepository",
           "ResourceKindHostFirewall",
           "ResourceKindHostPerimeter",
+          "ResourceKindHostRenderStatus",
+          "ResourceKindHostUnit",
           "ResourceKindHQRequestPath",
           "ResourceKindMachine",
           "ResourceKindNetwork",
@@ -1701,9 +1920,12 @@
           "cloudflare.tunnel",
           "cloudflare.zone",
           "github.delivery",
+          "github.profile",
           "github.repository",
           "host.firewall",
           "host.perimeter",
+          "host.render_status",
+          "host.unit",
           "npm.access_list",
           "npm.certificate",
           "npm.dead_host",
@@ -1739,9 +1961,12 @@
           "SweptCloudflareTunnel",
           "SweptCloudflareZone",
           "SweptGitHubDelivery",
+          "SweptGitHubProfile",
           "SweptGitHubRepository",
           "SweptHostFirewall",
           "SweptHostPerimeter",
+          "SweptHostRenderStatus",
+          "SweptHostUnit",
           "SweptNPMAccessList",
           "SweptNPMCertificate",
           "SweptNPMDeadHost",
@@ -2055,6 +2280,146 @@
         ],
         "additionalProperties": false
       },
+      "GitHubProfilePlan": {
+        "type": "object",
+        "description": "Whose public GitHub profile the controller reads, and whether to read now. The accounts are the ones a person's sign-in names. The profile keeps a slower clock than the sweep, which HQ holds: due says the reading is old enough or somebody asked.",
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9-]{1,39}$"
+            },
+            "description": "GitHub logins."
+          },
+          "due": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "accounts",
+          "due"
+        ]
+      },
+      "GitHubProfileBounds": {
+        "type": "object",
+        "description": "The bounds of a github.profile record, stated here for both sides. GitHub allows an address 60 anonymous calls an hour, and one account costs the profile, the stars and the picture, then a release call and an advisory call for each watched repository: 3 + 2 x watched.maxItems.",
+        "properties": {
+          "watched": {
+            "type": "array",
+            "maxItems": 15,
+            "description": "The newest starred repositories, each with its latest release and published advisories.",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "x-go-type": "any"
+            }
+          },
+          "avatar": {
+            "type": "string",
+            "maxLength": 90000,
+            "description": "The picture as a data: URI, so a page loads no image from another host."
+          }
+        },
+        "additionalProperties": false
+      },
+      "HostUnitRecord": {
+        "type": "object",
+        "description": "One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships, and the controller reports no other. Each string is a unit name, one of systemd's state words or an instant in UTC; none is a path, a command line or an environment.",
+        "properties": {
+          "unit": {
+            "type": "string",
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9:_.@-]+\\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$",
+            "description": "Id: the unit's name."
+          },
+          "load": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "description": "LoadState: loaded, or why systemd holds no configuration for it (not-found, masked, error, bad-setting)."
+          },
+          "file_state": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "description": "UnitFileState: whether the unit file is enabled, static or disabled. Absent for a unit with no file."
+          },
+          "active": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "description": "ActiveState: active, inactive, activating, deactivating, failed and the like."
+          },
+          "sub": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "description": "SubState: the unit type's own word for the same state, such as waiting or elapsed for a timer."
+          },
+          "result": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "description": "Result: success, or why the last run failed (exit-code, signal, timeout and the like)."
+          },
+          "main_code": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "ExecMainCode: how the main process of the last run ended, as the kernel's code (1 exited, 2 killed, 3 dumped)."
+          },
+          "main_status": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "ExecMainStatus: the exit status or signal number of the main process of the last run."
+          },
+          "started_at": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+            "description": "InactiveExitTimestamp: when the last start began, on this boot."
+          },
+          "ended_at": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+            "description": "InactiveEnterTimestamp: when the unit last became inactive or failed, on this boot."
+          },
+          "condition": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "description": "ConditionResult: yes or no, whether the unit's conditions held when last checked. A start whose conditions do not hold is skipped without failing."
+          },
+          "condition_at": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+            "description": "ConditionTimestamp: when the conditions were last checked."
+          },
+          "last_trigger_at": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+            "description": "LastTriggerUSec: when a timer last started its unit."
+          },
+          "next_elapse_at": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+            "description": "NextElapseUSecRealtime: when a timer with a calendar schedule next elapses."
+          },
+          "activates": {
+            "type": "string",
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9:_.@-]+\\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$",
+            "description": "Unit: the unit a timer or path starts."
+          },
+          "read_at": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+            "description": "When the launcher asked systemd."
+          }
+        },
+        "required": [
+          "unit",
+          "load",
+          "active",
+          "sub",
+          "read_at"
+        ],
+        "additionalProperties": false
+      },
       "ConnectionProvider": {
         "type": "string",
         "description": "A connection provider HQ's registry declares: what a credential is for. Django's contract test holds this to the admitted connections.",
@@ -2089,6 +2454,7 @@
           "access",
           "acl_management",
           "apps",
+          "avatar",
           "branch_rules",
           "clients",
           "code_scanning",
@@ -2124,6 +2490,7 @@
           "PartAccess",
           "PartACLManagement",
           "PartApps",
+          "PartAvatar",
           "PartBranchRules",
           "PartClients",
           "PartCodeScanning",
@@ -2183,6 +2550,84 @@
           "ConditionReady",
           "ConditionDrifted",
           "ConditionDegraded"
+        ]
+      },
+      "Problem": {
+        "type": "object",
+        "description": "An RFC 9457 problem: why HQ refused or failed a bridge call.",
+        "required": [
+          "title",
+          "status",
+          "detail"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BridgeBody": {
+        "type": "string",
+        "maxLength": 67108864,
+        "description": "One bridge message as sent: maxLength is the most bytes either side accepts as a request or an answer."
+      },
+      "LeaseSeconds": {
+        "type": "integer",
+        "minimum": 30,
+        "maximum": 3600,
+        "default": 300,
+        "description": "How long a claimed operation is leased, in seconds. The controller sends the default; HQ applies it when none is sent."
+      },
+      "JobOutcome": {
+        "type": "object",
+        "description": "How one piece of scheduled work ended. Running means a job of this kind was already live.",
+        "required": [
+          "name",
+          "state",
+          "note"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/JobState"
+          },
+          "note": {
+            "type": "string"
+          },
+          "job": {
+            "type": "string"
+          }
+        }
+      },
+      "JobState": {
+        "type": "string",
+        "description": "How a job stands when HQ answers for it.",
+        "enum": [
+          "succeeded",
+          "failed",
+          "lost",
+          "running"
+        ],
+        "x-enum-varnames": [
+          "JobStateSucceeded",
+          "JobStateFailed",
+          "JobStateLost",
+          "JobStateRunning"
         ]
       }
     }

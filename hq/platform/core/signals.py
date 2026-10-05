@@ -1,4 +1,4 @@
-"""Wire up login/logout audit events."""
+"""Wire up login/logout audit events, and database upkeep after a migration."""
 
 from __future__ import annotations
 
@@ -7,9 +7,11 @@ from django.contrib.auth.signals import (
     user_logged_out,
     user_login_failed,
 )
+from django.db.models.signals import post_migrate
 from django.dispatch import receiver
 
 from .audit import record_event
+from .database import optimize
 from .models import AuditLog
 
 
@@ -57,3 +59,11 @@ def _on_login_failed(sender, credentials, request=None, **kwargs):
         message=f"Failed login attempt for {username!r}",
         metadata={"username": username, "ip": ip},
     )
+
+
+@receiver(post_migrate, dispatch_uid="hq.core.optimize_after_migrate")
+def _optimize_after_migrate(sender, using, **kwargs):
+    # Sent once per app; this app's is the one that answers, so once per run.
+    # Every container start migrates, which is also the daily floor.
+    if sender.name == "hq.platform.core":
+        optimize(using)

@@ -21,7 +21,7 @@ the project root.
 
 ```bash
 # On the homelab host
-sudo mkdir -p /srv/severino-hq/data /srv/severino-hq/media /srv/severino-hq/exports /srv/severino-hq/static
+sudo mkdir -p /srv/severino-hq/data /srv/severino-hq/media /srv/severino-hq/exports
 sudo chown -R 10001:10001 /srv/severino-hq    # matches the non-root UID in the image
 ```
 
@@ -39,7 +39,6 @@ DJANGO_BEHIND_TLS_PROXY=1
 SEVERINO_DATABASE_PATH=/data/severino.sqlite3
 SEVERINO_MEDIA_ROOT=/media
 SEVERINO_EXPORTS_ROOT=/exports
-DJANGO_STATIC_ROOT=/static
 SEVERINO_MCP_ALLOWED_HOSTS=<direct Tailscale IP>,<MagicDNS hostname>
 ```
 
@@ -69,7 +68,9 @@ controller service requires a root-owned 0700 directory and a root-owned 0400
 file, separate from the web-writable doorbell directory.
 `scripts/run-controller.sh` copies the document into the run's private
 directory, bind-mounts it read-only into a short-lived controller container
-running from the exact deployed HQ image, and passes only its path. No provider
+running from the exact deployed HQ image, and passes only its path. That
+container is given the bridge socket's volume read-only and nothing else of
+HQ's: not its database, and not its application environment. No provider
 credential is a container environment variable, so none is in `docker inspect`
 or the container's on-disk configuration. The document is never mounted into
 the HQ web container. Provider passwords are never copied into the
@@ -213,6 +214,20 @@ daily `severino-hq-script-drift` check compares the same set, byte for byte,
 with `/etc/systemd/system`, and names each file that differs. A drop-in the host
 adds beside a shipped one is the host's and is not compared.
 
+A unit that fails is reported to HQ, and no unit is wired for that by hand.
+`deploy/systemd/severino-hq-.service.d/10-on-failure.conf` (and the same file
+for timers and paths) is in the drop-in directory systemd reads for every unit
+whose name begins `severino-hq-`, and sets
+`OnFailure=severino-hq-job@units.read.service`. Two units carry an empty
+drop-in of the same name in their own directory, which replaces it for them,
+because either would otherwise start itself again whenever it failed: the unit
+a failure starts, and the controller, which the read's doorbell starts.
+`scripts/test-systemd-units.sh` holds every shipped unit to the prefix, the
+exemptions to exactly those a loop requires, and no unit to an `OnFailure=` of
+its own. HQ learns of a controller that fails from its silence. The state of
+every shipped unit is also read on each sweep (`host.unit`), so a unit that
+was never installed or a timer that was never enabled is a finding too.
+
 The same activation gate performs an authenticated pull of the live
 `example.com` content index before installing and enabling its persistent
 daily timer. Cloudflare Access credentials come from uppercase fields on the
@@ -299,8 +314,51 @@ image and the compose file it was started with, starts the replacement under the
 compose file copied out of that verified image (so a compose change takes effect
 in the same deploy), and restores both the previous image and its compose file
 automatically if the exact SHA-tagged replacement does not become healthy or
-its controller cannot pass activation. After rollback,
-the controller remains stopped for explicit operator review.
+its controller cannot pass activation. After rollback, the units it held are
+started again as they were.
+
+#### What a deploy holds, and when the bridge is there
+
+The controller reaches HQ over a Unix socket the web container serves
+(`SEVERINO_BRIDGE_SOCKET` in `docker-compose.yml`, in the `severino_bridge`
+volume). The socket exists once the web process has started and before it
+answers its health check, and it is gone while the container is stopped or
+being replaced. A controller pass in that gap fails with the reason and the
+next one runs. The order of a deploy keeps a pass out of the gap:
+
+1. `deploy-image.sh` stops every unit that starts release work by itself: the
+   controller's timer and its path unit, the content sync, the secret refresh
+   and the root-tree check. It then waits up to three minutes for a controller
+   run or a secret refresh already in flight to end against the release it
+   began with.
+2. It pulls the image and replaces the web container under the new release's
+   compose file. The bridge of the previous release is gone from here.
+3. The new container migrates, starts, binds the socket and turns healthy. The
+   bridge of the new release is there from here.
+4. The new release's sync replaces the root-owned tree, and its installer
+   runs the controller preflight: the new launcher starts the new controller
+   against the new bridge, in plan mode. This is the first pass of the release,
+   and a bridge it cannot reach fails the deploy and rolls it back.
+5. The installer enables every shipped timer and path unit, and the deploy
+   starts whatever else it held. The first applying pass follows, from the
+   timer or the next doorbell.
+
+A unit that was not active before the deploy is not started by it. On any
+failure the previous image, compose file and root tree are put back before
+the held units are started, so the previous launcher only ever meets the
+previous image.
+
+A release is installed by the deploy script of the release before it. A
+release whose launcher and image must match (a change to how the controller
+reaches HQ is one) is therefore safe only if the script that deploys it holds
+the units above; on a host whose installed script does not, stop
+`severino-hq-controller.path` and `severino-hq-controller.timer` by hand for
+that one deploy. The installer starts them again.
+
+The bridge needs nothing on the host: the volume is created by compose, takes
+its owner and mode from the image, and persists across reboots. HQ refuses to
+start if the socket's directory is not its account's alone, which fails the
+health check and rolls the deploy back.
 
 ### A.4 Build & run
 
@@ -375,8 +433,12 @@ mistaken for another's:
 | **Deploy** (`deploy.yml`) | started with a commit by Compose once it has published HQ, or by hand to redeploy or roll back | waits for approval in `production`, then deploys on the self-hosted runner with health rollback |
 
 Production runs the composed image (`…/composition:…`), never the host image
-on its own. Migrations and `collectstatic` run on container boot via
-`entrypoint.sh`. A pull request never starts Deploy, so no pull request's code
+on its own. Migrations run on container boot via `entrypoint.sh`. Static
+assets and the application's bytecode are part of the image: each build runs
+`scripts/collect-assets.sh` (the composition again, once its extensions are
+installed) and `compileall`, so `/static` is read-only, no volume holds it, and
+a start collects and compiles nothing. Readiness reports `assets` false for an
+image built without them. A pull request never starts Deploy, so no pull request's code
 reaches the self-hosted runner. To redeploy or roll back, run **Deploy** with
 the commit to put back.
 
@@ -497,7 +559,6 @@ The equivalent **manual** steps, for a standalone or first-time deploy, are:
 git pull
 docker compose build
 docker compose run --rm app python manage.py migrate
-docker compose run --rm app python manage.py collectstatic --noinput
 docker compose up -d
 ```
 

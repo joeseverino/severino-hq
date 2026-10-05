@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime
 from typing import Any
 
 from django.db import transaction
@@ -27,7 +28,6 @@ from hq.domains.control_plane.models import (
     ProviderInventory,
 )
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
 from hq.domains.control_plane.reading_parts import clean_refused_parts, refused_parts
 from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS, registry_label
 from hq.platform.core.audit import CONNECTION_AUDIT_TYPE, record_event
@@ -67,6 +67,9 @@ def record_inventory(
     merging would keep records that have since been deleted, which is the one
     thing a staleness-aware cache must not do.
 
+    ``payload`` is the contract's ``Inventory``, which the bridge holds every
+    sweep to before this runs; a member is read as the type the contract gives it.
+
     A provider that could not be reached is the exception, and the reason is
     the same one. "The credential is missing" and "the provider is empty" are
     different facts, and a sweep that reports the first must not be stored as
@@ -87,14 +90,23 @@ def record_inventory(
             # rest of the sweep is still true, and refusing it would make a
             # controller upgrade take the whole inventory down.
             continue
-        reached = bool(report.get("ok", True))
-        connected = bool(report.get("connected", True))
-        records = report.get("records") or []
-        error = str(report.get("error", ""))
-        refusal = str(report.get("refusal", "")) if not reached else ""
-        # An unknown refusal is stored as none, so no remedy is offered for it.
-        if refusal not in REFUSALS:
-            refusal = ""
+        if report.get("carried"):
+            # A kind on its own clock that was not due: nothing was asked of
+            # the provider, so what HQ holds is untouched. A refusal reported
+            # with it (the provider's allowance is spent) is an attempt, and
+            # is stored as one beside the records it could not replace.
+            parts = clean_refused_parts(kind, report.get("refused_parts"))
+            if parts:
+                ProviderInventory.objects.filter(kind=kind).update(
+                    refused_parts=parts, controller_id=controller_id, updated_at=observed_at
+                )
+                stored.append(kind)
+            continue
+        reached = report["ok"]
+        connected = report.get("connected", True)
+        records = report["records"]
+        error = report.get("error", "")
+        refusal = report.get("refusal", "") if not reached else ""
         observation = OBSERVATIONS.get(kind)
         if observation is not None:
             records, refused = observation.clean(records)
@@ -221,20 +233,20 @@ def confirm_observed(payload: dict[str, Any]) -> int:
     Only where the spec still matches the live record. A declaration that has
     drifted is exactly the one a reconcile should visit, and quietly calling it
     observed would hide the difference this whole model exists to surface.
-    """
 
-    from django.utils import timezone
+    A declaration whose observation changed is saved, so the change is audited
+    and indexed. The rest, found exactly as they were last observed, take the
+    moment in one statement for the whole sweep: no save, no event and nothing
+    to index.
+    """
 
     seen = timezone.now()
     confirmed = 0
+    unchanged: list[Any] = []
     for kind, report in payload.items():
-        if kind not in PROVIDERS or not report.get("ok", True):
+        if kind not in PROVIDERS or not report["ok"]:
             continue
-        live = {}
-        for record in report.get("records") or []:
-            spec = _spec_from_record(kind, record)
-            if spec is not None:
-                live[record_identity(kind, spec)] = spec
+        live = _live_specs(kind, report["records"])
         if not live:
             continue
         for resource in ManagedResource.objects.filter(kind=kind, enabled=True):
@@ -245,27 +257,56 @@ def confirm_observed(payload: dict[str, Any]) -> int:
             if drift:
                 _record_drift(resource, drift)
                 continue
-            resource.observed_generation = resource.generation
-            resource.last_observed_at = seen
-            resource.status = dict(found)
-            resource.conditions = stamped(resource.conditions, [
-                {
-                    "type": "Ready",
-                    "status": True,
-                    "reason": "Observed",
-                    "message": "The last sweep found this exactly as declared.",
-                }
-            ])
-            resource.save(
-                update_fields=[
-                    "observed_generation",
-                    "last_observed_at",
-                    "status",
-                    "conditions",
-                ]
-            )
+            if not _observe(resource, found, seen):
+                unchanged.append(resource.pk)
             confirmed += 1
+    if unchanged:
+        ManagedResource.objects.filter(pk__in=unchanged).update(last_observed_at=seen)
     return confirmed
+
+
+def _live_specs(kind: str, records: list[Any]) -> dict[tuple[str, ...], dict[str, Any]]:
+    """Each live record as the spec a declaration of it would hold, by identity."""
+
+    live = {}
+    for record in records:
+        spec = _spec_from_record(kind, record)
+        if spec is not None:
+            live[record_identity(kind, spec)] = spec
+    return live
+
+
+def _observe(resource: ManagedResource, found: dict[str, Any], seen: datetime) -> bool:
+    """Save what the sweep found when it differs from what is stored; whether it did."""
+
+    status = dict(found)
+    conditions = stamped(resource.conditions, [
+        {
+            "type": "Ready",
+            "status": True,
+            "reason": "Observed",
+            "message": "The last sweep found this exactly as declared.",
+        }
+    ], seen)
+    if (
+        resource.observed_generation == resource.generation
+        and resource.status == status
+        and resource.conditions == conditions
+    ):
+        return False
+    resource.observed_generation = resource.generation
+    resource.last_observed_at = seen
+    resource.status = status
+    resource.conditions = conditions
+    resource.save(
+        update_fields=[
+            "observed_generation",
+            "last_observed_at",
+            "status",
+            "conditions",
+        ]
+    )
+    return True
 
 
 def retire_departed(payload: dict[str, Any]) -> list[str]:
@@ -286,10 +327,10 @@ def retire_departed(payload: dict[str, Any]) -> list[str]:
 
     from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
-    report = payload.get(CONTAINER_KIND) or {}
-    records = report.get("records") or []
-    if not report.get("ok", True) or report.get("refused_parts") or not records:
+    report = payload.get(CONTAINER_KIND)
+    if report is None or not report["ok"] or report.get("refused_parts") or not report["records"]:
         return []
+    records = report["records"]
     from_record = PROVIDERS[CONTAINER_KIND].from_record
     if from_record is None:
         return []
@@ -406,7 +447,7 @@ def _record_drift(
     # nothing looks at.
     # Stamped, so the drift keeps the moment it was first seen however many
     # sweeps find it again: that is what lets a finding say what happened then.
-    resource.conditions = stamped(resource.conditions, [
+    conditions = stamped(resource.conditions, [
         {
             "type": "Drifted",
             "status": True,
@@ -416,6 +457,9 @@ def _record_drift(
             + ".",
         }
     ])
+    if conditions == resource.conditions:
+        return
+    resource.conditions = conditions
     resource.save(update_fields=["conditions"])
 
 
@@ -468,14 +512,13 @@ def record_step_failures(
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     by_ref: dict[str, list[dict[str, str]]] = {}
     for item in payload:
-        if not isinstance(item, dict):
-            continue
-        subject = str(item.get("subject", "")).strip()
-        step = str(item.get("step", "")).strip()
+        subject = item["subject"].strip()
+        step = item["step"].strip()
+        # A failure naming no connection or no step has no row to stand on.
         if not subject or not step:
             continue
         by_ref.setdefault(subject, []).append(
-            {"step": step[:200], "reason": str(item.get("reason", ""))[:120]}
+            {"step": step[:200], "reason": item["reason"][:120]}
         )
     updated = 0
     for connection in ProviderConnection.objects.filter(controller_id=controller_id):
@@ -504,10 +547,10 @@ def record_connections(
     observed_at = timezone.now()
     stored = []
     for connection in payload:
-        connection_ref = str(connection.get("connection_ref", "")).strip()
+        connection_ref = connection["connection_ref"].strip()
         if not connection_ref:
             continue
-        endpoint = str(connection.get("endpoint", ""))[:500]
+        endpoint = connection["endpoint"][:500]
         if endpoint and endpoint_has_private_parts(endpoint):
             raise ValueError(
                 f"Connection {connection_ref!r} endpoint contains private URL parts."
@@ -521,9 +564,9 @@ def record_connections(
             carried = ProviderConnection.objects.filter(
                 controller_id=controller_id, connection_ref=connection_ref
             ).update(
-                provider=str(connection.get("provider", ""))[:64],
+                provider=connection["provider"][:64],
                 endpoint=endpoint,
-                manages=connection.get("manages") is True,
+                manages=connection["manages"],
                 store=store_references(connection.get("store")),
                 reported_at=observed_at,
             )
@@ -541,17 +584,15 @@ def record_connections(
             controller_id=controller_id,
             connection_ref=connection_ref,
             defaults={
-                "provider": str(connection.get("provider", ""))[:64],
+                "provider": connection["provider"][:64],
                 "endpoint": endpoint,
-                "reaches": [
-                    str(name) for name in connection.get("reaches") or [] if name
-                ],
-                "reachable": bool(connection.get("ok", True)),
-                "probed": bool(connection.get("probed", True)),
-                "detail": str(connection.get("detail", ""))[:500],
-                "failure": _failure(connection),
-                # Only an explicit true manages; anything else observes.
-                "manages": connection.get("manages") is True,
+                "reaches": [name for name in connection["reaches"] if name],
+                "reachable": connection["ok"],
+                "probed": connection["probed"],
+                "detail": connection["detail"][:500],
+                # Why a probe failed is kept only for one that did.
+                "failure": "" if connection["ok"] else connection.get("failure", ""),
+                "manages": connection["manages"],
                 "expires_at": parse_expiry(connection.get("expires_at")),
                 "store": store_references(connection.get("store")),
                 "observed_at": observed_at,
@@ -572,15 +613,6 @@ def record_connections(
         "recorded": sorted(stored),
         "observed_at": observed_at.isoformat(),
     }
-
-
-def _failure(connection: dict[str, Any]) -> str:
-    """Why a reported probe failed, when it failed for a cause HQ knows; else ""."""
-
-    if connection.get("ok", True):
-        return ""
-    found = str(connection.get("failure", "") or "")
-    return found if found in FAILURES else ""
 
 
 def _record_probe(row: ProviderConnection) -> None:

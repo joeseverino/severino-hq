@@ -6,7 +6,7 @@ OnBootSec=3min
 OnCalendar=hourly
 RandomizedDelaySec=5min
 Persistent=yes
-Unit=severino-hq-contacts-inbox.service
+Unit=severino-hq-job@contacts.inbox.service
 
 [Install]
 WantedBy=timers.target

@@ -12,12 +12,15 @@ import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 from typing import Any, Callable, Iterable
+from uuid import UUID
 
 from django.db.models.signals import post_delete, post_init, post_save
 from django.dispatch import receiver
 
+from . import speculation
 from .facets import as_metadata as facet_metadata
 from .middleware import get_current_user
 from .models import AuditLog
@@ -75,21 +78,62 @@ def _readable(value):
     return str(value)[:VALUE_CHARS]
 
 
-def _snapshot(instance) -> dict:
-    """The instance's concrete fields, as they stand.
+# Types whose values cannot change in place. Holding one is the same as
+# holding what it looked like, so its conversion waits for a save. Matched on
+# the exact type: a subclass may carry state of its own.
+_IMMUTABLE: frozenset[type] = frozenset(
+    {type(None), bool, int, float, str, Decimal, date, datetime, time, timedelta, UUID}
+)
+
+# Names the audit receivers of one model, so they can be found on the signal.
+AUDIT_DISPATCH_UID = "hq.audit"
+
+
+def _tracked(model) -> tuple[str, ...]:
+    """The attribute names a model's audit diff compares, in field order.
+
+    `auto_now` fields move on every save by definition, so including them
+    would mean no save is ever a no-op and every diff carries a line saying
+    the clock advanced.
+    """
+    return tuple(
+        field.attname
+        for field in model._meta.concrete_fields
+        if not getattr(field, "auto_now", False)
+    )
+
+
+def _capture(instance, names: tuple[str, ...]) -> dict:
+    """What a later save is compared against, at the cost a read can afford.
+
+    This runs for every instance a query returns, and almost none of them are
+    saved. An immutable value is held as it is; anything else (a JSON dict or
+    list, a file) is made readable now, because it can be changed in place and
+    the change has to show.
 
     Only fields actually loaded: touching a deferred one fires a query per
     field per instance, which would turn a list page into hundreds of queries.
     """
     loaded = instance.__dict__
-    return {
-        field.attname: _readable(loaded[field.attname])
-        for field in instance._meta.concrete_fields
-        # `auto_now` fields move on every save by definition, so including
-        # them would mean no save is ever a no-op and every diff carries a
-        # line saying the clock advanced.
-        if field.attname in loaded and not getattr(field, "auto_now", False)
-    }
+    held = {}
+    for name in names:
+        if name in loaded:
+            value = loaded[name]
+            held[name] = value if type(value) in _IMMUTABLE else _readable(value)
+    return held
+
+
+def _snapshot(instance, names: tuple[str, ...]) -> dict:
+    """The instance's loaded concrete fields, as the log shows them."""
+    loaded = instance.__dict__
+    return {name: _readable(loaded[name]) for name in names if name in loaded}
+
+
+def _shown(held: dict | None) -> dict | None:
+    """A capture, as the log shows it."""
+    if held is None:
+        return None
+    return {name: _readable(value) for name, value in held.items()}
 
 
 def _changes(before: dict | None, after: dict, secret: frozenset) -> dict:
@@ -199,19 +243,21 @@ def register_audit(
     # staleness rules; it is just not an event on its own.
     looked = frozenset(observation)
 
-    @receiver(post_init, sender=model, weak=False)
+    names = _tracked(model)
+
+    @receiver(post_init, sender=model, weak=False, dispatch_uid=AUDIT_DISPATCH_UID)
     def _on_init(sender, instance, **kwargs):
         # What the row looked like when it was read. Taken here rather than
         # re-read on save, which would put a second query on every write.
-        instance._audit_snapshot = _snapshot(instance)
+        instance._audit_snapshot = _capture(instance, names)
 
-    @receiver(post_save, sender=model, weak=False)
+    @receiver(post_save, sender=model, weak=False, dispatch_uid=AUDIT_DISPATCH_UID)
     def _on_save(sender, instance, created, **kwargs):
         changes = {}
         if not created:
             changes = _changes(
-                getattr(instance, "_audit_snapshot", None),
-                _snapshot(instance),
+                _shown(getattr(instance, "_audit_snapshot", None)),
+                _snapshot(instance, names),
                 secret,
             )
             # A save that changed nothing is not an event. Django writes
@@ -221,7 +267,7 @@ def register_audit(
             # diff rather than before it, so the timestamp still appears beside
             # a real change and only disappears when it is the whole story.
             if looked and changes and set(changes) <= looked:
-                instance._audit_snapshot = _snapshot(instance)
+                instance._audit_snapshot = _capture(instance, names)
                 return
             if not changes:
                 return
@@ -234,9 +280,9 @@ def register_audit(
         )
         # Re-armed for the next save in the same request: without this, a
         # second save would re-report the first one's changes.
-        instance._audit_snapshot = _snapshot(instance)
+        instance._audit_snapshot = _capture(instance, names)
 
-    @receiver(post_delete, sender=model, weak=False)
+    @receiver(post_delete, sender=model, weak=False, dispatch_uid=AUDIT_DISPATCH_UID)
     def _on_delete(sender, instance, **kwargs):
         # What going away meant, when the one removing it knows: a read request
         # answered, a declaration forgotten. "Deleted" otherwise.
@@ -285,6 +331,9 @@ def record_event(
     without its audit record would violate their contract.
     """
 
+    # A page fetched on a guess does nothing worth recording, so it does not
+    # get as far as recording it.
+    speculation.refuse("it does something the audit log records")
     user = user or get_current_user()
     if user is not None and not getattr(user, "is_authenticated", False):
         user = None

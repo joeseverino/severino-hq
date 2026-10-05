@@ -1,7 +1,9 @@
 #!/bin/sh
 # Execute the controller in a short-lived, isolated container made from the
 # exact running HQ image. The web container never receives provider secrets,
-# deployment identities, ACME state, or certificate private keys.
+# deployment identities, ACME state, or certificate private keys; the
+# controller's container never receives HQ's database or its application
+# environment, and reaches HQ only through the bridge socket.
 
 set -eu
 
@@ -9,34 +11,17 @@ readonly app_dir="${SEVERINO_HQ_APP_DIR:-/opt/apps/severino-hq}"
 script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 # shellcheck source=scripts/lib/controller-env.sh
 . "${script_dir}/lib/controller-env.sh"
+# shellcheck source=scripts/lib/systemd-units.sh
+. "${script_dir}/lib/systemd-units.sh"
 readonly mode="${1:-}"
 readonly container="${HQ_CONTAINER:-severino-hq}"
 readonly acme_dir="${app_dir}/secrets/acme"
-readonly web_secret_dir="${SEVERINO_HQ_WEB_SECRET_DIR:-${controller_runtime_dir}/web}"
-# shellcheck source=scripts/lib/secrets.sh
-. "${script_dir}/lib/secrets.sh"
-# Where hq-secrets rendered the environment, which is the tmpfs once a
-# refresh has run and the checkout only before one has.
-app_env_dir="$(secrets_app_env_dir "${web_secret_dir}" "${app_dir}/secrets")"
-readonly app_env_dir
-readonly app_env="${app_env_dir}/severino_hq_env"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "run-controller.sh must run as root." >&2
     exit 1
 fi
 controller_require_connections
-if [ ! -s "${app_env}" ]; then
-    echo "Controller application environment is missing: ${app_env}." >&2
-    exit 1
-fi
-# The checkout is somewhere another account can write. Only what
-# hq-secrets rendered is handed to the controller, wherever it sits: a
-# root-only directory holding a file of the web user's own.
-if ! secrets_private_dir "${app_env_dir}" || ! secrets_trusted_file "${app_env}" 10001; then
-    echo "Refusing the application environment: ${app_env_dir} must be root's alone, holding a file owned by 10001." >&2
-    exit 1
-fi
 
 install -d -o root -g root -m 0700 "${acme_dir}"
 # The whole tree, every run, and not only the directory. Certbot saves a renewal
@@ -55,7 +40,6 @@ find "${controller_runtime_dir}" -mindepth 1 -maxdepth 1 -type d -name 'run.*' \
 run_dir="$(mktemp -d "${controller_runtime_dir}/run.XXXXXX")"
 trap 'rm -rf "${run_dir}"' EXIT
 trap 'exit 1' HUP INT TERM
-runtime_app_env="${run_dir}/env"
 runtime_ssh_dir="${run_dir}/ssh"
 runtime_connections="${run_dir}/connections.json"
 # The roots this host added to its own trust store, as one bundle. Public roots
@@ -68,36 +52,23 @@ chmod 0444 "${ca_file}"
 runtime_tailnet="${run_dir}/tailnet.json"
 runtime_tailnet_lock="${run_dir}/tailnet-lock.json"
 runtime_firewall="${run_dir}/firewall.json"
-# The application environment, the connections document and the identities
-# hq-secrets rendered, copied under the shared lock so the run holds one
-# generation even if a refresh replaces it meanwhile. The environment is
-# rewritten in place, so a copy taken outside the lock could be cut short.
-# The document is the controller account's own private file, which is the
-# only kind the controller reads.
+# The connections document and the identities hq-secrets rendered, copied
+# under the shared lock so the run holds one generation even if a refresh
+# replaces it meanwhile. The document is the controller account's own private
+# file, which is the only kind the controller reads.
 install -d -m 0700 "${runtime_ssh_dir}"
 controller_ssh_lock shared
 controller_require_connections
-install -o root -g root -m 0400 "${app_env}" "${runtime_app_env}"
 install -o root -g root -m 0400 "${controller_connections}" "${runtime_connections}"
 if [ -d "${controller_runtime_dir}/ssh" ]; then
     cp -a "${controller_runtime_dir}/ssh/." "${runtime_ssh_dir}/"
 fi
 exec 8>&-
-if [ ! -s "${runtime_app_env}" ]; then
-    echo "Controller application environment is empty: ${app_env}." >&2
-    exit 1
-fi
-chown 10001:10001 "${runtime_app_env}"
 chown 10001:10001 "${runtime_connections}"
 chown -R 10001:10001 "${runtime_ssh_dir}"
 image="$(docker inspect --format '{{.Config.Image}}' "${container}")"
-data_volume="$(
-    docker inspect --format \
-        '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}' \
-        "${container}"
-)"
-if [ -z "${image}" ] || [ -z "${data_volume}" ]; then
-    echo "Could not resolve the deployed image or HQ data volume." >&2
+if [ -z "${image}" ]; then
+    echo "Could not resolve the deployed image." >&2
     exit 1
 fi
 # Which repository delivers this image, from its standard OCI source label.
@@ -128,29 +99,14 @@ set -- run --rm --network host --user 10001:10001 --cap-drop ALL \
     --security-opt no-new-privileges:true \
     --tmpfs /tmp:size=64m,noexec,nosuid,nodev \
     --entrypoint /usr/local/bin/hq-controller \
-    --mount "type=volume,source=${data_volume},target=/data" \
-    --mount "type=bind,source=${runtime_app_env},target=/run/secrets/severino_hq_env,readonly" \
     --mount "type=bind,source=${runtime_connections},target=/run/secrets/controller-connections.json,readonly" \
     --mount "type=bind,source=${runtime_ssh_dir},target=/run/secrets/controller-ssh,readonly" \
     --mount "type=bind,source=${acme_dir},target=/var/lib/severino-hq/acme" \
-    --env HQ_IN_PROCESS=1 \
-    --env HQ_MANAGE_PY=/app/manage.py \
     --env HQ_CONTROLLER_CONNECTIONS=/run/secrets/controller-connections.json \
     --env HQ_CONTROLLER_SSH_DIR=/run/secrets/controller-ssh \
     --env HQ_ACME_DIR=/var/lib/severino-hq/acme \
     --env "HQ_CONTROLLER_IMAGE=${image}" \
     --env "SEVERINO_HQ_SOURCE_REPOSITORY=${source_repository}"
-# The doorbells, so a sweep that finds an image HQ has not read rings the
-# registry read on the host instead of waiting for the daily floor. The same
-# directory the web container rings (SEVERINO_REGISTRY_DOORBELL in
-# docker-compose.yml): owned by the web UID and holding doorbells only, never a
-# credential (install-controller.sh). A directory, not the file, because a
-# ring is an atomic replace beside it.
-if [ -d /run/severino-hq ]; then
-    set -- "$@" \
-        --mount "type=bind,source=/run/severino-hq,target=/run/severino-hq-doorbells" \
-        --env SEVERINO_REGISTRY_DOORBELL=/run/severino-hq-doorbells/registry-doorbell
-fi
 if [ -s "${ca_file}" ]; then
     set -- "$@" \
         --mount "type=bind,source=${ca_file},target=/run/secrets/severino_controller_ca.pem,readonly" \
@@ -258,6 +214,84 @@ if command -v nft >/dev/null 2>&1 \
         --mount "type=bind,source=${runtime_firewall},target=/run/severino-hq/firewall.json,readonly" \
         --env SEVERINO_HOST_FIREWALL=/run/severino-hq/firewall.json
 fi
+
+# HQ's bridge: the Unix socket the running web process serves the controller
+# contract on, and the only way the controller reaches HQ. The path is the web
+# container's own setting and its directory is the volume mounted there, so
+# both are read from that container and neither is restated here. Mounted
+# read-only: the controller connects to the socket, and can neither replace it
+# nor leave anything beside it. A web container that serves no bridge stops the
+# run; nothing else is tried in its place.
+bridge_socket="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${container}" \
+    | sed -n 's/^SEVERINO_BRIDGE_SOCKET=//p' | tail -n 1)"
+case "${bridge_socket}" in
+    *[!A-Za-z0-9_./-]* | *//* | */./* | */../* | */)
+        echo "HQ's bridge socket is not a plain path." >&2
+        exit 1 ;;
+    /*/*) ;;
+    *)
+        echo "HQ serves no controller bridge: ${container} names no socket." >&2
+        exit 1 ;;
+esac
+bridge_dir="${bridge_socket%/*}"
+bridge_volume="$(docker inspect --format \
+    '{{range .Mounts}}{{if eq .Type "volume"}}{{.Destination}} {{.Name}}{{println}}{{end}}{{end}}' \
+    "${container}" | awk -v dir="${bridge_dir}" '$1 == dir { print $2 }')"
+case "${bridge_volume}" in
+    "" | *[!A-Za-z0-9_.-]*)
+        echo "HQ's bridge directory is not a volume of ${container}." >&2
+        exit 1 ;;
+esac
+set -- "$@" \
+    --mount "type=volume,source=${bridge_volume},target=${bridge_dir},readonly" \
+    --env "SEVERINO_BRIDGE_SOCKET=${bridge_socket}"
+
+# What each secret renderer on this machine says about its own runs, so HQ can
+# tell fresh secrets from a renderer that keeps failing while the files it left
+# keep everything running. A status document holds times, versions, counts and
+# short words, and no secret (docs/SECRETS.md). It sits in the root-only
+# directory beside the secrets, so a copy is mounted and never the directory.
+#
+# One line per renderer, name=document. The name is a fixed word chosen here
+# and is all HQ is told of where a document came from. Every name is passed
+# whether or not its document exists: a renderer that left none is a finding
+# in HQ, where an unnamed one would be silence.
+render_status=""
+while IFS='=' read -r renderer_name renderer_document; do
+    renderer_target="/run/severino-hq/render-status/${renderer_name}.json"
+    render_status="${render_status}${render_status:+,}${renderer_name}=${renderer_target}"
+    if [ -f "${renderer_document}" ] && [ ! -L "${renderer_document}" ]; then
+        renderer_copy="${run_dir}/render-status-${renderer_name}.json"
+        install -o 10001 -g 10001 -m 0400 "${renderer_document}" "${renderer_copy}"
+        set -- "$@" \
+            --mount "type=bind,source=${renderer_copy},target=${renderer_target},readonly"
+    fi
+done <<EOF
+hq=${controller_runtime_dir}/status.json
+EOF
+set -- "$@" --env "SEVERINO_RENDER_STATUS=${render_status}"
+
+# The state of the units this repository ships, as systemd holds it, so a unit
+# that failed, a timer that stopped and a unit that was never installed reach
+# HQ instead of staying in this machine's journal. The units are the ones under
+# deploy/systemd beside this script, in the tree root owns, and the question
+# is a fixed list of properties (scripts/lib/systemd-units.sh): states,
+# results and instants, and nothing a unit runs or is given.
+#
+# Asked here and passed in as a file, on the same terms as the readings above:
+# the manager's socket is read and write, so the container is handed the
+# answer and never the socket. The reading is named whether or not systemd
+# answered, so a machine where it did not is a reading HQ could not take, and
+# says so.
+runtime_units="${run_dir}/units"
+if units_state "${script_dir}/../deploy/systemd" > "${runtime_units}" 2>/dev/null \
+    && [ -s "${runtime_units}" ]; then
+    chown 10001:10001 "${runtime_units}"
+    chmod 0400 "${runtime_units}"
+    set -- "$@" \
+        --mount "type=bind,source=${runtime_units},target=/run/severino-hq/units,readonly"
+fi
+set -- "$@" --env SEVERINO_HOST_UNITS=/run/severino-hq/units
 
 # No connection reaches the container's environment: Docker writes a
 # container's resolved environment to disk and shows it in `docker inspect`.

@@ -1,10 +1,16 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}API reference{% endblock %}
+{% block head_extra %}
+  <link rel="stylesheet" href="{% static 'css/api-reference.css' %}">
+{% endblock %}
 {% block content %}
-<div id="api-reference-root" data-url="{{ document_url }}"></div>
+<p class="api-reference-loading" role="status">Loading the reference.</p>
+<div class="api-reference" id="api-reference-root" data-url="{{ document_url }}"></div>
 <noscript><p>The reference needs JavaScript. The document itself is at <a href="{{ document_url }}">{{ document_url }}</a>.</p></noscript>
 {% endblock %}
+{% comment %}The reference fills the page under the header; its pinned sidebar runs to the bottom.{% endcomment %}
+{% block site_footer %}{% endblock %}
 {% block scripts_extra %}
   <script src="{% static 'js/api-reference.js' %}" defer></script>
   <script src="{% static 'vendor/scalar/standalone.js' %}" defer></script>

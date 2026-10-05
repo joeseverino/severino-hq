@@ -23,6 +23,7 @@ from hq.domains.control_plane.models import (
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
+from hq.platform.application.derivations import uncached
 from ..attention import infrastructure, tailnet
 from ..command_center import command_center
 from ..estate import Estate, attention as estate_attention, cards, estate_reading
@@ -131,7 +132,7 @@ class SearchFindsTheEstateTests(TestCase):
                                        spec={"name": "example-host"})
 
         response = self.client.get(
-            reverse("search"), {"q": "example-host"}, headers={"X-Command-Center": "palette"}
+            reverse("search"), {"q": "example-host"}, headers={"X-Fragment": "palette"}
         )
 
         content = response.content.decode()
@@ -783,6 +784,7 @@ class EstateQueryBudgetTests(TestCase):
             mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()),
             mock.patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")),
             CaptureQueriesContext(db) as queries,
+            uncached(),
         ):
             operating_snapshot(principal=cli_principal())
         return len(queries)

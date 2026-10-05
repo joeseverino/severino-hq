@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from hq.platform.application.routes import reverse
-from django.utils import timezone
 
 from hq.domains.control_plane.provider_adapters.tls import (
     CERTIFICATE_KIND,
@@ -22,6 +21,7 @@ from hq.domains.control_plane.provider_adapters.tls import (
 
 from hq.domains.control_plane.provider_spec import expiry_phrase
 
+from .derivations import reached
 from .entity_links import entity_link
 from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
 from .item_help import cannot_help, remedy_link
@@ -454,7 +454,6 @@ def _holds_something(machine) -> bool:
 
 
 def _offline(estate: Estate) -> tuple[Insight, ...]:
-    now = timezone.now()
     items = []
     for machine in estate.machines:
         presence = machine.presence
@@ -462,7 +461,7 @@ def _offline(estate: Estate) -> tuple[Insight, ...]:
         if presence is None or presence.online or presence.personal or not _holds_something(machine):
             continue
         seen = moment(presence.last_seen)
-        if seen is None or seen.year < 2000 or now - seen < OFFLINE_AFTER:
+        if seen is None or seen.year < 2000 or not reached(seen + OFFLINE_AFTER):
             continue
         serves = bool(machine.hostnames or machine.roles or machine.runs_hq)
         what = ", ".join(role.label for role in machine.roles)

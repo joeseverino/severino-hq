@@ -21,6 +21,7 @@ import (
 	"github.com/joeseverino/severino-hq/controller/secrets/connectapi"
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 	"github.com/joeseverino/severino-hq/controller/secrets/project"
+	"github.com/joeseverino/severino-hq/controller/secretstatus"
 )
 
 // Config is the host's configuration, from the unit and its drop-in.
@@ -291,9 +292,9 @@ func (r *Runner) Run(ctx context.Context) (Result, error) {
 	}
 	defer unlock()
 
-	status := Status{SchemaVersion: StatusSchemaVersion}
-	if data, ok := install.Read(tree.Runtime(), StatusName, r.Config.Layout.RootUID, 0o644); ok {
-		if previous, err := DecodeStatus(data); err == nil {
+	status := secretstatus.Status{SchemaVersion: secretstatus.SchemaVersion}
+	if data, ok := install.Read(tree.Runtime(), secretstatus.Name, r.Config.Layout.RootUID, 0o644); ok {
+		if previous, err := secretstatus.Decode(data); err == nil {
 			status = previous
 		}
 	}
@@ -304,17 +305,17 @@ func (r *Runner) Run(ctx context.Context) (Result, error) {
 	if settleErr := r.settle(ctx, tree, &result); err == nil {
 		err = settleErr
 	}
-	status.LastAttempt = Attempt{At: r.Now().UTC(), Outcome: result.Outcome, Failure: Class(err)}
+	status.LastAttempt = secretstatus.Attempt{At: r.Now().UTC(), Outcome: result.Outcome, Failure: Class(err)}
 	if err != nil {
-		status.LastAttempt.Outcome = "failed"
+		status.LastAttempt.Outcome = secretstatus.OutcomeFailed
 	}
-	if data, marshalErr := json.Marshal(status); marshalErr != nil || tree.WriteAtomic(StatusName, append(data, '\n'), 0o644) != nil {
+	if data, marshalErr := json.Marshal(status); marshalErr != nil || tree.WriteAtomic(secretstatus.Name, append(data, '\n'), 0o644) != nil {
 		r.Log.Warn("the status document could not be written", slog.String("event", "secrets.status.unwritten"))
 	}
 	return result, err
 }
 
-func (r *Runner) render(ctx context.Context, tree *install.Tree, status *Status) (Result, error) {
+func (r *Runner) render(ctx context.Context, tree *install.Tree, status *secretstatus.Status) (Result, error) {
 	config := r.Config
 	if err := tree.LegacyKeys(); err != nil {
 		return Result{}, err
@@ -371,11 +372,11 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *Status)
 		last.Inputs == r.inputs(last.Salt, registryBytes) &&
 		r.Now().Sub(last.RenderedAt) < config.FullEvery && r.Now().After(last.RenderedAt.Add(-time.Minute)) &&
 		!r.pendingUnreadable(tree) && r.intact(tree, last) {
-		status.LastSuccess = &Success{At: r.Now().UTC(), RenderedAt: last.RenderedAt, ContentVersion: vault.ContentVersion,
+		status.LastSuccess = &secretstatus.Success{At: r.Now().UTC(), RenderedAt: last.RenderedAt, ContentVersion: vault.ContentVersion,
 			AttributeVersion: vault.AttributeVersion, Counts: last.Counts}
 		r.Log.Info("Severino HQ secrets are current.", slog.String("event", "secrets.render.current"),
 			slog.Int("content_version", *vault.ContentVersion))
-		return Result{Outcome: "current"}, nil
+		return Result{Outcome: secretstatus.OutcomeCurrent}, nil
 	}
 	read, items, err := r.read(connectCtx, client, *vault.Id)
 	if err != nil {
@@ -414,7 +415,7 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *Status)
 		}
 	}
 
-	result := Result{Outcome: "rendered"}
+	result := Result{Outcome: secretstatus.OutcomeRendered}
 	// Every installed file changes under the lock the launcher copies them
 	// with, the application environment included: its in-place write truncates
 	// first. Taken before anything is touched, so a launcher that holds it
@@ -482,7 +483,7 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *Status)
 	}
 	next := state{SchemaVersion: stateSchemaVersion, RenderedAt: r.Now().UTC(), VaultID: *vault.Id,
 		AttributeVersion: read.AttributeVersion, Salt: salt, Inputs: r.inputs(salt, registryBytes),
-		Counts: Counts{ItemsRead: len(items), Connections: len(out.Document.Connections), AppVariables: out.AppVariables,
+		Counts: secretstatus.Counts{ItemsRead: len(items), Connections: len(out.Document.Connections), AppVariables: out.AppVariables,
 			Identities: out.Identities, SigningKeys: out.SigningKeys}}
 	type target struct {
 		dir, name string
@@ -512,7 +513,7 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *Status)
 	if err := r.at("state"); err != nil {
 		return result, err
 	}
-	status.LastSuccess = &Success{At: next.RenderedAt, RenderedAt: next.RenderedAt, ContentVersion: read.ContentVersion,
+	status.LastSuccess = &secretstatus.Success{At: next.RenderedAt, RenderedAt: next.RenderedAt, ContentVersion: read.ContentVersion,
 		AttributeVersion: read.AttributeVersion, Counts: next.Counts}
 	r.Log.Info("Severino HQ secrets rendered.", slog.String("event", "secrets.render.installed"),
 		slog.Bool("changed", result.Changed), slog.Bool("web_changed", result.WebChanged),

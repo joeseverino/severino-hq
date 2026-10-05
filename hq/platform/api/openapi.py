@@ -162,7 +162,7 @@ class _Components:
 
 
 class _Tags:
-    """The tag tree: nav groups, then domains, from the domain registry.
+    """The tag tree: nav groups and their domains in the bar's order, from the domain registry.
 
     A resource belongs to the domain that declares it (its integration or its
     records), else to the domain whose nav item is the resource's web page. A
@@ -221,20 +221,28 @@ class _Tags:
                 "description": _first_line(views.__doc__),
             }
         ]
-        groups: list[str] = []
+        # The bar's order: a group stands where its first domain does, and a
+        # domain outside every group keeps its own place among them.
+        groups: set[str] = set()
         for domain in used:
             group = self._group(domain)
             if group and group not in groups:
-                groups.append(group)
-        tags += [
-            {"name": f"nav.{_camel(group)}", "summary": group, "kind": "nav"} for group in groups
-        ]
-        for domain in used:
+                groups.add(group)
+                tags.append({"name": f"nav.{_camel(group)}", "summary": group, "kind": "nav"})
             tag: dict[str, Any] = {"name": domain.id, "summary": domain.label, "kind": "nav"}
-            if group := self._group(domain):
+            if group:
                 tag["parent"] = f"nav.{_camel(group)}"
             tags.append(tag)
-        tags.append({"name": VERSION_TAG, "summary": f"v{VERSION}", "kind": "badge"})
+        # A badge marks operations and is no section of its own. A viewer that
+        # does not read ``kind`` is told so in the form it does read.
+        tags.append(
+            {
+                "name": VERSION_TAG,
+                "summary": f"v{VERSION}",
+                "kind": "badge",
+                "x-scalar-ignore": True,
+            }
+        )
         return tags
 
 
@@ -327,9 +335,17 @@ class _Builder:
         if request is not None and "requestBody" in fields:
             for media in fields["requestBody"]["content"].values():
                 media["examples"] = _recorded(request)
+        # A view's title names it and its docstring says what it answers; an
+        # expansion states both for the concrete operation it derives.
+        summary = fields.pop("summary", None)
+        if summary is None:
+            summary = view.__hq_title__
+            fields["description"] = " ".join(
+                part for part in (_first_line(view.__doc__), fields.get("description")) if part
+            )
         operation: dict[str, Any] = {
             "operationId": operation_id,
-            "summary": fields.pop("summary", None) or _first_line(view.__doc__),
+            "summary": summary,
             "tags": [tag, VERSION_TAG],
             **fields,
             "responses": self._responses(view, operation_id),

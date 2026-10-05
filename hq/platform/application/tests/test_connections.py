@@ -19,7 +19,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 
 from ..connections import connection_readings, connections_for, reachable_through
 from ..connection_catalog import CONTROLLER_CONNECTIONS, connection_catalog
-from ..inventory import record_connections
+from ..report_testing import report_connections
 from hq.domains.control_plane.provider_spec import NameContext
 
 from ..provider_choices import container_stack, zone
@@ -47,7 +47,7 @@ A_DNS_TOKEN = {
 
 
 def sweep(*connections, controller_id="a-controller"):
-    return record_connections(
+    return report_connections(
         list(connections), principal=cli_principal(), controller_id=controller_id
     )
 
@@ -103,7 +103,7 @@ class RecordingTests(TestCase):
         self.assertEqual(connection_readings()[0].status_label, "Not probed")
 
     def test_a_connection_without_a_ref_is_skipped_rather_than_stored(self):
-        sweep({"provider": "portainer"}, A_PORTAINER)
+        sweep({"connection_ref": " ", "provider": "portainer"}, A_PORTAINER)
 
         self.assertEqual(ProviderConnection.objects.count(), 1)
 

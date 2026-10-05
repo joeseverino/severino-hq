@@ -273,6 +273,7 @@ ENDPOINT_ERRORS = (401, 403, 405, 503)
 def _endpoint(
     methods: tuple[str, ...],
     *,
+    title: str,
     data: Any,
     errors: tuple[int, ...] = (),
     operator_session: bool = False,
@@ -288,7 +289,9 @@ def _endpoint(
 
     ``data`` is the type a success carries under ``data`` (None: the body is
     not enveloped) and ``errors`` the statuses the view adds to
-    ENDPOINT_ERRORS. Both are read by hq_api/openapi.py.
+    ENDPOINT_ERRORS. ``title`` names the operation in a few words, where the
+    docstring's first line says what it answers. All three are read by
+    hq_api/openapi.py.
     """
 
     if operator_session and set(methods) - {"GET", "HEAD"}:
@@ -367,6 +370,7 @@ def _endpoint(
         # and fails if one lacks the mark.
         setattr(wrapper, "__hq_authenticated__", True)
         setattr(wrapper, "__hq_methods__", methods)
+        setattr(wrapper, "__hq_title__", title)
         setattr(wrapper, "__hq_data__", data)
         setattr(wrapper, "__hq_errors__", tuple(sorted({*ENDPOINT_ERRORS, *errors})))
         setattr(wrapper, "__hq_operator_session__", operator_session)
@@ -375,7 +379,7 @@ def _endpoint(
     return decorate
 
 
-@_endpoint(("GET",), data=RootData)
+@_endpoint(("GET",), title="API root", data=RootData)
 def root(request: APIRequest) -> HttpResponse:
     """What this is, and what the presented credential may actually do."""
 
@@ -394,7 +398,7 @@ def root(request: APIRequest) -> HttpResponse:
     return _ok(data)
 
 
-@_endpoint(("GET",), data=None, operator_session=True)
+@_endpoint(("GET",), title="OpenAPI document", data=None, operator_session=True)
 def openapi(request: APIRequest) -> HttpResponse:
     """This API as an OpenAPI 3.2 document, derived from its routes and registries.
 
@@ -409,7 +413,7 @@ def openapi(request: APIRequest) -> HttpResponse:
     return _json(document())
 
 
-@_endpoint(("GET",), data=CapabilityCatalog)
+@_endpoint(("GET",), title="List capabilities", data=CapabilityCatalog)
 def capabilities(request: APIRequest) -> HttpResponse:
     """Every capability HQ has, flagged by whether this token may run it.
 
@@ -436,7 +440,7 @@ def capabilities(request: APIRequest) -> HttpResponse:
     return _ok(catalog)
 
 
-@_endpoint(("GET",), data=ResourceCatalog)
+@_endpoint(("GET",), title="List resources", data=ResourceCatalog)
 def resources(request: APIRequest) -> HttpResponse:
     """Every readable resource, including operations this token may use."""
 
@@ -454,7 +458,7 @@ def resources(request: APIRequest) -> HttpResponse:
 
 
 def _projection(
-    serve: Callable[..., Any], query_fields: tuple[str, ...], name: str, doc: str
+    serve: Callable[..., Any], query_fields: tuple[str, ...], name: str, title: str, doc: str
 ) -> View:
     """One principal-scoped projection, served with declared narrowing inputs.
 
@@ -487,7 +491,7 @@ def _projection(
     # route-walking security test reads them.
     view.__name__ = name
     view.__doc__ = doc
-    served = _endpoint(("GET",), data=Projection)(view)
+    served = _endpoint(("GET",), title=title, data=Projection)(view)
     # The narrowing inputs, for the OpenAPI document's query parameters.
     setattr(served, "__hq_query_fields__", query_fields)
     return served
@@ -497,6 +501,7 @@ topology = _projection(
     application_topology,
     ("lens", "focus", "direction", "depth"),
     "topology",
+    "Topology",
     """The live permitted infrastructure graph and its canonical actions.
 
     `?lens=` narrows to a standing question. `?focus=`, `direction`, and
@@ -508,6 +513,7 @@ findings = _projection(
     application_findings,
     ("rule",),
     "findings",
+    "Findings",
     """What HQ currently claims is wrong, with the evidence and a remedy.
 
     Derived from the same projection as the topology and narrowed the same way,
@@ -517,7 +523,7 @@ findings = _projection(
 )
 
 
-@_endpoint(("GET",), data=ConnectionCatalog)
+@_endpoint(("GET",), title="Connections", data=ConnectionCatalog)
 def connections(request: APIRequest) -> HttpResponse:
     """Connection contracts plus the safe state this token may inspect."""
 
@@ -556,7 +562,7 @@ def _resource_failure(exc: Exception) -> HttpResponse:
 RESOURCE_ERRORS = (400, 404, 405)
 
 
-@_endpoint(("GET",), data=ResourceCollection, errors=RESOURCE_ERRORS)
+@_endpoint(("GET",), title="List a resource", data=ResourceCollection, errors=RESOURCE_ERRORS)
 def resource_list(request: APIRequest, name: str) -> HttpResponse:
     """List one resource through its declared, schema-validated query."""
 
@@ -584,7 +590,7 @@ def resource_list(request: APIRequest, name: str) -> HttpResponse:
         return _resource_failure(exc)
 
 
-@_endpoint(("GET",), data=dict[str, Any], errors=RESOURCE_ERRORS)
+@_endpoint(("GET",), title="Get a resource record", data=dict[str, Any], errors=RESOURCE_ERRORS)
 def resource_detail(request: APIRequest, name: str, identifier: str) -> HttpResponse:
     """Get one resource record through its declared identifier contract."""
 
@@ -700,7 +706,7 @@ def _parse_envelope(request: HttpRequest) -> tuple[dict[str, Any], Envelope]:
 EXECUTE_ERRORS = (400, 409, 413, 415, *CAPABILITY_STATUS.values())
 
 
-@_endpoint(("POST",), data=dict[str, Any], errors=EXECUTE_ERRORS)
+@_endpoint(("POST",), title="Run a capability", data=dict[str, Any], errors=EXECUTE_ERRORS)
 def execute(request: APIRequest, name: str) -> HttpResponse:
     """Run one HQ capability, replaying machine writes by idempotency key."""
 

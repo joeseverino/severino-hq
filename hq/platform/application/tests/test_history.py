@@ -68,7 +68,7 @@ class ReadingChangeTests(TestCase):
 
     def test_a_failed_read_is_not_a_change(self):
         sweep(dns())
-        record_inventory({"cloudflare.dns_record": {"ok": False, "error": "refused"}}, principal=cli_principal())
+        record_inventory({"cloudflare.dns_record": {"ok": False, "records": [], "error": "refused"}}, principal=cli_principal())
 
         self.assertEqual(readings(), [])
 

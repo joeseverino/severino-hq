@@ -1,6 +1,6 @@
 {% comment %}
 What the dialog holds before the panel arrives. Replaced wholesale on open.
 {% endcomment %}
-<div class="conn-pending" data-connection-slot aria-busy="true">
+<div class="conn-pending" data-fragment="{% url 'connection' %}" data-fragment-name="connection" data-fragment-load data-fragment-failure="This connection could not be read here." data-fragment-fallback="{% url 'connection' %}" aria-busy="true">
   <p class="muted">Reading this connection…</p>
 </div>

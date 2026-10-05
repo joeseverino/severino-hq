@@ -291,17 +291,15 @@ def watching() -> tuple[Card, ...]:
 
     from datetime import timedelta
 
-    from hq.platform.core.models import UpstreamReading
-
-    from .github_profile import KEY_PREFIX, profile
+    from .github_profile import profile, profiles
     from .timestamps import moment
 
-    # One query whatever is linked: a profile is only ever read for a signed-in
-    # person's own linked account, so its reading names them.
-    keys = list(UpstreamReading.objects.filter(key__startswith=KEY_PREFIX).values_list("key", flat=True)[:2])
-    if len(keys) != 1:
+    # A profile is only ever read for a signed-in person's own linked account,
+    # so its reading names them.
+    logins = profiles()
+    if len(logins) != 1:
         return ()
-    found = profile(keys[0].removeprefix(KEY_PREFIX))
+    found = profile(logins[0])
     if found is None:
         return ()
     since = timezone.now() - timedelta(days=30)

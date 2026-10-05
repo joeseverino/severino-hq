@@ -22,6 +22,7 @@ import (
 	"github.com/joeseverino/severino-hq/controller/secrets/connecttest"
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 	"github.com/joeseverino/severino-hq/controller/secrets/project"
+	"github.com/joeseverino/severino-hq/controller/secretstatus"
 )
 
 type (
@@ -177,7 +178,7 @@ func (h *host) noLeak(err error) {
 	if err != nil {
 		surfaces["error"] = err.Error()
 	}
-	if status, readErr := os.ReadFile(filepath.Join(h.layout().RuntimeDir, StatusName)); readErr == nil {
+	if status, readErr := os.ReadFile(filepath.Join(h.layout().RuntimeDir, secretstatus.Name)); readErr == nil {
 		surfaces["status document"] = string(status)
 	}
 	for where, text := range surfaces {
@@ -192,13 +193,13 @@ func (h *host) noLeak(err error) {
 	}
 }
 
-func (h *host) status() Status {
+func (h *host) status() secretstatus.Status {
 	h.t.Helper()
-	data, err := os.ReadFile(filepath.Join(h.layout().RuntimeDir, StatusName))
+	data, err := os.ReadFile(filepath.Join(h.layout().RuntimeDir, secretstatus.Name))
 	if err != nil {
 		h.t.Fatal(err)
 	}
-	status, err := DecodeStatus(data)
+	status, err := secretstatus.Decode(data)
 	if err != nil {
 		h.t.Fatalf("the status document is not its declared shape: %v\n%s", err, data)
 	}
@@ -285,10 +286,10 @@ func TestAFirstRenderInstallsEveryConsumersFile(t *testing.T) {
 	status := h.status()
 	if status.LastAttempt.Outcome != "rendered" || status.LastAttempt.Failure != "" || status.LastSuccess == nil ||
 		!status.LastSuccess.At.Equal(h.now) || *status.LastSuccess.ContentVersion != 1 ||
-		status.LastSuccess.Counts != (Counts{ItemsRead: 4, Connections: 2, AppVariables: 16, Identities: 1}) {
+		status.LastSuccess.Counts != (secretstatus.Counts{ItemsRead: 4, Connections: 2, AppVariables: 16, Identities: 1}) {
 		t.Fatalf("status: %+v %+v", status.LastAttempt, status.LastSuccess)
 	}
-	if status.Connect == nil || status.Connect.Version != "1.8.1" || status.Connect.Dependencies[0] != (Dependency{Service: "sync", Status: "ACTIVE"}) {
+	if status.Connect == nil || status.Connect.Version != "1.8.1" || status.Connect.Dependencies[0] != (secretstatus.Dependency{Service: "sync", Status: "ACTIVE"}) {
 		t.Fatalf("connect status: %+v", status.Connect)
 	}
 	// The token went to Connect and nowhere else: not to a file, not to the
@@ -1014,7 +1015,7 @@ func TestConcurrentRunsDoNotInterleave(t *testing.T) {
 	if _, err := second.Run(context.Background()); !errors.Is(err, install.ErrBusy) || Class(err) != "busy" {
 		t.Fatalf("a second renderer ran beside the first: %v", err)
 	}
-	if _, err := os.Lstat(filepath.Join(h.layout().RuntimeDir, StatusName)); err == nil {
+	if _, err := os.Lstat(filepath.Join(h.layout().RuntimeDir, secretstatus.Name)); err == nil {
 		t.Fatal("the refused renderer wrote the status document under the running one")
 	}
 	if len(h.staging()) != 0 {
@@ -1120,7 +1121,7 @@ func TestConnectIsUnlockedByTheAuthenticatedRequestAndWaitedFor(t *testing.T) {
 	if h.fake.Requests[0] != "/v1/vaults" || h.fake.Authorizations[0] != "Bearer "+connecttest.Token {
 		t.Fatalf("the first request was not the authenticated listing: %v", h.fake.Requests[:1])
 	}
-	if status := h.status(); status.Connect.Dependencies[0] != (Dependency{Service: "sync", Status: "TOKEN_NEEDED"}) {
+	if status := h.status(); status.Connect.Dependencies[0] != (secretstatus.Dependency{Service: "sync", Status: "TOKEN_NEEDED"}) {
 		t.Fatalf("sync state was not recorded: %+v", status.Connect)
 	}
 	// What an unauthenticated endpoint says is not copied into the document.

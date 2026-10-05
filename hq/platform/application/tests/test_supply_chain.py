@@ -4,7 +4,7 @@ from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -200,8 +200,7 @@ class CadenceTests(TestCase):
         self.assertEqual(record["unresolved"], ["B"])
 
 
-@override_settings(SEVERINO_REGISTRY_DOORBELL="")
-class DoorbellTests(TestCase):
+class RegistryReadTests(TestCase):
     def sweep(self):
         from ..sweep import record_sweep
 
@@ -209,11 +208,11 @@ class DoorbellTests(TestCase):
             record_sweep({"portainer.container": {"ok": True, "records": list(ProviderInventory.objects.get(kind="portainer.container").records)}},
                          principal=cli_principal())
 
-    def test_a_sweep_that_finds_a_digest_hq_has_not_read_rings(self):
+    def test_a_sweep_that_finds_a_digest_hq_has_not_read_starts_the_read(self):
         estate()
-        with mock.patch("hq.platform.application.cadence.ring_registry_doorbell") as ring:
+        with mock.patch("hq.platform.application.scheduled_work.start") as start:
             self.sweep()
-        ring.assert_called_once_with()
+        start.assert_called_once_with("registry.refresh")
 
     def test_a_sweep_that_finds_nothing_new_is_silent(self):
         from ..public_registry import registry_due
@@ -221,9 +220,9 @@ class DoorbellTests(TestCase):
         estate()
         inventory("registry.digest", [attested(APP), attested("docker.io/example/kuma@sha256:bbb")])
         self.assertFalse(registry_due())
-        with mock.patch("hq.platform.application.cadence.ring_registry_doorbell") as ring:
+        with mock.patch("hq.platform.application.scheduled_work.start") as start:
             self.sweep()
-        ring.assert_not_called()
+        start.assert_not_called()
 
 
 class ContainerJoinTests(TestCase):

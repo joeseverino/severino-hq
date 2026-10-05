@@ -346,7 +346,7 @@ class CarriedConnectionRecordTests(TestCase):
     def test_a_carried_connection_keeps_its_last_answer_and_its_time(self):
         from hq.domains.control_plane.models import ProviderConnection
 
-        from ..inventory import record_connections
+        from ..report_testing import report_connections
 
         taken = timezone.now() - timedelta(minutes=20)
         ProviderConnection.objects.create(
@@ -359,7 +359,7 @@ class CarriedConnectionRecordTests(TestCase):
             observed_at=taken,
         )
 
-        record_connections(
+        report_connections(
             [
                 {
                     "connection_ref": "shared-hosting",
@@ -383,9 +383,9 @@ class CarriedConnectionRecordTests(TestCase):
     def test_a_carried_connection_hq_has_never_seen_is_recorded_as_unprobed(self):
         from hq.domains.control_plane.models import ProviderConnection
 
-        from ..inventory import record_connections
+        from ..report_testing import report_connections
 
-        record_connections(
+        report_connections(
             [
                 {
                     "connection_ref": "new-host",
@@ -461,10 +461,9 @@ class ControllerStandingTests(TestCase):
         self.assertTrue(cadence.controller_standing(later).silent)
 
     def test_the_arrival_is_noted_on_the_first_call_every_applying_run_makes(self):
-        from django.core.management import call_command
-        from io import StringIO
+        from hq.domains.control_plane.tests import bridge_client
 
-        call_command("infrastructure_controller", "glance-plan", "--controller-id", "test", stdout=StringIO())
+        bridge_client.call("glance-plan", controller_id="test")
 
         self.assertTrue(cadence.controller_standing().known)
 

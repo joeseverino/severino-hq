@@ -6,8 +6,8 @@ import (
 )
 
 func (w *Worker) glance(ctx context.Context) {
-	var plan GlancePlan
-	if err := w.call(ctx, "glance-plan", nil, &plan, "--controller-id", w.ID); err != nil {
+	plan, err := w.Bridge.GlancePlan(ctx, w.ID)
+	if err != nil {
 		w.logger().Warn("glance plan unavailable", slog.Any("error", err))
 		return
 	}
@@ -19,12 +19,12 @@ func (w *Worker) glance(ctx context.Context) {
 		w.logger().Warn("glance read failed", slog.Any("error", err))
 		return
 	}
-	w.post(ctx, "glance", result)
+	w.post("glance", w.Bridge.Glance(ctx, w.ID, result))
 }
 
 func (w *Worker) sweep(ctx context.Context) error {
-	var verdict SweepVerdict
-	if err := w.call(ctx, "sweep-due", nil, &verdict, "--controller-id", w.ID); err != nil {
+	verdict, err := w.Bridge.SweepDue(ctx, w.ID)
+	if err != nil {
 		w.logger().Warn("sweep policy unavailable", slog.Any("error", err))
 		verdict.Carry, verdict.OnlyKinds = nil, nil
 	} else if !verdict.Due {
@@ -39,13 +39,13 @@ func (w *Worker) sweep(ctx context.Context) error {
 		if connections == nil {
 			connections = []ConnectionRecord{}
 		}
-		w.post(ctx, "connections", connections)
+		w.post("connections", w.Bridge.Connections(ctx, w.ID, connections))
 	}
 	inventory, err := w.Providers.Inventory(ctx, verdict.OnlyKinds)
 	if err != nil {
 		return err
 	}
-	w.post(ctx, "inventory", inventory)
+	w.post("inventory", w.Bridge.Inventory(ctx, w.ID, inventory))
 	if len(verdict.OnlyKinds) != 0 {
 		return nil
 	}
@@ -59,7 +59,7 @@ func (w *Worker) sweep(ctx context.Context) error {
 		w.logger().Warn("analytics sweep skipped", slog.String("phase", "analytics"), slog.Any("error", err))
 		return nil
 	}
-	w.post(ctx, "analytics", readings)
+	w.post("analytics", w.Bridge.Analytics(ctx, w.ID, readings))
 	return nil
 }
 
@@ -67,8 +67,8 @@ func (w *Worker) analyticsWindows(ctx context.Context, sites []AnalyticsSiteIden
 	if len(sites) == 0 {
 		return []AnalyticsWindow{}
 	}
-	var plan AnalyticsPlan
-	if err := w.call(ctx, "analytics-plan", sites, &plan); err != nil {
+	plan, err := w.Bridge.AnalyticsPlan(ctx, sites)
+	if err != nil {
 		w.logger().Warn("analytics plan unavailable", slog.Any("error", err))
 		return []AnalyticsWindow{}
 	}

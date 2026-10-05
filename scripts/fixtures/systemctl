@@ -1,10 +1,38 @@
 #!/bin/sh
 # A fake systemctl for the shell suites: the Actions runner units, one per
-# line, and the account the first runs as.
+# line, the account the first runs as, and the state of the units a test set
+# up.
+#
+# `show --property=Id,...` answers as systemd does for several units: a block
+# per unit named after `--`, an empty line between blocks. A unit's block is its
+# name and then the file of that name in TEST_UNIT_STATE; a unit with no file
+# there is one systemd holds no configuration for. TEST_SYSTEMCTL_LOG, when set,
+# receives the zone and the arguments of the call.
 # shellcheck disable=SC2086  # the unit list is meant to split
 case "$1" in
     list-units) printf '%s\n' ${TEST_RUNNER_UNITS-actions.runner.example-hq.example-host.service} \
         | awk 'NF { print $1 " loaded active running Example runner" }' ;;
-    show) printf '%s\n' "${TEST_ACCOUNT}" ;;
+    show)
+        case " $* " in
+            *' --property=Id,'*)
+                [ -n "${TEST_UNIT_STATE-}" ] || exit 1
+                if [ -n "${TEST_SYSTEMCTL_LOG-}" ]; then
+                    printf '%s\n' "TZ=${TZ-}" "$@" >"${TEST_SYSTEMCTL_LOG}"
+                fi
+                while [ "$1" != "--" ]; do shift; done
+                shift
+                first=1
+                for unit; do
+                    [ "${first}" -eq 1 ] || echo
+                    first=0
+                    printf 'Id=%s\n' "${unit}"
+                    if [ -f "${TEST_UNIT_STATE}/${unit}" ]; then
+                        cat "${TEST_UNIT_STATE}/${unit}"
+                    else
+                        printf 'LoadState=not-found\nActiveState=inactive\nSubState=dead\n'
+                    fi
+                done ;;
+            *) printf '%s\n' "${TEST_ACCOUNT}" ;;
+        esac ;;
     *) exit 64 ;;
 esac

@@ -1,11 +1,12 @@
 {% extends "page.html" %}
 {% block page %}
 {% comment %}
-Every control is a link or a form, so the page works without JavaScript;
-app.js only makes paging, checking a source and opening a day happen in
-place. The ids are what it swaps.
+Every control is a link or a form, so the page works without JavaScript. The
+region is a fragment (static/js/fragment.js): paging, checking a source and
+opening a day ask this page for the `calendar` part and take it in place.
 {% endcomment %}
-<div class="split calendar-layout" id="calendar" data-calendar>
+{% partialdef calendar inline %}
+<div class="split calendar-layout" id="calendar" data-fragment data-fragment-name="calendar" data-fragment-links data-fragment-history="replace">
   <section class="card calendar-month" id="calendar-month" aria-labelledby="calendar-period">
     <div class="section-head">
       <h2 id="calendar-period">{{ calendar.month|date:"F Y" }}</h2>
@@ -55,7 +56,7 @@ place. The ids are what it swaps.
         <ul>
           {% for source in sources %}
             <li>
-              <form method="post" action="{% url 'calendar:source' source.id %}" data-calendar-source>
+              <form method="post" action="{% url 'calendar:source' source.id %}" data-fragment-target>
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ here }}">
                 <input type="hidden" name="shown" value="{% if source.shown %}0{% else %}1{% endif %}">
@@ -72,4 +73,5 @@ place. The ids are what it swaps.
     </section>
   </aside>
 </div>
+{% endpartialdef %}
 {% endblock %}

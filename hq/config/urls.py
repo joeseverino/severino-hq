@@ -1,10 +1,8 @@
 """Root URL configuration for Severino HQ."""
 
-from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_not_required
 from django.urls import URLPattern, include, path
-from django.views.generic import RedirectView
 
 from django.conf import settings
 
@@ -22,6 +20,7 @@ from hq.platform.core.views import (
 )
 from hq.platform.core.csp_views import csp_report
 from hq.platform.core.health_views import health_live, health_ready
+from hq.platform.core.speculation import rules_document
 from hq.platform.core.action_item_views import (
     ActionItemCountView,
     ActionItemAsideView,
@@ -64,14 +63,6 @@ urlpatterns = [
         csp_report,
         name="csp_report",
     ),
-    # Django admin ships its own sign-in form. Routed to the login HQ
-    # controls so there is exactly one sign-in path, with one set of rules.
-    path(
-        "admin/login/",
-        RedirectView.as_view(url="/accounts/login/", query_string=True),
-        name="admin_login_redirect",
-    ),
-    path("admin/", admin.site.urls),
     path(
         "accounts/login/",
         ThrottledLoginView.as_view(),
@@ -83,6 +74,7 @@ urlpatterns = [
         name="logout",
     ),
     path("oidc/", public("mozilla_django_oidc.urls")),
+    path("speculation-rules.json", rules_document, name="speculation_rules"),
     path("", DashboardView.as_view(), name="dashboard"),
     path("action-items/", ActionItemsView.as_view(), name="action_items"),
     path(

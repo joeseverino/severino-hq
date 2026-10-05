@@ -21,6 +21,7 @@ output-options:
     - actions/list-self-hosted-runners-for-repo
     - actions/list-workflow-runs
     - actions/list-workflow-runs-for-repo
+    - activity/list-repos-starred-by-user
     - apps/create-installation-access-token
     - apps/get-authenticated
     - apps/get-repo-installation
@@ -34,12 +35,14 @@ output-options:
     - issues/create-comment
     - issues/list-comments
     - pulls/list
+    - rate-limit/get
     - repos/check-automated-security-fixes
     - repos/get
     - repos/get-all-environments
     - repos/get-branch-rules
     - repos/get-commit
     - repos/get-content
+    - repos/get-latest-release
     - repos/list-collaborators
     - repos/list-deploy-keys
     - repos/list-deployment-statuses
@@ -47,3 +50,5 @@ output-options:
     - repos/list-pull-requests-associated-with-commit
     - repos/list-releases
     - secret-scanning/list-alerts-for-repo
+    - security-advisories/list-repository-advisories
+    - users/get-by-username

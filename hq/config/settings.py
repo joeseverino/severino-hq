@@ -236,11 +236,16 @@ SILENCED_SYSTEM_CHECKS = [] if SECURE_SSL_REDIRECT else ["security.W008"]
 # Where the browser sends a policy violation. One path, named once, because the
 # policy references it and the URLconf has to route it.
 SEVERINO_CSP_REPORT_PATH = "/csp-report/"
+# What happens when a request reaches for a network, a process or a timer
+# (hq.platform.core.outbound): "refuse" raises before the call leaves; "report"
+# logs it as outbound.in_request and lets it go, for a composition whose
+# extensions have not yet moved such work to a job.
+SEVERINO_OUTBOUND_IN_REQUEST = os.environ.get("SEVERINO_OUTBOUND_IN_REQUEST", "refuse")
 
 # Django owns the browser security boundary. Scripts are limited to same-origin
 # assets or per-response nonces; objects and framing are disabled outright.
-# Inline styles remain allowed for Django admin compatibility, while application
-# templates keep styles in the static bundle.
+# Inline styles remain allowed so a chart can place a mark with a per-datum
+# custom property; application templates keep styles in the static bundle.
 #
 # `require-trusted-types-for` is the one directive here that is not about where
 # content may come from. Every other line describes an origin; this one removes
@@ -251,15 +256,11 @@ SEVERINO_CSP_REPORT_PATH = "/csp-report/"
 #
 # `trusted-types` names exactly one policy and does not permit duplicates. HQ's
 # progressive enhancement is server-rendered HTML swapped in, so one place does
-# have to turn a response body into markup; `hq-fragment` in `static/js/app.js`
+# have to turn a response body into markup; `hq-fragment` in `static/js/fragment.js`
 # is that place and the only one. Because the name is taken and cannot be
 # claimed twice, script that gets onto the page cannot create a policy of its
 # own to reach a sink with, which is the property that makes a single
 # audited sink worth more than a blanket ban nobody could satisfy.
-#
-# Django admin's bundled jQuery writes HTML through `innerHTML` on every page
-# it renders, so the admin (and only the admin) runs the policy below
-# without these two directives.
 SECURE_CSP = {
     "default-src": [CSP.SELF],
     "script-src": [CSP.SELF, CSP.NONCE],
@@ -281,16 +282,13 @@ SECURE_CSP = {
     "report-uri": [SEVERINO_CSP_REPORT_PATH],
 }
 
-# The admin, minus the directive its bundled jQuery cannot satisfy. Spelled as
-# a derivation rather than a second literal policy, so tightening the real one
-# cannot leave a stale copy behind serving the admin a weaker boundary.
-SEVERINO_ADMIN_CSP = without_trusted_types(SECURE_CSP)
-
-# The API reference at /api/docs/, derived the same way and for the same kind
-# of reason: the vendored Scalar bundle (static/vendor/scalar) writes strings
-# into innerHTML through Vue and its markdown renderer, and no configuration
-# of it creates only the `hq-fragment` policy. Every source stays 'self'; it
-# needs no inline script and, configured jitless, no eval.
+# The API reference at /api/docs/ is the one page served without the Trusted
+# Types directives: the vendored Scalar bundle (static/vendor/scalar) writes
+# strings into innerHTML through Vue and its markdown renderer, and no
+# configuration of it creates only the `hq-fragment` policy. Spelled as a
+# derivation rather than a second literal policy, so tightening the real one
+# cannot leave a stale copy behind. Every source stays 'self'; it needs no
+# inline script and, configured jitless, no eval.
 SEVERINO_API_REFERENCE_CSP = without_trusted_types(SECURE_CSP)
 
 # ----- Who may reach HQ at all ------------------------------------------------
@@ -353,8 +351,8 @@ SEVERINO_LOGIN_WINDOW_SECONDS = env_int("SEVERINO_LOGIN_WINDOW_SECONDS", 900)
 # ----- Apps --------------------------------------------------------------------
 
 INSTALLED_APPS = [
-    # Django's admin, on a site that scopes its CSP exception (core.admin_site).
-    "hq.platform.core.admin_site.HQAdminConfig",
+    # No ``django.contrib.admin``: every write goes through the capability
+    # policy, and the admin is a write path that policy does not see.
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -376,10 +374,6 @@ MIDDLEWARE = [
     "hq.platform.core.network.TrustedNetworkMiddleware",
     "hq.platform.core.middleware.RequestContextMiddleware",
     "django.middleware.security.SecurityMiddleware",
-    # WhiteNoise serves /static/ in production (DEBUG=0). Must come immediately
-    # after SecurityMiddleware so it can short-circuit static-file requests
-    # before sessions / auth do any work.
-    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.csp.ContentSecurityPolicyMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -448,6 +442,24 @@ TEMPLATES = [
 WSGI_APPLICATION = "hq.config.wsgi.application"
 
 
+# ----- Caches ------------------------------------------------------------------
+
+CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+    # What the estate pages derive, keyed by the revisions of the tables each
+    # fact reads (hq.platform.application.derivations). In the database, so
+    # every process sees one copy and a value stored inside a transaction
+    # commits or rolls back with the rows and revisions it was derived from.
+    "derived": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "hq_derived",
+        "TIMEOUT": 24 * 60 * 60,
+        # A fact is stored once per revision it was derived at, and an old
+        # revision is never asked for again: a small table, culled by halves.
+        "OPTIONS": {"MAX_ENTRIES": 120, "CULL_FREQUENCY": 2},
+    },
+}
+
 # ----- Database ----------------------------------------------------------------
 
 DATABASES = {
@@ -505,6 +517,9 @@ TEST_RUNNER = "hq.platform.core.test_runner.SeverinoTestRunner"
 # Here rather than in the runner because settings are what every parallel
 # worker imports on start. See config/warning_policy.py.
 RUNNING_TESTS = sys.argv[1:2] == ["test"]
+# Whether a list read raises on a relation or deferred field it did not fetch
+# (see ``application.projection.guarded``). On where a developer sees it.
+SEVERINO_STRICT_FETCH = DEBUG or RUNNING_TESTS
 if RUNNING_TESTS:
     from hq.config.warning_policy import enforce as _enforce_warning_policy
 
@@ -628,6 +643,9 @@ OIDC_CREATE_USER = env_bool("SEVERINO_OIDC_CREATE_USER", default=True)
 # say why rather than going straight back to the provider in a loop.
 LOGIN_REDIRECT_URL_FAILURE = "/accounts/login/?sso_failed=1"
 OIDC_USE_PKCE = True
+# Signing in waits on the provider, and nothing waits without a bound: every
+# call the exchange makes (token, keys, userinfo) gives up after this long.
+OIDC_TIMEOUT = env_int("SEVERINO_OIDC_TIMEOUT_SECONDS", 10)
 OIDC_STORE_ACCESS_TOKEN = False
 OIDC_STORE_ID_TOKEN = False
 OIDC_AUTHENTICATION_CALLBACK_URL = "oidc_authentication_callback"
@@ -727,8 +745,11 @@ SEVERINO_REQUEST_PATH_SECONDS = env_int("SEVERINO_REQUEST_PATH_SECONDS", 300)
 # Where HQ leaves each marker. The doorbell has to be somewhere the host can
 # watch; the in-use marker is read only by HQ and defaults beside the database.
 SEVERINO_CONTROLLER_DOORBELL = os.environ.get("SEVERINO_CONTROLLER_DOORBELL", "")
-SEVERINO_REGISTRY_DOORBELL = os.environ.get("SEVERINO_REGISTRY_DOORBELL", "")
 SEVERINO_ACTIVITY_MARKER = os.environ.get("SEVERINO_ACTIVITY_MARKER", "")
+# The Unix socket the controller bridge is served on, in a directory only this
+# account can enter. Unset, the process serves no bridge; set, it serves one or
+# does not start.
+SEVERINO_BRIDGE_SOCKET = os.environ.get("SEVERINO_BRIDGE_SOCKET", "")
 
 # Extra dashboard links, as a JSON list of {label, sub, href}. One deployment's
 # status page is a fact about that deployment; the consoles HQ can reach are
@@ -751,18 +772,19 @@ STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = Path(os.environ.get("DJANGO_STATIC_ROOT", str(BASE_DIR / "var" / "static")))
 
-# Serve static files from the source trees, uncached, instead of from the
-# collected STATIC_ROOT, so an edited stylesheet shows on the next reload.
-# A deployment check (hq.E110) refuses it with DEBUG off; a local dev server may
-# run it with DEBUG off. Off by default: a served request should not search the
-# filesystem. Both static paths
-# honour it: the native ASGI mount (core.static) and WhiteNoise, its WSGI
-# fallback.
+# /static/ has one server, the ASGI mount in hq.config.asgi (core.static), and
+# one collected tree: the image build runs collectstatic, so STATIC_ROOT is
+# part of the image, read-only, and a container start collects nothing.
+#
+# STATIC_LIVE serves from the source trees instead, uncached, so an edited
+# stylesheet shows on the next reload. A deployment check (hq.E110) refuses it
+# with DEBUG off; a local dev server may run it with DEBUG off. Off by default:
+# a served request should not search the filesystem.
 STATIC_LIVE = env_bool("DJANGO_WHITENOISE_AUTOREFRESH", default=DEBUG)
-WHITENOISE_AUTOREFRESH = WHITENOISE_USE_FINDERS = STATIC_LIVE
 
 # Collected assets are named by their content (css/app.3f2a1b9c0d4e.css), so
-# core.static can cache them forever. Live serving keeps plain names: the
+# core.static can cache them forever, and each has a gzip copy beside it, so
+# nothing is compressed while serving. Live serving keeps plain names: the
 # source trees it reads have no hashed copies, and it sends no-cache anyway.
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
@@ -770,6 +792,9 @@ STORAGES = {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
         if STATIC_LIVE
         else "hq.platform.core.static.HashedStaticStorage",
+        # Public by nature and collected by root into the image, so readable
+        # by the account that serves them: not the private mode uploads get.
+        "OPTIONS": {"file_permissions_mode": 0o644, "directory_permissions_mode": 0o755},
     },
 }
 

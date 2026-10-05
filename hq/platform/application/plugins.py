@@ -15,7 +15,7 @@ from hq.platform.application.routes import reverse
 
 from .ui import STATUS_VALUES, DomainOverview
 
-PLUGIN_API_VERSION = 3
+PLUGIN_API_VERSION = 4
 
 # The manifest fields plugin API 1 named runtime providers with; API 2 has the
 # single integration_provider entry point. A wheel that passes one fails in
@@ -71,6 +71,9 @@ class PluginIntegration:
     # Calendar sources: each a ``CalendarSource`` naming what the domain
     # already knows the date of.
     calendars: Callable[[], Iterable[Any]] | None = None
+    # Work that reaches outside the process: each an ``OutboundWork``. HQ
+    # derives its job, capability, route, control and audit entries.
+    outbound: Callable[[], Iterable[Any]] | None = None
 
 
 @dataclass(frozen=True)
@@ -94,7 +97,7 @@ class PluginManifest:
     # a native or machine client, which needs a 401 it can act on.
     #
     # Deliberately relative. The host joins each one to url_prefix, so a plugin
-    # can only ever say "these paths of mine": never /admin/, never another
+    # can only ever say "these paths of mine": never the host's, never another
     # plugin's mount.
     token_authenticated_routes: tuple[str, ...] = ()
     operator_capabilities: tuple[str, ...] = ()
@@ -366,8 +369,10 @@ def clear_plugin_composition_cache() -> None:
 
     _installed_plugins.cache_clear()
     from .integrations import clear_integration_graph_cache
+    from .outbound_work import clear_outbound_work_cache
 
     clear_integration_graph_cache()
+    clear_outbound_work_cache()
 
 
 def installed_plugin_apps() -> list[str]:
@@ -419,6 +424,7 @@ def installed_integrations() -> tuple[tuple[PluginManifest, PluginIntegration], 
                 "search",
                 "health",
                 "calendars",
+                "outbound",
             )
             if (value := getattr(integration, field)) is not None
             and not callable(value)
@@ -587,9 +593,15 @@ def gather_attention(
             if status not in ATTENTION_ORDER:
                 continue
             gathered.append({"item": item, "source": label, "source_id": source_id})
+    return ordered_attention(gathered)
+
+
+def ordered_attention(entries: Iterable[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
+    """Gathered entries in the one order every surface shows them."""
+
     return tuple(
         sorted(
-            gathered,
+            entries,
             key=lambda entry: (
                 ATTENTION_ORDER.index(entry["item"].status),
                 entry["source"],
@@ -624,8 +636,20 @@ def plugin_attention_items() -> tuple[dict[str, Any], ...]:
     )
 
 
+def plugin_outbound_work() -> tuple[Any, ...]:
+    return _provided("outbound")
+
+
 def plugin_capability_specs() -> tuple[Any, ...]:
-    return _provided("capabilities")
+    """What every extension declares, and the capability each piece of its
+    outbound work is asked for through."""
+
+    from .outbound_work import capability_for
+
+    return (
+        *_provided("capabilities"),
+        *(capability_for(work) for work in plugin_outbound_work()),
+    )
 
 
 def plugin_resource_specs() -> tuple[Any, ...]:

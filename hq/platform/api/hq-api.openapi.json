@@ -3468,6 +3468,7 @@
   "paths": {
     "/api/v2/": {
       "get": {
+        "description": "What this is, and what the presented credential may actually do.",
         "operationId": "rootV2",
         "responses": {
           "200": {
@@ -3588,7 +3589,7 @@
             "description": "Service Unavailable."
           }
         },
-        "summary": "What this is, and what the presented credential may actually do.",
+        "summary": "API root",
         "tags": [
           "api",
           "api.v2"
@@ -3597,6 +3598,7 @@
     },
     "/api/v2/capabilities/": {
       "get": {
+        "description": "Every capability HQ has, flagged by whether this token may run it.",
         "operationId": "capabilitiesV2",
         "responses": {
           "200": {
@@ -3635,7 +3637,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Every capability HQ has, flagged by whether this token may run it.",
+        "summary": "List capabilities",
         "tags": [
           "api",
           "api.v2"
@@ -7336,6 +7338,7 @@
     },
     "/api/v2/capabilities/{name}/": {
       "post": {
+        "description": "Run one HQ capability, replaying machine writes by idempotency key.",
         "operationId": "executeV2",
         "parameters": [
           {
@@ -7488,7 +7491,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Run one HQ capability, replaying machine writes by idempotency key.",
+        "summary": "Run a capability",
         "tags": [
           "api",
           "api.v2"
@@ -7497,6 +7500,7 @@
     },
     "/api/v2/connections/": {
       "get": {
+        "description": "Connection contracts plus the safe state this token may inspect.",
         "operationId": "connectionsV2",
         "responses": {
           "200": {
@@ -7535,7 +7539,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Connection contracts plus the safe state this token may inspect.",
+        "summary": "Connections",
         "tags": [
           "api",
           "api.v2"
@@ -7544,6 +7548,7 @@
     },
     "/api/v2/findings/": {
       "get": {
+        "description": "What HQ currently claims is wrong, with the evidence and a remedy.",
         "operationId": "findingsV2",
         "parameters": [
           {
@@ -7593,7 +7598,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "What HQ currently claims is wrong, with the evidence and a remedy.",
+        "summary": "Findings",
         "tags": [
           "api",
           "api.v2"
@@ -7602,7 +7607,7 @@
     },
     "/api/v2/openapi.json": {
       "get": {
-        "description": "Also served to the signed-in operator's web session.",
+        "description": "This API as an OpenAPI 3.2 document, derived from its routes and registries. Also served to the signed-in operator's web session.",
         "operationId": "openapiV2",
         "responses": {
           "200": {
@@ -7658,7 +7663,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "This API as an OpenAPI 3.2 document, derived from its routes and registries.",
+        "summary": "OpenAPI document",
         "tags": [
           "api",
           "api.v2"
@@ -7667,6 +7672,7 @@
     },
     "/api/v2/resources/": {
       "get": {
+        "description": "Every readable resource, including operations this token may use.",
         "operationId": "resourcesV2",
         "responses": {
           "200": {
@@ -7705,7 +7711,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Every readable resource, including operations this token may use.",
+        "summary": "List resources",
         "tags": [
           "api",
           "api.v2"
@@ -10951,6 +10957,7 @@
     },
     "/api/v2/resources/{name}/": {
       "get": {
+        "description": "List one resource through its declared, schema-validated query.",
         "operationId": "resourceListV2",
         "parameters": [
           {
@@ -11006,7 +11013,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List one resource through its declared, schema-validated query.",
+        "summary": "List a resource",
         "tags": [
           "api",
           "api.v2"
@@ -11015,6 +11022,7 @@
     },
     "/api/v2/resources/{name}/{identifier}/": {
       "get": {
+        "description": "Get one resource record through its declared identifier contract.",
         "operationId": "resourceDetailV2",
         "parameters": [
           {
@@ -11080,7 +11088,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Get one resource record through its declared identifier contract.",
+        "summary": "Get a resource record",
         "tags": [
           "api",
           "api.v2"
@@ -11089,6 +11097,7 @@
     },
     "/api/v2/topology/": {
       "get": {
+        "description": "The live permitted infrastructure graph and its canonical actions.",
         "operationId": "topologyV2",
         "parameters": [
           {
@@ -11181,7 +11190,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "The live permitted infrastructure graph and its canonical actions.",
+        "summary": "Topology",
         "tags": [
           "api",
           "api.v2"
@@ -11202,26 +11211,6 @@
     },
     {
       "kind": "nav",
-      "name": "nav.build",
-      "summary": "Build"
-    },
-    {
-      "kind": "nav",
-      "name": "nav.web",
-      "summary": "Web"
-    },
-    {
-      "kind": "nav",
-      "name": "nav.business",
-      "summary": "Business"
-    },
-    {
-      "kind": "nav",
-      "name": "nav.infrastructure",
-      "summary": "Infrastructure"
-    },
-    {
-      "kind": "nav",
       "name": "hq.dashboard",
       "summary": "Dashboard"
     },
@@ -11229,6 +11218,11 @@
       "kind": "nav",
       "name": "hq.calendar",
       "summary": "Calendar"
+    },
+    {
+      "kind": "nav",
+      "name": "nav.build",
+      "summary": "Build"
     },
     {
       "kind": "nav",
@@ -11241,6 +11235,11 @@
       "name": "hq.docs",
       "parent": "nav.build",
       "summary": "Docs"
+    },
+    {
+      "kind": "nav",
+      "name": "nav.web",
+      "summary": "Web"
     },
     {
       "kind": "nav",
@@ -11268,6 +11267,11 @@
     },
     {
       "kind": "nav",
+      "name": "nav.business",
+      "summary": "Business"
+    },
+    {
+      "kind": "nav",
       "name": "hq.expenses",
       "parent": "nav.business",
       "summary": "Expenses"
@@ -11283,6 +11287,11 @@
       "name": "hq.assets",
       "parent": "nav.business",
       "summary": "Assets"
+    },
+    {
+      "kind": "nav",
+      "name": "nav.infrastructure",
+      "summary": "Infrastructure"
     },
     {
       "kind": "nav",
@@ -11329,7 +11338,8 @@
     {
       "kind": "badge",
       "name": "api.v2",
-      "summary": "v2"
+      "summary": "v2",
+      "x-scalar-ignore": true
     }
   ],
   "x-hq-mcp-tools": {

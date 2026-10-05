@@ -32,25 +32,21 @@ func (w *Worker) emit(value any) error {
 	return json.NewEncoder(w.Output).Encode(value)
 }
 
-func (w *Worker) call(ctx context.Context, action string, payload any, result any, args ...string) error {
-	return w.Bridge.Call(ctx, append([]string{action}, args...), payload, result)
-}
-
-func (w *Worker) post(ctx context.Context, action string, payload any) {
-	if err := w.call(ctx, action, payload, nil, "--controller-id", w.ID); err != nil {
+// post reports to HQ. A report HQ did not take is logged and the pass goes on:
+// the next pass reports again.
+func (w *Worker) post(action string, err error) {
+	if err != nil {
 		w.logger().Warn("controller report skipped", slog.String("action", action), slog.Any("error", err))
 	}
 }
 
-func (w *Worker) claimArgs(action string) []string {
-	args := []string{action}
-	if action == "claim" {
-		args = append(args, "--controller-id", w.ID)
-	}
+// claimable is every kind:action this controller has a handler for.
+func (w *Worker) claimable() []string {
+	capabilities := []string{}
 	for _, capability := range w.Providers.Capabilities() {
-		args = append(args, "--capability", string(capability.Kind)+":"+capability.Action)
+		capabilities = append(capabilities, string(capability.Kind)+":"+capability.Action)
 	}
-	return args
+	return capabilities
 }
 
 // Run preserves the host's two bounded queue passes and sweep ordering. A failed
@@ -64,13 +60,13 @@ func (w *Worker) Run(ctx context.Context, apply bool) (int, error) {
 		if failures == nil {
 			failures = []StepFailure{}
 		}
-		w.post(ctx, "steps", failures)
+		w.post("steps", w.Bridge.Steps(ctx, w.ID, failures))
 	}()
 	w.glance(ctx)
 	applied, failed, queueErr := w.applyQueued(ctx)
 	sweepErr := w.sweep(ctx)
 	if sweepErr == nil {
-		sweepErr = w.call(ctx, "schedule", nil, nil, "--controller-id", w.ID)
+		sweepErr = w.Bridge.Schedule(ctx, w.ID)
 	}
 	if queueErr != nil {
 		return 1, queueErr
@@ -99,8 +95,8 @@ func (w *Worker) Run(ctx context.Context, apply bool) (int, error) {
 }
 
 func (w *Worker) plan(ctx context.Context) (int, error) {
-	var pending Pending
-	if err := w.Bridge.Call(ctx, w.claimArgs("peek"), nil, &pending); err != nil {
+	pending, err := w.Bridge.Peek(ctx, w.claimable())
+	if err != nil {
 		return 1, err
 	}
 	connections, err := w.Providers.Connections(ctx, nil)
@@ -177,8 +173,8 @@ func (w *Worker) applyQueued(ctx context.Context) (int, bool, error) {
 }
 
 func (w *Worker) applyOne(ctx context.Context) (bool, bool, error) {
-	var pending Pending
-	if err := w.Bridge.Call(ctx, w.claimArgs("claim"), nil, &pending); err != nil {
+	pending, err := w.Bridge.Claim(ctx, w.ID, w.claimable())
+	if err != nil {
 		return false, false, err
 	}
 	if pending.Operation == nil {
@@ -186,8 +182,8 @@ func (w *Worker) applyOne(ctx context.Context) (bool, bool, error) {
 	}
 	resource := pending.Resource
 	if w.Providers.NeedsMaterial(resource.Kind) {
-		var material Material
-		if err := w.call(ctx, "material", nil, &material, "--resource", resource.Key); err != nil {
+		material, err := w.Bridge.Material(ctx, resource.Key)
+		if err != nil {
 			return true, false, err
 		}
 		if resource.Spec == nil {
@@ -219,7 +215,7 @@ func (w *Worker) applyOne(ctx context.Context) (bool, bool, error) {
 		Conditions:         result.Conditions,
 		Message:            result.Message,
 	}
-	if err := w.call(ctx, "report", report, nil, "--controller-id", w.ID, "--operation", pending.Operation.ID); err != nil {
+	if err := w.Bridge.Report(ctx, w.ID, pending.Operation.ID, report); err != nil {
 		return true, false, err
 	}
 	var output any = AppliedOperationOutput{OK: true, Operation: pending.Operation.ID, Resource: resource.Key, Changed: result.Changed}

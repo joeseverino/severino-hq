@@ -354,7 +354,7 @@ class RefusalEndToEndTests(TestCase):
 
     def test_a_refusal_is_cleared_by_a_read_that_succeeds(self):
         record_inventory(
-            {"host.perimeter": {"ok": False, "error": "x", "refusal": CREDENTIAL_REFUSAL}},
+            {"host.perimeter": {"ok": False, "records": [], "error": "x", "refusal": CREDENTIAL_REFUSAL}},
             principal=cli_principal(),
         )
         record_inventory(
@@ -363,13 +363,13 @@ class RefusalEndToEndTests(TestCase):
 
         self.assertEqual(ProviderInventory.objects.get(kind="host.perimeter").refusal, "")
 
-    def test_an_unknown_refusal_is_stored_as_none(self):
-        record_inventory(
-            {"host.perimeter": {"ok": False, "error": "x", "refusal": "other"}},
-            principal=cli_principal(),
-        )
+    def test_the_contract_allows_exactly_the_refusals_stored(self):
+        from hq.domains.control_plane.bridge_contract import contract
+        from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
 
-        self.assertEqual(ProviderInventory.objects.get(kind="host.perimeter").refusal, "")
+        schemas = contract()["components"]["schemas"]
+        self.assertEqual(schemas["Refusal"]["enum"], ["", *REFUSALS])
+        self.assertEqual(schemas["FailureClass"]["enum"], ["", *FAILURES])
 
 
 class CredentialSightPageTests(TestCase):

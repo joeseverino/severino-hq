@@ -11,10 +11,23 @@ from .registry import DEFINITIONS
 
 
 def index_instance(definition: SearchDefinition, instance) -> None:
-    SearchDocument.objects.update_or_create(
-        scope=definition.scope,
-        object_id=definition.object_id(instance),
-        defaults={"body": definition.body(instance)},
+    """Store the instance's search body, writing only when it differs.
+
+    A save that leaves the body as it stands writes nothing: no row, no
+    full-text entry and no revision. A body that is new or changed is one
+    statement, which inserts the document or replaces its body.
+    """
+
+    key = {"scope": definition.scope, "object_id": definition.object_id(instance)}
+    body = definition.body(instance)
+    stored = SearchDocument.objects.filter(**key).values_list("body", flat=True).first()
+    if stored == body:
+        return
+    SearchDocument.objects.bulk_create(
+        [SearchDocument(**key, body=body)],
+        update_conflicts=True,
+        unique_fields=("scope", "object_id"),
+        update_fields=("body", "updated_at"),
     )
 
 
