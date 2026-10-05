@@ -138,17 +138,23 @@ def controller_binary() -> Path | None:
 
 
 class Counted:
-    """The bridge application, with each call's action and time kept."""
+    """The bridge application, with each call's action and time kept.
+
+    A call is kept when it arrives: the caller may have its answer and be gone
+    before the application returns here.
+    """
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, float]] = []
 
     async def __call__(self, scope, receive, send):
         started = time.monotonic()
+        at = len(self.calls)
+        self.calls.append((scope["path"].removeprefix("/"), 0.0))
         try:
             await application(scope, receive, send)
         finally:
-            self.calls.append((scope["path"].removeprefix("/"), time.monotonic() - started))
+            self.calls[at] = (self.calls[at][0], time.monotonic() - started)
 
 
 @skipUnless(controller_binary(), "no controller binary and no Go toolchain to build one")
