@@ -158,10 +158,10 @@ runs:
         set -euo pipefail
         version="$(python - <<'PY'
         import pathlib, re, sys
-        source = pathlib.Path("host/application/plugins.py").read_text()
+        source = pathlib.Path("host/hq/platform/application/plugins.py").read_text()
         match = re.search(r"^PLUGIN_API_VERSION\s*=\s*(\d+)\s*$", source, re.M)
         if not match:
-            sys.exit("host/application/plugins.py does not define PLUGIN_API_VERSION")
+            sys.exit("host/hq/platform/application/plugins.py does not define PLUGIN_API_VERSION")
         print(match.group(1))
         PY
         )"
