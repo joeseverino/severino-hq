@@ -25,7 +25,7 @@ readonly sync_program="${SEVERINO_HQ_SBIN_DIR:-/usr/local/sbin}/severino-hq-sync
 # is replaced until the release has installed itself, so nothing of the
 # previous release is started against the new image, and nothing restarts the
 # container while its health is being read.
-readonly held_units="severino-hq-controller.timer severino-hq-controller.path severino-hq-audit-prune.timer severino-hq-contacts-inbox.timer severino-hq-content-sync.timer severino-hq-public-registry.timer severino-hq-secrets.timer severino-hq-script-drift.timer"
+readonly held_units="severino-hq-controller.timer severino-hq-controller.path severino-hq-audit-prune.timer severino-hq-contacts-inbox.timer severino-hq-content-sync.timer severino-hq-public-registry.timer severino-hq-secrets.timer severino-hq-sessions-clear.timer severino-hq-script-drift.timer"
 # What those units start. A run already in flight is given this long to end
 # against the release it began with before the image is replaced.
 readonly held_services="severino-hq-controller.service severino-hq-secrets.service"

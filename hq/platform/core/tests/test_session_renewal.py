@@ -7,7 +7,7 @@ from unittest import mock
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.backends.signed_cookies import SessionStore
 from django.http import HttpResponse, JsonResponse
-from django.test import RequestFactory, SimpleTestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
 from hq.platform.core.oidc import HQSessionRefresh
 
@@ -84,3 +84,24 @@ class RenamedBackendTests(SimpleTestCase):
         ):
             HQSessionRefresh(lambda request: HttpResponse()).process_request(request)
         self.assertEqual(request.session["_auth_user_id"], "1")
+
+
+class ExpiredSessionPurgeTests(TestCase):
+    """A session row outlives its expiry until the daily job deletes it."""
+
+    def test_the_scheduled_job_deletes_sessions_past_their_expiry(self):
+        from datetime import timedelta
+
+        from django.contrib.sessions.models import Session
+        from django.utils import timezone
+
+        from hq.platform.application import scheduled_work
+
+        now = timezone.now()
+        Session.objects.create(session_key="expired", session_data="", expire_date=now - timedelta(hours=1))
+        Session.objects.create(session_key="current", session_data="", expire_date=now + timedelta(hours=1))
+
+        answer = scheduled_work.run("sessions.clear")
+
+        self.assertEqual(answer["state"], "succeeded")
+        self.assertEqual(list(Session.objects.values_list("session_key", flat=True)), ["current"])

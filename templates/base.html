@@ -216,17 +216,10 @@
               <span>Connection</span>
               <span class="menu-item-status"><span class="conn-dot" aria-hidden="true"></span><span class="menu-item-note">{{ CONNECTION_CHANNEL.label }}</span></span>
             </a>
-            {% comment %}
-            The two ways out of HQ's own pages share a line; a plain account
-            has only the one, which then takes the line.
-            {% endcomment %}
-            <div class="menu-pair">
-              {% if user.is_staff %}<a class="menu-item" href="{% url 'admin:index' %}">Admin</a>{% endif %}
-              <form action="{% url 'logout' %}" method="post">
-                {% csrf_token %}
-                <button type="submit" class="menu-item">Sign out</button>
-              </form>
-            </div>
+            <form action="{% url 'logout' %}" method="post">
+              {% csrf_token %}
+              <button type="submit" class="menu-item">Sign out</button>
+            </form>
           </div>
         </div>
       </details>

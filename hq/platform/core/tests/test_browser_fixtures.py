@@ -18,7 +18,7 @@ from django.test import Client, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.application.inventory import record_connections
+from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import cli_principal
 from hq.platform.application.services import CONTAINER_KIND
 from hq.platform.application.ui import (
@@ -103,7 +103,7 @@ def build_estate():
             "renewal_window_days": 30,
         },
     )
-    record_connections(
+    report_connections(
         [
             {
                 "connection_ref": "a-portainer",

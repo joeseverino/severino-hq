@@ -21,6 +21,7 @@ from ..findings import derive_findings
 from ..inventory import inventory_state, record_inventory
 from ..paths import path_to
 from ..projection import projection_scope
+from ..report_testing import refused_part
 from ..security import cli_principal
 from ..topology import derive_topology
 
@@ -149,23 +150,22 @@ class NoConnectionTests(TestCase):
 
 
 class CleanTests(TestCase):
-    def test_only_declared_parts_and_known_refusals_are_kept(self):
+    def test_only_declared_parts_are_kept_with_bounded_text(self):
         cleaned = clean_refused_parts(REDIRECT, [
             refused("Example.COM"),
-            {"part": "gremlins", "refusal": "permission"},
-            {"part": "page_rules", "refusal": "sideways", "reason": "x" * 999},
-            "not a mapping",
+            # A part the contract names and this kind does not declare.
+            refused_part("querylog", refusal="permission"),
+            refused_part("page_rules", reason="x" * 999),
         ])
 
         self.assertEqual([entry["part"] for entry in cleaned], ["rules", "page_rules"])
         self.assertEqual(cleaned[0]["scope"], "example.com")
-        self.assertEqual(cleaned[1]["refusal"], "")
         self.assertEqual(len(cleaned[1]["reason"]), 300)
 
     def test_a_machine_scope_keeps_its_address_only_when_it_is_one(self):
         cleaned = clean_refused_parts("portainer.image", [
-            {"part": "", "scope": "edge-2", "address": " 198.51.100.30 "},
-            {"part": "", "scope": "edge-3", "address": "not-an-address"},
+            refused_part("", scope="edge-2", address=" 198.51.100.30 "),
+            refused_part("", scope="edge-3", address="not-an-address"),
         ])
 
         self.assertEqual(cleaned[0]["address"], "198.51.100.30")

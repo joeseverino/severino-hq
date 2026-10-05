@@ -55,7 +55,6 @@ SKIPPED = {
     "csp_report": "browser report sink",
     "login": "signed out",
     "logout": "signed out",
-    "admin_login_redirect": "signed out",
     "oidc_authentication_callback": "identity provider handshake",
     "oidc_authentication_init": "identity provider handshake",
     "oidc_logout": "identity provider handshake",
@@ -179,7 +178,7 @@ class Result:
 def _routes(patterns=None, prefix: str = "") -> Iterator[tuple[str, URLPattern]]:
     for pattern in patterns if patterns is not None else get_resolver().url_patterns:
         if isinstance(pattern, URLResolver):
-            if pattern.app_name == "admin" or pattern.namespace == "djdt":
+            if pattern.namespace == "djdt":
                 continue
             space = f"{prefix}{pattern.namespace}:" if pattern.namespace else prefix
             yield from _routes(pattern.url_patterns, space)

@@ -82,6 +82,99 @@ def _row(dimension="path", value="/about/", offset=0, pageviews=20, visits=10):
     }
 
 
+A_DAY_OF_VITALS = {
+    "sample_interval": 1,
+    "cumulative_layout_shift": 0.05,
+    "largest_contentful_paint_ms": 1800,
+    "interaction_to_next_paint_ms": 120,
+    "first_contentful_paint_ms": 900,
+    "time_to_first_byte_ms": 200,
+    **{
+        f"{vital}_{bucket}": 1
+        for vital in ("lcp", "inp", "cls")
+        for bucket in ("good", "needs_improvement", "poor")
+    },
+}
+
+
+class IngestTests(TestCase):
+    """A report is stored in one statement per table, however many rows it has."""
+
+    def ingest(self, rows, vitals=None):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as captured:
+            result = service.record_analytics(_payload(rows, vitals), principal=_principal())
+        return result, [query["sql"] for query in captured.captured_queries]
+
+    def test_its_statements_do_not_grow_with_the_rows(self):
+        counts = {}
+        for size in (50, 300):
+            rows = [_row(value=f"/page-{index}/") for index in range(size)]
+            vitals = [{"date": _day(0), **A_DAY_OF_VITALS}]
+            _result, new = self.ingest(rows, vitals)
+            _result, restated = self.ingest(rows, vitals)
+            # The first report of a site also creates it.
+            self.assertLessEqual(len(new), 11)
+            counts[size] = len(restated)
+            written = [sql for sql in restated if sql.startswith(("INSERT", "UPDATE"))]
+            # The site, its coverage, the rows and the vitals: one statement each.
+            self.assertEqual(len(written), 4, written)
+            self.assertEqual(RumDaily.objects.count(), size)
+            RumDaily.objects.all().delete()
+
+        self.assertEqual(counts, {50: 9, 300: 9})
+
+    def test_a_restated_row_keeps_its_identity_and_takes_the_counts_and_the_moment(self):
+        self.ingest([_row(pageviews=20, visits=10)])
+        before = RumDaily.objects.get()
+
+        result, _statements = self.ingest([_row(pageviews=31, visits=12)])
+
+        after = RumDaily.objects.get()
+        self.assertEqual(result["recorded"]["rows"], 1)
+        self.assertEqual(after.pk, before.pk)
+        self.assertEqual((after.pageviews, after.visits, after.sample_interval), (31, 12, 10))
+        self.assertGreater(after.observed_at, before.observed_at)
+
+    def test_a_grain_reported_twice_is_stored_as_last_said(self):
+        result, _statements = self.ingest([_row(pageviews=1), _row(pageviews=7)])
+
+        self.assertEqual(result["recorded"]["rows"], 2)
+        self.assertEqual(RumDaily.objects.get().pageviews, 7)
+
+    def test_a_restated_day_of_vitals_takes_every_reading(self):
+        self.ingest([], [{"date": _day(0), **A_DAY_OF_VITALS}])
+        before = VitalsDaily.objects.get()
+
+        self.ingest([], [{"date": _day(0), **A_DAY_OF_VITALS, "largest_contentful_paint_ms": None, "lcp_good": 9}])
+
+        after = VitalsDaily.objects.get()
+        self.assertEqual(after.pk, before.pk)
+        self.assertIsNone(after.largest_contentful_paint_ms)
+        self.assertEqual((after.lcp_good, after.inp_good), (9, 1))
+        self.assertEqual(str(after.cumulative_layout_shift), "0.0500")
+        self.assertGreater(after.observed_at, before.observed_at)
+
+    def test_inserting_and_restating_both_move_the_tables_revision(self):
+        from hq.platform.core import revisions
+
+        table = RumDaily._meta.db_table
+        start = revisions.read().counts.get(table, 0)
+        self.ingest([_row(value="/a/"), _row(value="/b/")])
+        inserted = revisions.read().counts[table]
+        self.ingest([_row(value="/a/"), _row(value="/b/")])
+        restated = revisions.read().counts[table]
+
+        self.assertEqual((inserted - start, restated - inserted), (2, 2))
+
+    def test_nothing_about_a_reading_is_audited(self):
+        from hq.platform.core.audit import audited_labels
+
+        self.assertFalse({AnalyticsSite, AnalyticsCoverage, RumDaily, VitalsDaily} & set(audited_labels()))
+
+
 class RecordingTests(TestCase):
     def test_it_stores_a_reading_and_the_site_behind_it(self):
         service.record_analytics(_payload([_row()]), principal=_principal())
@@ -145,13 +238,14 @@ class RecordingTests(TestCase):
             list(RumDaily.objects.values_list("value", flat=True)), ["/kept/"]
         )
 
-    def test_an_unknown_dimension_is_refused_rather_than_stored(self):
-        service.record_analytics(
-            _payload([_row(dimension="fingerprint", value="x")]),
-            principal=_principal(),
-        )
+    def test_the_contract_allows_exactly_the_dimensions_stored(self):
+        from hq.domains.control_plane.bridge_contract import contract
 
-        self.assertEqual(RumDaily.objects.count(), 0)
+        row = contract()["components"]["schemas"]["AnalyticsRow"]["properties"]
+        self.assertEqual(row["dimension"]["enum"], RumDaily.Dimension.values)
+        self.assertEqual(
+            row["value"]["maxLength"], RumDaily._meta.get_field("value").max_length
+        )
 
     def test_recording_requires_the_controller_capability(self):
         bare = Principal(actor="anon", interface="web", capabilities=frozenset())

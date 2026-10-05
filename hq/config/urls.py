@@ -1,10 +1,8 @@
 """Root URL configuration for Severino HQ."""
 
-from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_not_required
 from django.urls import URLPattern, include, path
-from django.views.generic import RedirectView
 
 from django.conf import settings
 
@@ -64,14 +62,6 @@ urlpatterns = [
         csp_report,
         name="csp_report",
     ),
-    # Django admin ships its own sign-in form. Routed to the login HQ
-    # controls so there is exactly one sign-in path, with one set of rules.
-    path(
-        "admin/login/",
-        RedirectView.as_view(url="/accounts/login/", query_string=True),
-        name="admin_login_redirect",
-    ),
-    path("admin/", admin.site.urls),
     path(
         "accounts/login/",
         ThrottledLoginView.as_view(),

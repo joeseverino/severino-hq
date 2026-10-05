@@ -12,7 +12,7 @@ from hq.platform.core.models import AuditLog
 from ..adoption_testing import connection
 from ..infrastructure import PolicyError
 from ..resource_operations import OperationCommand, request_removal
-from ..inventory import record_connections
+from ..report_testing import report_connections
 from ..adoption import AdoptCommand, adopt, unmanaged
 from ..security import cli_principal
 from ..sweep import record_sweep
@@ -127,19 +127,18 @@ class ManagingConnectionTests(TestCase):
 
 
 class RecordedConnectionTests(TestCase):
-    def test_only_an_explicit_true_manages(self):
-        record_connections(
+    def test_a_connection_manages_only_when_it_says_so(self):
+        report_connections(
             [
                 {"connection_ref": "example-a", "provider": "cloudflare_dns", "manages": True},
-                {"connection_ref": "example-b", "provider": "cloudflare_dns", "manages": "1"},
-                {"connection_ref": "example-c", "provider": "cloudflare_dns"},
+                {"connection_ref": "example-b", "provider": "cloudflare_dns", "manages": False},
             ],
             principal=cli_principal(),
         )
 
         self.assertEqual(
             dict(ProviderConnection.objects.values_list("connection_ref", "manages")),
-            {"example-a": True, "example-b": False, "example-c": False},
+            {"example-a": True, "example-b": False},
         )
 
 

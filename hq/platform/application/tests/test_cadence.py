@@ -346,7 +346,7 @@ class CarriedConnectionRecordTests(TestCase):
     def test_a_carried_connection_keeps_its_last_answer_and_its_time(self):
         from hq.domains.control_plane.models import ProviderConnection
 
-        from ..inventory import record_connections
+        from ..report_testing import report_connections
 
         taken = timezone.now() - timedelta(minutes=20)
         ProviderConnection.objects.create(
@@ -359,7 +359,7 @@ class CarriedConnectionRecordTests(TestCase):
             observed_at=taken,
         )
 
-        record_connections(
+        report_connections(
             [
                 {
                     "connection_ref": "shared-hosting",
@@ -383,9 +383,9 @@ class CarriedConnectionRecordTests(TestCase):
     def test_a_carried_connection_hq_has_never_seen_is_recorded_as_unprobed(self):
         from hq.domains.control_plane.models import ProviderConnection
 
-        from ..inventory import record_connections
+        from ..report_testing import report_connections
 
-        record_connections(
+        report_connections(
             [
                 {
                     "connection_ref": "new-host",

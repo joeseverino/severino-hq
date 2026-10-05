@@ -1632,13 +1632,16 @@
             "x-go-type-skip-optional-pointer": false
           },
           "pageviews": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "visits": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "sample_interval": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           }
         },
         "additionalProperties": false,
@@ -1663,7 +1666,8 @@
             "x-go-type-skip-optional-pointer": false
           },
           "sample_interval": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "cumulative_layout_shift": {
             "type": [
@@ -1679,7 +1683,8 @@
               "null"
             ],
             "x-go-type-skip-optional-pointer": false,
-            "description": "p75 in milliseconds; null when there were no samples."
+            "description": "p75 in milliseconds; null when there were no samples.",
+            "minimum": 0
           },
           "interaction_to_next_paint_ms": {
             "type": [
@@ -1687,7 +1692,8 @@
               "null"
             ],
             "x-go-type-skip-optional-pointer": false,
-            "description": "p75 in milliseconds; null when there were no samples."
+            "description": "p75 in milliseconds; null when there were no samples.",
+            "minimum": 0
           },
           "first_contentful_paint_ms": {
             "type": [
@@ -1695,7 +1701,8 @@
               "null"
             ],
             "x-go-type-skip-optional-pointer": false,
-            "description": "p75 in milliseconds; null when there were no samples."
+            "description": "p75 in milliseconds; null when there were no samples.",
+            "minimum": 0
           },
           "time_to_first_byte_ms": {
             "type": [
@@ -1703,34 +1710,44 @@
               "null"
             ],
             "x-go-type-skip-optional-pointer": false,
-            "description": "p75 in milliseconds; null when there were no samples."
+            "description": "p75 in milliseconds; null when there were no samples.",
+            "minimum": 0
           },
           "lcp_good": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "lcp_needs_improvement": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "lcp_poor": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "inp_good": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "inp_needs_improvement": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "inp_poor": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "cls_good": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "cls_needs_improvement": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           },
           "cls_poor": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           }
         },
         "additionalProperties": false,

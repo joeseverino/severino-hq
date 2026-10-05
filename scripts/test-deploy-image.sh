@@ -247,7 +247,7 @@ run_failure() {
 # The units that start release work on their own, the controller's path unit
 # and the secret refresh among them, are stopped before anything changes and
 # each one that was active is started again.
-readonly held="severino-hq-controller.timer severino-hq-controller.path severino-hq-audit-prune.timer severino-hq-contacts-inbox.timer severino-hq-content-sync.timer severino-hq-public-registry.timer severino-hq-secrets.timer severino-hq-script-drift.timer"
+readonly held="severino-hq-controller.timer severino-hq-controller.path severino-hq-audit-prune.timer severino-hq-contacts-inbox.timer severino-hq-content-sync.timer severino-hq-public-registry.timer severino-hq-secrets.timer severino-hq-sessions-clear.timer severino-hq-script-drift.timer"
 line_of() { grep -n -- "$1" "${log_file}" | head -n 1 | cut -d: -f1; }
 # Each is a unit the repository ships, and the controller's every trigger is held.
 for unit in ${held}; do

@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
-from django.urls import Resolver404, URLPattern, URLResolver, get_resolver, resolve, reverse
+from django.urls import Resolver404, URLPattern, URLResolver, get_resolver, resolve
 from django.urls.resolvers import RoutePattern
 from django.utils import timezone
 
@@ -399,10 +399,7 @@ def _sampled_routes(patterns=None, prefix="/"):
 
 
 def _sent_to_sign_in(response, view) -> bool:
-    """A redirect to sign in, carrying where to come back to.
-
-    The admin names its own login page, which HQ routes to the one sign-in.
-    """
+    """A redirect to sign in, carrying where to come back to."""
 
     if response.status_code != 302:
         return False
@@ -439,12 +436,40 @@ class RouteExposureTests(SimpleTestCase):
 class AnonymousSweepTests(TestCase):
     """Ask for everything without a credential; nothing may answer."""
 
-    def test_the_admin_password_form_is_not_a_second_door(self):
-        """One sign-in path, so one set of rules governs every attempt."""
+    def test_there_is_no_admin_site(self):
+        """Every write goes through the capability policy. Django's admin
+        writes a model directly, with no capability, approval or audit
+        attribution, so it is not installed, not routed and not registered."""
 
-        response = Client().get("/admin/login/", REMOTE_ADDR="127.0.0.1")
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(response["Location"].startswith("/accounts/login/"))
+        from pathlib import Path
+
+        from django.apps import apps
+
+        self.assertFalse(apps.is_installed("django.contrib.admin"))
+        self.assertFalse(any(route.startswith("admin/") for route, _view in _routes()))
+        root = Path(settings.BASE_DIR)
+        imports = re.compile(
+            r"^\s*(from django\.contrib\.admin\b|import django\.contrib\.admin\b"
+            r"|from django\.contrib import [^\n]*\badmin\b)",
+            re.MULTILINE,
+        )
+        registered = [
+            str(path.relative_to(root))
+            for package in ("hq", "hq_sdk")
+            for path in (root / package).rglob("*.py")
+            if imports.search(path.read_text())
+        ]
+        self.assertEqual(registered, [])
+        for user in (None, get_user_model().objects.create_superuser("root-example", password="unused-test-pass")):
+            client = Client()
+            if user is not None:
+                client.force_login(user)
+            for path in ("/admin/", "/admin/login/", "/admin/core/auditlog/"):
+                with self.subTest(path=path, signed_in=user is not None):
+                    response = client.get(path, REMOTE_ADDR="127.0.0.1")
+                    self.assertIn(response.status_code, (302, 404))
+                    if response.status_code == 302:
+                        self.assertTrue(response["Location"].startswith("/accounts/login/"))
 
     def test_only_the_reviewed_surface_answers_without_a_session(self):
         """Every route in the composed URLconf, asked for without a session.
@@ -947,28 +972,6 @@ class BrowserBoundaryTests(TestCase):
         response = self.client.get("/accounts/login/")
 
         self.assertEqual(response["Cross-Origin-Resource-Policy"], "same-origin")
-
-    def test_the_admin_keeps_the_policy_minus_only_what_it_cannot_meet(self):
-        """The scoped exception, pinned so it stays scoped.
-
-        Admin's bundled jQuery writes HTML through `innerHTML`, so it cannot
-        run under Trusted Types. The relaxation is allowed to remove that and
-        nothing else: a second directive quietly joining it would make the
-        admin a hole in a policy the rest of the application still advertises.
-        """
-
-        application = self.client.get("/accounts/login/")
-        self.client.force_login(
-            get_user_model().objects.create_superuser("admin-example", password="unused-test-pass")
-        )
-        # The site's own page and a generated per-model one.
-        for path in (reverse("admin:index"), reverse("admin:core_auditlog_changelist")):
-            with self.subTest(path=path):
-                admin = self.client.get(path)
-                self.assertEqual(admin.status_code, 200)
-                relaxed = set(_directives(application["Content-Security-Policy"]))
-                relaxed -= set(_directives(admin["Content-Security-Policy"]))
-                self.assertEqual(relaxed, {"require-trusted-types-for", "trusted-types"})
 
 
 def _directives(policy):

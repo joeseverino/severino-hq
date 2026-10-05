@@ -132,8 +132,7 @@ a destructive one is only its colour.
 by HQ from sign-on, never loaded from the provider by a page), their name,
 what the account may do, and how long ago they signed in, in hours or days.
 Then what can be set: the two switches share a line, names over tracks, and
-the theme has its row. Then where the menu leads. The Admin link is offered
-only to an account the admin would let in.
+the theme has its row. Then where the menu leads.
 
 **One disclosure.** Every `details` that is not a menu shows the same mark,
 turned when open. A section that folds (`section-fold`) uses its heading as the

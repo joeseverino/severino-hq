@@ -94,7 +94,7 @@ class PluginContractTests(TestCase):
         root = Path(__file__).resolve().parents[4]
         policy = json.loads((root / "policy" / "plugin-admission-v1.json").read_text())
         self.assertEqual(policy["plugin_api_version"], PLUGIN_API_VERSION)
-        for path in (*root.glob("*.md"), *root.glob("docs/*.md")):
+        for path in (*root.glob("*.md"), *root.glob("docs/*.md"), *root.glob("tests/fixtures/*/plugin.py")):
             for found in re.findall(r"api_version=(\d+)", path.read_text()):
                 with self.subTest(path=path.name):
                     self.assertEqual(int(found), PLUGIN_API_VERSION)

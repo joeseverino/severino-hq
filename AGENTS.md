@@ -151,6 +151,14 @@ same review, and should fail when its path matches nothing rather than pass.
 - Reject unknown input; Pydantic plugin commands inherit `StrictCommand`.
 - Enforce authorization in the shared capability/view layer, not ad hoc in a
   template or handler.
+- A rule one row must keep on its own is a `Rule` in the model's
+  `Meta.constraints` (`hq/platform/core/rules.py`): the database refuses the
+  row from every writer, and `full_clean` reports it beside its field, from
+  that one declaration. Never restate it in `clean()` or a service. Adding one
+  to a table that holds rows fails the migration if a row breaks it, and the
+  container migrates on boot: run `manage.py constraint_preflight --path
+  <database>` against the production data first (it reads only), and give
+  each constraint its own migration operation.
 - Every mutation is atomic and audit-attributed. Machine writes are safely
   retryable with durable idempotency.
 - Plugin IDs, routes, Django apps, distributions, providers, grants, and

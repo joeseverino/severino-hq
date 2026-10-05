@@ -240,7 +240,7 @@ class VisitRefreshTests(TestCase):
         few, many = (FAST,), (FAST, "npm.proxy_host", "tailscale.device", "adguard.dns", "npm.redirect")
         for kind in many:
             store(kind, age=OLD)
-        decide, per_write = 8, 13
+        decide, per_write = 8, 9
 
         with page(*few), self.assertNumQueries(decide + per_write * len(few)):
             self.ask()

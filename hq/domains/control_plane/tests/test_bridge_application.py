@@ -80,7 +80,7 @@ class RefusalTests(TestCase):
 
     def test_input_an_action_will_not_take(self):
         self.refused(400, "Managed resource was not found", "/export", query={"resource": "absent"})
-        self.refused(400, "", "/report", query={"controller-id": "x", "operation": "1"}, body=b'{"success": "maybe"}')
+
 
     def test_a_payload_over_the_limit_is_refused_before_it_is_read_or_run(self):
         ran = []
@@ -112,6 +112,150 @@ class RefusalTests(TestCase):
 
     def test_the_limit_is_the_contracts(self):
         self.assertEqual(max_body_bytes(), 64 * 1024 * 1024)
+
+
+A_CONNECTION = {
+    "connection_ref": "example-npm",
+    "provider": "npm",
+    "endpoint": "https://proxy.example.com",
+    "manages": True,
+    "probed": True,
+    "ok": True,
+    "detail": "Authenticated.",
+    "reaches": [],
+}
+A_ROW = {
+    "dimension": "path",
+    "value": "/about/",
+    "date": "2026-08-12",
+    "pageviews": 3,
+    "visits": 2,
+    "sample_interval": 1,
+}
+
+
+def _analytics(**row) -> dict:
+    site = {
+        "site_tag": "tag",
+        "host": "example.com",
+        "connection_ref": "example-api",
+        "start": "2026-08-12",
+        "end": "2026-08-12",
+        "rows": [{**A_ROW, **row}],
+        "vitals": [],
+    }
+    return {"sites": [site]}
+
+
+class PayloadContractTests(TestCase):
+    """A report that departs from the contract's schema is refused whole, at
+    the member that departs, before any action sees it."""
+
+    # Each case is one a field-by-field coercion would take as something else.
+    DEPARTURES = (
+        ("inventory", {"adguard.rewrite": {"ok": "false", "records": []}}, "/adguard.rewrite/ok", "boolean"),
+        ("inventory", {"adguard.rewrite": {"ok": True, "records": None}}, "/adguard.rewrite/records", "array"),
+        ("inventory", {"adguard.rewrite": {"ok": False}}, "/adguard.rewrite", "records"),
+        (
+            "inventory",
+            {"adguard.rewrite": {"ok": False, "records": [], "refusal": "other"}},
+            "/adguard.rewrite/refusal",
+            "not one of the values",
+        ),
+        (
+            "inventory",
+            {"adguard.rewrite": {"ok": True, "records": [], "refused_parts": ["rewrites"]}},
+            "/adguard.rewrite/refused_parts/0",
+            "object",
+        ),
+        ("inventory", {"adguard.rewrite": {"ok": True, "records": ["a record"]}}, "/adguard.rewrite/records/0", "object"),
+        ("connections", [{**A_CONNECTION, "manages": "1"}], "/0/manages", "boolean"),
+        ("connections", [{**A_CONNECTION, "ok": "false"}], "/0/ok", "boolean"),
+        ("connections", [{**A_CONNECTION, "reaches": [7]}], "/0/reaches/0", "string"),
+        ("connections", [{**A_CONNECTION, "ok": False, "failure": "gremlins"}], "/0/failure", "not one of the values"),
+        ("connections", [A_CONNECTION, {"provider": "npm"}], "/1", "connection_ref"),
+        ("connections", [{**A_CONNECTION, "password": "x"}], "/0", "password"),
+        ("steps", ["a string"], "/0", "object"),
+        ("steps", [{"subject": "example-npm", "step": 4, "reason": ""}], "/0/step", "string"),
+        ("analytics", _analytics(pageviews="many"), "/sites/0/rows/0/pageviews", "integer"),
+        ("analytics", _analytics(pageviews=-1), "/sites/0/rows/0/pageviews", "less than 0"),
+        ("analytics", _analytics(sample_interval=0), "/sites/0/rows/0/sample_interval", "less than 1"),
+        ("analytics", _analytics(dimension="fingerprint"), "/sites/0/rows/0/dimension", "not one of the values"),
+        ("analytics", _analytics(value="x" * 513), "/sites/0/rows/0/value", "longer than 512"),
+        ("analytics", {"sites": None}, "/sites", "array"),
+        ("analytics-plan", [{"site_tag": "tag"}], "/0", "connection_ref"),
+        ("report", {"success": "maybe", "observed_generation": 1}, "/success", "boolean"),
+        ("report", {"success": True}, "/", "observed_generation"),
+    )
+
+    def test_each_departure_is_refused_with_its_path_and_runs_nothing(self):
+        ran = []
+        with patch.object(bridge_application, "_run", side_effect=lambda *args: ran.append(args)):
+            for action, payload, pointer, reason in self.DEPARTURES:
+                with self.subTest(action=action, pointer=pointer):
+                    query = {"controller-id": "x", "operation": "1"} if action == "report" else {"controller-id": "x"}
+                    answer = bridge_client.request(
+                        f"/{action}",
+                        query={} if action == "analytics-plan" else query,
+                        body=json.dumps(payload).encode(),
+                    )
+                    self.assertEqual(answer.status, 422, answer.body)
+                    self.assertEqual(answer.media_type, "application/problem+json")
+                    problem = answer.json()
+                    Draft202012Validator(PROBLEM).validate(problem)
+                    self.assertIn(f"The {action} payload at {pointer} ", problem["detail"])
+                    self.assertIn(reason, problem["detail"])
+        self.assertEqual(ran, [])
+
+    def test_a_refusal_never_repeats_the_value_it_refused(self):
+        answer = bridge_client.request(
+            "/connections",
+            query={"controller-id": "x"},
+            body=json.dumps([{**A_CONNECTION, "detail": {"leaked": "a-value-nobody-should-echo"}}]).encode(),
+        )
+
+        self.assertEqual(answer.status, 422)
+        self.assertNotIn("a-value-nobody-should-echo", answer.body.decode())
+
+    def test_one_record_that_departs_refuses_the_whole_report(self):
+        from hq.domains.control_plane.models import ProviderConnection
+
+        answer = bridge_client.request(
+            "/connections",
+            query={"controller-id": "x"},
+            body=json.dumps([A_CONNECTION, {**A_CONNECTION, "connection_ref": "other", "probed": "yes"}]).encode(),
+        )
+
+        self.assertEqual(answer.status, 422)
+        self.assertFalse(ProviderConnection.objects.exists())
+
+    def test_reports_that_conform_are_recorded(self):
+        from hq.domains.analytics.models import RumDaily
+        from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+
+        bridge_client.call("connections", [A_CONNECTION], controller_id="x")
+        bridge_client.call(
+            "inventory",
+            {"adguard.rewrite": {"ok": True, "records": [{"domain": "app.example.com", "answer": "192.0.2.10", "enabled": True}]}},
+            controller_id="x",
+        )
+        bridge_client.call(
+            "steps", [{"subject": "example-npm", "step": "npm.proxy_host:reconcile", "reason": "refused"}], controller_id="x"
+        )
+        bridge_client.call("analytics", _analytics(), controller_id="x")
+
+        connection = ProviderConnection.objects.get()
+        self.assertTrue(connection.manages)
+        self.assertEqual(connection.failing_steps, [{"step": "npm.proxy_host:reconcile", "reason": "refused"}])
+        self.assertEqual(len(ProviderInventory.objects.get(kind="adguard.rewrite").records), 1)
+        self.assertEqual(RumDaily.objects.get().pageviews, 3)
+
+    def test_every_payload_an_action_takes_is_held_to_a_schema(self):
+        for name, operation in operations().items():
+            with self.subTest(action=name):
+                declared = "requestBody" in contract()["paths"][f"/{name}"]["post"]
+                self.assertEqual(operation.takes_body, declared)
+                self.assertEqual(operation.violation(object()) is not None, declared)
 
 
 class ContractBindingTests(SimpleTestCase):
@@ -175,7 +319,7 @@ class ReachabilityTests(TestCase):
         self.assertNotIn(bridge_application.application.application, mounted)
 
     def test_the_bridge_serves_no_web_route(self):
-        for path in ("/health/ready/", "/health/live/", "/api/v2/openapi.json", "/admin/", "/mcp", "/static/app.css"):
+        for path in ("/health/ready/", "/health/live/", "/api/v2/openapi.json", "/mcp", "/static/app.css"):
             for method in ("GET", "POST"):
                 with self.subTest(path=path, method=method):
                     self.assertEqual(bridge_client.request(path, method=method).status, 404)

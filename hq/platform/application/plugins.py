@@ -97,7 +97,7 @@ class PluginManifest:
     # a native or machine client, which needs a 401 it can act on.
     #
     # Deliberately relative. The host joins each one to url_prefix, so a plugin
-    # can only ever say "these paths of mine": never /admin/, never another
+    # can only ever say "these paths of mine": never the host's, never another
     # plugin's mount.
     token_authenticated_routes: tuple[str, ...] = ()
     operator_capabilities: tuple[str, ...] = ()

@@ -217,13 +217,12 @@ class MenuTests(TestCase):
         start = body.index('class="user-menu"')
         return body[start : body.index("</details>", start)]
 
-    def test_no_picture_draws_the_mark_and_a_plain_account_has_no_role_or_admin_link(self):
+    def test_no_picture_draws_the_mark_and_a_plain_account_has_no_role(self):
         menu = self._menu()
 
         self.assertIn('class="user-icon"', menu)
         self.assertNotIn("<img", menu)
         self.assertNotIn("role-mark", menu)
-        self.assertNotIn(reverse("admin:index"), menu)
 
     def test_the_sessions_picture_is_drawn_from_hq_itself(self):
         session = self.client.session
@@ -232,12 +231,12 @@ class MenuTests(TestCase):
 
         self.assertEqual(self._menu().count(f'src="{reverse("avatar", args=["a" * 64])}"'), 2)
 
-    def test_an_admin_is_marked_and_offered_the_admin(self):
+    def test_a_superuser_is_marked_and_led_nowhere_else(self):
         get_user_model().objects.filter(pk=self.user.pk).update(is_staff=True, is_superuser=True)
         menu = self._menu()
 
         self.assertIn('<span class="role-mark">Admin</span>', menu)
-        self.assertIn(reverse("admin:index"), menu)
+        self.assertNotIn("/admin/", menu)
 
     def test_the_sign_in_is_aged_in_hours_or_days_never_minutes(self):
         for age, said in (

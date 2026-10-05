@@ -54,6 +54,17 @@ def prune_audit(progress: Any = None) -> dict[str, Any]:
     return {"deleted": deleted, "days": days}
 
 
+def _clear_sessions(progress: Any) -> dict[str, Any]:
+    """A session row outlives its expiry until something deletes it."""
+
+    from django.contrib.sessions.models import Session
+    from django.core.management import call_command
+
+    before = Session.objects.count()
+    call_command("clearsessions")
+    return {"deleted": before - Session.objects.count()}
+
+
 def _contacts_inbox(progress: Any) -> dict[str, Any]:
     from hq.domains.contacts import inbox
 
@@ -84,6 +95,7 @@ SCHEDULED: tuple[ScheduledWork, ...] = (
     ScheduledWork("contacts.inbox", "Read the contact inbox", _contacts_inbox),
     ScheduledWork("content.sync", "Pull the site content index", _content_index),
     ScheduledWork("registry.refresh", "Read public registry records", _public_registry),
+    ScheduledWork("sessions.clear", "Delete expired sessions", _clear_sessions),
 )
 
 ACTOR = "timer"

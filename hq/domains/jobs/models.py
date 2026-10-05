@@ -23,23 +23,29 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from hq.platform.core.rules import Rule, one_of
+
 # How long a running job may go without a heartbeat before it is presumed
 # dead. Generous: a slow step that reports nothing for two minutes is working,
 # and declaring it dead is worse than waiting.
 HEARTBEAT_GRACE = timedelta(minutes=5)
 
 
+class JobState(models.TextChoices):
+    QUEUED = "queued", "Queued"
+    RUNNING = "running", "Running"
+    SUCCEEDED = "succeeded", "Succeeded"
+    FAILED = "failed", "Failed"
+    # Distinct from FAILED: a vanished process is a restart to retry,
+    # a raised exception is a traceback to read.
+    LOST = "lost", "Lost"
+
+
 class Job(models.Model):
     """One piece of work that outlives the request that asked for it."""
 
-    class State(models.TextChoices):
-        QUEUED = "queued", "Queued"
-        RUNNING = "running", "Running"
-        SUCCEEDED = "succeeded", "Succeeded"
-        FAILED = "failed", "Failed"
-        # Distinct from FAILED: a vanished process is a restart to retry,
-        # a raised exception is a traceback to read.
-        LOST = "lost", "Lost"
+    # Declared above the model so a rule in ``Meta`` can name its values.
+    State = JobState
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     # Namespaced by convention ("<extension>.<work>") so the list stays
@@ -49,8 +55,8 @@ class Job(models.Model):
     state = models.CharField(
         max_length=16, choices=State, default=State.QUEUED, db_index=True
     )
-    # 0-100, or null where the work cannot say: better than a number that
-    # stops moving.
+    # 0 to 100 (``job_percent_at_most_100``), or null where the work cannot
+    # say: better than a number that stops moving.
     percent = models.PositiveSmallIntegerField(null=True, blank=True)
     note = models.CharField(max_length=200, blank=True)
     actor = models.CharField(max_length=160, blank=True)
@@ -81,7 +87,14 @@ class Job(models.Model):
                 fields=("kind",),
                 condition=models.Q(state__in=("queued", "running")),
                 name="one_live_job_per_kind",
-            )
+            ),
+            Rule(
+                condition=models.Q(percent__isnull=True) | models.Q(percent__lte=100),
+                name="job_percent_at_most_100",
+                violation_error_message="Progress is 0 to 100.",
+                field="percent",
+            ),
+            one_of("state", JobState, "job_state_is_declared"),
         ]
 
     def __str__(self):

@@ -8,6 +8,8 @@ from typing import Any, Iterable
 
 from django.db.models import Q, QuerySet, Sum
 
+from .projection import guarded
+
 
 @dataclass(frozen=True)
 class TableFilter:
@@ -160,7 +162,7 @@ class TableListMixin:
         query = self.request.GET.get("q", "").strip()
         queryset = self._apply_table_search(queryset, query)
         queryset = self._apply_table_filters(queryset)
-        return self._apply_table_sort(queryset, query)
+        return guarded(self._apply_table_sort(queryset, query))
 
     def table_context(self) -> dict[str, Any]:
         filters = []

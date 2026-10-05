@@ -25,7 +25,7 @@ from ..credential_mint import (
 )
 from ..credential_sight import credential_sight
 from ..findings import derive_findings
-from ..inventory import record_connections
+from ..report_testing import report_connections
 from ..security import cli_principal
 from ..topology import derive_topology
 
@@ -129,7 +129,7 @@ class StoreReferenceTests(TestCase):
         self.assertIsNone(parse_expiry(None))
 
     def test_record_connections_keeps_references_and_expiry_and_no_secret(self):
-        record_connections(
+        report_connections(
             [
                 {
                     "connection_ref": "example-api",
@@ -362,7 +362,7 @@ class RenderedFixTests(TestCase):
         )
         self.client.force_login(user)
         production_shape()
-        record_connections(
+        report_connections(
             [
                 {
                     "connection_ref": "example-api",

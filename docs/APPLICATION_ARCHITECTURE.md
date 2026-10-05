@@ -985,6 +985,13 @@ in each fails if a call comes to cost a process again.
   refusal is an RFC 9457 problem the controller reports as a `BridgeError`.
   A call the controller gave up on may still finish in HQ; a claim that was
   never received expires with its lease.
+- **Held to the contract.** Every payload is validated against the schema the
+  contract declares for its operation (`bridge_contract.Operation.violation`,
+  JSON Schema 2020-12) before an action sees it, so an action reads a member
+  as the type the contract gives it and coerces nothing. A report with one
+  member that departs is refused whole with status 422 and the JSON Pointer of
+  that member, as the controller refuses an answer it cannot decode. The
+  refusal names the member and the keyword, never the value.
 - **Calls may run together.** Each runs on a thread with a database connection
   of its own, and SQLite orders the writes: transactions begin `IMMEDIATE` and
   a writer waits up to the busy timeout for the one ahead of it.
@@ -992,8 +999,8 @@ in each fails if a call comes to cost a process again.
   replaced there is no socket, or nothing listening on it. The pass fails with
   that reason and the next one runs; nothing weaker is tried.
 - **Scheduled work is one more action.** What the host does on a schedule
-  (prune routine audit events, read the contact inbox, pull the content index,
-  read the public registries) is declared once, in
+  (prune routine audit events, delete expired sessions, read the contact
+  inbox, pull the content index, read the public registries) is declared once, in
   `hq/platform/application/scheduled_work.py`. A timer runs
   `hq-controller job NAME` inside the web container
   (`severino-hq-job@.service`); the running process does the work as a job and

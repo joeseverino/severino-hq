@@ -42,6 +42,45 @@ class IndexedSearchTests(TestCase):
         project.delete()
         self.assertEqual(search_ids("projects", "comm", principal=OPERATOR), [])
 
+    def test_a_save_that_leaves_the_body_alone_writes_nothing(self):
+        from hq.platform.core import revisions
+
+        project = Project.objects.create(name="Quiet save")
+        document = SearchDocument.objects.get(scope="projects", object_id=project.slug)
+        table = SearchDocument._meta.db_table
+        before = revisions.read().counts[table]
+
+        with CaptureQueriesContext(connection) as queries:
+            project.save(update_fields=["updated_at"])
+
+        self.assertEqual(revisions.read().counts[table], before)
+        self.assertEqual(
+            [query["sql"] for query in queries if table in query["sql"]][1:], []
+        )
+        self.assertEqual(
+            SearchDocument.objects.get(pk=document.pk).updated_at, document.updated_at
+        )
+
+    def test_the_full_text_entry_is_rewritten_only_when_the_body_changes(self):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'search_document_au'"
+            )
+            (sql,) = cursor.fetchone()
+        self.assertIn("AFTER UPDATE OF body", sql)
+        self.assertIn("WHEN old.body IS NOT new.body", sql)
+
+        project = Project.objects.create(name="Lighthouse")
+        document = SearchDocument.objects.filter(scope="projects", object_id=project.slug)
+        # An update that restates the body leaves the entry as it stands.
+        document.update(body=document.get().body)
+        self.assertEqual(search_ids("projects", "lighthouse", principal=OPERATOR), [project.slug])
+        document.update(body="harbour")
+        self.assertEqual(search_ids("projects", "lighthouse", principal=OPERATOR), [])
+        self.assertEqual(search_ids("projects", "harbour", principal=OPERATOR), [project.slug])
+        with connection.cursor() as cursor:
+            cursor.execute("INSERT INTO search_index_fts(search_index_fts) VALUES ('integrity-check')")
+
     def test_rebuild_recovers_a_missing_projection(self):
         project = Project.objects.create(name="Recovery target")
         SearchDocument.objects.filter(scope="projects").delete()

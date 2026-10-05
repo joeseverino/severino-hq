@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from django.test import TestCase
+from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, CURRENT, KIND
@@ -34,7 +35,9 @@ class DeliveryScheduleTests(TestCase):
         )
 
     def settle(self):
-        OperationRequest.objects.update(state=OperationRequest.State.SUCCEEDED)
+        OperationRequest.objects.update(
+            state=OperationRequest.State.SUCCEEDED, completed_at=timezone.now()
+        )
 
     def test_each_new_stage_is_one_reconcile(self):
         self.assertEqual(len(schedule_automatic_operations("example-controller")["scheduled"]), 1)

@@ -24,7 +24,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.platform.application import readings
-from hq.platform.application.inventory import record_connections
+from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import cli_principal
 from hq.platform.application.services import CONTAINER_KIND
 from hq.platform.core.models import AuditLog
@@ -336,7 +336,7 @@ def build_dense_estate():
     _findings()
     _containers()
     _glance()
-    record_connections(
+    report_connections(
         [
             {
                 "connection_ref": PORTAINER,

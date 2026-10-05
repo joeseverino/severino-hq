@@ -10,9 +10,13 @@ import uuid
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import F, Q
+from django.db.models.functions import Length, Trim
+from django.db.models.lookups import GreaterThan
 from django.urls import reverse
 
 from hq.platform.core.models import TimestampedModel
+from hq.platform.core.rules import Rule
 
 
 class Entry(TimestampedModel):
@@ -49,6 +53,62 @@ class Entry(TimestampedModel):
     class Meta:
         ordering = ("starts_on", "starts_at", "title")
         indexes = [models.Index(fields=("starts_on",)), models.Index(fields=("repeat",))]
+        constraints = [
+            Rule(
+                condition=Q(GreaterThan(Length(Trim("title")), 0)),
+                name="calendar_entry_has_a_title",
+                violation_error_message="Give the entry a title.",
+                field="title",
+            ),
+            Rule(
+                condition=Q(ends_on__isnull=True) | Q(ends_on__gte=F("starts_on")),
+                name="calendar_entry_ends_after_it_starts",
+                violation_error_message="It cannot end before it starts.",
+                field="ends_on",
+            ),
+            Rule(
+                condition=Q(ends_at__isnull=True) | Q(starts_at__isnull=False),
+                name="calendar_entry_end_time_has_a_start",
+                violation_error_message="An end time needs a start time.",
+                field="ends_at",
+            ),
+            Rule(
+                # Within one day the end time follows the start time.
+                condition=(
+                    Q(ends_at__isnull=True)
+                    | Q(starts_at__isnull=True)
+                    | Q(ends_on__isnull=False, ends_on__gt=F("starts_on"))
+                    | Q(ends_at__gt=F("starts_at"))
+                ),
+                name="calendar_entry_end_time_follows_start",
+                violation_error_message="It cannot end before it starts.",
+                field="ends_at",
+            ),
+            Rule(
+                condition=Q(interval__gte=1, interval__lte=366),
+                name="calendar_entry_interval_in_range",
+                violation_error_message="Repeat every 1 to 366.",
+                field="interval",
+            ),
+            Rule(
+                condition=Q(weekdays="") | Q(repeat="weekly"),
+                name="calendar_entry_weekdays_only_weekly",
+                violation_error_message="Only a weekly entry names its days.",
+                field="weekdays",
+            ),
+            Rule(
+                condition=Q(repeat_until__isnull=True) | ~Q(repeat=""),
+                name="calendar_entry_until_only_repeating",
+                violation_error_message="Only a repeating entry has an end.",
+                field="repeat_until",
+            ),
+            Rule(
+                condition=Q(repeat_until__isnull=True) | Q(repeat_until__gte=F("starts_on")),
+                name="calendar_entry_until_after_it_starts",
+                violation_error_message="It cannot stop repeating before it starts.",
+                field="repeat_until",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.title
@@ -67,36 +127,17 @@ class Entry(TimestampedModel):
         return tuple(sorted({int(day) for day in self.weekdays.split(",") if day.strip()}))
 
     def clean(self) -> None:
-        errors: dict[str, str] = {}
-        if not self.title.strip():
-            errors["title"] = "Give the entry a title."
-        if self.ends_on and self.ends_on < self.starts_on:
-            errors["ends_on"] = "It cannot end before it starts."
-        if self.ends_at and not self.starts_at:
-            errors["ends_at"] = "An end time needs a start time."
-        if (
-            self.starts_at
-            and self.ends_at
-            and (self.ends_on or self.starts_on) == self.starts_on
-            and self.ends_at <= self.starts_at
-        ):
-            errors["ends_at"] = "It cannot end before it starts."
-        if not 1 <= self.interval <= 366:
-            errors["interval"] = "Repeat every 1 to 366."
+        """The one rule a check constraint cannot state: what a weekday is.
+
+        Every other rule of an entry is a ``Rule`` in ``Meta.constraints``.
+        """
+
         try:
             days = self.weekday_numbers
         except ValueError:
             days = (-1,)
         if any(day not in range(7) for day in days):
-            errors["weekdays"] = "Weekdays are 0 (Monday) to 6 (Sunday)."
-        elif days and self.repeat != self.Repeat.WEEKLY:
-            errors["weekdays"] = "Only a weekly entry names its days."
-        if self.repeat_until and not self.repeat:
-            errors["repeat_until"] = "Only a repeating entry has an end."
-        elif self.repeat_until and self.repeat_until < self.starts_on:
-            errors["repeat_until"] = "It cannot stop repeating before it starts."
-        if errors:
-            raise ValidationError(errors)
+            raise ValidationError({"weekdays": "Weekdays are 0 (Monday) to 6 (Sunday)."})
 
 
 class Preference(TimestampedModel):

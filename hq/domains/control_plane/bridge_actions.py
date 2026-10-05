@@ -13,8 +13,6 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from pydantic import TypeAdapter
-
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.analytics import analytics_plan, record_analytics
 from hq.platform.application.cadence import note_controller, sweep_due
@@ -123,8 +121,10 @@ def _schedule(parameters: Parameters, payload: Any) -> Any:
 
 
 def _report(parameters: Parameters, payload: Any) -> Any:
-    parsed = TypeAdapter(ControllerReport).validate_python(payload)
-    return report_operation(parameters["operation"], parsed, controller_id=parameters["controller-id"])
+    # Held to the contract's ``ControllerReport`` before it arrives here.
+    return report_operation(
+        parameters["operation"], ControllerReport(**payload), controller_id=parameters["controller-id"]
+    )
 
 
 @dataclass(frozen=True)

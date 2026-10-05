@@ -244,8 +244,8 @@ SEVERINO_OUTBOUND_IN_REQUEST = os.environ.get("SEVERINO_OUTBOUND_IN_REQUEST", "r
 
 # Django owns the browser security boundary. Scripts are limited to same-origin
 # assets or per-response nonces; objects and framing are disabled outright.
-# Inline styles remain allowed for Django admin compatibility, while application
-# templates keep styles in the static bundle.
+# Inline styles remain allowed so a chart can place a mark with a per-datum
+# custom property; application templates keep styles in the static bundle.
 #
 # `require-trusted-types-for` is the one directive here that is not about where
 # content may come from. Every other line describes an origin; this one removes
@@ -261,10 +261,6 @@ SEVERINO_OUTBOUND_IN_REQUEST = os.environ.get("SEVERINO_OUTBOUND_IN_REQUEST", "r
 # claimed twice, script that gets onto the page cannot create a policy of its
 # own to reach a sink with, which is the property that makes a single
 # audited sink worth more than a blanket ban nobody could satisfy.
-#
-# Django admin's bundled jQuery writes HTML through `innerHTML` on every page
-# it renders, so the admin (and only the admin) runs the policy below
-# without these two directives.
 SECURE_CSP = {
     "default-src": [CSP.SELF],
     "script-src": [CSP.SELF, CSP.NONCE],
@@ -286,16 +282,13 @@ SECURE_CSP = {
     "report-uri": [SEVERINO_CSP_REPORT_PATH],
 }
 
-# The admin, minus the directive its bundled jQuery cannot satisfy. Spelled as
-# a derivation rather than a second literal policy, so tightening the real one
-# cannot leave a stale copy behind serving the admin a weaker boundary.
-SEVERINO_ADMIN_CSP = without_trusted_types(SECURE_CSP)
-
-# The API reference at /api/docs/, derived the same way and for the same kind
-# of reason: the vendored Scalar bundle (static/vendor/scalar) writes strings
-# into innerHTML through Vue and its markdown renderer, and no configuration
-# of it creates only the `hq-fragment` policy. Every source stays 'self'; it
-# needs no inline script and, configured jitless, no eval.
+# The API reference at /api/docs/ is the one page served without the Trusted
+# Types directives: the vendored Scalar bundle (static/vendor/scalar) writes
+# strings into innerHTML through Vue and its markdown renderer, and no
+# configuration of it creates only the `hq-fragment` policy. Spelled as a
+# derivation rather than a second literal policy, so tightening the real one
+# cannot leave a stale copy behind. Every source stays 'self'; it needs no
+# inline script and, configured jitless, no eval.
 SEVERINO_API_REFERENCE_CSP = without_trusted_types(SECURE_CSP)
 
 # ----- Who may reach HQ at all ------------------------------------------------
@@ -358,8 +351,8 @@ SEVERINO_LOGIN_WINDOW_SECONDS = env_int("SEVERINO_LOGIN_WINDOW_SECONDS", 900)
 # ----- Apps --------------------------------------------------------------------
 
 INSTALLED_APPS = [
-    # Django's admin, on a site that scopes its CSP exception (core.admin_site).
-    "hq.platform.core.admin_site.HQAdminConfig",
+    # No ``django.contrib.admin``: every write goes through the capability
+    # policy, and the admin is a write path that policy does not see.
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -524,6 +517,9 @@ TEST_RUNNER = "hq.platform.core.test_runner.SeverinoTestRunner"
 # Here rather than in the runner because settings are what every parallel
 # worker imports on start. See config/warning_policy.py.
 RUNNING_TESTS = sys.argv[1:2] == ["test"]
+# Whether a list read raises on a relation or deferred field it did not fetch
+# (see ``application.projection.guarded``). On where a developer sees it.
+SEVERINO_STRICT_FETCH = DEBUG or RUNNING_TESTS
 if RUNNING_TESTS:
     from hq.config.warning_policy import enforce as _enforce_warning_policy
 

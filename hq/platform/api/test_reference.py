@@ -50,7 +50,7 @@ class ReferencePageTests(TestCase):
         self.assertContains(response, 'role="status">Loading the reference.</p>\n<div class="api-reference"')
 
     def test_it_sends_hqs_policy_minus_only_trusted_types(self):
-        """The page's one exception, pinned like the admin's.
+        """The one exception to the policy, pinned.
 
         Scalar writes strings into innerHTML, so the two Trusted Types
         directives go and nothing else: no inline script, no eval, no origin

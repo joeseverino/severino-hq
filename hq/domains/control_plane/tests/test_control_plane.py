@@ -860,7 +860,8 @@ class OperationPolicyTests(TestCase):
         schedule_automatic_operations("a-docker-host")
         operation = OperationRequest.objects.get()
         operation.state = OperationRequest.State.FAILED
-        operation.save(update_fields=("state", "updated_at"))
+        operation.completed_at = timezone.now()
+        operation.save(update_fields=("state", "completed_at", "updated_at"))
         schedule_automatic_operations("a-docker-host")
         self.assertEqual(OperationRequest.objects.count(), 1)
 
@@ -984,7 +985,7 @@ class OperationPolicyTests(TestCase):
                     "not_after": (timezone.now() + timedelta(days=89)).isoformat()
                 },
                 "conditions": [
-                    {"type": "Ready", "status": True, "reason": "Verified"}
+                    {"type": "Ready", "status": True, "reason": "Verified", "message": ""}
                 ],
                 "message": "All consumers verified.",
             },
@@ -1143,6 +1144,7 @@ class InfrastructureViewsTests(TestCase):
             resource=self.resource,
             action=OperationRequest.Action.RECONCILE,
             state=OperationRequest.State.SUCCEEDED,
+            completed_at=timezone.now(),
             requested_actor="joe",
             requested_interface="web",
             idempotency_key="legacy-success",
@@ -1173,6 +1175,7 @@ class InfrastructureViewsTests(TestCase):
             resource=self.resource,
             action=OperationRequest.Action.RECONCILE,
             state=OperationRequest.State.FAILED,
+            completed_at=timezone.now(),
             requested_actor="example-controller",
             requested_interface="controller",
             idempotency_key="structured-failure",
@@ -1223,6 +1226,7 @@ class InfrastructureViewsTests(TestCase):
             input={"generation": self.resource.generation},
             claimed_by="controller",
             claimed_at=timezone.now(),
+            lease_expires_at=timezone.now() + timedelta(minutes=5),
         )
         with self.assertRaisesRegex(ValueError, "secret-bearing"):
             report_operation(
@@ -1262,6 +1266,7 @@ class InfrastructureViewsTests(TestCase):
             input={"generation": self.resource.generation},
             claimed_by="controller",
             claimed_at=timezone.now(),
+            lease_expires_at=timezone.now() + timedelta(minutes=5),
         )
 
         report_operation(

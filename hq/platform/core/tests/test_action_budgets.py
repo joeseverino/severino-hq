@@ -21,9 +21,9 @@ SCRIPT = {"X-Requested-With": "XMLHttpRequest"}
 
 # The queries each converted action makes, at any size of estate.
 BUDGETS = {
-    "watching_refresh": 23,
-    "projects:refresh": 13,
-    "control_plane:read_now": 20,
+    "watching_refresh": 19,
+    "projects:refresh": 9,
+    "control_plane:read_now": 16,
     "control_plane:visit": 17,
 }
 

@@ -9,6 +9,8 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from .rules import singleton
+
 
 @functools.cache
 def _model_labels() -> dict[str, str]:
@@ -259,6 +261,9 @@ class AgentAccess(models.Model):
         related_name="+",
     )
     changed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [singleton("agent_access_is_one_row")]
 
     def __str__(self) -> str:
         return "agents paused" if self.paused else "agents allowed"

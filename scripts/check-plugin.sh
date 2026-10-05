@@ -34,7 +34,8 @@ esac
 cd "$plugin_root"
 uv sync --frozen --group dev
 host_requirements=$(mktemp "${TMPDIR:-/tmp}/hq-runtime.XXXXXX")
-trap 'rm -f -- "$host_requirements"' EXIT HUP INT TERM
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/hq-plugin-check.XXXXXX")
+trap 'rm -rf -- "$host_requirements" "$scratch"' EXIT HUP INT TERM
 uv export --project "$hq_root" --locked --no-default-groups --no-emit-project \
     --output-file "$host_requirements" > /dev/null
 uv pip install --python "$virtualenv/bin/python" --require-hashes -r "$host_requirements"
@@ -44,6 +45,8 @@ PYTHONPATH="$hq_root" "$virtualenv/bin/python" -m hq_sdk.validation src
 
 export DJANGO_DEBUG=true
 export DJANGO_SETTINGS_MODULE=hq.config.settings
+# A check never opens the host checkout's own database.
+export SEVERINO_DATABASE_PATH="$scratch/check.sqlite3"
 export PYTHONPATH="$hq_root"
 export SEVERINO_HQ_PLUGINS="$plugin_reference"
 "$virtualenv/bin/python" "$hq_root/manage.py" check
@@ -56,7 +59,7 @@ export SEVERINO_HQ_PLUGINS="$plugin_reference"
 # dependency boundary in an isolated environment so an undeclared host pin
 # fails here instead of after composition.
 runtime_root=$(mktemp -d "${TMPDIR:-/tmp}/hq-plugin-runtime.XXXXXX")
-trap 'rm -rf -- "$runtime_root"; rm -f -- "$host_requirements"' EXIT HUP INT TERM
+trap 'rm -rf -- "$runtime_root" "$scratch"; rm -f -- "$host_requirements"' EXIT HUP INT TERM
 uv build --wheel --out-dir "$runtime_root/dist"
 set -- "$runtime_root"/dist/*.whl
 if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then

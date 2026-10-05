@@ -82,10 +82,9 @@ def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any])
     if not reached:
         return
     now = timezone.now()
-    for target in ManagedResource.objects.filter(kind=DELIVERY_TARGET_KIND):
-        if target.spec.get("connection_ref") in reached:
-            target.last_observed_at = now
-            target.save(update_fields=("last_observed_at", "updated_at"))
+    ManagedResource.objects.filter(
+        kind=DELIVERY_TARGET_KIND, spec__connection_ref__in=reached
+    ).update(last_observed_at=now, updated_at=now)
 
 
 def _assert_public_status(value: Any, path: str = "status") -> None:
@@ -342,6 +341,8 @@ def claim_next_operation(
 ) -> dict[str, Any]:
     if not 30 <= lease_seconds <= 3600:
         raise ValueError("Lease duration must be between 30 and 3600 seconds.")
+    if not controller_id:
+        raise ValueError("A claim names the controller making it.")
     now = timezone.now()
     OperationRequest.objects.filter(
         state=OperationRequest.State.CLAIMED,

@@ -536,6 +536,7 @@ class OperationProjectionTests(TestCase):
             resource=resource,
             action=OperationRequest.Action.RECONCILE,
             state=OperationRequest.State.FAILED,
+            completed_at=timezone.now(),
             requested_actor="example-controller",
             requested_interface="controller",
             idempotency_key="failed-projection",

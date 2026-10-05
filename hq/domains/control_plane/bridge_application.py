@@ -11,8 +11,10 @@ is served on (``hq.platform.core.unix_server``). It is not part of the web
 application's routing, and it refuses a request that arrived on a network
 listener, so mounting it there by mistake serves nothing.
 
-A refusal is an RFC 9457 problem. Sizes are bounded in both directions by the
-contract's ``BridgeBody``.
+A payload is held to the schema the contract declares for its operation
+before any action sees it; one that departs from it is refused whole, with the
+JSON Pointer of the member that departs. A refusal is an RFC 9457 problem.
+Sizes are bounded in both directions by the contract's ``BridgeBody``.
 """
 
 from __future__ import annotations
@@ -115,9 +117,13 @@ async def payload_of(operation: Operation, request: Request) -> Any:
             raise Refused(HTTPStatus.BAD_REQUEST, f"{operation.name} takes no payload.")
         return None
     try:
-        return json.loads(raw)
+        payload = json.loads(raw)
     except ValueError as exc:
         raise Refused(HTTPStatus.BAD_REQUEST, "The payload is not JSON.") from exc
+    violation = operation.violation(payload)
+    if violation is not None:
+        raise Refused(HTTPStatus.UNPROCESSABLE_ENTITY, violation)
+    return payload
 
 
 def _run(action: Action, parameters: dict[str, Any], payload: Any) -> bytes:

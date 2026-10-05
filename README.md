@@ -112,7 +112,7 @@ implements is [`docs/PLUGINS.md`](docs/PLUGINS.md).
 - Django 6.1 + SQLite (PostgreSQL is a future option)
 - Django templates, server-rendered; JavaScript progressively enhances
 - Plain CSS (no build step, no CDN runtime dependencies)
-- Django auth, Django admin, Django ORM and migrations
+- Django auth, Django ORM and migrations
 - Environment variables for secrets
 
 ## One application core, every interface
@@ -193,7 +193,7 @@ available in the header.
 - The top navigation highlights the active section and stays on one row on
   desktop. If the viewport is narrow, the nav scrolls horizontally instead of
   wrapping into stacked links.
-- Operator utilities (Action items, Admin, Sign out) sit in a dropdown under
+- Operator utilities (Action items, Sign out) sit in a dropdown under
   your username, keeping the domain nav compact. When anything is unread, its
   count sits beside your username. It is fetched after the page renders, so no
   page assembles the queue just to draw the header.
@@ -331,7 +331,7 @@ Python dependencies come from `uv.lock` through `uv run --locked`, which every
 task uses; no virtualenv is made by hand. The image alone still bootstraps uv
 itself ([`Dockerfile`](Dockerfile)).
 
-Open <http://127.0.0.1:8000/>, sign in. Admin lives at `/admin/`.
+Open <http://127.0.0.1:8000/>, sign in.
 
 `mise run dev` collects versioned assets, then runs Uvicorn with reload enabled.
 Using the same ASGI path as production means local browser checks exercise
