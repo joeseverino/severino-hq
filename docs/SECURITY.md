@@ -215,9 +215,14 @@
       `SEVERINO_SECRET_STORE_KEY`, which lives on the env item and not in the
       database; storing is refused outright when that key is absent, never
       downgraded to plaintext. The material is read only by the controller,
-      through a bridge command of its own so it does not ride in the contract
-      that `export` prints, and it appears in no serializer, no API response,
+      through a bridge action of its own so it does not ride in the contract
+      that `export` answers with, and it appears in no serializer, no API response,
       and not in the reply to the upload that supplied it.
+- [ ] The controller bridge listens on its Unix socket only: no web route
+      reaches a bridge action, the socket's directory admits the web account
+      alone, and both ends refuse a peer that is another uid. The controller's
+      container mounts that directory read-only and holds neither HQ's
+      database nor its application environment.
 - [ ] Provider credentials remain outside the web container entirely. The
       controller report guard rejects any status carrying a key named
       `private`, `secret`, `token`, `password`, or `credential`.

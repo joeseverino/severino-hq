@@ -1,6 +1,6 @@
 // Command hq-controller is the one-shot native controller: apply what is
 // queued, sweep when HQ says to, and report. HQ stays the owner of every
-// decision and record; this reaches it only through the bridge command.
+// decision and record; this reaches it only through the bridge socket.
 package main
 
 import (
@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -31,34 +30,10 @@ func main() {
 	os.Exit(code)
 }
 
-// bridgeCommand is how this controller reaches HQ: the bridge in HQ's container
-// through docker exec, or, with HQ_IN_PROCESS=1, a manage.py on this machine.
-func bridgeCommand(env runtime.Environment) ([]string, error) {
-	if env["HQ_IN_PROCESS"] == "1" {
-		manage := strings.TrimSpace(env["HQ_MANAGE_PY"])
-		if manage == "" {
-			return nil, &runtime.BridgeError{Message: "HQ_MANAGE_PY must name manage.py when HQ_IN_PROCESS is set"}
-		}
-		python := strings.TrimSpace(env["HQ_PYTHON"])
-		if python == "" {
-			python = "python3"
-		}
-		return []string{python, manage, "infrastructure_controller"}, nil
-	}
-	docker := strings.TrimSpace(env["HQ_DOCKER_BIN"])
-	if docker == "" {
-		found, err := exec.LookPath("docker")
-		if err != nil {
-			return nil, &runtime.BridgeError{Message: "docker CLI not found"}
-		}
-		docker = found
-	}
-	container := strings.TrimSpace(env["HQ_CONTAINER"])
-	if container == "" {
-		container = "severino-hq"
-	}
-	return []string{docker, "exec", "-i", container, "python", "manage.py", "infrastructure_controller"}, nil
-}
+// BridgeSocket names the variable holding the path of HQ's bridge socket,
+// which the launcher mounts. There is no other way to reach HQ: unset, or not
+// a socket this account can trust, the pass fails and the next one tries again.
+const BridgeSocket = "HQ_BRIDGE_SOCKET"
 
 // failure is the one line a pass that could not run prints.
 type failure struct {
@@ -81,16 +56,16 @@ func run(ctx context.Context, args []string, env runtime.Environment, stdout, st
 		json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
 		return 1
 	}
-	prefix, err := bridgeCommand(env)
+	// The bridge carries no credential in either direction: HQ persists, it
+	// does not reach providers, and the socket itself is the authorization.
+	bridge, err := runtime.NewSocketBridge(strings.TrimSpace(env[BridgeSocket]))
 	if err != nil {
 		return fail(err)
 	}
-	// HQ's process gets no connection's credentials: it persists, it does not reach providers.
-	bridge := runtime.CommandBridge{Prefix: prefix, Env: env.WithoutConnections()}
-	var declared runtime.ControllerRegistry
-	if err := bridge.Call(ctx, []string{"registry"}, nil, &declared); err != nil {
+	declared, err := bridge.Registry(ctx)
+	if err != nil {
 		if *apply {
-			bridge.Call(ctx, []string{"steps", "--controller-id", *controllerID}, []runtime.StepFailure{}, nil)
+			bridge.Steps(ctx, *controllerID, []runtime.StepFailure{})
 		}
 		return fail(err)
 	}

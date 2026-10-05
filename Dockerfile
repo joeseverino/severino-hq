@@ -89,8 +89,11 @@ COPY --from=controller /out/hq-secrets /app/deploy/bin/hq-secrets
 RUN sh scripts/root-tree-manifest.sh /app > /app/root-tree.sha256
 
 # Mounted volumes; create empty so the container can boot before a host mount.
-RUN mkdir -p /data /media /exports /static \
-    && chown -R severino:severino /data /media /exports /static
+# The bridge socket's directory is this account's alone: a volume first mounted
+# there takes that owner and mode, and HQ refuses to serve from anything wider.
+RUN mkdir -p /data /media /exports /static /run/hq-bridge \
+    && chown -R severino:severino /data /media /exports /static /run/hq-bridge \
+    && chmod 0700 /run/hq-bridge
 
 USER severino
 EXPOSE 8000

@@ -78,11 +78,24 @@ services:
       SEVERINO_CONTROLLER_DOORBELL: /run/severino-hq/controller-doorbell
       # The same, for an image or digest a sweep found that HQ has not read.
       SEVERINO_REGISTRY_DOORBELL: /run/severino-hq/registry-doorbell
+      # The Unix socket HQ serves the controller's bridge on: the contract
+      # in controller/api, answered by the process that is already running, so
+      # a controller call starts nothing. Not a network listener, and not
+      # reachable through the one above: the directory is the volume below,
+      # which only this account can enter, and each connection's peer is
+      # checked. The launcher reads this path from the container and mounts
+      # the same volume, read-only, into the controller's.
+      SEVERINO_BRIDGE_SOCKET: /run/hq-bridge/bridge.sock
     volumes:
       - severino_data:/data
       - severino_media:/media
       - severino_exports:/exports
       - severino_static:/static
+      # The bridge socket's directory. A volume, so it exists before the
+      # container does on every boot, and takes its owner and 0700 mode from
+      # the image's directory the first time it is mounted. It holds the
+      # socket and nothing else.
+      - severino_bridge:/run/hq-bridge
       # Somewhere both sides can see. `/run` is transient by design, which is
       # right for a doorbell: a stale one after a reboot would ring for work
       # that was claimed before it.
@@ -112,3 +125,4 @@ volumes:
   severino_media:
   severino_exports:
   severino_static:
+  severino_bridge:

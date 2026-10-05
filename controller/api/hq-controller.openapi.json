@@ -3,7 +3,7 @@
   "info": {
     "title": "HQ controller bridge",
     "version": "1.0.0",
-    "description": "The contract between Severino HQ and its infrastructure controller. Each path is one bridge action (today the infrastructure_controller management command, payload on stdin, JSON on stdout). Go types are generated from components/schemas; Django's tests validate every action's output against them."
+    "description": "The contract between Severino HQ and its infrastructure controller. Each path is one bridge action: a POST over HTTP on HQ's private Unix socket, parameters in the query, the payload as the JSON body, the answer as JSON, and a refusal as an RFC 9457 problem. Go types and the controller's client are generated from this document; HQ's bridge application takes its routes, parameters and limits from it, and Django's tests validate every action against it."
   },
   "paths": {
     "/claim": {
@@ -25,11 +25,9 @@
             "name": "lease-seconds",
             "in": "query",
             "required": false,
-            "description": "Lease length, 30 to 3600.",
+            "description": "Lease length in seconds.",
             "schema": {
-              "type": "integer",
-              "minimum": 30,
-              "maximum": 3600
+              "$ref": "#/components/schemas/LeaseSeconds"
             }
           },
           {
@@ -47,11 +45,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Pending"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -80,11 +88,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Pending"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -110,11 +128,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Contract"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -140,11 +168,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -179,11 +217,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -219,11 +267,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -249,11 +307,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SweepVerdict"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -279,11 +347,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -322,11 +400,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -362,11 +450,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -395,11 +493,21 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AnalyticsPlan"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -438,11 +546,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -478,11 +596,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GlancePlan"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -508,11 +636,21 @@
         ],
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -537,11 +675,21 @@
         "x-bridge-action": "registry",
         "responses": {
           "200": {
-            "description": "The command's JSON output.",
+            "description": "The action's answer.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ControllerRegistry"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2242,6 +2390,44 @@
           "ConditionDrifted",
           "ConditionDegraded"
         ]
+      },
+      "Problem": {
+        "type": "object",
+        "description": "An RFC 9457 problem: why HQ refused or failed a bridge call.",
+        "required": [
+          "title",
+          "status",
+          "detail"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BridgeBody": {
+        "type": "string",
+        "maxLength": 67108864,
+        "description": "One bridge message as sent: maxLength is the most bytes either side accepts as a request or an answer."
+      },
+      "LeaseSeconds": {
+        "type": "integer",
+        "minimum": 30,
+        "maximum": 3600,
+        "default": 300,
+        "description": "How long a claimed operation is leased, in seconds. The controller sends the default; HQ applies it when none is sent."
       }
     }
   }

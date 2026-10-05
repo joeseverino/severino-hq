@@ -510,7 +510,7 @@ everything would make the system less honest, not more unified.
 The one exception to "nothing secret" is a certificate an operator generated
 themselves and asked HQ to install. It is sealed with a key held outside the
 database, refused outright when that key is absent, read only by the controller
-through its own bridge command, and absent from every serializer. Provider
+through its own bridge action, and absent from every serializer. Provider
 credentials remain outside the web container entirely.
 
 The vault emits a validated manifest; HQ never walks the vault and never stores
@@ -804,26 +804,68 @@ types generated from `controller/api/hq-controller.openapi.json`. A Go test hold
 the registered readers equal to the contract's `SweptKind`, and Django's contract
 test holds `SweptKind` to the kinds HQ expects a sweep to read.
 
-The bridge contract is written by hand and both sides take it. What the Go
-generator does not emit (a pattern, a default) the controller reads from the
+The bridge contract is written by hand and both sides take it. The
+controller's client (every path, parameter and message type) is generated from
+it, and HQ's bridge application builds its routes and parses each request from
+the same document, so an action, a parameter or a limit exists once. What the
+Go generator does not emit (a pattern, a default) the controller reads from the
 copy embedded in its binary (`controller/api/contract.go`), and a declaration
 reads from the same file (`hq/domains/control_plane/bridge_contract.py`): the
-Caddyfile token patterns and the `github.delivery` defaults are stated there
-and nowhere else. A keyword the contract does not state stops the controller
-at start and fails the declaration's import. A vendor's base URL is the
+Caddyfile token patterns, the `github.delivery` defaults, the claim lease and
+the largest message either side accepts are stated there and nowhere else. A
+keyword the contract does not state stops the controller at start and fails
+the declaration's import. A vendor's base URL is the
 `servers` entry of its vendored description, generated as a constant.
 
 The homelab controller is a separate root-owned systemd oneshot, not a web
 process. It starts a disposable, capability-dropped container from the exact
 scanned HQ image, whose `/usr/local/bin/hq-controller` is the static Go binary
 built in the image's `controller` stage, so the host needs no toolchain and
-cannot drift from the deployed application. The binary reaches HQ through the
-same image's `manage.py infrastructure_controller` (`HQ_IN_PROCESS=1`). Provider variables, the ACME lineage, and
-deployment identities enter only that short-lived container; they never enter
-the web container. The disposable container runs as the same unprivileged UID
-as the application data owner; the root-owned systemd launcher projects
-short-lived, owner-scoped copies of its environment and SSH identities. Plan
-mode authenticates and peeks without leasing work.
+cannot drift from the deployed application. Provider variables, the ACME
+lineage, and deployment identities enter only that short-lived container; they
+never enter the web container. HQ's database and application environment never
+enter the controller's.
+
+The binary reaches HQ through the bridge: the contract's actions as HTTP on a
+Unix socket that HQ's running process serves (`SEVERINO_BRIDGE_SOCKET`). Django
+is already started, so a call costs the work it asks for and starts nothing.
+Measured with the real Django side on a development machine, one call takes
+about a millisecond and an idle applying pass of ten calls about 40 ms, where a
+process per call took 2.8 seconds and the same pass 20 to 29; on a host where
+starting Django takes seven seconds the difference is larger. `go test -bench
+BridgeCall ./runtime` and the pass in
+`hq/domains/control_plane/tests/test_bridge_live.py` reproduce it, and a budget
+in each fails if a call comes to cost a process again.
+
+- **One listener, one application.** `hq/domains/control_plane/bridge_application.py`
+  is an ASGI application of its own, served by a second listener in the web
+  process (`hq/platform/core/unix_server.py`) and given to nothing else. It is
+  not a route of the web application, it refuses a request that arrived on a
+  network listener, and it serves no web route. The controller starts no
+  process to reach HQ and has no other way to.
+- **The socket is the authorization.** It is in a directory only the web
+  account can enter (a volume of its own, mounted read-only into the
+  controller's container), it is that account's with mode 0600, and each side
+  asks the kernel who the other is (`SO_PEERCRED`): HQ drops a connection from
+  any other uid before reading it, and the controller refuses a directory, a
+  socket or a listener that is not its own account's, a link, or a wider mode.
+  No credential crosses the bridge in either direction.
+- **Bounded.** A request or an answer over the contract's `BridgeBody` size is
+  refused on both sides, every call has a deadline (`BridgeTimeout`), and a
+  refusal is an RFC 9457 problem the controller reports as a `BridgeError`.
+  A call the controller gave up on may still finish in HQ; a claim that was
+  never received expires with its lease.
+- **Calls may run together.** Each runs on a thread with a database connection
+  of its own, and SQLite orders the writes: transactions begin `IMMEDIATE` and
+  a writer waits up to the busy timeout for the one ahead of it.
+- **No bridge, no pass.** While the web container is restarting or being
+  replaced there is no socket, or nothing listening on it. The pass fails with
+  that reason and the next one runs; nothing weaker is tried.
+
+The disposable container runs as the same unprivileged UID as the web
+process, which is what lets it reach the socket; the root-owned systemd
+launcher projects short-lived, owner-scoped copies of its connections and SSH
+identities. Plan mode authenticates and peeks without leasing work.
 Apply mode first schedules due work, then claims only explicitly supported
 kind/action pairs. The validated capability document declares which actions are
 automatic; a generic scheduler derives reconciliation for generation/health

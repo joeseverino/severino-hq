@@ -4,9 +4,17 @@
 package runtime
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
 	"time"
+
+	"github.com/oapi-codegen/runtime"
 )
 
 // Defines values for AnalyticsRowDimension.
@@ -748,6 +756,9 @@ type AppliedOperationOutput struct {
 	Resource  string `json:"resource"`
 }
 
+// BridgeBody One bridge message as sent: maxLength is the most bytes either side accepts as a request or an answer.
+type BridgeBody = string
+
 // CaddyCertificateDirectory The directory a Caddy edge loads delivered certificates from: one plain absolute path.
 type CaddyCertificateDirectory = string
 
@@ -957,6 +968,9 @@ type KindReport struct {
 	RefusedParts []RefusedPart `json:"refused_parts,omitempty"`
 }
 
+// LeaseSeconds How long a claimed operation is leased, in seconds. The controller sends the default; HQ applies it when none is sent.
+type LeaseSeconds = int
+
 // LockedAction An action the registry refuses, and the reason it gives.
 type LockedAction struct {
 	Action string `json:"action"`
@@ -1026,6 +1040,14 @@ type PlannedOperation struct {
 	Operation   string `json:"operation"`
 	Resource    string `json:"resource"`
 	WouldChange bool   `json:"would_change"`
+}
+
+// Problem An RFC 9457 problem: why HQ refused or failed a bridge call.
+type Problem struct {
+	Detail string `json:"detail"`
+	Status int    `json:"status"`
+	Title  string `json:"title"`
+	Type   string `json:"type,omitempty"`
 }
 
 // ReadingPartName A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares, and Django's contract test holds this to the declared parts.
@@ -1127,8 +1149,8 @@ type ClaimParams struct {
 	// ControllerID The reporting controller.
 	ControllerID string `form:"controller-id" json:"controller-id"`
 
-	// LeaseSeconds Lease length, 30 to 3600.
-	LeaseSeconds int `form:"lease-seconds,omitempty" json:"lease-seconds,omitempty"`
+	// LeaseSeconds Lease length in seconds.
+	LeaseSeconds LeaseSeconds `form:"lease-seconds,omitempty" json:"lease-seconds,omitempty"`
 
 	// Capability A kind:action the controller can perform.
 	Capability []string `form:"capability,omitempty" json:"capability,omitempty"`
@@ -1294,4 +1316,3102 @@ func (a Acknowledgement) MarshalJSON() ([]byte, error) {
 		}
 	}
 	return json.Marshal(object)
+}
+
+// RequestEditorFn is the function signature for the RequestEditor callback function
+type RequestEditorFn func(ctx context.Context, req *http.Request) error
+
+// Doer performs HTTP requests.
+//
+// The standard http.Client implements this interface.
+type HttpRequestDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+// Client which conforms to the OpenAPI3 specification for this service.
+type Client struct {
+	// The endpoint of the server conforming to this interface, with scheme,
+	// https://api.deepmap.com for example. This can contain a path relative
+	// to the server, such as https://api.deepmap.com/dev-test, and all the
+	// paths in the swagger spec will be appended to the server.
+	Server string
+
+	// Doer for performing requests, typically a *http.Client with any
+	// customized settings, such as certificate chains.
+	Client HttpRequestDoer
+
+	// A list of callbacks for modifying requests which are generated before sending over
+	// the network.
+	RequestEditors []RequestEditorFn
+}
+
+// ClientOption allows setting custom parameters during construction
+type ClientOption func(*Client) error
+
+// Creates a new Client, with reasonable defaults
+func NewClient(server string, opts ...ClientOption) (*Client, error) {
+	// create a client with sane default values
+	client := Client{
+		Server: server,
+	}
+	// mutate client and add all optional params
+	for _, o := range opts {
+		if err := o(&client); err != nil {
+			return nil, err
+		}
+	}
+	// ensure the server URL always has a trailing slash
+	if !strings.HasSuffix(client.Server, "/") {
+		client.Server += "/"
+	}
+	// create httpClient, if not already present
+	if client.Client == nil {
+		client.Client = &http.Client{}
+	}
+	return &client, nil
+}
+
+// WithHTTPClient allows overriding the default Doer, which is
+// automatically created using http.Client. This is useful for tests.
+func WithHTTPClient(doer HttpRequestDoer) ClientOption {
+	return func(c *Client) error {
+		c.Client = doer
+		return nil
+	}
+}
+
+// WithRequestEditorFn allows setting up a callback function, which will be
+// called right before sending the request. This can be used to mutate the request.
+func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
+	return func(c *Client) error {
+		c.RequestEditors = append(c.RequestEditors, fn)
+		return nil
+	}
+}
+
+// The interface specification for the client above.
+type ClientInterface interface {
+
+	// AnalyticsWithBody Record site analytics.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /analytics (the `Analytics` operationId).
+	AnalyticsWithBody(ctx context.Context, params *AnalyticsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Analytics Record site analytics.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /analytics (the `Analytics` operationId).
+	Analytics(ctx context.Context, params *AnalyticsParams, body AnalyticsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AnalyticsPlanWithBody The window to read for each site.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /analytics-plan (the `AnalyticsPlan` operationId).
+	AnalyticsPlanWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AnalyticsPlan The window to read for each site.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /analytics-plan (the `AnalyticsPlan` operationId).
+	AnalyticsPlan(ctx context.Context, body AnalyticsPlanJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Claim Lease the next compatible operation.
+	//
+	// Corresponds with POST /claim (the `Claim` operationId).
+	Claim(ctx context.Context, params *ClaimParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ConnectionsWithBody Record the connections this controller carries.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /connections (the `Connections` operationId).
+	ConnectionsWithBody(ctx context.Context, params *ConnectionsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Connections Record the connections this controller carries.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /connections (the `Connections` operationId).
+	Connections(ctx context.Context, params *ConnectionsParams, body ConnectionsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Export The contract for one resource.
+	//
+	// Corresponds with POST /export (the `Export` operationId).
+	Export(ctx context.Context, params *ExportParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GlanceWithBody Record dashboard observations.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /glance (the `Glance` operationId).
+	GlanceWithBody(ctx context.Context, params *GlanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Glance Record dashboard observations.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /glance (the `Glance` operationId).
+	Glance(ctx context.Context, params *GlanceParams, body GlanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GlancePlan The dashboard panels to refresh.
+	//
+	// Corresponds with POST /glance-plan (the `GlancePlan` operationId).
+	GlancePlan(ctx context.Context, params *GlancePlanParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// InventoryWithBody Record one sweep.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /inventory (the `Inventory` operationId).
+	InventoryWithBody(ctx context.Context, params *InventoryParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Inventory Record one sweep.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /inventory (the `Inventory` operationId).
+	Inventory(ctx context.Context, params *InventoryParams, body InventoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Material Certificate material for one resource.
+	//
+	// Corresponds with POST /material (the `Material` operationId).
+	Material(ctx context.Context, params *MaterialParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Peek Read the next compatible operation without leasing it.
+	//
+	// Corresponds with POST /peek (the `Peek` operationId).
+	Peek(ctx context.Context, params *PeekParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Registry The provider declarations the controller acts on.
+	//
+	// Corresponds with POST /registry (the `Registry` operationId).
+	Registry(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReportWithBody Report an operation's result.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /report (the `Report` operationId).
+	ReportWithBody(ctx context.Context, params *ReportParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Report Report an operation's result.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /report (the `Report` operationId).
+	Report(ctx context.Context, params *ReportParams, body ReportJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Schedule Queue the operations the contracts call for.
+	//
+	// Corresponds with POST /schedule (the `Schedule` operationId).
+	Schedule(ctx context.Context, params *ScheduleParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StepsWithBody Record the work one pass could not finish.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /steps (the `Steps` operationId).
+	StepsWithBody(ctx context.Context, params *StepsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Steps Record the work one pass could not finish.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /steps (the `Steps` operationId).
+	Steps(ctx context.Context, params *StepsParams, body StepsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SweepDue Whether to sweep now, and why.
+	//
+	// Corresponds with POST /sweep-due (the `SweepDue` operationId).
+	SweepDue(ctx context.Context, params *SweepDueParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// AnalyticsWithBody Record site analytics.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /analytics (the `Analytics` operationId).
+func (c *Client) AnalyticsWithBody(ctx context.Context, params *AnalyticsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAnalyticsRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Analytics Record site analytics.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /analytics (the `Analytics` operationId).
+func (c *Client) Analytics(ctx context.Context, params *AnalyticsParams, body AnalyticsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAnalyticsRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AnalyticsPlanWithBody The window to read for each site.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /analytics-plan (the `AnalyticsPlan` operationId).
+func (c *Client) AnalyticsPlanWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAnalyticsPlanRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AnalyticsPlan The window to read for each site.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /analytics-plan (the `AnalyticsPlan` operationId).
+func (c *Client) AnalyticsPlan(ctx context.Context, body AnalyticsPlanJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAnalyticsPlanRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Claim Lease the next compatible operation.
+//
+// Corresponds with POST /claim (the `Claim` operationId).
+func (c *Client) Claim(ctx context.Context, params *ClaimParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewClaimRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ConnectionsWithBody Record the connections this controller carries.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /connections (the `Connections` operationId).
+func (c *Client) ConnectionsWithBody(ctx context.Context, params *ConnectionsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConnectionsRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Connections Record the connections this controller carries.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /connections (the `Connections` operationId).
+func (c *Client) Connections(ctx context.Context, params *ConnectionsParams, body ConnectionsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConnectionsRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Export The contract for one resource.
+//
+// Corresponds with POST /export (the `Export` operationId).
+func (c *Client) Export(ctx context.Context, params *ExportParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewExportRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GlanceWithBody Record dashboard observations.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /glance (the `Glance` operationId).
+func (c *Client) GlanceWithBody(ctx context.Context, params *GlanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGlanceRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Glance Record dashboard observations.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /glance (the `Glance` operationId).
+func (c *Client) Glance(ctx context.Context, params *GlanceParams, body GlanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGlanceRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GlancePlan The dashboard panels to refresh.
+//
+// Corresponds with POST /glance-plan (the `GlancePlan` operationId).
+func (c *Client) GlancePlan(ctx context.Context, params *GlancePlanParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGlancePlanRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// InventoryWithBody Record one sweep.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /inventory (the `Inventory` operationId).
+func (c *Client) InventoryWithBody(ctx context.Context, params *InventoryParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInventoryRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Inventory Record one sweep.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /inventory (the `Inventory` operationId).
+func (c *Client) Inventory(ctx context.Context, params *InventoryParams, body InventoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInventoryRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Material Certificate material for one resource.
+//
+// Corresponds with POST /material (the `Material` operationId).
+func (c *Client) Material(ctx context.Context, params *MaterialParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewMaterialRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Peek Read the next compatible operation without leasing it.
+//
+// Corresponds with POST /peek (the `Peek` operationId).
+func (c *Client) Peek(ctx context.Context, params *PeekParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPeekRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Registry The provider declarations the controller acts on.
+//
+// Corresponds with POST /registry (the `Registry` operationId).
+func (c *Client) Registry(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRegistryRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReportWithBody Report an operation's result.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /report (the `Report` operationId).
+func (c *Client) ReportWithBody(ctx context.Context, params *ReportParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReportRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Report Report an operation's result.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /report (the `Report` operationId).
+func (c *Client) Report(ctx context.Context, params *ReportParams, body ReportJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReportRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Schedule Queue the operations the contracts call for.
+//
+// Corresponds with POST /schedule (the `Schedule` operationId).
+func (c *Client) Schedule(ctx context.Context, params *ScheduleParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScheduleRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// StepsWithBody Record the work one pass could not finish.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /steps (the `Steps` operationId).
+func (c *Client) StepsWithBody(ctx context.Context, params *StepsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStepsRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Steps Record the work one pass could not finish.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /steps (the `Steps` operationId).
+func (c *Client) Steps(ctx context.Context, params *StepsParams, body StepsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStepsRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SweepDue Whether to sweep now, and why.
+//
+// Corresponds with POST /sweep-due (the `SweepDue` operationId).
+func (c *Client) SweepDue(ctx context.Context, params *SweepDueParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSweepDueRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// NewAnalyticsRequest calls the generic Analytics builder with application/json body
+func NewAnalyticsRequest(server string, params *AnalyticsParams, body AnalyticsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAnalyticsRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewAnalyticsRequestWithBody constructs an http.Request for the Analytics method, with any body, and a specified content type
+func NewAnalyticsRequestWithBody(server string, params *AnalyticsParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/analytics")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "controller-id", params.ControllerID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewAnalyticsPlanRequest calls the generic AnalyticsPlan builder with application/json body
+func NewAnalyticsPlanRequest(server string, body AnalyticsPlanJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAnalyticsPlanRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewAnalyticsPlanRequestWithBody constructs an http.Request for the AnalyticsPlan method, with any body, and a specified content type
+func NewAnalyticsPlanRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/analytics-plan")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewClaimRequest constructs an http.Request for the Claim method
+func NewClaimRequest(server string, params *ClaimParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/claim")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "controller-id", params.ControllerID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "lease-seconds", params.LeaseSeconds, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Capability != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "capability", params.Capability, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "array", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewConnectionsRequest calls the generic Connections builder with application/json body
+func NewConnectionsRequest(server string, params *ConnectionsParams, body ConnectionsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewConnectionsRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewConnectionsRequestWithBody constructs an http.Request for the Connections method, with any body, and a specified content type
+func NewConnectionsRequestWithBody(server string, params *ConnectionsParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/connections")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "controller-id", params.ControllerID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewExportRequest constructs an http.Request for the Export method
+func NewExportRequest(server string, params *ExportParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/export")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "resource", params.Resource, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGlanceRequest calls the generic Glance builder with application/json body
+func NewGlanceRequest(server string, params *GlanceParams, body GlanceJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewGlanceRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewGlanceRequestWithBody constructs an http.Request for the Glance method, with any body, and a specified content type
+func NewGlanceRequestWithBody(server string, params *GlanceParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/glance")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "controller-id", params.ControllerID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGlancePlanRequest constructs an http.Request for the GlancePlan method
+func NewGlancePlanRequest(server string, params *GlancePlanParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/glance-plan")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "controller-id", params.ControllerID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewInventoryRequest calls the generic Inventory builder with application/json body
+func NewInventoryRequest(server string, params *InventoryParams, body InventoryJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewInventoryRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewInventoryRequestWithBody constructs an http.Request for the Inventory method, with any body, and a specified content type
+func NewInventoryRequestWithBody(server string, params *InventoryParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/inventory")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "controller-id", params.ControllerID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewMaterialRequest constructs an http.Request for the Material method
+func NewMaterialRequest(server string, params *MaterialParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/material")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "resource", params.Resource, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPeekRequest constructs an http.Request for the Peek method
+func NewPeekRequest(server string, params *PeekParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/peek")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Capability != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "capability", params.Capability, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "array", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRegistryRequest constructs an http.Request for the Registry method
+func NewRegistryRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/registry")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReportRequest calls the generic Report builder with application/json body
+func NewReportRequest(server string, params *ReportParams, body ReportJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewReportRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewReportRequestWithBody constructs an http.Request for the Report method, with any body, and a specified content type
+func NewReportRequestWithBody(server string, params *ReportParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/report")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "controller-id", params.ControllerID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "operation", params.Operation, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewScheduleRequest constructs an http.Request for the Schedule method
+func NewScheduleRequest(server string, params *ScheduleParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/schedule")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "controller-id", params.ControllerID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewStepsRequest calls the generic Steps builder with application/json body
+func NewStepsRequest(server string, params *StepsParams, body StepsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewStepsRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewStepsRequestWithBody constructs an http.Request for the Steps method, with any body, and a specified content type
+func NewStepsRequestWithBody(server string, params *StepsParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/steps")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "controller-id", params.ControllerID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewSweepDueRequest constructs an http.Request for the SweepDue method
+func NewSweepDueRequest(server string, params *SweepDueParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/sweep-due")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "controller-id", params.ControllerID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
+	for _, r := range c.RequestEditors {
+		if err := r(ctx, req); err != nil {
+			return err
+		}
+	}
+	for _, r := range additionalEditors {
+		if err := r(ctx, req); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ClientWithResponses builds on ClientInterface to offer response payloads
+type ClientWithResponses struct {
+	ClientInterface
+}
+
+// NewClientWithResponses creates a new ClientWithResponses, which wraps
+// Client with return type handling
+func NewClientWithResponses(server string, opts ...ClientOption) (*ClientWithResponses, error) {
+	client, err := NewClient(server, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &ClientWithResponses{client}, nil
+}
+
+// WithBaseURL overrides the baseURL.
+func WithBaseURL(baseURL string) ClientOption {
+	return func(c *Client) error {
+		newBaseURL, err := url.Parse(baseURL)
+		if err != nil {
+			return err
+		}
+		c.Server = newBaseURL.String()
+		return nil
+	}
+}
+
+// ClientWithResponsesInterface is the interface specification for the client with responses above.
+type ClientWithResponsesInterface interface {
+
+	// AnalyticsWithBodyWithResponse Record site analytics.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /analytics (the `Analytics` operationId).
+	AnalyticsWithBodyWithResponse(ctx context.Context, params *AnalyticsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AnalyticsResponse, error)
+
+	// AnalyticsWithResponse Record site analytics.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /analytics (the `Analytics` operationId).
+	AnalyticsWithResponse(ctx context.Context, params *AnalyticsParams, body AnalyticsJSONRequestBody, reqEditors ...RequestEditorFn) (*AnalyticsResponse, error)
+
+	// AnalyticsPlanWithBodyWithResponse The window to read for each site.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /analytics-plan (the `AnalyticsPlan` operationId).
+	AnalyticsPlanWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AnalyticsPlanResponse, error)
+
+	// AnalyticsPlanWithResponse The window to read for each site.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /analytics-plan (the `AnalyticsPlan` operationId).
+	AnalyticsPlanWithResponse(ctx context.Context, body AnalyticsPlanJSONRequestBody, reqEditors ...RequestEditorFn) (*AnalyticsPlanResponse, error)
+
+	// ClaimWithResponse Lease the next compatible operation.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /claim (the `Claim` operationId).
+	ClaimWithResponse(ctx context.Context, params *ClaimParams, reqEditors ...RequestEditorFn) (*ClaimResponse, error)
+
+	// ConnectionsWithBodyWithResponse Record the connections this controller carries.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /connections (the `Connections` operationId).
+	ConnectionsWithBodyWithResponse(ctx context.Context, params *ConnectionsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ConnectionsResponse, error)
+
+	// ConnectionsWithResponse Record the connections this controller carries.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /connections (the `Connections` operationId).
+	ConnectionsWithResponse(ctx context.Context, params *ConnectionsParams, body ConnectionsJSONRequestBody, reqEditors ...RequestEditorFn) (*ConnectionsResponse, error)
+
+	// ExportWithResponse The contract for one resource.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /export (the `Export` operationId).
+	ExportWithResponse(ctx context.Context, params *ExportParams, reqEditors ...RequestEditorFn) (*ExportResponse, error)
+
+	// GlanceWithBodyWithResponse Record dashboard observations.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /glance (the `Glance` operationId).
+	GlanceWithBodyWithResponse(ctx context.Context, params *GlanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GlanceResponse, error)
+
+	// GlanceWithResponse Record dashboard observations.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /glance (the `Glance` operationId).
+	GlanceWithResponse(ctx context.Context, params *GlanceParams, body GlanceJSONRequestBody, reqEditors ...RequestEditorFn) (*GlanceResponse, error)
+
+	// GlancePlanWithResponse The dashboard panels to refresh.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /glance-plan (the `GlancePlan` operationId).
+	GlancePlanWithResponse(ctx context.Context, params *GlancePlanParams, reqEditors ...RequestEditorFn) (*GlancePlanResponse, error)
+
+	// InventoryWithBodyWithResponse Record one sweep.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /inventory (the `Inventory` operationId).
+	InventoryWithBodyWithResponse(ctx context.Context, params *InventoryParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InventoryResponse, error)
+
+	// InventoryWithResponse Record one sweep.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /inventory (the `Inventory` operationId).
+	InventoryWithResponse(ctx context.Context, params *InventoryParams, body InventoryJSONRequestBody, reqEditors ...RequestEditorFn) (*InventoryResponse, error)
+
+	// MaterialWithResponse Certificate material for one resource.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /material (the `Material` operationId).
+	MaterialWithResponse(ctx context.Context, params *MaterialParams, reqEditors ...RequestEditorFn) (*MaterialResponse, error)
+
+	// PeekWithResponse Read the next compatible operation without leasing it.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /peek (the `Peek` operationId).
+	PeekWithResponse(ctx context.Context, params *PeekParams, reqEditors ...RequestEditorFn) (*PeekResponse, error)
+
+	// RegistryWithResponse The provider declarations the controller acts on.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /registry (the `Registry` operationId).
+	RegistryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*RegistryResponse, error)
+
+	// ReportWithBodyWithResponse Report an operation's result.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /report (the `Report` operationId).
+	ReportWithBodyWithResponse(ctx context.Context, params *ReportParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReportResponse, error)
+
+	// ReportWithResponse Report an operation's result.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /report (the `Report` operationId).
+	ReportWithResponse(ctx context.Context, params *ReportParams, body ReportJSONRequestBody, reqEditors ...RequestEditorFn) (*ReportResponse, error)
+
+	// ScheduleWithResponse Queue the operations the contracts call for.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /schedule (the `Schedule` operationId).
+	ScheduleWithResponse(ctx context.Context, params *ScheduleParams, reqEditors ...RequestEditorFn) (*ScheduleResponse, error)
+
+	// StepsWithBodyWithResponse Record the work one pass could not finish.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /steps (the `Steps` operationId).
+	StepsWithBodyWithResponse(ctx context.Context, params *StepsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StepsResponse, error)
+
+	// StepsWithResponse Record the work one pass could not finish.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /steps (the `Steps` operationId).
+	StepsWithResponse(ctx context.Context, params *StepsParams, body StepsJSONRequestBody, reqEditors ...RequestEditorFn) (*StepsResponse, error)
+
+	// SweepDueWithResponse Whether to sweep now, and why.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /sweep-due (the `SweepDue` operationId).
+	SweepDueWithResponse(ctx context.Context, params *SweepDueParams, reqEditors ...RequestEditorFn) (*SweepDueResponse, error)
+}
+
+type AnalyticsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Acknowledgement
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AnalyticsResponse) GetJSON200() *Acknowledgement {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AnalyticsResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AnalyticsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AnalyticsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AnalyticsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AnalyticsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AnalyticsPlanResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AnalyticsPlan
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AnalyticsPlanResponse) GetJSON200() *AnalyticsPlan {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AnalyticsPlanResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AnalyticsPlanResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AnalyticsPlanResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AnalyticsPlanResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AnalyticsPlanResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ClaimResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Pending
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ClaimResponse) GetJSON200() *Pending {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ClaimResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ClaimResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ClaimResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ClaimResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ClaimResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ConnectionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Acknowledgement
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ConnectionsResponse) GetJSON200() *Acknowledgement {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ConnectionsResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ConnectionsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ConnectionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ConnectionsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ConnectionsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ExportResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Contract
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ExportResponse) GetJSON200() *Contract {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ExportResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ExportResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ExportResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ExportResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ExportResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GlanceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Acknowledgement
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GlanceResponse) GetJSON200() *Acknowledgement {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GlanceResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GlanceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GlanceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GlanceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GlanceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GlancePlanResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *GlancePlan
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GlancePlanResponse) GetJSON200() *GlancePlan {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GlancePlanResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GlancePlanResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GlancePlanResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GlancePlanResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GlancePlanResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type InventoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Acknowledgement
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r InventoryResponse) GetJSON200() *Acknowledgement {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r InventoryResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r InventoryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r InventoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r InventoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r InventoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type MaterialResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Material
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r MaterialResponse) GetJSON200() *Material {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r MaterialResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r MaterialResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r MaterialResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r MaterialResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r MaterialResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PeekResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Pending
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PeekResponse) GetJSON200() *Pending {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PeekResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PeekResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PeekResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PeekResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PeekResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RegistryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ControllerRegistry
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RegistryResponse) GetJSON200() *ControllerRegistry {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RegistryResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RegistryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RegistryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RegistryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RegistryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReportResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Acknowledgement
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReportResponse) GetJSON200() *Acknowledgement {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ReportResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ReportResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReportResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReportResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReportResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ScheduleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Acknowledgement
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ScheduleResponse) GetJSON200() *Acknowledgement {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ScheduleResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ScheduleResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ScheduleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ScheduleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ScheduleResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type StepsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Acknowledgement
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r StepsResponse) GetJSON200() *Acknowledgement {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r StepsResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r StepsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r StepsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r StepsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r StepsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SweepDueResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SweepVerdict
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SweepDueResponse) GetJSON200() *SweepVerdict {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SweepDueResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SweepDueResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SweepDueResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SweepDueResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SweepDueResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// AnalyticsWithBodyWithResponse Record site analytics.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /analytics (the `Analytics` operationId).
+func (c *ClientWithResponses) AnalyticsWithBodyWithResponse(ctx context.Context, params *AnalyticsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AnalyticsResponse, error) {
+	rsp, err := c.AnalyticsWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAnalyticsResponse(rsp)
+}
+
+// AnalyticsWithResponse Record site analytics.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /analytics (the `Analytics` operationId).
+func (c *ClientWithResponses) AnalyticsWithResponse(ctx context.Context, params *AnalyticsParams, body AnalyticsJSONRequestBody, reqEditors ...RequestEditorFn) (*AnalyticsResponse, error) {
+	rsp, err := c.Analytics(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAnalyticsResponse(rsp)
+}
+
+// AnalyticsPlanWithBodyWithResponse The window to read for each site.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /analytics-plan (the `AnalyticsPlan` operationId).
+func (c *ClientWithResponses) AnalyticsPlanWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AnalyticsPlanResponse, error) {
+	rsp, err := c.AnalyticsPlanWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAnalyticsPlanResponse(rsp)
+}
+
+// AnalyticsPlanWithResponse The window to read for each site.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /analytics-plan (the `AnalyticsPlan` operationId).
+func (c *ClientWithResponses) AnalyticsPlanWithResponse(ctx context.Context, body AnalyticsPlanJSONRequestBody, reqEditors ...RequestEditorFn) (*AnalyticsPlanResponse, error) {
+	rsp, err := c.AnalyticsPlan(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAnalyticsPlanResponse(rsp)
+}
+
+// ClaimWithResponse Lease the next compatible operation.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /claim (the `Claim` operationId).
+func (c *ClientWithResponses) ClaimWithResponse(ctx context.Context, params *ClaimParams, reqEditors ...RequestEditorFn) (*ClaimResponse, error) {
+	rsp, err := c.Claim(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseClaimResponse(rsp)
+}
+
+// ConnectionsWithBodyWithResponse Record the connections this controller carries.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /connections (the `Connections` operationId).
+func (c *ClientWithResponses) ConnectionsWithBodyWithResponse(ctx context.Context, params *ConnectionsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ConnectionsResponse, error) {
+	rsp, err := c.ConnectionsWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConnectionsResponse(rsp)
+}
+
+// ConnectionsWithResponse Record the connections this controller carries.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /connections (the `Connections` operationId).
+func (c *ClientWithResponses) ConnectionsWithResponse(ctx context.Context, params *ConnectionsParams, body ConnectionsJSONRequestBody, reqEditors ...RequestEditorFn) (*ConnectionsResponse, error) {
+	rsp, err := c.Connections(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConnectionsResponse(rsp)
+}
+
+// ExportWithResponse The contract for one resource.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /export (the `Export` operationId).
+func (c *ClientWithResponses) ExportWithResponse(ctx context.Context, params *ExportParams, reqEditors ...RequestEditorFn) (*ExportResponse, error) {
+	rsp, err := c.Export(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseExportResponse(rsp)
+}
+
+// GlanceWithBodyWithResponse Record dashboard observations.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /glance (the `Glance` operationId).
+func (c *ClientWithResponses) GlanceWithBodyWithResponse(ctx context.Context, params *GlanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GlanceResponse, error) {
+	rsp, err := c.GlanceWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGlanceResponse(rsp)
+}
+
+// GlanceWithResponse Record dashboard observations.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /glance (the `Glance` operationId).
+func (c *ClientWithResponses) GlanceWithResponse(ctx context.Context, params *GlanceParams, body GlanceJSONRequestBody, reqEditors ...RequestEditorFn) (*GlanceResponse, error) {
+	rsp, err := c.Glance(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGlanceResponse(rsp)
+}
+
+// GlancePlanWithResponse The dashboard panels to refresh.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /glance-plan (the `GlancePlan` operationId).
+func (c *ClientWithResponses) GlancePlanWithResponse(ctx context.Context, params *GlancePlanParams, reqEditors ...RequestEditorFn) (*GlancePlanResponse, error) {
+	rsp, err := c.GlancePlan(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGlancePlanResponse(rsp)
+}
+
+// InventoryWithBodyWithResponse Record one sweep.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /inventory (the `Inventory` operationId).
+func (c *ClientWithResponses) InventoryWithBodyWithResponse(ctx context.Context, params *InventoryParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InventoryResponse, error) {
+	rsp, err := c.InventoryWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInventoryResponse(rsp)
+}
+
+// InventoryWithResponse Record one sweep.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /inventory (the `Inventory` operationId).
+func (c *ClientWithResponses) InventoryWithResponse(ctx context.Context, params *InventoryParams, body InventoryJSONRequestBody, reqEditors ...RequestEditorFn) (*InventoryResponse, error) {
+	rsp, err := c.Inventory(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInventoryResponse(rsp)
+}
+
+// MaterialWithResponse Certificate material for one resource.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /material (the `Material` operationId).
+func (c *ClientWithResponses) MaterialWithResponse(ctx context.Context, params *MaterialParams, reqEditors ...RequestEditorFn) (*MaterialResponse, error) {
+	rsp, err := c.Material(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseMaterialResponse(rsp)
+}
+
+// PeekWithResponse Read the next compatible operation without leasing it.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /peek (the `Peek` operationId).
+func (c *ClientWithResponses) PeekWithResponse(ctx context.Context, params *PeekParams, reqEditors ...RequestEditorFn) (*PeekResponse, error) {
+	rsp, err := c.Peek(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePeekResponse(rsp)
+}
+
+// RegistryWithResponse The provider declarations the controller acts on.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /registry (the `Registry` operationId).
+func (c *ClientWithResponses) RegistryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*RegistryResponse, error) {
+	rsp, err := c.Registry(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRegistryResponse(rsp)
+}
+
+// ReportWithBodyWithResponse Report an operation's result.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /report (the `Report` operationId).
+func (c *ClientWithResponses) ReportWithBodyWithResponse(ctx context.Context, params *ReportParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReportResponse, error) {
+	rsp, err := c.ReportWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReportResponse(rsp)
+}
+
+// ReportWithResponse Report an operation's result.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /report (the `Report` operationId).
+func (c *ClientWithResponses) ReportWithResponse(ctx context.Context, params *ReportParams, body ReportJSONRequestBody, reqEditors ...RequestEditorFn) (*ReportResponse, error) {
+	rsp, err := c.Report(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReportResponse(rsp)
+}
+
+// ScheduleWithResponse Queue the operations the contracts call for.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /schedule (the `Schedule` operationId).
+func (c *ClientWithResponses) ScheduleWithResponse(ctx context.Context, params *ScheduleParams, reqEditors ...RequestEditorFn) (*ScheduleResponse, error) {
+	rsp, err := c.Schedule(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseScheduleResponse(rsp)
+}
+
+// StepsWithBodyWithResponse Record the work one pass could not finish.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /steps (the `Steps` operationId).
+func (c *ClientWithResponses) StepsWithBodyWithResponse(ctx context.Context, params *StepsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StepsResponse, error) {
+	rsp, err := c.StepsWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStepsResponse(rsp)
+}
+
+// StepsWithResponse Record the work one pass could not finish.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /steps (the `Steps` operationId).
+func (c *ClientWithResponses) StepsWithResponse(ctx context.Context, params *StepsParams, body StepsJSONRequestBody, reqEditors ...RequestEditorFn) (*StepsResponse, error) {
+	rsp, err := c.Steps(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStepsResponse(rsp)
+}
+
+// SweepDueWithResponse Whether to sweep now, and why.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /sweep-due (the `SweepDue` operationId).
+func (c *ClientWithResponses) SweepDueWithResponse(ctx context.Context, params *SweepDueParams, reqEditors ...RequestEditorFn) (*SweepDueResponse, error) {
+	rsp, err := c.SweepDue(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSweepDueResponse(rsp)
+}
+
+// ParseAnalyticsResponse parses an HTTP response from a AnalyticsWithResponse call
+func ParseAnalyticsResponse(rsp *http.Response) (*AnalyticsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AnalyticsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Acknowledgement
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAnalyticsPlanResponse parses an HTTP response from a AnalyticsPlanWithResponse call
+func ParseAnalyticsPlanResponse(rsp *http.Response) (*AnalyticsPlanResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AnalyticsPlanResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AnalyticsPlan
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseClaimResponse parses an HTTP response from a ClaimWithResponse call
+func ParseClaimResponse(rsp *http.Response) (*ClaimResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ClaimResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Pending
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseConnectionsResponse parses an HTTP response from a ConnectionsWithResponse call
+func ParseConnectionsResponse(rsp *http.Response) (*ConnectionsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ConnectionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Acknowledgement
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseExportResponse parses an HTTP response from a ExportWithResponse call
+func ParseExportResponse(rsp *http.Response) (*ExportResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ExportResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Contract
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGlanceResponse parses an HTTP response from a GlanceWithResponse call
+func ParseGlanceResponse(rsp *http.Response) (*GlanceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GlanceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Acknowledgement
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGlancePlanResponse parses an HTTP response from a GlancePlanWithResponse call
+func ParseGlancePlanResponse(rsp *http.Response) (*GlancePlanResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GlancePlanResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest GlancePlan
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseInventoryResponse parses an HTTP response from a InventoryWithResponse call
+func ParseInventoryResponse(rsp *http.Response) (*InventoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &InventoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Acknowledgement
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseMaterialResponse parses an HTTP response from a MaterialWithResponse call
+func ParseMaterialResponse(rsp *http.Response) (*MaterialResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &MaterialResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Material
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePeekResponse parses an HTTP response from a PeekWithResponse call
+func ParsePeekResponse(rsp *http.Response) (*PeekResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PeekResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Pending
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRegistryResponse parses an HTTP response from a RegistryWithResponse call
+func ParseRegistryResponse(rsp *http.Response) (*RegistryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RegistryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ControllerRegistry
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReportResponse parses an HTTP response from a ReportWithResponse call
+func ParseReportResponse(rsp *http.Response) (*ReportResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReportResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Acknowledgement
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseScheduleResponse parses an HTTP response from a ScheduleWithResponse call
+func ParseScheduleResponse(rsp *http.Response) (*ScheduleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ScheduleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Acknowledgement
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseStepsResponse parses an HTTP response from a StepsWithResponse call
+func ParseStepsResponse(rsp *http.Response) (*StepsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &StepsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Acknowledgement
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSweepDueResponse parses an HTTP response from a SweepDueWithResponse call
+func ParseSweepDueResponse(rsp *http.Response) (*SweepDueResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SweepDueResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SweepVerdict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
 }

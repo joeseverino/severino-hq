@@ -3,6 +3,9 @@ package: runtime
 output: ../runtime/bridge.gen.go
 generate:
   models: true
+  # Request builders for every operation: the bridge's paths and parameters
+  # reach the controller as code, never as strings it spells itself.
+  client: true
 output-options:
   skip-prune: true
   prefer-skip-optional-pointer: true

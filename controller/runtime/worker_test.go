@@ -15,7 +15,7 @@ import (
 )
 
 type bridgeCall struct {
-	Args    []string
+	Action  string
 	Payload any
 }
 type fakeBridge struct {
@@ -25,17 +25,17 @@ type fakeBridge struct {
 	Pending   []Pending
 }
 
-func (b *fakeBridge) Call(_ context.Context, args []string, payload, into any) error {
-	b.Calls = append(b.Calls, bridgeCall{append([]string{}, args...), payload})
-	if err := b.Fail[args[0]]; err != nil {
+func (b *fakeBridge) call(action string, payload, into any) error {
+	b.Calls = append(b.Calls, bridgeCall{action, payload})
+	if err := b.Fail[action]; err != nil {
 		return err
 	}
-	result := b.Responses[args[0]]
-	if args[0] == "claim" && len(b.Pending) > 0 {
+	result := b.Responses[action]
+	if action == "claim" && len(b.Pending) > 0 {
 		result = b.Pending[0]
 		b.Pending = b.Pending[1:]
 	}
-	if result == nil && args[0] == "sweep-due" {
+	if result == nil && action == "sweep-due" {
 		result = SweepVerdict{OK: true, Due: true, Carry: []string{}, Forced: []ForcedRead{}, OnlyKinds: []ResourceKind{}, Reason: "Nothing has been swept yet."}
 	}
 	if result == nil {
@@ -50,10 +50,47 @@ func (b *fakeBridge) Call(_ context.Context, args []string, payload, into any) e
 	}
 	return json.Unmarshal(data, into)
 }
+func (b *fakeBridge) Peek(context.Context, []string) (pending Pending, err error) {
+	return pending, b.call("peek", nil, &pending)
+}
+func (b *fakeBridge) Claim(context.Context, string, []string) (pending Pending, err error) {
+	return pending, b.call("claim", nil, &pending)
+}
+func (b *fakeBridge) Material(context.Context, string) (material Material, err error) {
+	return material, b.call("material", nil, &material)
+}
+func (b *fakeBridge) Report(_ context.Context, _, _ string, report ControllerReport) error {
+	return b.call("report", report, nil)
+}
+func (b *fakeBridge) Schedule(context.Context, string) error { return b.call("schedule", nil, nil) }
+func (b *fakeBridge) SweepDue(context.Context, string) (verdict SweepVerdict, err error) {
+	return verdict, b.call("sweep-due", nil, &verdict)
+}
+func (b *fakeBridge) GlancePlan(context.Context, string) (plan GlancePlan, err error) {
+	return plan, b.call("glance-plan", nil, &plan)
+}
+func (b *fakeBridge) Glance(_ context.Context, _ string, observations GlanceObservations) error {
+	return b.call("glance", observations, nil)
+}
+func (b *fakeBridge) Connections(_ context.Context, _ string, records []ConnectionRecord) error {
+	return b.call("connections", records, nil)
+}
+func (b *fakeBridge) Inventory(_ context.Context, _ string, inventory Inventory) error {
+	return b.call("inventory", inventory, nil)
+}
+func (b *fakeBridge) AnalyticsPlan(_ context.Context, sites []AnalyticsSiteIdentity) (plan AnalyticsPlan, err error) {
+	return plan, b.call("analytics-plan", sites, &plan)
+}
+func (b *fakeBridge) Analytics(_ context.Context, _ string, readings AnalyticsReadings) error {
+	return b.call("analytics", readings, nil)
+}
+func (b *fakeBridge) Steps(_ context.Context, _ string, failures []StepFailure) error {
+	return b.call("steps", failures, nil)
+}
 func (b *fakeBridge) actions() []string {
 	a := []string{}
 	for _, c := range b.Calls {
-		a = append(a, c.Args[0])
+		a = append(a, c.Action)
 	}
 	return a
 }
@@ -159,7 +196,7 @@ func TestProviderFailureReportsGenerationAndStillSweeps(t *testing.T) {
 		t.Fatalf("%d %v %#v", code, err, p.Apply)
 	}
 	for _, call := range b.Calls {
-		if call.Args[0] == "report" {
+		if call.Action == "report" {
 			report, ok := call.Payload.(ControllerReport)
 			if !ok || report.Success != false || report.ObservedGeneration != int64(7) {
 				t.Fatalf("%#v", call.Payload)
@@ -181,7 +218,7 @@ func TestWrappedProviderFailureIsReportedWithItsContext(t *testing.T) {
 		t.Fatalf("%d %v", code, err)
 	}
 	for _, call := range b.Calls {
-		if call.Args[0] == "report" {
+		if call.Action == "report" {
 			report := call.Payload.(ControllerReport)
 			if report.Success || report.Message != "reconcile rewrite: provider answered 403" {
 				t.Fatalf("%#v", report)
@@ -247,7 +284,7 @@ func TestAnalyticsPlanContainsNoProviderAccountIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, call := range b.Calls {
-		if call.Args[0] == "analytics-plan" {
+		if call.Action == "analytics-plan" {
 			want := []AnalyticsSiteIdentity{{ConnectionRef: "example", SiteTag: "site"}}
 			if !reflect.DeepEqual(call.Payload, want) {
 				t.Fatalf("%#v", call.Payload)

@@ -17,8 +17,19 @@ readonly image="${1:?usage: deploy-image.sh IMAGE}"
 readonly app_dir="${SEVERINO_HQ_APP_DIR:-/opt/apps/severino-hq}"
 readonly lib_dir="${SEVERINO_HQ_LIB_DIR:-/usr/local/lib/severino-hq}"
 readonly sync_program="${SEVERINO_HQ_SBIN_DIR:-/usr/local/sbin}/severino-hq-sync-scripts"
-readonly controller_timer="severino-hq-controller.timer"
-readonly content_timer="severino-hq-content-sync.timer"
+# Every unit that starts work needing the root-owned tree and the running
+# image to be one release, or that acts on the web container: the controller's
+# timer and the path unit HQ's doorbell fires, the content sync, the secret
+# refresh, which restarts the web container when its environment changed, and
+# the check of the tree against the image. Each is held from before the image
+# is replaced until the release has installed itself, so nothing of the
+# previous release is started against the new image, and nothing restarts the
+# container while its health is being read.
+readonly held_units="severino-hq-controller.timer severino-hq-controller.path severino-hq-content-sync.timer severino-hq-secrets.timer severino-hq-script-drift.timer"
+# What those units start. A run already in flight is given this long to end
+# against the release it began with before the image is replaced.
+readonly held_services="severino-hq-controller.service severino-hq-secrets.service"
+readonly drain_seconds="${SEVERINO_HQ_DRAIN_SECONDS:-180}"
 readonly log_dir="${SEVERINO_HQ_LOG_DIR:-/var/log/severino-hq}"
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -225,14 +236,12 @@ private_compose() {
 previous_image="$(
     docker inspect --format '{{.Config.Image}}' severino-hq 2>/dev/null || true
 )"
-controller_was_active=0
-content_was_active=0
-if systemctl is-active --quiet "${controller_timer}"; then
-    controller_was_active=1
-fi
-if systemctl is-active --quiet "${content_timer}"; then
-    content_was_active=1
-fi
+held_active=""
+for unit in ${held_units}; do
+    if systemctl is-active --quiet "${unit}"; then
+        held_active="${held_active} ${unit}"
+    fi
+done
 
 # Reclaim before pulling. The currently running image is referenced and cannot
 # be pruned, so it remains the rollback target while stale releases are removed.
@@ -246,18 +255,32 @@ if [ "${available_kb}" -lt 524288 ]; then
     exit 1
 fi
 
-systemctl stop \
-    "${controller_timer}" \
-    "${content_timer}" 2>/dev/null || true
-
+# Unquoted on purpose: the list is this script's own words, one unit each.
+# shellcheck disable=SC2086
+hold_units() { systemctl stop ${held_units} 2>/dev/null || true; }
+# Exactly the units that were active before the deploy, and no others.
 restore_timers() {
-    if [ "${controller_was_active}" -eq 1 ]; then
-        systemctl start "${controller_timer}"
-    fi
-    if [ "${content_was_active}" -eq 1 ]; then
-        systemctl start "${content_timer}"
-    fi
+    for unit in ${held_active}; do
+        systemctl start "${unit}"
+    done
 }
+# Stopping a timer or a path unit starts nothing new; it does not end a run it
+# already started. `is-active` is true of a oneshot only while it runs.
+drain_runs() {
+    waited=0
+    while [ "${waited}" -lt "${drain_seconds}" ]; do
+        running=0
+        for unit in ${held_services}; do
+            if systemctl is-active --quiet "${unit}"; then running=1; fi
+        done
+        [ "${running}" -eq 1 ] || return 0
+        sleep 5
+        waited=$((waited + 5))
+    done
+    echo "A run started before the deploy is still going; it fails against the new image and the next one retries." >&2
+}
+hold_units
+drain_runs
 
 controller_backup=""
 sync_backup=""
@@ -284,7 +307,7 @@ rollback() {
     SEVERINO_IMAGE="${previous_image}" private_compose "Restore" restore up -d --no-build app
     restore_root_tree
     restore_timers
-    echo "Previous image and prior controller timer state restored." >&2
+    echo "Previous image and the held units restored." >&2
 }
 
 # Root-owned and private: root is about to act on what lands here, so nothing
@@ -298,7 +321,7 @@ if [ -x "${lib_dir}/scripts/run-private.sh" ]; then
 fi
 
 if ! SEVERINO_IMAGE="${image}" private_compose "Image pull" pull pull app; then
-    echo "Image pull failed; restoring prior controller timer state." >&2
+    echo "Image pull failed; restoring the held units." >&2
     restore_timers
     exit 1
 fi
@@ -312,7 +335,7 @@ fi
 if ! compose_cid="$(docker create --pull never "${image}" true)" \
     || ! docker cp "${compose_cid}:/app/docker-compose.yml" "${compose_stage}/next.yml" \
     || ! docker cp "${compose_cid}:/app/scripts/severino-hq-sync-scripts" "${compose_stage}/sync"; then
-    echo "Could not read the release's files from ${image}; restoring prior controller timer state." >&2
+    echo "Could not read the release's files from ${image}; restoring the held units." >&2
     restore_timers
     exit 1
 fi
@@ -353,13 +376,14 @@ for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
             if [ "${app_env_host}" != "${checkout_env}" ]; then
                 rm -f "${checkout_env}"
             fi
+            # The installer enables every shipped timer and path; this puts
+            # back whatever was held and is not one of those.
+            restore_timers
             echo "Deployed healthy image ${image} with an active controller."
             exit 0
         fi
         echo "Controller activation failed; rolling back application image." >&2
-        systemctl stop \
-            "${controller_timer}" \
-            "${content_timer}" 2>/dev/null || true
+        hold_units
         rollback
         exit 1
     fi

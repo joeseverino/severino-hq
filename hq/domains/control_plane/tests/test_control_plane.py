@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import json
 from datetime import timedelta
-from io import StringIO
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -31,6 +28,7 @@ from hq.platform.application.resource_operations import (
 )
 from hq.platform.application.security import cli_principal, mcp_principal
 
+from . import bridge_client
 from ..models import (
     ManagedResource,
     OperationRequest,
@@ -970,49 +968,32 @@ class OperationPolicyTests(TestCase):
             principal=cli_principal(),
             current_key=self.resource.key,
         )
-        claimed = StringIO()
-        call_command(
-            "infrastructure_controller",
-            "claim",
-            controller_id="example-controller",
-            stdout=claimed,
-        )
-        claim_payload = json.loads(claimed.getvalue())
+        claim_payload = bridge_client.call("claim", controller_id="example-controller")
         self.assertEqual(claim_payload["operation"]["id"], queued["operation"]["id"])
         self.assertEqual(
             claim_payload["resource"]["spec"]["certificate_name"],
             "example",
         )
 
-        reported = StringIO()
-        # On standard input, as the controller sends it.
-        report = json.dumps(
-                {
-                    "success": True,
-                    "observed_generation": self.resource.generation,
-                    "status": {
-                        "not_after": (timezone.now() + timedelta(days=89)).isoformat()
-                    },
-                    "conditions": [
-                        {"type": "Ready", "status": True, "reason": "Verified"}
-                    ],
-                    "message": "All consumers verified.",
-                }
-            )
-        with patch("sys.stdin", StringIO(report)):
-            call_command(
-                "infrastructure_controller",
-                "report",
-                controller_id="example-controller",
-                operation=queued["operation"]["id"],
-                payload="-",
-                stdout=reported,
-            )
+        reported = bridge_client.call(
+            "report",
+            {
+                "success": True,
+                "observed_generation": self.resource.generation,
+                "status": {
+                    "not_after": (timezone.now() + timedelta(days=89)).isoformat()
+                },
+                "conditions": [
+                    {"type": "Ready", "status": True, "reason": "Verified"}
+                ],
+                "message": "All consumers verified.",
+            },
+            controller_id="example-controller",
+            operation=queued["operation"]["id"],
+        )
         self.resource.refresh_from_db()
         self.assertEqual(self.resource.observed_generation, self.resource.generation)
-        self.assertEqual(
-            json.loads(reported.getvalue())["operation"]["state"], "succeeded"
-        )
+        self.assertEqual(reported["operation"]["state"], "succeeded")
 
 
 class DeliveryTargetConfirmationTests(TestCase):

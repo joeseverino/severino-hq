@@ -24,9 +24,9 @@ REFERENCE = "sentinel-connection"
 
 # Every variable the launcher may set: a path, a name, an image or a nonce.
 LAUNCH_VARIABLES = {
-    "HQ_CONTROLLER_RUN", "HQ_IN_PROCESS", "HQ_MANAGE_PY", "HQ_CONTROLLER_CONNECTIONS",
+    "HQ_CONTROLLER_RUN", "HQ_BRIDGE_SOCKET", "HQ_CONTROLLER_CONNECTIONS",
     "HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_CONTROLLER_IMAGE",
-    "SEVERINO_HQ_SOURCE_REPOSITORY", "SEVERINO_REGISTRY_DOORBELL", "HQ_CONTROLLER_CA_FILE",
+    "SEVERINO_HQ_SOURCE_REPOSITORY", "HQ_CONTROLLER_CA_FILE",
     "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK", "SEVERINO_HOST_FIREWALL",
 }
 
@@ -260,6 +260,8 @@ case "$1" in
     inspect)
         case "$*" in
             *Config.Image*) echo example-image ;;
+            *Config.Env*) printf '%s\\n' ${BRIDGE_ENV-PATH=/usr/bin SEVERINO_BRIDGE_SOCKET=/run/hq-bridge/bridge.sock} ;;
+            *.Type*) printf '%s\\n' "/data example-volume" "${BRIDGE_MOUNT-/run/hq-bridge example-bridge}" ;;
             *Mounts*) echo example-volume ;;
             *) echo https://github.com/example/example ;;
         esac ;;
@@ -315,9 +317,9 @@ esac
         # The run's staging is gone when the launcher returns.
         self.assertEqual(list(self.runtime.glob("run.*")), [])
 
-    def test_the_application_environment_is_copied_under_the_shared_lock(self):
-        # The renderer rewrites it in place, truncating first, under the
-        # exclusive lock: a copy taken outside the shared one can be cut short.
+    def test_the_document_is_copied_under_the_shared_lock(self):
+        # The renderer replaces it under the exclusive lock: a copy taken
+        # outside the shared one could mix two generations.
         self.stub("flock", 'echo lock >>"$FIXTURES/order"\n')
         install = (self.bin / "install").read_text().replace(
             "set -eu\n", 'set -eu\necho "install $*" >>"$FIXTURES/order"\n', 1)
@@ -326,12 +328,58 @@ esac
         self.assertEqual(result.returncode, 0, result.stderr)
         order = (self.root / "order").read_text().splitlines()
         copies = [i for i, line in enumerate(order)
-                  if line.startswith("install ") and line.endswith("/env") and "severino_hq_env" in line]
+                  if line.startswith("install ") and line.endswith("/connections.json")]
         self.assertEqual(len(copies), 1, order)
         self.assertLess(order.index("lock"), copies[0])
         script = LAUNCHER.read_text()
-        self.assertLess(script.index("controller_ssh_lock shared"), script.index('"${app_env}" "${runtime_app_env}"'))
-        self.assertLess(script.index('"${app_env}" "${runtime_app_env}"'), script.index("exec 8>&-"))
+        self.assertLess(script.index("controller_ssh_lock shared"), script.index('"${controller_connections}" "${runtime_connections}"'))
+        self.assertLess(script.index('"${controller_connections}" "${runtime_connections}"'), script.index("exec 8>&-"))
+
+    def test_nothing_of_hqs_own_is_given_to_the_container(self):
+        # HQ's database and application environment stay with HQ: the
+        # container that holds every provider credential gets neither.
+        (self.runtime / "web" / "severino_hq_env").write_text("DJANGO_SECRET_KEY='sentinel-application-secret'\n")
+        result = self.launch("--apply")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        launched = "\n".join(self.arguments())
+        # Nor the doorbells: HQ rings them itself, from the process that records the sweep.
+        for absent in ("target=/data", "severino_hq_env", "example-volume", "sentinel-application-secret",
+                       "doorbell", "source=/run/severino-hq,", str(self.app)):
+            with self.subTest(absent=absent):
+                self.assertNotIn(absent, launched.replace(f"{self.app}/secrets/acme", ""))
+        self.assertEqual(list(self.runtime.glob("run.*")), [])
+
+    def test_the_bridge_is_the_web_containers_socket_on_its_volume_read_only(self):
+        result = self.launch("--apply")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        arguments = self.arguments()
+        self.assertIn("HQ_BRIDGE_SOCKET=/run/hq-bridge/bridge.sock", arguments)
+        self.assertIn("type=volume,source=example-bridge,target=/run/hq-bridge,readonly", arguments)
+        # One way to HQ: nothing else names a bridge, a socket or a container to exec into.
+        self.assertEqual([a for a in arguments if "bridge" in a.lower()], [
+            "type=volume,source=example-bridge,target=/run/hq-bridge,readonly",
+            "HQ_BRIDGE_SOCKET=/run/hq-bridge/bridge.sock",
+        ])
+        self.assertFalse([a for a in arguments if "docker.sock" in a])
+
+    def test_a_web_container_that_serves_no_bridge_stops_the_launch(self):
+        for name, change, message in (
+            ("no socket named", {"BRIDGE_ENV": "PATH=/usr/bin"}, "names no socket"),
+            ("an empty setting", {"BRIDGE_ENV": "SEVERINO_BRIDGE_SOCKET="}, "names no socket"),
+            ("a relative path", {"BRIDGE_ENV": "SEVERINO_BRIDGE_SOCKET=bridge.sock"}, "names no socket"),
+            ("a path that climbs", {"BRIDGE_ENV": "SEVERINO_BRIDGE_SOCKET=/run/hq-bridge/../x/bridge.sock"}, "not a plain path"),
+            ("a path with an option in it", {"BRIDGE_ENV": "SEVERINO_BRIDGE_SOCKET=/run/x,readonly=false/b.sock"}, "not a plain path"),
+            ("a directory that is no volume", {"BRIDGE_MOUNT": "/run/elsewhere example-bridge"}, "not a volume"),
+            ("no volume at all", {"BRIDGE_MOUNT": ""}, "not a volume"),
+        ):
+            with self.subTest(name=name):
+                original = self.env.copy()
+                self.env.update(change)
+                result = self.launch("--apply")
+                self.env = original
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+                self.assertFalse((self.root / "docker-args").exists())
 
     def test_the_launcher_never_sources_or_forwards_connection_values(self):
         script = LAUNCHER.read_text()

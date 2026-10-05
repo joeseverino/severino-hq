@@ -461,10 +461,9 @@ class ControllerStandingTests(TestCase):
         self.assertTrue(cadence.controller_standing(later).silent)
 
     def test_the_arrival_is_noted_on_the_first_call_every_applying_run_makes(self):
-        from django.core.management import call_command
-        from io import StringIO
+        from hq.domains.control_plane.tests import bridge_client
 
-        call_command("infrastructure_controller", "glance-plan", "--controller-id", "test", stdout=StringIO())
+        bridge_client.call("glance-plan", controller_id="test")
 
         self.assertTrue(cadence.controller_standing().known)
 

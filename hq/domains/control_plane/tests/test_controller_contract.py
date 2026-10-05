@@ -1,21 +1,18 @@
 """The controller bridge honours its OpenAPI contract.
 
 controller/api/hq-controller.openapi.json is the one description of every
-bridge message; the Go controller's types are generated from it. Each test
-here runs a bridge action through the management command, exactly as the
-controller does, and validates its output against that action's response
+bridge message; the Go controller's types and client are generated from it.
+Each test here runs a bridge action through the bridge application, as a
+request on its socket, and validates its answer against that action's response
 schema, and every payload against its request schema. A field changed on
 either side without the contract fails here or in the Go build.
 """
 
 from __future__ import annotations
 
-import json
-from io import StringIO
 from typing import get_args
 from unittest.mock import patch
 
-from django.core.management import call_command
 from django.test import TestCase
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
@@ -30,13 +27,14 @@ from hq.platform.application.resource_operations import (
 )
 from hq.platform.application.security import cli_principal
 from hq.domains.control_plane.bridge_contract import contract, keyword, limit
-from hq.domains.control_plane.management.commands.infrastructure_controller import ACTIONS
+from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.domains.control_plane.models import DashboardConfiguration, ManagedResource
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
 from hq.domains.control_plane.provider_adapters.tls import TLSConsumer
 from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS
 
+from . import bridge_client
 from .test_control_plane import certificate_spec, declare_targets
 
 CONTRACT_URI = "urn:hq:controller-bridge"
@@ -67,13 +65,7 @@ def bridge(action: str, payload: object = None, **options: object) -> dict:
             _pointer(action, "requestBody", "content", "application/json", "schema"),
             payload,
         )
-        options["payload"] = "-"
-    out = StringIO()
-    with patch(
-        "sys.stdin", StringIO(json.dumps(payload) if payload is not None else "")
-    ):
-        call_command("infrastructure_controller", action, stdout=out, **options)
-    result = json.loads(out.getvalue())
+    result = bridge_client.call(action, payload, **options)
     _validate(
         _pointer(action, "responses", "200", "content", "application/json", "schema"),
         result,

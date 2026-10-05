@@ -35,7 +35,7 @@ func TestActionRefusalTextIsCappedInTheReport(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, call := range b.Calls {
-		if call.Args[0] != "report" {
+		if call.Action != "report" {
 			continue
 		}
 		report := call.Payload.(ControllerReport)

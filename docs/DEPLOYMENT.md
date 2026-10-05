@@ -69,7 +69,9 @@ controller service requires a root-owned 0700 directory and a root-owned 0400
 file, separate from the web-writable doorbell directory.
 `scripts/run-controller.sh` copies the document into the run's private
 directory, bind-mounts it read-only into a short-lived controller container
-running from the exact deployed HQ image, and passes only its path. No provider
+running from the exact deployed HQ image, and passes only its path. That
+container is given the bridge socket's volume read-only and nothing else of
+HQ's: not its database, and not its application environment. No provider
 credential is a container environment variable, so none is in `docker inspect`
 or the container's on-disk configuration. The document is never mounted into
 the HQ web container. Provider passwords are never copied into the
@@ -299,8 +301,51 @@ image and the compose file it was started with, starts the replacement under the
 compose file copied out of that verified image (so a compose change takes effect
 in the same deploy), and restores both the previous image and its compose file
 automatically if the exact SHA-tagged replacement does not become healthy or
-its controller cannot pass activation. After rollback,
-the controller remains stopped for explicit operator review.
+its controller cannot pass activation. After rollback, the units it held are
+started again as they were.
+
+#### What a deploy holds, and when the bridge is there
+
+The controller reaches HQ over a Unix socket the web container serves
+(`SEVERINO_BRIDGE_SOCKET` in `docker-compose.yml`, in the `severino_bridge`
+volume). The socket exists once the web process has started and before it
+answers its health check, and it is gone while the container is stopped or
+being replaced. A controller pass in that gap fails with the reason and the
+next one runs. The order of a deploy keeps a pass out of the gap:
+
+1. `deploy-image.sh` stops every unit that starts release work by itself: the
+   controller's timer and its path unit, the content sync, the secret refresh
+   and the root-tree check. It then waits up to three minutes for a controller
+   run or a secret refresh already in flight to end against the release it
+   began with.
+2. It pulls the image and replaces the web container under the new release's
+   compose file. The bridge of the previous release is gone from here.
+3. The new container migrates, starts, binds the socket and turns healthy. The
+   bridge of the new release is there from here.
+4. The new release's sync replaces the root-owned tree, and its installer
+   runs the controller preflight: the new launcher starts the new controller
+   against the new bridge, in plan mode. This is the first pass of the release,
+   and a bridge it cannot reach fails the deploy and rolls it back.
+5. The installer enables every shipped timer and path unit, and the deploy
+   starts whatever else it held. The first applying pass follows, from the
+   timer or the next doorbell.
+
+A unit that was not active before the deploy is not started by it. On any
+failure the previous image, compose file and root tree are put back before
+the held units are started, so the previous launcher only ever meets the
+previous image.
+
+A release is installed by the deploy script of the release before it. A
+release whose launcher and image must match (a change to how the controller
+reaches HQ is one) is therefore safe only if the script that deploys it holds
+the units above; on a host whose installed script does not, stop
+`severino-hq-controller.path` and `severino-hq-controller.timer` by hand for
+that one deploy. The installer starts them again.
+
+The bridge needs nothing on the host: the volume is created by compose, takes
+its owner and mode from the image, and persists across reboots. HQ refuses to
+start if the socket's directory is not its account's alone, which fails the
+health check and rolls the deploy back.
 
 ### A.4 Build & run
 

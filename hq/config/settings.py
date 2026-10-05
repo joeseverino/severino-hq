@@ -737,6 +737,10 @@ SEVERINO_REQUEST_PATH_SECONDS = env_int("SEVERINO_REQUEST_PATH_SECONDS", 300)
 SEVERINO_CONTROLLER_DOORBELL = os.environ.get("SEVERINO_CONTROLLER_DOORBELL", "")
 SEVERINO_REGISTRY_DOORBELL = os.environ.get("SEVERINO_REGISTRY_DOORBELL", "")
 SEVERINO_ACTIVITY_MARKER = os.environ.get("SEVERINO_ACTIVITY_MARKER", "")
+# The Unix socket the controller bridge is served on, in a directory only this
+# account can enter. Unset, the process serves no bridge; set, it serves one or
+# does not start.
+SEVERINO_BRIDGE_SOCKET = os.environ.get("SEVERINO_BRIDGE_SOCKET", "")
 
 # Extra dashboard links, as a JSON list of {label, sub, href}. One deployment's
 # status page is a fact about that deployment; the consoles HQ can reach are

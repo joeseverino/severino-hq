@@ -40,15 +40,3 @@ func TestChildEnvironmentCarriesNoCredential(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 }
-
-func TestWithoutConnectionsDropsEveryConnectionsValues(t *testing.T) {
-	env := Environment{
-		"DJANGO_SECRET_KEY": "k", "NPM_CONNECTION_REF": "proxy", "NPM_PASSWORD": "synthetic",
-		"OP_SERVICE_ACCOUNT_TOKEN": "t", "HQ_MANAGE_PY": "/app/manage.py",
-	}
-	got := env.WithoutConnections()
-	slices.Sort(got)
-	if !slices.Equal(got, []string{"DJANGO_SECRET_KEY=k", "HQ_MANAGE_PY=/app/manage.py"}) {
-		t.Fatalf("%v", got)
-	}
-}

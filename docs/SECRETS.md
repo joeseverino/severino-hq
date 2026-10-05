@@ -65,6 +65,15 @@ exception and stay out of that vault; see "Minting observer credentials".
 - The certificate writer runs `op` with its service-account token in that one
   child's environment, inside the controller container. It still requires
   cloud access.
+- The controller reaches HQ over one Unix socket, which HQ's web process
+  serves and nothing else listens on. No credential crosses it in either
+  direction: HQ answers with declarations and queued work and is sent readings
+  and results. The socket's directory is a volume only the web account can
+  enter, mounted read-only into the controller's container; each side checks
+  the directory, the socket and the peer's uid before a byte is exchanged
+  (`docs/APPLICATION_ARCHITECTURE.md`). The controller's container is given
+  neither HQ's database nor its application environment, so the process that
+  holds every provider credential holds none of HQ's, and the reverse.
 
 Connect needs outbound cloud synchronization. Cached availability does not mean
 revocation is instantaneous during a disconnection. Monitor synchronization age
