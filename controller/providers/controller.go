@@ -285,9 +285,9 @@ func (c *Controller) providerOf(kind string) string {
 
 // hasSource is whether anything this controller holds can read the kind.
 func (c *Controller) hasSource(kind string, connected map[runtime.ConnectionProvider]bool) bool {
-	if runtime.ResourceKind(kind) == runtime.ResourceKindGitHubProfile {
-		// Read without a credential: the accounts HQ names are the source.
-		return len(c.Profiles.Accounts) > 0
+	held, local := c.held[kind]
+	if local && held.only {
+		return held.has()
 	}
 	var needs []runtime.ConnectionProvider
 	if provider, ok := c.Declared.Observations[kind]; ok {
@@ -306,15 +306,7 @@ func (c *Controller) hasSource(kind string, connected map[runtime.ConnectionProv
 			return true
 		}
 	}
-	switch runtime.ResourceKind(kind) {
-	case runtime.ResourceKindTailscaleDevice:
-		return c.Env["SEVERINO_TAILNET_STATUS"] != ""
-	case runtime.ResourceKindHostFirewall:
-		return c.Env["SEVERINO_HOST_FIREWALL"] != ""
-	case runtime.ResourceKindHostRenderStatus:
-		return c.Env[renderStatusEnv] != ""
-	}
-	return false
+	return local && held.has()
 }
 
 // readKind is one kind's report: its records and any parts refused while they

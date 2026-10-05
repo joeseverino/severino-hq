@@ -22,11 +22,10 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hq.config.settings")
 django_application = get_asgi_application()
 # Wrapped, because this mount sits above the Django stack and so never reaches
 # the middleware that refuses untrusted callers everywhere else.
+# No compressor: the image build compressed each asset once and the mount sends
+# that copy.
 static_application = TrustedNetworkASGI(
-    GZipMiddleware(
-        CachedStaticFiles(directory=settings.STATIC_ROOT, check_dir=False),
-        minimum_size=500,
-    )
+    CachedStaticFiles(directory=settings.STATIC_ROOT, check_dir=False)
 )
 # LowercaseHeaders inside the compressor, not outside it: the compressor has to
 # see names it can match, and by the time the response leaves it the damage
@@ -113,8 +112,7 @@ async def lifespan(app):
 application = Starlette(
     routes=[
         Mount("/mcp", app=mcp_application),
-        # Serve collected assets on the native async path. WhiteNoise remains
-        # the WSGI fallback, but its synchronous iterator never reaches Uvicorn.
+        # Collected assets, on the native async path and before the Django stack.
         Mount(settings.STATIC_URL.rstrip("/"), app=static_application),
         Mount("/", app=compressed_django_application),
     ],

@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"errors"
+	"io"
+	"mime"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -135,5 +137,94 @@ func TestRefusalKeepsItsBody(t *testing.T) {
 	var refused *ProviderError
 	if !errors.As(err, &refused) || refused.HTTPStatus != 400 || !strings.Contains(string(refused.Body), "valid IPv4 address") {
 		t.Fatalf("refusal = %#v", err)
+	}
+}
+
+// The upload a provider receives for plain names is exactly the documented
+// multipart/form-data framing: each part's disposition, its PEM type, its
+// bytes, in order.
+func TestMultipartIsTheDocumentedFraming(t *testing.T) {
+	parts := Multipart{
+		{Field: "certificate", Filename: "certificate.pem", Content: []byte("leaf\n")},
+		{Field: "certificate_key", Filename: "certificate_key.pem", Content: []byte("key\n")},
+	}
+	body, contentType, err := parts.encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil || mediaType != "multipart/form-data" || params["boundary"] == "" {
+		t.Fatalf("content type %q", contentType)
+	}
+	boundary := params["boundary"]
+	want := "--" + boundary + "\r\n" +
+		"Content-Disposition: form-data; name=\"certificate\"; filename=\"certificate.pem\"\r\n" +
+		"Content-Type: application/x-pem-file\r\n\r\n" +
+		"leaf\n\r\n" +
+		"--" + boundary + "\r\n" +
+		"Content-Disposition: form-data; name=\"certificate_key\"; filename=\"certificate_key.pem\"\r\n" +
+		"Content-Type: application/x-pem-file\r\n\r\n" +
+		"key\n\r\n" +
+		"--" + boundary + "--\r\n"
+	if string(body) != want {
+		t.Fatalf("body:\n%q\nwant:\n%q", body, want)
+	}
+}
+
+// A name that holds a quote, a backslash or a line break stays inside its
+// own header: the receiver reads back the names and bytes that were given,
+// and no part the caller did not send.
+func TestMultipartNamesCannotEndTheirHeader(t *testing.T) {
+	hostile := []MultipartFile{
+		{Field: `cert"; filename="other.pem`, Filename: `a"b\c.pem`, Content: []byte("one")},
+		{Field: "key", Filename: "x.pem\"\r\nX-Injected: yes\r\n\r\ninjected", Content: []byte("two")},
+	}
+	var received []MultipartFile
+	var types, injected []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reader, err := r.MultipartReader()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		for {
+			part, err := reader.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			content, _ := io.ReadAll(part)
+			received = append(received, MultipartFile{Field: part.FormName(), Filename: part.FileName(), Content: content})
+			types = append(types, part.Header.Get("Content-Type"))
+			injected = append(injected, part.Header.Get("X-Injected"))
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+	client := &HTTPClient{}
+	if _, err := client.Request(t.Context(), server.URL, "POST", nil, Multipart(hostile)); err != nil {
+		t.Fatal(err)
+	}
+	if len(received) != len(hostile) {
+		t.Fatalf("received %d parts, sent %d", len(received), len(hostile))
+	}
+	for i, sent := range hostile {
+		got := received[i]
+		if got.Field != sent.Field || string(got.Content) != string(sent.Content) {
+			t.Errorf("part %d: field %q content %q", i, got.Field, got.Content)
+		}
+		if types[i] != partContentType || injected[i] != "" {
+			t.Errorf("part %d: content type %q, injected header %q", i, types[i], injected[i])
+		}
+	}
+	if received[0].Filename != `a"b\c.pem` {
+		t.Errorf("filename %q", received[0].Filename)
+	}
+	// A line break cannot be carried in a header: it arrives percent-encoded.
+	if want := `x.pem"%0D%0AX-Injected: yes%0D%0A%0D%0Ainjected`; received[1].Filename != want {
+		t.Errorf("filename %q, want %q", received[1].Filename, want)
 	}
 }

@@ -9,7 +9,8 @@
 #   data/    SQLite DB
 #   media/   Uploaded receipt files (private: never publicly exposed)
 #   exports/ Generated exports
-#   static/  Collected static files
+#
+# Static assets are not a volume: the image carries them, collected at build.
 #
 # No env_file: production secrets come from the 1Password-rendered file the
 # entrypoint sources (see docs/SECRETS.md). The on-host .env holds
@@ -38,9 +39,8 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    # Nothing HQ does at runtime writes to the image. State lives in the four
-    # volumes below and the doorbell directory; migrations and collectstatic
-    # write into those. A read-only root means an exploited process cannot
+    # Nothing HQ does at runtime writes to the image. State lives in the
+    # volumes below and the doorbell directory; migrations write into those. A read-only root means an exploited process cannot
     # leave anything behind for the next boot to run: the difference between
     # an incident and a persistent one. The controller is a separate
     # `docker run` from the same image and is unaffected by this.
@@ -69,7 +69,6 @@ services:
       TMPDIR: /data/tmp
       SEVERINO_MEDIA_ROOT: /media
       SEVERINO_EXPORTS_ROOT: /exports
-      DJANGO_STATIC_ROOT: /static
       # Provider HTTPS keeps normal public roots and adds the homelab CA.
       HQ_CONTROLLER_CA_FILE: /run/secrets/severino_controller_ca.pem
       # A file HQ replaces when it queues controller work. It carries nothing
@@ -90,7 +89,6 @@ services:
       - severino_data:/data
       - severino_media:/media
       - severino_exports:/exports
-      - severino_static:/static
       # The bridge socket's directory. A volume, so it exists before the
       # container does on every boot, and takes its owner and 0700 mode from
       # the image's directory the first time it is mounted. It holds the
@@ -124,5 +122,4 @@ volumes:
   severino_data:
   severino_media:
   severino_exports:
-  severino_static:
   severino_bridge:

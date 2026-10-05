@@ -2,8 +2,9 @@
 # Severino HQ container entrypoint.
 #
 # - Applies any pending migrations on boot.
-# - Collects static files for the native ASGI static mount.
 # - Then exec's whatever CMD was passed (Uvicorn by default).
+#
+# Static assets and bytecode are the image's, made when it was built.
 #
 # Intentionally minimal: we want boot failures to be loud and obvious.
 
@@ -22,9 +23,6 @@ fi
 
 echo "[severino-hq] applying migrations…"
 python manage.py migrate --noinput
-
-echo "[severino-hq] collecting static files…"
-python manage.py collectstatic --noinput
 
 # A new image is the moment production changes what it runs, so delivery is
 # read now rather than found later. Best effort: nothing about serving may

@@ -15,6 +15,9 @@ ARG HQ_IMAGE=scratch
 FROM ghcr.io/astral-sh/uv:0.12.23@sha256:61d393e44e249f2e4b526b6c7ddcecce245946826e608e11c93ad4f5bba55b21 AS uv
 FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS installer-base
 COPY --from=uv /uv /usr/local/bin/uv
+# Every wheel an installer of this base installs carries its bytecode, as the
+# host's own packages do: the image is read-only to the account HQ runs as.
+ENV UV_COMPILE_BYTECODE=1
 
 FROM installer-base AS installer
 
@@ -59,4 +62,7 @@ ENV SEVERINO_HQ_PLUGINS=${SEVERINO_HQ_PLUGIN_REFERENCES} \
     SEVERINO_HQ_PLUGIN_LOCK=/opt/severino/plugin-lock.json \
     SEVERINO_HQ_PLUGIN_POLICY_SHA256=${PLUGIN_POLICY_SHA256} \
     SEVERINO_HQ_REVISION=${HQ_REVISION}
+# The extensions bring assets of their own, so the tree the host image
+# collected is collected again with them, under the settings set above.
+RUN /app/scripts/collect-assets.sh
 USER severino

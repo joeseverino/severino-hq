@@ -73,8 +73,13 @@ def _is_health_probe(request) -> bool:
     return request.path.startswith("/health/")
 
 
+# A request slower than this is logged as a warning, so it is found without
+# reading every line. Pages answer in a tenth of it (`manage.py bench_pages`).
+SLOW_REQUEST_MS = 1000
+
+
 class RequestContextMiddleware:
-    """Attach a server-generated correlation ID and one bounded access log."""
+    """Attach a server-generated correlation ID, the time taken, and one bounded access log."""
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -122,15 +127,21 @@ class RequestContextMiddleware:
                 "Reporting-Endpoints",
                 f'csp="{settings.SEVERINO_CSP_REPORT_PATH}"',
             )
-            if not _is_health_probe(request) or response.status_code >= 500:
-                _request_logger.info(
-                    "request completed",
+            duration_ms = round((monotonic() - started) * 1000, 2)
+            # The application's own time, where the operator is already
+            # looking: the browser's network panel shows it beside the request.
+            response["Server-Timing"] = f"app;dur={duration_ms}"
+            slow = duration_ms >= SLOW_REQUEST_MS
+            if slow or not _is_health_probe(request) or response.status_code >= 500:
+                _request_logger.log(
+                    logging.WARNING if slow else logging.INFO,
+                    "slow request" if slow else "request completed",
                     extra={
                         "event": "http.request",
                         "method": request.method,
                         "path": request.path,
                         "status": response.status_code,
-                        "duration_ms": round((monotonic() - started) * 1000, 2),
+                        "duration_ms": duration_ms,
                     },
                 )
             return response

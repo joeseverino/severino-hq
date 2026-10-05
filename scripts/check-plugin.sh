@@ -47,9 +47,10 @@ export DJANGO_SETTINGS_MODULE=hq.config.settings
 export PYTHONPATH="$hq_root"
 export SEVERINO_HQ_PLUGINS="$plugin_reference"
 "$virtualenv/bin/python" "$hq_root/manage.py" check
-"$virtualenv/bin/python" "$hq_root/manage.py" check --tag interface --fail-level WARNING
 "$virtualenv/bin/python" "$hq_root/manage.py" makemigrations --check --dry-run "$django_app"
-"$virtualenv/bin/python" "$hq_root/manage.py" test "$django_app" hq.platform.application.tests.test_plugins hq.platform.application.tests.test_rendered
+# InterfaceTextTests reads the plugin's wording and markup with the host's.
+"$virtualenv/bin/python" "$hq_root/manage.py" test "$django_app" hq.platform.application.tests.test_plugins hq.platform.application.tests.test_rendered \
+    hq.platform.application.tests.test_architecture.InterfaceTextTests
 
 # Production installs admitted wheels with --no-deps. Recreate that exact
 # dependency boundary in an isolated environment so an undeclared host pin

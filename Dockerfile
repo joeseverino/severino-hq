@@ -91,9 +91,22 @@ RUN sh scripts/root-tree-manifest.sh /app > /app/root-tree.sha256
 # Mounted volumes; create empty so the container can boot before a host mount.
 # The bridge socket's directory is this account's alone: a volume first mounted
 # there takes that owner and mode, and HQ refuses to serve from anything wider.
-RUN mkdir -p /data /media /exports /static /run/hq-bridge \
-    && chown -R severino:severino /data /media /exports /static /run/hq-bridge \
+RUN mkdir -p /data /media /exports /run/hq-bridge \
+    && chown -R severino:severino /data /media /exports /run/hq-bridge \
     && chmod 0700 /run/hq-bridge
+
+# The image carries what a start would otherwise make: the collected, hashed
+# and compressed assets in /static, and the application's bytecode. Both are
+# root's and read-only to the account HQ runs as, like the source they come
+# from, so a start collects and compiles nothing.
+#
+# Bytecode is validated by nothing at run time (unchecked-hash): the source
+# beside it cannot change in an image, and a timestamp would make the bytes
+# depend on when the build ran. The hash seed is fixed for this step so they
+# cannot depend on it either. Tests compile when a gate runs them.
+RUN scripts/collect-assets.sh \
+    && PYTHONHASHSEED=0 python -m compileall -q --invalidation-mode unchecked-hash \
+        -x '/tests/' hq hq_sdk
 
 USER severino
 EXPOSE 8000

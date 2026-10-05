@@ -2,6 +2,9 @@
 
 Only the (action, object type) pairs in ``core.audit.ROUTINE_EVENTS`` are
 eligible. Prints counts only.
+
+The nightly run is also when SQLite refreshes its planner statistics
+(``core.database.optimize``): the one job that holds the database every day.
 """
 
 from __future__ import annotations
@@ -11,6 +14,7 @@ from django.core.management.base import BaseCommand
 
 from hq.platform.application.ui import counted
 from hq.platform.core.audit import prune_routine, record_operation
+from hq.platform.core.database import optimize
 from hq.platform.core.models import AuditLog
 
 
@@ -43,6 +47,7 @@ class Command(BaseCommand):
                 action=AuditLog.Action.DELETED,
                 metadata={"deleted": deleted, "days": days},
             )
+        optimize()
         self.stdout.write(
             f"{counted(deleted, 'routine event', 'routine events')} older than {counted(days, 'day')} deleted."
         )

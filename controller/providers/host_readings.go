@@ -51,8 +51,10 @@ type perimeterReading struct {
 
 func (r *Registry) admitHostReadings() {
 	r.reader(runtime.ResourceKindHostFirewall, r.hostFirewall)
+	r.readsHeld(runtime.ResourceKindHostFirewall, func() bool { return r.Env["SEVERINO_HOST_FIREWALL"] != "" })
 	r.reader(runtime.ResourceKindHostPerimeter, r.hostPerimeter)
 	r.reader(runtime.ResourceKindHostRenderStatus, r.hostRenderStatus)
+	r.readsHeld(runtime.ResourceKindHostRenderStatus, func() bool { return r.Env[renderStatusEnv] != "" })
 }
 
 // renderStatusEnv names the status documents run-controller.sh mounts, as

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import gzip
 import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -92,18 +93,23 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         # Outermost, because this mount is above the Django stack and would
         # otherwise be the one thing an untrusted caller could still fetch.
         self.assertIsInstance(static_route.app, TrustedNetworkASGI)
-        compressed = static_route.app.app
-        self.assertIsInstance(compressed, GZipMiddleware)
-        self.assertIsInstance(compressed.app, StaticFiles)
-        self.assertIsInstance(compressed.app, CachedStaticFiles)
+        # Nothing between the gate and the files: an asset is compressed when
+        # the image is built, never while it is served.
+        self.assertIsInstance(static_route.app.app, StaticFiles)
+        self.assertIsInstance(static_route.app.app, CachedStaticFiles)
         self.assertEqual(django_route.path, "")
         self.assertIsInstance(django_route.app, GZipMiddleware)
+
+    def test_static_assets_have_one_server(self):
+        from django.conf import settings
+
+        serving = [name for name in settings.MIDDLEWARE if "static" in name.lower() or "whitenoise" in name.lower()]
+        self.assertEqual(serving, [], "/static/ is served by the ASGI mount alone")
 
     @override_settings(STATIC_LIVE=False)
     def test_versioned_static_assets_are_compressed_and_immutable(self):
         async def request(root):
-            app = GZipMiddleware(CachedStaticFiles(directory=root), minimum_size=500)
-            transport = httpx.ASGITransport(app=app)
+            transport = httpx.ASGITransport(app=CachedStaticFiles(directory=root))
             async with httpx.AsyncClient(
                 transport=transport, base_url="http://testserver"
             ) as client:
@@ -114,12 +120,17 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
 
         with TemporaryDirectory() as directory:
             Path(directory, "bundle.0123456789ab.css").write_text("a" * 2000, encoding="utf-8")
+            compressed = gzip.compress(b"a" * 2000, mtime=0)
+            Path(directory, "bundle.0123456789ab.css.gz").write_bytes(compressed)
             manifest = SimpleNamespace(hashed_files={"bundle.css": "bundle.0123456789ab.css"})
             with patch("hq.platform.core.static.staticfiles_storage", manifest):
                 response = async_to_sync(request)(directory)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["content-encoding"], "gzip")
+        # The copy collectstatic wrote, byte for byte: nothing compressed it again.
+        self.assertEqual(response.headers["content-length"], str(len(compressed)))
+        self.assertEqual(response.text, "a" * 2000)
         self.assertEqual(
             response.headers["cache-control"],
             "public, max-age=31536000, immutable",
@@ -1235,6 +1246,59 @@ class CountedTests(SimpleTestCase):
             Context({"n": 1})
         )
         self.assertEqual(rendered, "1 thing needs you")
+
+
+class InterfaceTextTests(SimpleTestCase):
+    """What HQ and its extensions show people, read from source in one pass.
+
+    A gate reads it, here. A running HQ never does: a system check runs before
+    every management command, at every container start.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from hq.platform.core import interface_text
+
+        super().setUpClass()
+        cls.reading = interface_text.read()
+
+    def _places(self, found):
+        return [f"{path}:{line}" + (f": {why[0]}" if why else "") for path, line, *why in found]
+
+    def test_the_pass_read_the_source(self):
+        self.assertGreater(self.reading.files, 300, "The interface text pass read almost nothing")
+
+    def test_no_em_dash_in_interface_text(self):
+        """Rewrite the sentence. For a missing value use `or_empty` or MISSING."""
+        self.assertEqual(self._places(self.reading.em_dashes), [])
+
+    def test_no_plural_built_by_hand(self):
+        """Use counted(n, one, many) or {{ n|counted:"one,many" }}."""
+        self.assertEqual(self._places(self.reading.hand_plurals), [])
+
+    def test_no_form_opened_inside_another(self):
+        """Close the outer form first, or point the control at a form with form="id"."""
+        self.assertEqual(self._places(self.reading.nested_forms), [])
+
+    def test_every_counted_phrase_agrees(self):
+        """Give both forms: counted(n, "zone band", "zone bands")."""
+        self.assertEqual(self._places(self.reading.unagreeable_counts), [])
+
+    def test_no_system_check_that_runs_by_default_reads_source(self):
+        import inspect
+
+        from django.core.checks.registry import registry
+
+        reads_source = re.compile(r"\b(ast\.parse|rglob|os\.walk|read_text|interface_text)\b")
+        checked = 0
+        for check in registry.get_checks(include_deployment_checks=False):
+            module = inspect.getmodule(check)
+            if module is None or not module.__name__.startswith("hq"):
+                continue
+            checked += 1
+            with self.subTest(check=f"{module.__name__}.{check.__name__}"):
+                self.assertIsNone(reads_source.search(inspect.getsource(module)))
+        self.assertGreater(checked, 0, "No HQ system check was examined")
 
 
 class PostButtonTests(SimpleTestCase):

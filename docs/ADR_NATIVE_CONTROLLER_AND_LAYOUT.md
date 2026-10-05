@@ -66,9 +66,9 @@ thousands, spell a regular plural from a registry label, or refuse a phrase
 given one form. `counted` does all four in under 40 lines, is part of the
 `hq_sdk` contract, and has 95 Python calls and 49 template uses that would
 each grow. Django's
-`pluralize` agrees the noun and forgets the verb, which is what check
-`hq.W101` exists to refuse, and `hq.E101` reads every literal phrase before a
-page can raise on it. Neither check has a built-in equivalent.
+`pluralize` agrees the noun and forgets the verb, which the architecture test
+`InterfaceTextTests` refuses, and the same pass reads every literal phrase
+before a page can raise on it. Neither rule has a built-in equivalent.
 
 Byte counts keep `human_bytes`, reached in templates through the `bytes`
 filter. `filesizeformat` says "38.0 MB" and "512 bytes" where the controller's

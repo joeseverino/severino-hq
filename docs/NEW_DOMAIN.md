@@ -38,7 +38,7 @@ same commit as the rule. Extensions are a different path: `docs/PLUGINS.md`.
 | A view with `paginate_by` takes `TableListMixin` | `DeliveryAdapterArchitectureTests.test_paginated_list_views_use_the_shared_table_engine` |
 | `hq/platform/mcp/services.py` stays free of models and `.objects`; expose reads through `hq/platform/application/resources.py` and read models | `DeliveryAdapterArchitectureTests.test_mcp_services_do_not_access_django_models` |
 | Keep the workflow layering: `workflow_contracts.py` has no relative imports, `ui.py` does not import `workflows`, `workflows.py` does not import `action_links` | `DeliveryAdapterArchitectureTests.test_workflow_models_remain_a_dependency_leaf` |
-| Serve static assets from the shared delivery path: ASGI routes `/static/` before Django, and versioned files are compressed and immutable | `DeliveryAdapterArchitectureTests.test_asgi_routes_static_assets_before_django`, `DeliveryAdapterArchitectureTests.test_versioned_static_assets_are_compressed_and_immutable` |
+| Serve static assets from the shared delivery path: the ASGI mount is the only server of `/static/`, before Django; versioned files are immutable and sent as the gzip copy the image build wrote | `DeliveryAdapterArchitectureTests.test_asgi_routes_static_assets_before_django`, `DeliveryAdapterArchitectureTests.test_static_assets_have_one_server`, `DeliveryAdapterArchitectureTests.test_versioned_static_assets_are_compressed_and_immutable` |
 | Resolve URLs with `hq.platform.application.routes.reverse`, never `django.urls.reverse`, in `hq/platform/application/` and `hq/domains/control_plane/` | `RouteOwnerTests.test_the_application_resolves_routes_through_its_one_owner`, `RouteOwnerTests.test_a_remembered_route_is_djangos_and_follows_the_url_configuration` |
 | Every template sets `{% block title %}` to the page's own name, without the site name | `PageTitleTests.test_every_page_names_itself`, `PageTitleTests.test_no_page_appends_the_site_name_itself`, `PageTitleTests.test_the_layout_is_what_appends_it` |
 | Link a command's form with `command_url`, never `reverse("command")` or `{% url "command" %}` | `OnePrimitiveTests.test_a_command_is_linked_through_command_url` |
@@ -64,6 +64,8 @@ layers, spacing, colour), `TemplateCommentTests` (no multi-line `{# #}`),
 `CognitiveComplexityTests` (score 20 per function), `CommentHistoryTests` (comments
 describe the present), `AssertionPrecisionTests` (`assertEqual(a, b)`, not
 `assertTrue(a == b)`), `SourceEscapeTests` (no invalid string escapes),
-`CountedTests` (plurals), `PostButtonTests` (the shared post button),
+`CountedTests` (plurals), `InterfaceTextTests` (no em dash, hand-built plural,
+nested form or `counted` phrase that cannot agree, in HQ or an extension; no
+system check reads source), `PostButtonTests` (the shared post button),
 `WorkflowSecrecyTests` (no secret interpolated into a workflow script),
 `ComposedQueueTests` (a domain's attention items and cards reach the shared queue).

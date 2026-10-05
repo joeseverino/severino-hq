@@ -381,10 +381,6 @@ MIDDLEWARE = [
     "hq.platform.core.network.TrustedNetworkMiddleware",
     "hq.platform.core.middleware.RequestContextMiddleware",
     "django.middleware.security.SecurityMiddleware",
-    # WhiteNoise serves /static/ in production (DEBUG=0). Must come immediately
-    # after SecurityMiddleware so it can short-circuit static-file requests
-    # before sessions / auth do any work.
-    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.csp.ContentSecurityPolicyMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -781,18 +777,19 @@ STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = Path(os.environ.get("DJANGO_STATIC_ROOT", str(BASE_DIR / "var" / "static")))
 
-# Serve static files from the source trees, uncached, instead of from the
-# collected STATIC_ROOT, so an edited stylesheet shows on the next reload.
-# A deployment check (hq.E110) refuses it with DEBUG off; a local dev server may
-# run it with DEBUG off. Off by default: a served request should not search the
-# filesystem. Both static paths
-# honour it: the native ASGI mount (core.static) and WhiteNoise, its WSGI
-# fallback.
+# /static/ has one server, the ASGI mount in hq.config.asgi (core.static), and
+# one collected tree: the image build runs collectstatic, so STATIC_ROOT is
+# part of the image, read-only, and a container start collects nothing.
+#
+# STATIC_LIVE serves from the source trees instead, uncached, so an edited
+# stylesheet shows on the next reload. A deployment check (hq.E110) refuses it
+# with DEBUG off; a local dev server may run it with DEBUG off. Off by default:
+# a served request should not search the filesystem.
 STATIC_LIVE = env_bool("DJANGO_WHITENOISE_AUTOREFRESH", default=DEBUG)
-WHITENOISE_AUTOREFRESH = WHITENOISE_USE_FINDERS = STATIC_LIVE
 
 # Collected assets are named by their content (css/app.3f2a1b9c0d4e.css), so
-# core.static can cache them forever. Live serving keeps plain names: the
+# core.static can cache them forever, and each has a gzip copy beside it, so
+# nothing is compressed while serving. Live serving keeps plain names: the
 # source trees it reads have no hashed copies, and it sends no-cache anyway.
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
@@ -800,6 +797,9 @@ STORAGES = {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
         if STATIC_LIVE
         else "hq.platform.core.static.HashedStaticStorage",
+        # Public by nature and collected by root into the image, so readable
+        # by the account that serves them: not the private mode uploads get.
+        "OPTIONS": {"file_permissions_mode": 0o644, "directory_permissions_mode": 0o755},
     },
 }
 

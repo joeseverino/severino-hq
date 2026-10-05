@@ -576,7 +576,8 @@ class StaticCachingTests(SimpleTestCase):
             ),
         ):
             name = "app.0123456789ab.js" if versioned else "app.js"
-            response = asyncio.run(files.get_response(name, {}))
+            scope = {"type": "http", "method": "GET", "headers": []}
+            response = asyncio.run(files.get_response(name, scope))
         return response.headers["Cache-Control"]
 
     def test_production_pins_a_versioned_asset_forever(self):
@@ -625,6 +626,144 @@ def _returns(value):
         return value
 
     return _get_response
+
+
+class PrecompressedStaticTests(SimpleTestCase):
+    """An asset is compressed once, when it is collected, and that copy is what is sent."""
+
+    BODY = "body { color: red }\n" * 200
+    # Not the gzip of BODY: what arrives shows which file was read.
+    COPY = "precompressed"
+
+    def _get(self, path, *, live=False, copy=True, **headers):
+        import gzip
+        import os
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        import httpx
+        from asgiref.sync import async_to_sync
+        from starlette.applications import Starlette
+        from starlette.routing import Mount
+
+        from hq.platform.core.static import CachedStaticFiles
+
+        async def request(root):
+            # Mounted, as production mounts it, so a refusal is a response.
+            app = Starlette(routes=[Mount("/", app=CachedStaticFiles(directory=root))])
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+                return await client.get(path, headers={"Accept-Encoding": "identity", **headers})
+
+        manifest = SimpleNamespace(hashed_files={"app.css": "app.0123456789ab.css"})
+        with tempfile.TemporaryDirectory() as root:
+            for name in ("app.css", "app.0123456789ab.css"):
+                Path(root, name).write_text(self.BODY, encoding="utf-8")
+                if copy:
+                    Path(root, f"{name}.gz").write_bytes(gzip.compress(self.COPY.encode(), mtime=0))
+            for written in Path(root).iterdir():
+                # A validator is the file's time and size: the same in every scratch tree.
+                os.utime(written, (1_700_000_000, 1_700_000_000))
+            with (
+                override_settings(STATIC_LIVE=live, STATICFILES_DIRS=[root]),
+                patch("hq.platform.core.static.staticfiles_storage", manifest),
+            ):
+                return async_to_sync(request)(root)
+
+    def test_a_request_that_takes_gzip_gets_the_collected_copy(self):
+        response = self._get("/app.0123456789ab.css", **{"Accept-Encoding": "br, gzip"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.text, self.COPY)
+        self.assertEqual(response.headers["content-encoding"], "gzip")
+        self.assertEqual(response.headers["content-type"], "text/css; charset=utf-8")
+        self.assertEqual(response.headers["vary"], "Accept-Encoding")
+        self.assertEqual(response.headers["cache-control"], "public, max-age=31536000, immutable")
+        self.assertEqual(response.headers["cross-origin-resource-policy"], "same-origin")
+        self.assertEqual(response.headers["x-content-type-options"], "nosniff")
+
+    def test_an_unhashed_name_is_compressed_but_never_pinned(self):
+        response = self._get("/app.css", **{"Accept-Encoding": "gzip"})
+        self.assertEqual(response.text, self.COPY)
+        self.assertEqual(response.headers["cache-control"], "public, max-age=3600")
+
+    def test_a_request_that_refuses_gzip_gets_the_asset_itself(self):
+        for accepted in ("identity", "br", "gzip;q=0", "gzip; q=0.0", ""):
+            with self.subTest(accepted=accepted):
+                response = self._get("/app.0123456789ab.css", **{"Accept-Encoding": accepted})
+                self.assertEqual(response.text, self.BODY)
+                self.assertNotIn("content-encoding", response.headers)
+                # Still varies: the same name has a compressed representation.
+                self.assertEqual(response.headers["vary"], "Accept-Encoding")
+                self.assertEqual(
+                    response.headers["cache-control"], "public, max-age=31536000, immutable"
+                )
+
+    def test_an_asset_with_no_copy_is_sent_as_it_is(self):
+        response = self._get("/app.0123456789ab.css", copy=False, **{"Accept-Encoding": "gzip"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.text, self.BODY)
+        self.assertNotIn("content-encoding", response.headers)
+
+    def test_a_copy_already_held_is_not_sent_again(self):
+        first = self._get("/app.0123456789ab.css", **{"Accept-Encoding": "gzip"})
+        again = self._get(
+            "/app.0123456789ab.css",
+            **{"Accept-Encoding": "gzip", "If-None-Match": first.headers["etag"]},
+        )
+        self.assertEqual(again.status_code, 304)
+        self.assertEqual(again.content, b"")
+        self.assertEqual(again.headers["vary"], "Accept-Encoding")
+        self.assertEqual(again.headers["cache-control"], "public, max-age=31536000, immutable")
+
+    def test_each_representation_has_its_own_validator(self):
+        compressed = self._get("/app.0123456789ab.css", **{"Accept-Encoding": "gzip"})
+        plain = self._get("/app.0123456789ab.css")
+        self.assertNotEqual(compressed.headers["etag"], plain.headers["etag"])
+
+    def test_a_missing_asset_is_not_found_either_way(self):
+        for accepted in ("gzip", "identity"):
+            with self.subTest(accepted=accepted):
+                response = self._get("/absent.css", **{"Accept-Encoding": accepted})
+                self.assertEqual(response.status_code, 404)
+
+    def test_a_write_is_refused_before_any_lookup(self):
+        import asyncio
+
+        from starlette.exceptions import HTTPException
+
+        from hq.platform.core.static import CachedStaticFiles
+
+        scope = {"type": "http", "method": "POST", "headers": [(b"accept-encoding", b"gzip")]}
+        with override_settings(STATIC_LIVE=False), self.assertRaises(HTTPException) as refused:
+            asyncio.run(CachedStaticFiles(directory=".", check_dir=False).get_response("app.css", scope))
+        self.assertEqual(refused.exception.status_code, 405)
+
+    def test_serving_live_reads_the_source_and_never_a_copy(self):
+        response = self._get("/app.css", live=True, **{"Accept-Encoding": "gzip"})
+        self.assertEqual(response.text, self.BODY)
+        self.assertNotIn("content-encoding", response.headers)
+        self.assertEqual(response.headers["cache-control"], "no-cache")
+
+    def test_what_takes_gzip(self):
+        from hq.platform.core.static import accepts_gzip
+
+        cases = {
+            "gzip": True,
+            "GZIP": True,
+            "deflate, gzip;q=0.5, br": True,
+            "*": True,
+            "": False,
+            "identity": False,
+            "gzip;q=0": False,
+            "gzip;q=nonsense": False,
+            "xgzip": False,
+        }
+        for header, expected in cases.items():
+            with self.subTest(header=header):
+                scope = {"type": "http", "headers": [(b"accept-encoding", header.encode())]}
+                self.assertIs(accepts_gzip(scope), expected)
+        self.assertIs(accepts_gzip({"type": "http", "headers": []}), False)
 
 
 @override_settings(SEVERINO_TRUSTED_PROXIES=[PROXY])
@@ -980,6 +1119,10 @@ class CanonicalEntryTests(TestCase):
         it would make the container permanently unhealthy.
         """
 
-        response = self.client.get("/health/ready/", REMOTE_ADDR="127.0.0.1")
+        from unittest.mock import patch
+
+        # Ready, as the image is: this is about the redirect, not the assets.
+        with patch("hq.platform.core.health_views.collected", return_value=True):
+            response = self.client.get("/health/ready/", REMOTE_ADDR="127.0.0.1")
 
         self.assertEqual(response.status_code, 200)

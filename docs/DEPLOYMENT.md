@@ -21,7 +21,7 @@ the project root.
 
 ```bash
 # On the homelab host
-sudo mkdir -p /srv/severino-hq/data /srv/severino-hq/media /srv/severino-hq/exports /srv/severino-hq/static
+sudo mkdir -p /srv/severino-hq/data /srv/severino-hq/media /srv/severino-hq/exports
 sudo chown -R 10001:10001 /srv/severino-hq    # matches the non-root UID in the image
 ```
 
@@ -39,7 +39,6 @@ DJANGO_BEHIND_TLS_PROXY=1
 SEVERINO_DATABASE_PATH=/data/severino.sqlite3
 SEVERINO_MEDIA_ROOT=/media
 SEVERINO_EXPORTS_ROOT=/exports
-DJANGO_STATIC_ROOT=/static
 SEVERINO_MCP_ALLOWED_HOSTS=<direct Tailscale IP>,<MagicDNS hostname>
 ```
 
@@ -420,8 +419,12 @@ mistaken for another's:
 | **Deploy** (`deploy.yml`) | started with a commit by Compose once it has published HQ, or by hand to redeploy or roll back | waits for approval in `production`, then deploys on the self-hosted runner with health rollback |
 
 Production runs the composed image (`…/composition:…`), never the host image
-on its own. Migrations and `collectstatic` run on container boot via
-`entrypoint.sh`. A pull request never starts Deploy, so no pull request's code
+on its own. Migrations run on container boot via `entrypoint.sh`. Static
+assets and the application's bytecode are part of the image: each build runs
+`scripts/collect-assets.sh` (the composition again, once its extensions are
+installed) and `compileall`, so `/static` is read-only, no volume holds it, and
+a start collects and compiles nothing. Readiness reports `assets` false for an
+image built without them. A pull request never starts Deploy, so no pull request's code
 reaches the self-hosted runner. To redeploy or roll back, run **Deploy** with
 the commit to put back.
 
@@ -542,7 +545,6 @@ The equivalent **manual** steps, for a standalone or first-time deploy, are:
 git pull
 docker compose build
 docker compose run --rm app python manage.py migrate
-docker compose run --rm app python manage.py collectstatic --noinput
 docker compose up -d
 ```
 

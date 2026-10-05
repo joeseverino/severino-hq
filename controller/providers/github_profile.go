@@ -102,6 +102,8 @@ type GitHubAdvisory struct {
 
 func (r *Registry) admitGitHubProfile() {
 	r.reader(runtime.ResourceKindGitHubProfile, r.githubProfiles)
+	// Read without a credential: the accounts HQ names are the source.
+	r.readsOnlyHeld(runtime.ResourceKindGitHubProfile, func() bool { return len(r.Profiles.Accounts) > 0 })
 }
 
 func githubAnonymousHeaders(accept string) map[string]string {

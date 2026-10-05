@@ -210,6 +210,13 @@ bench seeds first.
 
 Timings move with the machine; query counts do not. Compare two trees by
 running them back to back and reading the counts first.
+
+A running HQ says the same of each request. Every response carries
+`Server-Timing: app;dur=<ms>`, the application's own time, which a browser's
+network panel shows beside the request, and the access log line
+(`severino.request`, `duration_ms`) is written from the same measurement. A
+request at or over `SLOW_REQUEST_MS` (`hq/platform/core/middleware.py`) is
+logged as a warning, so it is found at any log level.
 `hq/platform/core/tests/test_page_budgets.py` pins the counts below against the
 same seed, at two sizes where a per-row read would show.
 

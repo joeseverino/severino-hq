@@ -12,6 +12,7 @@ from django.db.migrations.executor import MigrationExecutor
 from django.http import JsonResponse
 
 from hq.platform.application.plugins import plugin_health
+from hq.platform.core.static import collected
 
 
 @login_not_required
@@ -41,12 +42,14 @@ def health_ready(request):
     writable_paths = (
         settings.MEDIA_ROOT,
         settings.EXPORTS_ROOT,
-        settings.STATIC_ROOT,
         Path(settings.DATABASES["default"]["NAME"]).parent,
     )
     checks["storage"] = all(
         path.is_dir() and os.access(path, os.W_OK) for path in writable_paths
     )
+    # The image carries its assets and a start collects none, so an image
+    # built without them is not ready. Read once, when the storage loads.
+    checks["assets"] = settings.STATIC_LIVE or collected()
     # Aggregated for anonymous callers, itemised for signed-in ones.
     #
     # This endpoint answers without a credential, because a container
