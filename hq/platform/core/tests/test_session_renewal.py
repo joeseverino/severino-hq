@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest import mock
 
+from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.backends.signed_cookies import SessionStore
 from django.http import HttpResponse, JsonResponse
 from django.test import RequestFactory, SimpleTestCase, override_settings
@@ -50,3 +51,36 @@ class RenewalTests(SimpleTestCase):
     def test_the_probes_never_renew(self):
         exempt = HQSessionRefresh(lambda request: HttpResponse()).exempt_urls
         self.assertLessEqual({"/health/live/", "/health/ready/"}, exempt)
+
+
+@override_settings(
+    ALLOWED_HOSTS=["hq.example.com"],
+    AUTHENTICATION_BACKENDS=["hq.platform.core.oidc.HQOIDCAuthenticationBackend"],
+)
+class RenamedBackendTests(SimpleTestCase):
+    """A session from before a backend was renamed ends; it is not an error."""
+
+    def request(self, backend):
+        request = RequestFactory().get("/", secure=True, HTTP_HOST="hq.example.com")
+        request.session = SessionStore()
+        request.session["_auth_user_id"] = "1"
+        request.session["_auth_user_backend"] = backend
+        request.session["oidc_id_token_expiration"] = 0
+        # What Django's own middleware makes of a backend it does not have.
+        request.user = AnonymousUser()
+        return request
+
+    def test_a_session_naming_a_backend_that_is_gone_is_ended(self):
+        request = self.request("core.oidc.HQOIDCAuthenticationBackend")
+        # The real refresh, which imports whatever backend the session names.
+        HQSessionRefresh(lambda request: HttpResponse()).process_request(request)
+        self.assertNotIn("_auth_user_backend", request.session)
+        self.assertNotIn("_auth_user_id", request.session)
+
+    def test_a_session_naming_the_current_backend_is_kept(self):
+        request = self.request("hq.platform.core.oidc.HQOIDCAuthenticationBackend")
+        with mock.patch(
+            "mozilla_django_oidc.middleware.SessionRefresh.process_request", return_value=None
+        ):
+            HQSessionRefresh(lambda request: HttpResponse()).process_request(request)
+        self.assertEqual(request.session["_auth_user_id"], "1")

@@ -19,6 +19,7 @@ from __future__ import annotations
 import base64
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from typing import Any
 
@@ -29,6 +30,8 @@ from .security import Capability, Principal
 
 REFRESH_AFTER = timedelta(hours=6)
 WATCHED_LIMIT = 15
+# How many watched repositories are asked about at once.
+WATCHED_WORKERS = 8
 AVATAR_MAX_BYTES = 200_000
 # The same list with the moment each repository was starred.
 _STARS = "application/vnd.github.star+json"
@@ -92,6 +95,10 @@ def read(login: str) -> dict[str, Any]:
 
     user = _get(f"/users/{urllib.parse.quote(login)}")
     stars = _get(f"/users/{urllib.parse.quote(login)}/starred?per_page=100", accept=_STARS) or []
+    # No watched repository's calls depend on another's. Asked together, a read
+    # waits for the slowest answer rather than for the sum of them.
+    with ThreadPoolExecutor(max_workers=WATCHED_WORKERS) as pool:
+        watched = list(pool.map(_watched, stars[:WATCHED_LIMIT]))
     return {
         "login": str(user.get("login") or login),
         "name": str(user.get("name") or ""),
@@ -110,7 +117,7 @@ def read(login: str) -> dict[str, Any]:
         "hireable": bool(user.get("hireable")),
         "avatar": _avatar(str(user.get("avatar_url") or "")),
         "starred": len(stars),
-        "watched": [_watched(star) for star in stars[:WATCHED_LIMIT]],
+        "watched": watched,
     }
 
 

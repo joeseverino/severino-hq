@@ -14,12 +14,13 @@ authoritative for human and agentic development in this public repository.
    push first and run `mise run preflight --remote`: it reads every check
    GitHub ran on that commit instead of running `mise run ci`.
 
-Setup is [mise](https://mise.jdx.dev) and `mise install`: the pinned tools, at
-the versions in `mise.toml` and the checksums in `mise.lock`. Python
-dependencies come from `uv.lock` through `uv run --locked`, so no virtualenv is
-made by hand. Every gate is a task in `mise.toml` named `<job>:<gate>`;
+Setup is [mise](https://mise.jdx.dev), `mise install` and uv on the PATH: the
+pinned tools, at the versions in `mise.toml` and the checksums in `mise.lock`.
+Python dependencies come from `uv.lock` through `uv run --locked`, so no
+virtualenv is made by hand. uv's own pin is in `pyproject.toml` with its hashes
+in `uv.lock`, which is the uv the pipeline installs. Every gate is a task in `mise.toml` named `<job>:<gate>`;
 `mise tasks` lists them and `mise run checks:ruff` runs one. Outside a task,
-run a command with the same tools as `mise exec -- uv run --locked python
+run a command with the same dependencies as `uv run --locked python
 manage.py ...`.
 
 `mise run fast [BASE]` is the inner loop: the changed files against the merge

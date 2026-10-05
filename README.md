@@ -308,7 +308,8 @@ to read the uv pin from `pyproject.toml`.
 git clone <your-mirror> severino-hq
 cd severino-hq
 
-# 2. The pinned tools (versions in mise.toml, checksums in mise.lock)
+# 2. The pinned tools (versions in mise.toml, checksums in mise.lock), and uv.
+#    Any uv works: uv.lock decides every package it installs.
 mise install
 
 # 3. Environment
@@ -316,11 +317,11 @@ cp .env.example .env
 # (for dev you can leave DEBUG=0 with a real SECRET_KEY, or set DEBUG=1)
 
 # 4. DB + first user
-mise exec -- uv run --locked python manage.py migrate
-mise exec -- uv run --locked python manage.py createsuperuser
+uv run --locked python manage.py migrate
+uv run --locked python manage.py createsuperuser
 
 # 5. Optional demo data
-mise exec -- uv run --locked python manage.py seed_demo
+uv run --locked python manage.py seed_demo
 
 # 6. Run the production-like ASGI dev server (binds to localhost only)
 mise run dev
@@ -394,7 +395,7 @@ require an explicit path choice; the layout move does not move their data.
 ### What the gates need
 
 `mise install` supplies the pinned tools and `uv run --locked` the Python
-dependencies, the `browser` and `audit` groups included when a gate asks for
+dependencies (uv itself is the one prerequisite besides mise), the `browser` and `audit` groups included when a gate asks for
 them. `mise run ci` covers what CI runs, so it also needs what CI's runner has.
 Tool versions are pinned in [`mise.toml`](mise.toml) with their checksums in
 [`mise.lock`](mise.lock), Python packages in `uv.lock`;

@@ -13,7 +13,10 @@
 # names every gate that failed.
 #
 # Python dependencies come from uv.lock through `uv run --locked`; nothing here
-# needs a virtualenv made by hand.
+# needs a virtualenv made by hand. uv itself is not one of the tools below: its
+# pin and hashes are in pyproject.toml and uv.lock with every other Python
+# dependency, where one update moves them together. The pipeline installs that
+# exact uv; any uv on a developer's PATH works, since uv.lock decides what runs.
 
 min_version = "2026.10.1"
 
@@ -28,8 +31,6 @@ _.file = "scripts/toolchain.env"
 SEVERINO_LOG_LEVEL = "CRITICAL"
 
 [tools]
-# One pin: pyproject.toml's, which the image's bootstrap also reads.
-uv = "{{ exec(command='python3 scripts/dependency_config.py pin uv') }}"
 shellcheck = "0.11.0"
 actionlint = "1.7.12"
 yq = "4.54.1"
@@ -205,6 +206,10 @@ run = "scripts/check-openapi.sh"
 [tasks."checks:lockfile"]
 description = "uv.lock matches pyproject.toml"
 run = "uv lock --check"
+
+[tasks."checks:toolchain"]
+description = "mise.lock has a checksum for every pinned tool on every platform a gate runs on"
+run = "python3 scripts/toolchain_lock.py"
 
 [tasks."checks:workflows"]
 description = "The workflows are valid, run: blocks included"

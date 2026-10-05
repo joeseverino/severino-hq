@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -48,6 +49,33 @@ class ReadTests(TestCase):
         self.assertEqual((found["name"], found["followers"], found["starred"]), ("Example User", 3, 1))
         self.assertEqual(found["watched"][0]["release"]["tag"], "v1.2.0")
         self.assertEqual(found["avatar"], "data:image/png;base64,AA==")
+
+    def test_the_watched_repositories_are_asked_about_together(self):
+        stars = [
+            {"starred_at": "2026-09-20T00:00:00Z", "repo": {"full_name": f"example/tool-{n}"}}
+            for n in range(3)
+        ]
+        # Every release read waits here until three are in flight at once, so a
+        # read that asked one repository at a time would never get past it.
+        together = threading.Barrier(3, timeout=5)
+
+        def fake_get(path, *, accept="", missing_ok=False):
+            if path == "/users/example-user":
+                return {"login": "example-user"}
+            if path.startswith("/users/example-user/starred"):
+                return stars
+            if path.endswith("/releases/latest"):
+                together.wait()
+                return {"tag_name": "v1.0.0"}
+            return []
+
+        with mock.patch.object(github_profile, "_get", side_effect=fake_get), \
+                mock.patch.object(github_profile, "_avatar", return_value=""):
+            found = github_profile.read("example-user")
+
+        # In the order the stars came, whichever answered first.
+        self.assertEqual([repo["name"] for repo in found["watched"]],
+                         ["example/tool-0", "example/tool-1", "example/tool-2"])
 
     def test_an_avatar_from_anywhere_else_is_not_fetched(self):
         with mock.patch("hq.platform.application.github_profile.urllib.request.urlopen") as urlopen:
