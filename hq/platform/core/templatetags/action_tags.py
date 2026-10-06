@@ -32,6 +32,22 @@ def decision(item):
 
 
 @register.filter
+def urgency(status):
+    """``{{ item.status|urgency }}``: how urgent, in the words every pill says."""
+    from hq.platform.application.decisions import urgency as said
+
+    return said(status)
+
+
+@register.filter
+def workflow_parts(plan):
+    """A plan's steps and its reason, apart, as a card shows them."""
+    from hq.platform.application.decisions import workflow_parts as parts
+
+    return parts(plan)
+
+
+@register.filter
 def queue_entries(entries):
     """Keep the SDK attention include on the queue's single projection."""
     from hq.platform.application.dashboard import queue_item

@@ -537,7 +537,7 @@ class ConnectionPageTests(TestCase):
         self.assertContains(response, "Derived topology")
         self.assertContains(response, "data-connection-protocol")
         self.assertContains(response, "data-connection-layers")
-        self.assertContains(response, "Storage, backup, and secret custody")
+        self.assertContains(response, "This shows only how this request reached HQ.")
         self.assertContains(response, "The identities and interfaces behind both ends")
         self.assertContains(response, "Open protocol evidence to read the response.")
         self.assertNotContains(response, 'id="conn-decision-title"')

@@ -19,7 +19,7 @@
 </section>
 
 <section class="card">
-  <div class="section-head"><h2>About this message</h2></div>
+  <div class="section-head"><h2>How it arrived</h2></div>
   <dl class="kv">
     <dt>Number</dt><dd>#{{ submission.id }}</dd>
     <dt>Bot check</dt><dd>{{ submission.turnstile|or_empty }}</dd>
@@ -35,7 +35,7 @@
 </section>
 
 <section class="card">
-  <div class="section-head"><h2>Your note</h2></div>
+  <div class="section-head"><h2>Your notes</h2></div>
   <form method="post" class="form">
     {% csrf_token %}
     {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}

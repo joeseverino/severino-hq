@@ -5,7 +5,7 @@ carrying a card that says so.
 {% if recent_contacts %}
 <section class="card">
   <div class="section-head">
-    <h2>Contacts</h2>
+    <h2>Messages</h2>
     {% if unread_contacts_count %}<span class="count">{{ unread_contacts_count }} unread</span>{% endif %}
   </div>
   {% include "partials/_record_list.html" with rows=recent_contacts %}

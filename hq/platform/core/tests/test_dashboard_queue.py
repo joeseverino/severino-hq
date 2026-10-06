@@ -90,15 +90,24 @@ class DashboardQueueTests(TestCase):
                         self.assertContains(response, 'formaction="/dashboard/glance/"')
                         self.assertContains(response, 'form="hq-post"')
                         self.assertContains(response, 'name="csrfmiddlewaretoken"')
-                        self.assertContains(response, "Serious</span>")
-                        self.assertTemplateUsed(response, "partials/_work_queue.html")
+                        self.assertContains(response, "Urgent</span>")
                     else:
-                        self.assertNotContains(response, "Reconcile the bill")
-                        self.assertNotContains(response, "data-attention-item")
+                        # A queue this short is read on the dashboard itself.
+                        self.assertContains(response, "data-attention-item", count=2)
+                        self.assertContains(response, "Inspect evidence", count=1)
                         self.assertContains(response, 'href="/action-items/"')
+                    self.assertTemplateUsed(response, "partials/_work_queue.html")
                     self.assertNotContains(response, "An interesting observation")
                     self.assertNotContains(response, 'href=""')
         self.assertFalse(DashboardRefreshRequest.objects.exists())
+
+    def test_a_long_queue_stays_a_count_on_the_dashboard(self):
+        items = [{**work_queue()[0], "key": f"example:{i}", "label": f"Decision {i}"} for i in range(4)]
+        with patch("hq.platform.application.dashboard.work_queue", return_value=items):
+            response = self.client.get("/")
+
+        self.assertNotContains(response, "data-attention-item")
+        self.assertContains(response, "4 things need you")
 
     def test_search_includes_the_recommended_action(self):
         response = self.client.get("/action-items/", {"q": "Reconcile the bill"})
@@ -134,9 +143,9 @@ class DashboardQueueTests(TestCase):
 
     def test_empty_filtered_queue_offers_a_way_back(self):
         response = self.client.get("/action-items/", {"q": "not an existing item"})
-        self.assertContains(response, "Nothing waiting matches these filters.")
+        self.assertContains(response, "Nothing matches these filters.")
         self.assertContains(response, "Clear filters")
-        self.assertNotContains(response, "Nothing waits on you.")
+        self.assertNotContains(response, "Nothing needs you.")
 
     def test_anonymous_reader_cannot_open_either_queue(self):
         self.client.logout()

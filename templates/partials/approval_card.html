@@ -5,7 +5,7 @@
     <p class="muted">
       {{ entry.held.requested_interface|upper }} · asked {{ entry.held.created_at|ago }}
       {% if entry.held.state == 'pending' %}
-        · lapses {{ entry.held.expires_at|naturaltime }}
+        · expires {{ entry.held.expires_at|naturaltime }}
       {% else %}
         · <strong>{{ entry.held.get_state_display }}</strong>{% if entry.held.decided_actor %} by <code>{{ entry.held.decided_actor }}</code>{% endif %}{% if entry.held.decided_at %} {{ entry.held.decided_at|ago }}{% endif %}
       {% endif %}
@@ -16,7 +16,7 @@
 
   {% if entry.warnings %}
     <div class="notice notice-attention">
-      <strong>What this reaches</strong>
+      <strong>What this affects</strong>
       <ul>{% for warning in entry.warnings %}<li>{{ warning }}</li>{% endfor %}</ul>
     </div>
   {% endif %}

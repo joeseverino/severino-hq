@@ -29,18 +29,21 @@ from hq.domains.content.models import ContentItem
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 
-from .entity_links import entity_link
+from .conditions import held_since
+from .entity_links import entity_link, kind_label
 from .estate import subject_link
 from .findings import estate_findings, rule_for
 from .infrastructure import enabled_resources, resource_health
-from .item_help import cannot_help, commands, finding_plan, remedy_link
+from .item_help import commands, finding_plan, instructions, remedy_link
+from .moments import ago, when_day
 from .projection import read_once
 from .security import cli_principal
 from .services import service_catalog
 from . import sections
 from .topology import derive_topology
-from .ui import Insight, counted
-from .workflow_contracts import ActionLink
+from .timestamps import moment
+from .ui import Insight, counted, ended
+from .workflow_contracts import ActionLink, WorkflowPlan
 
 # Reconciliation states that mean the declared world and the real one disagree.
 # "degraded" is a failure; the others are a resource HQ cannot currently vouch
@@ -57,32 +60,33 @@ def _backlog(
     key: str,
     count: int,
     eyebrow: str,
-    title: str,
-    body: str,
+    one: str,
+    many: str,
     action: str,
     url: str,
-    reason: str,
-    status: str = "attention",
+    body: str = "",
+    notice: bool = False,
 ) -> tuple[Insight, ...]:
     """One Insight when there is something to do, nothing when there is not.
 
-    ``reason`` is why HQ cannot do it for you: every backlog here is a
-    judgement or a fact only the operator holds."""
+    The title is the count and what is true of them, said whole for one and
+    for many. ``action`` names the page the work is done on, which is the
+    help every backlog comes with."""
 
     if not count:
         return ()
     return (
         Insight(
-            status=status,
+            status="attention",
             eyebrow=eyebrow,
-            title=title,
+            title=counted(count, one, many),
             value=str(count),
             body=body,
             action=action,
             url=url,
             magnitude=count,
             key=key,
-            workflow=cannot_help(key, reason),
+            notice=notice,
         ),
     )
 
@@ -92,10 +96,9 @@ def documentation() -> tuple[Insight, ...]:
         count=sections.documentation_reading()["needing_review"],
         key="docs-review",
         eyebrow="Docs",
-        title="Docs need review",
-        body="Past their review date.",
+        one="doc is past its review date",
+        many="docs are past their review date",
         action="Review docs",
-        reason="Whether a doc is still true is a judgement about its content, which HQ cannot make.",
         url=f"{reverse('docs_index:list')}?needs_review=1",
     )
 
@@ -106,11 +109,12 @@ def content() -> tuple[Insight, ...]:
             count=sections.content_reading()["drafts"],
             key="content-drafts",
             eyebrow="Content",
-            title="Draft content",
-            body="Written but not published.",
+            one="draft is not published",
+            many="drafts are not published",
             action="Open drafts",
-            reason="HQ does not write content, and publishing a draft is your decision.",
             url=f"{reverse('content:list')}?status=draft",
+            # A draft is work in hand, not a problem to fix.
+            notice=True,
         ),
         *_backlog(
             # Published only: a draft already has its own entry and is too
@@ -123,10 +127,9 @@ def content() -> tuple[Insight, ...]:
             ),
             key="content-undocumented",
             eyebrow="Content",
-            title="Content needs docs",
-            body="Published with no linked documentation.",
-            action="Link docs",
-            reason="HQ cannot tell which doc describes a piece of content.",
+            one="published piece has no doc linked",
+            many="published pieces have no doc linked",
+            action="Link a doc",
             url=f"{reverse('content:list')}?no_docs=1",
         ),
     )
@@ -153,10 +156,9 @@ def contacts() -> tuple[Insight, ...]:
         count=count,
         key="contacts-unread",
         eyebrow="Contacts",
-        title="Unread contact submissions",
-        body="Sent through the contact form and not yet answered.",
-        action="Read submissions",
-        reason="A reply goes from your own mail; HQ reads the form's submissions and sends nothing.",
+        one="unread message from the contact form",
+        many="unread messages from the contact form",
+        action="Read messages",
         url=f"{reverse('contacts:list')}?status=unread",
     )
 
@@ -170,10 +172,9 @@ def expenses() -> tuple[Insight, ...]:
         ),
         key="expenses-without-receipts",
         eyebrow="Expenses",
-        title="Expenses need receipts",
-        body="No receipt attached.",
+        one="expense has no receipt",
+        many="expenses have no receipt",
         action="Attach receipts",
-        reason="A receipt is a document only you have; HQ has no source to fetch it from.",
         url=f"{reverse('expenses:list')}?no_receipts=1",
     )
 
@@ -185,10 +186,9 @@ def receipts() -> tuple[Insight, ...]:
         ).count(),
         key="receipts-unlinked",
         eyebrow="Receipts",
-        title="Receipts need links",
-        body="Not attached to an expense or an asset.",
-        action="Link receipts",
-        reason="HQ does not know which expense or asset a receipt is for.",
+        one="receipt is not attached to an expense or asset",
+        many="receipts are not attached to an expense or asset",
+        action="Attach them",
         url=f"{reverse('receipts:list')}?unlinked=1",
     )
 
@@ -202,10 +202,10 @@ def assets() -> tuple[Insight, ...]:
         ),
         key="assets-missing-purchase",
         eyebrow="Assets",
-        title="Assets missing purchase info",
-        body="No purchase date or cost, so depreciation cannot be calculated.",
-        action="Complete assets",
-        reason="HQ has no record of when an asset was bought or what it cost.",
+        one="asset has no purchase date or cost",
+        many="assets have no purchase date or cost",
+        body="Depreciation cannot be calculated without both.",
+        action="Fill them in",
         url=f"{reverse('assets:list')}?missing_purchase=1",
     )
 
@@ -279,31 +279,37 @@ def tailnet() -> tuple[Insight, ...]:
         days = presence.key_expiry_days
         if days is None or days > KEY_EXPIRY_ATTENTION_DAYS:
             continue
+        expires = moment(presence.key_expires)
+        on = f" on {when_day(expires)}" if expires else ""
+        key = f"tailnet-expiry:{name}"
         items.append(
             Insight(
                 status="serious" if days <= KEY_EXPIRY_SERIOUS_DAYS else "attention",
                 eyebrow="Tailnet",
-                family="Tailnet key expiry",
-                key=f"tailnet-expiry:{name}",
+                family="Tailscale keys expiring",
+                key=key,
                 title=(
-                    f"{name} leaves the tailnet in {days} days"
+                    f"{name} leaves the tailnet in {counted(days, 'day')}"
                     if days > 0
                     else f"{name} has left the tailnet"
                 ),
                 value=str(max(days, 0)),
                 body=(
-                    "Its node key expires. Re-authenticate it or turn off key "
-                    "expiry."
+                    f"Its Tailscale key expires{on}."
                     if days > 0
-                    else "Its node key expired. Re-authenticate it."
+                    else f"Its Tailscale key expired{on}."
                 ),
-                action="Open machine",
                 url=entity_link("machine", name).url,
                 subject=subject_link("machine", name),
-                workflow=cannot_help(
-                    f"tailnet-expiry:{name}",
-                    "A node key is renewed by signing in again on the machine itself, and no "
-                    "HQ capability turns off key expiry.",
+                since=expires if days <= 0 else None,
+                workflow=instructions(
+                    key,
+                    (
+                        f"Sign in to Tailscale again on {name}, or turn off key expiry "
+                        "for it in the Tailscale admin console."
+                        if days > 0
+                        else f"Sign in to Tailscale again on {name}."
+                    ),
                 ),
             )
         )
@@ -322,13 +328,12 @@ def tailnet() -> tuple[Insight, ...]:
                 title=f"{name} is locked out of the tailnet",
                 value="1",
                 body=(
-                    "Tailnet lock is on and its key is unsigned, so other nodes "
-                    "ignore it. Its own status still shows healthy."
+                    f"Other machines ignore {name} because its key is not signed. "
+                    "Its own status still shows healthy."
                 ),
-                action="Sign it from a signing node",
                 url=reverse("control_plane:tailnet"),
                 subject=subject_link("machine", name),
-                workflow=cannot_help(f"tailnet-locked-out:{name}", _LOCK_REASON),
+                workflow=_sign_key(f"tailnet-locked-out:{name}", name),
             )
         )
     for name, presence in presences:
@@ -337,18 +342,16 @@ def tailnet() -> tuple[Insight, ...]:
                 Insight(
                     status="serious",
                     eyebrow="Tailnet",
-                    family="Tailnet devices awaiting approval",
+                    family="Devices waiting for approval",
                     key=f"tailnet-unauthorized:{name}",
                     title=f"{name} is waiting for tailnet approval",
                     value="1",
-                    body="It cannot reach anything until it is approved.",
-                    action="Open machine",
+                    body="It cannot reach anything yet.",
                     url=entity_link("machine", name).url,
                     subject=subject_link("machine", name),
-                    workflow=cannot_help(
+                    workflow=instructions(
                         f"tailnet-unauthorized:{name}",
-                        "No HQ capability authorizes a device: letting a machine onto the "
-                        "tailnet is kept for a person in the Tailscale admin console.",
+                        "Approve it in the Tailscale admin console, under Machines.",
                     ),
                 )
             )
@@ -362,13 +365,12 @@ def tailnet() -> tuple[Insight, ...]:
                     title=f"{name} is not signed for tailnet lock",
                     value="1",
                     body=(
-                        f"{presence.lock_error} Other nodes ignore an "
-                        "unsigned node."
+                        f"Other machines ignore {name} because its key is not signed. "
+                        f"Tailscale says: {ended(presence.lock_error)}"
                     ),
-                    action="Open machine",
                     url=entity_link("machine", name).url,
                     subject=subject_link("machine", name),
-                    workflow=cannot_help(f"tailnet-lock-unsigned:{name}", _LOCK_REASON),
+                    workflow=_sign_key(f"tailnet-lock-unsigned:{name}", name),
                 )
             )
         if presence.update_available:
@@ -381,13 +383,11 @@ def tailnet() -> tuple[Insight, ...]:
                     title=f"Tailscale update available for {name}",
                     value="1",
                     body=_update_body(presence, newest),
-                    action="Open machine",
                     url=entity_link("machine", name).url,
                     subject=subject_link("machine", name),
                     workflow=commands(
                         f"tailnet-update:{name}",
                         ((f"On {name}, as an administrator", "tailscale update"),),
-                        reason="HQ has no shell on the machine, so the update runs there.",
                     ),
                 )
             )
@@ -398,17 +398,21 @@ def tailnet() -> tuple[Insight, ...]:
             Insight(
                 status="attention",
                 eyebrow="Tailnet",
-                family="Tailnet routes",
+                family="Tailscale routes",
                 key=f"tailnet-routes:{name}",
                 title=(
-                    f"{name} advertises "
-                    f"{counted(len(unapproved), 'unapproved route', 'unapproved routes')}"
+                    f"{name} offers "
+                    + counted(
+                        len(unapproved),
+                        "route that is not approved yet",
+                        "routes that are not approved yet",
+                    )
                 ),
                 value=str(len(unapproved)),
                 body=(
                     f"Not approved: {', '.join(unapproved)}. "
                     + (
-                        "It cannot be used as an exit node. "
+                        "It cannot be used as an exit node until its exit route is approved. "
                         # The swept fact, not a second reading of the route
                         # list: what makes a route an exit route is Tailscale's
                         # to say, and the sweep already asked.
@@ -416,12 +420,8 @@ def tailnet() -> tuple[Insight, ...]:
                         and not presence.exit_node_approved
                         else ""
                     )
-                    + "Approve the ones you want and stop advertising the rest."
+                    + "Approve the ones you want and stop offering the rest."
                 ),
-                # The machine page, which offers the approval as a POST. A
-                # queue entry links somewhere you can look before you act; the
-                # verb lives where the routes it approves are shown.
-                action="Approve routes",
                 url=entity_link("machine", name).url,
                 subject=subject_link("machine", name),
                 actions=_approve_routes(name),
@@ -430,11 +430,14 @@ def tailnet() -> tuple[Insight, ...]:
     return tuple(items)
 
 
-# Why HQ offers nothing for tailnet lock: the signing key is the whole point.
-_LOCK_REASON = (
-    "Signing takes a tailnet lock key, and by design only your signing devices hold "
-    "one, never HQ."
-)
+def _sign_key(key: str, name: str) -> WorkflowPlan:
+    """Signing takes a tailnet lock key, which only a signing machine holds."""
+
+    return commands(
+        key,
+        (("On a machine that can sign, list the keys waiting", "tailscale lock status"),),
+        then=f"Then run tailscale lock sign with the key it lists for {name}.",
+    )
 
 
 def _approve_routes(name: str) -> tuple[ActionLink, ...]:
@@ -508,7 +511,6 @@ def infrastructure() -> tuple[Insight, ...]:
             title=finding.title,
             value="",
             body=finding.explanation,
-            action="",
             url=f"{findings_url}?rule={finding.rule}",
             subject=_node_link(nodes.get(finding.subject)),
             workflow=finding_plan(
@@ -529,33 +531,38 @@ def infrastructure() -> tuple[Insight, ...]:
         health = health_by_key[resource.key]
         if health["state"] not in UNSETTLED_RESOURCE_STATES:
             continue
-        items.append(
-            Insight(
-                status="serious" if health["state"] == "degraded" else "attention",
-                eyebrow="Infrastructure",
-                key=f"resource:{resource.key}",
-                title=(
-                    f"{resource.key}: {health['message']}"
-                    if health["message"]
-                    else f"{resource.key} state is {health['state']}"
-                ),
-                value="1",
-                body=(
-                    "It reports a failure. Open it to see why."
-                    if health["state"] == "degraded"
-                    else "HQ cannot confirm its current state."
-                ),
-                action="Open resource",
-                url=entity_link("resource", resource.key).url,
-                subject=subject_link("resource", resource.key),
-                **_reconcile_help(resource),
-            )
-        )
+        items.append(_unsettled(resource, health))
     return tuple(items) + tailnet()
 
 
-def _reconcile_help(resource) -> dict:
-    """Reconcile it, where its kind allows; otherwise say why HQ cannot."""
+def _unsettled(resource, health: dict[str, str]) -> Insight:
+    """A record that reports a problem, or that could not be checked, and that
+    no finding already speaks for."""
+
+    named = f"{kind_label(resource.kind)} {resource.key}"
+    failed = health["state"] == "degraded"
+    if failed:
+        body = ended(health["message"]) or "It gave no reason."
+    elif resource.last_observed_at:
+        body = f"It was last read {ago(resource.last_observed_at)}."
+    else:
+        body = "It has never been read."
+    return Insight(
+        status="serious" if failed else "attention",
+        eyebrow="Infrastructure",
+        key=f"resource:{resource.key}",
+        title=f"{named} has a problem" if failed else f"{named} could not be checked",
+        value="1",
+        body=body,
+        url=entity_link("resource", resource.key).url,
+        subject=subject_link("resource", resource.key),
+        since=held_since(resource.conditions, "Degraded") if failed else None,
+        **_apply_help(resource),
+    )
+
+
+def _apply_help(resource) -> dict:
+    """Apply HQ's settings again, where its type allows; otherwise say where to change it."""
 
     from hq.domains.control_plane.providers import PROVIDERS
 
@@ -563,13 +570,13 @@ def _reconcile_help(resource) -> dict:
     policy = provider.actions.get("reconcile") if provider else None
     link = None
     if policy is None or policy.mode != "locked":
-        link = remedy_link("infrastructure.reconcile", "Reconcile", resource.key)
+        link = remedy_link("infrastructure.reconcile", "Apply again", resource.key)
     if link is not None:
         return {"actions": (link,)}
     return {
-        "workflow": cannot_help(
+        "workflow": instructions(
             f"resource:{resource.key}",
-            "Its kind is locked against reconcile, so only a change at the provider settles it.",
+            "Change it where it lives. HQ is not allowed to change this type.",
         )
     }
 
@@ -584,7 +591,6 @@ def waiting_for_approval() -> tuple[Insight, ...]:
     items = []
     for held in pending():
         shown = preview(held)
-        what = ", ".join(f"{row.path}: {row.after or '(empty)'}" for row in shown.rows[:3])
         items.append(
             Insight(
                 status="serious",
@@ -595,8 +601,9 @@ def waiting_for_approval() -> tuple[Insight, ...]:
                     + (f" on {held.target}" if held.target else "")
                 ),
                 value="1",
-                body=f"{shown.label}{f' · {what}' if what else ''}",
+                body=_asked_change(shown),
                 url=reverse("core:approval_entry", kwargs={"approval_id": held.id}),
+                since=held.created_at,
                 actions=tuple(
                     ActionLink(
                         name=f"approval.{decision}",
@@ -614,6 +621,27 @@ def waiting_for_approval() -> tuple[Insight, ...]:
             )
         )
     return tuple(items)
+
+
+def _asked_change(shown) -> str:
+    """What an asked-for change would do, as far as its first three fields."""
+
+    moves = [
+        (
+            f"{row.path} from {row.before} to {row.after or 'empty'}"
+            if row.before
+            else f"{row.path} to {row.after or 'empty'}"
+        )
+        for row in shown.rows[:3]
+    ]
+    if not moves:
+        return ended(shown.label)
+    more = len(shown.rows) - len(moves)
+    return (
+        f"{shown.label}: {', '.join(moves)}"
+        + (f", and {counted(more, 'more field', 'more fields')}" if more > 0 else "")
+        + "."
+    )
 
 
 def services() -> tuple[Insight, ...]:
@@ -634,17 +662,12 @@ def services() -> tuple[Insight, ...]:
             status="attention",
             eyebrow="Services",
             key=f"service:{service.hostname}",
-            title=f"{service.hostname} is not fully wired",
+            title=f"{service.hostname} is not set up properly",
             value=str(len(service.faults)),
             body=" ".join(service.faults),
-            action="Open service",
+            action="Open the service",
             url=service.url,
             subject=subject_link("service", service.hostname),
-            workflow=cannot_help(
-                f"service:{service.hostname}",
-                "Each gap is a declaration only you can make: HQ does not guess which "
-                "certificate, host or record a name should have.",
-            ),
         )
         for service in service_catalog()
         if service.faults

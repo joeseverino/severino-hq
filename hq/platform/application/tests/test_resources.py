@@ -58,7 +58,7 @@ class ResourceExecutionTests(TestCase):
 
         self.assertEqual(renewal.url, "/commands/certificate.renew/")
         self.assertEqual(renewal.destination_label, "")
-        self.assertEqual(renewal.badges, ("infrastructure change",))
+        self.assertEqual(renewal.badges, ("Changes a live system",))
 
     def test_command_center_degrades_an_unusable_plugin_route_to_text(self):
         plugin = ResourceSpec(

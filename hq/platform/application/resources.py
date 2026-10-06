@@ -120,8 +120,8 @@ CORE_RESOURCE_SPECS = (
     ),
     ResourceSpec(
         "infrastructure.resources",
-        "Infrastructure resources",
-        "Canonical desired and observed infrastructure state.",
+        "Records",
+        "Everything HQ manages: what HQ expects and what is live.",
         Capability.READ,
         infrastructure.list_managed_resources,
         InfrastructureResourceQuery,
@@ -133,7 +133,7 @@ CORE_RESOURCE_SPECS = (
             ManagedResource,
             "key",
             ("key", "kind", "spec", "status", "conditions"),
-            label="Infrastructure resources",
+            label="Records",
             title_field="key",
             badge_field="kind_label",
             snippet_field="search_summary",
@@ -143,7 +143,7 @@ CORE_RESOURCE_SPECS = (
     ResourceSpec(
         "services",
         "Services",
-        "Declared hostnames and the state of their DNS, ingress, and TLS.",
+        "Every service name and the state of its DNS, proxy and certificate.",
         Capability.READ,
         service_list.list_services,
         EmptyQuery,
@@ -163,7 +163,7 @@ CORE_RESOURCE_SPECS = (
     ),
     ResourceSpec(
         "action.items",
-        "Action items",
+        "Needs you",
         "The composed action queue: what needs doing, from every domain.",
         Capability.READ,
         derived_reads.list_action_items,
@@ -212,7 +212,7 @@ CORE_RESOURCE_SPECS = (
     ResourceSpec(
         "domains",
         "Domains",
-        "Every domain HQ declares or a sweep has seen, its services and registration.",
+        "Every domain HQ manages or has read, its services and registration.",
         Capability.READ,
         derived_reads.list_domains,
         BoundedQuery,
@@ -224,7 +224,7 @@ CORE_RESOURCE_SPECS = (
     ResourceSpec(
         "relationships",
         "Relationships",
-        "One machine, service, domain or declaration and everything related to it.",
+        "One machine, service, domain or record and everything related to it.",
         Capability.READ,
         detail_handler=derived_reads.get_relationships,
         identifier="node",
@@ -255,7 +255,7 @@ CORE_RESOURCE_SPECS = (
     ResourceSpec(
         "readings",
         "Readings",
-        "Each reading kind, its last read, and its stored records as its schema admits them.",
+        "Each type of reading, when it was last read, and the records it holds.",
         Capability.READ,
         derived_reads.list_readings,
         ReadingQuery,
@@ -266,8 +266,8 @@ CORE_RESOURCE_SPECS = (
     ),
     ResourceSpec(
         "credentials",
-        "Credential sight",
-        "What each connection provider's credential can see, and what it would need to see more.",
+        "Credential access",
+        "What each connection's credential can read, and what it would need to read more.",
         Capability.READ,
         derived_reads.list_credentials,
         EmptyQuery,
@@ -280,7 +280,7 @@ CORE_RESOURCE_SPECS = (
         "tailnet",
         "Tailnet",
         "The tailnet policy: settings, grants, shell rules, groups and tags with their "
-        "machines, services, app connectors, tests, findings, and what could not be read.",
+        "machines, services, app connectors, tests, problems, and what could not be read.",
         Capability.READ,
         tailnet_context.get_tailnet,
         EmptyQuery,
@@ -289,7 +289,7 @@ CORE_RESOURCE_SPECS = (
     ),
     ResourceSpec(
         "connection.standing",
-        "Connection standing",
+        "Connection status",
         "Each connection with what its credential sees, how fresh each reading is, what "
         "was refused and the fix; the summary counts, the security posture and HQ's path.",
         Capability.READ,

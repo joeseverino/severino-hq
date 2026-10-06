@@ -10,7 +10,7 @@ part, so only a panel that changed is replaced and an open one stays open.
   once when the page is showing. Asking by hand is in each panel's popover,
   and posts through the first.
   {% endcomment %}
-  <form id="glance-refresh" method="post" action="{% url 'dashboard_glance' %}" data-fragment-target data-fragment-failure="At-a-glance refresh failed." hidden>{% csrf_token %}</form>
+  <form id="glance-refresh" method="post" action="{% url 'dashboard_glance' %}" data-fragment-target data-fragment-failure="Could not read it." hidden>{% csrf_token %}</form>
   {% if dashboard_due %}<form method="post" action="{% url 'dashboard_glance' %}" data-fragment-target data-fragment-auto hidden>{% csrf_token %}<input type="hidden" name="scope" value="stale"></form>{% endif %}
   <div class="glance-panels">
     {% for panel in dashboard_panels %}
@@ -25,12 +25,12 @@ part, so only a panel that changed is replaced and an open one stays open.
             </span>
           {% else %}
             <span class="glance-lead glance-lead-empty">{{ panel.label }}</span>
-            <span class="glance-caption">{% if panel.refreshing %}Refreshing…{% else %}No reading yet{% endif %}</span>
+            <span class="glance-caption">{% if panel.refreshing %}Reading…{% else %}No reading yet{% endif %}</span>
           {% endif %}
           {% comment %}Said only when it is news: a current reading needs no age.{% endcomment %}
           {% if panel.refreshing or panel.outdated or panel.payload.refresh_failed %}
             <span class="glance-freshness">
-              {% if panel.refreshing %}Refreshing{% elif panel.payload.refresh_failed %}Refresh failed{% elif panel.observed_at %}Out of date · as of {{ panel.observed_at|when:"ago" }}{% else %}Out of date{% endif %}
+              {% if panel.refreshing %}Reading{% elif panel.payload.refresh_failed %}Reading failed{% elif panel.observed_at %}Out of date · as of {{ panel.observed_at|when:"ago" }}{% else %}Out of date{% endif %}
             </span>
           {% endif %}
         </summary>
@@ -40,7 +40,7 @@ part, so only a panel that changed is replaced and an open one stays open.
             {% if panel.payload.summary %}<span>{{ panel.payload.summary }}</span>{% endif %}
             {% if panel.observed_at %}<time datetime="{{ panel.observed_at|date:'c' }}" title="{{ panel.observed_at }}">Read {{ panel.observed_at|ago }}</time>{% endif %}
           </header>
-          {% if panel.payload.refresh_failed and panel.payload.metrics %}<p class="glance-note">The last refresh failed ({{ panel.payload.refresh_failed }}); this is the reading from {% if panel.observed_at %}{{ panel.observed_at|ago }}{% else %}before it{% endif %}.</p>{% endif %}
+          {% if panel.payload.refresh_failed and panel.payload.metrics %}<p class="glance-note">The last reading failed ({{ panel.payload.refresh_failed }}). This one is from {% if panel.observed_at %}{{ panel.observed_at|ago }}{% else %}before it{% endif %}.</p>{% endif %}
           {% if panel.payload.metrics %}
             <dl class="glance-metrics">
               {% for metric in panel.readings %}
@@ -52,7 +52,7 @@ part, so only a panel that changed is replaced and an open one stays open.
               {% endfor %}
             </dl>
           {% else %}
-            <p class="glance-note">{% if panel.refreshing %}Refreshing…{% elif panel.payload.summary %}{{ panel.payload.summary }}{% else %}{{ panel.empty }}{% endif %}</p>
+            <p class="glance-note">{% if panel.refreshing %}Reading…{% elif panel.payload.summary %}{{ panel.payload.summary }}{% else %}{{ panel.empty }}{% endif %}</p>
           {% endif %}
           {% if panel.payload.hours %}
             <ol class="glance-hours" aria-label="The hours ahead">
@@ -60,7 +60,8 @@ part, so only a panel that changed is replaced and an open one stays open.
                 <li title="{{ hour.forecast }}">
                   <span>{{ hour.time }}</span>
                   <strong>{{ hour.temperature }}</strong>
-                  <small{% if hour.precipitation != "0%" %} class="is-wet"{% endif %}>{{ hour.precipitation }}</small>
+                  {% comment %}A chance of rain is said only when there is one.{% endcomment %}
+                  <small{% if hour.precipitation != "0%" %} class="is-wet"{% endif %}>{% if hour.precipitation != "0%" %}{{ hour.precipitation }}{% endif %}</small>
                 </li>
               {% endfor %}
             </ol>
@@ -68,7 +69,7 @@ part, so only a panel that changed is replaced and an open one stays open.
           <footer class="glance-expanded-foot">
             {% if panel.link %}<a href="{{ panel.link.url }}">{{ panel.link.label }} →</a>{% endif %}
             <span>
-              {% if dashboard_can_refresh %}<button class="glance-refresh" type="submit" form="glance-refresh">Refresh now</button>{% endif %}
+              {% if dashboard_can_refresh %}<button class="glance-refresh" type="submit" form="glance-refresh">Read now</button>{% endif %}
               <a href="{% url 'dashboard_glance_settings' %}">Settings</a>
             </span>
           </footer>

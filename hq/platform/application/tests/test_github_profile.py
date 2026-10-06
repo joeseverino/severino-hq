@@ -253,7 +253,7 @@ class CardTests(TestCase):
 
         self.assertEqual(len(cards), 1)
         card = cards[0]
-        self.assertEqual((card["label"], card["value"]), ("New advisories", "1"))
+        self.assertEqual((card["label"], card["value"]), ("New security advisories", "1"))
         self.assertNotIn("detail", card)
 
     def test_no_linked_account_no_card(self):

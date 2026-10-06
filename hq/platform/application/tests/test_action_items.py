@@ -260,7 +260,7 @@ class PageTests(TestCase):
         self.client.post(url)
 
         self.assertEqual(self.shown(self.client.get(reverse("action_items"))), [ITEM["label"]])
-        self.assertContains(self.client.get(reverse("action_items"), {"q": "gadget"}), "Nothing waiting matches these filters.")
+        self.assertContains(self.client.get(reverse("action_items"), {"q": "gadget"}), "Nothing matches these filters.")
 
     def test_a_notice_is_kept_apart_from_what_needs_doing_and_out_of_that_count(self):
         told = {**ITEM, "key": "example:run", "label": "A run drifted", "notice": True}

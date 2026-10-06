@@ -22,34 +22,37 @@ class JobListView(PageMixin, TableListMixin, ListView):
     paginate_by = 40
     page_title = "Background jobs"
     table_search_fields = ("label", "kind", "note")
-    table_search_placeholder = "Search jobs and notes…"
+    table_search_placeholder = "Search jobs and results…"
+    page_lede = (
+        "Work HQ does on a schedule or that you started, and how each run went. "
+        "What changed as a result is in the audit log."
+    )
     table_columns = (
         TableColumn("Started", "created_at"),
         TableColumn("Job", css="key-col"),
         TableColumn("State", css="key-col"),
         TableColumn("Duration", css="num-col"),
-        TableColumn("Last update"),
+        TableColumn("Result"),
         TableColumn("Requested by"),
     )
     table_sorts = (
         TableSort("-created_at", "Newest first", "-created_at"),
         TableSort("created_at", "Oldest first", "created_at"),
-        TableSort("kind", "Kind A–Z", ("kind", "-created_at")),
+        TableSort("kind", "Job A–Z", ("label", "-created_at")),
         TableSort("state", "State", ("state", "-created_at")),
     )
     table_default_sort = "-created_at"
 
     def get_table_filters(self):
         # Kinds are strings extensions choose, so the options are whatever
-        # has actually run rather than a list this app maintains.
-        kinds = (
-            Job.objects.order_by("kind")
-            .values_list("kind", flat=True)
-            .distinct()
-        )
+        # has actually run rather than a list this app maintains. Each is
+        # offered by the name its rows carry: its latest run's label.
+        named: dict[str, str] = {}
+        for kind, label in Job.objects.order_by("kind", "-created_at").values_list("kind", "label"):
+            named.setdefault(kind, label or kind)
         return (
             TableFilter("state", "State", "state", Job.State.choices),
-            TableFilter("kind", "Kind", "kind", [(kind, kind) for kind in kinds]),
+            TableFilter("kind", "Job", "kind", sorted(named.items(), key=lambda item: item[1].casefold())),
         )
 
     def get_queryset(self):

@@ -17,9 +17,9 @@
     {% include "partials/_kpi_grid.html" with label="Traffic" items=kpis %}
 
     <p class="muted reading-note">
-      {{ totals.start|when:"day" }}{% if totals.start != totals.end %} – {{ totals.end|when:"day" }}{% endif %}{% if totals.sample_interval > 1 %} · sampled 1:{{ totals.sample_interval }}{% endif %}{% if observed_at %} · read {{ observed_at|ago }}{% endif %}
+      {{ totals.start|when:"day" }}{% if totals.start|date:"Ymd" != totals.end|date:"Ymd" %} – {{ totals.end|when:"day" }}{% endif %}{% if totals.sample_interval > 1 %} · estimated from 1 in {{ totals.sample_interval }} visits{% endif %}{% if observed_at %} · read {{ observed_at|ago }}{% endif %}
       {% if coverage.expected_days and not coverage.complete %}
-        · {{ coverage.missing_days|counted:"day" }} still loading
+        · {{ coverage.covered_days }} of {{ coverage.expected_days }} days read so far, the rest still loading
       {% endif %}
     </p>
 
@@ -55,7 +55,7 @@
             <dt>{% if key == "lcp" %}Loading (LCP){% elif key == "inp" %}Responsiveness (INP){% elif key == "cls" %}Layout shift (CLS){% else %}{{ key|upper }}{% endif %}</dt>
             <dd>
               {% if metric.percent is None %}
-                <span class="muted">no samples</span>
+                <span class="muted">not enough visits to measure</span>
               {% else %}
                 <span class="vital-rate{% if metric.passing %} is-passing{% endif %}">{{ metric.percent|floatformat:"-1" }}<span class="unit">%</span></span>
                 <span class="muted">{{ metric.good }} of {{ metric.total }} good</span>
@@ -68,6 +68,6 @@
     </section>
   {% else %}
     {% url 'control_plane:connections' as connections_url %}
-    {% include "partials/_empty_state.html" with message="No visits recorded yet." why="HQ reads them from Cloudflare once a connection that can read site analytics is set up." action_url=connections_url action_label="Connections" only %}
+    {% include "partials/_empty_state.html" with message="No visits recorded yet." why="Visits are read from Cloudflare Web Analytics, through a Cloudflare connection." action_url=connections_url action_label="Connections" only %}
   {% endif %}
 {% endblock %}

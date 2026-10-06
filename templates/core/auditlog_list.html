@@ -36,4 +36,4 @@ moment another source dated (a deploy, a container start).
     {% endwith %}
   {% endif %}
 {% endblock %}
-{% block empty %}{% if awaiting %}Nothing is waiting for approval.{% else %}No audit events.{% endif %}{% endblock %}
+{% block empty %}{% if awaiting %}Nothing is waiting for your approval.{% else %}Nothing has been recorded yet.{% endif %}{% endblock %}

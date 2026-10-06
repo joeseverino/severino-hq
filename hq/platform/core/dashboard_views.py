@@ -34,6 +34,10 @@ from hq.platform.application.moments import when_day
 from hq.platform.application.ui import ListRow
 from hq.domains.contacts import inbox
 
+# A queue of this many or fewer is read on the dashboard itself, each card
+# with its button; a longer one is a count and a link to its page.
+NEEDS_YOU_IN_PLACE = 3
+
 
 class DashboardLinkChoiceView(View):
     """Choose which outward links the dashboard shows, for this operator only.
@@ -51,7 +55,7 @@ class DashboardLinkChoiceView(View):
                 "external_choices": link_choices(request.user),
                 **page_context(
                     "Dashboard links",
-                    "Pick the links to show. With none picked, every one HQ can reach is shown.",
+                    "Tick the links to show. With none ticked, all of them show.",
                 ),
             },
         )
@@ -184,6 +188,8 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             active_projects=snapshot["active_projects"],
             draft_content_count=snapshot["kpis"]["draft_content"],
             action_queue_count=action_queue_count,
+            # A queue short enough to read in place is shown in place.
+            needs_you=doing if len(doing) <= NEEDS_YOU_IN_PLACE else [],
             notice_count=len(told),
             aside_count=len(queue) - action_queue_count - len(told),
             profile_action_count=action_queue_count + len(told),

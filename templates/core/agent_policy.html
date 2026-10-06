@@ -4,33 +4,33 @@
   <div class="agent-state-main">
     <span class="agent-state-dot" aria-hidden="true"></span>
     <div class="agent-state-copy">
-      <h2>{% if agents_paused %}Agents are paused{% else %}Agents are running{% endif %}</h2>
-      <p>{% if agents_paused %}No agent can act through HQ until you resume.{% else %}Agents act within the rules below.{% endif %}</p>
+      <h2>{% if agents_paused %}Agents are blocked{% else %}Agents are allowed{% endif %}</h2>
+      <p>{% if agents_paused %}No agent can do anything through HQ until you allow them again.{% else %}They can do what the table below allows.{% endif %}</p>
     </div>
     {% url 'agent_access' as agent_access_url %}
     {% if agents_paused %}
-      {% post_button "Resume" agent_access_url name="paused" value="0" css="btn primary" %}
+      {% post_button "Allow agents" agent_access_url name="paused" value="0" css="btn primary" %}
     {% else %}
-      {% post_button "Pause all" agent_access_url name="paused" value="1" %}
+      {% post_button "Block all agents" agent_access_url name="paused" value="1" %}
     {% endif %}
   </div>
   <p class="agent-state-facts">
-    <span><strong>{{ rule_count|counted:"rule" }}</strong> set</span>
-    <a href="{% url 'core:audit_list' %}?awaiting=1"><strong>{{ awaiting_count }}</strong> awaiting approval</a>
-    <a href="{% url 'core:audit_list' %}?action=denied"><strong>{{ refused_count }}</strong> refused in 24h</a>
-    {% if any_dormant %}<span class="policy-dormant-note">Faded rules are off on this server until MCP allows them.</span>{% endif %}
+    <span>{{ rule_count|counted:"rule changed from the default,rules changed from the default" }}</span>
+    {% if awaiting_count %}<a href="{% url 'core:audit_list' %}?awaiting=1"><strong>{{ awaiting_count }}</strong> waiting for your approval</a>{% endif %}
+    <a href="{% url 'core:audit_list' %}?action=denied"><strong>{{ refused_count }}</strong> refused in the last day</a>
+    {% if any_dormant %}<span class="policy-dormant-note">A greyed-out rule does nothing yet. HQ's settings do not let MCP agents do that action at all (the <code>SEVERINO_MCP_ENABLE</code> settings).</span>{% endif %}
   </p>
   {% if agents %}
     <ul class="policy-agents">
       {% for agent in agents %}
         <li>
           <span class="policy-agent-name">{{ agent.label }}</span>
-          <span class="muted">{{ agent.detail }} · {{ agent.identity.granted|length }} granted in Pocket ID · seen {{ agent.identity.last_seen|ago }}</span>
+          <span class="muted">Uses {{ agent.detail }} · {{ agent.identity.granted|length|counted:"permission from Pocket ID,permissions from Pocket ID" }} · last seen {{ agent.identity.last_seen|ago }}</span>
         </li>
       {% endfor %}
     </ul>
   {% else %}
-    <p class="muted policy-none">No agent has connected yet. One appears here the first time it presents a token.</p>
+    <p class="muted policy-none">No agent has connected yet.</p>
   {% endif %}
 </section>
 
@@ -50,7 +50,7 @@ so a rule is read and changed where it sits rather than behind a disclosure.
         <tr>
           <th scope="col">Action</th>
           <th scope="col">Default</th>
-          {% for head in column_heads %}<th scope="col" title="{{ head.column.detail }}">{{ head.column.label }}{% if head.dormant %} <span class="policy-off">off on this server</span>{% endif %}</th>{% endfor %}
+          {% for head in column_heads %}<th scope="col" title="{{ head.column.detail }}">{{ head.column.label }}{% if head.dormant %} <span class="policy-off">off in HQ's settings</span>{% endif %}</th>{% endfor %}
         </tr>
       </thead>
       {% for group in groups %}
@@ -58,7 +58,7 @@ so a rule is read and changed where it sits rather than behind a disclosure.
           <tr class="row-group"><th colspan="{{ column_heads|length|add:2 }}" scope="rowgroup">{{ group.label }}</th></tr>
           {% for row in group.rows %}
             <tr>
-              <th scope="row">{{ row.label }} <span class="policy-effect effect-{{ row.effect }}">{{ row.effect_label }}</span></th>
+              <th scope="row">{{ row.label }}{% if row.effect_label %} <span class="policy-effect effect-{{ row.effect }}">{{ row.effect_label }}</span>{% endif %}</th>
               <td class="policy-default">{{ row.default }}</td>
               {% for cell in row.cells %}<td>{% include "core/_policy_setting.html" %}</td>{% endfor %}
             </tr>

@@ -56,7 +56,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.core.audit import operation_context
 
 from .derivations import reached
-from .entity_links import entity_link
+from .entity_links import entity_link, kind_label
 from .security import AuthorizationError, Principal, internal_principal, is_interactive
 
 # How long an unanswered request stands. A day, because the person it is waiting
@@ -288,9 +288,9 @@ def consent_gap(kind: str, *, principal: Principal) -> str:
     if is_interactive(principal) or principal.approved_by:
         return ""
     return (
-        f"Changing a {kind!r} declaration needs a person to approve it. Ask for "
-        "the change over an interface that records the request, then approve it "
-        "as a signed-in operator."
+        f"Changing a {kind_label(kind)} needs a person to approve it. Ask for the "
+        "change through the API or MCP, which records the request, then approve it "
+        "in the browser, signed in."
     )
 
 
@@ -410,7 +410,7 @@ def lapse_unanswered(ids: tuple[Any, ...]) -> int:
     ).update(
         state=ApprovalRequest.State.EXPIRED,
         decided_at=timezone.now(),
-        decision_note="Nobody answered it inside its window.",
+        decision_note="It expired without an answer.",
     )
 
 
@@ -471,10 +471,10 @@ def _decidable(approval_id: str) -> ApprovalRequest:
         _settle(
             held,
             ApprovalRequest.State.EXPIRED,
-            "Nobody answered it inside its window.",
+            "It expired without an answer.",
         )
         raise ApprovalError(
-            "That request lapsed before it was answered. Ask for it again if it "
+            "That request expired before it was answered. Ask for it again if it "
             "is still wanted."
         )
     return held
@@ -492,9 +492,7 @@ def _require_person(principal: Principal, held: ApprovalRequest) -> None:
 
     if not is_interactive(principal):
         raise AuthorizationError(
-            "Approving a held change requires a signed-in operator on the web "
-            "interface. A capability is not enough: the point of the hold is "
-            "that a person sees it."
+            "Approve this in the browser, signed in. An agent cannot approve a change."
         )
     if principal.actor == held.requested_actor:
         raise AuthorizationError("A request cannot be approved by whoever asked for it.")
@@ -539,7 +537,7 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
     spec = capability_registry().get(held.capability)
     if spec is None:
         raise ApprovalError(
-            f"{held.capability!r} is no longer a capability HQ offers, so this "
+            f"{held.capability!r} is no longer something HQ can do, so this "
             "request cannot be applied."
         )
     _require_person(principal, held)
@@ -555,12 +553,11 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
         _settle(
             held,
             ApprovalRequest.State.STALE,
-            "The declaration changed after this was requested.",
+            "HQ's copy changed after this was requested.",
         )
         raise ApprovalError(
-            "What this request was about has changed since it was asked for, so "
-            "approving it would apply something other than what is shown. It "
-            "has been superseded; ask again against the current declaration."
+            "This changed after the agent asked, so approving it would apply "
+            "something other than what is shown. Ask the agent to request it again."
         )
     acting = Principal(
         held.requested_actor,
@@ -771,9 +768,9 @@ def preview(held: ApprovalRequest) -> ChangePreview:
     provider = PROVIDERS.get(held.resource_kind)
     requested = held.payload.get("spec")
     if isinstance(requested, dict):
-        return compare(declared, requested, label="Declaration would change")
+        return compare(declared, requested, label="HQ's copy would change")
     if held.capability.endswith(".remove"):
-        return compare(declared, {}, label="This declaration would be removed")
+        return compare(declared, {}, label="This would be removed from HQ")
     observed = held.baseline.get("observed") or {}
     if provider is not None and provider.from_record is not None and observed:
         try:
@@ -782,7 +779,7 @@ def preview(held: ApprovalRequest) -> ChangePreview:
             live = {}
         if live:
             return compare(live, declared, label="The live record would change")
-    return compare({}, declared, label="This would be applied as declared")
+    return compare({}, declared, label="HQ's copy would be applied")
 
 
 # Fields that steer a request rather than being written by it.

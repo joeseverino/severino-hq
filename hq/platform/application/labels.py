@@ -55,3 +55,17 @@ def human_bytes(value: int | float) -> str:
             return f"{amount:.0f} {unit}" if unit in {"B", "KB", "MB"} else f"{amount:.1f} {unit}"
         amount /= 1024
     return "0 B"
+
+
+# What running a command does, in the words every page uses for it: the search
+# results, the command's own page and the agents table.
+EFFECT_LABELS = {
+    "read": "Reads only",
+    "remote_write": "Changes HQ",
+    "infrastructure_change": "Changes a live system",
+    "destructive": "Deletes",
+}
+
+
+def effect_label(effect: str) -> str:
+    return EFFECT_LABELS.get(effect, "")

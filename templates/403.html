@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Not allowed{% endblock %}
+{% block content %}
+{% comment %}
+Every refusal of a signed-in page: an account that may not do this, or a form
+whose page went stale (`stale`, from `error_views.csrf_failure`). It never
+repeats the refusal's own text, which names permissions by their identifiers.
+{% endcomment %}
+<section class="notice-page">
+  <p class="notice-code">403</p>
+  {% if stale %}
+    <h1>That form is out of date</h1>
+    <p class="notice-body">The page it came from was open too long, or you signed in again since. Go back, reload the page and try once more. Nothing was saved.</p>
+  {% else %}
+    <h1>You can't open this</h1>
+    <p class="notice-body">Your account is not allowed to see or do this. If it should be, change what your sign-in allows, then sign in again.</p>
+  {% endif %}
+  <p class="page-actions">
+    <a class="btn primary" href="{% url 'dashboard' %}">Back to the dashboard</a>
+  </p>
+</section>
+{% endblock %}

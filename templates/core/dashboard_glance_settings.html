@@ -3,16 +3,16 @@
 <form method="post" action="{% url 'dashboard_glance_settings' %}" class="form">
   {% csrf_token %}
   <div class="field">
-    <label for="glance-infrastructure-label">Homelab label</label>
+    <label for="glance-infrastructure-label">Name for the machine card</label>
     <input id="glance-infrastructure-label" name="infrastructure_label" maxlength="40" value="{{ settings.infrastructure_label }}">
   </div>
   <div class="field">
     <label for="glance-weather-point">Weather location</label>
     <input id="glance-weather-point" name="weather_point" maxlength="64" placeholder="latitude, longitude" value="{{ settings.weather_point }}">
-    <p class="help">Latitude, longitude. Longitudes west of Greenwich are negative. Leave blank to hide the weather.</p>
+    <p class="help">Latitude, longitude, for example 38.6, -90.3. Leave blank to hide the weather.</p>
   </div>
   <div class="field">
-    <label for="glance-weather-label">Weather label</label>
+    <label for="glance-weather-label">Name for the weather card</label>
     <input id="glance-weather-label" name="weather_label" maxlength="40" value="{{ settings.weather_label }}">
   </div>
   <div class="form-actions">

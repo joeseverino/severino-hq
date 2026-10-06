@@ -191,7 +191,7 @@ RULES: tuple[FindingRule, ...] = tuple(
 
 _RULE_BY_NAME = {rule.name: rule for rule in RULES}
 if len(_RULE_BY_NAME) != len(RULES):
-    raise ValueError("Two finding modules declare the same rule name.")
+    raise ValueError("Two finding modules use the same rule name.")
 
 
 def finding_steps(finding: Finding) -> tuple[OperatorStep, ...]:
@@ -646,7 +646,7 @@ def auto_remediable(*, principal: Principal, limit: int = 10) -> tuple[Repair, .
             Repair(
                 resource_key=node.label,
                 rule=finding.rule,
-                reason=f"Automatic repair of a finding: {finding.rule}.",
+                reason=f"Automatic repair of a problem HQ found: {finding.rule}.",
             )
         )
         if len(repairs) >= limit:

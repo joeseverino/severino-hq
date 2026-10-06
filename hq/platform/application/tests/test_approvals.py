@@ -746,7 +746,7 @@ class SurfaceTests(TestCase):
         page = self.client.get(f"{reverse('core:audit_list')}?awaiting=1")
 
         self.assertEqual(len(page.context["events"]), 2)
-        self.assertContains(page, "Awaiting approval · 2")
+        self.assertContains(page, "Waiting for your approval · 2")
 
     def test_a_decision_is_offered_only_while_the_request_waits(self):
         """This card sits on a permanent record. A button on something already

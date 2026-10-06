@@ -45,8 +45,8 @@ OUTSIDE_HQ = "outside"
 DEPLOYS = "deploy"
 CONTAINERS = "container"
 SOURCES = (
-    (THROUGH_HQ, "Through HQ"),
-    (OUTSIDE_HQ, "Outside HQ"),
+    (THROUGH_HQ, "Done in HQ"),
+    (OUTSIDE_HQ, "Changed outside HQ"),
     (DEPLOYS, "Deploys"),
     (CONTAINERS, "Containers"),
 )

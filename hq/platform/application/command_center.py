@@ -13,6 +13,8 @@ from .capabilities import CapabilitySpec
 from .connections import ConnectionAbility, ConnectionSpec
 from .connection_catalog import connection_catalog
 from .contracts import route_url
+from .decisions import urgency
+from .labels import effect_label
 from .entity_links import entity_link
 from .integrations import integration_graph
 from .resources import ResourceSpec
@@ -147,7 +149,7 @@ def _matching_ability_labels(spec: ConnectionSpec, query: str) -> tuple[str, ...
     hidden = len(labels) - len(visible)
     if not hidden:
         return visible
-    return (*visible, f"+{hidden} matching abilities")
+    return (*visible, f"+{hidden} more")
 
 
 def _command_matches_ability(
@@ -177,7 +179,7 @@ def _command_item(spec: CapabilitySpec, relation: CommandRelation) -> DiscoveryI
         url=url,
         destination_label="",
         badges=(
-            spec.effect.replace("_", " "),
+            effect_label(spec.effect),
             *(f"via {label}" for label in relation.labels),
         ),
     )
@@ -262,10 +264,6 @@ def _finding_url(name: str) -> str:
     return f"{base}?{urlencode({'rule': name})}" if base else ""
 
 
-def _ability_count(count: int) -> str:
-    return f"{count} {'ability' if count == 1 else 'abilities'}"
-
-
 def _live_connection_url(group, connection) -> str:
     relationship = next(
         (action.url for action in connection.actions if action.name == "relationships"),
@@ -281,14 +279,17 @@ def _live_connection_item(group, connection) -> DiscoveryItem:
         kind="connection",
         name=instance.id,
         label=instance.label,
-        summary=instance.detail or instance.endpoint or group.spec.summary,
+        # What kind of connection it is. Its address and its identifiers are
+        # searched, and shown on its own page.
+        summary=group.spec.label if group.spec.label != instance.label else "",
         url=_live_connection_url(group, connection),
-        destination_label=group.spec.label,
-        badges=(instance.status_label, _ability_count(len(abilities))),
+        destination_label="",
+        badges=(instance.status_label,),
         search_terms=(
             group.spec.label,
             group.spec.summary,
             instance.kind,
+            instance.detail,
             instance.endpoint,
             instance.controller_id,
             *(fact.label for fact in instance.facts),
@@ -470,15 +471,7 @@ def _command_center(
             summary=spec.summary,
             url=_resource_url(spec),
             destination_label="",
-            badges=tuple(
-                operation
-                for operation, supported in (
-                    ("list", spec.list_handler),
-                    ("get", spec.detail_handler),
-                    ("search", spec.search),
-                )
-                if supported
-            ),
+            badges=(),
         )
         for spec in registered_resources
         if principal.permits(*spec.required_capabilities)
@@ -507,11 +500,7 @@ def _command_center(
             summary=spec.summary,
             url=route_url(spec.web_route),
             destination_label="",
-            badges=(
-                _ability_count(len(spec.abilities)),
-                *((spec.secret_store,) if spec.secret_store else ()),
-                *_matching_ability_labels(spec, query),
-            ),
+            badges=_matching_ability_labels(spec, query),
             search_terms=tuple(
                 term
                 for ability in spec.abilities
@@ -531,8 +520,8 @@ def _command_center(
                 label=lens.label,
                 summary=lens.summary,
                 url=_lens_url(lens.name),
-                destination_label="Topology",
-                badges=("topology",),
+                destination_label="",
+                badges=(),
             )
             for lens in topology_lenses()
         )
@@ -547,10 +536,10 @@ def _command_center(
                 kind="check",
                 name=rule.name,
                 label=rule.title,
-                summary=rule.severity,
+                summary="",
                 url=_finding_url(rule.name),
-                destination_label="Findings",
-                badges=(rule.severity,),
+                destination_label="",
+                badges=(urgency(rule.severity),),
             )
             for rule in finding_rules()
         )

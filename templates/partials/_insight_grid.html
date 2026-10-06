@@ -10,7 +10,7 @@ Each item accepts:
   value    the reading itself, kept short
   title    what the reading is about
   body     the interpretation
-  action   the recommended next step (rendered after a "Next" label)
+  action   the recommended next step, as a sentence
   status   good | attention | serious | neutral (default neutral)
   url      optional; makes the card a link
 
@@ -28,9 +28,12 @@ communicated by colour alone.
         {% if item.url %}<a href="{{ item.url }}">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}
       </h3>
       {% if item.body %}<p class="insight-body">{{ item.body }}</p>{% endif %}
-      {% if item.action %}<p class="insight-action"><span class="insight-action-label">Next</span> {{ item.action }}</p>{% endif %}
+      {% if item.action %}<p class="insight-action">{{ item.action }}</p>{% endif %}
+      {% if item.workflow %}{% with parts=item.workflow|workflow_parts %}
+        {% include "partials/_resolution_workflow.html" with steps=parts.steps fold=parts.fold label=item.title only %}
+        {% if parts.reason %}<p class="attention-reason">{{ parts.reason }}</p>{% endif %}
+      {% endwith %}{% endif %}
       {% if item.actions %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=item.actions only %}</div>{% endif %}
-      {% if item.workflow %}<details class="attention-workflow"><summary>What to do</summary>{% include "partials/_resolution_workflow.html" with workflow=item.workflow compact=True %}</details>{% endif %}
     </article>
   {% endfor %}
 </section>

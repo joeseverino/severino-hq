@@ -58,7 +58,7 @@
       CSS can style an anchor but not rewrite where it goes, and a control
       that only ever opens is a control that appears broken on the second tap.
       {% endcomment %}
-      <a class="nav-toggle nav-toggle-open" href="#sections" aria-label="Sections" aria-controls="primary-navigation" aria-expanded="false">
+      <a class="nav-toggle nav-toggle-open" href="#sections" aria-label="Menu" aria-controls="primary-navigation" aria-expanded="false">
         <svg viewBox="0 0 16 12" width="15" height="12" aria-hidden="true" fill="currentColor">
           <rect x="0" y="0" width="16" height="2" rx="1"/>
           <rect x="0" y="5" width="16" height="2" rx="1"/>
@@ -68,7 +68,7 @@
       {% comment %}
       Both halves carry the state, because only one of them is ever on screen.
       {% endcomment %}
-      <a class="nav-toggle nav-toggle-close" href="#" aria-label="Close sections" aria-controls="primary-navigation" aria-expanded="true">
+      <a class="nav-toggle nav-toggle-close" href="#" aria-label="Close menu" aria-controls="primary-navigation" aria-expanded="true">
         <svg viewBox="0 0 16 12" width="15" height="12" aria-hidden="true" fill="currentColor">
           <rect x="0" y="0" width="16" height="2" rx="1"/>
           <rect x="0" y="5" width="16" height="2" rx="1"/>
@@ -106,7 +106,7 @@
       {% endcomment %}
       {% if request.showing_demo %}<span class="demo-flag">Demo</span>{% endif %}
       {% comment %}
-      A doorway, not a field: it opens the command center, and without script it
+      A doorway, not a field: it opens the search dialog, and without script it
       is a link to the search page. With nothing to type into here there is no
       focus to return to it and nothing to expand over its neighbours.
       {% endcomment %}
@@ -118,10 +118,10 @@
         <span class="search-label">Find anything</span>
         <kbd class="search-key" aria-hidden="true">⌘K</kbd>
       </a>
-      <a class="action-badge" href="{% url 'action_items' %}" title="Action items" data-action-count-url="{% url 'action_item_count' %}"{% if show_action_count %} data-action-count-fresh="{{ profile_action_count }}"{% endif %}>
+      <a class="action-badge" href="{% url 'action_items' %}" title="Needs you" data-action-count-url="{% url 'action_item_count' %}"{% if show_action_count %} data-action-count-fresh="{{ profile_action_count }}"{% endif %}>
         <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>
         <span data-action-count{% if not show_action_count or not profile_action_count %} hidden{% endif %}>{{ profile_action_count }}</span>
-        <span class="visually-hidden">Action items</span>
+        <span class="visually-hidden">Needs you</span>
       </a>
       <details class="user-menu" data-menu>
         {% comment %}
@@ -172,7 +172,7 @@
               {% csrf_token %}
               <input type="hidden" name="next" value="{{ request.get_full_path }}">
               <button type="submit" class="menu-item menu-setting" role="switch" aria-checked="{% if request.showing_demo %}true{% else %}false{% endif %}">
-                <span>Demo</span>
+                <span>Demo data</span>
                 <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
               </button>
             </form>
@@ -181,7 +181,7 @@
               <input type="hidden" name="next" value="{{ request.get_full_path }}">
               <input type="hidden" name="paused" value="{% if agents_paused %}0{% else %}1{% endif %}">
               <button type="submit" class="menu-item menu-setting" role="switch" aria-checked="{% if agents_paused %}false{% else %}true{% endif %}">
-                <span>Agents</span>
+                <span>Agents allowed</span>
                 <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
               </button>
             </form>
@@ -244,11 +244,7 @@
     {% block content %}{% endblock %}
   </main>
 
-  {% block site_footer %}
-  <footer class="site-footer">
-    <span>{{ SITE_NAME }} · Unauthorized Access is Strictly Prohibited</span>
-  </footer>
-  {% endblock %}
+  {% block site_footer %}{% endblock %}
 
   {% if user.is_authenticated %}
     {% comment %}
@@ -256,14 +252,14 @@
     page, so a button inside another form still posts only what it names.
     {% endcomment %}
     <form id="hq-post" method="post" hidden>{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"></form>
-    {% include "partials/_modal.html" with id="command-center" title="Command center" body_template="core/_command_center_modal.html" modal_class="command-center-modal" %}
+    {% include "partials/_modal.html" with id="command-center" title="Search" body_template="core/_command_center_modal.html" modal_class="command-center-modal" %}
     {% comment %}
     Empty until opened. The panel behind it reads the tailnet inventory and
     evaluates the access policy, and this dialog is on every page, so it
     fetches on first open rather than making every page pay for a panel almost
     nobody opens.
     {% endcomment %}
-    {% include "partials/_modal.html" with id="connection" title="This connection" lede="How this request reached HQ, and what had to hold for it to arrive." body_template="core/_connection_loading.html" modal_class="modal-wide" %}
+    {% include "partials/_modal.html" with id="connection" title="Your connection" lede="How you are connected to HQ right now." body_template="core/_connection_loading.html" modal_class="modal-wide" %}
   {% endif %}
 
   <script src="{% static 'js/fragment.js' %}" defer></script>

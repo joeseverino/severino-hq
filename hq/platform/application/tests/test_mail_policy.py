@@ -110,7 +110,7 @@ class SpfTests(SimpleTestCase):
         self.assertIn("soft", parse_spf("v=spf1 include:a.example ~all").default_result)
 
     def test_a_policy_protecting_nothing_says_so(self):
-        self.assertIn("protects nothing", parse_spf("v=spf1 +all").default_result)
+        self.assertIn("forgeries get through", parse_spf("v=spf1 +all").default_result)
 
     def test_a_policy_with_no_final_term_is_named_as_unhandled(self):
         self.assertIn("unhandled", parse_spf("v=spf1 include:a.example").default_result)

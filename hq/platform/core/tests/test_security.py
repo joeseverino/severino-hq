@@ -265,7 +265,7 @@ class SingleSignOnOnlyTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Pocket ID refused HQ&#x27;s client credentials.")
-        self.assertContains(response, "Sign in with SSO")
+        self.assertContains(response, "Sign in with Pocket ID")
 
     def test_signing_in_goes_straight_to_the_provider(self):
         response = self.client.get("/accounts/login/", REMOTE_ADDR="100.64.0.1")

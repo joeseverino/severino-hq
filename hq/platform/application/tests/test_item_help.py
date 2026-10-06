@@ -1,5 +1,6 @@
 """Every item HQ raises comes with help: a remedy HQ runs, the exact command
-to run, or HQ's specific reason it can offer neither. Never bare prose."""
+to run, the page the work is done on, what to do in words, or the reason none
+of those can be offered. Never a problem alone."""
 
 from __future__ import annotations
 
@@ -15,12 +16,15 @@ from ..finding_model import Finding, FindingRule, OperatorStep, Remedy
 from ..findings import RULES, _no_help_reason
 from ..item_help import (
     COMMAND,
+    INSTRUCTION,
+    PLACE,
     REASON,
     REMEDY,
     cannot_help,
     commands,
     finding_help,
     finding_plan,
+    instructions,
     item_help,
 )
 from ..ui import Insight
@@ -43,10 +47,11 @@ def _insight_calls(path: Path) -> list[ast.Call]:
 
 
 def _unhelped(call: ast.Call) -> bool:
-    """Neither ``workflow=`` nor ``actions=`` given, nor any ``**`` that could."""
+    """Neither ``workflow=`` nor ``actions=`` given, nor any ``**`` that could,
+    nor the page the work is done on (``action=`` with ``url=``)."""
 
     names = {keyword.arg for keyword in call.keywords}
-    return not ({"workflow", "actions", None} & names)
+    return not ({"workflow", "actions", None} & names or {"action", "url"} <= names)
 
 
 def host_modules() -> list[Path]:
@@ -71,7 +76,7 @@ class EveryItemComesWithHelpTests(SimpleTestCase):
             if _unhelped(call)
         ]
 
-        self.assertEqual(missing, [], "Give each a remedy, a command or a reason (application.item_help).")
+        self.assertEqual(missing, [], "Give each one of the kinds of help in application.item_help.")
 
     def test_a_pending_file_is_still_pending(self):
         for name in PENDING:
@@ -125,6 +130,14 @@ class FindingHelpTests(SimpleTestCase):
         self.assertEqual(item_help(_item(workflow=finding_plan(commanded, "k"))), COMMAND)
         self.assertEqual(item_help(_item(workflow=finding_plan(reasoned, "k"))), REASON)
 
+    def test_a_finding_with_no_command_says_what_to_do_in_words(self):
+        told = _finding(steps=(OperatorStep("Renew it at the registrar."),), no_help_reason="Only they can.")
+        plan = finding_plan(told, "k")
+
+        self.assertEqual([(step.phase, step.summary) for step in plan.steps],
+                         [("do", "Renew it at the registrar."), ("cannot", "Only they can.")])
+        self.assertEqual(item_help(_item(workflow=plan)), INSTRUCTION)
+
 
 def _item(**fields) -> Insight:
     return Insight(status="attention", eyebrow="Example", title="Example", value="1", body="", **fields)
@@ -139,12 +152,15 @@ class ItemHelpTests(SimpleTestCase):
         self.assertEqual(item_help(_item(actions=(posted,))), REMEDY)
         self.assertEqual(item_help(_item(workflow=commands("k", (("Here", "example --fix"),)))), COMMAND)
         self.assertEqual(item_help(_item(workflow=cannot_help("k", "Because."))), REASON)
+        self.assertEqual(item_help(_item(workflow=instructions("k", "Sign in again."))), INSTRUCTION)
+        self.assertEqual(item_help(_item(action="Fill them in", url="/assets/")), PLACE)
 
     def test_a_link_to_look_at_or_an_empty_reason_is_not_help(self):
         look = ActionLink("subject", "Open", "read", "/thing/")
 
         self.assertEqual(item_help(_item(actions=(look,))), "")
         self.assertEqual(item_help(_item(workflow=cannot_help("k", " "))), "")
+        self.assertEqual(item_help(_item(action="Fill them in")), "")
         self.assertEqual(item_help(_item()), "")
 
 

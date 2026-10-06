@@ -45,7 +45,7 @@ class ActionItemsView(PageMixin, TemplateView):
     """The full human surface for HQ's one composed attention queue."""
 
     template_name = "action_items.html"
-    page_title = "Action items"
+    page_title = "Needs you"
 
     def _aside_all_url(self, part: str) -> str:
         # The filters travel in the URL, so "all" means all that are shown, of

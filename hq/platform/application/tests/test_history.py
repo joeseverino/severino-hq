@@ -161,7 +161,7 @@ class AuditHistoryPageTests(TestCase):
     def test_an_empty_log_says_so(self):
         response = self.client.get(self.url())
 
-        self.assertContains(response, "No audit events.")
+        self.assertContains(response, "Nothing has been recorded yet.")
 
     def test_everything_is_on_one_line_newest_first(self):
         self.stored()

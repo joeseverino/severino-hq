@@ -38,7 +38,7 @@ four domains behind a click and then need a second one to go anywhere.
       {% url 'zones:adopt' zone.zone as adopt_url %}
       <p>{% post_button "Manage this domain" adopt_url name="token" value=zone.adopt_token css="btn primary" %}</p>
     {% elif zone.observed_only %}
-      <p class="muted">Read through a connection that only observes.</p>
+      <p class="muted">HQ can read this domain, but the credential it reads with cannot change it.</p>
     {% endif %}
   </section>
 {% endif %}
@@ -97,7 +97,7 @@ four domains behind a click and then need a second one to go anywhere.
   {% endif %}
 </div>
 
-{% include "control_plane/_zone_records.html" with rows=zone.routing zone=zone public_dns_enabled=public_dns_enabled %}
+{% if zone.policy %}{% include "control_plane/_zone_records.html" with rows=zone.routing zone=zone public_dns_enabled=public_dns_enabled empty_message="None of this domain's records sends traffic anywhere. They are all below." %}{% else %}{% include "control_plane/_zone_records.html" with rows=zone.routing zone=zone public_dns_enabled=public_dns_enabled %}{% endif %}
 
 {% comment %}
 Verification strings and issuance rules, folded away. A domain apex answers
@@ -113,7 +113,13 @@ zone at the top of the page.
 {% endif %}
 
 
-{% comment %}What the domain relates to. Access and other overlays rank last.{% endcomment %}
+{% comment %}
+What the domain relates to, each thing once (`zone_views._page_relationships`).
+What it is read with is how HQ knows, so it follows as one quiet line.
+{% endcomment %}
 {% include "partials/_relationships.html" %}
+{% if read_with %}
+  <p class="muted relation-source">Read with {% for link in read_with %}{% entity link %}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+{% endif %}
 {% comment %}Reads what is due from the public registries once the page is up.{% endcomment %}
 {% endblock %}

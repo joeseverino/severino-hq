@@ -17,9 +17,9 @@ here names one.
       {% elif notice_count %}
         Nothing needs you. <a href="{% url 'action_items' %}">{{ notice_count|counted:"notice,notices" }}</a>
       {% elif aside_count %}
-        Nothing waits on you. <a href="{% url 'action_items' %}">{{ aside_count }} dismissed</a>
+        Nothing needs you. <a href="{% url 'action_items' %}">{{ aside_count }} dismissed</a>
       {% else %}
-        Nothing needs your attention right now.
+        Nothing needs you.
       {% endif %}
     </p>
   </div>
@@ -29,6 +29,20 @@ here names one.
     {% include "core/_dashboard_glance.html" %}
   </div>
 </header>
+
+{% comment %}
+A short queue is read here, on the same card the queue page shows: what is
+wrong and the button that fixes it, without a second page. A longer one stays
+a count and a link, so the dashboard keeps its shape.
+{% endcomment %}
+{% if needs_you %}
+<section class="card dash-needs" aria-labelledby="dash-needs-title" data-triage-routes data-dismiss="{% url 'action_items_set_aside' %}" data-restore="{% url 'action_items_bring_back' %}">
+  <div class="section-head">
+    <h2 id="dash-needs-title">Needs you <span class="count" data-queue-count>{{ action_queue_count }}</span></h2>
+  </div>
+  {% include "partials/_work_queue.html" with items=needs_you triage=True %}
+</section>
+{% endif %}
 
 {% include "core/_dashboard_highlights.html" %}
 
@@ -136,6 +150,6 @@ A domain's own calendar stays on its pages.
   {% endcomment %}
   <a class="ext-edit" href="{% url 'dashboard_links' %}" data-modal-open="links">Edit</a>
 </section>
-{% include "partials/_modal.html" with id="links" title="Dashboard links" lede="Pick the links to show. With none picked, every one HQ can reach is shown." body_template="core/_dashboard_links_form.html" %}
+{% include "partials/_modal.html" with id="links" title="Dashboard links" lede="Tick the links to show. With none ticked, all of them show." body_template="core/_dashboard_links_form.html" %}
 {% endif %}
 {% endblock %}

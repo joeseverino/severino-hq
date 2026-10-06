@@ -1,14 +1,14 @@
 {% extends "page.html" %}
 {% block page %}
 <form class="filter-bar" method="get" role="search">
-  <input type="search" name="q" value="{{ action_query }}" placeholder="Filter action items" aria-label="Filter action items">
-  <select name="status" aria-label="Severity">
-    <option value="">All severities</option>
-    <option value="serious"{% if action_status == "serious" %} selected{% endif %}>Serious</option>
-    <option value="attention"{% if action_status == "attention" %} selected{% endif %}>Attention</option>
+  <input type="search" name="q" value="{{ action_query }}" placeholder="Filter what needs you" aria-label="Filter what needs you">
+  <select name="status" aria-label="Urgency">
+    <option value="">Any urgency</option>
+    <option value="serious"{% if action_status == "serious" %} selected{% endif %}>{{ "serious"|urgency }}</option>
+    <option value="attention"{% if action_status == "attention" %} selected{% endif %}>{{ "attention"|urgency }}</option>
   </select>
-  <select name="source" aria-label="Source">
-    <option value="">All sources</option>
+  <select name="source" aria-label="Area">
+    <option value="">All areas</option>
     {% for source_id, source_label in action_sources %}<option value="{{ source_id }}"{% if action_source == source_id %} selected{% endif %}>{{ source_label }}</option>{% endfor %}
   </select>
   <button class="btn" type="submit">Apply</button>
@@ -23,16 +23,16 @@ comes back on its own only if it gets worse.
 {% endcomment %}
 <section class="card action-items-card" data-triage-routes data-dismiss="{% url 'action_items_set_aside' %}" data-restore="{% url 'action_items_bring_back' %}">
   <div class="section-head">
-    <h2>{% if action_query or action_status or action_source %}Matching{% else %}Needs you{% endif %} <span class="count" data-queue-count>{{ action_item_total }}</span></h2>
+    <h2>{% if action_query or action_status or action_source %}Matches{% else %}Needs you{% endif %} <span class="count" data-queue-count>{{ action_item_total }}</span></h2>
     {% if action_groups %}{% post_button "Dismiss all" aside_all_url css="btn compact ghost" %}{% endif %}
   </div>
   {% if action_groups %}
     {% include "partials/_queue_groups.html" with groups=action_groups prefix="queue" aside_url=aside_all_url %}
   {% elif action_query or action_status or action_source %}
     {% url 'action_items' as all_actions_url %}
-    {% include "partials/_empty_state.html" with message="Nothing waiting matches these filters." action_url=all_actions_url action_label="Clear filters" compact=True only %}
+    {% include "partials/_empty_state.html" with message="Nothing matches these filters." action_url=all_actions_url action_label="Clear filters" compact=True only %}
   {% else %}
-    {% include "partials/_work_queue.html" with items=action_groups empty="Nothing waits on you." %}
+    {% include "partials/_work_queue.html" with items=action_groups empty="Nothing needs you." %}
   {% endif %}
 </section>
 

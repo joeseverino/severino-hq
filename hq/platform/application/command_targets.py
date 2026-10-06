@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .capabilities import CapabilitySpec
-from .labels import human_label
+from .entity_links import kind_label
 from .integrations import integration_graph
 from .projection import MAX_PAGE_SIZE
 from .resources import ResourceError, get_resource, list_resource
@@ -18,23 +18,25 @@ from hq.platform.core.errors import UpstreamUnavailable
 class CommandTargetOption:
     value: str
     label: str
+    # What type of thing it is, in the words its own pages use; a long list
+    # is offered under these.
+    group: str = ""
 
 
-def _option_label(item: dict[str, Any], value: str) -> str:
-    base = value
+def _option(item: dict[str, Any], value: str) -> CommandTargetOption:
+    label = value
     for field in ("name", "title", "label"):
         candidate = item.get(field)
         if isinstance(candidate, str) and candidate.strip():
-            base = (
+            label = (
                 f"{candidate.strip()} · {value}"
                 if candidate.strip() != value
                 else value
             )
             break
     kind = item.get("kind")
-    if isinstance(kind, str) and kind.strip():
-        return f"{base} · {human_label(kind)}"
-    return base
+    group = kind_label(kind) if isinstance(kind, str) and kind.strip() else ""
+    return CommandTargetOption(value, label, group)
 
 
 def capability_target_options(
@@ -86,7 +88,7 @@ def capability_target_options(
         if raw_value is None:
             continue
         value = str(raw_value)
-        options.append(CommandTargetOption(value, _option_label(item, value)))
+        options.append(_option(item, value))
     return tuple(sorted(options, key=lambda option: option.label.casefold()))
 
 
@@ -118,7 +120,7 @@ def with_requested_target(
     wanted = dict(spec.target_query)
     if any(item.get(field) != value for field, value in wanted.items()):
         return options
-    return (CommandTargetOption(target, _option_label(item, target)), *options)
+    return (_option(item, target), *options)
 
 
 def capability_target_initial(

@@ -203,7 +203,7 @@ class ComposedQueueTests(TestCase):
 
         # Build (100) before Web (110), matching the nav, so the row does not
         # tell a different story about what matters than the bar above it.
-        self.assertLess(labels.index("Active projects"), labels.index("Draft content"))
+        self.assertLess(labels.index("Active projects"), labels.index("Drafts"))
 
     def test_extension_items_share_the_queue_with_host_items(self):
         """An extension on fire has to be visible on the page that lists work.

@@ -312,7 +312,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         id="hq.contacts",
         label="Contacts",
         navigation=(
-            NavigationItem("Contacts", "contacts:list", "contacts", 112, "Web"),
+            NavigationItem("Messages", "contacts:list", "contacts", 112, "Web"),
         ),
         integration=PluginIntegration(
             capabilities=_provider("hq.domains.contacts.specs:capabilities"),
@@ -398,8 +398,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             create=False,
             on_delete="hq.platform.application.receipts:file_cleanup",
             wording=(
-                ("update", "Update receipt metadata and relationships (never file bytes).", ""),
-                ("delete", "Delete a confirmed receipt and its private file.", ""),
+                ("update", "Change a receipt's details. The file itself does not change.", ""),
+                ("delete", "Delete one receipt and its file.", ""),
             ),
         ),
     ),
@@ -579,7 +579,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         id="hq.jobs",
         label="Jobs",
         navigation=(
-            NavigationItem("Jobs", "jobs:list", "jobs", 132, "Infrastructure"),
+            NavigationItem("Background jobs", "jobs:list", "jobs", 132, "Infrastructure"),
         ),
         apps=("hq.domains.jobs",),
         mounts=(Mount("jobs/", "hq.domains.jobs.urls"),),
@@ -589,7 +589,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Audit",
         navigation=(
             NavigationItem(
-                "Audit", "core:audit_list", "core", HOST_ORDER_MACHINERY, "System"
+                "Audit log", "core:audit_list", "core", HOST_ORDER_MACHINERY, "System"
             ),
         ),
         integration=PluginIntegration(

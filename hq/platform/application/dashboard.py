@@ -67,6 +67,7 @@ def queue_item(source_id: str, source: str, item: Any) -> dict[str, Any]:
     from .action_items import item_key, item_revision
 
     subject = getattr(item, "subject", None)
+    since = getattr(item, "since", None)
     return {
         "key": item_key(source_id, item),
         "revision": item_revision(item),
@@ -83,6 +84,7 @@ def queue_item(source_id: str, source: str, item: Any) -> dict[str, Any]:
         "subject": asdict(subject) if subject else None,
         "notice": bool(getattr(item, "notice", False)),
         "family": getattr(item, "family", ""),
+        "since": since.isoformat() if since else "",
     }
 
 

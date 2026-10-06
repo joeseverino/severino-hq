@@ -123,14 +123,14 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
     # verb, declared, effect, permission, command, handler, summary, label, targeted
     verbs = (
         ("create", records.create, "remote_write", records.write, command, records.save,
-         f"Create an HQ {title}.", f"Create {title}", False),
+         f"Add a new {title}.", f"Create {title}", False),
         ("upsert", bool(records.upsert), "remote_write", records.write, command, records.upsert,
-         f"Idempotently create or update an HQ {title} by {records.lookup}.",
+         f"Add a new {title}, or update it if it already exists.",
          f"Create or update {title}", False),
         ("update", True, "remote_write", records.write, command, records.save,
-         f"Update an HQ {title}.", f"Update {title}", True),
+         f"Change one {title}.", f"Update {title}", True),
         ("delete", True, "destructive", records.delete, DeleteCommand, deleter(records.resource),
-         f"Delete a confirmed {title}.", f"Delete {title}", True),
+         f"Delete one {title}.", f"Delete {title}", True),
     )
     wording = {verb: (summary, label) for verb, summary, label in records.wording}
     target_label = f"{title[0].upper()}{title[1:]} {_TARGET_NAMES[records.target]}"

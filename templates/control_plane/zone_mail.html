@@ -54,9 +54,9 @@ four would turn a typo in a DKIM selector into a mail outage.
         <button type="button" class="btn name-list-add" data-name-list-add>Add sender</button>
       </div>
       <p class="help">
-        Usually <code>include:</code> plus a provider that sends for you. Each one
+        Usually <code>include:</code> plus a mail service that sends for you. Each one
         costs a DNS lookup. Receivers ignore SPF past {{ spf_limit }} lookups. This
-        record uses {{ spf.lookups }}.
+        record uses {{ spf.lookups }} of {{ spf_limit }}.
       </p>
     </div>
 
@@ -154,16 +154,16 @@ not designed. Adding or removing one is a record, through the domain's own
               {% url 'control_plane:edit' record.resource_key as record_edit %}
               <a class="subtle-link" href="{{ record_edit }}?next={{ request.get_full_path|urlencode }}">Change</a>
             {% else %}
-              <span class="pill pill-attention">Not declared in HQ</span>
+              <span class="pill pill-attention">Not managed by HQ</span>
             {% endif %}
           </li>
         {% endfor %}
       </ul>
       <p class="help">
         {% if section.id == "receiving" %}
-          Set by your mailbox provider. Change these only when switching providers.
+          Set by your mail service. Change these only when switching to another.
         {% else %}
-          Issued by your mail provider. HQ publishes the records. The provider rotates the keys.
+          Issued by your mail service, which also rotates the keys. HQ publishes the records.
         {% endif %}
       </p>
     </section>

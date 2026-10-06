@@ -106,12 +106,12 @@ def _unit_state(progress: Any) -> dict[str, Any]:
 
 
 SCHEDULED: tuple[ScheduledWork, ...] = (
-    ScheduledWork("audit.prune", "Prune routine audit events", prune_audit),
+    ScheduledWork("audit.prune", "Delete old routine log entries", prune_audit),
     ScheduledWork("contacts.inbox", "Read the contact inbox", _contacts_inbox),
-    ScheduledWork("content.sync", "Pull the site content index", _content_index),
-    ScheduledWork("registry.refresh", "Read public registry records", _public_registry),
+    ScheduledWork("content.sync", "Fetch the site's content list", _content_index),
+    ScheduledWork("registry.refresh", "Read domain registration and image data", _public_registry),
     ScheduledWork("sessions.clear", "Delete expired sessions", _clear_sessions),
-    ScheduledWork("units.read", "Read unit state after a failure", _unit_state),
+    ScheduledWork("units.read", "Check HQ's own services after a failure", _unit_state),
 )
 
 ACTOR = "timer"

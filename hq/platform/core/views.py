@@ -82,7 +82,7 @@ class ThrottledLoginView(LoginView):
         context = super().get_context_data(**kwargs)
         if "sso_failed" in self.request.GET:
             context["sso_failure"] = self.request.session.pop(
-                SSO_FAILURE_SESSION_KEY, "Signing in did not finish."
+                SSO_FAILURE_SESSION_KEY, "Sign-in was cancelled or timed out. Try again."
             )
         return context
 
@@ -247,9 +247,12 @@ class AgentPolicyView(PageMixin, TemplateView):
         return redirect("agent_policy")
 
 
+DISCOVERY_GROUPS = ("estate", "resources", "commands", "connections", "views", "checks")
+
+
 class SearchView(PageMixin, TemplateView):
     template_name = "search.html"
-    page_title = "Command Center"
+    page_title = "Search"
     result_limit = 8
     palette_search_limit = 3
     palette_search_total_limit = 12
@@ -270,11 +273,11 @@ class SearchView(PageMixin, TemplateView):
         remaining = self.palette_result_limit
         groups = []
         for key, label in (
-            ("estate", "Estate"),
+            ("estate", "Machines, services and domains"),
             ("commands", "Commands"),
-            ("views", "Topology views"),
-            ("resources", "Resources"),
+            ("resources", "Pages"),
             ("connections", "Connections"),
+            ("views", "Topology views"),
             ("checks", "Checks"),
         ):
             items = tuple(item for item in discovery[key] if item.url)[
@@ -327,9 +330,18 @@ class SearchView(PageMixin, TemplateView):
                 if not palette_request:
                     contacts = inbox.search(q, limit=self.result_limit)
                     total += len(contacts)
-            discovery = command_center(
-                q, principal=principal, include_live_connections=True
+            # With nothing asked, the page is a search box. The palette still
+            # opens on a short list of where to go.
+            discovery = (
+                command_center(q, principal=principal, include_live_connections=True)
+                if q or palette_request
+                else {key: () for key in DISCOVERY_GROUPS}
             )
+        # A page to go to: a resource with no page of its own is the API's.
+        discovery = {
+            **discovery,
+            "resources": tuple(item for item in discovery["resources"] if item.url),
+        }
         palette_groups = self._palette_groups(discovery)
         palette_search_groups = self._palette_search_groups(groups)
         palette_search_count = sum(
@@ -385,9 +397,9 @@ class ConnectionView(PageMixin, TemplateView):
     """
 
     template_name = "core/connection.html"
-    page_title = "This connection"
+    page_title = "Your connection"
     page_lede = (
-        "Why this request reached HQ, which identities agree, and the evidence "
+        "How you are connected to HQ right now, who it takes you to be, and the "
         "behind every admission decision."
     )
 

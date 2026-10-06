@@ -228,7 +228,7 @@ the `SEVERINO_MCP_ENABLE_*` switches gate writes, not these reads.
 | `relationships_for`, with `entity_link` names | Entity pages | `relationships` (`get <node id>`) | yes | yes | yes | yes |
 | Readings, schema-filtered (`hq/domains/control_plane/observations`) | Connections, entity pages | `readings` (`get <kind>`) | yes | yes | yes | yes |
 | Join engine (`facts.readings`) | Entity pages | inside `relationships`, `services`, `domains` | yes | yes | yes | yes |
-| Credential sight | Connections | `credentials` (`get <provider>`) | yes | yes | yes | yes |
+| Credential access | Connections | `credentials` (`get <provider>`) | yes | yes | yes | yes |
 | Connections page (`connection_context.connections_context`): rows with sight, freshness, refusals, what more scope would show, credential fix, reach (network, machine, tailnet peering), last activity, pending read now; summary counts; estate posture; HQ's path | Connections | `connection.standing` (`get <connection_ref>`) | yes | yes | yes | yes |
 | Tailnet page (`tailnet_context.tailnet_context`): settings, grants, shell rules, groups, tags with machines, services, app connectors, tests, findings, unread readings and why | Tailnet | `tailnet` | yes | yes | yes | yes |
 | Estate and record search (command center) | Search | `search` | yes | yes | yes | yes |

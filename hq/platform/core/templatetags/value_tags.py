@@ -171,6 +171,22 @@ def span(days):
 
 
 @register.filter
+def seconds(value):
+    """``{{ job.duration_seconds|seconds }}``: a run time as a person reads
+    one: "45 s", "4 min 33 s", "1 h 2 min". Never a bare count of seconds."""
+
+    try:
+        whole = max(0, round(float(value)))
+    except (TypeError, ValueError):
+        return or_empty(None)
+    hours, rest = divmod(whole, 3600)
+    minutes, left = divmod(rest, 60)
+    if hours:
+        return f"{hours} h {minutes} min"
+    return f"{minutes} min {left} s" if minutes else f"{left} s"
+
+
+@register.filter
 def expiry(value):
     """``{{ not_after|expiry }}``: "22 Dec 2026 · 87 days", the one phrasing HQ uses for an end date."""
     from hq.domains.control_plane.provider_spec import expiry_phrase

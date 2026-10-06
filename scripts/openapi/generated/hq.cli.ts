@@ -1214,7 +1214,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.contacts",
     "name": "contactSubmissionDeleteV2",
-    "summary": "Delete contact submission",
+    "summary": "Delete a message",
     "method": "POST",
     "path": "/api/v2/capabilities/contact.submission.delete/",
     "positionals": [],
@@ -1255,7 +1255,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.contacts",
     "name": "contactSubmissionReviewV2",
-    "summary": "Review contact submission",
+    "summary": "Review a message",
     "method": "POST",
     "path": "/api/v2/capabilities/contact.submission.review/",
     "positionals": [],
@@ -1296,7 +1296,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.contacts",
     "name": "contactSubmissionsListV2",
-    "summary": "List contact submissions",
+    "summary": "List messages",
     "method": "POST",
     "path": "/api/v2/capabilities/contact.submissions.list/",
     "positionals": [],
@@ -1829,7 +1829,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "api",
     "name": "infrastructureControllerRefreshV2",
-    "summary": "Refresh controller readings",
+    "summary": "Read everything now",
     "method": "POST",
     "path": "/api/v2/capabilities/infrastructure.controller.refresh/",
     "positionals": [],
@@ -1870,7 +1870,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.infrastructure",
     "name": "infrastructureReconcileV2",
-    "summary": "Reconcile resource",
+    "summary": "Apply HQ's settings",
     "method": "POST",
     "path": "/api/v2/capabilities/infrastructure.reconcile/",
     "positionals": [],
@@ -1952,7 +1952,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.infrastructure",
     "name": "infrastructureResourceCreateV2",
-    "summary": "Declare resource",
+    "summary": "Add a record",
     "method": "POST",
     "path": "/api/v2/capabilities/infrastructure.resource.create/",
     "positionals": [],
@@ -1993,7 +1993,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.infrastructure",
     "name": "infrastructureResourceRemoveV2",
-    "summary": "Remove resource",
+    "summary": "Remove a record",
     "method": "POST",
     "path": "/api/v2/capabilities/infrastructure.resource.remove/",
     "positionals": [],
@@ -2034,7 +2034,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.infrastructure",
     "name": "infrastructureResourceUpdateV2",
-    "summary": "Update resource",
+    "summary": "Change what HQ expects",
     "method": "POST",
     "path": "/api/v2/capabilities/infrastructure.resource.update/",
     "positionals": [],
@@ -2239,7 +2239,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.projects",
     "name": "projectRefreshV2",
-    "summary": "Refresh project metadata",
+    "summary": "Refresh a project",
     "method": "POST",
     "path": "/api/v2/capabilities/project.refresh/",
     "positionals": [],
@@ -2485,7 +2485,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.infrastructure",
     "name": "tailnetReachAllowV2",
-    "summary": "Allow tailnet reach",
+    "summary": "Allow a blocked Tailscale connection",
     "method": "POST",
     "path": "/api/v2/capabilities/tailnet.reach.allow/",
     "positionals": [],
@@ -2785,7 +2785,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "api",
     "name": "listActionItemsV2",
-    "summary": "List Action items",
+    "summary": "List Needs you",
     "method": "GET",
     "path": "/api/v2/resources/action.items/",
     "positionals": [],
@@ -3075,7 +3075,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.connections",
     "name": "listConnectionStandingV2",
-    "summary": "List Connection standing",
+    "summary": "List Connection status",
     "method": "GET",
     "path": "/api/v2/resources/connection.standing/",
     "positionals": [],
@@ -3107,7 +3107,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.connections",
     "name": "getConnectionStandingV2",
-    "summary": "Get one of Connection standing",
+    "summary": "Get one of Connection status",
     "method": "GET",
     "path": "/api/v2/resources/connection.standing/{identifier}/",
     "positionals": [
@@ -3317,7 +3317,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.connections",
     "name": "listCredentialsV2",
-    "summary": "List Credential sight",
+    "summary": "List Credential access",
     "method": "GET",
     "path": "/api/v2/resources/credentials/",
     "positionals": [],
@@ -3349,7 +3349,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.connections",
     "name": "getCredentialsV2",
-    "summary": "Get one of Credential sight",
+    "summary": "Get one of Credential access",
     "method": "GET",
     "path": "/api/v2/resources/credentials/{identifier}/",
     "positionals": [
@@ -3551,7 +3551,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.infrastructure",
     "name": "listInfrastructureResourcesV2",
-    "summary": "List Infrastructure resources",
+    "summary": "List Records",
     "method": "GET",
     "path": "/api/v2/resources/infrastructure.resources/",
     "positionals": [],
@@ -3602,7 +3602,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.infrastructure",
     "name": "getInfrastructureResourcesV2",
-    "summary": "Get one of Infrastructure resources",
+    "summary": "Get one of Records",
     "method": "GET",
     "path": "/api/v2/resources/infrastructure.resources/{identifier}/",
     "positionals": [

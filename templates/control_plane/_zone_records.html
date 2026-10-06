@@ -4,7 +4,9 @@ One table of DNS records, used for both halves of a zone: the records that send
 traffic somewhere, and the policy records folded away beneath them. Shared so
 the two cannot drift into looking like different things.
 
-Expects `rows`, `zone`, and `public_dns_enabled`.
+Expects `rows`, `zone`, and `public_dns_enabled`. A state is said only where
+it is not healthy, and a TTL only where it is not automatic: seventeen rows
+that each say "Healthy" and "Auto" say nothing.
 {% endcomment %}
 <div class="table-scroll">
   <table class="data-table zone-record-table">
@@ -32,7 +34,7 @@ Expects `rows`, `zone`, and `public_dns_enabled`.
             <span class="zone-value">{{ record.value }}</span>
             {% if record.proxied %}<span class="pill pill-neutral">Proxied</span>{% endif %}
           </td>
-          <td>{% if record.ttl == 1 %}<span class="muted">Auto</span>{% else %}{{ record.ttl }}{% endif %}</td>
+          <td>{% if record.ttl != 1 %}{{ record.ttl }} s{% endif %}</td>
           {% if zone.managed %}
             <td>
               {% comment %}
@@ -45,7 +47,7 @@ Expects `rows`, `zone`, and `public_dns_enabled`.
               {% if not record.manageable %}
                 <span class="pill pill-neutral">{{ record.record_type }} not managed</span>
               {% elif record.managed %}
-                <span class="pill control-{{ record.health.state }}">{{ record.health.label }}</span>
+                {% if record.health.state != "healthy" %}<span class="pill control-{{ record.health.state }}">{{ record.health.label }}</span>{% endif %}
               {% else %}
                 <span class="pill pill-attention">New</span>
               {% endif %}
@@ -62,7 +64,7 @@ Expects `rows`, `zone`, and `public_dns_enabled`.
         </tr>
       {% empty %}
         <tr><td colspan="6">
-          {% include "partials/_empty_state.html" with compact=True message="No records." %}
+          {% include "partials/_empty_state.html" with compact=True message=empty_message|default:"No records." %}
         </td></tr>
       {% endfor %}
     </tbody>
