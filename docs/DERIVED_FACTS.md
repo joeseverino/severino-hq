@@ -476,8 +476,8 @@ build labels naming the repository it is built from. `registry.upstream` is
 each GitHub repository an image names that way, or lives under in `ghcr.io`:
 its recent releases and its published security advisories with their version
 ranges and fixes (`hq.platform.application.github_public`). Upstreams are chosen from the
-images just read, and fewer are read per run, because GitHub's anonymous limit
-is shared with Watching. Every host a registry read touches is named by someone
+images just read, and fewer are read per run, because GitHub allows an address
+few anonymous calls an hour. Every host a registry read touches is named by someone
 else (the image, the registry's token challenge, a redirect to a CDN), so each
 request is HTTPS to a name resolving only to public addresses, a token never
 follows a redirect to another host, and a response is size-capped.

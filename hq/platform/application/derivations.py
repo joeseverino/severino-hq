@@ -205,9 +205,12 @@ class Derivation:
     compute: Callable[..., Any]
     vary: Callable[..., Any] | None
     _tables: list[frozenset[str]] = field(default_factory=list, compare=False, repr=False)
+    # Tables a computation was seen to read beyond ``reads``: an installed
+    # extension's, which the host cannot name. Kept for the life of the process.
+    _learned: set[str] = field(default_factory=set, compare=False, repr=False)
 
     @property
-    def tables(self) -> frozenset[str]:
+    def declared(self) -> frozenset[str]:
         """The database tables behind ``reads``, resolved once models load."""
 
         if not self._tables:
@@ -217,6 +220,20 @@ class Derivation:
                 frozenset(apps.get_model(label)._meta.db_table for label in self.reads)
             )
         return self._tables[0]
+
+    @property
+    def tables(self) -> frozenset[str]:
+        """Every table the answer is keyed on: the declared ones and any a
+        computation was seen to read."""
+
+        return self.declared | self._learned if self._learned else self.declared
+
+    def learn(self, tables: set[str]) -> bool:
+        """Key the answer on ``tables`` too; whether any of them is new."""
+
+        new = tables - self.tables
+        self._learned.update(new)
+        return bool(new)
 
 
 def derivation(
@@ -286,16 +303,22 @@ def _store():
 
 def _answer(declared: Derivation, variant: str, args: tuple, kwargs: dict) -> Any:
     parent = _FRAME.get()
-    if parent is not None and not declared.tables <= parent.tables:
-        missing = ", ".join(sorted(declared.tables - parent.tables))
+    if parent is not None and not declared.declared <= parent.tables:
+        missing = ", ".join(sorted(declared.declared - parent.tables))
         raise ImproperlyConfigured(
             f"A derivation calls {declared.name!r} without declaring what it reads: {missing}."
         )
     key = None if _UNCACHED.get() else _key(declared, variant)
     value, until, found = _stored(key)
     if not found:
-        value, until = _compute(declared, args, kwargs)
+        value, until, learned = _compute(declared, args, kwargs)
+        if learned and key is not None:
+            # Stored under a key that moves with what it was seen to read.
+            key = _key(declared, variant)
         found = _keep(key, value, until)
+    if parent is not None:
+        # What this one reads, the one that called it read through it.
+        parent.undeclared |= declared.tables - parent.tables
     if found and key is not None:
         # What this projection was answered from, for ``standing``.
         read_once("derivation.answered", dict)[key] = until
@@ -331,7 +354,17 @@ def _stored(key: str | None) -> tuple[Any, datetime | None, bool]:
     return value, until, True
 
 
-def _compute(declared: Derivation, args: tuple, kwargs: dict) -> tuple[Any, datetime | None]:
+def _compute(declared: Derivation, args: tuple, kwargs: dict) -> tuple[Any, datetime | None, bool]:
+    """The value, how long it holds, and whether computing it showed a table
+    its key did not yet move with.
+
+    A computation is a function of the tables it read. Whatever made it read
+    one more was itself a change to a table it had read, so the answer stored
+    before was sound, and from here its key moves with the new table too.
+    ``reads`` is the floor the host states; an installed extension's tables,
+    which the host cannot name, are learned the first time they are read.
+    """
+
     from django.db import connection
 
     frame = _Frame(declared.tables)
@@ -342,16 +375,15 @@ def _compute(declared: Derivation, args: tuple, kwargs: dict) -> tuple[Any, date
     finally:
         _FRAME.reset(token)
     COMPUTED[declared.name] += 1
-    if frame.undeclared:
-        # Its key would not move when those tables change: never stored.
+    learned = declared.learn(frame.undeclared)
+    if learned:
         UNDECLARED.setdefault(declared.name, set()).update(frame.undeclared)
-        logger.error(
-            "Derivation %s reads %s without declaring it; not stored.",
+        logger.info(
+            "Derivation %s also reads %s; its answers are keyed on them from now on.",
             declared.name,
             ", ".join(sorted(frame.undeclared)),
         )
-        return value, _clock()
-    return value, frame.until
+    return value, frame.until, learned
 
 
 def _keep(key: str | None, value: Any, until: datetime | None) -> bool:

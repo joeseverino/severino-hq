@@ -1,9 +1,10 @@
 """What the estate's derived facts read, declared once.
 
 Every model a derivation queries is named here, so the topology, the findings
-and the action queue agree on what a change to the estate is. A derivation that
-reads a table it did not declare is not stored (``derivations``), and
-``test_derivations`` fails on it.
+and the action queue agree on what a change to the estate is. A host table a
+derivation reads without declaring fails ``test_derivations``. An installed
+extension's tables cannot be named here: a derivation learns those the first
+time it reads them and keys its answers on them from then on (``derivations``).
 """
 
 from __future__ import annotations

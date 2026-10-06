@@ -29,7 +29,16 @@ func profileRoutes(remaining int) map[string]string {
 	}
 }
 
+// profileHarness is a controller with no GitHub App connected, so its reads are anonymous.
 func profileHarness(t *testing.T, remaining int, plan runtime.GitHubProfilePlan) (*githubHarness, *Controller) {
+	t.Helper()
+	h, c := appProfileHarness(t, remaining, plan)
+	delete(h.r.Env, "GITHUB_APP_CONNECTION_REF")
+	delete(h.r.Env, "GITHUB_APP_APP_ID")
+	return h, c
+}
+
+func appProfileHarness(t *testing.T, remaining int, plan runtime.GitHubProfilePlan) (*githubHarness, *Controller) {
 	t.Helper()
 	h := newGitHubHarness(t, profileRoutes(remaining), nil)
 	// A repository with no release answers 404, which is an answer.
@@ -188,5 +197,43 @@ func TestFetchPictureKeepsOnlyASmallImageFromTheAddressAsked(t *testing.T) {
 		if _, _, err := fetchPicture(t.Context(), server.URL+attempt.path, attempt.limit); err == nil {
 			t.Errorf("%s was kept", name)
 		}
+	}
+}
+
+// TestGitHubProfileIsReadUnderTheAppWhereOneIsConnected holds the read to the
+// installation's allowance: every public call carries one token, and that
+// token grants metadata of one covered repository and nothing else.
+func TestGitHubProfileIsReadUnderTheAppWhereOneIsConnected(t *testing.T) {
+	h, c := appProfileHarness(t, 5000, runtime.GitHubProfilePlan{Accounts: []string{"example"}, Due: true})
+	report := readProfiles(t, c)
+	if !report.OK || report.Carried || len(report.Records) != 1 {
+		t.Fatalf("report %+v", report)
+	}
+	bearers := map[string]bool{}
+	for _, call := range h.recorded() {
+		if strings.HasPrefix(call.path, "/users/") || strings.HasPrefix(call.path, "/repos/example/tool") ||
+			strings.HasPrefix(call.path, "/repos/example/quiet") || call.path == "/rate_limit" {
+			if !strings.HasPrefix(call.auth, "Bearer minted-") {
+				t.Errorf("%s was asked without the app's token: %q", call.path, call.auth)
+			}
+			bearers[call.auth] = true
+		}
+	}
+	if len(bearers) != 1 {
+		t.Fatalf("public reads carried %d tokens", len(bearers))
+	}
+	for _, grant := range h.grants {
+		encoded, _ := json.Marshal(grant.Permissions)
+		if string(encoded) != `{"metadata":"read"}` || len(grant.Repositories) > 1 {
+			t.Errorf("a token for public reads was granted %s over %v", encoded, grant.Repositories)
+		}
+	}
+}
+
+func TestGitHubProfileSaysWhoseAllowanceRanOut(t *testing.T) {
+	_, c := appProfileHarness(t, githubProfileCost()-1, runtime.GitHubProfilePlan{Accounts: []string{"example"}, Due: true})
+	report := readProfiles(t, c)
+	if len(report.RefusedParts) != 1 || !strings.Contains(report.RefusedParts[0].Reason, "GitHub allows the app") {
+		t.Fatalf("refused %+v", report.RefusedParts)
 	}
 }
