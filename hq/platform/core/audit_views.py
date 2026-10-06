@@ -22,28 +22,37 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     table_search_scope = "audit"
     table_selectable = True
     table_filters = (
-        TableFilter("source", "Source", "source", history.SOURCES),
+        TableFilter("source", "Where", "source", history.SOURCES),
         TableFilter("action", "Action", "action", AuditLog.Action.choices),
     )
     table_columns = (
         TableColumn("When", "created_at", "Oldest event", "Newest event"),
         TableColumn("Who", "user__username", "User A–Z", "User Z–A"),
-        TableColumn("Action", "action", css="key-col"),
-        TableColumn("Object", "object_type", "Object type A–Z", "Object type Z–A"),
+        TableColumn("Action", "action", "Action A–Z", "Action Z–A", css="key-col"),
+        TableColumn("What", "object_type", "Type A–Z", "Type Z–A"),
         TableColumn("Message", "message", "Message A–Z", "Message Z–A"),
     )
     table_default_sort = "-created_at"
-    table_search_placeholder = "Search objects, operation IDs, and messages…"
+    table_search_placeholder = "Search what changed, ids and messages…"
+    page_lede = (
+        "Everything that changed, and who or what changed it. How background work "
+        "went is under Background jobs."
+    )
 
     def get_page_actions(self):
         from hq.platform.application.approvals import awaiting_ids
 
         listing = reverse("core:audit_list")
         awaiting = self._awaiting()
+        waiting = len(awaiting_ids())
+        # The way to what waits is offered while something does, and on its
+        # own view so there is a way back.
+        if not waiting and not awaiting:
+            return ()
         return (
             PageAction("All events", listing, primary=not awaiting),
             PageAction(
-                f"Awaiting approval · {len(awaiting_ids())}",
+                f"Waiting for your approval · {waiting}",
                 f"{listing}?awaiting=1",
                 primary=awaiting,
             ),

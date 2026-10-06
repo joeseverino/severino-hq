@@ -54,7 +54,7 @@ def connection_specs():
                 kind="nws",
                 status="good",
                 status_label="keyless",
-                detail="Public forecasts and alerts; configured points refresh through HQ.",
+                detail="Weather for the dashboard. Public, no key needed.",
                 endpoint=NWS_API,
                 credential_model="none",
                 ability_names=("nws.hourly_forecast", "nws.active_alerts"),
@@ -66,7 +66,7 @@ def connection_specs():
         ConnectionSpec(
             name="hq.nws",
             label="National Weather Service",
-            summary="Keyless hourly forecasts and active alerts for the configured point.",
+            summary="Hourly forecast and weather alerts for the dashboard. Public, no key needed.",
             required_capability=Capability.READ,
             instance_provider=instances,
             abilities=(
@@ -178,7 +178,7 @@ def panel_specs(
             DashboardPanelSpec(
                 "weather",
                 configuration.weather_label,
-                "Refresh to read the National Weather Service.",
+                "Press Read now to fetch the forecast.",
                 icon="weather",
                 head_labels=False,
                 alert_metric="Alerts",
@@ -404,9 +404,9 @@ def dashboard_panels(
                 else str(resource.spec.get("name") or resource.key)
             ),
             empty=(
-                "Refresh to read this machine."
+                "Press Read now to read this machine."
                 if resource.pk in routes
-                else "No controller connection reaches this machine yet."
+                else "HQ has no way to read this machine yet."
             ),
         )
         panels.append(
@@ -667,7 +667,7 @@ def _record_machine_readings(
             panel_id=f"machine-{resource.pk}"
         ).update(completed_at=observed_at)
     if not matched:
-        raise ValueError("No declared machine matched the controller report.")
+        raise ValueError("No machine HQ knows matched the controller's report.")
 
 
 def _record_weather_reading(

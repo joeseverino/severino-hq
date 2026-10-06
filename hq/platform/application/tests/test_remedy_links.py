@@ -36,7 +36,7 @@ from .test_tailnet_posture import policy as tailnet_policy, tailnet_connection
 from ..topology import derive_topology
 
 TRAP = "This replaces the whole record"
-UNOFFERED = "is not a target here"
+UNOFFERED = "cannot be used here"
 
 
 def an_operator():

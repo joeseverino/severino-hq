@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import secrets
-from urllib.parse import quote
 
 from django.core.exceptions import PermissionDenied
 from django.core.serializers.json import DjangoJSONEncoder
@@ -125,7 +124,7 @@ def _apply_execution_error(form, result: dict) -> None:
             form.add_error(field if field in form.fields else None, message)
             placed = True
     if not placed:
-        form.add_error(None, error.get("message", "The command could not be executed."))
+        form.add_error(None, error.get("message", "That did not run."))
 
 
 class CommandView(View):
@@ -171,27 +170,19 @@ class CommandView(View):
     def _context(self, form, *, result=None):
         resource = integration_graph().resources.get(self.spec.subject_resource)
         schema = capability_schema(self.spec)
-        required_capabilities = tuple(
-            item.value if hasattr(item, "value") else str(item)
-            for item in self.spec.required_capabilities
-        )
         facts, table = _result_projection(result["payload"]) if result else ((), None)
         resource_url = route_url(resource.web_route) if resource else ""
-        search = reverse("search")
-        actions = []
-        if resource_url:
-            actions.append(PageAction(f"Open {resource.label}", resource_url))
-        actions.append(PageAction("All commands", f"{search}?q={quote(self.spec.name)}"))
+        actions = [PageAction(f"Open {resource.label}", resource_url)] if resource_url else []
         return {
             **page_context(
                 self.spec.title,
                 self.spec.summary,
                 actions=actions,
-                trail=(("Command Center", search),),
+                trail=(("Search", reverse("search")),),
             ),
             "command": self.spec,
             "command_label": self.spec.title,
-            "effect_label": self.spec.effect.replace("_", " "),
+            "chosen_target": self._chosen_target(form),
             "form": form,
             "result": result,
             "result_facts": facts,
@@ -202,15 +193,8 @@ class CommandView(View):
                 else ""
             ),
             "return_url": safe_next(self.request),
-            "schema_json": json.dumps(schema, indent=2, sort_keys=True),
             "resource_url": resource_url,
             "resource_label": resource.label if resource else "",
-            "handler_name": self.spec.handler.__name__,
-            "required_capabilities": required_capabilities,
-            "target_catalog_count": (
-                len(self.target_options) if self.target_options is not None else None
-            ),
-            "has_reason": "reason" in form.fields,
             "hydrates_target": bool(self.spec.target_initial_fields),
             # Only a command that writes a record's fields can blank them; one
             # that takes just a target and a reason has no record to replace.
@@ -218,14 +202,29 @@ class CommandView(View):
                 set(schema.get("properties", {}))
                 - {"idempotency_key", "reason"}
             ),
-            "effect_outcome": {
-                "read": "Reads authorized state without changing it.",
-                "remote_write": "Commits an atomic change to HQ state.",
-                "infrastructure_change": (
-                    "Queues or performs a policy-gated external change."
-                ),
-                "destructive": "Removes or retires the selected state.",
-            }.get(self.spec.effect, self.spec.effect.replace("_", " ")),
+        }
+
+    def _chosen_target(self, form):
+        """The one this page was opened for, named instead of offered in a list.
+
+        A link from a card or a record carries its target, and a list of every
+        other choice beside it is noise. Only a target the list holds counts,
+        so a link cannot name one the reader could not have picked.
+        """
+
+        asked = self.request.GET.get("target", "") if self.spec.target_kind else ""
+        chosen = next(
+            (option for option in self.target_options or () if option.value == asked), None
+        )
+        if chosen is None or form["__target"].value() != asked:
+            return None
+        field = form.fields["__target"]
+        # Still the same control, so it posts as it would shown: only out of sight.
+        field.widget.attrs["hidden"] = True
+        return {
+            "field": field.label,
+            "label": chosen.label,
+            "change_url": command_url(self.spec.name),
         }
 
     def get(self, request, name: str):

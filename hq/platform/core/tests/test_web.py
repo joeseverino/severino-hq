@@ -244,7 +244,7 @@ class AuthGateTests(TestCase):
     @override_settings(SEVERINO_OIDC_ENABLED=True)
     def test_login_page_shows_sso_button_when_enabled(self):
         response = self.client.get("/accounts/login/")
-        self.assertContains(response, "Sign in with SSO")
+        self.assertContains(response, "Sign in with Pocket ID")
 
 
 class SecurityBoundaryTests(TestCase):
@@ -558,19 +558,27 @@ class NavigationSmokeTests(_AuthedTestCase):
 
 
 class SearchPageTests(_AuthedTestCase):
-    def test_empty_search_is_the_derived_command_center(self):
-        response = self.client.get("/search/")
+    def test_search_with_nothing_asked_is_a_search_box(self):
+        with patch("hq.platform.core.views.command_center") as discovery:
+            response = self.client.get("/search/")
+
+        discovery.assert_not_called()
+        self.assertContains(response, "<title>Search")
+        self.assertContains(response, 'placeholder="Find anything"')
+        self.assertNotContains(response, "Command Center")
+        self.assertNotContains(response, "discovery-link")
+        self.assertNotContains(response, "/commands/")
+
+    def test_a_query_finds_pages_and_commands_by_their_names_and_shows_no_identifier(self):
+        response = self.client.get("/search/", {"q": "project"})
 
         content = response.content.decode()
-        self.assertContains(response, "Command Center")
-        self.assertIn("project.create", content)
-        self.assertIn("infrastructure.controllers", content)
-        self.assertIn('href="/projects/"', content)
-        self.assertIn('href="/commands/project.create/"', content)
-        self.assertIn(
-            '<a class="discovery-link" href="/commands/project.create/">', content
-        )
-        self.assertNotIn("Open command", content)
+        self.assertIn('<a class="discovery-link" href="/commands/project.create/">', content)
+        self.assertIn('<a class="discovery-link" href="/projects/">', content)
+        self.assertIn("<strong>Create project</strong>", content)
+        self.assertIn('<span class="scope-chip">Changes HQ</span>', content)
+        self.assertNotIn("<code>project.create</code>", content)
+        self.assertNotIn("remote write", content)
 
     def test_query_filters_commands_as_well_as_records(self):
         response = self.client.get("/search/", {"q": "certificate.renew"})
@@ -748,7 +756,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
             response = self.client.post("/dashboard/glance/")
 
         self.assertEqual(response.status_code, 202)
-        self.assertContains(response, "Refreshing", status_code=202)
+        self.assertContains(response, "Reading", status_code=202)
         self.assertEqual(
             list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)),
             [f"machine-{machine.pk}"],
@@ -790,12 +798,13 @@ class DashboardWorkflowTests(_AuthedTestCase):
                 "/action-items/", {"status": "serious", "q": "draft"}
             )
 
-        self.assertContains(response, "Draft content")
+        self.assertContains(response, "1 draft is not published")
         self.assertContains(response, 'href="/content/?status=draft"')
-        self.assertContains(response, "Action items")
-        # Filtered to serious only, so an attention-level entry is gone even
+        self.assertContains(response, "<title>Needs you")
+        self.assertNotContains(response, "Action items")
+        # Filtered to urgent only, so an entry that is not urgent is gone even
         # though the query still matches its text.
-        self.assertNotContains(filtered, "Draft content")
+        self.assertNotContains(filtered, "1 draft is not published")
 
     def test_profile_count_is_lazy_off_dashboard(self):
         ContentItem.objects.create(title="Count me", status=ContentItem.Status.DRAFT)
@@ -831,10 +840,10 @@ class DashboardWorkflowTests(_AuthedTestCase):
             silent = self.client.get("/")
 
         self.assertContains(never, 'dash-reading dash-controller"')
-        self.assertContains(never, "Has not run here")
+        self.assertContains(never, "Not set up yet")
         self.assertContains(arriving, "dash-controller is-arriving")
         self.assertContains(silent, "dash-controller is-silent")
-        self.assertContains(silent, "Silent for")
+        self.assertContains(silent, "Last read")
 
     def test_the_dashboard_draws_its_contacts_without_waiting_on_d1(self):
         from hq.platform.application import readings
@@ -913,8 +922,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Active projects")
-        self.assertContains(response, "1 needs output")
-        self.assertNotContains(response, "Active projects need output")
+        self.assertContains(response, "1 has no writeup or doc")
+        self.assertNotContains(response, "need output")
         self.assertNotContains(response, "/projects/?needs_output=1")
         self.assertNotContains(response, "Project opportunities")
         self.assertNotContains(response, "Relationship health")

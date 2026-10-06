@@ -693,7 +693,7 @@ def overview(*, days: int = DEFAULT_WINDOW_DAYS, limit: int = 12) -> dict[str, A
                 "is_zero": not totals["visits"],
             },
             {
-                "label": "Pages reached",
+                "label": "Different pages viewed",
                 "value": f"{measured_paths:,}",
                 "detail": "",
                 "is_zero": not measured_paths,

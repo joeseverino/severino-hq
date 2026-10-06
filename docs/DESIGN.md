@@ -10,6 +10,17 @@ The rules below are enforced where they can be. Each names its gate.
 
 ## Rules
 
+**The owner's words, not HQ's.** One person reads this interface. He knows his
+machines and does not know how HQ is built, so a page never says the names HQ
+has for its own parts: a thing is called by its own noun ("DNS record",
+"certificate"), HQ "reads" and "applies", and what differs was "changed
+outside HQ". `hq/platform/core/plain_words.py` holds each word that is never
+shown with what to say instead, and each label that was retired for one name
+per thing: the queue is "Needs you", search is "Search" and its box "Find
+anything", a fresh read from a thing's page is "Read now" and from a problem
+card "Check again". Comments and identifiers keep the internal vocabulary.
+*Gate:* `PlainWordsTests`, over the paths it lists.
+
 **One frame per thing.** A box that holds content is a *surface*: one border,
 one radius, one background, one shadow, drawn by the single surface rule in
 `app.css`. A component joins by adding its selector to that rule's list and
@@ -168,18 +179,30 @@ theme is a set of token values and dark mode is not a second stylesheet.
 `ghost` for link-like actions that sit inline; `danger` in red text on the same
 surface as its neighbours, loud only in its confirmation.
 
-**A decision carries its evidence.** The action queue
-and domain attention lists use one queue projection and one row partial.
-A row leads with what is wrong, beside how bad it is and what it is about;
-the next step is the toggle for the evidence and remaining steps behind it;
-what can be done follows, outside the disclosure.
-An owner's first available workflow step supplies the actions only when it
-emits no quick actions. Promoted actions are omitted from the disclosure by
-method and URL, without changing the transport's full workflow. All emitted
-actions use the page-action renderer and the shared POST form.
+**A card says what is wrong and holds what fixes it.** The queue is named
+"Needs you" wherever it appears. The dashboard, the queue page and a domain's
+own attention list use one projection (`hq/platform/application/decisions.py`)
+and one card partial (`partials/_work_queue.html`). A card reads, in order:
 
-The dashboard leads with domain overviews, keeping attention in its linked
-count rather than duplicating the queue.
+- how urgent it is, in one set of words (`decisions.URGENCY`), and the title,
+  which states what is wrong and links to the thing it is about;
+- one or two sentences of what it means;
+- since when, where its owner knows (`Insight(since=...)`), and never a guess;
+- what to do: a command or an instruction is a step, one standing alone and
+  several numbered, folded under "Steps" only when long;
+- the reason it cannot be done from here, as a sentence and never as a step;
+- buttons: the owner's actions, the first step that can be taken now when the
+  owner offered none, and the check that reads again.
+
+Nothing that explains a card or acts on it sits behind a toggle. A next step
+an owner names as a short label with a `url` is a link to that page; one it
+writes as a sentence is shown as a sentence. Each action renders once, by
+method and URL, through the page-action renderer and the shared POST form,
+and the transport keeps the owner's full workflow. A dismissed card is its
+title and the way back.
+
+A queue of three or fewer is read on the dashboard, under the greeting, on the
+same cards. A longer one is a count and a link to its page.
 
 **An item is open until its owner stops raising it.** Nobody closes one by
 looking at it. What a reader can do with one they are not acting on is dismiss

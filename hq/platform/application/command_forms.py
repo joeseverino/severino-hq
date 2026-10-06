@@ -141,15 +141,7 @@ class CapabilityCommandForm(forms.Form):
         return tuple(
             field
             for field in self.visible_fields()
-            if field.name not in {"__expected_updated_at", "__confirm_effect", "next"}
-        )
-
-    @property
-    def advanced_fields(self):
-        return tuple(
-            field
-            for field in self.visible_fields()
-            if field.name == "__expected_updated_at"
+            if field.name not in {"__confirm_effect", "next"}
         )
 
     @property
@@ -198,6 +190,17 @@ class CapabilityCommandForm(forms.Form):
         return cleaned
 
 
+def grouped_choices(options: tuple[CommandTargetOption, ...]) -> tuple:
+    """The choices under the type each is, where they are of more than one."""
+
+    groups: dict[str, list[tuple[str, str]]] = {}
+    for item in options:
+        groups.setdefault(item.group, []).append((item.value, item.label))
+    if len(groups) < 2:
+        return tuple((item.value, item.label) for item in options)
+    return tuple((group or "Other", tuple(choices)) for group, choices in sorted(groups.items()))
+
+
 def command_form_class(
     spec: CapabilitySpec,
     *,
@@ -215,10 +218,7 @@ def command_form_class(
     if "idempotency_key" in fields:
         fields["idempotency_key"].widget = forms.HiddenInput()
     if spec.target_kind:
-        options = {
-            "label": spec.target_label or "Target",
-            "help_text": spec.target_help or "The existing object this command acts on.",
-        }
+        options = {"label": spec.target_label or "Which one", "help_text": spec.target_help}
         if target_options is None:
             target_field = (
                 forms.IntegerField
@@ -227,21 +227,16 @@ def command_form_class(
             )
             fields["__target"] = target_field(**options)
         else:
-            empty_label = (
-                f"Select {(spec.target_label or 'target').lower()}…"
-                if target_options
-                else "No eligible targets are currently available"
-            )
+            empty_label = "Choose one…" if target_options else "Nothing to choose from yet"
             fields["__target"] = forms.ChoiceField(
-                choices=(("", empty_label),)
-                + tuple((item.value, item.label) for item in target_options),
+                choices=(("", empty_label), *grouped_choices(target_options)),
                 **options,
             )
         fields = {"__target": fields.pop("__target"), **fields}
+        # Filled from the record a chosen target loads, never typed: a save
+        # made against a record that changed since is refused.
         fields["__expected_updated_at"] = forms.CharField(
-            required=False,
-            label="Expected updated at",
-            help_text="Optional optimistic-concurrency timestamp from the current record.",
+            required=False, widget=forms.HiddenInput()
         )
     fields["__execution_key"] = forms.CharField(
         max_length=128,
@@ -257,9 +252,9 @@ def command_form_class(
     if spec.effect in {"infrastructure_change", "destructive"}:
         fields["__confirm_effect"] = forms.BooleanField(
             label=(
-                "I understand this command may change external infrastructure."
+                "I understand this changes a live system."
                 if spec.effect == "infrastructure_change"
-                else "I understand this command is destructive."
+                else "I understand this deletes data."
             )
         )
     return type(

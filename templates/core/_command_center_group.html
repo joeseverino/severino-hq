@@ -4,17 +4,13 @@
     <a id="command-center-option-{{ group.key }}-{{ forloop.counter }}"
        class="command-center-option" href="{{ item.url }}" role="option"
        aria-selected="false" tabindex="-1" data-command-center-option>
-      <span class="command-center-kind command-center-kind-{{ item.kind }}" aria-hidden="true">{{ item.kind|slice:":1"|upper }}</span>
       <span class="command-center-copy">
-        <span class="command-center-title">
-          <strong>{{ item.label }}</strong>
-          {% if item.name != item.label %}<code>{{ item.name }}</code>{% endif %}
-        </span>
-        <span class="muted">{{ item.summary }}</span>
+        <span class="command-center-title"><strong>{{ item.label }}</strong></span>
+        {% if item.summary and group.key != "resources" %}<span class="muted">{{ item.summary }}</span>{% endif %}
       </span>
       <span class="command-center-evidence">
         {% if item.destination_label %}<span class="command-center-destination">{{ item.destination_label }}</span>{% endif %}
-        {% for badge in item.badges %}<span class="scope-chip">{{ badge }}</span>{% endfor %}
+        {% for badge in item.badges %}{% if badge %}<span class="scope-chip">{{ badge }}</span>{% endif %}{% endfor %}
       </span>
       <span class="command-center-arrow" aria-hidden="true">→</span>
     </a>

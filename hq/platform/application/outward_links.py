@@ -72,15 +72,15 @@ def outward_links(user=None) -> tuple[list[dict[str, str]], bool]:
     offered = [
         {
             "label": "Health endpoint",
-            "sub": "liveness",
+            "sub": "HQ's own health check",
             "href": reverse("health_ready"),
         },
         *(
-            {"label": label, "sub": sub or "console", "href": href}
+            {"label": label, "sub": sub or "admin console", "href": href}
             for label, sub, href in consoles()
         ),
         *(
-            {"label": hostname, "sub": sub or "published", "href": href}
+            {"label": hostname, "sub": sub or "public site", "href": href}
             for hostname, sub, href in public_sites()
         ),
         *operator_links(),

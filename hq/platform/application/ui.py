@@ -3,7 +3,7 @@
 import math
 import re
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from .drawings import Dots, Trend
 from .labels import plural
@@ -176,6 +176,11 @@ class Insight:
     # the same thing read as one line until opened. Left empty, the item
     # stands alone.
     family: str = ""
+    # When this began, where its owner knows: the moment a condition was first
+    # seen, a request was made, a key ran out. A card says "Since Oct 3".
+    # Left unset when the owner knows only that it holds now: a card that
+    # guesses a start is worse than one that gives none.
+    since: datetime | None = None
 
     def __post_init__(self) -> None:
         if self.status not in STATUS_VALUES:

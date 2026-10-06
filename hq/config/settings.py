@@ -189,6 +189,8 @@ CSRF_COOKIE_SAMESITE = os.environ.get("DJANGO_CSRF_COOKIE_SAMESITE", "Lax")
 # and SessionRefresh below is what re-checks the provider.
 SESSION_COOKIE_AGE = env_int("SEVERINO_SESSION_SECONDS", 12 * 60 * 60)
 CSRF_COOKIE_HTTPONLY = False  # Django needs JS access for the token header
+# A stale form is answered on HQ's own refusal page, in the site's frame.
+CSRF_FAILURE_VIEW = "hq.platform.core.error_views.csrf_failure"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 SECURE_REFERRER_POLICY = "same-origin"

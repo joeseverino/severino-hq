@@ -52,4 +52,4 @@ class DormantColumnTests(TestCase):
         self.assertEqual(
             [head["dormant"] for head in response.context["column_heads"]], [True, False]
         )
-        self.assertContains(response, '<span class="policy-off">off on this server</span>', count=1)
+        self.assertContains(response, '<span class="policy-off">off in HQ\'s settings</span>', count=1)

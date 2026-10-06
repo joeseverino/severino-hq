@@ -344,7 +344,7 @@ document.addEventListener("click", (event) => {
       } else {
         const routes = document.querySelector("[data-triage-routes]")?.dataset;
         button.setAttribute("formaction", dismissing ? routes?.restore : routes?.dismiss);
-        button.textContent = dismissing ? "Undo" : "Dismiss";
+        button.textContent = dismissing ? "Restore" : "Dismiss";
       }
     })
     // Whatever went wrong, the plain form still works.
@@ -372,39 +372,17 @@ document.addEventListener("submit", (event) => {
   if (status) status.hidden = false;
 });
 
-// A command preview reads controls already on the page. It performs no fetch,
-// creates no second command model, and leaves the server-rendered fallback in
-// place; the deployed capability remains the only source of execution truth.
-document.querySelectorAll("form[data-command-form]").forEach((form) => {
-  const preview = form.parentElement?.querySelector("[data-command-preview]");
-  if (!preview) return;
-
-  const update = () => {
-    preview.querySelectorAll("[data-command-value]").forEach((output) => {
-      const control = form.elements.namedItem(output.dataset.commandValue);
-      if (!(control instanceof HTMLInputElement
-        || control instanceof HTMLTextAreaElement
-        || control instanceof HTMLSelectElement)) return;
-      let value = control.value.trim();
-      if (control instanceof HTMLSelectElement && value) {
-        value = control.selectedOptions[0]?.textContent?.trim() || value;
-      }
-      output.textContent = value || output.dataset.empty;
-    });
-  };
-  form.addEventListener("input", update);
-  form.addEventListener("change", update);
+// Choosing what a command acts on loads that record's current values into
+// the form, by asking for the same page with the choice in its address.
+document.querySelectorAll("form[data-command-hydrate-target]").forEach((form) => {
   const target = form.elements.namedItem("__target");
-  if (form.hasAttribute("data-command-hydrate-target")
-    && target instanceof HTMLSelectElement) {
-    target.addEventListener("change", () => {
-      if (!target.value) return;
-      const url = new URL(window.location.href);
-      url.searchParams.set("target", target.value);
-      window.location.assign(url);
-    });
-  }
-  update();
+  if (!(target instanceof HTMLSelectElement)) return;
+  target.addEventListener("change", () => {
+    if (!target.value) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("target", target.value);
+    window.location.assign(url);
+  });
 });
 
 // Modals. A trigger is always a real link to a page that does the same job, so

@@ -34,7 +34,7 @@ from django.apps import apps
 from django.conf import settings
 
 EM_DASH = chr(0x2014)  # built, so this file holds no literal one
-_TEMPLATE_COMMENT = re.compile(
+TEMPLATE_COMMENT = re.compile(
     r"\{#.*?#\}|\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}", re.DOTALL
 )
 _SKIPPED = frozenset(
@@ -145,7 +145,7 @@ def _template_forms(path: Path, number: int, line: str, depth: int, reading: Rea
 
 
 def _read_template(path: Path, source: str, worded: bool, reading: Reading) -> None:
-    text = _TEMPLATE_COMMENT.sub(lambda match: "\n" * match.group().count("\n"), source)
+    text = TEMPLATE_COMMENT.sub(lambda match: "\n" * match.group().count("\n"), source)
     depth = 0
     for number, line in enumerate(text.splitlines(), 1):
         _template_counts(path, number, line, reading)
@@ -158,7 +158,7 @@ def _read_template(path: Path, source: str, worded: bool, reading: Reading) -> N
         depth = _template_forms(path, number, line, depth, reading)
 
 
-def _docstrings(tree: ast.AST) -> set[int]:
+def docstrings(tree: ast.AST) -> set[int]:
     owners = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
     return {
         id(node.body[0].value)
@@ -218,7 +218,7 @@ def _read_python(path: Path, source: str, worded: bool, reading: Reading) -> Non
         tree = ast.parse(source)
     except (SyntaxError, ValueError):
         return
-    docstrings = _docstrings(tree) if worded else set()
+    documented = docstrings(tree) if worded else set()
     for node in ast.walk(tree):
         phrases = _counted_call_phrases(node)
         reason = _refusal(*phrases) if phrases else None
@@ -226,7 +226,7 @@ def _read_python(path: Path, source: str, worded: bool, reading: Reading) -> Non
             reading.unagreeable_counts.append((path, node.lineno, reason))
         if not worded:
             continue
-        if _has_em_dash(node) and id(node) not in docstrings:
+        if _has_em_dash(node) and id(node) not in documented:
             reading.em_dashes.append((path, node.lineno))
         if _is_suffix_guess(node) or _is_bracketed_plural(node):
             reading.hand_plurals.append((path, node.lineno))

@@ -31,6 +31,7 @@ from .approvals import (
     held_by_default,
     may_be_held_by_default,
 )
+from .labels import effect_label
 from .security import AuthorizationError, Principal, is_interactive, mcp_principal
 
 SURFACES = AGENT_SURFACES
@@ -126,7 +127,9 @@ def set_rule(
     if rule is not None and rule not in Rule.values:
         raise ValueError(f"{rule!r} is not a rule.")
     if rule == Rule.APPROVE and spec.effect == READ_EFFECT:
-        raise ValueError(f"{spec.name} is a read; it can be allowed or denied, not held.")
+        raise ValueError(
+            f"{spec.title} only reads. It can be allowed or blocked, not held for approval."
+        )
     if scope == Scope.AGENT and rule is not None:
         granted = (
             AgentIdentity.objects.filter(client_id=subject)
@@ -134,12 +137,9 @@ def set_rule(
             .first()
         )
         if granted is None:
-            raise ValueError(f"No agent named {subject!r} has presented a token here.")
+            raise ValueError(f"No agent named {subject} has connected yet.")
         if not _held_by_grant(spec, granted):
-            raise ValueError(
-                f"{subject}'s grant in Pocket ID does not include {spec.name}. "
-                "HQ can only narrow what the identity provider allows."
-            )
+            raise ValueError(f"Pocket ID does not allow {subject} to use {spec.title}.")
 
     with transaction.atomic():
         existing = CapabilityRule.objects.select_for_update().filter(
@@ -184,18 +184,24 @@ def _held_by_grant(spec, granted) -> bool:
     )
 
 
+# What a rule is called on the page. The stored values keep their names.
+RULE_LABELS = {Rule.ALLOW: "Allow", Rule.APPROVE: "Ask me first", Rule.DENY: "Block"}
+
+
 def _name(rule: str | None) -> str:
-    return "Default" if rule is None else Rule(rule).label
+    return "Default" if rule is None else RULE_LABELS[Rule(rule)]
 
 
 # Form field names are produced and parsed only here.
 _FIELD_SEPARATOR = "|"
 
+# What each kind of action does, beside its name. A read changes nothing and
+# says nothing.
 EFFECTS = {
-    "read": "Read",
-    "remote_write": "Write",
-    "destructive": "Delete",
-    "infrastructure_change": "Infra",
+    "read": "",
+    "remote_write": effect_label("remote_write"),
+    "destructive": effect_label("destructive"),
+    "infrastructure_change": effect_label("infrastructure_change"),
 }
 _EFFECT_ORDER = tuple(EFFECTS)
 
@@ -300,17 +306,18 @@ def matrix() -> tuple[tuple[Column, ...], tuple[Group, ...]]:
         specs = sorted(
             grouped[label], key=lambda spec: (_EFFECT_ORDER.index(spec.effect), spec.name)
         )
-        actions = _actions(specs, label)
         rows = tuple(
             Row(
                 spec.name,
-                action,
+                # The command's own title, whole: a title cut down to fit its
+                # group stops saying what the command does.
+                spec.title,
                 spec.effect,
                 EFFECTS[spec.effect],
                 _default_label(spec),
                 tuple(_cell(spec, column, current, grants, ceiling) for column in cols),
             )
-            for spec, action in zip(specs, actions, strict=True)
+            for spec in specs
         )
         groups.append(Group(label, rows))
     return cols, tuple(groups)
@@ -321,52 +328,52 @@ def _subject(spec) -> str:
 
 
 def _subject_label(subject: str) -> str:
+    """What a group of commands acts on, by the name its own page has."""
+
+    from .integrations import integration_graph
+
+    resource = integration_graph().resources.get(subject)
+    if resource is not None:
+        return resource.label
     words = subject.removesuffix(".resources").replace(".", " ").replace("_", " ")
     return words[:1].upper() + words[1:]
 
 
-def _actions(specs, group: str) -> list[str]:
-    """Row labels for one group. The prefix is dropped only where that keeps them apart."""
-
-    labels = [spec.title for spec in specs]
-    short = [_action(label, group, spec.name.split(".", 1)[0]) for label, spec in zip(labels, specs, strict=True)]
-    return [
-        _action(label, group, "") if short.count(action) > 1 else action
-        for label, action in zip(labels, short, strict=True)
-    ]
-
-
-def _action(label: str, group: str, prefix: str) -> str:
-    """The capability's label without the words its group or prefix already says."""
-
-    def stem(word: str) -> str:
-        return word.lower().rstrip("s")
-
-    group_stems = {stem(word) for word in group.split()} | ({stem(prefix)} if prefix else set())
-    # Wherever they fall: a declared label puts the verb first ("Create
-    # project"), a generated one puts it last ("Project Create").
-    kept = [word for word in label.split() if stem(word) not in group_stems]
-    words = kept or label.split()[-1:]
-    words = [word if word.isupper() and len(word) > 1 else word.lower() for word in words]
-    phrase = " ".join(words)
-    return phrase[:1].upper() + phrase[1:]
-
-
 def _default_label(spec) -> str:
+    """What happens with no rule set: a deletion always asks, and a change to
+    a type that needs approval asks for that type."""
+
     if spec.effect == DESTRUCTIVE_EFFECT:
-        return "Approval"
-    return "Approval if gated" if may_be_held_by_default(spec) else "Allow"
+        return RULE_LABELS[Rule.APPROVE]
+    if may_be_held_by_default(spec):
+        return f"{RULE_LABELS[Rule.APPROVE]} for {_approved_types()}"
+    return RULE_LABELS[Rule.ALLOW]
+
+
+def _approved_types() -> str:
+    """The types whose changes wait for a person, by the names their pages use."""
+
+    from hq.domains.control_plane.providers import PROVIDERS
+
+    from .entity_links import kind_label
+
+    names = sorted(
+        kind_label(kind).lower() for kind, provider in PROVIDERS.items() if provider.requires_approval
+    )
+    if not names:
+        return "types that need approval"
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
 
 def _cell(spec, column: Column, current, grants, ceiling) -> Cell:
     field = field_name(column.scope, column.subject, spec.name)
     if column.scope == Scope.AGENT and not _held_by_grant(spec, grants[column.subject]):
-        return Cell(field, column.scope, column.label, None, (), "Not granted in Pocket ID")
+        return Cell(field, column.scope, column.label, None, (), "Pocket ID does not allow this")
     dormant = column.subject == "mcp" and not ceiling.permits(*spec.required_capabilities)
-    options = [("", "Default"), (Rule.ALLOW, Rule.ALLOW.label)]
+    options = [("", "Default"), (Rule.ALLOW, RULE_LABELS[Rule.ALLOW])]
     if spec.effect != READ_EFFECT:
-        options.append((Rule.APPROVE, Rule.APPROVE.label))
-    options.append((Rule.DENY, Rule.DENY.label))
+        options.append((Rule.APPROVE, RULE_LABELS[Rule.APPROVE]))
+    options.append((Rule.DENY, RULE_LABELS[Rule.DENY]))
     return Cell(
         field,
         column.scope,
@@ -392,7 +399,7 @@ def apply_changes(submitted, *, principal: Principal, user) -> tuple[int, list[s
         scope, subject, capability = parsed
         spec = registry.get(capability)
         if spec is None:
-            problems.append(f"{capability} is no longer a capability HQ offers.")
+            problems.append(f"{capability} is no longer something HQ can do.")
             continue
         wanted = value or None
         if current.get((scope, subject, capability)) == wanted:

@@ -69,11 +69,7 @@ def connection_specs():
                 kind="cloudflare_d1",
                 status="good",
                 status_label="configured",
-                detail=(
-                    "Account and database from the cloudflare_api connection's "
-                    "readings; this token only writes. Health is checked when an "
-                    "operation runs."
-                ),
+                detail="Stores the messages sent through the contact form.",
                 endpoint=(
                     f"https://api.cloudflare.com/client/v4/accounts/{target.account}"
                     f"/d1/database/{target.database}"
@@ -89,7 +85,7 @@ def connection_specs():
                     "cloudflare.d1_submission_delete",
                 ),
                 targets=(
-                    ConnectionLink("Contact submissions", reverse("contacts:list")),
+                    ConnectionLink("Messages", reverse("contacts:list")),
                 ),
                 facts=(
                     ConnectionFact("Database", target.database),
@@ -103,29 +99,29 @@ def connection_specs():
         ConnectionSpec(
             name="hq.cloudflare_d1",
             label="Cloudflare D1",
-            summary="Cloudflare D1 databases HQ queries directly.",
+            summary="The Cloudflare D1 database that stores contact-form messages.",
             required_capability=Capability.MANAGE_CONTACTS,
             instance_provider=instances,
             abilities=(
                 ConnectionAbility(
                     "cloudflare.d1_submissions_read",
-                    "Read contact submissions",
-                    "List and view contact submissions.",
+                    "Read messages",
+                    "List and open contact-form messages.",
                     capability="contact.submissions.list",
                     subject_resource="contact.submissions",
                 ),
                 ConnectionAbility(
                     "cloudflare.d1_submission_review",
-                    "Review contact submission",
-                    "Set status, assignee, and notes.",
+                    "Review a message",
+                    "Mark it read, replied, archived or spam, and keep a note.",
                     effect="remote_write",
                     capability="contact.submission.review",
                     subject_resource="contact.submissions",
                 ),
                 ConnectionAbility(
                     "cloudflare.d1_submission_delete",
-                    "Delete contact submission",
-                    "Delete one contact submission after confirmation.",
+                    "Delete a message",
+                    "Delete one message, after you confirm.",
                     effect="destructive",
                     capability="contact.submission.delete",
                     subject_resource="contact.submissions",

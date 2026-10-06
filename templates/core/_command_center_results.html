@@ -1,6 +1,6 @@
 <div class="command-center-results" data-command-center-results data-fragment="{% url 'search' %}" data-fragment-name="palette" data-fragment-failure="Could not load results. Press Enter to search." aria-live="polite">
   {% if palette_estate or palette_groups or palette_search_groups %}
-    <div id="command-center-options" class="command-center-options" role="listbox" aria-label="HQ destinations">
+    <div id="command-center-options" class="command-center-options" role="listbox" aria-label="Results">
       {% for group in palette_estate %}{% include "core/_command_center_group.html" %}{% endfor %}
       {% for group in palette_search_groups %}
         <section class="command-center-group" aria-labelledby="command-center-group-search-{{ group.scope }}">
@@ -9,7 +9,6 @@
             <a id="command-center-option-search-{{ group.scope }}-{{ forloop.counter }}"
                class="command-center-option" href="{% if item.url %}{{ item.url }}{% else %}{% url 'core:audit_list' %}?q={{ q|urlencode }}{% endif %}"
                role="option" aria-selected="false" tabindex="-1" data-command-center-option>
-              <span class="command-center-kind command-center-kind-search" aria-hidden="true">S</span>
               <span class="command-center-copy">
                 <span class="command-center-title">
                   <strong>{{ item.title }}</strong>
@@ -32,13 +31,12 @@
     {% endif %}
   {% elif q %}
     <div class="command-center-empty">
-      <strong>No direct destination matches “{{ q }}”.</strong>
-      <span class="muted">Press Enter to search records, activity, contacts, and content.</span>
+      <strong>No page or command called “{{ q }}”.</strong>
+      <span class="muted">Press Enter to search everything.</span>
     </div>
   {% else %}
     <div class="command-center-empty">
-      <strong>No destinations are available.</strong>
-      <span class="muted">The palette only shows things your account can use.</span>
+      <strong>Nothing to show.</strong>
     </div>
   {% endif %}
 </div>

@@ -581,7 +581,8 @@ class ActionItemTests(TestCase):
 
         self.assertContains(
             response,
-            f'<a href="{reverse("control_plane:machine", args=["example-host"])}">example-host</a>',
+            f'<a class="attention-title" href="{reverse("control_plane:machine", args=["example-host"])}">'
+            "Tailscale update available for example-host</a>",
         )
 
 

@@ -150,7 +150,7 @@ page it falls back to. Nothing here knows which one it is in.
         </p>
       {% elif connection.identity.tailnet_user %}
         <p class="conn-agree conn-agree-no">
-          Both systems identify this request, but HQ has no declared link between those account names.
+          Both systems identify this request, but HQ has not been told those two account names are the same person.
         </p>
       {% else %}
         <p class="conn-agree conn-agree-no">
@@ -330,7 +330,7 @@ page it falls back to. Nothing here knows which one it is in.
         </li>
       {% endfor %}
     </ol>
-    <p class="conn-scope-note"><strong>Scope:</strong> this is request-path evidence. Each control names its evidence and the mechanism that produced it; no single green check is treated as the whole defence. Storage, backup, and secret custody belong to their resources and are never inferred from a browser request.</p>
+    <p class="conn-scope-note">This shows only how this request reached HQ. Each check names what it relied on, and no single passed check is the whole defence.</p>
   </section>
 
   <details class="conn-protocol conn-addresses">

@@ -1,7 +1,7 @@
 {% comment %}
-How this request reached HQ, beside the readings: the channel, the path, the
-encryption and whether the admission checks hold. The same reading the
-connection panel opens on, and a link to that panel, so it works without script.
+How you are connected to HQ, beside the readings: over which network, and how
+it is encrypted. Whether every check on the way in passed is said only when
+one did not. The panel behind the link has the rest, and works without script.
 {% endcomment %}
 <a class="glance-panel-head dash-reading dash-connection conn-badge-{{ connection.channel.id }}"
    href="{% url 'connection' %}"
@@ -9,8 +9,7 @@ connection panel opens on, and a link to that panel, so it works without script.
   <span class="glance-symbol">{% include "partials/_icon.html" with name="network" %}</span>
   <span class="glance-lead"><span class="conn-dot" aria-hidden="true"></span><strong>{{ connection.channel.label }}</strong></span>
   <span class="glance-caption">
-    <span>{{ connection.path_label }}</span>
     <span>{{ connection.transport }}</span>
   </span>
-  <span class="dash-connection-checks{% if not connection.holds %} is-attention{% endif %}">{{ connection.summary }}</span>
+  {% if not connection.holds %}<span class="dash-connection-checks is-attention">{{ connection.summary }}</span>{% endif %}
 </a>

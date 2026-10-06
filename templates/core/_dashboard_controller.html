@@ -14,8 +14,8 @@ An installation it has never reached says that and nothing more.
   {% endcomment %}
   <span class="glance-lead"><span class="conn-dot" aria-hidden="true"></span><strong>Controller</strong></span>
   <span class="glance-caption">
-    {% if not controller.known %}<span>Has not run here</span>
-    {% elif controller.silent %}<span>Silent for {{ controller.seen_at|timesince }}</span>
-    {% else %}<span>Ran {{ controller.seen_at|when:"ago" }}</span>{% endif %}
+    {% if not controller.known %}<span>Not set up yet</span>
+    {% elif controller.silent %}<span>Last read {{ controller.seen_at|when:"ago" }}</span>
+    {% else %}<span>Read {{ controller.seen_at|when:"ago" }}</span>{% endif %}
   </span>
 </a>

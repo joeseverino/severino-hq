@@ -7,8 +7,8 @@ one situation it is ever seen in.
 {% endcomment %}
 {% if zones %}
   <p class="page-lede">
-    No domain is managed yet. These zones are visible to the Cloudflare
-    credential. Managing one changes nothing at Cloudflare.
+    HQ can see these domains at Cloudflare and manages none of them yet.
+    Managing one changes nothing at Cloudflare.
   </p>
   <div class="control-summary">
     {% for zone in zones %}
@@ -22,13 +22,13 @@ one situation it is ever seen in.
           {% url 'zones:adopt' zone.zone as adopt_url %}
           {% post_button "Manage this domain" adopt_url name="token" value=zone.adopt_token css="btn primary" %}
         {% elif zone.observed_only %}
-          <span class="readout muted">Observed only</span>
+          <span class="readout muted">Read only</span>
         {% endif %}
       </div>
     {% endfor %}
   </div>
 {% else %}
-  {% include "partials/_empty_state.html" with message="No domains yet. The next sweep lists the zones the Cloudflare credential can reach." %}
+  {% include "partials/_empty_state.html" with message="No domains yet. They appear after HQ next reads Cloudflare." %}
 {% endif %}
 
 {% include "partials/_sweep_freshness.html" with inventory=inventory only_kind="cloudflare.zone" %}

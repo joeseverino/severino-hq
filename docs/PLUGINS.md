@@ -275,9 +275,13 @@ when it differs from today or coverage is incomplete; a render timestamp does
 not establish data freshness. The domain owns that meaning, so the host never
 infers dates from a card label or recalculates an extension's totals.
 Attention providers should emit `serious` or `attention` only for a decision
-that needs the operator. Use `neutral` or `good` for observations, and supply
-`Insight.action` and, when available, `Insight.workflow` to carry the next step
-and its verification into the shared queue.
+that needs the operator. Use `neutral` or `good` for observations. The title
+states what is wrong, with its count where it stands for several, and the body
+says what that means. Supply the help the shared card shows: `Insight.actions`
+for what can be pressed, `Insight.action` with `Insight.url` for the page the
+work is done on (a short label; a sentence is shown as a sentence),
+`Insight.workflow` for commands and their check, and `Insight.since` when the
+moment it began is known.
 
 Capabilities fail closed too. HQ validates every contributed
 `CapabilitySpec` before describing or invoking the registry: names, effects,

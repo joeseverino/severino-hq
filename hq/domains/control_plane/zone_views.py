@@ -9,6 +9,8 @@ second truth, only a second way of slicing the first.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from django.contrib import messages
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
@@ -64,19 +66,45 @@ def _records_lede(zone) -> str:
     """
 
     if not zone.managed:
-        return f"{len(zone.records)} published, none managed"
+        return f"{counted(len(zone.records), 'record')}, none managed by HQ"
     if not zone.adoptable:
-        # "Managed" conflated two things: that HQ holds a declaration, and that
-        # the declaration has been applied. The State column already says which
-        # records have been observed, so this says the first and only the first.
-        return f"{zone.managed_count} records, all declared in HQ"
+        return f"{counted(zone.managed_count, 'record')}, all managed by HQ"
     # Only ever seen in the gap between a record appearing at the provider and
     # the next sweep taking it on. Phrased as a statement of fact rather than
     # as a backlog, because it is not work anyone has to do.
     return (
-        f"{zone.managed_count} declared in HQ, "
-        f"{len(zone.adoptable)} new since the last sweep and adopted on the next"
+        f"{counted(zone.managed_count, 'record')} managed by HQ, "
+        f"{len(zone.adoptable)} new since the last read and picked up on the next"
     )
+
+
+def _page_relationships(zone, relationships):
+    """What a domain relates to, as its own page says it: each thing once.
+
+    The cards at the head of the page already name the domain's services, so
+    a relation whose every end is linked from a card is not said again. The
+    connections the domain is read with are how HQ knows, not something the
+    domain relates to, and are named apart, after the relations. The readings
+    as they arrived are for the topology view, which the section links to.
+    """
+
+    carded = {
+        url
+        for card in zone.cards
+        for url in (
+            *(row.url for row in card.rows or ()),
+            *(link.url for _label, links in card.links or () for link in links),
+        )
+        if url
+    }
+    kept, read_with = [], []
+    for group in relationships.groups:
+        ends = [item.entity for item in group.items]
+        if ends and all(end.kind == "connection" for end in ends):
+            read_with.extend(ends)
+        elif not (carded and all(end.url in carded for end in ends)):
+            kept.append(group)
+    return replace(relationships, groups=tuple(kept), readouts=()), tuple(read_with)
 
 
 class ZoneIndexView(View):
@@ -146,7 +174,8 @@ class ZoneMailView(View):
                 "spf_default": _spf_default(_spf_value(found)),
                 **page_context(
                     f"Email for {found.zone}",
-                    "MX, SPF, DKIM and DMARC for this domain.",
+                    "Who receives mail for this domain, who may send as it, and what "
+                    "happens to forgeries.",
                     trail=((found.zone, found.url),),
                 ),
             },
@@ -156,7 +185,7 @@ class ZoneMailView(View):
         """Write a composed policy back through the record's own use case."""
 
         if record is None or not record.resource_key:
-            messages.error(request, f"No {what} record declared.")
+            messages.error(request, f"HQ does not manage a {what} record for this domain.")
             return redirect("zones:mail", zone=zone.zone)
         resource = ManagedResource.objects.get(key=record.resource_key)
         try:
@@ -237,13 +266,13 @@ def _pin_action(zone) -> PageAction:
     """
 
     return PageAction(
-        "★ Default" if zone.pinned else "☆ Set as default",
+        "★ Opens first" if zone.pinned else "☆ Open this one first",
         reverse("zones:pin", args=[zone.zone]),
         method="post",
         title=(
-            "Domains opens here. Click to unstar."
+            "Domains opens on this one. Press to undo."
             if zone.pinned
-            else "Open Domains on this domain."
+            else "Make Domains open on this one."
         ),
     )
 
@@ -259,6 +288,9 @@ class ZoneDetailView(View):
         if context is None:
             raise Http404("No such domain.")
         found, zones = context.zone, context.zones
+        relationships, read_with = _page_relationships(
+            found, relationships_for(f"zone:{found.zone}", principal=web_principal(request.user))
+        )
         return render(
             request,
             "control_plane/zone_detail.html",
@@ -275,18 +307,17 @@ class ZoneDetailView(View):
                 # once.
                 "public_dns_enabled": public_dns_enabled(),
                 "records_lede": _records_lede(found),
-                "relationships": relationships_for(
-                    f"zone:{found.zone}", principal=web_principal(request.user)
-                ),
+                "relationships": relationships,
+                "read_with": read_with,
                 **page_context(
                     found.zone,
                     (
                         format_html(
-                            'Records published in this domain, through <a href="{}" data-entity="{}">{}</a>.',
+                            'The DNS records of this domain, from <a href="{}" data-entity="{}">{}</a>.',
                             *_connection_mention(found.connection_ref),
                         )
                         if found.connection_ref
-                        else "Records published in this domain."
+                        else "The DNS records of this domain."
                     ),
                     actions=(_pin_action(found), *_declaration_actions(found)),
                 ),
@@ -312,6 +343,11 @@ def _declaration_actions(zone) -> tuple[PageAction, ...]:
                 "Stop tracking in HQ" if capabilities.removal == "forget" else "Remove",
                 reverse("control_plane:remove", args=[resource.key]),
                 danger=True,
+                title=(
+                    "HQ stops changing this domain. Its records stay live."
+                    if capabilities.removal == "forget"
+                    else ""
+                ),
             )
         )
     return tuple(actions)
@@ -329,7 +365,7 @@ class ZoneAdoptView(View):
     def post(self, request, zone):
         principal = web_principal(request.user)
         try:
-            result = adopt(
+            adopt(
                 AdoptCommand(kind=ZONE_KIND, token=request.POST.get("token", "")),
                 principal=principal,
             )
@@ -347,8 +383,7 @@ class ZoneAdoptView(View):
 
         messages.success(
             request,
-            f"{zone} adopted as “{result['resource']['key']}” with "
-            f"{counted(adopted, 'record')}. "
+            f"HQ now manages {zone} and {counted(adopted, 'record')} in it. "
             "Nothing changed at Cloudflare.",
         )
         return redirect("zones:detail", zone=zone)

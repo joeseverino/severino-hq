@@ -90,7 +90,7 @@ def projects() -> tuple[Card, ...]:
         value=str(reading["active"]),
         url=reverse("projects:list"),
         detail=(
-            counted(reading["needing_output"], "needs output", "need output")
+            counted(reading["needing_output"], "has no writeup or doc", "have no writeup or doc")
             if reading["needing_output"]
             else ""
         ),
@@ -124,7 +124,7 @@ def content() -> tuple[Card, ...]:
         return ()
     return _card(
         id="hq.content.drafts",
-        label="Draft content",
+        label="Drafts",
         value=str(reading["drafts"]),
         url=f"{reverse('content:list')}?status=draft",
         detail=f"{reading['published']} published" if reading["published"] else "",
@@ -314,5 +314,5 @@ def watching() -> tuple[Card, ...]:
     releases = sum(1 for repo in found["watched"] if repo["release"] and recent(repo["release"]["published_at"]))
     # A number and what it counts, like the cards beside it; the rest is the page.
     if advisories:
-        return _card(id="hq.watching", label="New advisories", value=str(advisories), url=reverse("watching"))
+        return _card(id="hq.watching", label="New security advisories", value=str(advisories), url=reverse("watching"))
     return _card(id="hq.watching", label="New releases", value=str(releases), url=reverse("watching"))

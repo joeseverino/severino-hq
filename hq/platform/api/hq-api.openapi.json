@@ -3646,7 +3646,7 @@
     },
     "/api/v2/capabilities/asset.create/": {
       "post": {
-        "description": "Create an HQ asset.\n\nRequires: write_assets.",
+        "description": "Add a new asset.\n\nRequires: write_assets.",
         "operationId": "assetCreateV2",
         "parameters": [
           {
@@ -3733,7 +3733,7 @@
     },
     "/api/v2/capabilities/asset.delete/": {
       "post": {
-        "description": "Delete a confirmed asset.\n\nRequires: delete_assets.",
+        "description": "Delete one asset.\n\nRequires: delete_assets.",
         "operationId": "assetDeleteV2",
         "parameters": [
           {
@@ -3820,7 +3820,7 @@
     },
     "/api/v2/capabilities/asset.update/": {
       "post": {
-        "description": "Update an HQ asset.\n\nRequires: write_assets.",
+        "description": "Change one asset.\n\nRequires: write_assets.",
         "operationId": "assetUpdateV2",
         "parameters": [
           {
@@ -3907,7 +3907,7 @@
     },
     "/api/v2/capabilities/asset.upsert/": {
       "post": {
-        "description": "Idempotently create or update an HQ asset by slug.\n\nRequires: write_assets.",
+        "description": "Add a new asset, or update it if it already exists.\n\nRequires: write_assets.",
         "operationId": "assetUpsertV2",
         "parameters": [
           {
@@ -4255,7 +4255,7 @@
     },
     "/api/v2/capabilities/certificate.renew/": {
       "post": {
-        "description": "Request certificate renewal when policy allows it.\n\nRequires: request_certificate_renewal.",
+        "description": "Ask for a certificate to be renewed, where its renewal rules allow it.\n\nRequires: request_certificate_renewal.",
         "operationId": "certificateRenewV2",
         "parameters": [
           {
@@ -4342,7 +4342,7 @@
     },
     "/api/v2/capabilities/contact.submission.delete/": {
       "post": {
-        "description": "Delete one explicitly confirmed contact submission from Cloudflare D1.\n\nRequires: manage_contacts.",
+        "description": "Delete one message sent through the contact form.\n\nRequires: manage_contacts.",
         "operationId": "contactSubmissionDeleteV2",
         "parameters": [
           {
@@ -4415,7 +4415,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Delete contact submission",
+        "summary": "Delete a message",
         "tags": [
           "hq.contacts",
           "api.v2"
@@ -4429,7 +4429,7 @@
     },
     "/api/v2/capabilities/contact.submission.review/": {
       "post": {
-        "description": "Review and update one contact submission in Cloudflare D1.\n\nRequires: manage_contacts.",
+        "description": "Mark one message read, replied, archived or spam, and keep a note on it.\n\nRequires: manage_contacts.",
         "operationId": "contactSubmissionReviewV2",
         "parameters": [
           {
@@ -4502,7 +4502,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Review contact submission",
+        "summary": "Review a message",
         "tags": [
           "hq.contacts",
           "api.v2"
@@ -4516,7 +4516,7 @@
     },
     "/api/v2/capabilities/contact.submissions.list/": {
       "post": {
-        "description": "List contact submissions held in Cloudflare D1.\n\nRequires: manage_contacts.",
+        "description": "List the messages sent through the contact form.\n\nRequires: manage_contacts.",
         "operationId": "contactSubmissionsListV2",
         "parameters": [],
         "requestBody": {
@@ -4585,7 +4585,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List contact submissions",
+        "summary": "List messages",
         "tags": [
           "hq.contacts",
           "api.v2"
@@ -4599,7 +4599,7 @@
     },
     "/api/v2/capabilities/content.create/": {
       "post": {
-        "description": "Create an HQ content item.\n\nRequires: write_content.",
+        "description": "Add a new content item.\n\nRequires: write_content.",
         "operationId": "contentCreateV2",
         "parameters": [
           {
@@ -4686,7 +4686,7 @@
     },
     "/api/v2/capabilities/content.delete/": {
       "post": {
-        "description": "Delete a confirmed content item.\n\nRequires: delete_content.",
+        "description": "Delete one content item.\n\nRequires: delete_content.",
         "operationId": "contentDeleteV2",
         "parameters": [
           {
@@ -4773,7 +4773,7 @@
     },
     "/api/v2/capabilities/content.update/": {
       "post": {
-        "description": "Update an HQ content item.\n\nRequires: write_content.",
+        "description": "Change one content item.\n\nRequires: write_content.",
         "operationId": "contentUpdateV2",
         "parameters": [
           {
@@ -4860,7 +4860,7 @@
     },
     "/api/v2/capabilities/documentation.create/": {
       "post": {
-        "description": "Create an HQ document.\n\nRequires: write_documentation.",
+        "description": "Add a new document.\n\nRequires: write_documentation.",
         "operationId": "documentationCreateV2",
         "parameters": [
           {
@@ -4947,7 +4947,7 @@
     },
     "/api/v2/capabilities/documentation.delete/": {
       "post": {
-        "description": "Delete a confirmed document.\n\nRequires: delete_documentation.",
+        "description": "Delete one document.\n\nRequires: delete_documentation.",
         "operationId": "documentationDeleteV2",
         "parameters": [
           {
@@ -5034,7 +5034,7 @@
     },
     "/api/v2/capabilities/documentation.sync/": {
       "post": {
-        "description": "Synchronize a validated vault manifest into HQ.\n\nRequires: sync_documentation.",
+        "description": "Bring HQ's list of docs up to date from a vault export.\n\nRequires: sync_documentation.",
         "operationId": "documentationSyncV2",
         "parameters": [
           {
@@ -5121,7 +5121,7 @@
     },
     "/api/v2/capabilities/documentation.update/": {
       "post": {
-        "description": "Update an HQ document.\n\nRequires: write_documentation.",
+        "description": "Change one document.\n\nRequires: write_documentation.",
         "operationId": "documentationUpdateV2",
         "parameters": [
           {
@@ -5295,7 +5295,7 @@
     },
     "/api/v2/capabilities/expense.delete/": {
       "post": {
-        "description": "Delete a confirmed expense.\n\nRequires: delete_expenses.",
+        "description": "Delete one expense.\n\nRequires: delete_expenses.",
         "operationId": "expenseDeleteV2",
         "parameters": [
           {
@@ -5382,7 +5382,7 @@
     },
     "/api/v2/capabilities/expense.update/": {
       "post": {
-        "description": "Update an HQ expense.\n\nRequires: write_expenses.",
+        "description": "Change one expense.\n\nRequires: write_expenses.",
         "operationId": "expenseUpdateV2",
         "parameters": [
           {
@@ -5469,7 +5469,7 @@
     },
     "/api/v2/capabilities/hq.import/": {
       "post": {
-        "description": "Atomically import one document of projects and assets, by slug.\n\nRequires: write_projects, write_assets.",
+        "description": "Import projects and assets from one file. Nothing is saved unless every record in it is valid.\n\nRequires: write_projects, write_assets.",
         "operationId": "hqImportV2",
         "parameters": [
           {
@@ -5557,7 +5557,7 @@
     },
     "/api/v2/capabilities/hq.sync/": {
       "post": {
-        "description": "Atomically synchronize the vault manifest into HQ.\n\nRequires: sync_documentation.",
+        "description": "Bring HQ's list of docs up to date from the vault.\n\nRequires: sync_documentation.",
         "operationId": "hqSyncV2",
         "parameters": [
           {
@@ -5644,7 +5644,7 @@
     },
     "/api/v2/capabilities/infrastructure.controller.refresh/": {
       "post": {
-        "description": "Wake the privileged controller to pull work and refresh due observations.\n\nRequires: manage_infrastructure.",
+        "description": "Ask the controller to read everything again now.\n\nRequires: manage_infrastructure.",
         "operationId": "infrastructureControllerRefreshV2",
         "parameters": [
           {
@@ -5717,7 +5717,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Refresh controller readings",
+        "summary": "Read everything now",
         "tags": [
           "api",
           "api.v2"
@@ -5731,7 +5731,7 @@
     },
     "/api/v2/capabilities/infrastructure.reconcile/": {
       "post": {
-        "description": "Queue reconciliation of one managed infrastructure resource.\n\nRequires: manage_infrastructure.",
+        "description": "Apply HQ's copy of one record to the live system.\n\nRequires: manage_infrastructure.",
         "operationId": "infrastructureReconcileV2",
         "parameters": [
           {
@@ -5804,7 +5804,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Reconcile resource",
+        "summary": "Apply HQ's settings",
         "tags": [
           "hq.infrastructure",
           "api.v2"
@@ -5818,7 +5818,7 @@
     },
     "/api/v2/capabilities/infrastructure.resource.accept_observed/": {
       "post": {
-        "description": "Copy what is live into HQ's record, keeping a change made outside HQ.\n\nRequires: manage_infrastructure.",
+        "description": "Copy what is live into HQ's copy, keeping a change made outside HQ.\n\nRequires: manage_infrastructure.",
         "operationId": "infrastructureResourceAcceptObservedV2",
         "parameters": [
           {
@@ -5905,7 +5905,7 @@
     },
     "/api/v2/capabilities/infrastructure.resource.create/": {
       "post": {
-        "description": "Declare a typed managed infrastructure resource.\n\nRequires: manage_infrastructure.",
+        "description": "Add something for HQ to manage.\n\nRequires: manage_infrastructure.",
         "operationId": "infrastructureResourceCreateV2",
         "parameters": [
           {
@@ -5978,7 +5978,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Declare resource",
+        "summary": "Add a record",
         "tags": [
           "hq.infrastructure",
           "api.v2"
@@ -5992,7 +5992,7 @@
     },
     "/api/v2/capabilities/infrastructure.resource.remove/": {
       "post": {
-        "description": "Remove the record this declaration describes, then forget it.\n\nRequires: manage_infrastructure.",
+        "description": "Remove the live thing this record describes, then remove the record from HQ.\n\nRequires: manage_infrastructure.",
         "operationId": "infrastructureResourceRemoveV2",
         "parameters": [
           {
@@ -6065,7 +6065,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Remove resource",
+        "summary": "Remove a record",
         "tags": [
           "hq.infrastructure",
           "api.v2"
@@ -6079,7 +6079,7 @@
     },
     "/api/v2/capabilities/infrastructure.resource.update/": {
       "post": {
-        "description": "Update a typed managed infrastructure resource.\n\nRequires: manage_infrastructure.",
+        "description": "Change HQ's copy of a record. HQ then applies it to the live system.\n\nRequires: manage_infrastructure.",
         "operationId": "infrastructureResourceUpdateV2",
         "parameters": [
           {
@@ -6152,7 +6152,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Update resource",
+        "summary": "Change what HQ expects",
         "tags": [
           "hq.infrastructure",
           "api.v2"
@@ -6332,7 +6332,7 @@
     },
     "/api/v2/capabilities/project.create/": {
       "post": {
-        "description": "Create an HQ project.\n\nRequires: write_projects.",
+        "description": "Add a new project.\n\nRequires: write_projects.",
         "operationId": "projectCreateV2",
         "parameters": [
           {
@@ -6555,7 +6555,7 @@
     },
     "/api/v2/capabilities/project.delete/": {
       "post": {
-        "description": "Delete a confirmed project.\n\nRequires: delete_projects.",
+        "description": "Delete one project.\n\nRequires: delete_projects.",
         "operationId": "projectDeleteV2",
         "parameters": [
           {
@@ -6642,7 +6642,7 @@
     },
     "/api/v2/capabilities/project.refresh/": {
       "post": {
-        "description": "Refresh a project's GitHub and published-content metadata.\n\nRequires: write_projects.",
+        "description": "Read a project's latest GitHub activity and published pages.\n\nRequires: write_projects.",
         "operationId": "projectRefreshV2",
         "parameters": [
           {
@@ -6715,7 +6715,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Refresh project metadata",
+        "summary": "Refresh a project",
         "tags": [
           "hq.projects",
           "api.v2"
@@ -6729,7 +6729,7 @@
     },
     "/api/v2/capabilities/project.update/": {
       "post": {
-        "description": "Update an HQ project.\n\nRequires: write_projects.",
+        "description": "Change one project.\n\nRequires: write_projects.",
         "operationId": "projectUpdateV2",
         "parameters": [
           {
@@ -6816,7 +6816,7 @@
     },
     "/api/v2/capabilities/project.upsert/": {
       "post": {
-        "description": "Idempotently create or update an HQ project by slug.\n\nRequires: write_projects.",
+        "description": "Add a new project, or update it if it already exists.\n\nRequires: write_projects.",
         "operationId": "projectUpsertV2",
         "parameters": [
           {
@@ -6903,7 +6903,7 @@
     },
     "/api/v2/capabilities/receipt.delete/": {
       "post": {
-        "description": "Delete a confirmed receipt and its private file.\n\nRequires: delete_receipts.",
+        "description": "Delete one receipt and its file.\n\nRequires: delete_receipts.",
         "operationId": "receiptDeleteV2",
         "parameters": [
           {
@@ -6990,7 +6990,7 @@
     },
     "/api/v2/capabilities/receipt.update/": {
       "post": {
-        "description": "Update receipt metadata and relationships (never file bytes).\n\nRequires: write_receipts.",
+        "description": "Change a receipt's details. The file itself does not change.\n\nRequires: write_receipts.",
         "operationId": "receiptUpdateV2",
         "parameters": [
           {
@@ -7164,7 +7164,7 @@
     },
     "/api/v2/capabilities/tailnet.reach.allow/": {
       "post": {
-        "description": "Open a path the tailnet refuses that an observation says is needed.\n\nRequires: manage_infrastructure.",
+        "description": "Allow a connection Tailscale blocks that a reading needs.\n\nRequires: manage_infrastructure.",
         "operationId": "tailnetReachAllowV2",
         "parameters": [
           {
@@ -7237,7 +7237,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Allow tailnet reach",
+        "summary": "Allow a blocked Tailscale connection",
         "tags": [
           "hq.infrastructure",
           "api.v2"
@@ -7251,7 +7251,7 @@
     },
     "/api/v2/capabilities/tailnet.routes.approve/": {
       "post": {
-        "description": "Approve the routes a tailnet device already advertises.\n\nRequires: manage_infrastructure.",
+        "description": "Approve the routes a tailnet device already offers.\n\nRequires: manage_infrastructure.",
         "operationId": "tailnetRoutesApproveV2",
         "parameters": [
           {
@@ -7817,7 +7817,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List Action items",
+        "summary": "List Needs you",
         "tags": [
           "api",
           "api.v2"
@@ -8443,7 +8443,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List Connection standing",
+        "summary": "List Connection status",
         "tags": [
           "hq.connections",
           "api.v2"
@@ -8516,7 +8516,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Get one of Connection standing",
+        "summary": "Get one of Connection status",
         "tags": [
           "hq.connections",
           "api.v2"
@@ -8863,7 +8863,7 @@
     },
     "/api/v2/resources/credentials/": {
       "get": {
-        "description": "What each connection provider's credential can see, and what it would need to see more.",
+        "description": "What each connection's credential can read, and what it would need to read more.",
         "operationId": "listCredentialsV2",
         "parameters": [],
         "responses": {
@@ -8909,7 +8909,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List Credential sight",
+        "summary": "List Credential access",
         "tags": [
           "hq.connections",
           "api.v2"
@@ -8925,7 +8925,7 @@
     },
     "/api/v2/resources/credentials/{identifier}/": {
       "get": {
-        "description": "What each connection provider's credential can see, and what it would need to see more.",
+        "description": "What each connection's credential can read, and what it would need to read more.",
         "operationId": "getCredentialsV2",
         "parameters": [
           {
@@ -8982,7 +8982,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Get one of Credential sight",
+        "summary": "Get one of Credential access",
         "tags": [
           "hq.connections",
           "api.v2"
@@ -8993,7 +8993,7 @@
     },
     "/api/v2/resources/domains/": {
       "get": {
-        "description": "Every domain HQ declares or a sweep has seen, its services and registration.",
+        "description": "Every domain HQ manages or has read, its services and registration.",
         "operationId": "listDomainsV2",
         "parameters": [
           {
@@ -9076,7 +9076,7 @@
     },
     "/api/v2/resources/domains/{identifier}/": {
       "get": {
-        "description": "Every domain HQ declares or a sweep has seen, its services and registration.",
+        "description": "Every domain HQ manages or has read, its services and registration.",
         "operationId": "getDomainsV2",
         "parameters": [
           {
@@ -9355,7 +9355,7 @@
     },
     "/api/v2/resources/infrastructure.resources/": {
       "get": {
-        "description": "Canonical desired and observed infrastructure state.",
+        "description": "Everything HQ manages: what HQ expects and what is live.",
         "operationId": "listInfrastructureResourcesV2",
         "parameters": [
           {
@@ -9454,7 +9454,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "List Infrastructure resources",
+        "summary": "List Records",
         "tags": [
           "hq.infrastructure",
           "api.v2"
@@ -9502,7 +9502,7 @@
     },
     "/api/v2/resources/infrastructure.resources/{identifier}/": {
       "get": {
-        "description": "Canonical desired and observed infrastructure state.",
+        "description": "Everything HQ manages: what HQ expects and what is live.",
         "operationId": "getInfrastructureResourcesV2",
         "parameters": [
           {
@@ -9559,7 +9559,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Get one of Infrastructure resources",
+        "summary": "Get one of Records",
         "tags": [
           "hq.infrastructure",
           "api.v2"
@@ -10100,7 +10100,7 @@
     },
     "/api/v2/resources/readings/": {
       "get": {
-        "description": "Each reading kind, its last read, and its stored records as its schema admits them.",
+        "description": "Each type of reading, when it was last read, and the records it holds.",
         "operationId": "listReadingsV2",
         "parameters": [
           {
@@ -10214,7 +10214,7 @@
     },
     "/api/v2/resources/readings/{identifier}/": {
       "get": {
-        "description": "Each reading kind, its last read, and its stored records as its schema admits them.",
+        "description": "Each type of reading, when it was last read, and the records it holds.",
         "operationId": "getReadingsV2",
         "parameters": [
           {
@@ -10382,7 +10382,7 @@
     },
     "/api/v2/resources/relationships/{identifier}/": {
       "get": {
-        "description": "One machine, service, domain or declaration and everything related to it.",
+        "description": "One machine, service, domain or record and everything related to it.",
         "operationId": "getRelationshipsV2",
         "parameters": [
           {
@@ -10614,7 +10614,7 @@
     },
     "/api/v2/resources/services/": {
       "get": {
-        "description": "Declared hostnames and the state of their DNS, ingress, and TLS.",
+        "description": "Every service name and the state of its DNS, proxy and certificate.",
         "operationId": "listServicesV2",
         "parameters": [],
         "responses": {
@@ -10676,7 +10676,7 @@
     },
     "/api/v2/resources/services/{identifier}/": {
       "get": {
-        "description": "Declared hostnames and the state of their DNS, ingress, and TLS.",
+        "description": "Every service name and the state of its DNS, proxy and certificate.",
         "operationId": "getServicesV2",
         "parameters": [
           {
@@ -10744,7 +10744,7 @@
     },
     "/api/v2/resources/tailnet/": {
       "get": {
-        "description": "The tailnet policy: settings, grants, shell rules, groups and tags with their machines, services, app connectors, tests, findings, and what could not be read.",
+        "description": "The tailnet policy: settings, grants, shell rules, groups and tags with their machines, services, app connectors, tests, problems, and what could not be read.",
         "operationId": "listTailnetV2",
         "parameters": [],
         "responses": {
@@ -11485,7 +11485,7 @@
       }
     },
     "get_resource": {
-      "description": "Get one record from any registered addressable resource.\nKinds:\n- `assets`: Assets and their safe cross-domain relationships. Identifier: `slug`.\n- `calendar`: Everything on the calendar over a span of days, and your own events. Identifier: `uid`.\n- `connection.standing`: Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path. Identifier: `connection_ref`.\n- `contact.submissions`: Contact requests held in Cloudflare D1 and reviewed through HQ. Identifier: `id`.\n- `containers`: Every running container: what it runs and whether that is current and safe, how it is run, and its posture against the container standard. Identifier: `address`.\n- `credentials`: What each connection provider's credential can see, and what it would need to see more. Identifier: `provider`.\n- `domains`: Every domain HQ declares or a sweep has seen, its services and registration. Identifier: `name`.\n- `infrastructure.resources`: Canonical desired and observed infrastructure state. Identifier: `key`.\n- `machines`: Every machine anything reported, its roles, addresses and what runs on it. Identifier: `name`.\n- `paths`: The path a request for a hostname takes, hop by hop, with each hop's reading and certificate. Identifier: `hostname`.\n- `projects`: Projects and their safe cross-domain relationships. Identifier: `slug`.\n- `readings`: Each reading kind, its last read, and its stored records as its schema admits them. Identifier: `kind`.\n- `relationships`: One machine, service, domain or declaration and everything related to it. Identifier: `node`.\n- `services`: Declared hostnames and the state of their DNS, ingress, and TLS. Identifier: `hostname`.\n- `upgrades`: Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only. Identifier: `address`.",
+      "description": "Get one record from any registered addressable resource.\nKinds:\n- `assets`: Assets and their safe cross-domain relationships. Identifier: `slug`.\n- `calendar`: Everything on the calendar over a span of days, and your own events. Identifier: `uid`.\n- `connection.standing`: Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path. Identifier: `connection_ref`.\n- `contact.submissions`: Contact requests held in Cloudflare D1 and reviewed through HQ. Identifier: `id`.\n- `containers`: Every running container: what it runs and whether that is current and safe, how it is run, and its posture against the container standard. Identifier: `address`.\n- `credentials`: What each connection's credential can read, and what it would need to read more. Identifier: `provider`.\n- `domains`: Every domain HQ manages or has read, its services and registration. Identifier: `name`.\n- `infrastructure.resources`: Everything HQ manages: what HQ expects and what is live. Identifier: `key`.\n- `machines`: Every machine anything reported, its roles, addresses and what runs on it. Identifier: `name`.\n- `paths`: The path a request for a hostname takes, hop by hop, with each hop's reading and certificate. Identifier: `hostname`.\n- `projects`: Projects and their safe cross-domain relationships. Identifier: `slug`.\n- `readings`: Each type of reading, when it was last read, and the records it holds. Identifier: `kind`.\n- `relationships`: One machine, service, domain or record and everything related to it. Identifier: `node`.\n- `services`: Every service name and the state of its DNS, proxy and certificate. Identifier: `hostname`.\n- `upgrades`: Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only. Identifier: `address`.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -11570,7 +11570,7 @@
       }
     },
     "list_resource": {
-      "description": "List any registered resource with schema-validated filters.\nKinds:\n- `action.items`: The composed action queue: what needs doing, from every domain.\n- `analytics`: What the published site was asked for, by any breakdown HQ records.\n- `assets`: Assets and their safe cross-domain relationships.\n- `calendar`: Everything on the calendar over a span of days, and your own events.\n- `connection.standing`: Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path.\n- `contact.submissions`: Contact requests held in Cloudflare D1 and reviewed through HQ.\n- `containers`: Every running container: what it runs and whether that is current and safe, how it is run, and its posture against the container standard.\n- `credentials`: What each connection provider's credential can see, and what it would need to see more.\n- `domains`: Every domain HQ declares or a sweep has seen, its services and registration.\n- `estate`: Machines online, services, domains, next renewals and connections needing attention.\n- `expenses`: Expense records with stable relationship identifiers.\n- `infrastructure.resources`: Canonical desired and observed infrastructure state.\n- `machines`: Every machine anything reported, its roles, addresses and what runs on it.\n- `projects`: Projects and their safe cross-domain relationships.\n- `readings`: Each reading kind, its last read, and its stored records as its schema admits them.\n- `receipts`: Receipt metadata without file contents, storage paths, or URLs.\n- `request.path`: How the calling request reached HQ: HQ's own path hop by hop, each hop checked against what the request shows, with the admission layers decided there.\n- `search`: Machines, services and domains, then records, matching a query.\n- `services`: Declared hostnames and the state of their DNS, ingress, and TLS.\n- `tailnet`: The tailnet policy: settings, grants, shell rules, groups and tags with their machines, services, app connectors, tests, findings, and what could not be read.\n- `upgrades`: Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only.",
+      "description": "List any registered resource with schema-validated filters.\nKinds:\n- `action.items`: The composed action queue: what needs doing, from every domain.\n- `analytics`: What the published site was asked for, by any breakdown HQ records.\n- `assets`: Assets and their safe cross-domain relationships.\n- `calendar`: Everything on the calendar over a span of days, and your own events.\n- `connection.standing`: Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path.\n- `contact.submissions`: Contact requests held in Cloudflare D1 and reviewed through HQ.\n- `containers`: Every running container: what it runs and whether that is current and safe, how it is run, and its posture against the container standard.\n- `credentials`: What each connection's credential can read, and what it would need to read more.\n- `domains`: Every domain HQ manages or has read, its services and registration.\n- `estate`: Machines online, services, domains, next renewals and connections needing attention.\n- `expenses`: Expense records with stable relationship identifiers.\n- `infrastructure.resources`: Everything HQ manages: what HQ expects and what is live.\n- `machines`: Every machine anything reported, its roles, addresses and what runs on it.\n- `projects`: Projects and their safe cross-domain relationships.\n- `readings`: Each type of reading, when it was last read, and the records it holds.\n- `receipts`: Receipt metadata without file contents, storage paths, or URLs.\n- `request.path`: How the calling request reached HQ: HQ's own path hop by hop, each hop checked against what the request shows, with the admission layers decided there.\n- `search`: Machines, services and domains, then records, matching a query.\n- `services`: Every service name and the state of its DNS, proxy and certificate.\n- `tailnet`: The tailnet policy: settings, grants, shell rules, groups and tags with their machines, services, app connectors, tests, problems, and what could not be read.\n- `upgrades`: Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {

@@ -102,7 +102,7 @@ DMARC_TAGS: tuple[PolicyTag, ...] = (
         kind="choice",
         required=True,
         default="none",
-        help="What receivers should do with mail that claims to be from this domain and cannot prove it.",
+        help="What receivers should do with mail that says it is from this domain and cannot prove it.",
         choices=(
             Choice(
                 "none",
@@ -113,14 +113,14 @@ DMARC_TAGS: tuple[PolicyTag, ...] = (
             Choice(
                 "quarantine",
                 "Send it to spam",
-                "Forged mail lands in junk rather than the inbox. A sender you "
-                "have not authorised yet gets filtered instead of lost.",
+                "Forged mail goes to junk. A real sender you forgot to list goes "
+                "to junk too.",
             ),
             Choice(
                 "reject",
                 "Reject it outright",
-                "Forged mail is refused at the door. Strongest protection, and "
-                "an unauthorised legitimate sender stops being delivered.",
+                "Forged mail is refused. A real sender you forgot to list is "
+                "refused too.",
             ),
         ),
         sentence=_policy_sentence,
@@ -143,7 +143,7 @@ DMARC_TAGS: tuple[PolicyTag, ...] = (
         id="rua",
         label="Send aggregate reports to",
         kind="addresses",
-        help="Daily summaries of who is sending as this domain. This is how a policy is made safe to tighten.",
+        help="Daily summaries of who sends as this domain. Read them before tightening the policy.",
         sentence=_reports_sentence,
     ),
     PolicyTag(
@@ -151,7 +151,7 @@ DMARC_TAGS: tuple[PolicyTag, ...] = (
         label="Apply the policy to",
         kind="percent",
         default="100",
-        help="A way to tighten gradually. Anything under 100% leaves the rest reported only.",
+        help="Below 100%, the rest is reported but still delivered.",
         sentence=_percent_sentence,
     ),
 )
@@ -271,8 +271,8 @@ class SpfPolicy:
                 return {
                     "-": "Anything else is rejected.",
                     "~": "Anything else is marked as a soft failure.",
-                    "?": "Anything else is treated as neutral, which protects nothing.",
-                    "+": "Anything else passes, which protects nothing.",
+                    "?": "Anything else is treated as neutral, so forgeries get through.",
+                    "+": "Anything else passes, so forgeries get through.",
                 }.get(term.qualifier, "")
         return "No `all` term, so senders not listed here are simply unhandled."
 
@@ -299,8 +299,7 @@ SPF_DEFAULTS: tuple[Choice, ...] = (
     Choice(
         "-",
         "Reject it",
-        "Anyone not listed above is refused. The strongest answer, and the one "
-        "DMARC needs to mean anything.",
+        "Anyone not listed above is refused. DMARC needs this to work.",
     ),
     Choice(
         "~",
@@ -310,8 +309,8 @@ SPF_DEFAULTS: tuple[Choice, ...] = (
     ),
     Choice(
         "?",
-        "No opinion",
-        "Neutral. Says nothing about unlisted senders, which protects nothing.",
+        "Say nothing",
+        "Says nothing about unlisted senders, so forgeries get through.",
     ),
     Choice(
         "+",
@@ -439,8 +438,7 @@ def mail_overview(zone) -> MailOverview:
                 else "Nothing"
             ),
             detail=(
-                "Published by the mail provider. HQ keeps the records; the keys "
-                "themselves are theirs to rotate."
+                "These sign the mail sent from this domain."
                 if dkim
                 else "No DKIM record, so nothing signs mail from this domain."
             ),

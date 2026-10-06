@@ -581,7 +581,7 @@ class DomainCardTests(TestCase):
         response = self.client.get(reverse("zones:detail", args=["example.net"]))
 
         # The domain's own count, not the sweep's total, beside the heading.
-        self.assertRegex(response.content.decode(), r"Records <span class=\"heading-aside\">2 (published|records)[^<]*·\s+checked")
+        self.assertRegex(response.content.decode(), r"Records <span class=\"heading-aside\">2 records[^<]*·\s+read")
 
 
 class MachineServesAgreesTests(TestCase):

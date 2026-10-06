@@ -340,7 +340,7 @@ class DashboardGlanceTests(TestCase):
         )
 
         # The reading stays up while it is replaced, marked as refreshing.
-        self.assertIn('<span class="glance-freshness">\n              Refreshing', html)
+        self.assertIn('<span class="glance-freshness">\n              Reading', html)
         self.assertNotIn("Out of date", html)
         self.assertIn("4%", html)
         machine = next(panel for panel in panels if panel["id"] == self.machine_request_id)
@@ -353,7 +353,7 @@ class DashboardGlanceTests(TestCase):
 
     def test_unknown_machine_is_rejected_and_not_created(self):
         DashboardRefreshRequest.objects.create(panel_id=self.machine_request_id)
-        with self.assertRaisesMessage(ValueError, "No declared machine matched"):
+        with self.assertRaisesMessage(ValueError, "No machine HQ knows matched"):
             record_dashboard_observations(
                 [
                     {
@@ -568,7 +568,8 @@ class GlanceRenderingTests(TestCase):
         self.assertIn(">71–86°</span>", html)
         self.assertIn("Example Town, EX", html)
         self.assertIn('<small class="is-wet">60%</small>', html)
-        self.assertIn("<small>0%</small>", html)
+        self.assertIn("<small></small>", html)
+        self.assertNotIn(">0%<", html)
 
     def test_a_zero_alert_count_is_dropped_by_the_spec_alert_metric(self):
         WeatherObservation.objects.filter(point="0.0000,0.0000").update(
@@ -611,7 +612,7 @@ class GlanceRenderingTests(TestCase):
             "core/_dashboard_glance.html",
             {"dashboard_panels": dashboard_panels(), "dashboard_can_refresh": True},
         )
-        self.assertIn('form="glance-refresh">Refresh now</button>', html)
+        self.assertIn('form="glance-refresh">Read now</button>', html)
         self.assertIn('<form id="glance-refresh"', html)
         self.assertNotIn("<details class=\"glance-settings", html)
 
@@ -699,7 +700,7 @@ class GlanceEndpointTests(TestCase):
             [f"machine-{self.machine.pk}"],
         )
         self.assertContains(response, 'class="glance-freshness"', status_code=202)
-        self.assertContains(response, "Refreshing", status_code=202)
+        self.assertContains(response, "Reading", status_code=202)
         doorbell.assert_called_once()
 
     def test_a_stale_post_with_nothing_stale_requests_nothing(self):

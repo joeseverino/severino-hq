@@ -281,7 +281,7 @@ class ConnectionRegistrationTests(TestCase):
         )
         self.assertEqual(finance["abilities"][1]["governs_kinds"], [])
 
-    def test_command_center_pluralizes_one_ability(self):
+    def test_a_connection_is_listed_without_a_count_of_what_it_can_do(self):
         spec = _finance_spec()
         instance = replace(
             spec.instance_provider()[0], ability_names=(spec.abilities[0].name,)
@@ -296,7 +296,7 @@ class ConnectionRegistrationTests(TestCase):
         ):
             discovered = command_center("finance", principal=FINANCE)
 
-        self.assertEqual(discovered["connections"][0].badges[0], "1 ability")
+        self.assertEqual(discovered["connections"][0].badges, ())
 
     def test_command_center_finds_the_live_instance_not_only_its_family(self):
         spec = _finance_spec()
@@ -308,7 +308,7 @@ class ConnectionRegistrationTests(TestCase):
             )
 
         self.assertEqual(discovered["connections"][0].label, "Capital One")
-        self.assertEqual(discovered["connections"][0].badges, ("healthy", "2 abilities"))
+        self.assertEqual(discovered["connections"][0].badges, ("healthy",))
 
     def test_two_letter_query_matches_word_starts_not_word_middles(self):
         with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
@@ -349,6 +349,8 @@ class ConnectionRegistrationTests(TestCase):
                 "tailnet.routes.approve",
                 # Scoped to the policy kind, which the same credential reads.
                 "tailnet.policy.remove_empty_groups",
+                # Found by its own words: its title names Tailscale.
+                "tailnet.reach.allow",
             },
         )
         self.assertIn("via Tailnet device", commands["infrastructure.reconcile"].badges)
@@ -371,8 +373,8 @@ class ConnectionRegistrationTests(TestCase):
             for item in discovered["connections"]
             if item.name == "infrastructure.controllers"
         )
-        self.assertEqual(len(core.badges), 6)
-        self.assertRegex(core.badges[-1], r"^\+\d+ matching abilities$")
+        self.assertEqual(len(core.badges), 4)
+        self.assertRegex(core.badges[-1], r"^\+\d+ more$")
 
     def test_command_center_explains_terms_matched_across_abilities(self):
         with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):

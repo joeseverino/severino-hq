@@ -13,7 +13,7 @@ where the part can be dismissed, lets a family be dismissed whole.
         {% if entry.folded %}
           <details class="queue-family" data-queue-family>
             <summary>
-              <span class="pill pill-{{ entry.status }}">{{ entry.status|capfirst }}</span>
+              <span class="pill pill-{{ entry.status }}">{{ entry.status|urgency }}</span>
               <strong>{{ entry.family }}</strong>
               <span class="count" data-queue-count>{{ entry.items|length }}</span>
               {% if aside_url %}{% post_button "Dismiss these" aside_url|add:"&family="|add:entry.id css="btn compact ghost queue-family-end" %}{% endif %}

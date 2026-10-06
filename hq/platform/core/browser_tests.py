@@ -64,8 +64,9 @@ SELECTORS = {
     "decisions": "[data-attention-item]",
     "decision_family": "details[data-queue-family] > summary strong",
     "decision_title": ".attention-title",
-    "decision_evidence": ".attention-evidence",
-    "decision_summary": ".attention-evidence > summary",
+    "decision_fold": ".resolution-fold",
+    "decision_fold_summary": ".resolution-fold > summary",
+    "decision_steps": ".resolution-workflow",
     "decision_detail": ".attention-detail",
     "decision_actions": ".attention-actions",
     "highlights": ".dashboard-highlights > .highlight-card",
@@ -103,7 +104,7 @@ SELECTORS = {
     # gaps instead of padded cells, so the KPI band is not listed.
     "band_cell": (
         ":is(.control-summary, .service-band, .fact-band, .finding-facts, .insight-grid,"
-        " .command-preview-path, .connection-control-grid, .sweep-grid,"
+        " .connection-control-grid, .sweep-grid,"
         " .machine-telemetry-metrics) > *"
     ),
 }
@@ -823,19 +824,24 @@ class LayoutBrowserTests(BrowserGate):
 
         self.each(check)
 
-    def assert_decision_evidence(self, row):
-        evidence = row.locator(SELECTORS["decision_evidence"])
-        if not evidence.count():
-            return
-        detail = evidence.locator(SELECTORS["decision_detail"])
-        if detail.count():
-            self.assertFalse(detail.is_visible())
-        row.locator(SELECTORS["decision_summary"]).click()
-        if detail.count():
-            self.assertTrue(detail.is_visible())
-        row.locator(SELECTORS["decision_summary"]).click()
+    def assert_decision_face(self, row):
+        """What a card means is on its face; only long steps fold, and one
+        press of a native summary opens them."""
 
-    def test_decisions_keep_actions_visible_and_evidence_reachable_without_script(self):
+        for detail in row.locator(SELECTORS["decision_detail"]).all():
+            self.assertTrue(detail.is_visible())
+        fold = row.locator(SELECTORS["decision_fold"])
+        if not fold.count():
+            for steps in row.locator(SELECTORS["decision_steps"]).all():
+                self.assertTrue(steps.is_visible())
+            return
+        steps = fold.locator(SELECTORS["decision_steps"])
+        self.assertFalse(steps.is_visible())
+        row.locator(SELECTORS["decision_fold_summary"]).click()
+        self.assertTrue(steps.is_visible())
+        row.locator(SELECTORS["decision_fold_summary"]).click()
+
+    def test_a_card_shows_what_is_wrong_and_its_buttons_without_a_toggle_or_script(self):
         for width in OVERFLOW_WIDTHS:
             with self.subTest(width=width):
                 self.open("action-items", width)
@@ -850,7 +856,7 @@ class LayoutBrowserTests(BrowserGate):
                     self.assertTrue(row.locator(SELECTORS["decision_title"]).is_visible())
                     for action in row.locator(SELECTORS["decision_actions"]).all():
                         self.assertTrue(action.is_visible())
-                    self.assert_decision_evidence(row)
+                    self.assert_decision_face(row)
 
     def test_nothing_escapes_the_page_sideways(self):
         """Closed, and with every disclosure and popover open."""

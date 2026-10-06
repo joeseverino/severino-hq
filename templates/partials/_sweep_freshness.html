@@ -25,13 +25,13 @@ records. Each state is worded by `credential_sight.standing`: refused, unreadabl
 or out of date.
 {% endcomment %}
 {% if inventory %}
-  {% if only_kind and inline %}{% for snapshot in inventory %}{% if snapshot.kind == only_kind %}{% if snapshot.reachable %}checked {{ snapshot.observed_at|ago_short }}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|lower }}</span>{% endif %}{% endif %}{% endfor %}
+  {% if only_kind and inline %}{% for snapshot in inventory %}{% if snapshot.kind == only_kind %}{% if snapshot.reachable %}read {{ snapshot.observed_at|ago_short }}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|lower }}</span>{% endif %}{% endif %}{% endfor %}
   {% elif only_kind %}
     <p class="muted">
       {% for snapshot in inventory %}
         {% if snapshot.kind == only_kind %}
           {% if snapshot.reachable %}
-            {% if count or count == 0 %}{{ count|counted:"record" }}{% else %}{{ snapshot.count|counted:"record" }}{% endif %}, checked
+            {% if count or count == 0 %}{{ count|counted:"record" }}{% else %}{{ snapshot.count|counted:"record" }}{% endif %}, read
             {{ snapshot.observed_at|ago }}
           {% else %}
             {{ snapshot.state_label|lower }}{% if snapshot.error %} ({{ snapshot.error }}){% endif %}
@@ -46,7 +46,7 @@ or out of date.
     page's own content off a phone.
     {% endcomment %}
     <details class="sweep section-fold">
-      <summary><h2>Provider readings <span class="heading-aside">{{ inventory|length }}</span></h2></summary>
+      <summary><h2>What was read, and when <span class="heading-aside">{{ inventory|length }}</span></h2></summary>
       <div class="sweep-grid">
         {% for snapshot in inventory %}
           <div class="sweep-item{% if not snapshot.reachable %} sweep-item-unreachable{% elif snapshot.state == "stale" or snapshot.state == "partial" %} sweep-item-stale{% endif %}">

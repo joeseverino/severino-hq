@@ -1,76 +1,36 @@
 {% extends "page.html" %}
 {% block page %}
-{% comment %}The palette's results: the part this page answers to the command center.{% endcomment %}
+{% comment %}The palette's results: the part this page answers to the header's search.{% endcomment %}
 {% partialdef palette %}{% include "core/_command_center_results.html" %}{% endpartialdef %}
-<form class="filter-bar search-page-form" method="get" data-table-toolbar>
-  <input type="search" name="q" value="{{ q }}" placeholder="Search records, resources, connections, and commands…" aria-label="Search records, resources, connections, and commands" autofocus>
-  <button type="submit">Find</button>
+<form class="filter-bar search-page-form" method="get" role="search" data-table-toolbar>
+  <input type="search" name="q" value="{{ q }}" placeholder="Find anything" aria-label="Find anything" autofocus>
+  <button type="submit">Search</button>
 </form>
 
 <div data-search-results>
-  <div class="command-center-grid">
-    {% if discovered_estate %}
-    {% include "partials/_discovery_catalog.html" with title="Estate" items=discovered_estate %}
-    {% endif %}
-
-    {% if not q or discovered_connections %}
-    {% include "partials/_discovery_catalog.html" with title="Connections" items=discovered_connections empty_message="No connections declared." %}
-    {% endif %}
-
-    {% if not q or discovered_resources %}
-    {% include "partials/_discovery_catalog.html" with title="Resources" items=discovered_resources empty_message="No resources match this query." %}
-    {% endif %}
-
-    {% if not q or discovered_views %}
-    {% include "partials/_discovery_catalog.html" with title="Views" items=discovered_views empty_message="No views match this query." %}
-    {% endif %}
-
-    {% if not q or discovered_checks %}
-    {% include "partials/_discovery_catalog.html" with title="Checks" items=discovered_checks empty_message="No checks match this query." %}
-    {% endif %}
-
-    {% if not q or discovered_commands %}
-    <details class="card discovery-group discovery-commands" data-preserve-open="command-center-commands"{% if q %} open{% endif %}>
-      <summary class="section-head">
-        <h2>Commands</h2>
-        <span class="count">{{ discovered_commands|length }}</span>
-      </summary>
-      {% if discovered_commands %}
-      <ul class="discovery-list">
-        {% for item in discovered_commands %}
-        <li>
-          <a class="discovery-link" href="{{ item.url }}">
-            <span class="discovery-main">
-              <strong>{{ item.label }}</strong>
-              <span class="muted">{{ item.summary }}</span>
-            </span>
-            <span class="discovery-meta">
-              <code>{{ item.name }}</code>
-              {% for badge in item.badges %}<span class="scope-chip">{{ badge }}</span>{% endfor %}
-            </span>
-          </a>
-        </li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p class="muted">No commands match this query.</p>
-      {% endif %}
-    </details>
-    {% endif %}
-  </div>
-
 {% if q %}
+  {% if discovery_total %}
+  <div class="command-center-grid">
+    {% include "partials/_discovery_catalog.html" with title="Machines, services and domains" items=discovered_estate %}
+    {% include "partials/_discovery_catalog.html" with title="Pages" items=discovered_resources plain=True %}
+    {% include "partials/_discovery_catalog.html" with title="Commands" items=discovered_commands %}
+    {% include "partials/_discovery_catalog.html" with title="Connections" items=discovered_connections %}
+    {% include "partials/_discovery_catalog.html" with title="Topology views" items=discovered_views %}
+    {% include "partials/_discovery_catalog.html" with title="Checks" items=discovered_checks %}
+  </div>
+  {% endif %}
+
+  {% if total %}
   <div class="search-summary">
     <p class="muted">{{ total|counted:"record" }} for <strong>{{ q }}</strong></p>
-    {% if total %}
     <nav class="search-scopes" aria-label="Result groups">
       {% for group in groups %}{% if group.count %}
       <a class="scope-chip" href="#scope-{{ group.scope }}">{{ group.label }} <span class="count">{{ group.count }}</span></a>
       {% endif %}{% endfor %}
-      {% if contacts %}<a class="scope-chip" href="#scope-contacts">Contacts <span class="count">{{ contacts|length }}</span></a>{% endif %}
+      {% if contacts %}<a class="scope-chip" href="#scope-contacts">Messages <span class="count">{{ contacts|length }}</span></a>{% endif %}
     </nav>
-    {% endif %}
   </div>
+  {% endif %}
 
   {% for group in groups %}{% if group.count %}
   <section class="card search-group" id="scope-{{ group.scope }}">
@@ -104,7 +64,7 @@
   {% if contacts %}
   <section class="card search-group" id="scope-contacts">
     <div class="section-head">
-      <h2>Contacts</h2>
+      <h2>Messages</h2>
       <span class="count">{{ contacts|length }}</span>
     </div>
     <ul class="search-hits">
@@ -120,18 +80,18 @@
       </li>
       {% endfor %}
     </ul>
-    <p class="muted"><a class="subtle-link" href="{% url 'contacts:list' %}?q={{ q|urlencode }}">Search email and messages in Contacts &rarr;</a></p>
+    <p class="muted"><a class="subtle-link" href="{% url 'contacts:list' %}?q={{ q|urlencode }}">Search inside the messages &rarr;</a></p>
   </section>
   {% endif %}
 
   {% if not total and not discovery_total %}
   <div class="empty">
     <p>Nothing matches <strong>{{ q }}</strong>.</p>
-    <p class="muted">Try a shorter term, a domain, an operation, or an ID.</p>
+    <p class="muted">Try a shorter word, a domain name, or an id.</p>
   </div>
   {% endif %}
 {% else %}
-  <p class="command-hint muted"><kbd>⌘ K</kbd> opens search from any page. Try <strong>projects</strong> or <strong>sync</strong>.</p>
+  <p class="command-hint muted">Search finds machines, services, domains, records, pages and commands. <kbd>⌘ K</kbd> opens it from any page.</p>
 {% endif %}
 </div>
 {% endblock %}

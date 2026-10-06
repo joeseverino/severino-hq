@@ -1,41 +1,19 @@
 {% extends "page.html" %}
 {% block page %}
-<div class="command-contract" role="group" aria-label="Command contract">
-  <span class="scope-chip scope-{{ command.effect }}">{{ effect_label }}</span>
-  <code>{{ command.name }}</code>
-  {% if command.target_kind %}<span>Acts on <strong>{{ command.target_label|default:"an existing record" }}</strong></span>{% else %}<span>No target</span>{% endif %}
-</div>
-
+{% comment %}
+A command is its title, what it will change (the lede), its fields and one
+button named for what it does. How it is built belongs to the API reference.
+{% endcomment %}
 {% if result %}
 <section class="card command-result command-result-good" aria-labelledby="command-result-title">
   <div class="section-head">
-    <h2 id="command-result-title">Completed</h2>
-    {% comment %}
-    The badge is about retry protection. "Committed once" contradicts a
-    command whose stated effect is that it changes nothing, so the word comes
-    from what the command does.
-    {% endcomment %}
-    {% if result.replayed %}
-      <span class="scope-chip">Replayed</span>
-    {% elif command.effect == "read" %}
-      <span class="pill pill-good">Ran once</span>
-    {% else %}
-      <span class="pill pill-good">Committed once</span>
-    {% endif %}
+    <h2 id="command-result-title">Done</h2>
   </div>
-  {% comment %}Said in words too: a two-word badge assumes knowledge.{% endcomment %}
-  <p class="muted command-result-note">
-    {% if result.replayed %}
-      Already run. This is the first result.
-    {% else %}
-      Submitting again returns this result without running it again.
-    {% endif %}
-  </p>
+  {% if result.replayed %}<p class="muted command-result-note">This was already done earlier. Nothing ran again.</p>{% endif %}
   {% comment %}
-  The answer first, in the shape a person reads: the facts the result states
-  and the one list it carries. The JSON is the same result as API and MCP see
-  it, kept for checking HQ against another tool, and opens only when there is
-  nothing else to show.
+  The answer in the shape a person reads: the facts the result states and the
+  one list it carries. The JSON is the same result as API and MCP see it, and
+  opens only when there is nothing else to show.
   {% endcomment %}
   {% if result_facts %}
     <dl class="command-result-facts">
@@ -54,125 +32,68 @@
     </div>
   {% endif %}
   <details class="command-result-json"{% if not result_facts and not result_table %} open{% endif %}>
-    <summary><strong>Raw result</strong> <span class="muted">JSON, as the API and MCP return it</span></summary>
+    <summary>Full result, as JSON</summary>
     <pre><code>{{ result_json }}</code></pre>
   </details>
-  {% if return_url %}<a class="btn" href="{{ return_url }}">Back</a>{% endif %}
+  <div class="form-actions">
+    {% if return_url %}<a class="btn" href="{{ return_url }}">Back</a>{% endif %}
+    {% if resource_url %}<a class="btn ghost" href="{{ resource_url }}">Open {{ resource_label }}</a>{% endif %}
+  </div>
 </section>
 {% endif %}
 
-<div class="command-layout">
-  <section class="card command-runner">
-    {% comment %}
-    One heading per section. `h2` is already a small-caps section label, so a
-    kicker above it would say the same thing twice.
-    {% endcomment %}
-    <div class="section-head">
-      <h2>Run command</h2>
+<section class="card command-runner">
+  {% if command.effect == "destructive" %}
+    <div class="notice notice-serious"><strong>This deletes data</strong><p>It runs only with the confirmation below, and only once.</p></div>
+  {% elif command.effect == "infrastructure_change" %}
+    <div class="notice notice-attention"><strong>This changes a live system</strong><p>Pressing the button twice does not run it twice.</p></div>
+  {% elif command.effect == "remote_write" %}
+    <p class="muted command-effect-note">This changes HQ only. It is recorded in the audit log.</p>
+  {% endif %}
+
+  {% comment %}
+  A command that acts on an existing record writes every field of it, so a
+  field left blank here is saved blank. That is the right contract for API
+  and MCP callers, which send the whole record; in a browser the form opens
+  empty unless the command declares `target_initial_fields`.
+  {% endcomment %}
+  {% if command.target_kind and command.effect == "remote_write" and writes_record and not hydrates_target %}
+    <div class="notice notice-attention">
+      <strong>This replaces the whole record</strong>
+      <p>Every field is saved as you submit it, including blanks. To change one field, use the record's own edit page{% if resource_url %}, from <a href="{{ resource_url }}">{{ resource_label }}</a>{% endif %}.</p>
     </div>
+  {% endif %}
 
-    {% if command.effect == "destructive" %}
-      <div class="notice notice-serious"><strong>Destructive</strong><p>This can delete data. It runs only with the exact confirmation below, and only once.</p></div>
-    {% elif command.effect == "infrastructure_change" %}
-      <div class="notice notice-attention"><strong>Changes outside HQ</strong><p>This may change systems outside HQ. Submitting twice does not run it twice.</p></div>
-    {% elif command.effect == "remote_write" %}
-      <p class="muted command-effect-note">This writes to HQ and is recorded in the audit log.</p>
-    {% endif %}
+  {% if unoffered_target %}
+    <div class="notice notice-attention">
+      <strong>{{ unoffered_target }} cannot be used here</strong>
+      <p>Pick another below.</p>
+    </div>
+  {% endif %}
 
-    {% comment %}
-    A command that acts on an existing record writes every field of it, so a
-    field left blank here is saved blank. That is the right contract for API
-    and MCP callers, which send the whole record; it is a trap in a browser,
-    where the form opens empty unless the command declares
-    `target_initial_fields`, and only one does. Said plainly rather than
-    hydrating part of the record, which would leave the same fields being
-    cleared behind a form that looks complete.
-    {% endcomment %}
-    {% if command.target_kind and command.effect == "remote_write" and writes_record and not hydrates_target %}
-      <div class="notice notice-attention">
-        <strong>This replaces the whole record</strong>
-        <p>This form does not load current values. Every field is saved as submitted, including blanks and fields not shown here. Fill in the full record, or use the record's edit page.</p>
-      </div>
-    {% endif %}
-
-    {% if unoffered_target %}
-      <div class="notice notice-attention">
-        <strong>{{ unoffered_target }} is not a target here</strong>
-        <p>The link asked for it, but this command does not act on it or you cannot read it. Choose a target below.</p>
-      </div>
-    {% endif %}
-
-    <form method="post" class="stack-form command-form" data-command-form{% if hydrates_target %} data-command-hydrate-target{% endif %} data-submit-busy data-submit-label="Running…">
-      {% csrf_token %}
-      {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
-      {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
-      <div class="command-fields">
-        {% for field in form.primary_fields %}{% include "partials/_command_field.html" %}{% endfor %}
-      </div>
-      {% if form.advanced_fields %}
-        <details class="command-advanced">
-          <summary><strong>Advanced</strong> <span class="muted">Optional concurrency check</span></summary>
-          <div class="command-fields">
-            {% for field in form.advanced_fields %}{% include "partials/_command_field.html" %}{% endfor %}
+  <form method="post" class="stack-form command-form" data-command-form{% if hydrates_target %} data-command-hydrate-target{% endif %} data-submit-busy data-submit-label="Working…">
+    {% csrf_token %}
+    {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+    {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="command-fields">
+      {% for field in form.primary_fields %}
+        {% if chosen_target and field.name == "__target" %}
+          <div class="field command-target">
+            <span class="field-label">{{ chosen_target.field }}</span>
+            <p><strong>{{ chosen_target.label }}</strong> <a class="subtle-link" href="{{ chosen_target.change_url }}">Change</a></p>
+            {{ field }}
+            {{ field.errors }}
           </div>
-        </details>
-      {% endif %}
-      <section class="command-preview" data-command-preview aria-labelledby="command-preview-title">
-        <div class="section-head">
-          <h3 id="command-preview-title">Preview</h3>
-          {% comment %}
-          The rows below are the only things that track what is typed, and both
-          are conditional, so with neither a target nor a reason nothing here
-          ever changes. Claim live updating only when it is true.
-          {% endcomment %}
-          {% if command.target_kind or has_reason %}
-            <span class="muted">Updates as you type</span>
-          {% endif %}
-        </div>
-        <dl class="command-preview-live">
-          {% if command.target_kind %}
-            <div><dt>Target</dt><dd><output data-command-value="__target" data-empty="Choose a target above">Choose a target above</output></dd></div>
-          {% endif %}
-          {% if has_reason %}
-            <div><dt>Reason</dt><dd><output data-command-value="reason" data-empty="No reason given">No reason given</output></dd></div>
-          {% endif %}
-        </dl>
-        <div class="command-preview-path">
-          <div><span class="muted">Handler</span><code>{{ command.name }} → {{ handler_name }}</code></div>
-          {% if resource_label %}<div><span class="muted">Uses</span><strong>{{ resource_label }}</strong>{% if target_catalog_count is not None %}<small>{{ target_catalog_count|counted:"target available,targets available" }}</small>{% endif %}</div>{% endif %}
-          <div><span class="muted">Requires</span>{% for capability in required_capabilities %}<code>{{ capability }}</code>{% endfor %}</div>
-          <div><span class="muted">Effect</span><strong>{{ effect_outcome }}</strong></div>
-        </div>
-        {% if command.execution_notes %}
-          <ol class="command-preview-steps">
-            {% for note in command.execution_notes %}<li>{{ note }}</li>{% endfor %}
-          </ol>
+        {% else %}
+          {% include "partials/_command_field.html" %}
         {% endif %}
-      </section>
-      {% for field in form.confirmation_fields %}{% include "partials/_command_field.html" %}{% endfor %}
-      <div class="form-actions">
-        <button class="btn primary" type="submit">Run {{ command_label }}</button>
-        <span class="muted" data-submit-status hidden role="status">Running…</span>
-      </div>
-    </form>
-  </section>
-
-  <aside class="command-evidence">
-    <section class="card">
-      <span class="eyebrow">Checks</span>
-      <ol class="command-enforcement">
-        <li><strong>Permission</strong><span>Checked before the form loads.</span></li>
-        <li><strong>Strict input</strong><span>Unknown or repeated fields are rejected.</span></li>
-        <li><strong>Validation</strong><span>The command's own type validates input.</span></li>
-        <li><strong>One transaction</strong><span>The write succeeds or fails as a whole.</span></li>
-        <li><strong>Retry protection</strong><span>A repeated submit returns the first result.</span></li>
-        <li><strong>Audit</strong><span>Logged under your account, the same as API and MCP calls.</span></li>
-      </ol>
-    </section>
-    <details class="card command-schema">
-      <summary><strong>Schema</strong> <span class="muted">JSON Schema, as the API and MCP see it</span></summary>
-      <pre><code>{{ schema_json }}</code></pre>
-    </details>
-  </aside>
-</div>
+      {% endfor %}
+    </div>
+    {% for field in form.confirmation_fields %}{% include "partials/_command_field.html" %}{% endfor %}
+    <div class="form-actions">
+      <button class="btn primary" type="submit">{{ command_label }}</button>
+      <span class="muted" data-submit-status hidden role="status">Working…</span>
+    </div>
+  </form>
+</section>
 {% endblock %}

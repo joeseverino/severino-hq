@@ -1,26 +1,31 @@
+{% comment %}
+One group of search results that are places to go: machines, pages, commands,
+connections. A row is the name a person knows it by, one line of what it is
+(left out where `plain`), and at most a word of state. Never an identifier.
+A group with nothing in it is not drawn.
+{% endcomment %}
+{% if items %}
 <section class="card discovery-group">
   <div class="section-head">
     <h2>{{ title }}</h2>
     <span class="count">{{ items|length }}</span>
   </div>
-  {% if items %}
   <ul class="discovery-list">
     {% for item in items %}
     <li>
       {% if item.url %}<a class="discovery-link" href="{{ item.url }}">{% else %}<div class="discovery-link">{% endif %}
         <span class="discovery-main">
           <strong>{{ item.label }}</strong>
-          <span class="muted">{{ item.summary }}</span>
+          {% if item.summary and not plain %}<span class="muted">{{ item.summary }}</span>{% endif %}
         </span>
+        {% if item.badges %}
         <span class="discovery-meta">
-          <code>{{ item.name }}</code>
-          {% for badge in item.badges %}<span class="scope-chip">{{ badge }}</span>{% endfor %}
+          {% for badge in item.badges %}{% if badge %}<span class="scope-chip">{{ badge }}</span>{% endif %}{% endfor %}
         </span>
+        {% endif %}
       {% if item.url %}</a>{% else %}</div>{% endif %}
     </li>
     {% endfor %}
   </ul>
-  {% else %}
-  <p class="muted">{{ empty_message }}</p>
-  {% endif %}
 </section>
+{% endif %}

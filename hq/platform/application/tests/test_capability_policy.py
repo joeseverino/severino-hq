@@ -184,7 +184,7 @@ class SurfaceRuleTests(PolicyTestCase):
         )
         Project.objects.filter(pk=project.pk).update(description="changed underneath")
 
-        with self.assertRaisesMessage(Exception, "has changed since it was asked for"):
+        with self.assertRaisesMessage(Exception, "This changed after the agent asked"):
             approve(held["approval"]["id"], principal=self.operator)
         self.assertEqual(
             ApprovalRequest.objects.get(pk=held["approval"]["id"]).state,
@@ -290,8 +290,8 @@ class SettingTests(PolicyTestCase):
         )
         self.assertEqual(
             messages,
-            ["mcp · project.delete: Default → Require approval",
-             "mcp · project.delete: Require approval → Default"],
+            ["mcp · project.delete: Default → Ask me first",
+             "mcp · project.delete: Ask me first → Default"],
         )
         self.assertFalse(CapabilityRule.objects.exists())
 
@@ -307,17 +307,17 @@ class SettingTests(PolicyTestCase):
                 self.set(principal=credential)
 
     def test_a_read_can_be_denied_but_not_held(self):
-        with self.assertRaisesMessage(ValueError, "is a read"):
+        with self.assertRaisesMessage(ValueError, "List messages only reads."):
             self.set(spec=spec("contact.submissions.list"))
 
     def test_an_agent_rule_cannot_reach_past_its_pocket_id_grant(self):
         AgentIdentity.objects.create(client_id="example-agent", granted=["read", "write_projects"])
 
-        with self.assertRaisesMessage(ValueError, "does not include project.delete"):
+        with self.assertRaisesMessage(ValueError, "Pocket ID does not allow example-agent to use Delete project."):
             self.set(scope=Scope.AGENT, subject="example-agent")
 
     def test_an_agent_rule_needs_an_agent_that_has_been_seen(self):
-        with self.assertRaisesMessage(ValueError, "has presented a token here"):
+        with self.assertRaisesMessage(ValueError, "No agent named nobody has connected yet."):
             self.set(scope=Scope.AGENT, subject="nobody")
 
 
@@ -335,13 +335,16 @@ class PageTests(PolicyTestCase):
     def test_it_shows_both_surfaces_and_every_agent_seen(self):
         page = self.page()
 
-        for text in ("All MCP agents", "All API clients", "example-agent", "granted", "Projects", "0 rules", "awaiting approval"):
+        for text in ("All MCP agents", "All API clients", "example-agent", "permissions from Pocket ID",
+                     "Projects", "0 rules changed from the default", "Agents are allowed"):
             self.assertContains(page, text)
+        # Nothing waits, so nothing says how many wait.
+        self.assertNotContains(page, "waiting for your approval")
 
     def test_an_agent_cannot_be_offered_what_pocket_id_did_not_grant(self):
         page = self.page().content.decode()
 
-        self.assertIn("Not granted", page)
+        self.assertIn("Pocket ID does not allow this", page)
         self.assertNotIn(f'name="{field_name(Scope.AGENT, "example-agent", "project.delete")}"', page)
 
     def test_a_read_offers_no_approval(self):
@@ -376,7 +379,7 @@ class PageTests(PolicyTestCase):
 
         response = self.client.post(reverse("agent_policy"), {field: Rule.ALLOW}, follow=True)
 
-        self.assertContains(response, "does not include project.delete")
+        self.assertContains(response, "Pocket ID does not allow example-agent to use Delete project.")
         self.assertFalse(CapabilityRule.objects.exists())
 
     def test_signed_out_it_cannot_be_reached(self):
@@ -389,8 +392,8 @@ class PageTests(PolicyTestCase):
         projects = next(group for group in groups if group.label == "Projects")
         actions = [row.label for row in projects.rows]
 
-        self.assertIn("Create", actions)
-        self.assertIn("Delete", actions)
+        self.assertIn("Create project", actions)
+        self.assertIn("Delete project", actions)
         self.assertEqual([row.effect for row in projects.rows], sorted(
             (row.effect for row in projects.rows), key=["read", "remote_write", "destructive", "infrastructure_change"].index
         ))
@@ -401,23 +404,29 @@ class PageTests(PolicyTestCase):
 
         self.assertEqual(len(labels), len(set(labels)))
 
-    def test_an_action_drops_the_words_its_group_and_prefix_already_say(self):
-        from ..capability_policy import _action
+    def test_a_row_is_the_commands_whole_title_and_says_what_it_does(self):
+        _, groups = matrix()
+        rows = {row.name: row for group in groups for row in group.rows}
 
-        self.assertEqual(_action("Example Widget Mark Ready", "Widgets", "example"), "Mark ready")
-        self.assertEqual(_action("Project Create", "Projects", "project"), "Create")
-        self.assertEqual(_action("Create or update project", "Projects", "project"), "Create or update")
+        self.assertEqual(rows["hq.import"].label, "Import projects and assets")
+        self.assertEqual(rows["documentation.sync"].label, "Sync documentation")
+        self.assertEqual(rows["project.delete"].effect_label, "Deletes")
+        self.assertEqual(rows["project.create"].effect_label, "Changes HQ")
+        self.assertEqual(rows["contact.submissions.list"].effect_label, "")
+
+    def test_a_default_says_what_happens_in_the_words_the_choices_use(self):
+        _, groups = matrix()
+        rows = {row.name: row for group in groups for row in group.rows}
+
+        self.assertEqual(rows["project.delete"].default, "Ask me first")
+        self.assertEqual(rows["project.create"].default, "Allow")
+        self.assertTrue(rows["infrastructure.resource.update"].default.startswith("Ask me first for "))
+        self.assertNotIn("gated", rows["infrastructure.resource.update"].default)
 
     def test_only_acronyms_are_capitalised(self):
         self.assertEqual(human_label("example.pace.set"), "Example Pace Set")
         self.assertEqual(human_label("tls.certificate"), "TLS Certificate")
 
-    def test_two_capabilities_that_shorten_alike_keep_their_prefix(self):
-        from ..capability_policy import _actions
-
-        specs = [spec("documentation.sync"), spec("hq.sync")]
-
-        self.assertEqual(_actions(specs, "Documentation"), ["Sync", "Sync the vault"])
 
     def test_the_matrix_costs_the_same_however_many_capabilities_and_agents(self):
         AgentIdentity.objects.create(client_id="second-agent", granted=["read"])
@@ -433,7 +442,7 @@ class CommandTitleTests(TestCase):
         from ..capabilities import capability_title
 
         self.assertEqual(spec("project.create").title, "Create project")
-        self.assertEqual(capability_title("contact.submission.delete"), "Delete contact submission")
+        self.assertEqual(capability_title("contact.submission.delete"), "Delete a message")
 
     def test_a_command_with_no_label_reads_as_its_name(self):
         from ..capabilities import capability_title
@@ -474,5 +483,5 @@ class CommandTitleTests(TestCase):
             operator,
         )
 
-        self.assertEqual(state.action.label, "Delete contact submission")
+        self.assertEqual(state.action.label, "Delete a message")
         self.assertEqual(state.action.effect, "destructive")

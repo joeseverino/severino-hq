@@ -1,4 +1,4 @@
-"""Browser execution tests for the registry-driven Command Center."""
+"""Browser execution tests for the registry-driven command page."""
 
 import json
 from unittest import mock
@@ -63,8 +63,30 @@ class CommandViewTests(TestCase):
         self.assertContains(response, 'name="name"')
         self.assertContains(response, 'name="slug"')
         self.assertContains(response, 'name="__execution_key"')
-        self.assertIn('"additionalProperties": false', response.context["schema_json"])
         self.assertNotContains(response, 'name="__target"')
+
+    def test_the_page_is_a_title_what_it_changes_and_one_button(self):
+        response = self.client.get("/commands/project.create/")
+
+        self.assertContains(response, '<button class="btn primary" type="submit">Create project</button>')
+        self.assertContains(response, "Add a new project.")
+        for built in ("<code>project.create", "manage_projects", "Handler", "JSON Schema", "Strict input",
+                      "Run command", "Preview", "additionalProperties"):
+            self.assertNotContains(response, built)
+
+    def test_a_page_opened_for_one_thing_names_it_instead_of_listing_every_other(self):
+        ManagedResource.objects.create(key="example-certificate", kind="tls.certificate", spec={})
+        ManagedResource.objects.create(key="example-other", kind="tls.certificate", spec={})
+
+        chosen = self.client.get("/commands/certificate.renew/", {"target": "example-certificate"})
+        open_ = self.client.get("/commands/certificate.renew/")
+
+        self.assertContains(chosen, "<strong>example-certificate</strong>")
+        self.assertContains(chosen, 'href="/commands/certificate.renew/">Change</a>')
+        self.assertContains(chosen, '<select name="__target" hidden')
+        self.assertContains(chosen, '<option value="example-certificate" selected>')
+        self.assertNotContains(open_, '<select name="__target" hidden')
+        self.assertContains(open_, "Choose one…")
 
     def test_targeted_command_derives_its_target_control(self):
         Project.objects.create(name="HQ", slug="hq")
@@ -88,17 +110,14 @@ class CommandViewTests(TestCase):
         )
         response = self.client.get("/commands/certificate.renew/")
 
-        self.assertContains(response, "Certificate key")
-        self.assertContains(response, "The managed certificate to renew.")
+        self.assertContains(response, '<label for="id___target">Certificate</label>')
+        self.assertContains(response, "The certificate to renew.")
         self.assertContains(response, '<option value="example-certificate">')
         self.assertNotContains(response, '<option value="example-zone">')
         self.assertContains(response, 'type="hidden" name="idempotency_key"')
         self.assertNotContains(response, ">Idempotency Key<")
-        self.assertContains(
-            response, "1 target available"
-        )
-        self.assertContains(response, "certificate.renew → request_certificate_renewal")
-        self.assertContains(response, "provider work runs outside this page request")
+        self.assertNotContains(response, "request_certificate_renewal")
+        self.assertNotContains(response, "provider work runs outside this page request")
 
     def test_target_choices_are_one_local_query_and_never_a_provider_lookup(self):
         ManagedResource.objects.create(
@@ -139,13 +158,10 @@ class CommandViewTests(TestCase):
 
         self.assertContains(
             response,
-            '<option value="example-device">example-device · Tailscale Device</option>',
+            '<option value="example-device">example-device</option>',
             html=True,
         )
         self.assertNotContains(response, '<option value="example-zone">')
-        self.assertContains(
-            response, "1 target available"
-        )
 
     def test_update_hydrates_the_selected_resource_and_concurrency_guard(self):
         resource = ManagedResource.objects.create(
@@ -177,7 +193,7 @@ class CommandViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Committed once")
+        self.assertContains(response, '<h2 id="command-result-title">Done</h2>')
         self.assertTrue(Project.objects.filter(slug="browser-command").exists())
         self.assertEqual(IdempotencyRecord.objects.count(), 1)
         audit = AuditLog.objects.get(object_type="Project")
@@ -219,7 +235,7 @@ class CommandViewTests(TestCase):
 
         self.assertEqual(first.status_code, 302)
         self.assertEqual(second.status_code, 200)
-        self.assertContains(second, '<span class="scope-chip">Replayed</span>')
+        self.assertContains(second, "This was already done earlier. Nothing ran again.")
         self.assertEqual(Project.objects.filter(slug="safe-retry").count(), 1)
         self.assertEqual(IdempotencyRecord.objects.count(), 1)
 
@@ -266,8 +282,8 @@ class CommandViewTests(TestCase):
             "/commands/project.create/", {"result": query["result"][0]}
         )
 
-        self.assertNotContains(hidden, "Committed once")
-        self.assertContains(shown, "Committed once")
+        self.assertNotContains(hidden, 'id="command-result-title"')
+        self.assertContains(shown, 'id="command-result-title"')
 
 
 class CommandResultProjectionTests(TestCase):
@@ -324,7 +340,7 @@ class CommandResultProjectionTests(TestCase):
         self.assertEqual(table["rows"][0], ("example.test", "A", "192.0.2.1", MISSING))
         self.assertContains(response, "<th>type</th>")
         self.assertContains(response, "answers · 2")
-        self.assertContains(response, "Ran once")
+        self.assertContains(response, '<h2 id="command-result-title">Done</h2>')
         # The JSON is still there for anyone checking HQ against another tool,
         # closed because the answer is already on the page.
         self.assertContains(response, '<details class="command-result-json">')

@@ -112,7 +112,7 @@ class ContactViewTests(TestCase):
     def test_delete_get_shows_confirm(self, mock_get):
         response = self.client.get(reverse("contacts:delete", args=[1]))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Delete submission #1?")
+        self.assertContains(response, "Delete message #1?")
         self.assertContains(response, f'formaction="{reverse("contacts:delete", args=[1])}"')
 
     @patch("hq.domains.contacts.views.execute_contact_delete")

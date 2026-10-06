@@ -76,7 +76,7 @@ def contact_list(request):
             "q": q,
             "total_count": sum(counts.values()),
             "error": error,
-            **page_context("Contact submissions"),
+            **page_context("Messages", "What people sent through the contact form on the site."),
         },
     )
 
@@ -89,7 +89,7 @@ def contact_detail(request, pk: int):
         return redirect("contacts:list")
 
     if not submission:
-        messages.error(request, f"Contact submission #{pk} was not found.")
+        messages.error(request, f"Message #{pk} was not found.")
         return redirect("contacts:list")
 
     if request.method == "POST":
@@ -108,7 +108,7 @@ def contact_detail(request, pk: int):
             except (D1Error, ValueError) as exc:
                 messages.error(request, str(exc))
                 return redirect("contacts:detail", pk=pk)
-            messages.success(request, f"Submission #{pk} updated.")
+            messages.success(request, f"Message #{pk} saved.")
             return redirect("contacts:detail", pk=pk)
     else:
         form = ContactReviewForm(
@@ -128,10 +128,10 @@ def contact_detail(request, pk: int):
             "reply_href": reply,
             "form": form,
             **page_context(
-                f"Submission #{pk}",
+                f"Message #{pk}",
                 f"{submission['name']} · {submission['created_at']}",
-                actions=(PageAction("Reply via email", reply),),
-                trail=(("Contact submissions", reverse("contacts:list")),),
+                actions=(PageAction("Reply by email", reply),),
+                trail=(("Messages", reverse("contacts:list")),),
             ),
         },
     )
@@ -153,7 +153,7 @@ def contact_set_status(request, pk: int):
     try:
         submission = get_submission(pk)
         if not submission:
-            messages.error(request, f"Contact submission #{pk} was not found.")
+            messages.error(request, f"Message #{pk} was not found.")
             return redirect("contacts:list")
         execute_contact_review(
             ContactReviewCommand(
@@ -167,7 +167,7 @@ def contact_set_status(request, pk: int):
     except (D1Error, ValueError) as exc:
         messages.error(request, str(exc))
         return redirect(_safe_next(request))
-    messages.success(request, f"Submission #{pk} marked {status}.")
+    messages.success(request, f"Message #{pk} marked {status}.")
     return redirect(_safe_next(request))
 
 
@@ -179,7 +179,7 @@ def contact_delete(request, pk: int):
         return redirect("contacts:list")
 
     if not submission:
-        messages.error(request, f"Contact submission #{pk} was not found.")
+        messages.error(request, f"Message #{pk} was not found.")
         return redirect("contacts:list")
 
     if request.method == "POST":
@@ -192,7 +192,7 @@ def contact_delete(request, pk: int):
         except (D1Error, ValueError) as exc:
             messages.error(request, str(exc))
             return redirect("contacts:detail", pk=pk)
-        messages.success(request, f"Submission #{pk} deleted.")
+        messages.success(request, f"Message #{pk} deleted.")
         return redirect("contacts:list")
 
     return render(
@@ -202,15 +202,15 @@ def contact_delete(request, pk: int):
             "submission": submission,
             "confirm": {
                 "url": reverse("contacts:delete", args=[pk]),
-                "label": f"Delete submission #{pk}",
+                "label": f"Delete message #{pk}",
                 "cancel_url": reverse("contacts:detail", args=[pk]),
             },
             **page_context(
-                f"Delete submission #{pk}?",
+                f"Delete message #{pk}?",
                 f"{submission['created_at']} · {submission['name']} ({submission['email']})",
                 trail=(
-                    ("Contact submissions", reverse("contacts:list")),
-                    (f"Submission #{pk}", reverse("contacts:detail", args=[pk])),
+                    ("Messages", reverse("contacts:list")),
+                    (f"Message #{pk}", reverse("contacts:detail", args=[pk])),
                 ),
             ),
         },

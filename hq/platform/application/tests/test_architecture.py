@@ -1301,6 +1301,183 @@ class InterfaceTextTests(SimpleTestCase):
         self.assertGreater(checked, 0, "No HQ system check was examined")
 
 
+# What the plain-words rule reads, relative to the checkout: a file, or a
+# directory read whole. The platform pages and the modules that write their
+# text. To hold the whole interface to it, replace this with ("templates", "hq").
+PLAIN_WORDS_PATHS = (
+    "templates/403.html",
+    "templates/404.html",
+    "templates/500.html",
+    "templates/action_items.html",
+    "templates/base.html",
+    "templates/command.html",
+    "templates/confirm_page.html",
+    "templates/dashboard.html",
+    "templates/list_page.html",
+    "templates/page.html",
+    "templates/search.html",
+    "templates/analytics",
+    "templates/auth",
+    "templates/contacts",
+    "templates/core",
+    "templates/jobs",
+    "templates/control_plane/_zone_records.html",
+    "templates/control_plane/zone_detail.html",
+    "templates/control_plane/zone_index.html",
+    "templates/control_plane/zone_mail.html",
+    "templates/partials/_action_links.html",
+    "templates/partials/_ask.html",
+    "templates/partials/_attention_list.html",
+    "templates/partials/_command_field.html",
+    "templates/partials/_discovery_catalog.html",
+    "templates/partials/_empty_state.html",
+    "templates/partials/_form_field.html",
+    "templates/partials/_insight_grid.html",
+    "templates/partials/_modal.html",
+    "templates/partials/_page_action.html",
+    "templates/partials/_page_head.html",
+    "templates/partials/_pagination.html",
+    "templates/partials/_queue_groups.html",
+    "templates/partials/_resolution_workflow.html",
+    "templates/partials/_sweep_freshness.html",
+    "templates/partials/_table_toolbar.html",
+    "templates/partials/_work_queue.html",
+    "templates/partials/approval_card.html",
+    "hq/domains/analytics",
+    "hq/domains/contacts",
+    "hq/domains/jobs",
+    "hq/domains/control_plane/zone_views.py",
+    "hq/platform/application/action_items.py",
+    "hq/platform/application/analytics.py",
+    "hq/platform/application/approvals.py",
+    "hq/platform/application/attention.py",
+    "hq/platform/application/capability_policy.py",
+    "hq/platform/application/command_center.py",
+    "hq/platform/application/command_forms.py",
+    "hq/platform/application/command_targets.py",
+    "hq/platform/application/core_capabilities.py",
+    "hq/platform/application/dashboard.py",
+    "hq/platform/application/decisions.py",
+    "hq/platform/application/findings.py",
+    "hq/platform/application/glance.py",
+    "hq/platform/application/history.py",
+    "hq/platform/application/item_help.py",
+    "hq/platform/application/labels.py",
+    "hq/platform/application/mail_policy.py",
+    "hq/platform/application/outward_links.py",
+    "hq/platform/application/records.py",
+    "hq/platform/application/resources.py",
+    "hq/platform/application/scheduled_work.py",
+    "hq/platform/application/search.py",
+    "hq/platform/application/sections.py",
+    "hq/platform/application/workflows.py",
+    "hq/platform/application/zones.py",
+    "hq/platform/core/action_item_views.py",
+    "hq/platform/core/audit_views.py",
+    "hq/platform/core/command_views.py",
+    "hq/platform/core/dashboard_views.py",
+    "hq/platform/core/error_views.py",
+    "hq/platform/core/templatetags",
+    "hq/platform/core/views.py",
+)
+# A place the rule lets a word stand, as (path, word, why). Each is a string
+# that is kept as data or read by a client's author, never a sentence the
+# owner is told. One that no longer matches fails the test.
+PLAIN_WORDS_EXEMPT = (
+    (
+        "hq/platform/application/capability_policy.py",
+        "Capability",
+        "The type name stored on every past audit row for an agent rule; a new "
+        "name would split that history in two.",
+    ),
+    (
+        "hq/platform/application/resources.py",
+        "resource",
+        "An API error for a list name that does not exist, read by whoever "
+        "wrote the client, in the API's own vocabulary.",
+    ),
+)
+
+
+class PlainWordsTests(SimpleTestCase):
+    """HQ's names for its own parts stay out of what its owner reads.
+
+    ``hq.platform.core.plain_words`` holds the words and what to say instead.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from pathlib import Path
+
+        from django.conf import settings
+
+        from hq.platform.core import plain_words
+
+        super().setUpClass()
+        cls.words = plain_words
+        root = Path(settings.BASE_DIR).resolve()
+        cls.found, cls.files = plain_words.read((root / path for path in PLAIN_WORDS_PATHS), root=root)
+
+    def test_the_rule_read_the_pages(self):
+        self.assertGreater(self.files, 100, "The plain-words rule read almost nothing")
+
+    def test_no_page_shows_a_word_hq_keeps_to_itself(self):
+        """Say what plain_words.NEVER_SHOWN gives for it, or reword the sentence."""
+
+        exempt = {(path, word) for path, word, _why in PLAIN_WORDS_EXEMPT}
+        shown = [str(found) for found in self.found if (str(found.path), found.word) not in exempt]
+
+        self.assertEqual(shown, [])
+
+    def test_every_exemption_still_exempts_something_and_says_why(self):
+        found = {(str(item.path), item.word) for item in self.found}
+        for path, word, why in PLAIN_WORDS_EXEMPT:
+            with self.subTest(path=path, word=word):
+                self.assertIn((path, word), found, "Nothing here needs this exemption any more.")
+                self.assertGreater(len(why.split()), 6, "Say why the word stands here.")
+
+    def test_it_reads_what_a_person_sees_and_nothing_else(self):
+        template = (
+            "{% comment %}The sweep reconciles a kind.{% endcomment %}\n"
+            '<a class="sweep-link" href="{% url \'control_plane:reconcile\' %}" title="Reconcile it">Open</a>\n'
+            '{% include "partials/_sweep_freshness.html" with message="No resources yet." %}\n'
+            "<code>adguard.rewrite</code><p>Findings</p><p>Read 3 records.</p>"
+        )
+        shown = [text for _line, text in self.words.template_text(template)]
+
+        self.assertEqual(shown, ["Open", "Reconcile it", "No resources yet.", "Findings", "Read 3 records."])
+        self.assertEqual(
+            [word for text in shown for word, _instead in self.words.words_in(text)],
+            ["Reconcile", "resources"],
+        )
+
+    def test_python_is_read_for_sentences_and_not_for_names(self):
+        source = (
+            '"""A sweep of every kind."""\n'
+            'KIND = "adguard.rewrite"\n'
+            'route = "control_plane:reconcile"\n'
+            'logger.info("The sweep reached every provider.")\n'
+            'title = "Was not in the last sweep"\n'
+        )
+
+        self.assertEqual(
+            [text for _line, text in self.words.python_text(source)], ["Was not in the last sweep"]
+        )
+
+    def test_a_retired_name_is_found_as_written(self):
+        self.assertEqual(
+            [word for word, _instead in self.words.words_in("Open Action items from the Command Center")],
+            ["Action items", "Command Center"],
+        )
+        self.assertEqual(list(self.words.words_in("3 things need you. Read now.")), [])
+
+    def test_a_path_that_is_gone_fails_rather_than_passing(self):
+        from pathlib import Path
+
+        with self.assertRaises(FileNotFoundError):
+            self.words.read([Path("templates/no-such-page.html")], root=Path("."))
+
+
 class PostButtonTests(SimpleTestCase):
     """A post_button submits the one shared form, so it needs none of its own."""
 

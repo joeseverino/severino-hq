@@ -602,14 +602,14 @@ class OverviewPageTests(TestCase):
 
         response = self.client.get("/analytics/")
 
-        self.assertContains(response, "sampled 1:10")
+        self.assertContains(response, "estimated from 1 in 10 visits")
 
     def test_a_partial_window_says_what_is_missing_and_who_will_fill_it(self):
         service.record_analytics(_payload([_row()]), principal=_principal())
 
         response = self.client.get("/analytics/?days=7")
 
-        self.assertContains(response, "6 days still loading")
+        self.assertContains(response, "1 of 7 days read so far, the rest still loading")
         # No visit was measured for speed: one sentence, not three empty rates.
         self.assertContains(response, "Not enough visits to measure.")
         self.assertNotContains(response, "no samples")

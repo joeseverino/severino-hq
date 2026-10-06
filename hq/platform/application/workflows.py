@@ -65,7 +65,7 @@ def claim_resolution_plan(
         outcome=WorkflowOutcome(
             "claim_absent",
             identity,
-            "This goes away once it is fixed.",
+            "",
         ),
     )
 

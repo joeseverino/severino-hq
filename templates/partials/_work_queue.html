@@ -1,10 +1,11 @@
 {% comment %}
-The canonical queue, on the dashboard, queue and domain pages. Subjects,
-actions and evidence come from the owner. A row leads with what is wrong; its
-next step is the toggle for the evidence behind it, and what can be done about
-it follows. Under a domain's own heading (`grouped`) a row does not repeat the
-domain. Where the reader sorts their own queue (`triage`) a row ends with the
-one thing they can do to it: dismiss it, or restore it. Neither closes it.
+The one card of the queue, on the dashboard, the queue page and a domain's own
+pages. Its face is `application.decisions`: what is wrong, what it means, since
+when if that is known, then what to do, where a step is a step, a reason is a
+sentence and anything that can be pressed is a button. Under a domain's own
+heading (`grouped`) a card does not repeat the domain. Where the reader sorts
+their own queue (`triage`) a card ends with the one thing they can do to it:
+dismiss it, or restore it. Neither fixes it. A dismissed card is its title.
 {% endcomment %}
 <ul class="attention-list">
   {% for entry in items %}
@@ -12,27 +13,25 @@ one thing they can do to it: dismiss it, or restore it. Neither closes it.
     <li class="attention-row" data-attention-item>
       <div class="attention-body">
         <div class="attention-head">
-          {% if item.notice %}<span class="pill pill-idea">Notice</span>{% else %}<span class="pill pill-{{ item.status }}">{{ item.status|capfirst }}</span>{% endif %}
-          {% if item.url %}<a class="attention-title" href="{{ item.url }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}
+          <span class="pill pill-{% if item.notice %}idea{% else %}{{ item.status }}{% endif %}">{{ item.urgency }}</span>
+          {% if item.href %}<a class="attention-title" href="{{ item.href }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}
+          {% if item.since or not grouped %}
           <span class="attention-meta">
             {% if not grouped %}<span>{{ item.source }}</span>{% endif %}
-            {% if item.subject %}<a href="{{ item.subject.url }}">{{ item.subject.label }}</a>{% endif %}
-            {% if item.count > 1 %}<span class="attention-value">{{ item.count }} affected</span>{% endif %}
+            {% if item.since %}<span>Since {{ item.since|when:"day" }}</span>{% endif %}
           </span>
+          {% endif %}
         </div>
-        {% if item.detail or item.workflow %}
-          <details class="attention-evidence">
-            <summary>{% if item.action %}<span class="insight-action-label">Next</span> {{ item.action }}{% elif item.workflow %}What to do{% else %}Details{% endif %}<span class="visually-hidden"> for {{ item.label }}</span></summary>
-            {% if item.detail %}<p class="attention-detail">{{ item.detail }}</p>{% endif %}
-            {% if item.workflow %}{% include "partials/_resolution_workflow.html" with workflow=item.workflow compact=True %}{% endif %}
-          </details>
-        {% elif item.action %}
-          <p class="attention-action"><span class="insight-action-label">Next</span> {{ item.action }}</p>
-        {% endif %}
-        {% if item.actions %}
-          <div class="attention-actions">
-            {% include "partials/_action_links.html" with actions=item.actions only %}
-          </div>
+        {% if not item.aside %}
+          {% if item.detail %}<p class="attention-detail">{{ item.detail }}</p>{% endif %}
+          {% if item.advice %}<p class="attention-detail">{{ item.advice }}</p>{% endif %}
+          {% include "partials/_resolution_workflow.html" with steps=item.steps fold=item.steps_fold label=item.label only %}
+          {% if item.reason %}<p class="attention-reason">{{ item.reason }}</p>{% endif %}
+          {% if item.actions %}
+            <div class="attention-actions">
+              {% include "partials/_action_links.html" with actions=item.actions only %}
+            </div>
+          {% endif %}
         {% endif %}
       </div>
       {% if triage %}
@@ -49,6 +48,6 @@ one thing they can do to it: dismiss it, or restore it. Neither closes it.
     </li>
     {% endwith %}
   {% empty %}
-    <li class="attention-row"><p class="attention-clear">{{ empty|default:"Nothing to do." }}</p></li>
+    <li class="attention-row"><p class="attention-clear">{{ empty|default:"Nothing needs you." }}</p></li>
   {% endfor %}
 </ul>
