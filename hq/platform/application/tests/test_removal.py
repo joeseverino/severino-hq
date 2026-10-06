@@ -230,7 +230,7 @@ class RemovalWebTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "deletes this at the provider")
+        self.assertContains(response, "deletes the live record")
         self.assertFalse(OperationRequest.objects.exists())
 
     def test_confirming_queues_removal_without_dropping_the_row(self):

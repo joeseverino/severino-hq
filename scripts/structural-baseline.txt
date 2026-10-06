@@ -3,8 +3,7 @@
 # Pairs only leave; a file's count only shrinks. Rewrite with --record.
 similar hq/platform/application/assets.py::serialize_asset <> hq/platform/application/projects.py::serialize_project
 similar hq/platform/core/management/commands/seed_demo.py::_seed_content <> hq/platform/core/management/commands/seed_demo.py::_seed_docs
-similar hq/domains/reports/exports.py::documentation_csv <> hq/domains/reports/exports.py::projects_csv
-largest hq/platform/application/request_layers.py 909
-largest hq/config/settings.py 935
-largest hq/platform/application/facts.py 958
-largest hq/platform/application/ui.py 1161
+largest hq/platform/application/approvals.py 892
+largest hq/config/settings.py 930
+largest hq/platform/application/facts.py 952
+largest hq/platform/application/ui.py 1113

@@ -3,19 +3,19 @@
 <div class="table-scroll">
   <table class="data-table">
     <thead>
-      <tr><th>Resource</th><th>Kind</th><th>Sync</th><th class="key-col">Health</th><th>Observed</th></tr>
+      <tr><th>Name</th><th>Type</th><th class="key-col">State</th><th>Last read</th></tr>
     </thead>
     <tbody>
       {% for resource in resources %}
         <tr>
           <td>
-            <strong>{% entity "resource"|entity_of:resource.key %}</strong>
+            <strong>{% entity "resource"|entity_of:resource.key label=resource.shown_name %}</strong>
             {% comment %}
             Enough to recognise it, not the whole value. A DMARC record runs to
             three wrapped lines and makes every row beside it ragged; the full
-            value is one click away on the resource itself.
+            value is one click away on the record itself.
             {% endcomment %}
-            {% if resource.summary %}<br><span class="muted">{{ resource.summary|truncatechars:64 }}</span>{% endif %}
+            {% if resource.summary and resource.summary not in resource.shown_name %}<br><span class="muted">{{ resource.summary|truncatechars:64 }}</span>{% endif %}
             {% comment %}
             Whose address a proxy forwards to, when HQ knows the machine.
             {% endcomment %}
@@ -23,49 +23,41 @@
           </td>
           <td>{{ resource.kind_label }}</td>
           <td>
-            {% if not resource.enabled %}
-              <span class="pill">Disabled</span>
-            {% elif not resource.converges %}
-              <span class="pill pill-active">Declared</span>
-            {% elif resource.observed_generation == resource.generation %}
-              <span class="pill pill-active">In sync</span>
-            {% else %}
-              <span class="pill pill-paused">Pending</span>
-            {% endif %}
+            {% with status=resource.record_status %}
+              <span class="pill control-{{ status.tone }}"{% if status.detail %} title="{{ status.detail }}"{% endif %}>{{ status.label }}</span>
+              {% if status.since %}<br><span class="muted">{{ status.since|when:"ago" }}</span>{% endif %}
+            {% endwith %}
           </td>
-          <td>
-            {% if not resource.converges and not resource.last_observed_at %}
-              {% empty_value %}
-            {% else %}
-              <span class="pill control-{{ resource.control_health.state }}">{{ resource.control_health.label }}</span>
-            {% endif %}
-          </td>
-          <td class="muted date-col">{% if resource.last_observed_at %}{{ resource.last_observed_at|when:"ago" }}{% elif resource.converges %}Never{% else %}{% empty_value %}{% endif %}</td>
+          <td class="muted date-col">{% if resource.last_observed_at %}{{ resource.last_observed_at|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
         </tr>
       {% empty %}
-        <tr><td colspan="5" class="muted">No resources.</td></tr>
+        <tr><td colspan="4" class="muted">No records yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
 
-<h2>Recent operations</h2>
+{% comment %}
+What changed, not what ran: a check that found what the one before it found
+is not a row, so an unchanged minute-by-minute result is one line.
+{% endcomment %}
+{% if changes %}
+<h2>Recent changes</h2>
 <div class="table-scroll">
   <table class="data-table">
-    <thead><tr><th>Resource</th><th>Action</th><th class="key-col">State</th><th>Requested by</th><th>Created</th></tr></thead>
+    <thead><tr><th>What</th><th>Change</th><th class="key-col">Result</th><th>By</th><th>When</th></tr></thead>
     <tbody>
-      {% for operation in operations %}
+      {% for change in changes %}
         <tr>
-          <td>{% entity "resource"|entity_of:operation.resource.key %}</td>
-          <td>{{ operation.get_action_display }}</td>
-          <td><span class="pill pill-{{ operation.state }}">{{ operation.get_state_display }}</span></td>
-          <td>{{ operation.requested_actor }} <span class="muted">via {{ operation.requested_interface }}</span></td>
-          <td class="muted">{{ operation.created_at|when }}</td>
+          <td>{% entity "resource"|entity_of:change.resource %}</td>
+          <td>{{ change.action }}</td>
+          <td><span class="pill pill-{{ change.summary.tone }}">{{ change.summary.state_label }}</span> {{ change.summary.headline|truncatechars:120 }}</td>
+          <td>{{ change.by }}</td>
+          <td class="muted date-col">{{ change.at|when }}</td>
         </tr>
-      {% empty %}
-        <tr><td colspan="5" class="muted">No operations yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% endif %}
 {% endblock %}

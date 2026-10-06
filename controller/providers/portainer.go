@@ -562,7 +562,7 @@ func (r *Registry) portainerReconcile(ctx context.Context, spec PortainerStackSp
 	}
 	switch {
 	case apply && len(containers) == 0:
-		return Result{Changed: changed, Status: status, Conditions: []Condition{condition(runtime.ConditionDegraded, "NotRunning", "The stack exists in Portainer but no container from it is running.")}, Message: "Stack is declared but nothing is running."}, nil
+		return Result{Changed: changed, Status: status, Conditions: []Condition{condition(runtime.ConditionDegraded, "NotRunning", "The stack exists in Portainer but no container from it is running.")}, Message: "The stack exists but nothing in it is running."}, nil
 	case len(unreachable) > 0:
 		slices.Sort(unreachable)
 		detail := strings.Join(unreachable, ", ") + " publishes a port on the loopback address, so nothing outside that machine can reach it, including a proxy running in a container on the same host."

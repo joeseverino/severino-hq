@@ -6,17 +6,15 @@ The same filter bar every list uses. A chip per rule would spend a phone's
 first screen on chips before the first finding.
 {% endcomment %}
 <form class="filter-bar" method="get" role="search">
-  <select name="rule" aria-label="Rule">
-    <option value="">All rules</option>
+  <select name="rule" aria-label="Problem type">
+    <option value="">All problems</option>
     {% for rule in finding_rules %}<option value="{{ rule.name }}"{% if active_rule.name == rule.name %} selected{% endif %}>{{ rule.title }}</option>{% endfor %}
   </select>
-  <button class="btn" type="submit">Apply</button>
+  <button class="btn" type="submit">Show</button>
   {% if active_rule %}<a class="btn ghost" href="{% url 'control_plane:findings' %}">Clear</a>{% endif %}
   {% comment %}The count sits in the bar it filters, not in a second bar under it.{% endcomment %}
   <p class="filter-bar-summary" role="status">
-    <strong>{{ finding_entries|length|counted:"finding" }}</strong>
-    {% if finding_counts.serious %} · <strong>{{ finding_counts.serious }}</strong> serious{% endif %}
-    {% if finding_counts.attention %} · <strong>{{ finding_counts.attention }}</strong> attention{% endif %}
+    <strong>{{ finding_entries|length|counted:"problem" }}</strong>{% if finding_entries|length == 1 %}{% if finding_counts.serious %}, serious{% elif finding_counts.attention %}, needs a look{% endif %}{% else %}{% if finding_counts.serious %}, <strong>{{ finding_counts.serious }}</strong> serious{% endif %}{% if finding_counts.attention %}, <strong>{{ finding_counts.attention }}</strong> need a look{% endif %}{% endif %}
   </p>
 </form>
 {% endif %}
@@ -26,7 +24,7 @@ first screen on chips before the first finding.
     <article class="card finding-card is-{{ entry.finding.severity }}">
       <div class="section-head">
         <div>
-          <span class="pill pill-{{ entry.finding.severity }}">{{ entry.finding.severity|capfirst }}</span>
+          <span class="pill pill-{{ entry.finding.severity }}">{% if entry.finding.severity == "serious" %}Serious{% elif entry.finding.severity == "attention" %}Needs a look{% else %}Note{% endif %}</span>
           <h2>{{ entry.finding.title }}</h2>
         </div>
       </div>
@@ -43,7 +41,7 @@ first screen on chips before the first finding.
       {% endcomment %}
       <div class="finding-fix">
         {% for step in entry.finding.steps %}{% include "partials/_operator_step.html" %}{% endfor %}
-        {% if entry.finding.no_help_reason %}<p class="muted">Why HQ cannot do this for you: {{ entry.finding.no_help_reason }}</p>{% endif %}
+        {% if entry.finding.no_help_reason %}<p class="muted">{{ entry.finding.no_help_reason }}</p>{% endif %}
         {% if entry.layout.fix %}
           <div class="finding-actions">
             {% for action in entry.layout.fix %}
@@ -58,14 +56,14 @@ first screen on chips before the first finding.
       </div>
       {% if entry.layout.links %}
         <p class="finding-links">
-          {% if entry.layout.impact %}<span class="finding-links-group"><span class="muted">Impact</span> {% for action in entry.layout.impact %}<a class="subtle-link" href="{{ action.url }}">{{ action.label }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
-          {% if entry.layout.related %}<span class="finding-links-group"><span class="muted">See</span> {% for action in entry.layout.related %}<a class="subtle-link" href="{{ action.url }}">{{ action.label }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
-          {% if entry.layout.confirm %}<span class="finding-links-group"><span class="muted">Confirm</span> {% for action in entry.layout.confirm %}{% if action.method == "POST" %}{% post_button action.label action.url css="btn compact" title=action.reason %}{% else %}<a class="subtle-link" href="{{ action.url }}" title="{{ action.reason }}">{{ action.label }}</a>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+          {% if entry.layout.impact %}<span class="finding-links-group">{% for action in entry.layout.impact %}<a class="subtle-link" href="{{ action.url }}">{{ action.label }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+          {% if entry.layout.related %}<span class="finding-links-group">{% for action in entry.layout.related %}<a class="subtle-link" href="{{ action.url }}">{{ action.label }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+          {% if entry.layout.confirm %}<span class="finding-links-group">{% for action in entry.layout.confirm %}{% if action.method == "POST" %}{% post_button action.label action.url css="btn compact" title=action.reason %}{% else %}<a class="subtle-link" href="{{ action.url }}" title="{{ action.reason }}">{{ action.label }}</a>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
         </p>
       {% endif %}
     </article>
   {% empty %}
-    {% include "partials/_empty_state.html" with message="Nothing needs fixing." %}
+    {% include "partials/_empty_state.html" with message="No problems." %}
   {% endfor %}
 </div>
 {% endblock %}

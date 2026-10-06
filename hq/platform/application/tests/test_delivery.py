@@ -12,7 +12,7 @@ from ..controller import schedule_automatic_operations
 
 
 def drifted(message: str) -> list[dict]:
-    return [{"type": "Drifted", "status": True, "reason": "Drifted", "message": message}]
+    return [{"type": "Degraded", "status": True, "reason": "Reported", "message": message}]
 
 
 class DeliveryScheduleTests(TestCase):
@@ -31,7 +31,7 @@ class DeliveryScheduleTests(TestCase):
             },
             generation=1,
             observed_generation=1,
-            conditions=drifted("example.alpha bbbbbbb is admitted: no composition has started."),
+            conditions=drifted("example.alpha: bbbbbbb is approved, production still runs aaaaaaa. No deploy has started."),
         )
 
     def settle(self):
@@ -45,7 +45,7 @@ class DeliveryScheduleTests(TestCase):
         self.assertEqual(schedule_automatic_operations("example-controller")["scheduled"], [])
 
         self.resource.conditions = drifted(
-            "example.alpha bbbbbbb is admitted: composition run 9 is waiting for deploy approval."
+            "example.alpha: bbbbbbb is approved, production still runs aaaaaaa. Deploy run 9 is waiting for approval."
         )
         self.resource.save(update_fields=["conditions"])
         self.assertEqual(len(schedule_automatic_operations("example-controller")["scheduled"]), 1)

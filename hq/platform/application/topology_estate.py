@@ -120,7 +120,7 @@ def _open(url: str) -> tuple[TopologyAction, ...]:
 
 def _declared_by(edges, node_id: str, resource_id: str, nodes) -> None:
     if resource_id in nodes:
-        relation = edge_between(node_id, resource_id, "declared_by", "Declared by")
+        relation = edge_between(node_id, resource_id, "declared_by")
         edges[relation.id] = relation
 
 
@@ -203,7 +203,7 @@ def _zones(nodes, edges, resources, estate: _Estate) -> tuple[str, ...]:
 
 
 # What a service node is called under its name, by the service's mark.
-_SERVICE_SUBTITLES = {"observed": "Observed service"}
+_SERVICE_SUBTITLES = {"observed": "Service not in HQ"}
 
 
 def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
@@ -245,11 +245,11 @@ def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
             _declared_by(edges, node_id, f"resource:{claim.resource_key}", nodes)
         machine = estate.machine(_runs_on(service, own))
         if machine:
-            relation = edge_between(node_id, machine, "runs_on", "Runs on")
+            relation = edge_between(node_id, machine, "runs_on")
             edges[relation.id] = relation
         zone = zone_holding(service.hostname, zones)
         if zone:
-            relation = edge_between(f"zone:{zone}", node_id, "contains", "Contains")
+            relation = edge_between(f"zone:{zone}", node_id, "contains")
             edges[relation.id] = relation
     _redirect_edges(nodes, edges)
 
@@ -268,7 +268,7 @@ def _redirect_edges(nodes, edges) -> None:
     for node_id in [key for key, node in nodes.items() if node.kind == "service"]:
         target = path_to(nodes[node_id].label).redirects_to
         if target and f"service:{target}" in nodes:
-            relation = edge_between(node_id, f"service:{target}", "redirects_to", "Redirects to")
+            relation = edge_between(node_id, f"service:{target}", "redirects_to")
             edges[relation.id] = relation
 
 
@@ -367,7 +367,7 @@ def _runs_edges(nodes, edges, resources, estate: _Estate) -> None:
             continue
         host = estate.machine((resource.spec or {}).get("host"))
         if host:
-            relation = edge_between(host, resource_id, "runs", "Runs")
+            relation = edge_between(host, resource_id, "runs")
             edges[relation.id] = relation
 
 
@@ -387,7 +387,7 @@ def _tailnet_edges(nodes, edges, resources, estate: _Estate) -> None:
         if device is not None and device.addresses:
             estate.subjects[device_id] = Subject.of(addresses=device.addresses)
         for host in _device_hosts(device, estate):
-            relation = edge_between(host, device_id, "on_tailnet", "On the tailnet as")
+            relation = edge_between(host, device_id, "on_tailnet")
             edges[relation.id] = relation
 
 

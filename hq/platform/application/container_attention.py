@@ -50,10 +50,10 @@ def attention() -> tuple[Insight, ...]:
                 status="attention",
                 eyebrow="Containers",
                 key="container-updates",
-                title=f"{counted(len(behind), 'running image has', 'running images have')} a newer release",
+                title=f"{counted(len(behind), 'running image has', 'running images have')} an update",
                 value=str(len(behind)),
                 magnitude=len(behind),
-                body="; ".join(sorted(behind)) + "." + _not_yet(behind_running),
+                body=", ".join(sorted(behind)) + "." + _not_yet(behind_running),
                 action="Open containers",
                 url=reverse("control_plane:containers"),
                 # Each one's plan, the same help an advisory carries.
@@ -78,7 +78,13 @@ def _not_yet(running: list[Container]) -> str:
 
     plans = [plan for plan in (plan_for(item) for item in running) if plan is not None]
     reasons = list(dict.fromkeys(blocker.reason for plan in plans for blocker in plan.blockers))
-    return f" Not yet, because: {'; '.join(reason.rstrip('.') for reason in reasons)}." if reasons else ""
+    return _cannot_yet(reasons)
+
+
+def _cannot_yet(reasons: list[str]) -> str:
+    """Why an upgrade cannot be applied from HQ yet, as sentences."""
+
+    return f" HQ cannot apply it yet. {' '.join(reasons)}" if reasons else ""
 
 
 def _advisory(label: str, standing: Standing, running: list[Container]) -> Insight:
@@ -91,10 +97,9 @@ def _advisory(label: str, standing: Standing, running: list[Container]) -> Insig
     known = len(standing.advisories) or len(standing.urgent)
     waiting = not standing.newer
     plans = [plan for plan in (plan_for(item) for item in running) if plan is not None]
-    body = f"Worst: {standing.worst}. Runs as {where}.{f' Fixed in {fixed}.' if fixed else ''}"
+    body = f"Worst severity: {standing.worst}. Running as {where}.{f' Fixed in {fixed}.' if fixed else ''}"
     reasons = list(dict.fromkeys(blocker.reason for plan in plans for blocker in plan.blockers))
-    if reasons:
-        body += f" Not yet, because: {'; '.join(reason.rstrip('.') for reason in reasons)}."
+    body += _cannot_yet(reasons)
     watched = next((item for item in running if item.running.watcher), None)
     level, reached = _reach(running)
     body += reached
@@ -103,11 +108,11 @@ def _advisory(label: str, standing: Standing, running: list[Container]) -> Insig
         eyebrow="Containers",
         family="Image advisories",
         key=f"container-advisory:{standing.image.name}:{standing.tag}",
-        title=f"{label} has {standing.summary}" + ("; no release fixes it yet" if waiting else ""),
+        title=f"{label} has {standing.summary}" + (", and no release fixes it yet" if waiting else ""),
         value=str(known),
         magnitude=1,
         body=body,
-        action=_upgrade_action(plans[0], known) if plans else "Nothing to upgrade to until a release fixes it",
+        action=_upgrade_action(plans[0], known) if plans else "No fixed release to upgrade to yet",
         url=f"{watched.url}#upgrade" if watched else reverse("control_plane:containers"),
         actions=_limited(_upgrade_link(item) for item in running) if plans else (),
     )
@@ -115,15 +120,15 @@ def _advisory(label: str, standing: Standing, running: list[Container]) -> Insig
 
 def _upgrade_action(plan: Any, known: int) -> str:
     if plan.fixes:
-        return f"Upgrade to {plan.target_tag} (clears {len(plan.fixes)})"
-    return f"{plan.target_tag} is out, but is not known to clear {'it' if known == 1 else 'them'}"
+        return f"Upgrade to {plan.target_tag} (fixes {len(plan.fixes)})"
+    return f"{plan.target_tag} is available, but is not known to fix {'it' if known == 1 else 'them'}"
 
 
 def _upgrade_link(item: Container) -> ActionLink:
     if item.running.watcher:
         return ActionLink(
             "upgrade-plan", f"Upgrade plan for {item.running.name}", "read", f"{item.url}#upgrade",
-            reason="What upgrading it would take, and what stands in the way.",
+            reason="The steps to upgrade it, and what blocks them.",
         )
     return _adopt(item, f"Adopt {item.running.name} to plan its upgrade")
 
@@ -135,7 +140,7 @@ def _adopt(item: Container, label: str) -> ActionLink:
         "adopt", label, "remote_write",
         reverse("control_plane:adopt_record", kwargs={"kind": CONTAINER_KIND, "token": item.running.token}),
         method="POST",
-        reason="Nothing changes on the machine: HQ starts watching it.",
+        reason="Nothing changes on the machine. HQ starts tracking the container.",
     )
 
 
@@ -171,7 +176,7 @@ def _reach_attention() -> list[Insight]:
                     eyebrow="Containers",
                     family="Container hardening",
                     key=f"container-posture:{check.id}",
-                    title=f"{check.label}: not met by {counted(len(failing), 'container', 'containers')}",
+                    title=f"{check.label}: {counted(len(failing), 'container fails', 'containers fail')}",
                     value=str(len(failing)),
                     magnitude=len(failing),
                     body=f"{', '.join(f'{item.running.name} on {item.machine.name}' for item in failing)}. "
@@ -205,9 +210,9 @@ def _reach(running) -> tuple[str, str]:
 
 def _help(check_id: str) -> str:
     if check_id == "no-docker-socket":
-        return ("HQ cannot write the proxy: which Docker calls each makes is not in its inspect. "
-                "One whose job is Docker is marked as holding the socket instead.")
-    return "HQ wrote the compose change for each, on its page."
+        return ("HQ cannot tell which Docker calls each needs, so it cannot write a socket proxy for it. "
+                "For a container that is meant to control Docker, say so and HQ stops warning about it.")
+    return "The compose change for each is on its page."
 
 
 def _posture_link(check_id: str, item: Container) -> ActionLink:
@@ -229,15 +234,12 @@ def socket_holder_link(item: Container) -> ActionLink:
     key = item.running.watcher
     return ActionLink(
         "mark-socket-holder",
-        f"Mark {item.running.name} as holding the socket",
+        f"Mark {item.running.name} as meant to control Docker",
         "remote_write",
         command_url(UPDATE_CAPABILITY, key),
         capability=UPDATE_CAPABILITY,
         target=key,
-        reason=(
-            "For a socket proxy or a management agent, whose job is Docker: the "
-            "socket stays listed on its page, never an action item."
-        ),
+        reason="This container is meant to control Docker. Stop warning about it.",
     )
 
 

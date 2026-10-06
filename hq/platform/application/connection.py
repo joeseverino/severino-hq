@@ -72,9 +72,9 @@ class Peering:
 
 PEERING_UNKNOWN = Peering(
     "unknown",
-    "Not established",
-    "This device is on the tailnet, but no direct or relayed path is currently "
-    "negotiated, so HQ cannot say which network the session is riding over.",
+    "Not known yet",
+    "This device is on the tailnet, and it has no direct or relayed path to "
+    "HQ's machine right now.",
 )
 # Not the same statement. "No peering" is a fact about the device; this is a fact about
 # HQ's view of it. Behind a proxy it has not been told to trust, HQ judges the
@@ -82,11 +82,9 @@ PEERING_UNKNOWN = Peering(
 # nothing to read a peering from, which is not evidence that none exists.
 PEERING_UNATTRIBUTED = Peering(
     "unattributed",
-    "Not visible from here",
-    "The request reached HQ through a forwarding peer it has not been told to "
-    "trust, so HQ judges the proxy rather than the caller and attributes the "
-    "session to no device. The tailnet peering behind that proxy is real; this "
-    "deployment simply cannot see past it to report on it.",
+    "Hidden behind a proxy",
+    "This request came through a proxy HQ does not trust, so HQ cannot tell "
+    "which device sent it or how that device is connected.",
 )
 # The sweep is what fills the device inventory, and an instance that has never
 # run one (a fresh development database, a deployment whose Tailscale
@@ -94,10 +92,9 @@ PEERING_UNATTRIBUTED = Peering(
 # there would blame the network for an empty table.
 PEERING_UNOBSERVED = Peering(
     "unobserved",
-    "No tailnet observation",
-    "HQ holds no swept tailnet inventory, so it cannot match this address to a "
-    "device or report how the session is carried. Configure the Tailscale "
-    "connection, or wait for the next sweep.",
+    "Tailnet not read",
+    "HQ has no reading of the tailnet, so it cannot match this address to a "
+    "device. Set up the Tailscale connection, or wait for the next read.",
 )
 
 
@@ -110,10 +107,9 @@ def _peering(presence) -> Peering:
         return Peering(
             "relay",
             f"Relayed via {presence.relay}" if presence.relay else "Relayed",
-            "The two nodes could not open a direct path to each other, so "
-            "Tailscale is forwarding this session through one of its relays. "
-            "The relay carries ciphertext and holds no key to it, but the "
-            "traffic does cross a machine neither end owns.",
+            "The two machines could not connect directly, so Tailscale "
+            "passes the traffic through one of its relays. The relay cannot "
+            "read it.",
         )
     host, _ = split_host_port(presence.direct_endpoint)
     where = network_of(host)
@@ -124,30 +120,26 @@ def _peering(presence) -> Peering:
     if where in {"network", "loopback"}:
         return Peering(
             "local",
-            "Over your own network",
-            "The two nodes negotiated a direct path on the same private "
-            "network, so this session is not crossing the internet at all. "
-            "WireGuard still encrypts it end to end.",
+            "Direct, on your own network",
+            "The two machines connect directly on the same private network. "
+            "Nothing crosses the internet.",
             address=host,
         )
     if where == "public":
         return Peering(
             "internet",
-            "Over the public internet",
-            "The two nodes negotiated a direct path across the internet, so "
-            "this session is riding over it from the address below. WireGuard "
-            "encrypts every packet, and nothing between the two ends can read "
-            "it, but the path is a public one.",
+            "Direct, over the internet",
+            "The two machines connect directly across the internet, from the "
+            "address below. WireGuard encrypts every packet.",
             address=host,
         )
     # A tailnet-range endpoint means the peering is itself being carried by
     # another tailnet hop. Rare, and worth naming rather than guessing at.
     return Peering(
         "indirect",
-        "Over another tailnet hop",
-        "The negotiated endpoint is itself a tailnet address, so this session "
-        "is being carried by another node on the tailnet rather than by a "
-        "network HQ can name.",
+        "Through another tailnet device",
+        "The other end of this link is itself a tailnet address, so another "
+        "device on the tailnet is carrying it.",
         address=host,
     )
 
@@ -209,12 +201,12 @@ class Connection:
     @property
     def summary(self) -> str:
         if self.holds:
-            return f"{len(self.layers)} of {len(self.layers)} checks hold"
+            return f"All {len(self.layers)} checks passed"
         parts = []
         if self.failing:
             parts.append(f"{len(self.failing)} failed")
         if self.unverified:
-            parts.append(f"{len(self.unverified)} unverified")
+            parts.append(f"{len(self.unverified)} not confirmed")
         return " · ".join(parts)
 
     @property
@@ -223,7 +215,7 @@ class Connection:
 
         if self.channel.id == "tailnet":
             return "WireGuard + TLS" if self.secure_transport else "WireGuard only"
-        return "TLS" if self.secure_transport else "No verified encryption"
+        return "TLS" if self.secure_transport else "Encryption not confirmed"
 
     @property
     def transport_path(self) -> str:
@@ -231,7 +223,7 @@ class Connection:
 
         if self.forwarded and self.channel.id == "tailnet" and self.secure_transport:
             if self.local_forwarder:
-                return "WireGuard + TLS to HQ's host · loopback to the app"
+                return "WireGuard + TLS to HQ's machine"
             return f"TLS to {self.forwarder_name or 'proxy'} · WireGuard to HQ"
         if self.channel.id == "tailnet" and self.secure_transport:
             return "WireGuard + TLS end to end"
@@ -251,7 +243,7 @@ class Connection:
     @property
     def peer_label(self) -> str:
         peer = self.caller_device
-        return peer.label if peer else "Device not resolved"
+        return peer.label if peer else "Device not found"
 
     @property
     def peer_address(self) -> str:
@@ -274,13 +266,15 @@ class Connection:
         return {
             "direct": "Direct",
             "relayed": f"Relayed via {self.presence.relay}",
-            "idle": "Not negotiated",
+            "idle": "No path yet",
         }[self.path]
 
     @property
     def path_label(self) -> str:
+        if self.forwarded and self.local_forwarder:
+            return "Through the proxy on HQ's machine"
         if self.forwarded:
-            return f"Via {self.forwarder_name or 'forwarding peer'}"
+            return f"Through {self.forwarder_name or 'a proxy'}"
         return self.leg_label
 
     @property
@@ -297,10 +291,10 @@ class Connection:
     @property
     def measurement_label(self) -> str:
         if self.link_observed_by_hq:
-            return f"HQ · {self.observer.label}"
+            return f"HQ's own machine ({self.observer.label})"
         if self.observer:
-            return f"Tailnet observer · {self.observer.label}"
-        return "No tailnet observer"
+            return f"Another tailnet machine ({self.observer.label})"
+        return "Not measured"
 
     @property
     def handshake(self) -> str:
@@ -472,12 +466,12 @@ def _serving_device_resolution(
     for address in own_addresses(served):
         device = tailnet.device_at(address, known)
         if device is not None:
-            return ServingDeviceResolution(device, True, "matched to an address on this host")
+            return ServingDeviceResolution(device, True, "found by an address on this machine")
     index = index_of(declared=declared)
     for placed, basis in (
         (hq_machine(index, (), {}, served_at=served, devices=known.values()),
-         "matched through HQ's machine declaration"),
-        (machine, "matched through the machine HQ's names lead to"),
+         "found by the machine HQ is recorded on"),
+        (machine, "found by the machine HQ's names lead to"),
     ):
         device = _device_on(placed, index, known)
         if device is not None:
@@ -486,7 +480,7 @@ def _serving_device_resolution(
     return ServingDeviceResolution(
         observer,
         False,
-        "fallback to the sweep observer" if observer else "not resolved",
+        "assumed from the machine that read the tailnet" if observer else "not found",
     )
 
 

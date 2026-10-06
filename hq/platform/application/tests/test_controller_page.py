@@ -89,7 +89,7 @@ class ControllerPageTests(TestCase):
 
         page = controller_page()
 
-        self.assertEqual([(work.resource, work.state) for work in page.queue], [("example-dns", "Queued")])
+        self.assertEqual([(work.resource, work.state) for work in page.queue], [("example-dns", "Waiting")])
         self.assertEqual([read.subject for read in page.asked], ["adguard.rewrite"])
 
     def test_the_page_shows_a_controller_that_has_gone_quiet(self):
@@ -105,7 +105,8 @@ class ControllerPageTests(TestCase):
 
         self.assertContains(response, "Not heard from for")
         self.assertContains(response, "Nothing has been read or changed since.")
-        self.assertContains(response, "<code>adguard.rewrite</code>")
+        self.assertContains(response, 'title="adguard.rewrite">Internal DNS record')
+        self.assertNotContains(response, "<code>adguard.rewrite</code>")
         # A reading 26 hours old against a five-minute cadence is not "due": it is late, and says which.
         self.assertContains(response, "Overdue")
         self.assertContains(response, "Internal DNS record was last read")

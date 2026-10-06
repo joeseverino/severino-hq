@@ -282,5 +282,5 @@ def observed_addresses() -> dict[str, str]:
 
     for address in container_hosts().values():
         if address:
-            found.setdefault(address, "seen by the container sweep")
+            found.setdefault(address, "seen when containers were read")
     return found

@@ -26,6 +26,7 @@ from .cadence import forced_reads
 from .connection_contracts import ConnectionInstance
 from .connection_reach import ConnectionReach, connection_reach
 from .connection_security import (
+    ATTENTION_LIFECYCLES,
     REQUEST_CONTROLS,
     ConnectionSecurityPosture,
     connection_security_posture,
@@ -33,6 +34,7 @@ from .connection_security import (
 )
 from .connection_catalog import (
     CONTROLLER_CONNECTIONS,
+    LIFECYCLE_LABELS,
     ConnectionGroup,
     ConnectionView,
     connection_catalog,
@@ -48,6 +50,7 @@ from .path_model import ServicePath
 from .request_path import joined
 from .projection import projection_scope
 from .security import Principal
+from .ui import counted
 from .workflow_contracts import ActionLink
 
 
@@ -71,6 +74,43 @@ class ConnectionRow:
     @property
     def instance(self) -> ConnectionInstance:
         return self.connection.instance
+
+    @property
+    def lifecycle(self) -> str:
+        """The connection's lifecycle, with what its readings found folded in.
+
+        A credential the service refused outright is refused whatever the
+        probe said, so the state cannot disagree with the readings beside it.
+        """
+
+        if self.sight is not None and self.sight.credential_refusal:
+            return "revoked"
+        return self.connection.lifecycle
+
+    @property
+    def state_label(self) -> str:
+        return LIFECYCLE_LABELS[self.lifecycle]
+
+    @property
+    def _permissions_missing(self) -> int:
+        if self.sight is None or self.lifecycle not in ("ready", "reachable"):
+            return 0
+        return len(self.sight.missing)
+
+    @property
+    def state_line(self) -> str:
+        """The one line under the state word, or ""."""
+
+        if self.lifecycle != self.connection.lifecycle:
+            return ""
+        missing = self._permissions_missing
+        if missing:
+            return counted(missing, "permission missing", "permissions missing")
+        return self.connection.state_line
+
+    @property
+    def state_line_quiet(self) -> bool:
+        return not self._permissions_missing and self.connection.state_line_quiet
 
     def as_dict(self) -> dict[str, Any]:
         sight = self.sight
@@ -154,6 +194,17 @@ class ConnectionsContext:
     @property
     def attention_count(self) -> int:
         return self.estate_posture.attention_count
+
+    @property
+    def attention_states(self) -> tuple[tuple[int, str], ...]:
+        """(count, state) for each state that needs a person, in the rows' own words."""
+
+        counts: dict[str, int] = {}
+        for row in self.rows:
+            if row.lifecycle in ATTENTION_LIFECYCLES:
+                label = row.state_label.lower()
+                counts[label] = counts.get(label, 0) + 1
+        return tuple((count, label) for label, count in counts.items())
 
     @property
     def all_custodied(self) -> bool:
@@ -271,10 +322,11 @@ def _rows(
     )
     rows = []
     for group in groups:
+        found = []
         for connection in group.connections:
             ref = connection.instance.connection_ref
             fix = fixes.get(ref)
-            rows.append(
+            found.append(
                 ConnectionRow(
                     group=group,
                     connection=connection,
@@ -290,6 +342,10 @@ def _rows(
                     reach=reach.get(ref),
                 )
             )
+        # Within its group, a connection that needs a person comes first.
+        rows.extend(
+            sorted(found, key=lambda row: row.lifecycle not in ATTENTION_LIFECYCLES)
+        )
     return tuple(rows), unconnected
 
 

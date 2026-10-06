@@ -184,7 +184,7 @@ class CertificateFindingTests(TestCase):
 
         self.assertEqual(finding["severity"], "attention")
         self.assertIn("serves no name", finding["explanation"])
-        self.assertIn("rather than renew it", finding["explanation"])
+        self.assertIn("Delete it where it is held", finding["explanation"])
 
     def test_one_a_proxy_host_also_names_is_raised_once(self):
         expires = in_days(5)

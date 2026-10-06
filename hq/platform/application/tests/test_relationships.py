@@ -111,7 +111,7 @@ class OneEdgeBothEndsTests(TestCase):
         # Beside the hostname, with why on hover.
         self.assertContains(response, '<span class="pill" title="HQ&#x27;s own name: changed by deploying HQ">Read-only</span>')
         self.assertContains(response, '<span class="readout-label">Runs on</span>')
-        self.assertNotContains(response, "Nothing declared")
+        self.assertNotContains(response, "Nothing set up in HQ")
         self.assertNotContains(response, "Add container stack")
         self.assertNotContains(response, "Watch container")
         self.assertNotContains(response, "<h2>Resources</h2>")
@@ -466,7 +466,7 @@ class NoUnlinkedNamesTests(TestCase):
         domain = self.client.get(reverse("zones:detail", args=["example.com"]))
 
         # What reaches it is the band's to say; Relationships leaves it there.
-        self.assertContains(machine, "Reached through")
+        self.assertContains(machine, "Read through")
         self.assertNotContains(machine, "<dt>Reached through</dt>")
         self.assertContains(service, "<dt>Behind Access</dt>")
         self.assertContains(
@@ -628,7 +628,7 @@ class MachineServesAgreesTests(TestCase):
         body = response.content.decode()
         from ..ui import counted
 
-        header = body.split('<span class="band-label">Answers for</span>', 1)[1].split(
+        header = body.split('<span class="band-label">Serves</span>', 1)[1].split(
             "</div>", 1
         )[0]
         for name in panel.labels(RELATIONS["runs_on"].inverse):

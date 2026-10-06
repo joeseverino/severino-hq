@@ -299,7 +299,7 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
         "only_kinds": [],
     }
     if oldest is None:
-        return {**verdict, "due": True, "reason": "Nothing has been swept yet."}
+        return {**verdict, "due": True, "reason": "Nothing has been read yet."}
     age = timezone.now() - oldest
     due = age >= interval
     reason = (
@@ -471,7 +471,7 @@ def _read_subject(command: ControllerSweepCommand) -> tuple[str, str] | None:
             {"connection_ref": ValidationError("No such connection.", code="invalid_choice")}
         )
     if kind and kind not in OBSERVATIONS and kind not in PROVIDERS:
-        raise ValidationError({"kind": ValidationError("No such kind.", code="invalid_choice")})
+        raise ValidationError({"kind": ValidationError("No such type.", code="invalid_choice")})
     return (ref, kind) if named else None
 
 
@@ -549,7 +549,7 @@ def request_controller_sweep(
         )
     verdict = sweep_due()
     if not ring_doorbell():
-        raise ValueError("The controller doorbell could not be reached.")
+        raise ValueError("HQ could not reach the controller to start it.")
     return {
         "ok": True,
         "requested": True,
@@ -602,8 +602,8 @@ def _sweep_message(subject: tuple[str, str] | None, due: bool) -> str:
             "this page updates when it reports."
         )
     if due:
-        return "The controller was notified and will pull work now."
-    return "The controller was notified; the current observation is already fresh."
+        return "The controller was asked and will start now."
+    return "The controller was asked. What HQ shows is already up to date."
 
 
 def _touch(path: Path) -> None:

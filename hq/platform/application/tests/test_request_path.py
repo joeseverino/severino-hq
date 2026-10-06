@@ -146,7 +146,7 @@ class RequestPathTests(TestCase):
 
         ingress = next(hop for hop in found.hops if hop.step == "ingress")
         self.assertEqual(ingress.check.state, CONTRADICTED)
-        self.assertIn("without passing it", ingress.check.detail)
+        self.assertIn("reached HQ straight from", ingress.check.detail)
         self.assertTrue(ingress.check.step)
         self.assertIn(ingress, found.findings)
 
@@ -389,7 +389,7 @@ class ContainerHopTests(TestCase):
         _, check = self.check(here="ffffffffffff", listed="0123456789ab")
 
         self.assertEqual(check.state, UNPROVEN)
-        self.assertIn("next sweep", check.detail)
+        self.assertIn("until the next read", check.detail)
 
     def test_its_own_container_is_read_from_its_mounts_on_any_network(self):
         from .. import request_path as module
@@ -404,4 +404,4 @@ class ContainerHopTests(TestCase):
     def test_a_sweep_that_read_no_id_says_it_cannot_show(self):
         _, check = self.check(here="0123456789ab", listed="")
 
-        self.assertIn("cannot show", check.detail)
+        self.assertIn("no container ID", check.detail)

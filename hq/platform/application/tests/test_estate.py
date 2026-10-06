@@ -759,17 +759,20 @@ class ContainerVisibilityTests(TestCase):
     def page(self):
         return self.client.get(reverse("control_plane:machine", args=["example-host"]))
 
+    def listing(self):
+        return self.client.get(reverse("control_plane:machines"))
+
     def test_no_connection_reads_containers_so_none_are_not_visible(self):
-        self.assertContains(self.page(), "Not visible")
+        self.assertContains(self.listing(), "Not visible")
+        # The machine's own page draws no box for what it cannot see.
+        self.assertNotContains(self.page(), '<span class="band-label">Containers</span>')
 
     def test_a_connected_container_reader_makes_none_a_reading(self):
         from ..services import CONTAINER_KIND
 
         store(CONTAINER_KIND)
 
-        response = self.page()
-        self.assertNotContains(response, "Not visible")
-        self.assertContains(response, "None")
+        self.assertNotContains(self.listing(), "Not visible")
 
 
 class EstateQueryBudgetTests(TestCase):
@@ -833,7 +836,7 @@ class WatchedTests(TestCase):
             machine(("not answering", "unreachable")),
             machine(("offline", "unreachable")),
             machine(("away", "unprobed")),
-            machine(("no credential", "unprobed")),
+            machine(("not monitored", "unprobed")),
         ))
 
         self.assertEqual(len(estate.watched), 3)

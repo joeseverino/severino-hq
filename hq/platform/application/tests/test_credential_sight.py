@@ -433,7 +433,7 @@ class CredentialSightPageTests(TestCase):
         )
         self.assertNotIn("Add D1 Read (account)", body)
         self.assertContains(response, "Add users:read to see Tailnet user.")
-        self.assertContains(response, "2 readable")
+        self.assertContains(response, "Reads 2 things")
         # Not connected, once each, with what it would let HQ see.
         self.assertContains(response, "<strong>AdGuard Home</strong>", count=1)
         self.assertContains(
@@ -479,7 +479,7 @@ class CredentialSightPageTests(TestCase):
         )
 
         self.assertIn("Caddy route", own)
-        self.assertIn("3 records", own)
+        self.assertIn('<span class="muted">3</span>', own)
         self.assertNotIn("Caddy route", other)
         self.assertNotIn("Public perimeter", other)
 

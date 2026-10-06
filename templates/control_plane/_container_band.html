@@ -9,7 +9,7 @@ of its repository instead: the production deploy, and the repository's alerts.
     <span class="band-icon">{% include "partials/_icon.html" with name="activity" %}</span>
     <div>
       <span class="band-label">{{ running.state|capfirst|default:"Unknown" }}</span>
-      <strong>{{ running.uptime|default:running.status|default:"No status" }}</strong>
+      <strong>{{ container.item.uptime|default:running.uptime|default:running.status|default:"No status" }}</strong>
       <small>{% if running.check %}{{ running.check|capfirst }} · {% endif %}{% if machine %}on {% entity machine.link %}{% endif %}</small>
     </div>
   </div>
@@ -17,8 +17,9 @@ of its repository instead: the production deploy, and the repository's alerts.
     <span class="band-icon">{% include "partials/_icon.html" with name="layers" %}</span>
     <div>
       <span class="band-label">Version</span>
-      <strong><code>{% if standing.tag %}{{ standing.tag }}{% else %}{{ standing.image.digest|slice:":15" }}{% endif %}</code></strong>
+      <strong>{% if standing.tag %}<code>{{ standing.tag }}</code>{% else %}No version tag{% endif %}</strong>
       <small>{{ standing.image.short }}</small>
+      <small>{% if standing.pinned %}<span tabindex="0" data-tip="{{ standing.image.digest }}">Locked to an exact build</span>{% else %}Tag only{% endif %}</small>
       {% if standing.built %}<small>Built {{ standing.built|ago_short }}</small>{% endif %}
       {% if standing.moved_to %}<small class="github-gap">Its tag now names a newer build.</small>{% endif %}
     </div>
@@ -28,7 +29,7 @@ of its repository instead: the production deploy, and the repository's alerts.
       <span class="band-icon">{% include "partials/_icon.html" with name="deploy" %}</span>
       <div>
         <span class="band-label">Production deploy</span>
-        <strong>{% if standing.repository.production_verified %}Verified{% elif standing.repository.production_verified is False %}Failed verification{% elif deploy %}Deployed{% else %}No deploy read{% endif %}</strong>
+        <strong>{% if standing.repository.production_verified %}Verified{% elif standing.repository.production_verified is False %}Failed its checks{% elif deploy %}Deployed{% else %}No deploy found{% endif %}</strong>
         {% if deploy %}<small><a class="external-link" href="{{ standing.repository.url }}/commit/{{ deploy.sha }}" rel="noopener"><code>{{ deploy.sha|slice:":7" }}</code></a>{% if deploy.created_at %} · {{ deploy.created_at|ago_short }}{% endif %}</small>{% endif %}
         <small>{% if standing.repository.production_verified %}Passed its checks before deploying.{% else %}From {{ standing.repository.name }}.{% endif %}</small>
       </div>
@@ -42,21 +43,21 @@ of its repository instead: the production deploy, and the repository's alerts.
       </div>
     </div>
   {% endwith %}{% else %}
-    <div class="band-fact{% if standing.newer %} tone-attention{% elif standing.state == 'current' %} tone-good{% endif %}">
+    <div class="band-fact{% if standing.newer %} tone-attention{% elif standing.update_state == 'current' %} tone-good{% endif %}">
       <span class="band-icon">{% include "partials/_icon.html" with name="deploy" %}</span>
       <div>
         <span class="band-label">Update</span>
         {% if standing.newer %}
-          <strong>{% if standing.release %}<a class="external-link" href="{{ standing.release.url }}" rel="noopener"><code>{{ standing.latest }}</code> is out</a>{% else %}<code>{{ standing.latest }}</code> is out{% endif %}</strong>
+          <strong>{% if standing.release %}<a class="external-link" href="{{ standing.release.url }}" rel="noopener"><code>{{ standing.latest }}</code> available</a>{% else %}<code>{{ standing.latest }}</code> available{% endif %}</strong>
           <small>{{ standing.newer|length|counted:"newer release,newer releases" }}{% if standing.release.published %}, the newest {{ standing.release.published|ago_short }}{% endif %}</small>
-        {% elif standing.state == "current" or standing.newest %}
-          <strong>Newest release</strong>
-          <small>Nothing newer of this kind is published.</small>
+        {% elif standing.update_state == "current" %}
+          <strong>Up to date</strong>
+          <small>No newer version.</small>
         {% else %}
-          <strong>Not known</strong>
-          <small>{% if standing.unread %}{{ standing.unread }}{% elif not standing.tag %}No version to compare: the tag floats.{% else %}The registry has not been read yet.{% endif %}</small>
+          <strong>Unknown</strong>
+          <small>{{ standing.update_note }}</small>
         {% endif %}
-        {% if standing.read_at %}<small>Registry read {{ standing.read_at|ago_short }}</small>{% endif %}
+        {% if standing.read_at %}<small>Checked {{ standing.read_at|ago_short }}</small>{% endif %}
       </div>
     </div>
     <div class="band-fact{% if standing.serious %} tone-serious{% elif standing.state == 'vulnerable' %} tone-attention{% elif standing.source or standing.checked %} tone-good{% endif %}">
@@ -64,15 +65,15 @@ of its repository instead: the production deploy, and the repository's alerts.
       <div>
         <span class="band-label">Known vulnerabilities</span>
         {% if standing.state == 'vulnerable' %}
-          <strong>{{ standing.summary }}</strong>
+          <strong>{{ standing.vulnerabilities|capfirst }}</strong>
           {% for advisory in standing.advisories|slice:":2" %}<small><a class="external-link" href="{{ advisory.url }}" rel="noopener">{{ advisory.id }}</a> {{ advisory.severity }}</small>{% endfor %}
           {% if not standing.advisories %}{% for finding in standing.urgent|slice:":2" %}<small><a class="external-link" href="{{ finding.url }}" rel="noopener">{{ finding.id }}</a> {{ finding.package }}</small>{% endfor %}{% endif %}
         {% elif standing.checked or standing.source %}
           <strong>{% if standing.findings %}None serious{% else %}None known{% endif %}</strong>
           <small>{% if standing.findings %}{{ standing.findings|length }} lower, in {% endif %}{% if standing.checked %}{{ standing.checked.checked|counted:"package,packages" }}{% endif %}{% if standing.checked and standing.source %} and {% endif %}{% if standing.source %}<a class="external-link nowrap" href="{{ standing.source }}/security/advisories" rel="noopener">its repository</a>{% endif %}</small>
         {% else %}
-          <strong>No feed to check</strong>
-          <small>{% if edit_url %}<a href="{{ edit_url }}">Name its source</a>{% else %}Names no source repository{% endif %}</small>
+          <strong>Cannot check</strong>
+          <small>The image does not say where its source is.{% if edit_url %} <a href="{{ edit_url }}">Name its source repository</a>{% endif %}</small>
         {% endif %}
       </div>
     </div>

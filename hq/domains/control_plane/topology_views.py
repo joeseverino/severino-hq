@@ -27,6 +27,33 @@ from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import counted
 
 
+# What a lane of the map is called, and what one card in it is counted as. A
+# node kind with no entry here takes its noun from the node kind registry.
+_LANE_NOUNS: dict[str, tuple[str, str, str]] = {
+    "ability": ("What HQ can read", "thing HQ can read", "things HQ can read"),
+    "resource": ("Records", "record", "records"),
+    "registry": ("Lookups", "lookup", "lookups"),
+    "target": ("Accounts and items", "account or item", "accounts and items"),
+    "dependency": ("Not in HQ", "thing not in HQ", "things not in HQ"),
+}
+
+# The ways to follow links from one card, by the direction in the URL.
+_TRACE_DIRECTIONS = (
+    ("inbound", "What depends on this"),
+    ("outbound", "What this depends on"),
+    ("both", "Both"),
+)
+
+
+def _lane_nouns(kind: str) -> tuple[str, str, str]:
+    """A lane's heading, and the singular and plural its cards are counted in."""
+
+    if kind in _LANE_NOUNS:
+        return _LANE_NOUNS[kind]
+    known = NODE_KINDS[kind]
+    return known.plural.capitalize(), known.noun, known.plural
+
+
 class TopologyView(PageMixin, TemplateView):
     """The live, actionable graph derived by the application layer."""
 
@@ -35,8 +62,8 @@ class TopologyView(PageMixin, TemplateView):
 
     def get_page_actions(self):
         return (
-            PageAction("Add resource", reverse("control_plane:create"), primary=True),
-            PageAction("Resources", reverse("control_plane:list")),
+            PageAction("Add a record", reverse("control_plane:create"), primary=True),
+            PageAction("All records", reverse("control_plane:list")),
             PageAction("Connections", reverse("control_plane:connections")),
         )
 
@@ -63,22 +90,18 @@ class TopologyView(PageMixin, TemplateView):
             groups.setdefault(item["node"].kind, []).append(item)
             if trace and item["node"].id == trace.focus:
                 detail = item
-        # One noun and its plural per kind, from the node kind registry: the
-        # heading is the plural, and a count says one or the other.
-        nouns = {kind: (item.noun, item.plural) for kind, item in NODE_KINDS.items()}
-        trace_directions = (
-            ("inbound", "Incoming"),
-            ("outbound", "Outgoing"),
-            ("both", "Both directions"),
-        )
+        # One heading, noun and plural per lane: the heading names the lane,
+        # and a count says one or the other.
+        nouns = {kind: _lane_nouns(kind) for kind in groups}
+        trace_directions = _TRACE_DIRECTIONS
         context.update(
             {
                 "topology": topology,
                 "topology_groups": tuple(
                     {
                         "kind": kind,
-                        "label": nouns[kind][1].capitalize(),
-                        "count": counted(len(items), *nouns[kind]),
+                        "label": nouns[kind][0],
+                        "count": counted(len(items), *nouns[kind][1:]),
                         "items": items,
                     }
                     for kind, items in groups.items()
@@ -109,6 +132,9 @@ class TopologyView(PageMixin, TemplateView):
                 "active_lens": active_lens,
                 "topology_trace": trace,
                 "topology_trace_focus": by_id.get(trace.focus) if trace else None,
+                "topology_trace_label": (
+                    dict(_TRACE_DIRECTIONS).get(trace.direction, "") if trace else ""
+                ),
                 "trace_direction_links": tuple(
                     {
                         "name": name,

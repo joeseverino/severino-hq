@@ -9,7 +9,7 @@ waiting for the same controller.
 {% if removal_pending %}
   <div class="notice notice-attention">
     <strong>Removal in progress</strong>
-    <p>HQ drops this declaration once the provider confirms the deletion.</p>
+    <p>HQ forgets this record once it is confirmed gone.</p>
   </div>
 {% endif %}
 
@@ -36,42 +36,16 @@ declaration's machinery: the controller's actions are the buttons above, and
   {% include "control_plane/_container_band.html" with standing=container.standing running=container.running machine=container.machine edit_url=container.edit_url %}
   {% if container.item %}{% include "control_plane/_container_detail.html" with item=container.item plan=container.plan readiness=container.readiness edit_url=container.edit_url %}{% endif %}
 {% else %}
+{% comment %}
+One line: what state it is in, since when, and what happens next. A page
+never shows two statuses, so two can never disagree.
+{% endcomment %}
 <div class="control-summary">
-  <div class="control-metric">
-    <span class="control-label">Configuration</span>
-    {% if not capabilities.converges %}
-      <strong class="control-declared">Declared</strong>
-      <span>HQ keeps this as declared. The controller does not change it.</span>
-    {% elif sync_state == "in_sync" %}
-      <strong class="control-good">In sync</strong>
-      <span>Observed generation {{ resource.observed_generation }} matches desired generation {{ resource.generation }}.</span>
-    {% else %}
-      <strong class="control-warn">Pending</strong>
-      <span>Desired generation {{ resource.generation }} has not been observed.</span>
-    {% endif %}
+  <div class="control-metric" data-record-status="{{ status.state }}">
+    <span class="control-label">State</span>
+    <strong class="control-{{ status.tone }}">{{ status.label }}</strong>
+    <span>{% if status.since %}Since {{ status.since|when }}. {% endif %}{{ status.detail }}{% if status.read_at %} Last read {{ status.read_at|ago }}.{% endif %}{% for line in controller.lines %} {{ line }}{% endfor %}</span>
   </div>
-  <div class="control-metric">
-    <span class="control-label">Controller</span>
-    {% if controller %}
-      <strong class="control-{{ controller.tone }}">{{ controller.headline }}</strong>
-      {% for line in controller.lines %}<span>{{ line|capfirst }}</span>{% endfor %}
-    {% else %}
-      <strong class="control-declared">None</strong>
-      <span>The controller takes no action on this kind.</span>
-    {% endif %}
-  </div>
-  <div class="control-metric">
-    <span class="control-label">Runtime health</span>
-    <strong class="control-{{ control_health.state }}">{{ control_health.label }}</strong>
-    <span>{% if capabilities.observed_at %}Last observed {{ capabilities.observed_at|ago }}.{% elif capabilities.unobserved_reason %}{{ capabilities.unobserved_reason }}{% else %}{{ control_health.message }}{% endif %}</span>
-  </div>
-  {% if capabilities.actions.renew %}
-    <div class="control-metric">
-      <span class="control-label">Renewal policy</span>
-      <strong class="{% if capabilities.actions.renew.enabled %}control-warn{% else %}control-good{% endif %}">{% if capabilities.actions.renew.enabled %}Eligible now{% else %}Not due{% endif %}</strong>
-      <span>{% if capabilities.actions.renew.automatic %}Renewal begins {% if renewal_at %}{{ renewal_at|when:"day" }}{% else %}when policy allows{% endif %}. The controller resumes after restarts. {% endif %}{% if capabilities.actions.renew.reason not in controller.reasons %}{{ capabilities.actions.renew.reason }}{% endif %}</span>
-    </div>
-  {% endif %}
 </div>
 {% endif %}
 
@@ -81,28 +55,27 @@ declaration's machinery: the controller's actions are the buttons above, and
       <h2>Certificate</h2>
       <dl class="kv compact">
         <dt>Name</dt><dd>{{ resolved_spec.certificate_name }}</dd>
-        <dt>Issuer</dt><dd>{{ resource.status.issuer|default:"Not observed" }}</dd>
-        <dt>Expires</dt><dd>{% if resource.status.not_after %}{{ resource.status.not_after|expiry }}{% else %}Not observed{% endif %}</dd>
-        <dt>Renewal window</dt><dd>{{ resolved_spec.renewal_window_days|counted:"day" }}</dd>
+        <dt>Issuer</dt><dd>{{ resource.status.issuer|default:"Not read yet" }}</dd>
+        <dt>Expires</dt><dd>{% if resource.status.not_after %}{{ resource.status.not_after|expiry }}{% else %}Not read yet{% endif %}</dd>
+        <dt>Renews</dt><dd>{% if renewal_at %}From {{ renewal_at|when:"day" }}, {% endif %}{{ resolved_spec.renewal_window_days|counted:"day" }} before it expires</dd>
       </dl>
       <h3>Names</h3>
       <p>{% for domain in resolved_spec.domains %}<span class="tag">{{ domain }}</span>{% endfor %}</p>
     </section>
     <section class="control-card">
-      <h2>Consumers</h2>
+      <h2>Where it is installed</h2>
       {% if display_consumers %}
       <div class="table-scroll">
       <table class="data-table compact-table">
-        <thead><tr><th>Installed on</th><th>Verification names</th></tr></thead>
+        <thead><tr><th>Place</th><th>Names checked</th></tr></thead>
         <tbody>
           {% for consumer in display_consumers %}
             <tr>
               <td>
                 <strong>{% if consumer.url %}<a href="{{ consumer.url }}">{{ consumer.name }}</a>{% else %}{{ consumer.name }}{% endif %}</strong>
-                <br><code>{{ consumer.kind }}</code>
-                <span class="muted">via {{ consumer.connection_ref }}</span>
+                <br><span class="muted">through {% entity "connection"|entity_of:consumer.connection_ref %}</span>
               </td>
-              <td>{% for domain in consumer.display_domains %}<span class="tag">{{ domain }}</span>{% endfor %}</td>
+              <td>{% for domain in consumer.display_domains %}{% entity "service"|entity_of:domain %}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -120,7 +93,7 @@ declaration's machinery: the controller's actions are the buttons above, and
       {% endcomment %}
       {% if resource.status.unreachable_consumers %}
         <details class="operation-evidence" open>
-          <summary>{{ resource.status.unreachable_consumers|length }} not read</summary>
+          <summary>{{ resource.status.unreachable_consumers|length }} could not be checked</summary>
           <ul>
             {% for item in resource.status.unreachable_consumers %}
               <li><strong>{{ item.consumer }}</strong>{% if item.domain %} &middot; {{ item.domain }}{% endif %}: {{ item.reason }}</li>
@@ -137,25 +110,24 @@ declaration's machinery: the controller's actions are the buttons above, and
   {% endcomment %}
   {% if resource.status.published_facts %}
     <section class="control-card">
-      <h2>Recorded in</h2>
+      <h2>Saved to 1Password</h2>
       <table class="data-table compact-table">
-        <thead><tr><th>Target</th><th>Last reconcile</th></tr></thead>
+        <thead><tr><th>Item</th><th>Last saved</th></tr></thead>
         <tbody>
           {% for publication in resource.status.published_facts %}
             <tr>
               <td><strong>{{ publication.target }}</strong></td>
               <td>
                 {% if publication.detail %}
-                  <span class="pill pill-serious">Not recorded</span>
+                  <span class="pill pill-serious">Not saved</span>
                   <br><span class="muted">{{ publication.detail }}</span>
                 {% elif publication.written %}
-                  <span class="pill pill-good">Written</span>
-                  {% if publication.fields %}
-                    <br><span class="muted">{% for field in publication.fields %}{{ field }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+                  <span class="pill pill-good">Saved</span>
+                  {% if publication.fields or publication.material == "written" %}
+                    <br><span class="muted">{% if publication.material == "written" %}certificate, key{% if publication.fields %}, {% endif %}{% endif %}{% for field in publication.fields %}{{ field|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
                   {% endif %}
-                  {% if publication.material == "written" %}<br><span class="muted">certificate and key updated</span>{% endif %}
                 {% else %}
-                  <span class="pill pill-good">Already current</span>
+                  <span class="pill pill-good">Already up to date</span>
                 {% endif %}
               </td>
             </tr>
@@ -189,14 +161,14 @@ declaration's machinery: the controller's actions are the buttons above, and
     box over would carry the same two words for two different facts.
     {% endcomment %}
     {% if provider_machine %}
-      <p class="muted">Managed through {% entity provider_machine.link %}</p>
+      <p class="muted">Managed on {% entity provider_machine.link %}{% if managing_connections %} through {% for link in managing_connections %}{% entity link %}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</p>
     {% endif %}
     {% if origin_machine %}
-      <p class="muted">Forwards to {% entity origin_machine.link %}</p>
+      <p class="muted">{{ origin_phrase }} {% entity origin_machine.link %}</p>
     {% endif %}
     {% if service_links %}
       <p class="muted">
-        Serves
+        For
         {% for hostname, url in service_links %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}, {% endif %}{% endfor %}
       </p>
     {% endif %}
@@ -227,7 +199,7 @@ declaration's machinery: the controller's actions are the buttons above, and
           <dt>Seen</dt><dd>{{ container.running.observed_at|when:"ago" }}</dd>
         {% else %}
           <dt>State</dt>
-          <dd><span class="muted">Not seen by a sweep yet.</span></dd>
+          <dd><span class="muted">Not read yet.</span></dd>
         {% endif %}
         {% if container.serves %}
           <dt>Serves</dt>
@@ -242,7 +214,7 @@ declaration's machinery: the controller's actions are the buttons above, and
           <dd>
             {% if links %}{% for link in links %}{% entity link code=True %}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}{% with value=observed|default:desired %}{% if value is None or value == "" %}{% empty_value %}{% else %}{{ value|readout }}{% endif %}{% endwith %}{% endif %}
             {% if desired and observed and desired != observed %}
-              <span class="pill pill-serious">declared {{ desired }}</span>
+              <span class="pill pill-serious">HQ expects {{ desired }}</span>
             {% endif %}
           </dd>
         {% endfor %}
@@ -273,10 +245,10 @@ declaration's machinery: the controller's actions are the buttons above, and
 {% include "partials/_relationships.html" %}
 
 <details class="control-diagnostics">
-  <summary>Raw desired and observed JSON</summary>
+  <summary>Raw data</summary>
   <div class="two-col">
-    <section><h2>Desired specification</h2><pre>{{ resource.spec|pprint }}</pre></section>
-    <section><h2>Observed status</h2><pre>{{ diagnostic_status|pprint }}</pre></section>
+    <section><h2>HQ's settings</h2><pre>{{ spec_json }}</pre></section>
+    <section><h2>Last reading</h2><pre>{{ diagnostic_status }}</pre></section>
   </div>
 </details>
 
@@ -286,7 +258,7 @@ the same weight as Reconcile. Still offered while a removal is in flight: the
 one thing worth doing then is reading what it was.
 {% endcomment %}
 <p class="muted">
-  <a href="{% url 'control_plane:report_download' resource.key %}">Download report</a>
+  <a href="{% url 'control_plane:report_download' resource.key %}">Download this record (JSON)</a>
   {% comment %}
   Only when there is something to download. A link saying a thing cannot be
   done yet is a status report filed in the wrong place.
@@ -296,70 +268,44 @@ one thing worth doing then is reading what it was.
   {% endif %}
 </p>
 
-{% comment %}Only with something to show: an empty table is not a status.{% endcomment %}
-{% if resource.conditions %}
-<h2>Controller conditions</h2>
-{% if resource.conditions %}
-  <div class="table-scroll">
-    <table class="data-table">
-      <thead><tr><th>Type</th><th>Status</th><th>Reason</th><th>Message</th></tr></thead>
-      <tbody>
-        {% for condition in resource.conditions %}
-          <tr><td>{{ condition.type }}</td><td>{{ condition.status }}</td><td>{{ condition.reason }}</td><td>{{ condition.message }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-{% else %}
-  <p class="muted">No conditions.</p>
-{% endif %}
-
-{% endif %}
+{% comment %}
+Each operation that changed something: a check that ran and found what the row
+above it found is not a row.
+{% endcomment %}
 {% if operations %}
-<h2>Operations</h2>
+<h2>History</h2>
 <div class="table-scroll">
   <table class="data-table">
-    <thead><tr><th>Action</th><th>State</th><th>Requested</th><th>Completed</th><th>Result</th></tr></thead>
+    <thead><tr><th>What</th><th>Result</th><th>By</th><th>When</th></tr></thead>
     <tbody>
       {% for operation in operations %}
         <tr>
-          <td>{{ operation.action_label }}{% if operation.automatic %}<br><span class="tag">automatic</span>{% endif %}</td>
-          <td><span class="pill pill-{{ operation.state }}">{{ operation.state_label }}</span></td>
-          <td>{{ operation.created_at|when }}<br><span class="muted">{{ operation.requested_actor }} via {{ operation.requested_interface }}</span>{% if operation.attempt_count %}<br><span class="muted">Attempt {{ operation.attempt_count }}</span>{% endif %}</td>
-          <td>{{ operation.completed_at|when }}</td>
+          <td>{{ operation.action_label }}</td>
           <td class="operation-result">
+            <span class="pill pill-{{ operation.tone }}">{{ operation.state_label }}</span>
             <strong>{{ operation.headline }}</strong>
-            <p class="operation-guidance">{{ operation.guidance }}</p>
-            {% if operation.condition.reason %}<p class="muted">Provider reason: <code>{{ operation.condition.reason }}</code></p>{% endif %}
             {% if operation.affected %}
               <details class="operation-evidence" open>
-                <summary>{{ operation.affected|length|counted:"affected target,affected targets" }}</summary>
+                <summary>{{ operation.affected|length|counted:"name serves a different certificate,names serve a different certificate" }}</summary>
                 <ul>
                   {% for item in operation.affected %}
-                    <li><strong>{{ item.consumer }}</strong> · {{ item.domain }}<br><span class="muted">Expected <code title="{{ operation.expected_fingerprint_sha256 }}">{{ operation.expected_fingerprint_sha256|slice:":12" }}…</code>; observed <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12" }}…</code></span></li>
+                    <li><strong>{{ item.consumer }}</strong> · {{ item.domain }}<br><span class="muted">Expected <code title="{{ operation.expected_fingerprint_sha256 }}">{{ operation.expected_fingerprint_sha256|slice:":12" }}…</code>, found <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12" }}…</code></span></li>
                   {% endfor %}
                 </ul>
               </details>
-            {% elif operation.evidence %}
-              <details class="operation-evidence">
-                <summary>Verification evidence</summary>
-                <ul>
-                  {% for item in operation.evidence %}
-                    <li><strong>{{ item.consumer }}</strong> · {{ item.domain }} · <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12" }}…</code> · {% if item.matches_expected == True %}matched{% elif item.matches_expected == False %}did not match{% else %}observed (old result){% endif %}</li>
-                  {% endfor %}
-                </ul>
-              </details>
+            {% elif operation.matched %}
+              <p class="muted">{{ operation.matched|counted:"name serves,names serve" }} this certificate<span title="{{ operation.expected_fingerprint_sha256 }}"> ({{ operation.expected_fingerprint_sha256|slice:":8" }}…)</span>.</p>
             {% endif %}
             {% if operation.raw_result %}
               <details class="operation-evidence">
-                <summary>Raw controller result</summary>
-                <pre>{{ operation.raw_result|pprint }}</pre>
+                <summary>Raw result</summary>
+                <pre>{{ operation.raw_result }}</pre>
               </details>
             {% endif %}
           </td>
+          <td>{{ operation.by }}{% if operation.attempt_count > 1 %}<br><span class="muted">Attempt {{ operation.attempt_count }}</span>{% endif %}</td>
+          <td class="muted date-col">{{ operation.created_at|when }}</td>
         </tr>
-      {% empty %}
-        <tr><td colspan="5" class="muted">No operations yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>

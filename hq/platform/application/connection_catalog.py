@@ -13,6 +13,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 
 from .derivations import passed, present
+from .moments import ago
 from .contracts import SCOPE_NAME, endpoint_has_private_parts
 # Declared next to the domains that emit them, so a gateway can import the
 # record without importing this reader. Re-exported here as the one name
@@ -55,50 +56,58 @@ class ConnectionGroup:
 # and the page says which one it is making rather than folding them into one
 # "available".
 EVIDENCE_LABELS = {
-    "verified": "Scopes verified",
-    "coarse": "Whole-account credential",
-    "not_applicable": "Keyless",
-    "unverified": "Not verified",
-    "undeclared": "Proof undeclared",
-    "unknown": "Grants not reported",
-    "missing": "Scope missing",
-    "revoked": "Credential rejected",
+    "verified": "Permissions checked",
+    "coarse": "Full account access",
+    "not_applicable": "No key needed",
+    "unverified": "Permissions not checked",
+    "undeclared": "Permissions not checked",
+    "unknown": "Permissions not reported",
+    "missing": "Permission missing",
+    "revoked": "Credential refused",
 }
 # The sentence behind each label, for the place that has room for one.
 EVIDENCE_DETAILS = {
-    "verified": "The provider reported every grant this ability needs.",
-    "coarse": "Full-account credential. The provider offers no narrower scope.",
-    "not_applicable": "No credential involved.",
-    "unverified": "Scoped credential. The grants this ability needs are not declared.",
-    "undeclared": "Neither the ability nor the credential declares how access is proven.",
-    "unknown": "The provider has not reported which grants this credential holds.",
-    "missing": "A grant this ability needs is missing.",
-    "revoked": "The provider rejected this credential.",
+    "verified": "The service confirmed this credential has every permission this needs.",
+    "coarse": "This credential has full account access. The service offers nothing narrower.",
+    "not_applicable": "No key is needed for this.",
+    "unverified": "HQ has not checked this credential's permissions.",
+    "undeclared": "HQ has not checked this credential's permissions.",
+    "unknown": "The service has not said which permissions this credential has.",
+    "missing": "This credential lacks a permission this needs.",
+    "revoked": "The service refused this credential.",
 }
 # Evidence that settles the question: the ability may be performed and HQ can
 # say why. The rest either cannot be performed or has not been shown.
 PROVEN_EVIDENCE = frozenset({"verified", "coarse", "not_applicable"})
 
-# Where a connection is in its life, from the last observation of it.
+# Where a connection is in its life, from the last observation of it. The one
+# word the State column shows.
 LIFECYCLE_LABELS = {
-    "configured": "Configured",
-    "unreachable": "Unreachable",
-    "reachable": "Reachable",
-    "ready": "Ready",
-    "unauthorized": "Access missing",
-    "stale": "Stale",
-    "revoked": "Revoked",
+    "configured": "Set up",
+    "unreachable": "Not answering",
+    "reachable": "Working",
+    "ready": "Working",
+    "unauthorized": "Permission missing",
+    "stale": "Out of date",
+    "revoked": "Credential refused",
 }
-# The one-word answer to "may HQ do what this connection is held for".
+# What HQ can say about the credential's permissions, as the one line under
+# the state. Blank where the owner can do nothing about it: a connection type
+# that never says how its permissions are checked is HQ's gap, not a state of
+# the connection.
 AUTHORITY_LABELS = {
-    "proven": "Authority proven",
-    "whole_account": "Whole-account credential",
-    "undeclared": "Proof undeclared",
-    "unknown": "Grants unknown",
-    "missing": "Access missing",
-    "none": "No abilities",
+    "proven": "Permissions checked",
+    "whole_account": "Credential has full account access",
+    "undeclared": "",
+    "unknown": "Permissions not reported",
+    "missing": "Permission missing",
+    "none": "HQ reads nothing through it",
 }
-
+# The same line for a connection whose every ability needs no key.
+KEYLESS_LABEL = EVIDENCE_LABELS["not_applicable"]
+# Authority the row shows only when it is expanded: true of the connection,
+# and nothing to act on.
+QUIET_AUTHORITY = frozenset({"whole_account"})
 
 def grant_evidence(
     ability: ConnectionAbility, instance: ConnectionInstance
@@ -226,7 +235,69 @@ class ConnectionView:
 
     @property
     def authority_label(self) -> str:
+        if self.abilities and all(
+            state.evidence == "not_applicable" for state in self.abilities
+        ):
+            return KEYLESS_LABEL
         return AUTHORITY_LABELS[self.authority]
+
+    @property
+    def state_line(self) -> str:
+        """The one line under the state word, or "" when the word says it all.
+
+        Since when for a state that has an age, the missing permissions for a
+        credential that lacks them, and otherwise what HQ knows about the
+        credential's permissions.
+        """
+
+        observed = self.instance.observed_at
+        if self.lifecycle == "revoked":
+            return ""
+        if self.lifecycle == "stale":
+            return f"Last read {ago(observed)}"
+        if self.lifecycle == "unreachable":
+            return f"Last tried {ago(observed)}" if observed else ""
+        if self.lifecycle == "unauthorized":
+            missing = tuple(
+                dict.fromkeys(
+                    scope for state in self.abilities for scope in state.missing_scopes
+                )
+            )
+            return f"Needs {', '.join(missing)}" if missing else ""
+        label = self.authority_label
+        if self.lifecycle == "configured" and (
+            label != KEYLESS_LABEL and self.authority != "none"
+        ):
+            return "Not tested"
+        return label
+
+    @property
+    def state_line_quiet(self) -> bool:
+        """Whether ``state_line`` is shown only in the expanded row."""
+
+        return (
+            self.lifecycle in ("ready", "reachable")
+            and self.authority in QUIET_AUTHORITY
+        )
+
+    @property
+    def name_link(self):
+        """The connection's name, linked to what it reaches and what uses it.
+
+        The link builder's own mention of the connection, pointed at its
+        relationships when it has them: on the connections page its own row
+        is where the reader already is.
+        """
+
+        from dataclasses import replace
+
+        from .entity_links import entity_link
+
+        link = entity_link("connection", self.instance.label)
+        relationships = next(
+            (action for action in self.actions if action.name == "relationships"), None
+        )
+        return replace(link, url=relationships.url) if relationships else link
 
     @property
     def mixed_evidence(self) -> bool:
@@ -261,7 +332,9 @@ class ConnectionView:
         """
 
         return tuple(
-            action for action in self.other_actions if action.name not in FAMILY_ACTIONS
+            action
+            for action in self.other_actions
+            if action.name not in FAMILY_ACTIONS and action.name != "relationships"
         )
 
 

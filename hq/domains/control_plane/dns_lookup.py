@@ -50,7 +50,7 @@ def connection_specs():
             kind=kind,
             status="good",
             status_label="configured",
-            detail="Keyless public API; reachability is checked only when a lookup runs.",
+            detail="Needs no key. Checked only when a lookup runs.",
             endpoint=f"https://{parsed.netloc}",
             credential_model="none",
             ability_names=abilities,
@@ -79,14 +79,14 @@ def connection_specs():
         ConnectionSpec(
             name="hq.public_registries",
             label="Public lookup registries",
-            summary="Keyless DNS and address registries used for external truth.",
+            summary="Public DNS and address lookups that need no key.",
             required_capability=Capability.LOOK_UP_PUBLIC_RECORDS,
             instance_provider=instances,
             abilities=(
                 ConnectionAbility(
                     "lookup.public_dns",
                     "Public DNS lookup",
-                    "Resolve a hostname from outside HQ's internal DNS rewrites.",
+                    "Look a name up on the public internet.",
                     grant="none",
                     capability="lookup.name",
                 ),
@@ -100,7 +100,7 @@ def connection_specs():
                 ConnectionAbility(
                     "lookup.address_registry",
                     "Address ownership lookup",
-                    "Read the public allocation and registrant for an address.",
+                    "Read who owns an address.",
                     grant="none",
                     capability="lookup.address",
                 ),
@@ -155,7 +155,7 @@ def _base(name: str) -> str:
     configured = str(getattr(settings, name, "") or "").strip()
     parsed = urlsplit(configured)
     if parsed.scheme != "https" or not parsed.hostname:
-        raise LookupUnavailable("That lookup provider is not configured.")
+        raise LookupUnavailable("That lookup service is not set up.")
     return f"https://{parsed.netloc}"
 
 

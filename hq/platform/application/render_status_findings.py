@@ -24,12 +24,20 @@ from hq.domains.control_plane.observations.host import (
 )
 
 from .derivations import passed
-from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, fact_values
-from .moments import duration
+from .finding_model import (
+    Finding,
+    FindingEstate,
+    FindingRule,
+    OperatorStep,
+    cannot_run_commands,
+    fact_values,
+    journal_step,
+    machine_step,
+)
+from .moments import duration, when
 from .reading_facts import FactRow, ago as _when, rows_of, state_on_controller, stated
 from .timestamps import moment
 from .topology_model import TopologyNode
-from .ui import counted
 
 # The fact a node carries per renderer its controller reported. Neither it nor
 # a rule's name or title says "secret": the findings and the topology are held
@@ -62,28 +70,31 @@ RENDERED_WITHIN = FULL_READ_EVERY + CONFIRMED_WITHIN
 # here gets its rule's steps in words.
 RENDERER_UNITS = {"hq": "severino-hq-secrets.service"}
 
+# A failure filed under a word the table below does not hold, or under none.
+UNKNOWN_FAILURE = "an error HQ does not recognise"
+
 # What each word a failed run is filed under means (``Class`` in
 # controller/secrets/render.go, and the table in docs/SECRETS.md).
 FAILURE_CLASSES = {
-    "config": "the unit's configuration or the connection registry was refused",
-    "host": "a directory, mount, lock file or destination was not as required",
-    "busy": "another render held the lock",
-    "connect_unavailable": "Connect gave no answer within the deadline, or the vault kept changing",
-    "connect_denied": "Connect refused the reader token",
-    "connect_response": "Connect's answer was malformed, oversized, redirected or for another vault",
-    "content": "what the vault holds was refused",
-    "web_unhealthy": "the web container did not come back after its environment changed",
-    "internal": "the renderer failed in a way it has no word for",
+    "config": "the job's configuration was refused",
+    "host": "a folder, mount, lock file or destination on the machine is not as it should be",
+    "busy": "another refresh was already running",
+    "connect_unavailable": "1Password Connect did not answer in time, or the vault kept changing",
+    "connect_denied": "1Password Connect refused the token",
+    "connect_response": "1Password Connect gave an answer HQ could not use",
+    "content": "something in the vault was refused",
+    "web_unhealthy": "the web container did not come back after its settings changed",
+    "internal": UNKNOWN_FAILURE,
 }
 
 # Why the reading holds no document for a renderer, as evidence says it.
 UNREAD_REASONS = {
-    "missing": "no status document",
-    "unreadable": "the status document could not be opened",
-    "oversized": "the status document is larger than one can be",
-    "invalid": "the status document is not the shape this release reads",
-    "unread": "the controller could not take the reading",
-    "refused": "the record did not match the reading's schema",
+    "missing": "No report found",
+    "unreadable": "Report could not be opened",
+    "oversized": "Report is too large",
+    "invalid": "Report is from a different version",
+    "unread": "The controller could not read it",
+    "refused": "Report could not be understood",
 }
 
 SYNC_SERVICE = "sync"
@@ -112,7 +123,7 @@ class Rendering(FactRow):
 
     @property
     def name(self) -> str:
-        return self.renderer or "a renderer"
+        return self.renderer or "unnamed"
 
     @property
     def failed(self) -> bool:
@@ -203,33 +214,55 @@ def stated_on(node: TopologyNode) -> tuple[Rendering, ...]:
     return tuple(Rendering.of(value) for value in fact_values(node, RENDER_STATUS))
 
 
-def _names(renderings: tuple[Rendering, ...]) -> str:
-    return ", ".join(rendering.name for rendering in renderings)
+def _job(rendering: Rendering, among: tuple[Rendering, ...]) -> str:
+    """The words that tell one refresh job from another, when there are several."""
+
+    return f" ({rendering.name})" if len(among) > 1 else ""
 
 
-def _run_again(renderings: tuple[Rendering, ...], label: str) -> tuple[OperatorStep, ...]:
-    """Start each renderer whose unit HQ knows, on the machine."""
+def _run_again(
+    node: TopologyNode,
+    renderings: tuple[Rendering, ...],
+    label: str,
+    notes: tuple[str, ...] = (),
+) -> tuple[OperatorStep, ...]:
+    """Start each refresh job whose unit HQ knows, on the machine."""
 
     return tuple(
-        OperatorStep(label=label.format(name=rendering.name), command=f"sudo systemctl start {unit}")
+        step
         for rendering in renderings
         if (unit := RENDERER_UNITS.get(rendering.renderer))
+        for step in machine_step(
+            label + _job(rendering, renderings), node.label, f"systemctl start {unit}", notes
+        )
     )
 
 
-def _journal(renderings: tuple[Rendering, ...]) -> tuple[OperatorStep, ...]:
+def _journal(node: TopologyNode, renderings: tuple[Rendering, ...]) -> tuple[OperatorStep, ...]:
     return tuple(
-        OperatorStep(
-            label=f"Read why the {rendering.name} renderer's last run ended, on the machine",
-            command=f"sudo journalctl -u {unit} -n 50 --no-pager",
-            notes=(
-                "The line with event=secrets.render.failed names the class; "
-                "the lines above it say what was refused.",
+        step
+        for rendering in renderings
+        if (unit := RENDERER_UNITS.get(rendering.renderer))
+        for step in journal_step(
+            "See why" + _job(rendering, renderings),
+            node.label,
+            unit,
+            (
+                "Look for the line with event=secrets.render.failed. "
+                "The lines above it say what was refused.",
             ),
         )
-        for rendering in renderings
-        if (unit := RENDERER_UNITS.get(rendering.renderer))
     )
+
+
+def _why(rendering: Rendering) -> str:
+    """Why a run failed, in words. A word the table does not hold is said
+    beside them, so a failure nothing explains is still named."""
+
+    known = FAILURE_CLASSES.get(rendering.failure)
+    if known or not rendering.failure:
+        return known or UNKNOWN_FAILURE
+    return f"{UNKNOWN_FAILURE} ({rendering.failure})"
 
 
 def _failing(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -246,35 +279,35 @@ def _failing(estate: FindingEstate) -> tuple[Finding, ...]:
         if not failed:
             continue
         stale = any(rendering.unconfirmed(estate.now) for rendering in failed)
-        classes = ", ".join(dict.fromkeys(rendering.failure or "unknown" for rendering in failed))
+        reasons = ", ".join(dict.fromkeys(_why(rendering) for rendering in failed))
+        last_good = moment(failed[0].confirmed_at) if len(failed) == 1 else None
         found.append(
             Finding(
                 rule="render-failing",
                 subject=node.id,
                 scope=RENDER_STATUS_KIND,
-                title=f"Credentials on {node.label} failed to render ({classes})",
+                title=f"{node.label} could not refresh its credentials from 1Password: {reasons}",
                 severity="serious" if stale else "attention",
                 explanation=(
-                    "The last run of the credential renderer failed, so the machine is "
-                    "running on the files an earlier run installed. A credential "
-                    "rotated or revoked in the vault since then has not reached it. "
-                    "Fix what the failure names and run the renderer again."
+                    (
+                        f"It is still using the ones it got {_when(failed[0].confirmed_at, estate.now)}."
+                        if last_good is not None
+                        else "It is still using the ones from its last good refresh."
+                    )
+                    + " Anything changed in 1Password since then has not reached it."
                 ),
                 evidence=tuple(
                     item
                     for rendering in failed
                     for item in (
-                        ("Renderer", rendering.name),
-                        (
-                            "Failure",
-                            f"{rendering.failure or 'unknown'}: "
-                            + FAILURE_CLASSES.get(rendering.failure, "a class this release does not know"),
-                        ),
-                        ("Last attempt", _when(rendering.attempted_at, estate.now)),
-                        ("Last success", _when(rendering.confirmed_at, estate.now)),
+                        ("Job", rendering.name),
+                        ("Reason", _why(rendering)),
+                        ("Last tried", _when(rendering.attempted_at, estate.now)),
+                        ("Last refreshed", _when(rendering.confirmed_at, estate.now)),
                     )
                 ),
-                steps=_journal(failed) + _run_again(failed, "Run the {name} renderer again once that is fixed"),
+                steps=_journal(node, failed) + _run_again(node, failed, "Run it again"),
+                no_help_reason=cannot_run_commands(node.label),
             )
         )
     return tuple(found)
@@ -282,11 +315,26 @@ def _failing(estate: FindingEstate) -> tuple[Finding, ...]:
 
 def _stale_evidence(rendering: Rendering, now: datetime) -> tuple[tuple[str, str], ...]:
     return (
-        ("Renderer", rendering.name),
-        ("Last confirmed current", _when(rendering.confirmed_at, now)),
+        ("Job", rendering.name),
+        ("Last refreshed", _when(rendering.confirmed_at, now)),
         ("Last read in full", _when(rendering.rendered_at, now)),
-        ("Last attempt", _when(rendering.attempted_at, now)),
+        ("Last tried", _when(rendering.attempted_at, now)),
     )
+
+
+def _stale_title(machine: str, stale: tuple[Rendering, ...], now: datetime) -> str:
+    """What has not happened, and since when: the refresh, or only the full read."""
+
+    first = stale[0]
+    stamp, did = (
+        (first.confirmed_at, "refreshed its credentials")
+        if first.unconfirmed(now)
+        else (first.rendered_at, "read its credentials in full")
+    )
+    since = moment(stamp)
+    if since is None:
+        return f"{machine} has never {did}"
+    return f"{machine} has not {did} since {when(since)}"
 
 
 def _stale(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -316,30 +364,29 @@ def _stale(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="render-stale",
                 subject=node.id,
                 scope=RENDER_STATUS_KIND,
-                title=f"Credentials on {node.label} have not been refreshed ({_names(stale)})",
+                title=_stale_title(node.label, stale, estate.now),
                 severity="serious",
                 explanation=(
-                    f"The renderer runs every {duration(RENDER_EVERY)} and reads the vault "
-                    f"in full every {duration(FULL_READ_EVERY)}. Nothing has confirmed the "
-                    f"installed files within {duration(CONFIRMED_WITHIN)}, or read them in "
-                    f"full within {duration(RENDERED_WITHIN)}. Either the renderer is not "
-                    "running, or it fails before it can record a run: a refused "
-                    "configuration, a failed host check and a held lock write no status. "
-                    "Check its timer and its journal, then start it."
+                    f"It should refresh them every {duration(RENDER_EVERY)} and read "
+                    f"1Password in full every {duration(FULL_READ_EVERY)}. The job is "
+                    "either not running or failing before it starts."
                 ),
                 evidence=tuple(
                     item for rendering in stale for item in _stale_evidence(rendering, estate.now)
                 ),
                 steps=tuple(
-                    OperatorStep(
-                        label=f"See when the {rendering.name} renderer's timer last fired and is next due, on the machine",
-                        command=f"systemctl list-timers {unit.removesuffix('.service')}.timer",
-                    )
+                    step
                     for rendering in stale
                     if (unit := RENDERER_UNITS.get(rendering.renderer))
+                    for step in machine_step(
+                        "See when it last ran and is next due" + _job(rendering, stale),
+                        node.label,
+                        f"systemctl list-timers {unit.removesuffix('.service')}.timer",
+                    )
                 )
-                + _journal(stale)
-                + _run_again(stale, "Run the {name} renderer now"),
+                + _journal(node, stale)
+                + _run_again(node, stale, "Run it now"),
+                no_help_reason=cannot_run_commands(node.label),
             )
         )
     return tuple(found)
@@ -361,38 +408,35 @@ def _sync_stalled(estate: FindingEstate) -> tuple[Finding, ...]:
         )
         if not stalled:
             continue
-        states = ", ".join(dict.fromkeys(rendering.sync for rendering in stalled))
         found.append(
             Finding(
                 rule="connect-sync-stalled",
                 subject=node.id,
                 scope=RENDER_STATUS_KIND,
-                title=f"1Password Connect on {node.label} is not syncing ({states})",
+                title=f"1Password Connect on {node.label} has stopped syncing",
                 severity="attention",
                 explanation=(
-                    "Connect reports its synchronization with 1Password as not active. "
-                    "It keeps answering from its cache, so renders succeed on a vault "
-                    "that has stopped changing: a rotation does not arrive and a "
-                    "revocation does not take effect. Restore Connect's sync, then "
-                    "run the renderer."
+                    "It is serving an old copy of the vault, so changes made in "
+                    f"1Password are not reaching {node.label}."
                 ),
                 evidence=tuple(
                     item
                     for rendering in stalled
                     for item in (
-                        ("Renderer", rendering.name),
+                        ("Job", rendering.name),
                         ("Sync", rendering.sync),
-                        ("Connect read", _when(rendering.sync_read_at, estate.now)),
+                        ("Connect last read", _when(rendering.sync_read_at, estate.now)),
                     )
                 ),
                 steps=(
                     OperatorStep(
-                        label="Restart the Connect server on the machine and read its sync "
-                        "container's log; TOKEN_NEEDED means it has not been given its "
-                        "credentials file."
+                        label=f"Restart 1Password Connect on {node.label} and read its "
+                        "sync container's log",
+                        notes=("TOKEN_NEEDED means it has not been given its credentials file.",),
                     ),
-                    *_run_again(stalled, "Run the {name} renderer so its status is read again"),
+                    *_run_again(node, stalled, "Then run the refresh again"),
                 ),
+                no_help_reason=cannot_run_commands(node.label),
             )
         )
     return tuple(found)
@@ -415,87 +459,74 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="render-status-unread",
                 subject=node.id,
                 scope=RENDER_STATUS_KIND,
-                title=(
-                    f"{node.label} has no readable render status "
-                    f"({counted(len(unread), 'renderer')})"
-                ),
+                title=f"HQ cannot tell whether {node.label}'s credentials are fresh",
                 severity="attention",
                 explanation=(
-                    "The renderer writes a status document after every run, and the "
-                    "controller on the machine could not read one. Either the renderer "
-                    "has not run since the machine started, or the document is not the "
-                    "one this release reads. Run the renderer, and deploy if the "
-                    "document is still refused."
+                    "The job that refreshes them has not reported. It may not have "
+                    f"run since {node.label} started, or HQ and the job are "
+                    "different versions."
                 ),
                 evidence=tuple(
                     item
                     for rendering in unread
                     for item in (
-                        ("Renderer", rendering.name),
+                        ("Job", rendering.name),
                         (
-                            "Status document",
-                            UNREAD_REASONS.get(rendering.reason, "could not be read"),
+                            "Report",
+                            UNREAD_REASONS.get(rendering.reason, "Could not be read"),
                         ),
                     )
                 ),
-                steps=_run_again(unread, "Run the {name} renderer, which writes its status"),
+                steps=_run_again(
+                    node, unread, "Run it once", ("If this stays, deploy HQ.",)
+                ),
+                no_help_reason=cannot_run_commands(node.label),
             )
         )
     return tuple(found)
 
 
-_NO_SHELL = (
-    "The renderer runs as root on the machine, outside any container, and HQ holds "
-    "no shell there and no credential that can start a unit."
-)
-
 # The rules this module raises, beside the detectors that decide them.
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "render-failing",
-        "Credential render failing",
+        "Credentials could not be refreshed",
         "serious",
         _failing,
         operator_action=(
-            "Read the renderer unit's journal on the machine for the "
-            "event=secrets.render.failed line, fix what its class names, then start the unit."
+            "On the machine, read the refresh job's log for why it failed, "
+            "fix that, then start the job again."
         ),
-        no_help_reason=_NO_SHELL,
+        no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
         "render-stale",
-        "Credentials not refreshed",
+        "Credentials not refreshed lately",
         "serious",
         _stale,
         operator_action=(
-            "Check that the renderer's timer is enabled and firing on the machine, "
-            "then start the renderer's unit."
+            "On the machine, check that the refresh job's timer is on, then start the job."
         ),
-        no_help_reason=_NO_SHELL,
+        no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
         "connect-sync-stalled",
-        "Connect not syncing",
+        "1Password Connect has stopped syncing",
         "attention",
         _sync_stalled,
         operator_action=(
-            "Restore the Connect server's synchronization on the machine "
-            "(its sync container and credentials file), then start the renderer's unit."
+            "Restart 1Password Connect on the machine, then start the refresh job."
         ),
-        no_help_reason=(
-            "Connect is a server on the machine that only root's renderer may reach, "
-            "and HQ holds no credential for it."
-        ),
+        no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
         "render-status-unread",
-        "Render status not read",
+        "Cannot tell whether credentials are fresh",
         "attention",
         _unread,
         operator_action=(
-            "Start the renderer's unit on the machine so it writes its status document, "
-            "and deploy if the controller still refuses the document."
+            "Start the refresh job on the machine. If this stays, deploy HQ."
         ),
-        no_help_reason=_NO_SHELL,
+        no_help_reason=cannot_run_commands(),
     ),
 )

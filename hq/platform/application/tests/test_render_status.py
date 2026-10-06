@@ -262,16 +262,16 @@ class FailingTests(TestCase):
 
         (finding,) = raised("render-failing")
 
-        self.assertEqual(finding["title"], "Credentials on example-controller failed to render (connect_denied)")
+        self.assertEqual(finding["title"], "example-controller could not refresh its credentials from 1Password: 1Password Connect refused the token")
         # One failed run on files still inside the allowance.
         self.assertEqual(finding["severity"], "attention")
-        self.assertIn({"label": "Failure", "value": "connect_denied: Connect refused the reader token"}, finding["evidence"])
-        self.assertIn({"label": "Renderer", "value": "hq"}, finding["evidence"])
+        self.assertIn({"label": "Reason", "value": "1Password Connect refused the token"}, finding["evidence"])
+        self.assertIn({"label": "Job", "value": "hq"}, finding["evidence"])
         self.assertEqual(
             [step["command"] for step in finding["operator_steps"]],
             [
-                "sudo journalctl -u severino-hq-secrets.service -n 50 --no-pager",
-                "sudo systemctl start severino-hq-secrets.service",
+                'ssh example-controller "sudo journalctl -u severino-hq-secrets.service -n 50 --no-pager"',
+                'ssh example-controller "sudo systemctl start severino-hq-secrets.service"',
             ],
         )
         self.assertIsNone(finding["no_help_reason"])
@@ -284,7 +284,7 @@ class FailingTests(TestCase):
         (finding,) = raised("render-failing")
 
         self.assertEqual(finding["severity"], "serious")
-        self.assertIn({"label": "Last success", "value": "1\xa0week, 1\xa0day ago"}, finding["evidence"])
+        self.assertIn({"label": "Last refreshed", "value": "1\xa0week, 1\xa0day ago"}, finding["evidence"])
         self.assertEqual(raised("render-stale"), [])
 
     def test_a_renderer_that_never_succeeded_is_serious(self):
@@ -293,7 +293,7 @@ class FailingTests(TestCase):
         (finding,) = raised("render-failing")
 
         self.assertEqual(finding["severity"], "serious")
-        self.assertIn({"label": "Last success", "value": "never"}, finding["evidence"])
+        self.assertIn({"label": "Last refreshed", "value": "never"}, finding["evidence"])
         self.assertEqual(raised("connect-sync-stalled"), [])
 
     def test_a_class_this_release_does_not_know_is_still_named(self):
@@ -303,7 +303,7 @@ class FailingTests(TestCase):
 
         self.assertIn("(example_class)", finding["title"])
         self.assertIn(
-            {"label": "Failure", "value": "example_class: a class this release does not know"}, finding["evidence"]
+            {"label": "Reason", "value": "an error HQ does not recognise (example_class)"}, finding["evidence"]
         )
 
     def test_a_renderer_with_no_known_unit_gets_the_steps_in_words(self):
@@ -313,16 +313,16 @@ class FailingTests(TestCase):
 
         (step,) = finding["operator_steps"]
         self.assertEqual(step["command"], "")
-        self.assertIn("journal", step["label"])
-        self.assertIn("no shell", finding["no_help_reason"])
+        self.assertIn("job's log", step["label"])
+        self.assertEqual(finding["no_help_reason"], "HQ cannot run commands on example-controller.")
 
     def test_two_renderers_on_one_machine_are_one_finding_naming_both(self):
         sweep(read(outcome="failed", failure="content"), read("other-apps", outcome="failed", failure="busy"))
 
         (finding,) = raised("render-failing")
 
-        self.assertIn("(content, busy)", finding["title"])
-        renderers = [item["value"] for item in finding["evidence"] if item["label"] == "Renderer"]
+        self.assertIn("something in the vault was refused, another refresh was already running", finding["title"])
+        renderers = [item["value"] for item in finding["evidence"] if item["label"] == "Job"]
         self.assertEqual(renderers, ["hq", "other-apps"])
 
 
@@ -337,14 +337,14 @@ class StaleTests(TestCase):
         (finding,) = raised("render-stale")
 
         self.assertEqual(finding["severity"], "serious")
-        self.assertEqual(finding["title"], "Credentials on example-controller have not been refreshed (hq)")
-        self.assertIn({"label": "Last confirmed current", "value": "3\xa0hours, 16\xa0minutes ago"}, finding["evidence"])
+        self.assertIn("example-controller has not refreshed its credentials since ", finding["title"])
+        self.assertIn({"label": "Last refreshed", "value": "3\xa0hours, 16\xa0minutes ago"}, finding["evidence"])
         self.assertEqual(
             [step["command"] for step in finding["operator_steps"]],
             [
-                "systemctl list-timers severino-hq-secrets.timer",
-                "sudo journalctl -u severino-hq-secrets.service -n 50 --no-pager",
-                "sudo systemctl start severino-hq-secrets.service",
+                'ssh example-controller "sudo systemctl list-timers severino-hq-secrets.timer"',
+                'ssh example-controller "sudo journalctl -u severino-hq-secrets.service -n 50 --no-pager"',
+                'ssh example-controller "sudo systemctl start severino-hq-secrets.service"',
             ],
         )
         self.assertEqual(raised("render-failing"), [])
@@ -375,9 +375,9 @@ class SyncTests(TestCase):
         (finding,) = raised("connect-sync-stalled")
 
         self.assertEqual(finding["severity"], "attention")
-        self.assertEqual(finding["title"], "1Password Connect on example-controller is not syncing (TOKEN_NEEDED)")
+        self.assertEqual(finding["title"], "1Password Connect on example-controller has stopped syncing")
         self.assertIn({"label": "Sync", "value": "TOKEN_NEEDED"}, finding["evidence"])
-        self.assertEqual(finding["operator_steps"][-1]["command"], "sudo systemctl start severino-hq-secrets.service")
+        self.assertEqual(finding["operator_steps"][-1]["command"], 'ssh example-controller "sudo systemctl start severino-hq-secrets.service"')
         # The render itself succeeded, from Connect's cache.
         self.assertEqual(raised("render-failing"), [])
         self.assertEqual(raised("render-stale"), [])
@@ -407,13 +407,13 @@ class UnreadTests(TestCase):
         (finding,) = raised("render-status-unread")
 
         self.assertEqual(finding["severity"], "attention")
-        self.assertEqual(finding["title"], "example-controller has no readable render status (1 renderer)")
+        self.assertEqual(finding["title"], "HQ cannot tell whether example-controller's credentials are fresh")
         self.assertEqual(
             finding["evidence"],
-            [{"label": "Renderer", "value": "hq"}, {"label": "Status document", "value": "no status document"}],
+            [{"label": "Job", "value": "hq"}, {"label": "Report", "value": "No report found"}],
         )
         self.assertEqual(
-            [step["command"] for step in finding["operator_steps"]], ["sudo systemctl start severino-hq-secrets.service"]
+            [step["command"] for step in finding["operator_steps"]], ['ssh example-controller "sudo systemctl start severino-hq-secrets.service"']
         )
         for name in RULES:
             if name != "render-status-unread":
@@ -433,7 +433,7 @@ class UnreadTests(TestCase):
 
         (finding,) = raised("render-status-unread")
 
-        self.assertEqual([item["value"] for item in finding["evidence"] if item["label"] == "Renderer"], ["other-apps"])
+        self.assertEqual([item["value"] for item in finding["evidence"] if item["label"] == "Job"], ["other-apps"])
 
     def test_a_record_the_schema_refused_is_a_finding_not_a_silence(self):
         record_inventory(
@@ -445,7 +445,7 @@ class UnreadTests(TestCase):
         (finding,) = raised("render-status-unread")
 
         self.assertIn(
-            {"label": "Status document", "value": "the record did not match the reading's schema"}, finding["evidence"]
+            {"label": "Report", "value": "Report could not be understood"}, finding["evidence"]
         )
 
     def test_a_reading_the_controller_could_not_take_is_a_finding(self):
@@ -454,7 +454,7 @@ class UnreadTests(TestCase):
         (finding,) = raised("render-status-unread")
 
         self.assertIn(
-            {"label": "Status document", "value": "the controller could not take the reading"}, finding["evidence"]
+            {"label": "Report", "value": "The controller could not read it"}, finding["evidence"]
         )
 
 
@@ -526,7 +526,7 @@ class PageTests(TestCase):
             response = self.client.get(page)
             self.assertEqual(response.status_code, 200)
             body = response.content.decode()
-            self.assertIn("failed to render (host)", body)
+            self.assertIn("could not refresh its credentials from 1Password", body)
             self.assertIn("sudo systemctl start severino-hq-secrets.service", body)
             emitted += [
                 (unescape(match.group(1)), "GET")

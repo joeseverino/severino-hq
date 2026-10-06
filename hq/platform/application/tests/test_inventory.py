@@ -176,7 +176,7 @@ class ReadingStandingTests(TestCase):
             self.states(),
             {
                 "adguard.rewrite": "Readable",
-                "npm.proxy_host": "Unreadable",
+                "npm.proxy_host": "Could not be read",
                 "cloudflare.access_app": "Refused",
                 "caddy.route": "Out of date",
             },
@@ -191,7 +191,7 @@ class ReadingStandingTests(TestCase):
 
         self.assertContains(
             response,
-            '<span class="sweep-age" title="The address answered with a web page.">Unreadable</span>',
+            '<span class="sweep-age" title="The address answered with a web page.">Could not be read</span>',
             html=False,
         )
         self.assertNotContains(response, ">unreachable<")
@@ -844,7 +844,7 @@ class DriftIsSaidOutLoudTests(TestCase):
                 "type": "Ready",
                 "status": True,
                 "reason": "Observed",
-                "message": "The last sweep found this exactly as declared.",
+                "message": "Matches HQ's settings.",
             }
         ]
         self.resource.save(update_fields=["conditions"])
@@ -876,7 +876,7 @@ class DriftIsSaidOutLoudTests(TestCase):
         self._sweep(True)
 
         self.assertIn(
-            "key_expiry_disabled is True, where this asks for False",
+            "Disable key expiry is now True. HQ set it to False.",
             self.resource.conditions[0]["message"],
         )
 
@@ -1378,7 +1378,7 @@ class DriftPhraseTests(TestCase):
 
         self.assertEqual(
             _difference_phrase("answer", "192.0.2.1", "192.0.2.2"),
-            "answer is 192.0.2.2, where this asks for 192.0.2.1",
+            "answer is now 192.0.2.2. HQ set it to 192.0.2.1.",
         )
 
     def test_two_documents_are_compared_by_what_they_say(self):
@@ -1392,7 +1392,7 @@ class DriftPhraseTests(TestCase):
 
         phrase = _difference_phrase("document", json.dumps(declared), json.dumps(live))
 
-        self.assertEqual(phrase, "document differs from what this asks for: + autoApprovers, - groups, grants changed")
+        self.assertEqual(phrase, "document differs from HQ's copy: + autoApprovers, - groups, grants changed.")
 
     def test_a_long_value_that_is_not_a_document_is_sized_not_pasted(self):
         from ..inventory import _difference_phrase

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import uuid
 from functools import cached_property
 from typing import Any
@@ -13,39 +14,46 @@ from django.views import View
 from django.views.generic import DetailView, ListView
 
 from hq.platform.application.action_links import command_url
+from hq.platform.application.inventory import service_hostnames
 from hq.platform.application.infrastructure import (
     PolicyError,
     declared_machines,
     delivery_targets,
     is_drifted,
-    resource_health,
     serialize_resource,
     serialize_public_status,
 )
 
 from hq.platform.application.resource_operations import (
+    ACTION_LABELS,
+    HISTORY_WINDOW,
     OperationCommand,
+    changes,
     operation_summary,
+    requested_by,
+    resource_history,
     request_certificate_renewal,
     request_lifecycle,
     request_reconcile,
     request_removal,
 )
-from hq.platform.application.entity_links import kind_label
+from hq.platform.application.entity_links import kind_label, record_name, web_url
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_context import (
     controller_summary,
+    newest_reading,
     origin_machine,
     readout_rows,
+    record_status,
     resource_context,
 )
 from hq.platform.application.timestamps import moment
+from hq.platform.application.topology_model import RELATIONS
 from hq.platform.application.whereabouts import whereabouts
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.resource_capabilities import (
     VERB_LABELS,
-    kind_converges,
     resource_capabilities,
 )
 from hq.platform.application.ui import counted
@@ -84,6 +92,12 @@ def _web_operation(request, resource, action):
     )
 
 
+def _json(value: Any) -> str:
+    """A stored document as JSON a person can read and paste, or "" for none."""
+
+    return json.dumps(value, indent=2, sort_keys=True, default=str) if value else ""
+
+
 def _spec_value(value: Any) -> str:
     """One spec field as a person reads it: a list as its items, not its repr."""
 
@@ -94,7 +108,7 @@ def _spec_value(value: Any) -> str:
     return str(value)
 
 
-def _spec_rows(resource) -> dict[str, tuple[tuple[str, str], ...]]:
+def _spec_rows(resource, *, beside_readout: bool = False) -> dict[str, tuple[tuple[str, str], ...]]:
     """A spec as an operator reads it, split the way the form splits it.
 
     Shown before a destructive action, so:
@@ -103,6 +117,9 @@ def _spec_rows(resource) -> dict[str, tuple[tuple[str, str], ...]]:
     - An unset optional is left out rather than shown as "None".
     - Fields the provider declares routine fold away, the same split the form
       makes.
+
+    ``beside_readout`` is the record's own page, where the readout and the
+    page's name stand above this: a value they already show is not repeated.
     """
 
     provider = PROVIDERS[resource.kind]
@@ -110,11 +127,19 @@ def _spec_rows(resource) -> dict[str, tuple[tuple[str, str], ...]]:
     # What the readout above already printed. On anything with a handful of
     # fields the readout *is* the spec, and the disclosure would repeat it
     # whole.
-    shown = {str(label).strip().casefold() for label, _, _ in readout_rows(resource)}
+    rows = readout_rows(resource)
+    shown = {str(label).strip().casefold() for label, _, _ in rows}
+    # A value the readout or the page's own name already shows is not said
+    # again under a second label.
+    said: set[str] = set()
+    if beside_readout:
+        said = {str(value) for _, desired, observed in rows for value in (desired, observed) if value}
+        said.update(service_hostnames(resource.kind, resource.spec))
     primary: list[tuple[str, str]] = []
     advanced: list[tuple[str, str]] = []
     for name, value in resource.spec.items():
-        if value is None:
+        # A reported field's setting is the fixed goal its readout already states.
+        if value is None or name in provider.reported_fields:
             continue
         label = (
             fields[name].title or name.replace("_", " ").capitalize()
@@ -131,7 +156,7 @@ def _spec_rows(resource) -> dict[str, tuple[tuple[str, str], ...]]:
         # Only when they are the same string: a declaration whose name differs
         # from its filing is telling you something, and that is the case worth
         # showing.
-        if rendered == resource.key:
+        if rendered == resource.key or (rendered in said and not isinstance(value, bool)):
             continue
         row = (label, rendered)
         (advanced if name in provider.advanced_fields else primary).append(row)
@@ -218,11 +243,11 @@ class ResourceRemoveView(View):
                 "holds_records": bool(PROVIDERS[resource.kind].contains),
                 "confirm": {
                     "url": reverse("control_plane:remove", args=[resource.key]),
-                    "label": "Stop managing" if forget else "Remove",
+                    "label": "Stop tracking in HQ" if forget else "Remove",
                     "cancel_url": resource.get_absolute_url(),
                 },
                 **page_context(
-                    f"Remove {resource.key}?",
+                    f"Remove {record_name(resource.kind, resource.spec, resource.key)}?",
                     kind_label(resource.kind),
                 ),
             },
@@ -249,20 +274,16 @@ class ResourceRemoveView(View):
             released = len(result["released"])
             messages.success(
                 request,
-                f"Stopped managing “{result['forgotten']}”"
-                + (
-                    f" and {counted(released, 'record declaration', 'record declarations')} in it"
-                    if released
-                    else ""
-                )
-                + ". Nothing changed at the provider.",
+                f"Stopped tracking “{result['forgotten']}”"
+                + (f" and {counted(released, 'record')} in it" if released else "")
+                + ". Nothing live was changed.",
             )
             return redirect("control_plane:list")
         verb = "Queued" if result["queued"] else "Already queued"
         messages.success(
             request,
-            f"{verb} removal of “{resource.key}”. HQ drops it once the "
-            "provider is clear.",
+            f"{verb} removal of “{resource.key}”. HQ forgets it once it is "
+            "confirmed gone.",
         )
         return redirect("control_plane:detail", key=key)
 
@@ -275,9 +296,9 @@ class InfrastructureListView(PageMixin, ListView):
 
     def get_page_actions(self):
         return (
-            PageAction("Add", reverse("control_plane:create"), primary=True),
+            PageAction("Add a record", reverse("control_plane:create"), primary=True),
             PageAction("Services", reverse("control_plane:services")),
-            PageAction("Provider schemas", reverse("control_plane:providers")),
+            PageAction("Setting reference", reverse("control_plane:providers")),
         )
 
     def get_context_data(self, **kwargs):
@@ -288,16 +309,33 @@ class InfrastructureListView(PageMixin, ListView):
         machines = declared_machines()
         targets = delivery_targets()
         at = whereabouts(machines)
+        newest: dict[str, Any] = {}
         for resource in context["resources"]:
-            resource.control_health = resource_health(resource)
+            read_at = resource.last_observed_at
+            if read_at and (resource.kind not in newest or read_at > newest[resource.kind]):
+                newest[resource.kind] = read_at
+        for resource in context["resources"]:
+            resource.record_status = record_status(resource, newest=newest.get(resource.kind))
             # Where it sends traffic, named rather than addressed, matching
             # what the resource's own page has always said.
             resource.origin_machine = origin_machine(resource, machines, at, targets)
             # What it is, in the provider's own words.
             rows = readout_rows(resource)
             resource.summary = rows[0][1] or rows[0][2] if rows else ""
-            resource.converges = kind_converges(resource.kind)
-        context["operations"] = OperationRequest.objects.select_related("resource")[:12]
+            # The name the row's link shows, so the line under it never repeats it.
+            resource.shown_name = record_name(resource.kind, resource.spec, resource.key)
+        context["changes"] = [
+            {
+                "resource": operation.resource.key,
+                "action": ACTION_LABELS.get(operation.action, operation.get_action_display()),
+                "summary": operation_summary(operation),
+                "by": requested_by(operation),
+                "at": operation.created_at,
+            }
+            for operation in changes(
+                OperationRequest.objects.select_related("resource")[:HISTORY_WINDOW], 12
+            )
+        ]
         context["provider_catalog"] = describe_providers()
         return context
 
@@ -339,10 +377,12 @@ class InfrastructureDetailView(PageMixin, DetailView):
         # A container by its own name: its machine is the trail above it.
         if self.object.kind == CONTAINER_KIND and self.object.spec.get("name"):
             return self.object.spec["name"]
-        return self.object.key
+        return record_name(self.object.kind, self.object.spec, self.object.key)
 
     def get_page_lede(self):
-        return kind_label(self.object.kind)
+        # A record whose name is its type says what it does instead.
+        label = kind_label(self.object.kind)
+        return PROVIDERS[self.object.kind].summary if label == self.get_page_title() else label
 
     @cached_property
     def all_relationships(self):
@@ -389,11 +429,16 @@ class InfrastructureDetailView(PageMixin, DetailView):
         key = self.object.key
         capabilities = self.capabilities
         drifted = is_drifted(self.object)
+        provider = PROVIDERS[self.object.kind]
+        # Applying a record that only reports on itself reads it again.
+        labels = {
+            **VERB_LABELS,
+            **({"reconcile": "Read now"} if provider.reported_fields else {}),
+            **({"reconcile": "Restore HQ's version"} if drifted else {}),
+        }
         actions = [
             PageAction(
-                "Restore HQ's version"
-                if drifted and verb == "reconcile"
-                else VERB_LABELS[verb],
+                labels[verb],
                 reverse(f"control_plane:{verb}", args=[key]),
                 method="post",
                 primary=verb == "renew",
@@ -416,9 +461,16 @@ class InfrastructureDetailView(PageMixin, DetailView):
                     primary=True,
                 ),
             )
+        console = (
+            web_url(provider.console({**self.object.spec, **(self.object.status or {})}))
+            if provider.console and provider.console_label
+            else ""
+        )
+        if console:
+            actions.insert(0, PageAction(provider.console_label, console, primary=not drifted))
         actions.append(
             PageAction(
-                "Edit",
+                "Change what HQ expects",
                 returning_to(
                     reverse("control_plane:edit", args=[key]),
                     self.request.get_full_path(),
@@ -438,7 +490,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
         if capabilities.removal != "unavailable":
             actions.append(
                 PageAction(
-                    "Stop managing" if capabilities.removal == "forget" else "Remove",
+                    "Stop tracking in HQ" if capabilities.removal == "forget" else "Remove",
                     reverse("control_plane:remove", args=[key]),
                     danger=True,
                 )
@@ -453,15 +505,31 @@ class InfrastructureDetailView(PageMixin, DetailView):
             capabilities.actions, lambda verb: VERB_LABELS.get(verb, verb.replace("-", " ").capitalize())
         )
         derived = self.derived
-        context["control_health"] = derived.health
-        context["sync_state"] = "in_sync" if derived.in_sync else "pending"
+        context["status"] = record_status(
+            self.object, health=derived.health, newest=newest_reading(self.object.kind)
+        )
         # What this resource does, said by its own provider.
         context["label"] = kind_label(self.object.kind)
-        context["service_links"] = derived.service_links
+        # Relationships names the service it is for; the head says it only when
+        # that section does not.
+        relations = {group.phrase for group in self.relationships.groups}
+        context["service_links"] = (
+            () if RELATIONS["declared_by"].inverse in relations else derived.service_links
+        )
         # Where this resource sends traffic, when it sends it anywhere, and the
         # machine running the provider that manages it.
         context["origin_machine"] = derived.origin_machine
+        # A DNS record answers with an address; a proxy sends requests on.
+        context["origin_phrase"] = (
+            "Points to" if PROVIDERS[self.object.kind].answers else "Forwards to"
+        )
         context["provider_machine"] = derived.provider_machine
+        context["managing_connections"] = tuple(
+            item.entity
+            for group in self.relationships.groups
+            for item in group.items
+            if item.entity.kind == "connection"
+        )
         if self.container is not None:
             context["container"] = self.container
         context["removal_pending"] = capabilities.removal_pending
@@ -476,26 +544,25 @@ class InfrastructureDetailView(PageMixin, DetailView):
             else _linked_readout(self.object, self.relationships)
         )
         context["relationships"] = self.relationships
-        context["spec_rows"] = _spec_rows(self.object)
+        context["spec_rows"] = _spec_rows(self.object, beside_readout=True)
         context["renewal_at"] = derived.expiry.renewal_at if derived.expiry else None
-        context["operations"] = [
-            operation_summary(operation)
-            for operation in self.object.operations.all()[:20]
-        ]
+        context["operations"] = resource_history(self.object)
         for operation in context["operations"]:
             operation["created_at"] = moment(operation["created_at"], naive="keep")
             operation["completed_at"] = moment(operation["completed_at"], naive="keep")
+            operation["raw_result"] = _json(operation["raw_result"])
         context["resolved_spec"] = derived.resolved_spec
         context["resolution_error"] = derived.resolution_error
         context["display_consumers"] = derived.display_consumers
-        context["diagnostic_status"] = serialize_public_status(self.object.status)
+        context["spec_json"] = _json(self.object.spec)
+        context["diagnostic_status"] = _json(serialize_public_status(self.object.status))
         return context
 
 
 # What each controller verb is called in a sentence. One entry per verb, so a
 # new verb needs no new view class.
 OPERATION_PHRASE = {
-    OperationRequest.Action.RECONCILE: "reconciliation",
+    OperationRequest.Action.RECONCILE: "applying HQ's settings",
     OperationRequest.Action.RENEW: "certificate renewal",
     OperationRequest.Action.DELETE: "removal",
     OperationRequest.Action.RESTART: "a restart",

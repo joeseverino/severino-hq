@@ -160,9 +160,9 @@ def origin_is_authoritative(provider: "ProviderSpec") -> bool:
 # has to run before ingress can reach it, and ingress before a certificate
 # secures it.
 SERVICE_FACETS: tuple[tuple[str, str], ...] = (
-    ("runtime", "Runtime"),
+    ("runtime", "Container"),
     ("dns", "DNS"),
-    ("proxy", "Ingress"),
+    ("proxy", "Proxy"),
     ("certificate", "Certificate"),
 )
 SERVICE_FACET_IDS = frozenset(facet for facet, _ in SERVICE_FACETS)
@@ -229,6 +229,8 @@ class ProviderSpec:
     # existing entries pass resolved_type and resolver positionally, so a new
     # field inserted above them silently rebinds both.
     label: str = ""
+    # Many of them, where adding a letter to ``label`` does not say it.
+    label_plural: str = ""
 
     # ----- Service participation ---------------------------------------------
     #
@@ -292,6 +294,11 @@ class ProviderSpec:
     # comparison it means "the live record says empty". An NPM proxy host is
     # the case: NPM holds a numeric certificate id, not an HQ resource key.
     unobservable_fields: tuple[str, ...] = ()
+    # Fields whose live value is the thing's own account of how far it is from
+    # what the setting asks: a sentence it wrote, not a setting someone
+    # changed. A difference in one is a problem said in those words. It is
+    # never "changed outside HQ", so nothing offers to keep or restore a side.
+    reported_fields: tuple[str, ...] = ()
     # Why nothing sweeps this kind, or "" when something does.
     #
     # The collector registry is a dict in the controller and this is the list
@@ -320,6 +327,8 @@ class ProviderSpec:
     # The provider console page for a swept record, built only from ids the
     # record stores. Blank when the record lacks them.
     console: Callable[[dict[str, Any]], str] | None = None
+    # What a record's own page calls that link, as a button. Blank: no button.
+    console_label: str = ""
     # Whether a record puts its provider in front of the names it carries: a
     # proxied Cloudflare record. A reading whose ``fronted_by`` names this kind
     # applies to a name only where this says so.
@@ -398,6 +407,11 @@ class ProviderSpec:
     # so they would report as having no identity and be permanently invisible to
     # the one screen built to find unmanaged things.
     identity: Callable[[dict[str, Any]], tuple[str, ...]] | None = None
+    # What a record of this kind is called on a page, from its settings: the
+    # name it stands for, where its key is only HQ's filing of it. Left unset,
+    # a record is named by its first hostname and where that leads, then by
+    # its own ``name`` (``application.entity_links.record_name``).
+    name: Callable[[dict[str, Any]], str] | None = None
     # A readable key to suggest when adopting. Defaults to the hostname and the
     # facet, which is meaningless for a record that has no hostname: every TXT
     # record in a zone would be offered the same empty name.

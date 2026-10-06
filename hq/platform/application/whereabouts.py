@@ -333,6 +333,16 @@ def _listening(host: str, port: str, at: "Whereabouts | None" = None) -> list[st
     return found.get((host, int(port)), [])
 
 
+def reads_containers_on(host: str) -> bool:
+    """Whether the last container reading lists ``host``: only then is a port
+    no container publishes there something HQ can say."""
+
+    reads, _declared = _container_reads()
+    return bool(host) and any(
+        record.get("host") == host for snapshot in reads for record in snapshot.records or ()
+    )
+
+
 def _hosting(container: str, at: "Whereabouts | None" = None) -> list[str]:
     """Machines running a container of this name, seen or declared."""
 

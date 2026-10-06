@@ -6,6 +6,8 @@ vocabulary without importing the pipeline that collects it."""
 
 from __future__ import annotations
 
+import re
+import shlex
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable
@@ -128,7 +130,7 @@ def open_the_path(node: TopologyNode) -> tuple[Remedy, ...]:
         Remedy(
             capability="tailnet.reach.allow",
             target=node.label,
-            label="Allow the path",
+            label="Allow it in the tailnet policy",
             effect="infrastructure_change",
         ),
         *reconcile_remedy(node),
@@ -146,7 +148,7 @@ def reconcile_remedy(node: TopologyNode) -> tuple[Remedy, ...]:
         Remedy(
             capability="infrastructure.reconcile",
             target=node.label,
-            label="Reconcile",
+            label="Apply again",
             effect="",
         ),
     )
@@ -192,6 +194,51 @@ class OperatorStep:
     label: str
     command: str = ""
     notes: tuple[str, ...] = ()
+
+
+# What a step says last when a fresh read is what confirms the fix. A problem
+# card carries Check again; a connection's own page carries Read now.
+THEN_CHECK_AGAIN = "Then press Check again."
+THEN_READ_NOW = "Then press Read now."
+
+# A machine name a shell takes as one word.
+_MACHINE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def on_machine(machine: str, command: str) -> str:
+    """``command`` as it is pasted on the owner's own machine: over ssh, as
+    root on ``machine``. "" when the name is not one a shell takes as one word,
+    so a step never carries a command built on a guess."""
+
+    if not _MACHINE_NAME.match(machine or "") or not command.strip():
+        return ""
+    escaped = re.sub(r'(["\\$`])', r"\\\1", command.strip())
+    return f'ssh {machine} "sudo {escaped}"'
+
+
+def machine_step(
+    label: str, machine: str, command: str, notes: tuple[str, ...] = ()
+) -> tuple[OperatorStep, ...]:
+    """One step that is a command on ``machine``, or none when the command
+    cannot be written for it: a step with no command says nothing to run."""
+
+    pasted = on_machine(machine, command)
+    return (OperatorStep(label=label, command=pasted, notes=notes),) if pasted else ()
+
+
+def journal_step(label: str, machine: str, unit: str, notes: tuple[str, ...] = ()) -> tuple[OperatorStep, ...]:
+    """The step that reads a background job's log on its machine."""
+
+    return machine_step(label, machine, f"journalctl -u {shlex.quote(unit)} -n 50 --no-pager", notes)
+
+
+def cannot_run_commands(machine: str = "") -> str:
+    """Why a fix that is a command on a machine is the owner's to run."""
+
+    return f"HQ cannot run commands on {machine or 'the machine'}."
+
+
+CANNOT_EDIT_COMPOSE = "HQ cannot edit compose files."
 
 
 def parse_stamp(value: str) -> datetime | None:

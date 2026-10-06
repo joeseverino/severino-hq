@@ -36,6 +36,7 @@ from hq.domains.control_plane.observations.public_registry import (
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .github_public import github_repository
+from .container_words import UP_TO_DATE, UPDATE_AVAILABLE, StandingWords
 from .images import ImageRef, affected, compare, newer, version
 from .projection import projection_scope, read_once
 from .timestamps import moment
@@ -55,7 +56,7 @@ DECLARED = "declared"
 LABEL = "label"
 PROVENANCE = "provenance"
 REGISTRY = "registry"
-_KNOWN_BY = {DECLARED: "as declared", LABEL: "by its label", PROVENANCE: "by its provenance", REGISTRY: "by its registry"}
+_KNOWN_BY = {DECLARED: "as set in HQ", LABEL: "by its label", PROVENANCE: "by its provenance", REGISTRY: "by its registry"}
 
 
 # Docker's status ends with its health check's verdict: "Up 11 hours (healthy)".
@@ -259,7 +260,7 @@ def container_watchers() -> dict[tuple[str, str], tuple[str, bool]]:
 
 
 @dataclass(frozen=True)
-class Standing:
+class Standing(StandingWords):
     """What is known about one image at one version, wherever it runs."""
 
     image: ImageRef
@@ -405,16 +406,16 @@ class Standing:
 
         state = self.state
         if state == VULNERABLE and self.advisories:
-            return counted(len(self.advisories), "known advisory", "known advisories")
+            return counted(len(self.advisories), "known vulnerability", "known vulnerabilities")
         if state == VULNERABLE:
-            return f"{len(self.urgent)} serious, fixable"
+            return counted(len(self.urgent), "serious vulnerability", "serious vulnerabilities")
         if state == BEHIND:
-            return f"{self.latest} is out"
+            return f"{self.latest} available"
         if state == CURRENT and self.repository is not None:
             return "Verified before deploying" if self.repository.production_verified else "Deployed"
         if state == CURRENT:
-            return "Newest release"
-        return "Not known"
+            return "Up to date"
+        return "Update status unknown"
 
 
 @dataclass(frozen=True)
@@ -425,6 +426,19 @@ class Container:
     serves: tuple[str, ...] = field(default_factory=tuple)
     # How it is run, from Docker's inspect; None where that was not read.
     runtime: Mapping[str, Any] | None = None
+
+    @property
+    def uptime(self) -> str:
+        """How long it has been up, as HQ writes an age, when Docker's inspect
+        gave its start time. Docker's own phrase otherwise."""
+
+        from .moments import ago
+
+        started = moment(str((self.runtime or {}).get("started_at", "") or ""))
+        if started is None or not self.running.healthy:
+            return self.running.uptime
+        age = ago(started)
+        return "Just started" if age == "just now" else f"Up {age.removesuffix(' ago')}"
 
     @property
     def address(self) -> str:
@@ -553,15 +567,20 @@ def on_machine(machine: Any) -> dict[str, Any]:
     from .docker_sections import unused_images
     from .labels import human_bytes
 
-    standings = standings_on(machine.name)
+    here = [item for item in containers() if item.machine.name == machine.name]
+    standings = {item.running.name: item.standing for item in here}
     states = [standing.state for standing in standings.values()]
     unused = unused_images(machine)
     return {
         "standings": standings,
+        "uptimes": {item.running.name: item.uptime for item in here},
         "container_counts": {
             "behind": states.count(BEHIND),
             "current": states.count(CURRENT),
             "vulnerable": states.count(VULNERABLE),
+            # Counted apart from vulnerabilities, as the containers page counts them.
+            "update": sum(1 for standing in standings.values() if standing.update_state == UPDATE_AVAILABLE),
+            "up_to_date": sum(1 for standing in standings.values() if standing.update_state == UP_TO_DATE),
             "stopped": sum(1 for item in machine.containers if not item.healthy),
         },
         "unused_images": unused,
@@ -585,7 +604,7 @@ def _standing(reference: str, host: str, container: str) -> Standing:
             image=ImageRef("", str(reference or "")[:19]),
             tag="",
             pinned=False,
-            unread="It runs an image by id alone, so there is no name to look it up by.",
+            unread="It runs an image by id only, so there is no name to look it up by.",
         )
     pulled = _pulled().get((host, container), {})
     tag = image.tag or _pulled_as(image, pulled, "tags", "tag")

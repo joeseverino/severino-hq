@@ -29,15 +29,13 @@ class Channel:
 TAILNET_CHANNEL = Channel(
     "tailnet",
     "Tailnet",
-    "This request arrived from an address Tailscale issues and nothing else "
-    "uses, so it came over the tailnet rather than over the network it is "
-    "physically attached to.",
+    "This request came from an address only Tailscale issues, so it came "
+    "over the tailnet.",
 )
 NETWORK_CHANNEL = Channel(
     "network",
     "Local network",
-    "This request arrived from a private address, so it came from the network "
-    "HQ is on rather than across the tailnet.",
+    "This request came from a private address on the network HQ is on.",
 )
 LOOPBACK_CHANNEL = Channel(
     "loopback", "Loopback", "This request never left the machine HQ runs on."
@@ -45,16 +43,13 @@ LOOPBACK_CHANNEL = Channel(
 OPAQUE_CHANNEL = Channel(
     "opaque",
     "Address not passed through",
-    "Every hop in the chain was a proxy HQ knows, so the address it is judging "
-    "is a proxy's rather than the caller's. Whoever is asking may well be on "
-    "the tailnet: nothing here can tell, which means the network gate is "
-    "checking the proxy rather than them.",
+    "Every address this request passed through is a proxy HQ trusts, so HQ "
+    "has the proxy's address and cannot tell where the caller is.",
 )
 ELSEWHERE_CHANNEL = Channel(
     "elsewhere",
     "Unrecognised",
-    "This address is in none of the ranges HQ recognises, which should not be "
-    "possible while the network gate is enforced.",
+    "This address is in none of the ranges HQ accepts.",
 )
 
 

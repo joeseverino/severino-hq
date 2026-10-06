@@ -161,7 +161,7 @@ class ServiceDetailView(PageMixin, TemplateView):
             (
                 PageSection("overview", "Overview"),
                 PageSection("path", "Path"),
-                *((PageSection("parts", "Not declared"),) if self.missing_facets else ()),
+                *((PageSection("parts", "Not set up"),) if self.missing_facets else ()),
                 *(PageSection(section.id, section.label) for section in self.sections),
                 *(
                     (PageSection("relationships", "Relationships"),)

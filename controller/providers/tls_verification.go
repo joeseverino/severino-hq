@@ -159,13 +159,13 @@ func tlsConditions(spec TLSCertificateSpec, observations []TLSObservation, unver
 		fingerprints[item.FingerprintSHA256] = true
 	}
 	if len(fingerprints) > 1 {
-		conditions = append(conditions, Condition{Type: runtime.ConditionDrifted, Status: true, Reason: "ConsumerMismatch", Message: "TLS consumers are serving different certificates."})
+		conditions = append(conditions, Condition{Type: runtime.ConditionDrifted, Status: true, Reason: "ConsumerMismatch", Message: "Sites are serving different certificates."})
 	}
 	if daysRemaining <= spec.RenewalWindowDays {
 		conditions = append(conditions, Condition{Type: runtime.ConditionDegraded, Status: true, Reason: "ExpiringSoon", Message: fmt.Sprintf("A verified TLS consumer expires in %d days.", daysRemaining)})
 	}
 	if len(unverified) > 0 {
-		conditions = append(conditions, Condition{Type: runtime.ConditionDegraded, Status: true, Reason: "ConsumerUnverified", Message: "No verification domain is declared for: " + strings.Join(unverified, ", ")})
+		conditions = append(conditions, Condition{Type: runtime.ConditionDegraded, Status: true, Reason: "ConsumerUnverified", Message: "No name to check is set for: " + strings.Join(unverified, ", ")})
 	}
 	if len(unreachable) > 0 {
 		missed := make([]string, 0, len(unreachable))
@@ -179,7 +179,7 @@ func tlsConditions(spec TLSCertificateSpec, observations []TLSObservation, unver
 		conditions = append(conditions, Condition{Type: runtime.ConditionDegraded, Status: true, Reason: "ConsumerUnreachable", Message: "Could not be read: " + strings.Join(missed, ", ")})
 	}
 	if len(conditions) == 0 {
-		return []Condition{condition(runtime.ConditionReady, "Verified", "All TLS consumers are current.")}
+		return []Condition{condition(runtime.ConditionReady, "Verified", "Every site is serving this certificate.")}
 	}
 	return conditions
 }
@@ -243,7 +243,7 @@ func (r *Registry) reconcileTLS(ctx context.Context, spec TLSCertificateSpec) (R
 		Changed:    false,
 		Status:     status,
 		Conditions: tlsConditions(spec, observations, unverified, unreachable, daysUntil(expiry, r.Now())),
-		Message:    "TLS consumers observed.",
+		Message:    "Checked what each site serves.",
 	}, status, nil
 }
 

@@ -196,7 +196,7 @@ class ConnectionExecutionTests(TestCase):
         self.assertIsNotNone(action)
         self.assertEqual(action.name, "manage")
         self.assertEqual(action.label, "Review access")
-        self.assertIn("Missing 1 required provider scope.", action.reason)
+        self.assertIn("Missing 1 permission it needs.", action.reason)
 
     def test_a_command_link_requires_scope_evidence_and_hq_authority(self):
         base = _finance_spec()
@@ -597,10 +597,10 @@ class ConnectionWorkspaceTests(TestCase):
         self.assertContains(response, "Financial institutions")
         self.assertContains(response, "Capital One")
         self.assertContains(response, "Sync transactions")
-        self.assertContains(response, "Scope missing")
-        self.assertContains(response, "Secret store: Example Vault")
-        self.assertContains(response, "Security controls")
-        self.assertContains(response, "External edge")
+        self.assertContains(response, "Permission missing")
+        self.assertContains(response, "Secrets in Example Vault")
+        self.assertContains(response, "Security checks")
+        self.assertContains(response, "The proxy lets in tailnet addresses only")
 
     def test_a_plugin_unclassified_kind_does_not_trigger_controller_prose(self):
         spec = _finance_spec()

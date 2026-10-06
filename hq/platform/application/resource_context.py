@@ -26,8 +26,7 @@ from .infrastructure import (
     resource_health,
     serialize_resource,
 )
-from .resource_operations import operation_summary
-from .labels import lower_first
+from .resource_operations import resource_history
 from .resource_capabilities import ResourceCapabilities, resource_capabilities
 
 
@@ -99,6 +98,138 @@ def readout_rows(resource) -> tuple[tuple[str, str, str], ...]:
         return tuple(provider.readout(resource.spec, resource.status or {}))
     except (KeyError, TypeError, ValueError):
         return ()
+
+
+# How far behind the newest reading of its own type a record may fall before
+# it reads as not seen. The lens and the rule that ask the same question share
+# the line (``topology_lenses._STALE_AFTER``).
+def _left_behind(read_at: datetime | None, newest: datetime | None) -> bool:
+    from .topology_lenses import _STALE_AFTER
+
+    return read_at is not None and newest is not None and newest - read_at > _STALE_AFTER
+
+
+@dataclass(frozen=True)
+class RecordStatus:
+    """One record's state as one line: what it is, since when, what happens next.
+
+    The only status a record page or a list row shows, so two statuses can
+    never disagree side by side.
+    """
+
+    state: str
+    # The ``control-*`` tone the label is drawn in.
+    tone: str
+    label: str
+    detail: str = ""
+    since: datetime | None = None
+    read_at: datetime | None = None
+
+
+def _reconciles(kind: str) -> tuple[bool, bool]:
+    """``(applies, automatically)``: whether the controller applies HQ's settings."""
+
+    from hq.domains.control_plane.providers import controller_capability_registry
+
+    capability = controller_capability_registry().capabilities.get(kind)
+    policy = capability.actions.get("reconcile") if capability else None
+    applies = bool(policy and policy.mode == "apply")
+    return applies, bool(applies and policy.automatic)
+
+
+def _fault_status(resource, health: dict[str, str]) -> RecordStatus | None:
+    """A record that is switched off, changed outside HQ, or reporting a problem."""
+
+    from .conditions import held_since
+
+    read_at = resource.last_observed_at
+    if not resource.enabled:
+        return RecordStatus(
+            "off", "declared", "Switched off in HQ", "HQ does not apply or check it.", None, read_at
+        )
+    if health["state"] == "drifted":
+        return RecordStatus(
+            "drifted",
+            "drifted",
+            health["label"],
+            f"{health['message']} Keep the live version, or restore HQ's version.".strip(),
+            held_since(resource.conditions, "Drifted"),
+            read_at,
+        )
+    if health["state"] == "degraded":
+        return RecordStatus(
+            "degraded",
+            "degraded",
+            health["label"],
+            health["message"],
+            held_since(resource.conditions, "Degraded"),
+            read_at,
+        )
+    return None
+
+
+def record_status(
+    resource, *, health: dict[str, str] | None = None, newest: datetime | None = None
+) -> RecordStatus:
+    """``newest`` is the latest reading of any record of this type: a record
+    read long before it was not found the last time HQ looked."""
+
+    health = health or resource_health(resource)
+    fault = _fault_status(resource, health)
+    if fault is not None:
+        return fault
+    read_at = resource.last_observed_at
+    applies, automatically = _reconciles(resource.kind)
+    if applies and resource.observed_generation != resource.generation:
+        return RecordStatus(
+            "pending",
+            "pending",
+            "Change waiting to apply",
+            "The controller applies it within a few minutes."
+            if automatically
+            else "Press Apply again to apply it.",
+            None,
+            read_at,
+        )
+    if _left_behind(read_at, newest):
+        return RecordStatus(
+            "unseen",
+            "unknown",
+            "Not found lately",
+            "The others of its type have been read since.",
+            None,
+            read_at,
+        )
+    if health["state"] == "healthy":
+        return RecordStatus(
+            "working",
+            "healthy",
+            health["label"],
+            "Matches HQ's settings." if applies else "",
+            None,
+            read_at,
+        )
+    if not applies:
+        return RecordStatus(
+            "recorded", "declared", "Recorded only", "HQ only records this. Nothing is applied.", None, read_at
+        )
+    return RecordStatus("unread", "unknown", health["label"], health["message"], None, read_at)
+
+
+def newest_reading(kind: str) -> datetime | None:
+    """When any tracked record of this type was last read, from the read a
+    page already shares (``infrastructure.enabled_resources``)."""
+
+    from .infrastructure import enabled_resources
+
+    return max(
+        (
+            resource.last_observed_at
+            for resource in enabled_resources()
+            if resource.kind == kind and resource.last_observed_at
+        ),
+        default=None,
+    )
 
 
 @dataclass(frozen=True)
@@ -244,9 +375,7 @@ def get_managed_resource(key: str) -> dict[str, Any]:
     return {
         "resource": serialize_resource(resource),
         "derived": resource_context(resource).as_dict(),
-        "operations": [
-            operation_summary(operation) for operation in resource.operations.all()[:20]
-        ],
+        "operations": resource_history(resource),
     }
 
 
@@ -296,15 +425,14 @@ def controller_summary(actions, labels) -> ControllerSummary | None:
     for verb, allowed in actions.items():
         if not allowed.enabled:
             off.setdefault(allowed.reason, []).append(labels(verb))
-    lines = tuple(
-        f"{_and(names)} {'is' if len(names) == 1 else 'are'} off: {lower_first(reason)}"
-        for reason, names in off.items()
-    )
+    # Each reason is a whole sentence about the record, so it stands alone.
+    lines = tuple(off)
     if len(off) and sum(len(names) for names in off.values()) == len(actions):
-        return ControllerSummary("Observing only", "declared", lines, frozenset(off))
+        return ControllerSummary("HQ does not change this", "declared", lines, frozenset(off))
     automatic = any(allowed.automatic for allowed in actions.values())
-    return ControllerSummary("Automatic" if automatic else "On request", "good", lines, frozenset(off))
-
-
-def _and(names: list[str]) -> str:
-    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+    return ControllerSummary(
+        "Applied automatically" if automatic else "Applied when you press Apply again",
+        "good",
+        lines,
+        frozenset(off),
+    )

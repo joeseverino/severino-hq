@@ -1,14 +1,14 @@
 {% comment %}What a removal does: delete at the provider, or forget the declaration.{% endcomment %}
 {% if forget %}
   <p>
-    HQ stops managing {{ resource.key }}{% if holds_records %} and the records it holds{% endif %}.
-    Nothing is deleted at the provider.
-    Sweeps leave it unmanaged until you manage it again.
+    HQ stops tracking {{ resource.key }}{% if holds_records %} and the records in it{% endif %}.
+    Nothing live is deleted.
+    HQ leaves it alone until you manage it again.
   </p>
 {% else %}
   <p>
-    The controller deletes this at the provider. HQ drops the declaration
-    once the provider confirms the deletion.
+    The controller deletes the live record. HQ forgets it once it is
+    confirmed gone.
   </p>
 {% endif %}
 {% comment %}

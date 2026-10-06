@@ -107,7 +107,7 @@ class StandingTests(TestCase):
         self.assertIn("Fixed in 1.2.1", advisory.body)
         self.assertTrue(items["container-updates"].body.startswith("example/kuma:1 → 2."))
         # With help: why HQ cannot run the upgrade itself yet.
-        self.assertIn("Not yet, because:", items["container-updates"].body)
+        self.assertIn("HQ cannot apply it yet.", items["container-updates"].body)
 
     def test_many_advisories_are_one_thing_to_do(self):
         estate(advisories=[HIGH, {**HIGH, "id": "GHSA-high-2"}, {**HIGH, "id": "GHSA-high-3"}])
@@ -146,10 +146,10 @@ class StandingTests(TestCase):
         self.assertEqual(private[0], "attention")
         # A gap in what HQ read is not evidence nothing reaches it.
         self.assertEqual(unknown[0], "serious")
-        self.assertIn("reach not known", unknown[1])
+        self.assertIn("not known who can reach it", unknown[1])
         # Nothing routes to it, and HQ read everything that could: information.
         self.assertEqual(unrouted[0], "neutral")
-        self.assertIn("nothing routes to it", unrouted[1])
+        self.assertIn("not reachable", unrouted[1])
 
     def test_nothing_known_asks_for_nothing(self):
         estate(app_tags=("v1.2.0",))
@@ -223,8 +223,8 @@ class PageTests(TestCase):
 
         response = self.client.get(reverse("control_plane:containers"))
 
-        self.assertNotContains(response, "All current")
-        self.assertContains(response, "Not known")
+        self.assertNotContains(response, "All up to date")
+        self.assertContains(response, "Unknown")
 
     def test_all_current_only_when_every_container_was_read(self):
         estate(app_tags=("v1.2.0",))
@@ -232,7 +232,7 @@ class PageTests(TestCase):
 
         response = self.client.get(reverse("control_plane:containers"))
 
-        self.assertContains(response, "All current")
+        self.assertContains(response, "All up to date")
 
     def test_a_compose_file_copied_to_start_it_is_not_where_it_is_defined(self):
         from ..containers import _compose_files
@@ -255,8 +255,8 @@ class PageTests(TestCase):
         detail = self.client.get(reverse("control_plane:detail", args=["example-box-kuma"]))
 
         self.assertContains(listing, reverse("control_plane:detail", args=["example-box-kuma"]))
-        self.assertContains(detail, "<code>2</code> is out", html=False)
-        self.assertContains(detail, "No feed to check")
+        self.assertContains(detail, "<code>2</code> available", html=False)
+        self.assertContains(detail, "Cannot check")
 
     def test_a_machine_shows_each_container_standing_as_the_containers_page_does(self):
         estate(advisories=[HIGH])
@@ -264,8 +264,8 @@ class PageTests(TestCase):
         response = self.client.get(reverse("control_plane:machine", args=["example-box"]))
 
         self.assertEqual(response.context["standings"]["kuma"].latest, "2")
-        self.assertContains(response, "2 is out")
-        self.assertContains(response, "1 known advisory")
+        self.assertContains(response, "2 available")
+        self.assertContains(response, "1 known")
 
     def test_a_container_running_an_image_by_id_stays_listed_and_says_why(self):
         inventory("portainer.container", [running("orphan", "sha256:0123456789abcdef0123")])
@@ -273,7 +273,7 @@ class PageTests(TestCase):
         (item,) = containers()
 
         self.assertEqual(item.standing.state, UNKNOWN)
-        self.assertIn("by id alone", item.standing.unread)
+        self.assertIn("by id only", item.standing.unread)
 
     def test_nothing_running_says_so(self):
         response = self.client.get(reverse("control_plane:containers"))

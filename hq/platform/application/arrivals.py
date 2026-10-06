@@ -221,7 +221,12 @@ class Arrival:
     @property
     def how(self) -> str:
         way = _CARRIED.get(self.carried) or _CHANNELS.get(self.channel, "from an address HQ cannot place")
-        return f"{way}, through the proxy at {self.forwarded_by}" if self.forwarded_by else way
+        from .reach import network_of
+
+        # A proxy on HQ's own machine is how every request arrives.
+        if not self.forwarded_by or network_of(self.forwarded_by) == "loopback":
+            return way
+        return f"{way}, through the proxy at {self.forwarded_by}"
 
     @property
     def phrase(self) -> str:

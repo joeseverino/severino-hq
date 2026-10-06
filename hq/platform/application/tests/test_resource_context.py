@@ -23,8 +23,8 @@ class ControllerSummaryTests(SimpleTestCase):
             label,
         )
 
-        self.assertEqual(found.headline, "Observing only")
-        self.assertEqual(found.lines, ("Reconcile and Renew are off: its connection only observes. Set manages on the connection to act.",))
+        self.assertEqual(found.headline, "HQ does not change this")
+        self.assertEqual(found.lines, (observes,))
         self.assertIn(observes, found.reasons)
 
     def test_one_that_can_act_says_how(self):
@@ -32,8 +32,8 @@ class ControllerSummaryTests(SimpleTestCase):
             {"reconcile": allowance(True, automatic=True), "renew": allowance(False, "Not due yet.")}, label
         )
 
-        self.assertEqual((found.headline, found.tone), ("Automatic", "good"))
-        self.assertEqual(found.lines, ("Renew is off: not due yet.",))
+        self.assertEqual((found.headline, found.tone), ("Applied automatically", "good"))
+        self.assertEqual(found.lines, ("Not due yet.",))
 
     def test_no_actions_no_summary(self):
         self.assertIsNone(controller_summary({}, label))

@@ -7,6 +7,7 @@ from hq.domains.control_plane.provider_adapters.contracts import ADDRESS_FAILURE
 from . import credential_findings
 from .credential_findings import mint_steps
 from .finding_model import (
+    THEN_CHECK_AGAIN,
     Finding,
     FindingEstate,
     fact_values,
@@ -14,6 +15,7 @@ from .finding_model import (
     reconcile_remedy,
     FindingRule,
 )
+from .moments import elapsed
 
 
 def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -36,22 +38,17 @@ def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="connection-not-answering",
                 subject=node.id,
                 title=(
-                    f"{node.label}'s credential is refused"
+                    f"{node.label}: credential refused"
                     if refused
-                    else f"{node.label} does not answer as its API"
+                    else f"{node.label}: the address is not {_service(node)}'s API"
                     if failure == ADDRESS_FAILURE
                     else f"{node.label} is not answering"
                 ),
                 severity="attention",
                 explanation=(
                     (f"{reason.rstrip('.')}. " if reason else "")
-                    + (
-                        "The provider refuses the credential itself, so HQ reads "
-                        "nothing through it until it is replaced."
-                        if refused
-                        else "HQ reads nothing through it until it answers, so what "
-                        "it reaches may be out of date."
-                    )
+                    + "HQ cannot read anything through it, so what it shows from "
+                    f"{node.label} may be out of date."
                 ),
                 evidence=(
                     ("State", "Refused" if refused else node.status_label or "Unreachable"),
@@ -60,12 +57,18 @@ def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
                         if failure and not refused
                         else ()
                     ),
-                    *((("Last observed", node.observed_at),) if node.observed_at else ()),
+                    *((("Last checked", elapsed(node.observed_at)),) if node.observed_at else ()),
                 ),
                 steps=mint_steps(node) if refused else credential_findings.answer_steps(node),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))
+
+
+def _service(node) -> str:
+    """What a connection talks to, by the name its owner knows it by."""
+
+    return node.subtitle or "the service"
 
 
 def _unreachable_consumer(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -98,24 +101,27 @@ def _unreachable_consumer(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="unreachable-consumer",
                 subject=node.id,
                 title=(
-                    f"{node.label} could not read {names[0]}"
+                    f"Could not check {node.label} on {names[0]}"
                     if len(names) == 1
-                    else f"{node.label} could not read {len(names)} of its consumers"
+                    else f"Could not check {node.label} on {len(names)} of the "
+                    "places it is installed"
                 ),
                 severity="serious",
                 explanation=(
-                    "The last reading reached every other consumer. This one "
-                    "did not answer, so HQ cannot tell which certificate it "
-                    "serves."
+                    "The other places answered. "
                     + (
-                        " The tailnet policy blocks the path. Allow it, then "
-                        "reconcile."
+                        f"{names[0]} did not, so HQ cannot say which certificate it is serving."
+                        if len(names) == 1
+                        else "These did not, so HQ cannot say which certificate they are serving."
+                    )
+                    + (
+                        f" The tailnet policy does not allow {', '.join(refused)}."
                         if refused
                         else ""
                     )
                 ),
                 evidence=(
-                    *(("Not read", name) for name in names),
+                    *(("Did not answer", name) for name in names),
                     *(("Blocked by tailnet policy", path) for path in refused),
                 ),
                 remedies=open_the_path(node) if refused else reconcile_remedy(node),
@@ -128,26 +134,26 @@ def _unreachable_consumer(estate: FindingEstate) -> tuple[Finding, ...]:
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "connection-not-answering",
-        "Connection not answering or refused",
+        "A connection is not answering",
         "attention",
         _connection_not_answering,
         operator_action=(
-            "Fix what the connection's error names (its address, its credential, or the route to it) in its 1Password item or on the network, then request a fresh sweep."
+            f"Open the connection and fix what its error says. {THEN_CHECK_AGAIN}"
         ),
         no_help_reason=(
-            "The fault is outside HQ: the address, the credential in 1Password, or the network path, none of which HQ writes."
+            "HQ cannot change 1Password or your network."
         ),
     ),
     FindingRule(
         "unreachable-consumer",
-        "Consumer could not be read",
+        "Could not check a certificate where it is installed",
         "serious",
         _unreachable_consumer,
         operator_action=(
-            "Make the consumer reachable from the controller, or allow the path in the tailnet policy, then reconcile."
+            f"Make it reachable from the controller's machine. {THEN_CHECK_AGAIN}"
         ),
         no_help_reason=(
-            "When the tailnet does not refuse the path and the kind is locked against reconcile, HQ has nothing left it may try."
+            "HQ cannot reach it any other way."
         ),
         # Says the same thing with the name of the consumer in it. The generic
         # rule would otherwise put this in front of an operator twice.

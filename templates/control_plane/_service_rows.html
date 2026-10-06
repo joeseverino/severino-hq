@@ -12,7 +12,7 @@ alphabetical is the order and there is nothing to move.
     <thead>
       <tr>
         <th>Service</th>
-        <th>Reach</th>
+        <th>Open to</th>
         {% for id, label in facets %}<th>{{ label }}</th>{% endfor %}
         <th>Runs on</th>
         {% if show_service_projects %}<th>Project</th>{% endif %}
@@ -58,7 +58,7 @@ alphabetical is the order and there is nothing to move.
                 tailnet name); every other facet adds one line per kind of reading.
                 {% endcomment %}
                 {% for claim in facet.claims %}
-                  {% entity claim.link code=True %}{% if not forloop.last or facet.readings or facet.id == certificate_facet %}<br>{% endif %}
+                  {% entity claim.within_service code=True %}{% if not forloop.last or facet.readings or facet.id == certificate_facet %}<br>{% endif %}
                 {% endfor %}
                 {% if facet.id == certificate_facet %}
                   {% with certificate=service.path.certificate %}

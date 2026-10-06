@@ -209,8 +209,7 @@ def _address_answer(
             "address": str(parsed),
             "version": parsed.version,
             "hostnames": [],
-            "note": "This address is not routable on the public internet, so "
-            "nothing out there can say anything about it and HQ does not ask.",
+            "note": "This is a private address. Nothing on the public internet knows it.",
         }
     stored = AddressReading.objects.filter(address=str(parsed)).first()
     if stored is not None:

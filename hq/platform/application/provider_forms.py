@@ -185,10 +185,10 @@ class ResourceIdentityForm(forms.Form):
     enabled = forms.BooleanField(
         required=False,
         initial=True,
-        label="Reconcile this resource",
+        label="Keep this the way HQ sets it",
         help_text=(
-            "Disabled resources are left alone by the controller. Disabling does "
-            "not remove anything already applied at the provider."
+            "Switched off, the controller leaves it alone. Switching it off does "
+            "not remove anything that is already live."
         ),
     )
 
@@ -361,8 +361,8 @@ def spec_form_class(
             # second record beside the first. The warning stays because the
             # change reaches a live name on the next pass.
             fields[name].help_text = (
-                "Changing this renames the record at the provider on the next "
-                "pass. The old name stops resolving."
+                "Changing this renames the live record within about a minute. "
+                "The old name stops resolving."
             )
     return type(
         f"{provider.spec_type.__name__}Form",

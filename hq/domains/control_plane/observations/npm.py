@@ -209,7 +209,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
         DEAD_HOST_KIND,
         PROVIDER,
-        "NPM 404 host",
+        "NPM dead host",
         DeadHostRecord,
         requires=("dead_hosts: view",),
         hostnames=_enabled_names,

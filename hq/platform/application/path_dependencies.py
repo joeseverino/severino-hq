@@ -11,15 +11,15 @@ from .path_model import Hop, ServicePath, Source
 # What changing or losing a hop does to the name, by step.
 _CONSEQUENCES = {
     "dns": "The name stops resolving, or resolves somewhere else.",
-    "edge": "Unproxied, the origin is reached directly and the edge certificate no longer applies.",
+    "edge": "If it is switched off, visitors reach the origin directly and Cloudflare's certificate no longer applies.",
     "redirect": "Visitors stop being sent on.",
     "served": "The site stops answering at this name.",
-    "ingress": "Requests stop reaching what it forwards to.",
-    "machine": "Everything on this path through it stops answering.",
+    "ingress": "If it is removed, the name stops reaching the app.",
+    "machine": "If it is down, this service is down.",
     # The address a record answers with: move it and the record still points
     # at the old one.
-    "network": "The record still points at the old address, and the name stops answering.",
-    "upstream": "The proxy forwards to nothing, and requests fail with a bad gateway.",
+    "network": "If the machine's address changes, this name stops working.",
+    "upstream": "If nothing listens there, you get 502 Bad Gateway.",
     "container": "The service stops answering.",
     "hq": "HQ stops answering at this name.",
 }

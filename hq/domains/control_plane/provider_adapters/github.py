@@ -34,41 +34,69 @@ def _from_record(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+GOAL = "Production runs the latest approved commit of each plugin."
+
+
+def _plugin_state(item: Mapping[str, Any]) -> str:
+    """One plugin's line: what runs, and what stands between it and the latest."""
+
+    running, approved = str(item.get("running", ""))[:7], str(item.get("admitted", ""))[:7]
+    if not approved or approved == running:
+        return f"Live at {running}" if running else "Live"
+    stage = str(item.get("stage", "")).strip()
+    return f"Runs {running}, latest approved is {approved}" + (f". {stage}." if stage else ".")
+
+
 def _readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
-    rows = [("Production", spec.get("production", ""), status.get("production", ""))]
+    rows = [("Goal", GOAL, "")]
     rows.extend(
-        (item.get("plugin", ""), item.get("admitted", "")[:7], item.get("running", "")[:7])
+        (str(item.get("plugin", "")), "", _plugin_state(item))
         for item in status.get("extensions") or ()
         if isinstance(item, Mapping)
     )
     return tuple(rows)
 
 
+def _console(record: dict[str, Any]) -> str:
+    """The run a plugin is waiting on, else the repository's runs."""
+
+    for item in record.get("extensions") or ():
+        if isinstance(item, Mapping) and item.get("run_url"):
+            return str(item["run_url"])
+    repository = str(record.get("repository", ""))
+    return f"https://github.com/{repository}/actions" if repository else ""
+
+
 class GitHubDeliverySpec(ProviderModel):
     repository: str = Field(
         pattern=keyword(*_FIELDS, "repository", "pattern"),
-        title="Host repository",
-        description="The repository whose composition workflow deploys HQ.",
+        title="Repository",
+        description="The repository whose deploy workflow deploys HQ.",
     )
     workflow: str = Field(
         default=COMPOSE_WORKFLOW,
         pattern=keyword(*_FIELDS, "workflow", "pattern"),
-        title="Composition workflow",
+        title="Deploy workflow",
     )
     branch: str = Field(
         default=MAIN_BRANCH, pattern=keyword(*_FIELDS, "branch", "pattern"), title="Branch"
     )
     production: Literal[CURRENT] = Field(  # type: ignore[valid-type]
-        default=CURRENT, title="Production runs"
+        default=CURRENT, title="Production"
     )
 
 DEFINITION = ProviderSpec(
     KIND,
-    "Reports each extension's stage on its commit, from admission to "
-    "production, and comments once on its merged pull request.",
+    "Checks that production runs the latest approved commit of each plugin, "
+    "and reports it on the commit and its pull request.",
     GitHubDeliverySpec,
     actions={"reconcile": applies(automatic=True)},
-    label="Continuous delivery",
+    label="HQ deploys",
+    label_plural="HQ deploys",
+    name=lambda spec: "HQ deploys",
+    reported_fields=("production",),
+    console=_console,
+    console_label="Open the deploy on GitHub",
     connection_providers=(PROVIDER,),
     from_record=_from_record,
     identity=lambda spec: (spec["repository"],),
@@ -85,8 +113,8 @@ DEFINITION = ProviderSpec(
     advanced_fields=("workflow", "branch", "production"),
     declaration_only=True,
     removal_note=lambda spec: (
-        "HQ stops reporting on extension commits. Their admissions still "
-        f"start the composition in {spec.get('repository', 'the host repository')}."
+        "HQ stops reporting on plugin commits. Their approvals still "
+        f"start the deploy in {spec.get('repository', 'the repository')}."
     ),
 )
 DEFINITIONS = (DEFINITION,)

@@ -73,7 +73,7 @@ class NamesTests(TestCase):
         row = row_for(a_machine("site.test"), "site.test")
 
         self.assertEqual(row[0].text, "site.test")
-        self.assertEqual(row[2].text, "site-dns")  # the DNS column
+        self.assertIn("site-dns", row[2].url)  # the DNS record column
 
     def test_columns_follow_the_facet_registry_by_id(self):
         from unittest import mock
@@ -88,8 +88,9 @@ class NamesTests(TestCase):
         with mock.patch("hq.domains.control_plane.providers.SERVICE_FACETS", relabelled):
             section = by_id(a_machine("site.test"))["names"]
 
-        self.assertEqual(section.columns[2], "Resolver")
-        self.assertEqual(section.records[0][2].text, "site-dns")
+        # The page heads a facet it knows in its own words, whatever the registry calls it.
+        self.assertEqual(section.columns[2], "DNS record")
+        self.assertIn("site-dns", section.records[0][2].url)
 
     def test_a_name_nothing_supplies_says_so_per_column(self):
         """Blank is "nothing supplies this", not unhealthy, not unmeasured."""
@@ -121,13 +122,10 @@ class NamesTests(TestCase):
     def test_a_machine_with_no_names_grows_no_band(self):
         self.assertNotIn("names", by_id(a_machine()))
 
-    def test_the_band_points_at_the_graph_rather_than_listing_more_rows(self):
-        """Every other relationship is an edge, and edges live in the topology."""
+    def test_the_band_leaves_the_topology_link_to_the_relationships_panel(self):
+        """The page links to the topology once, from Relationships."""
 
-        actions = by_id(a_machine("site.test"))["names"].actions
-
-        self.assertEqual(len(actions), 1)
-        self.assertIn("topology", actions[0][1])
+        self.assertEqual(by_id(a_machine("site.test"))["names"].actions, ())
 
     def test_another_machines_traffic_is_not_borrowed(self):
         measure("elsewhere.test", pageviews=9999)
@@ -142,8 +140,8 @@ class NamesTests(TestCase):
 
         section = by_id(a_machine("dark.test", "darker.test"))["names"]
 
-        self.assertEqual(section.label, "Names it answers")
-        self.assertEqual(section.columns, ("Name", "Runtime", "DNS", "Ingress", "Certificate"))
+        self.assertEqual(section.label, "Serves")
+        self.assertEqual(section.columns, ("Name", "Container", "DNS record", "Proxy", "Certificate"))
         self.assertTrue(all(len(row) == 5 for row in section.records))
 
     def test_the_column_returns_with_the_first_reading(self):
@@ -164,7 +162,7 @@ class IdentityTests(TestCase):
 
         rows = by_id(a_machine(name="box", declaration="box", device="box-2"))["identity"].records
 
-        self.assertEqual([row[0].text for row in rows], ["box", "box-2"])
+        self.assertEqual([row[0].url.rstrip("/").rsplit("/", 1)[-1] for row in rows], ["box", "box-2"])
         self.assertEqual([row[1].text for row in rows], ["Machine", "Tailnet device"])
 
     def test_a_suffixed_key_says_why_it_is_suffixed(self):
@@ -176,7 +174,7 @@ class IdentityTests(TestCase):
         rows = by_id(a_machine(name="box", declaration="box", device="box-2"))["identity"].records
 
         self.assertEqual(rows[0][2].text, "")
-        self.assertIn("the plain one was taken", rows[1][2].text)
+        self.assertIn("the plain key was already in use", rows[1][2].text)
 
     def test_a_machine_with_no_declaration_grows_no_band(self):
         self.assertNotIn("identity", by_id(a_machine(name="box")))

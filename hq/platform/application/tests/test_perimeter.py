@@ -35,7 +35,7 @@ class PerimeterUncheckedTests(TestCase):
 
         self.assertEqual(finding["severity"], "attention")
         self.assertEqual(
-            finding["evidence"], [{"label": "Not checked", "value": "no port to try"}]
+            finding["evidence"], [{"label": "Not tested", "value": "the machine reported no port to try"}]
         )
         self.assertEqual(raised("perimeter-open"), [])
 
@@ -45,7 +45,7 @@ class PerimeterUncheckedTests(TestCase):
         (finding,) = raised("perimeter-unchecked")
 
         self.assertEqual(
-            finding["evidence"], [{"label": "Not checked", "value": "no public address"}]
+            finding["evidence"], [{"label": "Not tested", "value": "the machine reported no public address"}]
         )
 
     def test_a_checked_perimeter_raises_nothing_when_shut(self):

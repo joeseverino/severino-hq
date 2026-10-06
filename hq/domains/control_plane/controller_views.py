@@ -20,7 +20,7 @@ class ControllerView(PageMixin, TemplateView):
     page_title = "Controller"
     page_lede = (
         "The controller runs on your server. It reads what HQ shows from each connected "
-        "service and applies the changes you queue. HQ itself holds no service credentials."
+        "service and applies the changes you queue."
     )
 
     def get_page_actions(self):

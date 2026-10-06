@@ -93,6 +93,30 @@ class Plan:
             return LOW
         return MEDIUM
 
+    @property
+    def change_label(self) -> str:
+        """The size of the move, as a page says it: "Patch update"."""
+
+        return f"{self.change.capitalize()} update" if self.change != UNKNOWN_CHANGE else "Update"
+
+    @property
+    def risk_reason(self) -> str:
+        """Why upgrading carries the risk it does, or "" when the risk is low.
+
+        The risk is of the upgrade going wrong, never the severity of what it
+        fixes."""
+
+        reasons = []
+        if self.change in (MAJOR, MINOR):
+            reasons.append(f"it is a {self.change} version change")
+        if self.introduces:
+            reasons.append("the new version also has a known serious vulnerability")
+        if self.stateful:
+            reasons.append("it keeps data")
+        if not self.verified_by:
+            reasons.append("nothing checks that it works afterwards")
+        return "" if self.risk == LOW else " and ".join(reasons)
+
 
 def change_between(running: str, target: str) -> str:
     """The size of the move, by the first number that differs."""
@@ -197,14 +221,14 @@ def _unvetted(standing: Any) -> tuple[Blocker, ...]:
 
     attested = standing.target_attested
     if attested is None or attested.get("unread"):
-        return (Blocker("target-unread", "What the target's publisher attached to it has not been read yet."),)
+        return (Blocker("target-unread", "The new version's package list and build record have not been read yet."),)
     found = []
     if not attested.get("provenance"):
-        found.append(Blocker("no-provenance", "The target's build is not described, so what it was built from is unknown."))
+        found.append(Blocker("no-provenance", "The new version has no build provenance, so what it was built from is unknown."))
     if not attested.get("packages"):
-        found.append(Blocker("no-package-list", "The target lists no packages, so nothing can check them."))
+        found.append(Blocker("no-package-list", "The new version has no package list, so it cannot be checked for vulnerabilities."))
     elif standing.target_checked is None:
-        found.append(Blocker("not-scanned", "The target's packages have not been checked yet."))
+        found.append(Blocker("not-scanned", "The new version's packages have not been checked yet."))
     return tuple(found)
 
 
@@ -226,11 +250,11 @@ def _verified_by(item: Container) -> tuple[str, ...]:
 def _blockers(item: Container, standing: Any, introduces) -> tuple[Blocker, ...]:
     found = []
     if standing.repository is not None:
-        found.append(Blocker("own-pipeline", "HQ's own image is deployed by its signed pipeline, never by an upgrade."))
+        found.append(Blocker("own-pipeline", "HQ's own image is deployed by its release pipeline."))
     if not standing.target_digest:
-        found.append(Blocker("no-target-digest", f"The digest {standing.latest} names has not been read yet."))
+        found.append(Blocker("no-target-digest", f"The exact build of {standing.latest} has not been read yet."))
     if not item.running.watcher:
-        found.append(Blocker("not-declared", "HQ does not watch this container. Adopt it first."))
+        found.append(Blocker("not-declared", "HQ does not track this container. Adopt it first."))
     if item.mounts is None:
         found.append(Blocker("mounts-unread", "Its mounts have not been read, so its data cannot be found to snapshot."))
     if introduces:
@@ -242,8 +266,8 @@ def _blockers(item: Container, standing: Any, introduces) -> tuple[Blocker, ...]
     found.append(
         Blocker(
             "no-apply-path",
-            f"{item.machine.name} cannot apply it yet: the upgrade helper needs {needs} "
-            "there, and HQ does not yet queue upgrades to the machine a container runs on.",
+            f"{item.machine.name} cannot apply it yet. The upgrade helper needs {needs} "
+            "there, and HQ cannot yet send an upgrade to the machine a container runs on.",
         )
     )
     return tuple(found)
@@ -255,10 +279,10 @@ def _not_automatic(change: str, verified_by, blockers, unvetted=()) -> tuple[Blo
 
     found = [*blockers, *unvetted]
     if change != PATCH:
-        found.append(Blocker("not-a-patch", f"A {change} change waits for a person."))
+        found.append(Blocker("not-a-patch", f"A {change} update waits for you."))
     if not verified_by:
-        found.append(Blocker("unverifiable", "Nothing but its running state could say the new version works."))
-    found.append(Blocker("not-opted-in", "This container is not opted in to automatic upgrades."))
+        found.append(Blocker("unverifiable", "Nothing would show that the new version works, other than that it stays running."))
+    found.append(Blocker("not-opted-in", "Automatic upgrades are not turned on for this container."))
     return tuple(found)
 
 
@@ -298,7 +322,7 @@ def _steps(item: Container, target: str, digest: str, data, verified_by) -> tupl
             + (", against a copy of its data" if data else "")
             + ", until it proves itself. The service stays stopped, and is started unchanged if it fails.",
         ),
-        Step("pin", "Pin the digest in its compose override", f"{where}; the compose file itself is not edited"),
+        Step("pin", "Pin the digest in its compose override", f"{where}. The compose file itself is not edited."),
         Step("apply", "Recreate the service", f"compose up for {item.running.name} only"),
         Step("verify", "Verify", ", ".join(verified_by) if verified_by else "That it keeps running."),
         Step(
@@ -412,8 +436,8 @@ def _copy_steps(machine: str) -> tuple[Step, ...]:
         fetch = Step(
             "fetch",
             "Take the helper from a checkout of the HQ release you run",
-            "HQ does not know the commit it was built from (its build did not say), so check out that release's "
-            "commit; the helper is scripts/upgrade-container.sh in it.",
+            "HQ does not know the commit it was built from, so check out that release's "
+            "commit. The helper is scripts/upgrade-container.sh in it.",
         )
     directory = HELPER.rsplit("/", 1)[0]
     digest = _helper_digest()
@@ -458,9 +482,9 @@ def _uncheckable(standing: Any) -> tuple[Blocker, ...]:
 
     attested = standing.attested
     if attested is None or attested.get("unread"):
-        return (Blocker("attestations-unread", "What its publisher attaches to an image has not been read yet."),)
+        return (Blocker("attestations-unread", "Its package list and build record have not been read yet."),)
     if not attested.get("packages"):
-        return (Blocker("no-package-list", "Its publisher lists no packages, so no release of it can be checked."),)
+        return (Blocker("no-package-list", "Its publisher provides no package list, so a new release cannot be checked."),)
     return ()
 
 

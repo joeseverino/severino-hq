@@ -31,7 +31,7 @@ class ToolsView(PageMixin, TemplateView):
 
     template_name = "control_plane/tools.html"
     page_title = "Tools"
-    page_lede = "Lookups run from outside this network, not through its rewrites."
+    page_lede = "These look a name up on the public internet, not in AdGuard."
 
     def get_context_data(self, **kwargs):
         from hq.platform.application.capabilities import execute_capability

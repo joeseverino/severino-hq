@@ -137,9 +137,9 @@ STANDARD: tuple[Check, ...] = (
           "A privileged container is root on its machine: every device and every kernel capability.",
           "Remove privileged mode and add only the capability it needs.", serious=True),
     Check("no-docker-socket", "No Docker socket", _socket_held,
-          "The Docker socket starts any container, mounting anything, as root: read-only or not.",
+          "Anything holding the Docker socket can start a container as root with any mount, even when the socket is mounted read-only.",
           "Put a socket proxy that allows only the calls it needs between it and the socket.", serious=True),
-    Check("own-process-namespace", "Its own processes only", _on(lambda runtime: runtime.get("pid_mode") != "host"),
+    Check("own-process-namespace", "Does not share the host's process list", _on(lambda runtime: runtime.get("pid_mode") != "host"),
           "Sharing the host's process namespace lets it see and signal every process on the machine.",
           "Remove the host PID mode.", serious=True),
     Check("confined", "Confined by seccomp and AppArmor", _on(_confined),
@@ -148,11 +148,11 @@ STANDARD: tuple[Check, ...] = (
     Check("no-system-path-writable", "No system path writable", _system_path_kept,
           "A writable mount of a system path is a way to change the machine from inside the container.",
           "Mount it read-only, or mount only the one file it needs.", serious=True),
-    Check("no-powerful-capability", "No machine-level capability", _on(_no_powerful_capability),
-          "Some capabilities (SYS_ADMIN, NET_ADMIN, SYS_PTRACE and the like) are root in all but name.",
+    Check("no-powerful-capability", "No extra kernel capabilities", _on(_no_powerful_capability),
+          "Some capabilities (SYS_ADMIN, NET_ADMIN, SYS_PTRACE and the like) give it nearly everything root on the machine has.",
           "Drop the capability, or narrow it to the one operation it needs.", serious=True),
     Check("not-root", "Runs as a user other than root", _on(lambda runtime: str(runtime.get("user", "")) not in ROOT_USERS),
-          "Root inside a container is one kernel bug away from root on the machine.",
+          "A process running as root inside a container becomes root on the machine if it escapes.",
           "Set a non-root user in the compose file, or use an image that runs as one."),
     Check("no-new-privileges", "Cannot gain privileges", _on(lambda runtime: any(
               option.startswith("no-new-privileges") and not option.endswith("false")
@@ -162,7 +162,7 @@ STANDARD: tuple[Check, ...] = (
     Check("no-devices", "No host devices", _on(lambda runtime: not runtime.get("devices")),
           "A passed-through device is direct access to that hardware.",
           "Remove the device unless the service cannot work without it."),
-    Check("own-network", "Its own network", _on(lambda runtime: runtime.get("network_mode") != "host"),
+    Check("own-network", "Not on the host network", _on(lambda runtime: runtime.get("network_mode") != "host"),
           "On the host network, every port it opens is the machine's, on every interface.",
           "Give it a bridge network and publish only the ports it serves."),
     Check("ports-bound", "Ports bound to an address", _on(_bound_to_an_address),
@@ -171,9 +171,9 @@ STANDARD: tuple[Check, ...] = (
     Check("memory-limited", "Memory limited", _on(lambda runtime: bool(runtime.get("memory_limit"))),
           "Without a limit, one runaway container can take the machine's memory from every other.",
           "Set a memory limit in the compose file."),
-    Check("health-checked", "Its health is checked", _health_checked,
-          "Without a check, only that it is running can be known, and an upgrade cannot be verified by it.",
-          "Add a health check to the compose file, or serve it under a name HQ requests."),
+    Check("health-checked", "Has a health check", _health_checked,
+          "Without a check, HQ can only see that it is running, and cannot tell whether an upgrade worked.",
+          "Add a health check to the compose file, or serve it under a name HQ checks."),
 )
 
 

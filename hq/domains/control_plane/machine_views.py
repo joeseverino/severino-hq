@@ -36,8 +36,12 @@ class MachineListView(PageMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["machines"] = machines_once()
+        machines = machines_once()
+        context["machines"] = machines
         context["hq_label"] = HQ_LABEL
+        # How many are in each state, in the order the states first appear.
+        states = [item.state[0] for item in machines]
+        context["state_counts"] = [(states.count(state), state) for state in dict.fromkeys(states)]
         return context
 
 
@@ -182,7 +186,7 @@ class MachineDetailView(PageMixin, TemplateView):
         )
         return (
             PageAction(
-                "Add machine details" if self.found.route_approval_key else "Declare machine",
+                "Add machine details" if self.found.route_approval_key else "Add this machine to HQ",
                 f"{reverse('control_plane:create')}?{seeded}",
             ),
         )
@@ -207,12 +211,28 @@ class MachineDetailView(PageMixin, TemplateView):
         # What else HQ can say about this machine, from a registry rather than
         # from this view. A band appears because a resolver produced one, so
         # what HQ learns next reaches the page without either being edited.
-        context["sections"] = machine_sections(found)
+        sections = machine_sections(found)
+        from hq.platform.application.docker_sections import docker_line
         from hq.platform.application.page_relations import for_machine
 
         whole, context["relationships"] = for_machine(
-            found, context["sections"], principal=web_principal(self.request.user)
+            found, sections, principal=web_principal(self.request.user)
         )
+        # One Docker environment is a line under the containers heading. Its
+        # table is left for a machine that has several.
+        context["docker"] = docker_line(found) if found.containers else None
+        context["sections"] = tuple(
+            section
+            for section in sections
+            if not (context["docker"] and section.id == "docker-environment")
+        )
+        # The load reading counts running containers at its own moment. The
+        # page states one count, the container list's, so the two cannot differ.
+        context["load_metrics"] = [
+            metric
+            for metric in found.telemetry.get("metrics") or ()
+            if not (found.containers and metric.get("label") == "Containers")
+        ]
         context.update(machine_links(found, whole))
         # Whether you are reading this on the machine it describes. HQ already
         # judged the caller's address for the network gate, and every machine

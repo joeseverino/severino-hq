@@ -197,11 +197,10 @@ class FailedTests(TestCase):
         (finding,) = raised("unit-failed")
 
         self.assertEqual(finding["severity"], "serious")
-        self.assertIn("1 unit failed on", finding["title"])
-        self.assertIn(SERVICE, finding["title"])
+        self.assertEqual(finding["title"], f"{SERVICE} failed on example-controller")
         evidence = {item["label"]: item["value"] for item in finding["evidence"]}
-        self.assertEqual(evidence["Unit"], SERVICE)
-        self.assertEqual(evidence["Last run"], "exit-code, status 3")
+        self.assertEqual(evidence["Job"], SERVICE)
+        self.assertEqual(evidence["How it ended"], "exit-code, status 3")
         self.assertEqual(evidence["Failed"], "5\xa0hours ago")
         self.assertEqual({name: len(found) for name, found in every_rule().items() if found}, {"unit-failed": 1})
 
@@ -210,7 +209,7 @@ class FailedTests(TestCase):
 
         (finding,) = raised("unit-failed")
 
-        self.assertIn("3 units failed", finding["title"])
+        self.assertIn("3 background jobs failed", finding["title"])
 
     def test_the_commands_name_the_unit(self):
         sweep(failed())
@@ -224,7 +223,10 @@ class FailedTests(TestCase):
 
         self.assertEqual(
             [step.command for step in finding.steps],
-            [f"sudo journalctl -u {SERVICE} -n 50 --no-pager", f"sudo systemctl restart {SERVICE}"],
+            [
+                f'ssh example-controller "sudo journalctl -u {SERVICE} -n 50 --no-pager"',
+                f'ssh example-controller "sudo systemctl restart {SERVICE}"',
+            ],
         )
 
     def test_a_renderer_that_says_why_it_failed_is_one_finding_not_two(self):
@@ -279,11 +281,11 @@ class AbsentTests(TestCase):
         self.assertEqual(
             self.state(),
             {
-                "severino-hq-example-gone.service": "not installed (not-found)",
-                "severino-hq-example-masked.service": "not installed (masked)",
-                "severino-hq-example-off.timer": "not enabled (disabled)",
-                "severino-hq-example-idle.timer": "not started (inactive)",
-                "severino-hq-example-idle.path": "not started (inactive)",
+                "severino-hq-example-gone.service": "Not installed",
+                "severino-hq-example-masked.service": "Not installed",
+                "severino-hq-example-off.timer": "Switched off",
+                "severino-hq-example-idle.timer": "Not started",
+                "severino-hq-example-idle.path": "Not started",
             },
         )
         self.assertEqual(raised("timer-stalled"), [])
@@ -313,7 +315,7 @@ class StalledTests(TestCase):
     def test_a_timer_with_nothing_scheduled(self):
         sweep(service(), timer(sub="elapsed", next_elapse_at=""))
 
-        self.assertEqual(self.why(), "it has elapsed and nothing is scheduled")
+        self.assertEqual(self.why(), "It has run out and nothing more is scheduled")
 
     def test_a_timer_behind_its_own_next_elapse_when_it_was_read(self):
         within = rules.OVERDUE_AFTER - timedelta(minutes=1)
@@ -322,7 +324,7 @@ class StalledTests(TestCase):
 
         sweep(service(), timer(next_elapse_at=stamp(rules.OVERDUE_AFTER + timedelta(minutes=1))))
 
-        self.assertEqual(self.why(), "it was due more than 2\xa0hours before it was read")
+        self.assertEqual(self.why(), "It was more than 2\xa0hours overdue when HQ last read it")
 
     def test_a_reading_that_has_grown_old_does_not_make_a_timer_late(self):
         # Due an hour after it was read, and read a day ago: the timer was on
@@ -335,7 +337,7 @@ class StalledTests(TestCase):
     def test_a_start_skipped_because_its_condition_does_not_hold(self):
         sweep(service(condition="no", started_at="", ended_at=""), timer())
 
-        self.assertEqual(self.why(), f"{SERVICE} was skipped: its condition was not met")
+        self.assertEqual(self.why(), f"{SERVICE} was skipped because a condition it needs was not met")
 
     def test_a_unit_not_started_since_boot_was_not_skipped(self):
         """systemd says ``ConditionResult=no`` of a unit it has not started yet, with no time."""
@@ -370,7 +372,7 @@ class UnreadTests(TestCase):
         (finding,) = raised("unit-state-unread")
 
         self.assertEqual(finding["severity"], "attention")
-        self.assertEqual(finding["evidence"][0]["value"], "the controller could not take the reading")
+        self.assertEqual(finding["evidence"][0]["value"], "The controller could not read them")
         self.assertNotIn("mounted", repr(finding["evidence"]))
 
     def test_a_record_the_schema_refused_is_said_beside_the_units_that_were_read(self):

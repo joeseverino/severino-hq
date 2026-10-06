@@ -128,7 +128,7 @@ def request_empty_groups_removal(
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     policy = ManagedResource.objects.filter(key=current_key, kind=POLICY_KIND).first()
     if policy is None:
-        raise NotFoundError(f"No tailnet policy is declared as {current_key!r}.")
+        raise NotFoundError(f"HQ has no tailnet policy named {current_key!r}.")
     from .resource_operations import refuse_while_drifted
 
     refuse_while_drifted(policy)
@@ -137,7 +137,7 @@ def request_empty_groups_removal(
     except ValueError as exc:
         raise PolicyError(str(exc)) from exc
     if not document:
-        raise PolicyError("The declared policy grants no empty group.")
+        raise PolicyError("The policy grants no empty group.")
     result = save_managed_resource(
         ManagedResourceCommand(
             key=policy.key,

@@ -179,7 +179,7 @@
 - [ ] `DJANGO_BEHIND_TLS_PROXY=1`, `DJANGO_SESSION_COOKIE_SECURE=1`,
       `DJANGO_CSRF_COOKIE_SECURE=1`.
 - [ ] `DJANGO_HSTS_SECONDS` is **not** left at `0`. The connection page's
-      "There is one way in, and it is encrypted" layer reads the live setting
+      "HTTPS only" layer reads the live setting
       and says so when it is off; left at zero, it keeps telling browsers that
       plain HTTP is worth trying, indefinitely.
 - [ ] The container runs with `read_only: true`, `cap_drop: ALL`,

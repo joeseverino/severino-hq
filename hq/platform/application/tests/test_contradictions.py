@@ -47,9 +47,9 @@ class ContradictionTests(TestCase):
         (finding,) = raised("route-to-stopped-container")
 
         self.assertEqual(finding.subject, "service:shop.example.com")
-        self.assertIn("shop on edge-1, which is exited", finding.title)
+        self.assertIn("shop on edge-1, which is stopped", finding.title)
         self.assertEqual(finding.severity, "serious")
-        self.assertEqual(finding.steps[0].command, "docker start shop")
+        self.assertEqual(finding.steps[0].command, 'ssh edge-1 "sudo docker start shop"')
 
     def test_a_gate_on_a_name_no_record_answers(self):
         store("cloudflare.access_app", {"connection_ref": CLOUDFLARE, "id": "a1", "name": "Old admin",
@@ -57,7 +57,7 @@ class ContradictionTests(TestCase):
 
         (finding,) = raised("gate-guards-nothing")
 
-        self.assertIn("Old admin guards gone.example.com", finding.title)
+        self.assertIn("Old admin protects gone.example.com", finding.title)
 
     def test_inside_and_outside_reaching_different_machines(self):
         store(
@@ -77,7 +77,7 @@ class ContradictionTests(TestCase):
 
         (finding,) = raised("split-horizon-disagrees")
 
-        self.assertIn("db.example.com lives on edge-1 publicly and lab-1 inside", finding.title)
+        self.assertIn("db.example.com goes to edge-1 from the internet and lab-1 from home", finding.title)
         self.assertEqual([remedy.target for remedy in finding.remedies], ["example-db-rewrite"])
         self.assertIn("?target=example-db-rewrite", finding.remedies[0].url)
 
@@ -125,7 +125,7 @@ class ContradictionTests(TestCase):
         (finding,) = raised("published-port-unfronted")
 
         # shop answers too, but a route leads to it: only stray has nothing in front.
-        self.assertIn("stray on edge-1 answers the internet on port 9000", finding.title)
+        self.assertIn("stray on edge-1 is open to the internet on port 9000", finding.title)
 
 
 @PUBLIC_RANGE

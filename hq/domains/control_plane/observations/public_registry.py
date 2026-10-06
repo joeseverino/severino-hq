@@ -143,7 +143,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
         ADDRESS_KIND,
         "rdap",
-        "Address registration",
+        "Address owner",
         AddressHolderRecord,
         addresses=_address,
         title=lambda record: organisation_name(
@@ -186,7 +186,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
         DIGEST_KIND,
         "image_registry",
-        "Image attestations",
+        "Image signatures",
         DigestRecord,
         title=lambda record: str(record.get("digest", "")),
         relation="Attested as",

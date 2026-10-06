@@ -100,9 +100,9 @@ class FindingsTests(TestCase):
         self.assertEqual([f.subject for f in found], ["resource:skipped-record"])
         self.assertEqual(found[0].severity, "serious")
         evidence = dict(found[0].evidence)
-        self.assertEqual(evidence["Behind by"], "6\xa0hours")
-        self.assertEqual(evidence["Reason"], "Reconciled")
-        self.assertEqual(evidence["Records of this kind seen"], "4")
+        self.assertEqual(set(evidence), {"Last seen", "Others read"})
+        self.assertIn("6\xa0hours earlier", found[0].explanation)
+        self.assertIn("The other 3 internal DNS records were read", found[0].explanation)
 
     def test_the_skipped_record_is_offered_a_reconcile(self):
         skipped = self.rewrite("skipped-record")
@@ -144,7 +144,7 @@ class FindingsTests(TestCase):
         offered = [(remedy.capability, remedy.label) for remedy in found.remedies]
         # Removal is offered only to a principal allowed to remove; the edit
         # that marks it on demand is the one every manager gets.
-        self.assertEqual(offered[0], ("infrastructure.resource.update", "Mark on demand"))
+        self.assertEqual(offered[0], ("infrastructure.resource.update", "Mark it as running only sometimes"))
         self.assertNotIn("infrastructure.reconcile", [capability for capability, _ in offered])
 
     def test_a_healthy_estate_says_nothing(self):
@@ -234,7 +234,7 @@ class FindingsTests(TestCase):
         self.assertEqual([offer.label for offer in general[0].offers], ["Open connections"])
         self.assertEqual(
             [action.label for action in general[0].investigations],
-            ["Show in topology", "Trace impact"],
+            ["See it in the topology", "See what depends on it"],
         )
         self.assertIn("focus=controller%3Aone", general[0].investigations[0].url)
         self.assertEqual(
@@ -250,6 +250,20 @@ class FindingsTests(TestCase):
         )
         self.assertEqual(general[0].workflow.outcome.kind, "claim_absent")
         self.assertEqual([item.scope for item in raw], ["example.a", "example.b"])
+        self.assertEqual(general[0].remedies[0].label, "Read all now")
+        # "HQ dev" is not a name a shell takes, so no command is built on it.
+        self.assertEqual([step.command for step in general[0].steps], [""])
+
+    def test_the_controller_is_looked_at_with_commands_that_paste(self):
+        from ..controller_findings import _controller_steps
+
+        self.assertEqual(
+            [step.command for step in _controller_steps("lab-1")],
+            [
+                'ssh lab-1 "sudo systemctl status severino-hq-controller.service --no-pager"',
+                'ssh lab-1 "sudo journalctl -u severino-hq-controller.service -n 50 --no-pager"',
+            ],
+        )
 
     def test_a_shared_ability_does_not_guess_between_two_controllers(self):
         old = (self.now - timedelta(days=3)).isoformat()
@@ -367,7 +381,8 @@ class FindingsTests(TestCase):
         self.assertEqual(by_rule.count("never-observed"), 0)
         claim = next(f for f in raised if f.rule == "kind-never-swept")
         self.assertEqual(claim.scope, "cloudflare.zone")
-        self.assertEqual(dict(claim.evidence)["Records of this kind"], "25")
+        self.assertEqual(dict(claim.evidence)["In HQ"], "25")
+        self.assertEqual(claim.title, "Domains have never been read")
 
     def test_a_record_confirming_only_some_of_what_it_asserts_is_reported(self):
         """The security shape: observed, healthy, and asserting unchecked facts.
@@ -384,11 +399,11 @@ class FindingsTests(TestCase):
         found = [f for f in self.raised() if f.rule == "weakly-verified"]
 
         self.assertEqual([f.subject for f in found], ["resource:half-checked"])
-        self.assertEqual(dict(found[0].evidence)["Unconfirmed"], "answer")
+        self.assertEqual(dict(found[0].evidence)["Could not check"], "points at")
         # `field(s)` is what a claim looks like when it does not know how
         # many there are. This one does.
         # It names the field, so the reader knows what is unknown.
-        self.assertTrue(found[0].title.endswith(": answer not confirmed"))
+        self.assertTrue(found[0].title.endswith(": could not check points at"))
 
     def test_a_field_carrying_no_value_is_not_an_unconfirmed_assertion(self):
         """A spec is a full model dump, so an optional field nobody set is
@@ -467,7 +482,7 @@ class FindingsTests(TestCase):
             if f.rule == "weakly-verified" and f.subject == "resource:something-asserted"
         ]
 
-        self.assertEqual(dict(found[0].evidence)["Unconfirmed"], "priority")
+        self.assertEqual(dict(found[0].evidence)["Could not check"], "priority")
 
     def test_key_expiry_is_confirmed_by_the_sweep_that_can_see_it(self):
         """The daemon reading holds presence and key expiry: "the two that go
@@ -949,8 +964,8 @@ class ReachedButUnmeasuredTests(TestCase):
         found = self._raised("counted.example.com", "uncounted.example.com")[0]
         evidence = dict(found.evidence)
 
-        self.assertEqual(evidence["Traffic"], "not measured")
-        self.assertTrue(evidence["Reached by"])
+        self.assertEqual(evidence["Visitor counts"], "None")
+        self.assertTrue(evidence["Read through"])
 
 
 class RegistrationLapsingTests(TestCase):
@@ -1063,7 +1078,7 @@ class EveryFindingIsActionableTests(TestCase):
         missed = [f for f in self._findings() if f.rule == "skipped-by-a-sweep"]
         self.assertTrue(missed)
         for finding in missed:
-            self.assertIn("remove it", finding.explanation)
+            self.assertIn("removed or renamed", finding.explanation)
             self.assertTrue(finding.subject)
 
 
@@ -1162,7 +1177,8 @@ class OnDemandContainerTests(TestCase):
     def test_otherwise_it_offers_the_two_real_answers_and_not_the_locked_reconcile(self):
         (finding,) = self._missing(on_demand=False)
 
-        self.assertIn("Mark it on demand", finding.explanation)
+        self.assertIn("removed or renamed", finding.explanation)
+        self.assertIn("Mark it as running only sometimes", [remedy.label for remedy in finding.remedies])
         self.assertEqual(
             [remedy.capability for remedy in finding.remedies],
             ["infrastructure.resource.update", "infrastructure.resource.remove"],
@@ -1267,7 +1283,7 @@ class UnreachableConsumerTests(TestCase):
         self.assertEqual(finding.rule, "unreachable-consumer")
         self.assertEqual(finding.severity, "serious")
         self.assertIn("health.example", finding.title)
-        self.assertEqual(finding.evidence, (("Not read", "health.example"),))
+        self.assertEqual(finding.evidence, (("Did not answer", "health.example"),))
         self.assertTrue(finding.remedies, "nothing could ever clear this")
 
     def test_every_unread_name_is_evidence(self):
@@ -1283,9 +1299,9 @@ class UnreachableConsumerTests(TestCase):
         self.assertEqual(
             finding.evidence,
             (
-                ("Not read", "one.example"),
-                ("Not read", "two.example"),
-                ("Not read", "three.example"),
+                ("Did not answer", "one.example"),
+                ("Did not answer", "two.example"),
+                ("Did not answer", "three.example"),
             ),
         )
         self.assertIn("3", finding.title)
@@ -1333,7 +1349,7 @@ class PathRefusedByTheTailnetTests(TestCase):
             ("Blocked by tailnet policy", "a-controller to an-edge on 443"),
             finding.evidence,
         )
-        self.assertIn("The tailnet policy blocks the path", finding.explanation)
+        self.assertIn("The tailnet policy does not allow a-controller to an-edge on 443", finding.explanation)
 
     def test_a_consumer_merely_down_is_not_sent_at_the_policy(self):
         finding = self._finding(refused=False)
@@ -1383,7 +1399,7 @@ class WorkThatKeepsFailingTests(TestCase):
         self.assertIn("shared-hosting", finding.title)
         self.assertEqual(
             finding.evidence,
-            (("Could not finish", "SSH routes for shared-hosting (exit 126)"),),
+            (("Keeps failing", "SSH routes for shared-hosting (exit 126)"),),
         )
 
     def test_a_connection_whose_work_finishes_raises_nothing(self):
@@ -1398,7 +1414,7 @@ class WorkThatKeepsFailingTests(TestCase):
         )
 
         self.assertEqual(len(finding.evidence), 2)
-        self.assertIn("2 tasks", finding.title)
+        self.assertIn("2 things it does keep failing", finding.title)
 
     def test_a_reported_failing_step_reaches_the_finding_through_the_topology(self):
         from hq.domains.control_plane.models import ProviderConnection
@@ -1433,7 +1449,7 @@ class WorkThatKeepsFailingTests(TestCase):
         self.assertIn(":a-host:", found[0].subject)
         self.assertEqual(
             found[0].evidence,
-            (("Could not finish", "SSH routes for shared-hosting (exit 126)"),),
+            (("Keeps failing", "SSH routes for shared-hosting (exit 126)"),),
         )
 
 
@@ -1462,8 +1478,8 @@ class TailnetClaimTests(TestCase):
 
         self.assertEqual(finding.severity, "attention")
         self.assertIn("192.0.2.53", finding.title)
-        self.assertIn("1 tailnet nameserver is", finding.title)
-        self.assertEqual(finding.evidence, (("Nameserver", "192.0.2.53"),))
+        self.assertIn("which is not a tailnet address", finding.title)
+        self.assertEqual(finding.evidence, (("DNS server", "192.0.2.53"),))
 
     def test_a_resolver_on_the_tailnet_claims_nothing(self):
         from hq.platform.application.tailnet_findings import _tailnet_dns_off_tailnet
@@ -1681,8 +1697,8 @@ class PerimeterClaimTests(TestCase):
         (finding,) = self._findings(_firewall_stopped, ("firewall-unit", "inactive"))
 
         self.assertEqual(finding.severity, "serious")
-        self.assertIn("inactive", finding.explanation)
-        self.assertEqual(finding.evidence, (("Firewall unit", "inactive"),))
+        self.assertIn("not being applied", finding.explanation)
+        self.assertEqual(finding.evidence, (("Firewall", "Stopped"),))
 
     def test_a_running_firewall_claims_nothing(self):
         """Only a state worth acting on reaches the topology at all."""

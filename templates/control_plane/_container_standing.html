@@ -1,11 +1,14 @@
 {% comment %}
-One container's standing as a table cell (application.containers.Standing):
-advisories, a newer release, current, or not known and why. Shared by the
-containers page and a machine's container table so the two cannot drift.
+One container's standing as two table cells (application.containers.Standing):
+what is known against the version that runs, and whether a newer one is
+published. Shared by the containers page and a machine's container table so
+the two cannot drift.
 {% endcomment %}
-<td class="container-standing is-{{ standing.state }}">
-  {% if standing.state == "vulnerable" %}{% include "partials/_icon.html" with name="shield" %} {{ standing.summary }}
-  {% elif standing.state == "behind" %}{% include "partials/_icon.html" with name="deploy" %} {{ standing.summary }}
-  {% elif standing.state == "current" %}{% include "partials/_icon.html" with name="check-circle" %} {{ standing.summary }}
-  {% else %}<span class="muted" tabindex="0" data-tip="{% if standing.unread %}{{ standing.unread }}{% elif not standing.tag %}No version to compare: the tag floats.{% else %}The registry has not been read yet.{% endif %}">{{ standing.summary }}</span>{% endif %}
+<td class="container-standing{% if standing.state == "vulnerable" %} is-vulnerable{% endif %}">
+  {% if standing.state == "vulnerable" %}{% include "partials/_icon.html" with name="shield" %} {% endif %}{% if standing.vulnerabilities_note %}<span{% if standing.state != "vulnerable" %} class="muted"{% endif %} tabindex="0" data-tip="{{ standing.vulnerabilities_note }}">{{ standing.vulnerabilities|capfirst }}</span>{% else %}<span class="muted">{{ standing.vulnerabilities|capfirst }}</span>{% endif %}
+</td>
+<td class="container-standing{% if standing.update_state == "available" %} is-behind{% elif standing.update_state == "current" %} is-current{% endif %}">
+  {% if standing.update_state == "available" %}{% include "partials/_icon.html" with name="deploy" %} {{ standing.update }}
+  {% elif standing.update_state == "current" %}{% include "partials/_icon.html" with name="check-circle" %} {{ standing.update|capfirst }}
+  {% else %}<span class="muted" tabindex="0" data-tip="{{ standing.update_note }}">{{ standing.update|capfirst }}</span>{% endif %}
 </td>

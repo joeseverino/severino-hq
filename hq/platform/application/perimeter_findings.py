@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from .finding_model import (
-    OperatorStep,
+    THEN_CHECK_AGAIN,
+    cannot_run_commands,
     Finding,
     FindingEstate,
     fact_values,
@@ -52,22 +53,22 @@ def _reached_but_unmeasured(estate: FindingEstate) -> tuple[Finding, ...]:
         Finding(
             rule="reached-but-unmeasured",
             subject=node.id,
-            title=f"{node.label} has no traffic measurement",
+            title=f"{node.label} has no visitor counts",
             severity="attention",
             explanation=(
-                "Other names on the same connection report traffic. This one "
-                "does not. Add it to analytics."
+                "Other names read through the same connection have them. "
+                "Turn on analytics for this one."
             ),
             evidence=(
                 (
-                    "Reached by",
+                    "Read through",
                     (
                         by_id.get(reached_by[node.id]).label
                         if by_id.get(reached_by[node.id])
                         else "a connection"
                     ),
                 ),
-                ("Traffic", "not measured"),
+                ("Visitor counts", "None"),
             ),
         )
         for node in estate.nodes()
@@ -102,15 +103,15 @@ def _perimeter_open(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="perimeter-open",
                 subject=node.id,
                 title=(
-                    f"{node.label} answers on "
-                    f"{', '.join(ports)} from the public internet"
+                    f"{node.label} is open to the internet on "
+                    f"{'port' if len(ports) == 1 else 'ports'} {', '.join(ports)}"
                 ),
                 severity="serious",
                 explanation=(
-                    "A probe from outside the tailnet got an answer, so anything "
-                    "behind these ports is public. Close them at the firewall."
+                    "A test from outside your network got an answer on "
+                    f"{'this port' if len(ports) == 1 else 'these ports'}."
                 ),
-                evidence=tuple(("Answers publicly", port) for port in ports),
+                evidence=tuple(("Open port", port) for port in ports),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))
@@ -130,26 +131,25 @@ def _perimeter_unchecked(estate: FindingEstate) -> tuple[Finding, ...]:
             Finding(
                 rule="perimeter-unchecked",
                 subject=node.id,
-                title=f"{node.label}'s public perimeter was not checked",
-                steps=(
-                    (
-                        OperatorStep(
-                            label="Make the perimeter command on this machine report "
-                            "its public addresses, then request a fresh sweep."
-                        ),
-                    )
-                    if "no public address" in reasons
-                    else ()
-                ),
+                title=f"HQ could not test whether {node.label} is open to the internet",
                 severity="attention",
                 explanation=(
-                    "The last reading dialled nothing, so it cannot say whether "
-                    "anything answers from the public internet."
+                    "The test did not run because "
+                    + " and ".join(_UNCHECKED.get(reason, reason) for reason in reasons)
+                    + "."
                 ),
-                evidence=tuple(("Not checked", reason) for reason in reasons),
+                evidence=tuple(("Not tested", _UNCHECKED.get(reason, reason)) for reason in reasons),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))
+
+
+# Why the test tried nothing, as ``topology_facts.perimeter_unchecked`` words
+# it, in a sentence.
+_UNCHECKED = {
+    "no public address": "the machine reported no public address",
+    "no port to try": "the machine reported no port to try",
+}
 
 
 def _firewall_stopped(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -174,66 +174,69 @@ def _firewall_stopped(estate: FindingEstate) -> tuple[Finding, ...]:
             Finding(
                 rule="firewall-stopped",
                 subject=node.id,
-                title=f"{node.label} is not running its firewall",
+                title=f"{node.label}'s firewall is not running",
                 severity="serious",
-                explanation=(
-                    f"The firewall unit is {state}, so its rules are not "
-                    "applied. Start the unit."
-                ),
-                evidence=(("Firewall unit", state),),
+                explanation="Its firewall rules are not being applied.",
+                evidence=(("Firewall", _FIREWALL_STATES.get(state, state)),),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))
 
 
+# systemd's word for a unit that is not active, as a person says it.
+_FIREWALL_STATES = {
+    "inactive": "Stopped",
+    "failed": "Failed",
+    "activating": "Starting",
+    "deactivating": "Stopping",
+}
+
 # The rules this module raises, beside the detectors that decide them.
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "perimeter-open",
-        "Port open to the public internet",
+        "Ports open to the internet",
         "serious",
         _perimeter_open,
         operator_action=(
-            "Close each port at the machine's firewall so it answers only on the tailnet, then request a fresh sweep."
+            f"Close them in the machine's firewall. {THEN_CHECK_AGAIN}"
         ),
         no_help_reason=(
-            "HQ probes the machine from outside but has no write access to its firewall, and which ports close is yours to decide."
+            "HQ cannot change the firewall."
         ),
     ),
     FindingRule(
         "perimeter-unchecked",
-        "Public perimeter not checked",
+        "Could not test for ports open to the internet",
         "attention",
         _perimeter_unchecked,
         operator_action=(
-            "Make the machine's perimeter reading report its public addresses and published ports, then request a fresh sweep."
+            f"Make the machine report its public addresses and published ports. {THEN_CHECK_AGAIN}"
         ),
         no_help_reason=(
-            "The perimeter reading runs on the machine, and HQ cannot change what that command reports."
+            "HQ cannot change what the machine reports."
         ),
     ),
     FindingRule(
         "firewall-stopped",
-        "Firewall not running",
+        "A firewall is not running",
         "serious",
         _firewall_stopped,
         operator_action=(
-            "Start the firewall unit on the machine (systemctl start with the unit's name) and check it stays active."
+            "Start the firewall on the machine and check it stays running."
         ),
-        no_help_reason=(
-            "The reading reports the unit's state but not its name, and HQ has no shell on the machine to start it."
-        ),
+        no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
         "reached-but-unmeasured",
-        "Traffic not measured",
+        "A name has no visitor counts",
         "attention",
         _reached_but_unmeasured,
         operator_action=(
-            "Add the hostname to the analytics source that measures its neighbours."
+            "Turn on analytics for the name where the other names on its domain are measured."
         ),
         no_help_reason=(
-            "HQ reads the analytics source but no capability adds a name to it."
+            "HQ cannot turn analytics on."
         ),
     ),
 )

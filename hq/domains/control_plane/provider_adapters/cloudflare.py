@@ -425,6 +425,17 @@ def _zone_identity(spec: dict[str, Any]) -> tuple[str, ...]:
     return (zone,) if zone else ()
 
 
+def _dns_record_name(spec: dict[str, Any]) -> str:
+    """A record as a zone file would say it: the name, its type, and for an
+    address or an alias where it points."""
+
+    name = normalized_hostname(spec.get("name", ""))
+    record_type = str(spec.get("record_type", "")).strip().upper()
+    if record_type in ("A", "AAAA", "CNAME") and spec.get("content"):
+        return f"{name} → {spec['content']}"
+    return f"{name} {record_type}".strip()
+
+
 def _zone_key_hint(spec: dict[str, Any]) -> str:
     return normalized_hostname(spec.get("zone", ""))
 
@@ -513,6 +524,7 @@ DNS_RECORD = ProviderSpec(
     choices="hq.platform.application.provider_choices:dns_record",
     identity=_dns_record_identity,
     key_hint=_dns_record_key_hint,
+    name=_dns_record_name,
     origin=_dns_record_origin,
     created_from="zone",
     removal_note=_dns_record_removal_note,
@@ -540,6 +552,7 @@ ZONE = ProviderSpec(
     choices="hq.platform.application.provider_choices:zone",
     identity=_zone_identity,
     key_hint=_zone_key_hint,
+    name=_zone_key_hint,
     declaration_only=True,
     contains=(DNS_RECORD_KIND, "zone", "zone"),
     parts=(

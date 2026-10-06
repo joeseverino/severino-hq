@@ -56,18 +56,78 @@ def _declared(service: Any) -> Health:
     wired, or whose parts no controller has confirmed yet, needs attention.
     """
 
-    faults = counted(len(service.faults), "wiring fault", "wiring faults") if service.faults else ""
+    faults = counted(len(service.faults), "setup problem", "setup problems") if service.faults else ""
     states = {facet.state for facet in service.facets}
     if SERIOUS in states:
-        return Health(SERIOUS, "Degraded", faults)
+        return Health(SERIOUS, "Has a problem", faults)
     if service.faults:
         return Health(ATTENTION, "Incomplete", faults)
     if ATTENTION in states:
         # Which parts, so the word comes with the thing to go and look at.
         waiting = [facet.label for facet in service.facets if facet.state == ATTENTION]
-        return Health(ATTENTION, "Unverified", f"{', '.join(waiting)} not confirmed yet")
-    # What "healthy" rests on, said: every declared part confirmed.
-    return Health(GOOD, "Healthy", counted(len(service.declared_claims), "part confirmed", "parts confirmed"))
+        return Health(ATTENTION, "Not checked yet", f"Not checked yet: {', '.join(waiting)}")
+    return _in_place(service)
+
+
+# What each part of a service is called in the sentence saying it was checked.
+_PART_NOUNS = {"dns": "DNS record", "proxy": "proxy", "certificate": "certificate", "runtime": "container"}
+
+
+def _in_place(service: Any) -> Health:
+    """Every part HQ set up is in place: which parts those are, and what answers
+    behind the proxy where HQ reads it.
+
+    HQ checks records, never a request. So the word is what was checked, and a
+    proxy forwarding to a port nothing publishes says that instead.
+    """
+
+    parts = [
+        _PART_NOUNS.get(facet.id, facet.label.lower())
+        for facet in service.facets
+        if any(claim in service.declared_claims for claim in facet.claims)
+    ]
+    checked = f"{_and(parts)} {'is' if len(parts) == 1 else 'are'} in place" if parts else ""
+    checked = checked[:1].upper() + checked[1:]
+    if parts == [_PART_NOUNS["dns"]]:
+        return Health(UNKNOWN, "DNS record only", "A DNS record is in place. Nothing HQ set up answers at it.")
+    behind = _behind_the_proxy(service)
+    if behind is None:
+        return Health(GOOD, "Set up", f"{checked}." if checked else "")
+    address, machine, container, reads_containers = behind
+    if container:
+        return Health(GOOD, "Set up", f"{checked} and forward to {container} on {machine}.")
+    if reads_containers:
+        return Health(
+            ATTENTION,
+            "Nothing on that port",
+            f"{checked}. The proxy forwards to {address}, and no container on {machine} publishes that port.",
+        )
+    return Health(
+        GOOD, "Set up", f"{checked}. The proxy forwards to {address}. HQ does not read what runs there."
+    )
+
+
+def _and(names: list[str]) -> str:
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def _behind_the_proxy(service: Any) -> tuple[str, str, str, bool] | None:
+    """``(address, machine, container, whether HQ reads that machine's containers)``
+    for where the proxy forwards, or None when no proxy forwards anywhere HQ can place."""
+
+    from .whereabouts import reads_containers_on
+
+    route = service.path.primary
+    hops = list(route.hops) if route is not None else []
+    upstream = next((index for index, hop in enumerate(hops) if hop.step == "upstream"), None)
+    if upstream is None:
+        return None
+    after = hops[upstream + 1 :]
+    machine = next((hop.name for hop in after if hop.step == "machine"), "")
+    if not machine:
+        return None
+    container = next((hop.name for hop in after if hop.step == "container"), "")
+    return hops[upstream].name, machine, container, reads_containers_on(machine)
 
 
 def _undeclared(service: Any) -> Health:
@@ -75,11 +135,11 @@ def _undeclared(service: Any) -> Health:
 
     path = service.path
     if not path.observed_line:
-        return Health(UNKNOWN, "Nothing declared")
+        return Health(UNKNOWN, "Nothing set up in HQ")
     said = [path.observed_line]
     if not path.routes and path.gaps:
         said.append(_dns_state(path.gaps[0]))
-    return Health(UNKNOWN, "Observed", " · ".join(said))
+    return Health(UNKNOWN, "Read only", " · ".join(said))
 
 
 def _dns_state(gap: str) -> str:
@@ -93,7 +153,7 @@ def _with_own_findings(found: Health) -> Health:
     if not own:
         return found
     state = found.state if found.state == SERIOUS else ATTENTION
-    about = counted(len(own), "finding names HQ", "findings name HQ")
+    about = counted(len(own), "open problem is about HQ", "open problems are about HQ")
     return Health(state, found.label, " ".join(part for part in (found.detail, f"{about}.") if part))
 
 

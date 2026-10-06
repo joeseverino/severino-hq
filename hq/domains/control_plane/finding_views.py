@@ -18,7 +18,7 @@ class FindingsView(PageMixin, TemplateView):
 
     def get_page_actions(self):
         return (
-            PageAction("Action items", reverse("action_items")),
+            PageAction("Needs you", reverse("action_items")),
             PageAction("Topology", reverse("control_plane:topology")),
         )
 

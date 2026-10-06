@@ -223,4 +223,5 @@ class ArrivalTests(TestCase):
                 reverse("control_plane:machine", kwargs={"name": "a-laptop"})
             )
 
-        self.assertNotContains(response, "Last reached HQ")
+        self.assertContains(response, "This is HQ's own machine.")
+        self.assertNotContains(response, "over the tailnet")

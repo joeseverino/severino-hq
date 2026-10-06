@@ -281,18 +281,18 @@ func currentPolicy(document tailnetPolicyDocument) Result {
 				Type:    runtime.ConditionReady,
 				Status:  false,
 				Reason:  "Untested",
-				Message: "The policy is as declared and carries no tests, so nothing checks what it grants.",
+				Message: "The policy is as HQ set it and has no tests, so nothing checks what it allows.",
 			}},
 			Message: "Tailnet policy is current and untested.",
 		}
 	}
-	return Result{Status: status, Conditions: []Condition{condition(runtime.ConditionReady, "Reconciled", "The policy is as declared.")}, Message: "Tailnet policy is current."}
+	return Result{Status: status, Conditions: []Condition{condition(runtime.ConditionReady, "Reconciled", "The policy is as HQ set it.")}, Message: "Tailnet policy is current."}
 }
 
 func (r *Registry) tailnetPolicyReconcile(ctx context.Context, spec TailnetPolicySpec, _ struct{}, apply bool) (Result, error) {
 	wanted := strings.TrimSpace(spec.Document)
 	if wanted == "" {
-		return Result{Status: struct{}{}, Message: "No policy is declared, so there is nothing to apply."}, nil
+		return Result{Status: struct{}{}, Message: "HQ holds no policy, so there is nothing to apply."}, nil
 	}
 	document, err := policyDocument([]byte(wanted))
 	if err != nil {
@@ -336,7 +336,7 @@ func (r *Registry) tailnetPolicyReconcile(ctx context.Context, spec TailnetPolic
 	return Result{
 		Changed:    true,
 		Status:     TailnetPolicyStatus{Applied: true, Document: applied.pretty()},
-		Conditions: []Condition{condition(runtime.ConditionReady, "Reconciled", "The policy is as declared.")},
+		Conditions: []Condition{condition(runtime.ConditionReady, "Reconciled", "The policy is as HQ set it.")},
 		Message:    "Tailnet policy applied after its own tests passed.",
 	}, nil
 }

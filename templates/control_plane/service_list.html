@@ -15,15 +15,15 @@ which shares the "Runs on" column with the origin it would duplicate.
   manage, kept out by an operator, or a spec HQ could not validate.
   {% endcomment %}
   <details class="unmanaged">
-    <summary>{{ unmanaged|length }} not adopted</summary>
+    <summary>{{ unmanaged|length|counted:"name HQ found but does not manage,names HQ found but does not manage" }}</summary>
     <p class="muted">
-      Observed only, in a domain HQ does not manage, or not valid as a spec.
+      HQ only reads the connection each came through, the name is in a domain HQ does not manage, or its settings could not be read.
     </p>
     <div class="table-scroll">
       <table class="data-table">
         <thead>
           <tr>
-            <th>Hostname</th>
+            <th>Name</th>
             {% for id, label, value in unmanaged.0.facets %}<th>{{ label }}</th>{% endfor %}
             <th></th>
           </tr>
@@ -37,10 +37,10 @@ which shares the "Runs on" column with the origin it would duplicate.
               {% endfor %}
               <td>
                 {% if service.observed_only %}
-                  <span class="muted">Observed</span>
+                  <span class="muted">Read only</span>
                 {% else %}
                   {% url 'control_plane:adopt' service.hostname as retry_url %}
-                  {% post_button "Adopt" retry_url %}
+                  {% post_button "Manage in HQ" retry_url %}
                 {% endif %}
               </td>
             </tr>

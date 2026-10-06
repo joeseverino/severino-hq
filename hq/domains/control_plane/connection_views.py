@@ -36,7 +36,7 @@ class ConnectionListView(PageMixin, TemplateView):
         # Beside the title with every other page's controls, not on a line of
         # their own halfway down the summary.
         inspect = reverse("connection")
-        actions = [PageAction("Inspect this request", inspect, modal="connection")]
+        actions = [PageAction("How I am connected", inspect, modal="connection")]
         read_all = self._connections().read_all
         if read_all:
             from hq.platform.application.asks import Ask

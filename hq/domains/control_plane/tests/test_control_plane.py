@@ -677,15 +677,18 @@ class InfrastructureWebTests(TestCase):
             reverse("control_plane:detail", kwargs={"key": self.resource.key})
         )
 
-        self.assertContains(response, "Automatic")
-        self.assertContains(response, "resumes after restarts")
-        self.assertContains(response, "Renewal policy")
-        self.assertContains(response, "90 days remaining")
+        # One status line: this certificate's first change has not been applied.
+        self.assertEqual(response.content.decode().count("data-record-status="), 1)
+        self.assertContains(response, 'data-record-status="pending"')
+        self.assertContains(response, "Change waiting to apply")
+        self.assertContains(response, "Renews automatically from")
+        self.assertNotContains(response, "resumes after restarts")
+        self.assertNotContains(response, "Renewal policy")
         self.assertContains(response, "hq.example.com")
         self.assertContains(response, "sso.example.com")
         self.assertNotContains(response, "BEGIN CERTIFICATE")
         self.assertContains(response, "certificate_available")
-        self.assertContains(response, "True")
+        self.assertContains(response, "&quot;certificate_available&quot;: true")
 
     def test_a_proxy_host_and_its_upstream_are_distinct_machine_edges(self):
         ManagedResource.objects.create(
@@ -728,7 +731,7 @@ class InfrastructureWebTests(TestCase):
         # Two edges, two sentences. A container managed by a Portainer one box
         # over names two machines: the one it runs on, and the one its provider
         # runs on, so one "Runs on" cannot cover both.
-        self.assertContains(response, "Managed through")
+        self.assertContains(response, "Managed on")
         self.assertContains(response, "Forwards to")
 
     def test_public_certificate_download_never_serves_private_key(self):
@@ -915,7 +918,7 @@ class OperationPolicyTests(TestCase):
             "not_after": (timezone.now() + timedelta(days=45)).isoformat()
         }
         self.resource.save()
-        with self.assertRaisesRegex(PolicyError, "Renewal opens"):
+        with self.assertRaisesRegex(PolicyError, "Renews automatically from"):
             request_certificate_renewal(
                 OperationCommand(idempotency_key="renew-too-early"),
                 principal=cli_principal(),
@@ -1104,8 +1107,8 @@ class InfrastructureViewsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Findings")
-        self.assertContains(response, "No adguard.rewrite record has ever been seen")
-        self.assertContains(response, "Records of this kind")
+        self.assertContains(response, "Internal DNS records have never been read")
+        self.assertNotContains(response, "adguard.rewrite record")
         self.assertContains(response, reverse("action_items"))
 
     def test_findings_render_only_offers_the_projection_authorized(self):
@@ -1150,7 +1153,7 @@ class InfrastructureViewsTests(TestCase):
             idempotency_key="legacy-success",
             input={"generation": self.resource.generation},
             result={
-                "message": "Certificate consumers already match the managed lineage.",
+                "message": "Every site already serves this certificate.",
                 "status": {
                     "consumers": [
                         {
@@ -1167,7 +1170,7 @@ class InfrastructureViewsTests(TestCase):
             reverse("control_plane:detail", args=[self.resource.key])
         )
 
-        self.assertContains(detail, "observed (old result)")
+        self.assertNotContains(detail, "serves a different certificate")
         self.assertNotContains(detail, "did not match")
 
     def test_failed_operation_renders_guidance_and_expected_observed_evidence(self):
@@ -1208,12 +1211,12 @@ class InfrastructureViewsTests(TestCase):
         )
 
         self.assertContains(detail, "One consumer serves the previous certificate.")
-        self.assertContains(detail, "Provider reason:")
-        self.assertContains(detail, "VerificationFailed")
-        self.assertContains(detail, "1 affected target")
+        self.assertNotContains(detail, "Provider reason:")
+        self.assertNotContains(detail, "No action is required")
+        self.assertContains(detail, "1 name serves a different certificate")
         self.assertContains(detail, "Expected")
         self.assertContains(detail, "observed")
-        self.assertContains(detail, "Raw controller result")
+        self.assertContains(detail, "Raw result")
 
     def test_controller_rejects_secret_material_in_status(self):
         operation = OperationRequest.objects.create(

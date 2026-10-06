@@ -100,7 +100,7 @@ class RecordingTests(TestCase):
         sweep({**A_PORTAINER, "probed": False, "detail": "No probe."})
 
         self.assertEqual(connection_readings()[0].status, "unprobed")
-        self.assertEqual(connection_readings()[0].status_label, "Not probed")
+        self.assertEqual(connection_readings()[0].status_label, "Not tested")
 
     def test_a_connection_without_a_ref_is_skipped_rather_than_stored(self):
         sweep({"connection_ref": " ", "provider": "portainer"}, A_PORTAINER)
@@ -274,7 +274,7 @@ class ConnectionPageTests(TestCase):
         # A probed Portainer holds a whole-account credential: reached, proven,
         # and so ready: the lifecycle rather than the raw probe result.
         self.assertContains(response, 'class="connection-state connection-state-ready"')
-        self.assertContains(response, "Authority proven")
+        self.assertContains(response, "Credential has full account access")
         self.assertNotContains(response, "connection-ability-chip")
 
     def test_the_page_never_carries_a_secret(self):
@@ -291,14 +291,14 @@ class ConnectionPageTests(TestCase):
     def test_it_says_so_when_nothing_has_swept(self):
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "No controller has reported yet")
+        self.assertContains(response, "The controller has not read anything yet")
 
     def test_an_unclassified_connection_is_named_rather_than_hidden(self):
         sweep({**A_PORTAINER, "provider": ""})
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "Unclassified connections")
+        self.assertContains(response, "HQ does not know what these are")
         self.assertContains(response, "a-portainer")
 
     def test_the_workspace_query_cost_does_not_grow_with_connections(self):

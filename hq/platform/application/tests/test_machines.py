@@ -662,7 +662,7 @@ class WhoeverSweptTests(TestCase):
             reverse("control_plane:machine", kwargs={"name": "a-laptop"})
         )
 
-        self.assertContains(response, "No credential reaches this machine.")
+        self.assertContains(response, "no connection reads it")
         self.assertNotContains(response, "reported by something else")
 
 
@@ -940,11 +940,11 @@ class OneStateTests(TestCase):
     def test_nothing_reaching_it_says_so(self):
         containers({"name": "probe", "host": "somewhere", "state": "running"})
 
-        self.assertEqual(machine("somewhere").state, ("no credential", "unprobed"))
+        self.assertEqual(machine("somewhere").state, ("not monitored", "unprobed"))
 
 
 class DeclareFromWhatHQKnowsTests(TestCase):
-    """"Declare machine" opens a form holding the name and addresses HQ has."""
+    """"Add this machine to HQ" opens a form holding the name and addresses HQ has."""
 
     def setUp(self):
         self.user = get_user_model().objects.create_user(
@@ -979,7 +979,7 @@ class DeclareFromWhatHQKnowsTests(TestCase):
         return parse_qs(urlsplit(found.url).query)
 
     def test_the_action_is_seeded(self):
-        query = self.action(self.page(), "Declare machine")
+        query = self.action(self.page(), "Add this machine to HQ")
 
         self.assertEqual(query["kind"], ["machine"])
         self.assertEqual(query["name"], ["example-host"])
@@ -1016,7 +1016,7 @@ class DeclareFromWhatHQKnowsTests(TestCase):
         labels = [action.label for action in response.context["page"].actions]
 
         self.assertIn("Add machine details", labels)
-        self.assertNotIn("Declare machine", labels)
+        self.assertNotIn("Add this machine to HQ", labels)
         self.assertEqual(self.action(response, "Add machine details")["name"], ["example-host"])
 
     def test_saving_it_returns_to_the_machine_it_now_declares(self):

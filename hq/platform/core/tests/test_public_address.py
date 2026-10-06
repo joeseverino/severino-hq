@@ -60,7 +60,7 @@ class PublicAddressViewTests(TestCase):
     def test_a_non_routable_address_is_answered_locally_with_no_lookup_offered(self):
         response = self.client.get(self.url, {"address": "10.9.9.9"})
 
-        self.assertContains(response, "not routable")
+        self.assertContains(response, "private address")
         self.assertNotContains(response, "data-public-address-lookup")
 
     def test_a_malformed_address_is_refused(self):

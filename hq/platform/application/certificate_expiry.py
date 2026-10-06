@@ -21,7 +21,8 @@ from hq.domains.control_plane.providers import PROVIDERS
 from .expiry import days_until
 from .facts import Joined, inventory_records
 from .timestamps import moment
-from .finding_model import FindingRule, built_findings
+from .finding_model import THEN_CHECK_AGAIN, FindingRule, built_findings
+from .moments import span
 
 CERTIFICATE_EXPIRES = "certificate-expires"
 # A provider that renews on its own does so with thirty days left; a
@@ -144,18 +145,18 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
                     title=(
                         f"{label} {title} has expired"
                         if days < 0
-                        else f"{label} {title} expires {expiry_phrase(stamp)}"
+                        else f"{label} {title} expires in {span(days)}"
                     ),
                     # One that serves no name breaks nothing when it lapses: it
                     # is left over, and the advice is to remove it, not renew it.
                     severity="serious" if names and days <= SERIOUS_DAYS else "attention",
                     explanation=(
-                        "Clients get a certificate error on every name it serves "
+                        "Visitors get a certificate error on every name it serves "
                         "once it expires. Renew it where it is held, or find why "
                         "the automatic renewal failed."
                         if names
                         else "It serves no name, so nothing breaks when it expires. "
-                        "Delete it where it is held rather than renew it."
+                        "Delete it where it is held."
                     ),
                     evidence=(
                         ("Certificate", title),
@@ -176,10 +177,10 @@ RULES: tuple[FindingRule, ...] = (
         "attention",
         lambda estate: built_findings(expiring(estate)),
         operator_action=(
-            "Renew the certificate where it is held, or fix the automatic renewal that should have renewed it, then request a fresh sweep."
+            f"Renew the certificate where it is held, or fix its automatic renewal. {THEN_CHECK_AGAIN}"
         ),
         no_help_reason=(
-            "The certificate is held by a provider HQ only reads, so it is renewed there."
+            "HQ cannot renew this certificate."
         ),
     ),
 )

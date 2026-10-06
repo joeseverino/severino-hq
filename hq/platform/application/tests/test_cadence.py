@@ -214,7 +214,7 @@ class DoorbellTests(TestCase):
 
     @override_settings(SEVERINO_CONTROLLER_DOORBELL="/proc/nonexistent/doorbell")
     def test_an_explicit_sweep_request_reports_an_unreachable_doorbell(self):
-        with self.assertRaisesRegex(ValueError, "doorbell could not be reached"):
+        with self.assertRaisesRegex(ValueError, "could not reach the controller"):
             request_controller_sweep(
                 ControllerSweepCommand(), principal=cli_principal()
             )

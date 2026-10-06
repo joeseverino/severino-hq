@@ -205,7 +205,7 @@ class PageTests(TestCase):
         self.assertContains(page, "Add to <code>/opt/example/web/docker-compose.yml</code>", html=False)
         self.assertContains(page, "user: &quot;1000:1000&quot;", html=False)
         self.assertNotContains(page, "mem_limit")
-        self.assertContains(page, "Mark web as holding the socket")
+        self.assertContains(page, "Mark web as meant to control Docker")
         self.assertContains(page, "/commands/infrastructure.resource.update/?target=example-box-web")
 
     def test_a_container_meeting_every_check_has_no_block(self):
@@ -233,13 +233,13 @@ class AttentionHelpTests(TestCase):
         item = self.items()["container-posture:no-docker-socket"]
         actions = {action.label: action for action in item.actions}
 
-        mark = actions["Mark web as holding the socket"]
+        mark = actions["Mark web as meant to control Docker"]
         self.assertEqual(mark.url, "/commands/infrastructure.resource.update/?target=example-box-web")
         self.assertEqual((mark.capability, mark.target, mark.method), ("infrastructure.resource.update", "example-box-web", "GET"))
         adopt = actions["Adopt kuma to mark it"]
         self.assertEqual(adopt.method, "POST")
         self.assertIn("/adopt/record/portainer.container/", adopt.url)
-        self.assertIn("cannot write the proxy", item.body)
+        self.assertIn("cannot write a socket proxy", item.body)
 
     def test_the_socket_button_opens_the_update_prefilled_with_its_declaration(self):
         self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
@@ -271,7 +271,7 @@ class AttentionHelpTests(TestCase):
         (action,) = item.actions
         self.assertEqual(action.label, "Compose change for web")
         self.assertTrue(action.url.endswith("/example-box-web/#hardening"))
-        self.assertIn("HQ wrote the compose change", item.body)
+        self.assertIn("The compose change for each is on its page.", item.body)
 
     def test_an_advisory_says_which_upgrade_clears_it_and_why_it_cannot_run_yet(self):
         estate(advisories=[HIGH])
@@ -279,8 +279,8 @@ class AttentionHelpTests(TestCase):
 
         item = self.items()["container-advisory:ghcr.io/example/app:v1.2.0"]
 
-        self.assertEqual(item.action, "Upgrade to v1.3.0 (clears 1)")
-        self.assertIn("example-box cannot apply it yet: the upgrade helper needs a copy and its sudo rule there", item.body)
+        self.assertEqual(item.action, "Upgrade to v1.3.0 (fixes 1)")
+        self.assertIn("example-box cannot apply it yet. The upgrade helper needs a copy and its sudo rule there", item.body)
         self.assertTrue(item.url.endswith("/example-box-app/#upgrade"))
         (action,) = item.actions
         self.assertEqual(action.label, "Upgrade plan for app")
@@ -290,7 +290,7 @@ class AttentionHelpTests(TestCase):
 
         item = self.items()["container-advisory:ghcr.io/example/app:v1.2.0"]
 
-        self.assertIn("HQ does not watch this container", item.body)
+        self.assertIn("HQ does not track this container", item.body)
         (action,) = item.actions
         self.assertEqual((action.label, action.method), ("Adopt app to plan its upgrade", "POST"))
 
@@ -308,5 +308,5 @@ class AttentionHelpTests(TestCase):
         item = self.items()["container-advisory:ghcr.io/example/app:v1.2.0"]
 
         self.assertIn("no release fixes it yet", item.title)
-        self.assertEqual(item.action, "Nothing to upgrade to until a release fixes it")
+        self.assertEqual(item.action, "No fixed release to upgrade to yet")
         self.assertEqual(item.actions, ())

@@ -51,12 +51,12 @@ def wider_than_tailnet(estate: Any) -> tuple[dict[str, Any], ...]:
             {
                 "rule": "trusted-wider-than-tailnet",
                 "subject": node.id,
-                "title": f"HQ trusts all of {', '.join(map(str, wide))}; the tailnet uses {uses}",
+                "title": f"HQ trusts all of {', '.join(map(str, wide))}, and the tailnet uses {uses}",
                 "severity": "neutral",
                 "explanation": (
-                    "SEVERINO_TRUSTED_NETWORKS admits every address in the range. "
-                    "Narrowing it to what the tailnet uses is an operator's "
-                    "decision; HQ does not change it."
+                    "HQ accepts requests from every address in the range. "
+                    "You can narrow SEVERINO_TRUSTED_NETWORKS to the addresses "
+                    "the tailnet uses."
                 ),
                 "evidence": (
                     *(("Trusted", str(network)) for network in wide),
@@ -65,7 +65,7 @@ def wider_than_tailnet(estate: Any) -> tuple[dict[str, Any], ...]:
                 ),
                 "steps": (
                     OperatorStep(
-                        label="Narrow the trusted networks, then restart HQ",
+                        label="Set this where HQ is deployed, then restart HQ",
                         command=(
                             "SEVERINO_TRUSTED_NETWORKS="
                             f"{narrowed(wide, addresses, routes)}"

@@ -17,7 +17,6 @@ from hq.domains.control_plane.observations.portainer import (
     STACK_KIND,
     VOLUME_KIND,
     image_title,
-    short_id,
 )
 
 from .docker_estate import IMAGE_BEHIND, image_verdicts
@@ -81,6 +80,23 @@ def _environments(machine) -> ServiceSection | None:
     )
 
 
+def docker_line(machine) -> dict[str, Any] | None:
+    """A machine's one Docker environment as a line: its version and the
+    connection it is read through. None when it has none, or several, which
+    the table lists. How many containers run is the container list's to say."""
+
+    records = _records(machine, ENVIRONMENT_KIND)
+    if len(records) != 1:
+        return None
+    record = records[0]
+    ref = str(record.get("connection_ref", "") or "")
+    return {
+        "version": str(record.get("docker_version", "") or ""),
+        "status": str(record.get("status", "") or ""),
+        "connection": entity_link("connection", ref) if ref else None,
+    }
+
+
 def _networks(machine) -> ServiceSection | None:
     records = sorted(_records(machine, NETWORK_KIND), key=lambda record: str(record.get("name", "")))
     if not records:
@@ -109,7 +125,10 @@ def _users(record: Mapping[str, Any]) -> Cell:
         + (" (read only)" if user.get("read_only") else "")
         for user in record.get("used_by") or ()
     ]
-    return Cell("; ".join(users)) if users else Cell("unused", muted=True)
+    if users:
+        return Cell(", ".join(users))
+    # Only a named volume can be removed: a host path nothing mounts is not listed.
+    return Cell("unused, can be removed" if record.get("type") == "volume" else "unused", muted=True)
 
 
 def _data(machine) -> ServiceSection | None:
@@ -124,12 +143,13 @@ def _data(machine) -> ServiceSection | None:
         renders=(VOLUME_KIND,),
         folded=True,
         label="Where data lives",
-        columns=("Mount", "Kind", "On the machine", "Used by", "Project"),
+        columns=("Mount", "Type", "On the machine", "Used by", "Project"),
         records=tuple(
             (
                 Cell(str(record.get("name") or record.get("source") or "")),
                 Cell("Named volume" if record.get("type") == "volume" else "Host path"),
-                _text(record.get("source")),
+                # A host path is its own place on the machine, already in the first cell.
+                Cell(str(record.get("source") or "")) if record.get("type") == "volume" else Cell(""),
                 _users(record),
                 _text(record.get("stack")),
             )
@@ -139,7 +159,7 @@ def _data(machine) -> ServiceSection | None:
 
 
 def unused_images(machine) -> tuple[Mapping[str, Any], ...]:
-    """Images on the machine no container runs: what a prune would reclaim."""
+    """Images on the machine no container runs: what removing them would free."""
 
     return tuple(record for record in _records(machine, IMAGE_KIND) if not record.get("containers"))
 
@@ -151,9 +171,9 @@ def _image_state(verdicts: Mapping[str, str], record: Mapping[str, Any]) -> Cell
         return Cell("Unused", muted=True)
     if verdicts.get(str(record.get("id", ""))) == IMAGE_BEHIND:
         # Pulled, and not yet what runs: recreating the container runs it.
-        return Cell("Behind its tag")
+        return Cell("Newer build pulled, recreate the container to run it")
     if not record.get("tags"):
-        return Cell("Untagged")
+        return Cell("No tag")
     return None
 
 
@@ -171,11 +191,10 @@ def _images(machine) -> ServiceSection | None:
         # Every image, because the containers table shows those it runs.
         renders=(IMAGE_KIND,),
         label="Images",
-        columns=("Image", "Id", "Created", "Size", "State"),
+        columns=("Image", "Created", "Size", "State"),
         records=tuple(
             (
                 Cell(image_title(record)),
-                Cell(short_id(str(record.get("id", "")))),
                 _text(created.date().isoformat() if (created := moment(record.get("created_at"))) else ""),
                 _text(human_bytes(record["size"]) if isinstance(record.get("size"), int) else ""),
                 state,
@@ -190,6 +209,8 @@ def _projects(machine) -> ServiceSection | None:
     records = sorted(_records(machine, STACK_KIND), key=lambda record: str(record.get("name", "")))
     if not records:
         return None
+    # "Started by" is a column only when Portainer started one of them.
+    mixed = any(record.get("source") == "portainer" for record in records)
     return ServiceSection(
         id="docker-projects",
         renders=(STACK_KIND,),
@@ -200,8 +221,9 @@ def _projects(machine) -> ServiceSection | None:
             (
                 Cell(str(record.get("name", ""))),
                 Cell(
-                    "Portainer"
-                    + (f", {record['status']}" if record.get("status") else "")
+                    ""
+                    if not mixed
+                    else "Portainer" + (f", {record['status']}" if record.get("status") else "")
                     if record.get("source") == "portainer"
                     else "Compose on the machine"
                 ),
