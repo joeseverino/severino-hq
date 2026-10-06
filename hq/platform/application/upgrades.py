@@ -259,16 +259,10 @@ def _blockers(item: Container, standing: Any, introduces) -> tuple[Blocker, ...]
         found.append(Blocker("mounts-unread", "Its mounts have not been read, so its data cannot be found to snapshot."))
     if introduces:
         found.append(Blocker("target-affected", f"{standing.latest} brings a known vulnerability of its own."))
-    # HQ's deploys bring the helper to the machine HQ runs on; any other needs
-    # its own copy. A machine runs it once its sudo rule is there, and the
-    # queue does not yet send an upgrade to the one machine it concerns.
-    needs = "its sudo rule" if getattr(item.machine, "runs_hq", False) else "a copy and its sudo rule"
+    # The queue does not yet send an upgrade to the one machine it concerns,
+    # with or without the helper there (``install_steps``).
     found.append(
-        Blocker(
-            "no-apply-path",
-            f"{item.machine.name} cannot apply it yet. The upgrade helper needs {needs} "
-            "there, and HQ cannot yet send an upgrade to the machine a container runs on.",
-        )
+        Blocker("no-apply-path", f"HQ cannot apply an upgrade on {item.machine.name} yet.")
     )
     return tuple(found)
 

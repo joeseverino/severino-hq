@@ -35,9 +35,16 @@
 </section>
 
 {% comment %}
-One table per group, every rule visible: a column per surface and per agent,
-so a rule is read and changed where it sits rather than behind a disclosure.
+The rules that differ from the default, and every rule when asked: a column
+per surface and per agent, so a rule is read and changed where it sits.
 {% endcomment %}
+<div class="section-head">
+  <h2>{% if show_all %}Every action{% else %}Changed from the default{% endif %}</h2>
+  {% if show_all %}<a class="btn compact ghost" href="{% url 'agent_policy' %}">Show only changed</a>{% else %}<a class="btn compact ghost" href="{% url 'agent_policy' %}?all=1">Show all {{ action_count }} actions</a>{% endif %}
+</div>
+{% if not shown_groups %}
+  <p class="muted">Every action is at its default.</p>
+{% else %}
 <form method="post" class="policy">
   {% csrf_token %}
   {% comment %}
@@ -53,7 +60,7 @@ so a rule is read and changed where it sits rather than behind a disclosure.
           {% for head in column_heads %}<th scope="col" title="{{ head.column.detail }}">{{ head.column.label }}{% if head.dormant %} <span class="policy-off">off in HQ's settings</span>{% endif %}</th>{% endfor %}
         </tr>
       </thead>
-      {% for group in groups %}
+      {% for group in shown_groups %}
         <tbody>
           <tr class="row-group"><th colspan="{{ column_heads|length|add:2 }}" scope="rowgroup">{{ group.label }}</th></tr>
           {% for row in group.rows %}
@@ -69,4 +76,5 @@ so a rule is read and changed where it sits rather than behind a disclosure.
   </div>
   <div class="save-bar"><button type="submit" class="btn primary">Save changes</button></div>
 </form>
+{% endif %}
 {% endblock %}

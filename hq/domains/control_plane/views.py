@@ -44,6 +44,7 @@ from hq.platform.application.resource_context import (
     newest_reading,
     origin_machine,
     readout_rows,
+    record_list,
     record_status,
     resource_context,
 )
@@ -292,7 +293,7 @@ class InfrastructureListView(PageMixin, ListView):
     model = ManagedResource
     template_name = "control_plane/resource_list.html"
     context_object_name = "resources"
-    page_title = "Infrastructure"
+    page_title = "All records"
 
     def get_page_actions(self):
         return (
@@ -337,6 +338,11 @@ class InfrastructureListView(PageMixin, ListView):
             )
         ]
         context["provider_catalog"] = describe_providers()
+        context["records"] = record_list(
+            context["resources"],
+            query=self.request.GET.get("q", ""),
+            kind=self.request.GET.get("type", ""),
+        )
         return context
 
 
@@ -346,6 +352,13 @@ class InfrastructureDetailView(PageMixin, DetailView):
     slug_url_kwarg = "key"
     template_name = "control_plane/resource_detail.html"
     context_object_name = "resource"
+
+    def get_object(self, queryset=None):
+        # Read once: ``get`` asks before deciding where the record lives, and
+        # the detail view asks again to draw it.
+        if not hasattr(self, "_record"):
+            self._record = super().get_object(queryset)
+        return self._record
 
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
@@ -554,6 +567,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
         context["resolved_spec"] = derived.resolved_spec
         context["resolution_error"] = derived.resolution_error
         context["display_consumers"] = derived.display_consumers
+        context["certificate_use"] = derived.certificate_use
         context["spec_json"] = _json(self.object.spec)
         context["diagnostic_status"] = _json(serialize_public_status(self.object.status))
         return context

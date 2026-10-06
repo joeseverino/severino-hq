@@ -351,9 +351,17 @@ def observed_request_controls(hostname: str) -> tuple[SecurityControl, SecurityC
 def observed_connection_controls(
     hostname: str,
 ) -> tuple[SecurityControl, SecurityControl]:
-    """Read both provider controls in one constant local-cache query."""
+    """Both provider controls, from the one read of every reading the
+    connections page already shares."""
 
-    snapshots = _snapshots(*_ingress_kinds(), TAILNET_POLICY_KIND)
+    from .facts import stored_snapshots
+
+    stored = stored_snapshots()
+    snapshots = {
+        kind: stored[kind][0]
+        for kind in (*_ingress_kinds(), TAILNET_POLICY_KIND)
+        if stored.get(kind)
+    }
     return (
         _tailnet_policy_control(snapshots.get(TAILNET_POLICY_KIND)),
         _ingress_control(hostname, snapshots),

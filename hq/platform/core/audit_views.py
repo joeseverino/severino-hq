@@ -9,8 +9,12 @@ from hq.platform.application.projection import day_span
 from hq.platform.application import history
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.projection import projection_scope
-from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin
+from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from .models import AuditLog
+
+
+# The toggle that brings the asks for a fresh reading back into the log.
+READS = "reads"
 
 
 class AuditLogListView(PageMixin, TableListMixin, ListView):
@@ -25,6 +29,8 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
         TableFilter("source", "Where", "source", history.SOURCES),
         TableFilter("action", "Action", "action", AuditLog.Action.choices),
     )
+    # Off until asked for: an ask for a fresh reading changes nothing.
+    table_toggles = (TableToggle(READS, "Read requests"),)
     table_columns = (
         TableColumn("When", "created_at", "Oldest event", "Newest event"),
         TableColumn("Who", "user__username", "User A–Z", "User Z–A"),
@@ -61,6 +67,8 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
 
     def get_queryset(self):
         qs = AuditLog.objects.select_related("user").annotate(source=history.source_of_event())
+        if not self.request.GET.get(READS):
+            qs = qs.exclude(object_type=history.read_request_type())
         if self._awaiting():
             from hq.platform.application.approvals import AUDIT_LABELS, awaiting_ids
 

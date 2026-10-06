@@ -31,6 +31,7 @@ Two consequences:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from typing import Any
@@ -188,7 +189,7 @@ class Service:
         about what a domain is.
         """
 
-        for resource in ManagedResource.objects.filter(enabled=True):
+        for resource in enabled_resources():
             provider = PROVIDERS.get(resource.kind)
             if provider is None or not provider.contains:
                 continue
@@ -439,6 +440,35 @@ def certificates_serving(hostname: str) -> tuple[str, ...]:
             for facet_id, names, claim in covering
             if facet_id == CERTIFICATE_FACET and _serves(wanted, names, claim, named)
         )
+    )
+
+
+@dataclass(frozen=True)
+class CertificateUse:
+    """A certificate from the side of what it serves: the services served
+    with it, and the names on it that no service is served under."""
+
+    used_by: tuple[str, ...] = ()
+    unused: tuple[str, ...] = ()
+
+
+def certificate_use(key: str, names: Iterable[str]) -> CertificateUse:
+    """The reverse of ``certificates_serving``, for the certificate's own page."""
+
+    used_by = tuple(
+        sorted(
+            service.hostname
+            for service in service_catalog()
+            if key in certificates_serving(service.hostname)
+        )
+    )
+    return CertificateUse(
+        used_by,
+        tuple(
+            name
+            for name in names
+            if not any(certificate_covers(hostname, {name}) for hostname in used_by)
+        ),
     )
 
 

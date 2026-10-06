@@ -27,6 +27,8 @@ held request writes nothing and queues nothing by design.
   </div>
 {% endif %}
 
+{% problems_about as problems %}{% include "partials/_problems.html" %}
+
 {% comment %}
 A running container is summarised by what it runs rather than by the
 declaration's machinery: the controller's actions are the buttons above, and
@@ -47,6 +49,25 @@ never shows two statuses, so two can never disagree.
     <span>{% if status.since %}Since {{ status.since|when }}. {% endif %}{{ status.detail }}{% if status.read_at %} Last read {{ status.read_at|ago }}.{% endif %}{% for line in controller.lines %} {{ line }}{% endfor %}</span>
   </div>
 </div>
+{% endif %}
+
+{% comment %}
+A certificate from the side of what it serves: each service served with it,
+and the names on it nothing is served under. The service's own page names the
+certificate, so the relation reads from both ends.
+{% endcomment %}
+{% if certificate_use %}
+  <section class="control-card" id="used-by">
+    <h2>Used by</h2>
+    {% if certificate_use.used_by %}
+      <p>{{ certificate_use.used_by|length|counted:"service" }}: {% for hostname in certificate_use.used_by %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+    {% else %}
+      <p class="muted">No service is served with this certificate.</p>
+    {% endif %}
+    {% if certificate_use.unused and certificate_use.used_by %}
+      <p class="muted">Nothing is served under {% for name in certificate_use.unused %}<code>{{ name }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}.</p>
+    {% endif %}
+  </section>
 {% endif %}
 
 {% if resolved_spec or resolution_error %}
@@ -243,6 +264,7 @@ never shows two statuses, so two can never disagree.
 {% endif %}
 
 {% include "partials/_relationships.html" %}
+{% referenced_by resource.kind resource.key cards=True %}
 
 <details class="control-diagnostics">
   <summary>Raw data</summary>

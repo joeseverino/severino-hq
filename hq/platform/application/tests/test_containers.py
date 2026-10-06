@@ -105,9 +105,56 @@ class StandingTests(TestCase):
         advisory = items["container-advisory:ghcr.io/example/app:v1.2.0"]
         self.assertEqual((advisory.status, advisory.magnitude), ("serious", 1))
         self.assertIn("Fixed in 1.2.1", advisory.body)
-        self.assertTrue(items["container-updates"].body.startswith("example/kuma:1 → 2."))
-        # With help: why HQ cannot run the upgrade itself yet.
-        self.assertIn("HQ cannot apply it yet.", items["container-updates"].body)
+        # The body is the images. What to do is a step, and why HQ does not
+        # do it is one sentence that names no machine.
+        self.assertEqual(items["container-updates"].body, "example/kuma:1 → 2.")
+        steps = items["container-updates"].workflow.steps
+        self.assertEqual(
+            [(step.phase, step.summary) for step in steps],
+            [
+                ("do", "On example-box, set the image of kuma to docker.io/example/kuma:2 where it is defined, "
+                       "then start it again."),
+                ("cannot", "HQ cannot apply an update itself yet."),
+            ],
+        )
+
+    def test_an_update_names_the_command_when_its_compose_project_was_read(self):
+        estate()
+        inventory("portainer.runtime", [
+            {"connection_ref": "example-portainer", "host": "example-box", "container": "kuma", "service": "kuma-web"},
+        ])
+        inventory("portainer.compose_project", [
+            {"connection_ref": "example-portainer", "host": "example-box", "name": "kuma",
+             "config_files": ["/opt/apps/kuma/compose.yaml", "/opt/apps/kuma/compose.override.yaml"]},
+        ])
+
+        (item,) = [item for item in attention() if item.key == "container-updates"]
+
+        (step,) = [step for step in item.workflow.steps if step.phase == "run"]
+        self.assertEqual(
+            (step.phase, step.label, step.summary),
+            (
+                "run",
+                "On example-box, set the image of kuma to docker.io/example/kuma:2 in "
+                "/opt/apps/kuma/compose.override.yaml, then run",
+                'ssh example-box "sudo docker compose -f /opt/apps/kuma/compose.yaml '
+                '-f /opt/apps/kuma/compose.override.yaml up -d kuma-web"',
+            ),
+        )
+
+    def test_an_update_card_says_each_thing_once(self):
+        """One reason, no machine named twice, nothing about how HQ would apply it."""
+
+        estate(advisories=[HIGH])
+
+        for item in attention():
+            if item.workflow is None:
+                continue
+            said = " ".join([item.body, *(step.summary for step in item.workflow.steps)])
+            with self.subTest(item=item.key):
+                self.assertEqual(said.count("cannot apply"), 1)
+                self.assertNotIn("sudo rule", said)
+                self.assertNotIn("helper", said)
 
     def test_many_advisories_are_one_thing_to_do(self):
         estate(advisories=[HIGH, {**HIGH, "id": "GHSA-high-2"}, {**HIGH, "id": "GHSA-high-3"}])

@@ -279,7 +279,7 @@ def _record_observed_answers(
             found.setdefault(label, set()).update(answered)
 
 
-def observed_answers() -> dict[str, tuple[str, ...]]:
+def observed_answers(snapshots=None) -> dict[str, tuple[str, ...]]:
     """Every address each hostname is *seen* answering at.
 
     Observed rather than declared, because of what the callers do with it. A
@@ -299,7 +299,9 @@ def observed_answers() -> dict[str, tuple[str, ...]]:
     from hq.domains.control_plane.providers import PROVIDERS
 
     found: dict[str, set[str]] = {}
-    for snapshot in ProviderInventory.objects.all():
+    # ``snapshots`` is every stored reading, from a caller that already holds
+    # them; without it they are read here.
+    for snapshot in ProviderInventory.objects.all() if snapshots is None else snapshots:
         provider = PROVIDERS.get(snapshot.kind)
         if provider is None or provider.from_record is None:
             continue

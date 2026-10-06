@@ -1,0 +1,5 @@
+{% comment %}
+Free text with the names HQ knows in it as links (`application.where_it_runs.named_links`,
+as `text|named_links`). Line breaks are kept by the class, not by markup.
+{% endcomment %}
+<p class="linked-text">{% for part in parts %}{% if part.url %}{% entity part %}{% else %}{{ part }}{% endif %}{% endfor %}</p>

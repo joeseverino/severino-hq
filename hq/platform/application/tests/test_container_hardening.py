@@ -280,7 +280,8 @@ class AttentionHelpTests(TestCase):
         item = self.items()["container-advisory:ghcr.io/example/app:v1.2.0"]
 
         self.assertEqual(item.action, "Upgrade to v1.3.0 (fixes 1)")
-        self.assertIn("example-box cannot apply it yet. The upgrade helper needs a copy and its sudo rule there", item.body)
+        self.assertEqual([step.phase for step in item.workflow.steps], ["do", "cannot"])
+        self.assertIn("set the image of app to ghcr.io/example/app:v1.3.0", item.workflow.steps[0].summary)
         self.assertTrue(item.url.endswith("/example-box-app/#upgrade"))
         (action,) = item.actions
         self.assertEqual(action.label, "Upgrade plan for app")
@@ -290,7 +291,6 @@ class AttentionHelpTests(TestCase):
 
         item = self.items()["container-advisory:ghcr.io/example/app:v1.2.0"]
 
-        self.assertIn("HQ does not track this container", item.body)
         (action,) = item.actions
         self.assertEqual((action.label, action.method), ("Adopt app to plan its upgrade", "POST"))
 

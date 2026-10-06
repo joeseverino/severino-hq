@@ -11,8 +11,9 @@
     <option value="">All areas</option>
     {% for source_id, source_label in action_sources %}<option value="{{ source_id }}"{% if action_source == source_id %} selected{% endif %}>{{ source_label }}</option>{% endfor %}
   </select>
+  {% if action_about %}<input type="hidden" name="about" value="{{ action_about }}">{% endif %}
   <button class="btn" type="submit">Apply</button>
-  {% if action_query or action_status or action_source %}<a class="btn ghost" href="{% url 'action_items' %}">Clear</a>{% endif %}
+  {% if action_query or action_status or action_source or action_about %}<a class="btn ghost" href="{% url 'action_items' %}">Clear</a>{% endif %}
 </form>
 
 {% comment %}
@@ -23,12 +24,12 @@ comes back on its own only if it gets worse.
 {% endcomment %}
 <section class="card action-items-card" data-triage-routes data-dismiss="{% url 'action_items_set_aside' %}" data-restore="{% url 'action_items_bring_back' %}">
   <div class="section-head">
-    <h2>{% if action_query or action_status or action_source %}Matches{% else %}Needs you{% endif %} <span class="count" data-queue-count>{{ action_item_total }}</span></h2>
+    <h2>{% if action_query or action_status or action_source or action_about %}Matches{% else %}Needs you{% endif %} <span class="count" data-queue-count>{{ action_item_total }}</span></h2>
     {% if action_groups %}{% post_button "Dismiss all" aside_all_url css="btn compact ghost" %}{% endif %}
   </div>
   {% if action_groups %}
     {% include "partials/_queue_groups.html" with groups=action_groups prefix="queue" aside_url=aside_all_url %}
-  {% elif action_query or action_status or action_source %}
+  {% elif action_query or action_status or action_source or action_about %}
     {% url 'action_items' as all_actions_url %}
     {% include "partials/_empty_state.html" with message="Nothing matches these filters." action_url=all_actions_url action_label="Clear filters" compact=True only %}
   {% else %}

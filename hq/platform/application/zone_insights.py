@@ -22,7 +22,6 @@ import re
 from hq.platform.application.routes import reverse
 
 from hq.domains.control_plane.credential_reads import REGISTRAR_READ
-from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.contracts import PERMISSION_REFUSAL
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.control_plane.provider_adapters.cloudflare import caa_parts
@@ -42,7 +41,7 @@ from .facts import (
     inventory_records,
     readings as stored_readings,
 )
-from .infrastructure import delivery_targets, resolved_spec
+from .infrastructure import delivery_targets, enabled_resources, resolved_spec
 from .known_hosts import operator, registrable
 
 
@@ -223,9 +222,10 @@ def _covering(zone) -> list:
 
     targets = delivery_targets()
     covering = []
-    for resource in ManagedResource.objects.filter(
-        kind__in=(CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND), enabled=True
-    ):
+    # From the read the page already shares, in its order.
+    for resource in enabled_resources():
+        if resource.kind not in (CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND):
+            continue
         provider = PROVIDERS.get(resource.kind)
         if provider is None or provider.hostnames is None:
             continue

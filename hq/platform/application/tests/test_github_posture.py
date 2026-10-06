@@ -12,7 +12,16 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from ..github_posture import COMMANDS, REASONS, STANDARD, WIRED_SECRETS, attention, build_attention, postures
+from ..github_posture import (
+    COMMANDS,
+    PINS_CALLED,
+    REASONS,
+    STANDARD,
+    WIRED_SECRETS,
+    attention,
+    build_attention,
+    postures,
+)
 from ..item_help import COMMAND, item_help
 from ..standards import MET, UNAVAILABLE, UNMET
 from .test_github_estate import store
@@ -247,9 +256,14 @@ class PostureHelpTests(TestCase):
 
         self.assertEqual(runs(item)[0][0], "alpha: pin .github/workflows/ci.yml")
         self.assertNotIn("sha_pinning_required", str(item.workflow))
-        reason = item.workflow.steps[-1].summary
-        self.assertIn("also applies to the actions a called workflow uses", reason)
-        self.assertIn(called[0], reason)
+        # Why, in one sentence that names no workflow; which workflows, as a
+        # step each.
+        *told, reason = item.workflow.steps
+        self.assertEqual((reason.phase, reason.summary), ("cannot", PINS_CALLED))
+        self.assertEqual(
+            [step.summary for step in told if step.phase == "do"],
+            [f"alpha: check that {called[0]} pins its own actions, then require pinning."],
+        )
 
     def test_a_tag_that_could_not_be_resolved_holds_back_the_setting(self):
         pins = [{"path": ".github/workflows/ci.yml", "uses": "example/gone@v1",

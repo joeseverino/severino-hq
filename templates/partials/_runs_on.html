@@ -1,0 +1,12 @@
+{% comment %}
+Where something published runs: the machine and the container that answer
+for its public address, each a link, from the service at that address
+(`application.where_it_runs`). `runs_on` is `public_url|where_it_runs`; nothing
+is drawn when no service HQ knows answers there.
+{% endcomment %}
+{% if runs_on %}
+<p class="runs-on">
+  {% if runs_on.machine %}Runs on {% entity runs_on.machine %}{% if runs_on.container %}, container {% entity runs_on.container %}{% endif %}.{% endif %}
+  <span class="muted">Served as {% entity runs_on.service %}</span>
+</p>
+{% endif %}

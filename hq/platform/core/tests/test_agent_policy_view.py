@@ -47,7 +47,8 @@ class DormantColumnTests(TestCase):
         with patch(
             "hq.platform.application.capability_policy.matrix", return_value=((surface, agent), groups)
         ):
-            response = self.client.get(reverse("agent_policy"))
+            # Every action: a column is headed only over the rows that are drawn.
+            response = self.client.get(reverse("agent_policy"), {"all": 1})
 
         self.assertEqual(
             [head["dormant"] for head in response.context["column_heads"]], [True, False]

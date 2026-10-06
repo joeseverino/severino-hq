@@ -11,6 +11,7 @@ declaration that says holding it is the container's job.
 
 from __future__ import annotations
 
+import shlex
 from typing import Any
 
 from hq.platform.application.routes import reverse
@@ -20,10 +21,14 @@ from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from .action_links import command_url
 from .containers import VULNERABLE, Container, Standing, containers
 from .exposure import LEVELS, OPEN, UNKNOWN, UNROUTED, exposure_of_container, status_at, worse
+from .finding_model import on_machine
 from .images import version
+from .item_help import do_step, run_step, steps
 from .ui import Insight, counted
-from .workflow_contracts import ActionLink
+from .workflow_contracts import ActionLink, WorkflowPlan, WorkflowStep
 
+# Said once on a card whose update is applied by hand.
+BY_HAND = "HQ cannot apply an update itself yet."
 UPDATE_CAPABILITY = "infrastructure.resource.update"
 # Buttons on one item before the rest are left to the containers page.
 MOST_ACTIONS = 8
@@ -53,9 +58,10 @@ def attention() -> tuple[Insight, ...]:
                 title=f"{counted(len(behind), 'running image has', 'running images have')} an update",
                 value=str(len(behind)),
                 magnitude=len(behind),
-                body=", ".join(sorted(behind)) + "." + _not_yet(behind_running),
+                body=", ".join(sorted(behind)) + "." + _brings(behind_running),
                 action="Open containers",
                 url=reverse("control_plane:containers"),
+                workflow=by_hand("container-updates", behind_running),
                 # Each one's plan, the same help an advisory carries.
                 actions=_limited(_upgrade_link(item) for item in behind_running),
             )
@@ -71,35 +77,73 @@ def needs_you(standing: Standing, running: list[Container]) -> bool:
     return bool(standing.newer) or _reach(running)[0] in (OPEN, UNKNOWN)
 
 
-def _not_yet(running: list[Container]) -> str:
-    """Why HQ cannot run these upgrades itself yet, said once."""
-
+def _plans(running: list[Container]) -> list[Any]:
     from .upgrades import plan_for
 
-    plans = [plan for plan in (plan_for(item) for item in running) if plan is not None]
-    reasons = list(dict.fromkeys(blocker.reason for plan in plans for blocker in plan.blockers))
-    return _cannot_yet(reasons)
+    return [plan for plan in (plan_for(item) for item in running) if plan is not None]
 
 
-def _cannot_yet(reasons: list[str]) -> str:
-    """Why an upgrade cannot be applied from HQ yet, as sentences."""
+def _brings(running: list[Container]) -> str:
+    """What a new version would bring that is worth knowing before moving to it."""
 
-    return f" HQ cannot apply it yet. {' '.join(reasons)}" if reasons else ""
+    brings = sorted({plan.target_tag for plan in _plans(running) if plan.introduces})
+    return "".join(f" {tag} has a known vulnerability of its own." for tag in brings)
+
+
+def by_hand(key: str, running: list[Container]) -> WorkflowPlan | None:
+    """How these are updated today: on each machine, one step per container.
+
+    The step names the image to set and the file that sets it, and carries the
+    command that recreates the container, when HQ read the compose project it
+    belongs to. Without that it says only what to set.
+    """
+
+    told = [_by_hand_step(plan) for plan in _plans(running)]
+    return steps(key, told, reason=BY_HAND) if told else None
+
+
+def _by_hand_step(plan: Any) -> WorkflowStep:
+    item = plan.container
+    name, machine = item.running.name, item.machine.name
+    if item.standing.repository is not None:
+        return do_step(f"{name} on {machine} is HQ's own image. Its release pipeline deploys it.")
+    wanted = f"{item.standing.image.name}:{plan.target_tag}"
+    files = tuple(item.compose_files)
+    service = str((item.runtime or {}).get("service", "") or "")
+    command = (
+        on_machine(
+            machine,
+            "docker compose " + " ".join(f"-f {shlex.quote(path)}" for path in files)
+            + f" up -d {shlex.quote(service)}",
+        )
+        if files and service
+        else ""
+    )
+    if not command:
+        return do_step(f"On {machine}, set the image of {name} to {wanted} where it is defined, then start it again.")
+    return run_step(f"On {machine}, set the image of {name} to {wanted} in {_sets_image(files)}, then run", command)
+
+
+def _sets_image(files: tuple[str, ...]) -> str:
+    """The file whose image line decides: the project's override when it has
+    one, since compose reads that last, else its compose file."""
+
+    from .upgrades import OVERRIDES
+
+    return next((path for path in files if path.rsplit("/", 1)[-1] in OVERRIDES), files[0])
 
 
 def _advisory(label: str, standing: Standing, running: list[Container]) -> Insight:
     """One upgrade however many advisories; none yet if no release fixes them."""
 
-    from .upgrades import plan_for
-
     where = ", ".join(sorted({f"{item.running.name} on {item.machine.name}" for item in running}))
     fixed = _fixed_in(standing)
     known = len(standing.advisories) or len(standing.urgent)
     waiting = not standing.newer
-    plans = [plan for plan in (plan_for(item) for item in running) if plan is not None]
+    plans = _plans(running)
+    key = f"container-advisory:{standing.image.name}:{standing.tag}"
     body = f"Worst severity: {standing.worst}. Running as {where}.{f' Fixed in {fixed}.' if fixed else ''}"
-    reasons = list(dict.fromkeys(blocker.reason for plan in plans for blocker in plan.blockers))
-    body += _cannot_yet(reasons)
+    body += _brings(running)
     watched = next((item for item in running if item.running.watcher), None)
     level, reached = _reach(running)
     body += reached
@@ -107,13 +151,14 @@ def _advisory(label: str, standing: Standing, running: list[Container]) -> Insig
         status=status_at("serious" if standing.serious and not waiting else "attention", level),
         eyebrow="Containers",
         family="Image advisories",
-        key=f"container-advisory:{standing.image.name}:{standing.tag}",
+        key=key,
         title=f"{label} has {standing.summary}" + (", and no release fixes it yet" if waiting else ""),
         value=str(known),
         magnitude=1,
         body=body,
         action=_upgrade_action(plans[0], known) if plans else "No fixed release to upgrade to yet",
         url=f"{watched.url}#upgrade" if watched else reverse("control_plane:containers"),
+        workflow=by_hand(key, running),
         actions=_limited(_upgrade_link(item) for item in running) if plans else (),
     )
 

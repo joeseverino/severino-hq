@@ -10,9 +10,9 @@
 </div>
 
 {% comment %}
-One table of every connection HQ has. The family is a column, not a band.
-Families with nothing configured keep a single muted row so
-they stay visible and stay in the same table.
+One table of every connection HQ has, a tbody for each part of HQ that uses
+some (`connections.purposes`), so every part shares one set of columns. A
+part's heading shows only when there is more than one.
 {% endcomment %}
 {% if connections.groups %}
 <section class="connection-all">
@@ -27,8 +27,10 @@ they stay visible and stay in the same table.
           <th class="actions-col"></th>
         </tr>
       </thead>
+      {% for purpose, purpose_rows in connections.purposes %}
       <tbody>
-        {% for row in connections.rows %}
+        {% if connections.purposes|length > 1 %}<tr class="row-group"><th colspan="5" scope="rowgroup">{{ purpose }} <span class="count">{{ purpose_rows|length }}</span></th></tr>{% endif %}
+        {% for row in purpose_rows %}
           {% with connection=row.connection group=row.group %}
           <tr id="{{ connection.instance.label|connection_anchor }}">
             <td>
@@ -123,6 +125,7 @@ they stay visible and stay in the same table.
                 {% if row.read_requested_at %}<span class="muted narrow-more">Read asked {{ row.read_requested_at|ago }}</span>
                 {% elif row.state_line %}<span class="connection-authority connection-authority-{{ connection.authority }} {% if row.state_line_quiet %}row-more{% else %}narrow-more{% endif %}">{{ row.state_line }}</span>
                 {% elif not row.sight.sights and connection.instance.observed_at %}<span class="muted narrow-more">Read {{ connection.instance.observed_at|ago }}</span>{% endif %}
+                {% if row.problems %}<a class="connection-problems" href="{{ row.problems_url }}">{{ row.problems|counted:"problem" }}</a>{% endif %}
               </span>
             </td>
             <td class="connection-next">
@@ -139,6 +142,7 @@ they stay visible and stay in the same table.
           {% endwith %}
         {% endfor %}
       </tbody>
+      {% endfor %}
     </table>
   </div>
 

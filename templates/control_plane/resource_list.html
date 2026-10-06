@@ -1,12 +1,32 @@
 {% extends "page.html" %}
 {% block page %}
+{% comment %}
+One table under its types (`application.resource_context.record_list`): a
+tbody per type with how many it holds, the ones needing a look first. The
+filter keeps rows by their own words and by one type; the type list always
+offers every type.
+{% endcomment %}
+<form class="filter-bar" method="get" role="search">
+  <input type="search" name="q" value="{{ records.query }}" placeholder="Filter by name" aria-label="Filter by name">
+  <select name="type" aria-label="Type">
+    <option value="">All types</option>
+    {% for group in records.types %}<option value="{{ group.kind }}"{% if records.kind == group.kind %} selected{% endif %}>{{ group.label }} ({{ group.rows|length }})</option>{% endfor %}
+  </select>
+  <button class="btn" type="submit">Show</button>
+  {% if records.filtered %}<a class="btn ghost" href="{% url 'control_plane:list' %}">Clear</a>{% endif %}
+  <p class="filter-bar-summary" role="status">
+    <strong>{% if records.filtered %}{{ records.shown }} of {% endif %}{{ records.total|counted:"record" }}</strong>{% if records.unsettled %}, {{ records.unsettled|counted:"needs a look,need a look" }}{% endif %}
+  </p>
+</form>
 <div class="table-scroll">
   <table class="data-table">
     <thead>
-      <tr><th>Name</th><th>Type</th><th class="key-col">State</th><th>Last read</th></tr>
+      <tr><th>Name</th><th class="key-col">State</th><th>Last read</th></tr>
     </thead>
+    {% for group in records.groups %}
     <tbody>
-      {% for resource in resources %}
+      <tr class="row-group"><th colspan="3" scope="rowgroup">{{ group.label }} <span class="count">{{ group.rows|length }}</span></th></tr>
+      {% for resource in group.rows %}
         <tr>
           <td>
             <strong>{% entity "resource"|entity_of:resource.key label=resource.shown_name %}</strong>
@@ -21,7 +41,6 @@
             {% endcomment %}
             {% if resource.origin_machine %}<br><span class="muted">on {% entity resource.origin_machine.link %}</span>{% endif %}
           </td>
-          <td>{{ resource.kind_label }}</td>
           <td>
             {% with status=resource.record_status %}
               <span class="pill control-{{ status.tone }}"{% if status.detail %} title="{{ status.detail }}"{% endif %}>{{ status.label }}</span>
@@ -30,10 +49,11 @@
           </td>
           <td class="muted date-col">{% if resource.last_observed_at %}{{ resource.last_observed_at|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
         </tr>
-      {% empty %}
-        <tr><td colspan="4" class="muted">No records yet.</td></tr>
       {% endfor %}
     </tbody>
+    {% empty %}
+    <tbody><tr><td colspan="3" class="muted">{% if records.filtered %}Nothing matches.{% else %}No records yet.{% endif %}</td></tr></tbody>
+    {% endfor %}
   </table>
 </div>
 

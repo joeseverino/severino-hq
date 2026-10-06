@@ -250,6 +250,24 @@ def entity_link(
     raise KeyError(f"No registry declares the kind {kind!r}.")
 
 
+def container_link(host: str, name: str, watcher: str = "") -> EntityLink:
+    """A container by its name: its own page when a record tracks it
+    (``watcher``), else its row on its machine's page, which every container
+    has. No link when neither is known."""
+
+    from django.utils.text import slugify
+
+    if watcher:
+        return entity_link("resource", watcher, label=name)
+    page = NODE_KINDS["machine"].page(host) if host and name else ""
+    return EntityLink(
+        label=name,
+        url=f"{page}#container-{slugify(name)}" if page else "",
+        kind="resource",
+        kind_label="Container",
+    )
+
+
 def declared_link(label: str, url: str = "", kind: str = "target") -> EntityLink:
     """A name an emitter declared with its own url: a connection's target.
 

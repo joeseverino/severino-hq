@@ -246,6 +246,8 @@ RESOURCE_TONES = {
     "pending": "attention",
     "drifted": "serious",
     "degraded": "serious",
+    # A deploy on its way to production is not a fault (delivery_progress).
+    "deploying": "neutral",
 }
 
 
@@ -276,6 +278,11 @@ def resource_health(resource: ManagedResource) -> dict[str, str]:
     ):
         if condition_type in active:
             condition = active[condition_type]
+            if state == "degraded":
+                from .delivery_progress import deploying_label
+
+                label = deploying_label(resource)
+                state, label = ("deploying", label) if label else (state, "Has a problem")
             return {
                 "state": state,
                 "label": label,

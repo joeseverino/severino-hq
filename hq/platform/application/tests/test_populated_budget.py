@@ -27,9 +27,11 @@ from ..projection import projection_scope
 
 # The host dashboard (snapshot and highlights, one projection) over ``populate``'s
 # machines, services, zones, readings and connections; empty: HOST_QUERY_BUDGET.
-# 28: the Watching card reads its one profile, a constant query that does not
-# grow with the estate.
-POPULATED_QUERY_BUDGET = 28
+# 29: the Watching card reads its one profile, and the queue reads when its
+# items were first seen: each a constant query that does not grow with the
+# estate. A stored answer makes neither.
+# 30: the calendar reads whether any of its events links to something that is gone.
+POPULATED_QUERY_BUDGET = 30
 
 
 def _store(kind, records, **extra):

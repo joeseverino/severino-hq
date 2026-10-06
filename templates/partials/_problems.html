@@ -1,0 +1,26 @@
+{% comment %}
+The open problems about the thing a page shows, as the queue's own cards. A
+page asks for them and draws them in two tags:
+
+    {% problems_about as problems %}{% include "partials/_problems.html" %}
+
+`problems_about` finds them by the page's own address, or by the address it
+is given. Under the thing's own name a card does not say where it came from,
+and its title is not a link back to the page it is on. Nothing is drawn when
+nothing is open.
+{% endcomment %}
+{% if problems %}
+<section class="card problems-here" aria-labelledby="problems-here-heading">
+  <h2 id="problems-here-heading">{{ problems|length|counted:"problem" }}</h2>
+  {% comment %}Past three, the worst two stay open and the rest fold, so the page under them is still in reach.{% endcomment %}
+  {% if problems|length > 3 %}
+    {% include "partials/_work_queue.html" with items=problems|slice:":2" grouped=True here=True only %}
+    <details class="resolution-fold">
+      <summary>{{ problems|length|add:"-2" }} more</summary>
+      {% include "partials/_work_queue.html" with items=problems|slice:"2:" grouped=True here=True only %}
+    </details>
+  {% else %}
+    {% include "partials/_work_queue.html" with items=problems grouped=True here=True only %}
+  {% endif %}
+</section>
+{% endif %}

@@ -18,6 +18,8 @@ four domains behind a click and then need a second one to go anywhere.
   </nav>
 {% endif %}
 
+{% problems_about as problems %}{% include "partials/_problems.html" %}
+
 {% if not public_dns_enabled %}
   <section class="msg msg-info">
     <p>
@@ -118,6 +120,7 @@ What the domain relates to, each thing once (`zone_views._page_relationships`).
 What it is read with is how HQ knows, so it follows as one quiet line.
 {% endcomment %}
 {% include "partials/_relationships.html" %}
+{% referenced_by "zone" zone.zone cards=True %}
 {% if read_with %}
   <p class="muted relation-source">Read with {% for link in read_with %}{% entity link %}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
 {% endif %}

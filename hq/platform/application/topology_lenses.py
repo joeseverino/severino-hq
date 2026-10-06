@@ -237,3 +237,16 @@ def apply_trace(
         hops=tuple(sorted(hops.items(), key=lambda item: (item[1], item[0]))),
     )
     return narrowed, trace
+
+
+# Lanes the whole map leaves out until asked: what a credential could read,
+# public lookups, an extension's accounts and items, and names nothing in HQ
+# answers for. They are context for the lanes that stay, never the question.
+QUIET_KINDS = frozenset({"ability", "registry", "target", "dependency"})
+
+
+def kept_on_the_map(kind: str, degree: int) -> bool:
+    """Whether the whole map shows a card before "show everything": its lane
+    is not a quiet one, and something links to it."""
+
+    return kind not in QUIET_KINDS and degree > 0

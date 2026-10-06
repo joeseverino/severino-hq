@@ -34,14 +34,14 @@ from .importer import ManifestImportError
 from .models import DocumentationRecord
 
 
-DOCS_TRAIL = ("Documentation index", reverse_lazy("docs_index:list"))
+DOCS_TRAIL = ("Docs", reverse_lazy("docs_index:list"))
 
 
 class DocsListView(PageMixin, TableListMixin, ListView):
     model = DocumentationRecord
     template_name = "docs_index/docs_list.html"
     paginate_by = 25
-    page_title = "Documentation index"
+    page_title = "Docs"
     table_search_scope = "documentation"
     table_selectable = True
     table_columns = (

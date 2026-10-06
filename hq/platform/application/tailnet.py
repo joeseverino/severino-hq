@@ -416,13 +416,11 @@ def declaration() -> str:
     came from.
     """
 
-    from hq.domains.control_plane.models import ManagedResource
+    from .infrastructure import enabled_resources
 
-    return (
-        ManagedResource.objects.filter(kind=POLICY_KIND, enabled=True)
-        .values_list("key", flat=True)
-        .first()
-        or ""
+    # From the read every estate page already shares, in its order.
+    return next(
+        (resource.key for resource in enabled_resources() if resource.kind == POLICY_KIND), ""
     )
 
 

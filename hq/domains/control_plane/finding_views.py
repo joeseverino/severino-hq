@@ -19,7 +19,7 @@ class FindingsView(PageMixin, TemplateView):
     def get_page_actions(self):
         return (
             PageAction("Needs you", reverse("action_items")),
-            PageAction("Topology", reverse("control_plane:topology")),
+            PageAction("Map", reverse("control_plane:topology")),
         )
 
     def get_context_data(self, **kwargs):

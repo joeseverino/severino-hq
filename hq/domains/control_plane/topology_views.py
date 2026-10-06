@@ -17,6 +17,7 @@ from hq.platform.application.topology import derive_topology
 from hq.platform.application.topology_lenses import (
     apply_lens,
     apply_trace,
+    kept_on_the_map,
     lens_for,
     topology_lenses,
 )
@@ -58,7 +59,7 @@ class TopologyView(PageMixin, TemplateView):
     """The live, actionable graph derived by the application layer."""
 
     template_name = "control_plane/topology.html"
-    page_title = "Topology"
+    page_title = "Map"
 
     def get_page_actions(self):
         return (
@@ -86,7 +87,14 @@ class TopologyView(PageMixin, TemplateView):
         lens_name = active_lens.name if active_lens else ""
         groups: dict[str, list[dict[str, Any]]] = {}
         detail = None
+        # The whole map leaves its quiet lanes and unlinked cards out until
+        # asked. A view or a trace is already a question, and shows its answer.
+        everything = bool(active_lens or trace or self.request.GET.get("all"))
+        left_out = 0
         for item in self.node_items(topology, lens_name, trace):
+            if not everything and not kept_on_the_map(item["node"].kind, item["degree"]):
+                left_out += 1
+                continue
             groups.setdefault(item["node"].kind, []).append(item)
             if trace and item["node"].id == trace.focus:
                 detail = item
@@ -128,6 +136,8 @@ class TopologyView(PageMixin, TemplateView):
                 # The focused node's body, drawn once in the panel below the
                 # lanes rather than inside its card.
                 "topology_detail": detail,
+                "topology_left_out": left_out,
+                "topology_everything": bool(self.request.GET.get("all")) and not (active_lens or trace),
                 "topology_lenses": topology_lenses(),
                 "active_lens": active_lens,
                 "topology_trace": trace,

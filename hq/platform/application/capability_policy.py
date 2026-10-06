@@ -270,6 +270,14 @@ class Group:
     rows: tuple[Row, ...]
 
 
+def changed_only(groups: tuple[Group, ...]) -> tuple[Group, ...]:
+    """The groups with only the rows where some rule differs from the default,
+    and only the groups that have one."""
+
+    kept = (Group(group.label, tuple(row for row in group.rows if row.overrides)) for group in groups)
+    return tuple(group for group in kept if group.rows)
+
+
 def columns() -> tuple[Column, ...]:
     surfaces = (
         Column(Scope.SURFACE, "mcp", "All MCP agents", "MCP"),

@@ -511,7 +511,7 @@ class TopologyPageTests(TestCase):
     def test_a_node_states_each_edge_from_where_it_stands(self):
         """Direction is the half of an edge a neighbour list throws away."""
 
-        response = self.page()
+        response = self.page(all=1)
 
         ability_id = "ability:infrastructure.controllers:adguard.rewrite"
         relations = {
@@ -602,10 +602,33 @@ class TopologyPageTests(TestCase):
         # A disabled declaration is not a finding.
         self.assertContains(disabled, "HQ only reads this. It does not change it.")
 
+    def test_the_whole_map_leaves_out_quiet_lanes_and_unlinked_cards_until_asked(self):
+        from ..topology_lenses import QUIET_KINDS
+
+        shown = self.page()
+        everything = self.page(all=1)
+
+        def cards(response):
+            return [item for group in response.context["topology_groups"] for item in group["items"]]
+
+        self.assertTrue(all(item["degree"] and item["node"].kind not in QUIET_KINDS for item in cards(shown)))
+        left_out = shown.context["topology_left_out"]
+        self.assertGreater(left_out, 0)
+        self.assertEqual(len(cards(everything)), len(cards(shown)) + left_out)
+        self.assertContains(shown, f"Show {left_out} more")
+        self.assertContains(everything, "Show fewer")
+
+    def test_a_view_shows_everything_it_holds(self):
+        from ..topology_lenses import topology_lenses
+
+        for lens in topology_lenses():
+            with self.subTest(lens=lens.name):
+                self.assertEqual(self.page(lens=lens.name).context["topology_left_out"], 0)
+
     def test_a_node_nothing_reaches_says_so_rather_than_drawing_an_empty_box(self):
         alone = next(
             item["node"].id
-            for group in self.page().context["topology_groups"]
+            for group in self.page(all=1).context["topology_groups"]
             for item in group["items"]
             if not item["degree"]
         )
@@ -671,7 +694,7 @@ class FocusedPageTests(TestCase):
         with mock.patch(
             "hq.platform.application.plugins.plugin_connection_specs", return_value=()
         ):
-            unfocused = self.client.get(reverse("control_plane:topology"))
+            unfocused = self.client.get(reverse("control_plane:topology"), {"all": 1})
         lonely = next(
             item["node"].id
             for group in unfocused.context["topology_groups"]

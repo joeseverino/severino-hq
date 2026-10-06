@@ -30,6 +30,8 @@
       {% if machine.aliases %} · also known as {% for alias in machine.aliases %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
 </p>
 
+{% problems_about as problems %}{% include "partials/_problems.html" %}
+
 {% comment %}
 What reaches it, what runs on it and how that stands, and what it answers
 for: each once, the detail below. Whatever it is also declared as is the
@@ -329,6 +331,7 @@ for: each once, the detail below. Whatever it is also declared as is the
 {% endcomment %}
 {% include "partials/_page_sections.html" %}
 {% include "partials/_relationships.html" %}
+{% referenced_by "machine" machine.name cards=True %}
 
 {% if device_names %}
   {% include "partials/_modal.html" with id="whatif" title="Policy test" lede="Check whether the policy allows a connection." body_template="control_plane/_whatif_form.html" %}

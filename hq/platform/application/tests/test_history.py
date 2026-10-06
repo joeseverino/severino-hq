@@ -95,6 +95,9 @@ class HistoryTests(TestCase):
         self.assertEqual([item.source for item in found], ["Deploy", "Container"])
         self.assertEqual(found[0].title, "Deployed abc1234 to production")
         self.assertEqual(found[1].title, "app started on example-box")
+        # A start leads to the container: its row on its machine's page.
+        self.assertEqual(found[1].url, "/infrastructure/machines/example-box/#container-app")
+        self.assertFalse(found[1].external)
 
     def test_near_is_what_happened_closest_to_the_moment(self):
         (closest, *_rest) = near(self.now - timedelta(hours=2, minutes=5))

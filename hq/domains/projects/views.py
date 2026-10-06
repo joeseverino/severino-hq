@@ -280,7 +280,7 @@ class WatchingView(PageMixin, TemplateView):
     sign-in claims, so nobody reads a login HQ was merely told about."""
 
     template_name = "projects/watching.html"
-    page_title = "Watching"
+    page_title = "Starred repos"
 
     @property
     def login(self) -> str:
@@ -391,7 +391,7 @@ class PostureView(PageMixin, TemplateView):
     """
 
     template_name = "projects/posture.html"
-    page_title = "Posture"
+    page_title = "Repo checks"
 
     def get_page_lede(self) -> str:
         return "Each repository checked against your repository rules. Public ones have extra checks."

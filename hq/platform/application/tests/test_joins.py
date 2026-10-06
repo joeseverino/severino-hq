@@ -505,7 +505,7 @@ class TopologyEstateTests(TestCase):
         with mock.patch(
             "hq.platform.application.plugins.plugin_connection_specs", return_value=(self.finance,)
         ):
-            response = self.client.get(reverse("control_plane:topology"))
+            response = self.client.get(reverse("control_plane:topology"), {"all": 1})
 
         kinds = [group["kind"] for group in response.context["topology_groups"]]
         self.assertLess(kinds.index("machine"), kinds.index("target"))

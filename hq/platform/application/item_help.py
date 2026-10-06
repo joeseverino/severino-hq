@@ -81,6 +81,12 @@ def commands(
     return _plan(key, steps + ((cannot_step(reason),) if reason else ()))
 
 
+def steps(key: str, told: Iterable[WorkflowStep], *, reason: str = "") -> WorkflowPlan:
+    """Commands and instructions together, in the order given."""
+
+    return _plan(key, tuple(told) + ((cannot_step(reason),) if reason else ()))
+
+
 def instructions(key: str, *told: str, reason: str = "") -> WorkflowPlan:
     """What to do, in words, in order, where no exact command can be named."""
 
