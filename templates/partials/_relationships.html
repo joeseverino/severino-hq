@@ -17,31 +17,28 @@
     <h2>Relationships</h2>
     {% if relationships.focus_url and not topology_url %}<a class="btn ghost compact" href="{{ relationships.focus_url }}">See in topology</a>{% endif %}
   </div>
-  <div class="table-scroll">
-    <table class="data-table compact-table relationship-table">
-        {% for group in relationships.groups %}
-        <tbody>
-          {% if group.bare %}
-            <tr>
-              <th scope="rowgroup">{{ group.phrase }}</th>
-              <td colspan="2">{% for item in group.items %}{% entity item.entity %}{% if not forloop.last %} · {% endif %}{% endfor %}</td>
-            </tr>
-          {% else %}
+  {% comment %}
+    A list of what this is related to, not a table: each relation is named
+    once with its ends beside it, and under it on a narrow screen. Who read
+    the ends and when is said once where one source read them all.
+  {% endcomment %}
+  <dl class="relation-list">
+    {% for group in relationships.groups %}
+    {% with shared=group.shared %}
+    <div class="relation-group">
+      <dt>{{ group.phrase }}</dt>
+      <dd>
+        <ul class="relation-ends">
           {% for item in group.items %}
-            <tr>
-              {% if forloop.first %}<th scope="rowgroup" rowspan="{{ group.items|length }}">{{ group.phrase }}</th>{% endif %}
-              <td>{% entity item.entity %}{% if item.entity.detail %} <span class="muted">{{ item.entity.detail }}</span>{% endif %}</td>
-              <td class="muted">
-                {% if item.source %}via {% entity item.source %}{% endif %}{% if item.source and item.observed_at %} · {% endif %}{% if item.observed_at %}read {{ item.observed_at|when:"ago" }}{% endif %}
-                {% if item.stale %}<span class="pill pill-attention">Stale</span>{% endif %}
-              </td>
-            </tr>
+          <li>{% entity item.entity %}{% if item.entity.detail %} <span class="muted">{{ item.entity.detail }}</span>{% endif %}{% if not shared %}{% if item.source or item.observed_at %} <span class="muted">({% if item.source %}via {% entity item.source %}{% endif %}{% if item.source and item.observed_at %}, {% endif %}{% if item.observed_at %}read {{ item.observed_at|when:"ago" }}{% endif %})</span>{% endif %}{% endif %}{% if item.stale %} <span class="pill pill-attention">Stale</span>{% endif %}</li>
           {% endfor %}
-          {% endif %}
-        </tbody>
-        {% endfor %}
-    </table>
-  </div>
+        </ul>
+        {% if shared %}<p class="relation-source">From {% entity shared.source %}{% if shared.observed_at %}, read {{ shared.observed_at|when:"ago" }}{% endif %}</p>{% endif %}
+      </dd>
+    </div>
+    {% endwith %}
+    {% endfor %}
+  </dl>
   {% endif %}
   {% if relationships.unreadable %}
     <p class="muted">Not readable: {{ relationships.unreadable|join:", " }}. This may be incomplete. <a class="subtle-link" href="{% url 'control_plane:connections' %}">Connections &rarr;</a></p>

@@ -203,7 +203,7 @@ class PageTests(TestCase):
         response = self.client.post(reverse("watching_refresh"), follow=True)
 
         self.assertRedirects(response, reverse("watching"))
-        self.assertContains(response, "Asked the controller to read @example-user")
+        self.assertContains(response, "Reading @example-user from GitHub.")
         self.assertContains(response, "data-ask-status=")
         self.assertContains(response, 'aria-disabled="true"')
         self.assertContains(response, "Waiting for the controller.")
@@ -233,10 +233,12 @@ class PageTests(TestCase):
         response = self.client.get(reverse("watching"))
 
         self.assertContains(response, "@example-user")
-        self.assertContains(response, "Verified by your SSO sign-in")
+        self.assertContains(response, "This is your GitHub account, according to your sign-in.")
         self.assertContains(response, 'href="https://github.com/example-user?tab=followers"')
         self.assertContains(response, "v1.2.0")
         self.assertContains(response, "CVE-2026-0001")
+        # The advisory says what it is about, where a phone can read it.
+        self.assertContains(response, "A flaw")
 
 
 class CardTests(TestCase):
@@ -296,7 +298,7 @@ class AppProofTests(TestCase):
 
         response = self.client.get(reverse("watching"))
 
-        self.assertContains(response, "HQ's App is installed on @example-user")
+        self.assertContains(response, "HQ's GitHub App is installed on it.")
         self.assertContains(response, "reading 1 of your repositories")
         self.assertContains(response, "(private)")
         self.assertNotContains(response, "someone-else/thing")

@@ -35,6 +35,32 @@ class ConflictError(ValueError):
     """The caller tried to write over a newer version of an object."""
 
 
+def hq_sections(project: Project) -> tuple[tuple[str, str], ...]:
+    """The sections of HQ built from this project's repository: ``(name, url)``.
+
+    An installed extension names the repository it is built from, and a
+    project names its repository, so the two meet without either naming the
+    other. The link opens the extension's first page in the nav.
+    """
+
+    from hq.platform.application.routes import reverse
+
+    from .github_public import github_repository
+    from .plugins import installed_plugins
+
+    parts = github_repository(project.repository_url)
+    if not parts:
+        return ()
+    repository = "/".join(parts).lower()
+    found = []
+    for manifest in installed_plugins():
+        if manifest.source_repository.lower() != repository or not manifest.navigation:
+            continue
+        home = min(manifest.navigation, key=lambda item: item.order)
+        found.append((manifest.name, reverse(home.route)))
+    return tuple(found)
+
+
 GitHubFetcher = Callable[..., datetime | None]
 ContentSync = Callable[[], dict[str, Any]]
 
@@ -150,7 +176,7 @@ def refresh_project(
             result["content"] = {"ok": False, "error": str(exc)}
 
     if not project.repository_url:
-        result["github"] = {"ok": False, "error": "Project has no GitHub repository URL."}
+        result["github"] = {"ok": False, "error": "This project has no GitHub repository address."}
         return result
 
     app = request_app_read(project.repository_url, principal=principal)
@@ -167,7 +193,7 @@ def refresh_project(
         return result
 
     if pushed_at is None:
-        result["github"] = {"ok": False, "error": "GitHub returned no push metadata."}
+        result["github"] = {"ok": False, "error": "GitHub did not say when this repository was last pushed."}
         return result
     result["github"] = _record_push(project, pushed_at, principal)
     return result
@@ -251,19 +277,19 @@ def refresh_summary(result: dict[str, Any]) -> str:
     content = result.get("content")
     if content and content["ok"]:
         said.append(
-            f"Synced {counted(content['total'], 'content item', 'content items')} "
-            f"({content['created']} new, {content['updated']} updated)."
+            f"Read {counted(content['total'], 'writeup or page', 'writeups and pages')} from the site "
+            f"({content['created']} new, {content['updated']} changed)."
         )
     elif content:
-        said.append(f"Content sync failed: {content['error']}")
+        said.append(f"The site's list of writeups and pages could not be read: {content['error']}")
     app, github = result.get("github_app"), result.get("github")
     if app and app["ok"]:
         said.append(app["message"])
     else:
         if app:
-            said.append(f"The GitHub App was not asked to read: {app['error']}")
+            said.append(f"GitHub was not read: {app['error']}")
         if github and github["ok"]:
-            said.append("Synced GitHub project metadata.")
+            said.append("Read the last push from GitHub.")
         elif github:
             said.append(github["error"])
     return " ".join(said)
@@ -286,14 +312,14 @@ def request_project_refresh(slug: str, *, principal: Principal, requested_by: An
         raise NotFoundError(f"Project {slug!r} was not found.") from exc
 
     def work(progress: Any) -> dict[str, Any]:
-        progress("Reading what the project's sources say.")
+        progress("Reading GitHub.")
         result = refresh_project(slug, principal=principal)
         progress(refresh_summary(result), force=True)
         return result
 
     return start(
         REFRESH_JOB,
-        f"Refresh {project.name}",
+        f"Read GitHub for {project.name}",
         work,
         actor=principal.actor,
         requested_by=requested_by,
@@ -316,12 +342,12 @@ def execute_project_refresh(
     try:
         job = request_project_refresh(current_slug, principal=principal)
     except JobConflict:
-        return {"ok": True, "started": False, "message": "A project refresh is already running."}
+        return {"ok": True, "started": False, "message": "GitHub is already being read for a project."}
     return {
         "ok": True,
         "started": True,
         "job": str(job.pk),
-        "message": f"{job.label} started; the job reports what it found.",
+        "message": "Reading GitHub. The job says what it found when it finishes.",
     }
 
 

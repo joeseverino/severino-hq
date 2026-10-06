@@ -14,11 +14,27 @@ from hq.platform.core.audit import operation_context
 from hq.domains.projects.models import Project
 from .sensitivity import safe_doc_ids
 from .domains import records_of
+from .entity_links import EntityLink, entity_link
 from .security import Principal
 from .upserts import upsert_by_slug
 from .projection import addressable, iso, listing
 from .ui import counted
 
+
+
+def managed_domain(asset: Asset) -> EntityLink | None:
+    """The domain HQ manages that a domain asset is, matched by name.
+
+    An asset in the Domain category is named for the domain it registers, so
+    its name is the join. None when the name is not a domain HQ knows.
+    """
+
+    from .zones import zone_names
+
+    if asset.category != "domain":
+        return None
+    name = asset.item_name.strip().lower()
+    return entity_link("zone", name) if name in zone_names() else None
 
 
 class NotFoundError(ValueError):

@@ -25,7 +25,7 @@ class ProjectForm(forms.ModelForm):
             "security_notes": forms.Textarea(attrs={"rows": 4}),
             "notes": forms.Textarea(attrs={"rows": 4}),
             "slug": forms.TextInput(
-                attrs={"placeholder": "leave blank to auto-generate"}
+                attrs={"placeholder": "Leave blank to use the name"}
             ),
         }
 

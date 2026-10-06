@@ -34,7 +34,7 @@ class ContentItem(TimestampedModel):
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.DRAFT
     )
-    topic = models.CharField(max_length=160, blank=True)
+    topic = models.CharField(max_length=300, blank=True)
     tags = models.CharField(
         max_length=300,
         blank=True,

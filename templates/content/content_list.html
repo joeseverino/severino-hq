@@ -1,18 +1,18 @@
 {% extends "list_page.html" %}
 {% block row %}
-  <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.title }}</strong></a><br><span class="muted">{{ row.slug }}</span></td>
-  <td>{{ row.get_content_type_display }}</td>
+  <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.title }}</strong></a></td>
+  {% if show_type %}<td>{{ row.get_content_type_display }}</td>{% endif %}
   <td><span class="pill pill-{{ row.status }}">{{ row.get_status_display }}</span></td>
-  <td class="muted">{{ row.topic|or_empty }}</td>
+  <td class="muted">{% if row.topic %}<span class="table-clamp">{{ row.topic }}</span>{% else %}{% empty_value %}{% endif %}</td>
   <td class="num-col">{{ row.pageviews|or_empty }}</td>
   <td class="muted">{{ row.published_at|when }}</td>
   <td class="muted">{{ row.updated_at|when:"ago" }}</td>
   <td class="actions-col">
     {% if row.published_url|web_url %}
-      <a class="icon-link" href="{{ row.published_url|web_url }}" target="_blank" rel="noopener noreferrer" title="Open published page" aria-label="Open published page">↗</a>
+      <a class="icon-link" href="{{ row.published_url|web_url }}" target="_blank" rel="noopener noreferrer" title="Open live page" aria-label="Open live page">↗</a>
     {% else %}
       {% empty_value %}
     {% endif %}
   </td>
 {% endblock %}
-{% block empty %}No content yet.{% endblock %}
+{% block empty %}{{ empty_message }} <a href="{{ new_url }}">{{ new_label }}</a>{% endblock %}

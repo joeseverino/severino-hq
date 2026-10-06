@@ -1050,7 +1050,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.calendar",
     "name": "calendarEntryCreateV2",
-    "summary": "Add to calendar",
+    "summary": "Add event",
     "method": "POST",
     "path": "/api/v2/capabilities/calendar.entry.create/",
     "positionals": [],
@@ -1091,7 +1091,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.calendar",
     "name": "calendarEntryDeleteV2",
-    "summary": "Remove calendar entry",
+    "summary": "Delete event",
     "method": "POST",
     "path": "/api/v2/capabilities/calendar.entry.delete/",
     "positionals": [],
@@ -1132,7 +1132,7 @@ export const COMMANDS: CliCommand[] = [
   {
     "group": "hq.calendar",
     "name": "calendarEntryUpdateV2",
-    "summary": "Change calendar entry",
+    "summary": "Edit event",
     "method": "POST",
     "path": "/api/v2/capabilities/calendar.entry.update/",
     "positionals": [],

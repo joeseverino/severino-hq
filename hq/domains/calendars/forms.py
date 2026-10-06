@@ -8,14 +8,14 @@ WEEKDAYS = (
 
 
 class EntryForm(forms.ModelForm):
-    """My Calendar's entry, as a person fills it in: a day, then the rest if it applies."""
+    """An event, as a person fills it in: a day, then the rest if it applies."""
 
     weekdays = forms.MultipleChoiceField(
         choices=WEEKDAYS,
         required=False,
         widget=forms.CheckboxSelectMultiple,
         label="On",
-        help_text="For an entry that repeats weekly. Blank repeats on the day it starts.",
+        help_text="For an event that repeats weekly. Leave blank to repeat on the day it starts.",
     )
 
     class Meta:
@@ -44,7 +44,7 @@ class EntryForm(forms.ModelForm):
         help_texts = {
             "starts_at": "Leave the times blank for all day.",
             "ends_on": "For something over several days.",
-            "interval": "1 is every time; 2 is every other.",
+            "interval": "1 for every one, 2 for every other one.",
         }
         widgets = {
             "starts_on": forms.DateInput(attrs={"type": "date"}),

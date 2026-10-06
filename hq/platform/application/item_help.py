@@ -38,9 +38,9 @@ def _plan(key: str, steps: tuple[WorkflowStep, ...]) -> WorkflowPlan:
     identity = claim_identity(_NAMESPACE, key, "")
     return WorkflowPlan(
         id=f"help:{identity}",
-        label="Steps to resolve",
+        label="What to do",
         steps=steps,
-        outcome=WorkflowOutcome("claim_absent", identity, "Done when HQ no longer raises this."),
+        outcome=WorkflowOutcome("claim_absent", identity, "This goes away once it is fixed."),
     )
 
 

@@ -18,7 +18,7 @@ import json
 import shutil
 import subprocess
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
 from . import frontmatter_schema
 from .models import DocumentationRecord
@@ -100,3 +100,50 @@ class CommittedSchemaMatchesMcpTests(SimpleTestCase):
             "docs_index/schema.json is stale. Regenerate it:\n"
             "  severino-vault-mcp schema --json > docs_index/schema.json",
         )
+
+
+class RelatedDocumentsTests(TestCase):
+    """A record's documents as its page lists them: by type, by title."""
+
+    def _document(self, doc_id, title, doc_type="runbook", status="active"):
+        return DocumentationRecord.objects.create(doc_id=doc_id, title=title, doc_type=doc_type, status=status)
+
+    def test_groups_follow_the_type_order_and_tasks_come_last(self):
+        from hq.platform.application.documentation import related_documents
+
+        records = [
+            self._document("task-example-done", "Ship it", "task", "done"),
+            self._document("task-example-parked", "Wait for it", "task", "parked"),
+            self._document("note-example-design", "Example design", "architecture_note"),
+            self._document("rb-example-b", "Back up the example"),
+            self._document("rb-example-a", "Add an example"),
+        ]
+
+        found = related_documents(records)
+
+        self.assertEqual(
+            [(group.label, [link.label for link in group.links], group.folded) for group in found.groups],
+            [
+                ("Runbooks", ["Add an example", "Back up the example"], False),
+                ("Architecture notes", ["Example design"], False),
+                ("Open tasks", ["Wait for it"], False),
+                ("Done tasks", ["Ship it"], True),
+            ],
+        )
+        self.assertEqual(found.groups[0].links[0].title, "rb-example-a")
+
+    def test_nothing_related_is_falsy(self):
+        from hq.platform.application.documentation import related_documents
+
+        self.assertFalse(related_documents([]))
+
+    def test_a_project_already_listed_is_not_listed_again(self):
+        from hq.domains.projects.models import Project
+        from hq.platform.application.documentation import related_documents
+
+        project = Project.objects.create(name="Example Tool", slug="example-tool")
+        note = self._document("project-example-tool", "Example Tool", "architecture_note")
+
+        self.assertEqual([link.label for link in related_documents([note]).projects], ["Example Tool"])
+        self.assertFalse(related_documents([note], listed=[project]))
+        self.assertFalse(related_documents([note], about=project))

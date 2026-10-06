@@ -91,6 +91,16 @@ NODE_KINDS: Mapping[str, NodeKind] = {
     "project": NodeKind(
         "project", "projects", lambda slug: reverse("projects:detail", kwargs={"slug": slug})
     ),
+    # The records: each names its own page, so a record's name is a link wherever it is said.
+    "asset": NodeKind("asset", "assets", lambda slug: reverse("assets:detail", kwargs={"slug": slug})),
+    "writeup": NodeKind(
+        "writeup or page", "writeups and pages", lambda slug: reverse("content:detail", kwargs={"slug": slug})
+    ),
+    "document": NodeKind(
+        "document", "documents", lambda doc_id: reverse("docs_index:detail", kwargs={"doc_id": doc_id})
+    ),
+    "expense": NodeKind("expense", "expenses", lambda pk: reverse("expenses:detail", kwargs={"pk": pk})),
+    "receipt": NodeKind("receipt", "receipts", lambda pk: reverse("receipts:detail", kwargs={"pk": pk})),
     "target": NodeKind("target", "targets"),
     "dependency": NodeKind("dependency", "dependencies"),
 }

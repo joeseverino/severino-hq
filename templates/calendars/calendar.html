@@ -46,13 +46,13 @@ opening a day ask this page for the `calendar` part and take it in place.
         {% empty %}
           {% if not entry %}<p class="muted">Nothing on this day.</p>{% endif %}
         {% endfor %}
-        <p><a href="{{ new_entry_url }}?on={{ day.day|date:'Y-m-d' }}" data-hotkey="c">Add to My Calendar</a></p>
+        <p><a href="{{ new_entry_url }}?on={{ day.day|date:'Y-m-d' }}" data-hotkey="c">Add event</a></p>
       </section>
     {% endif %}
 
     <section class="card calendar-sources" id="calendar-sources" aria-label="Calendars">
       {% for group, sources in calendar.groups %}
-        <h3>{{ group }}</h3>
+        {% if group %}<h3>{{ group }}</h3>{% endif %}
         <ul>
           {% for source in sources %}
             <li>
@@ -60,9 +60,9 @@ opening a day ask this page for the `calendar` part and take it in place.
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ here }}">
                 <input type="hidden" name="shown" value="{% if source.shown %}0{% else %}1{% endif %}">
-                <button type="submit" class="calendar-source series-{{ source.slot }}" aria-pressed="{% if source.shown %}true{% else %}false{% endif %}" title="{{ source.description }}">
+                <button type="submit" class="calendar-source series-{{ source.slot }}" aria-pressed="{% if source.shown %}true{% else %}false{% endif %}">
                   <i class="calendar-check" aria-hidden="true"></i>
-                  <span>{{ source.label }}</span>
+                  <span>{{ source.label }}{% if source.description %}<small class="calendar-source-note">{{ source.description }}</small>{% endif %}</span>
                   {% if source.failure %}<small class="calendar-source-failure">{{ source.failure }}</small>{% endif %}
                 </button>
               </form>

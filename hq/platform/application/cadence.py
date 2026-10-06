@@ -303,8 +303,8 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
     age = timezone.now() - oldest
     due = age >= interval
     reason = (
-        f"The kind tried longest ago was tried {duration(age)} ago; "
-        f"{'due' if due else 'not due'} every {duration(interval)}."
+        f"The oldest reading is {duration(age)} old and everything is read "
+        f"every {duration(interval)}: {'due' if due else 'not due'}."
     )
     if not due and forced:
         reason += f" Read now asked for {', '.join(read.subject for read in forced)}."

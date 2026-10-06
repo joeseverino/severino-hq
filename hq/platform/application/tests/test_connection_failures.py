@@ -141,11 +141,11 @@ class FindingCardTests(TestCase):
         card = self.card()
 
         self.assertLess(card.index("operator-step"), card.index("finding-links"))
-        self.assertNotIn("Steps to resolve", card)
+        self.assertNotIn("What to do", card)
         self.assertNotIn("Fix it", card)
         self.assertNotIn("resolution-workflow", card)
         # A connection that does not answer is a reading: confirming it reads now.
-        self.assertIn("Read now and check again", card)
+        self.assertIn("Check again", card)
         self.assertIn('formaction="/infrastructure/connections/read/?connection_ref=example-npm', card)
 
     def test_open_connections_is_a_link_not_the_fix(self):

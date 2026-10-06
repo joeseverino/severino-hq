@@ -77,9 +77,9 @@ class FindingResolutionWorkflowTests(SimpleTestCase):
             {"entries": ({"item": insight, "source": "Example"},)},
         )
 
-        self.assertIn("Steps to resolve", html)
+        self.assertIn("What to do", html)
         self.assertIn("Request fresh sweep", html)
-        self.assertIn("Confirm the fix", html)
+        self.assertIn("Check that it worked", html)
         self.assertNotIn("Check the impact", html)
 
 

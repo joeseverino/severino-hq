@@ -359,7 +359,7 @@ def _verification(
         return None
     wanted = _read_subject(finding, subject)
     read = (
-        read_now_link(principal, label="Read now and check again", **wanted)
+        read_now_link(principal, label="Check again", **wanted)
         if wanted is not None
         else None
     )

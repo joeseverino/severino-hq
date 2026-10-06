@@ -17,6 +17,7 @@ import urllib.request
 from urllib.parse import urlsplit
 
 from django.conf import settings
+from django.utils.text import Truncator
 
 from hq.platform.application.timestamps import moment
 from hq.domains.content.models import ContentItem
@@ -110,7 +111,10 @@ def _live_fields(entry: dict, slug: str) -> dict:
     return {
         "title": (entry.get("title") or slug)[:200],
         "status": ContentItem.Status.PUBLISHED,
-        "topic": (entry.get("description") or "").strip()[:160],
+        # A description longer than the field ends in an ellipsis.
+        "topic": Truncator((entry.get("description") or "").strip()).chars(
+            ContentItem._meta.get_field("topic").max_length
+        ),
         "tags": ", ".join(str(t) for t in technologies if t)[:300],
         "published_url": entry.get("url") or "",
         "published_at": _parse_date(entry.get("published_at")),

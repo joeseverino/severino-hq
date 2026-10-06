@@ -26,7 +26,10 @@ class AssetForm(forms.ModelForm):
             "purchase_date": forms.DateInput(attrs={"type": "date"}),
             "warranty_date": forms.DateInput(attrs={"type": "date"}),
             "slug": forms.TextInput(
-                attrs={"placeholder": "leave blank to auto-generate"}
+                attrs={"placeholder": "Leave blank to use the name"}
             ),
             "related_projects": forms.SelectMultiple(attrs={"size": 6}),
+        }
+        help_texts = {
+            "business_use_percentage": "0 to 100. Used to estimate the deductible amount.",
         }

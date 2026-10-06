@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .derivations import passed, since
+from .entity_links import kind_label
 from .cadence import slowest_sweep_interval as _slowest_sweep_interval, sweep_interval
 from .topology_lenses import _STALE_AFTER
 from .infrastructure import DRIFT_LABEL
@@ -290,6 +292,25 @@ def drift_evidence(node: TopologyNode) -> tuple[tuple[str, str], ...]:
     )
 
 
+def _fault_title(node: TopologyNode, otherwise: str) -> str:
+    """What the resource itself says is wrong, as far as its first sentence;
+    a resource that says nothing gets ``otherwise``."""
+
+    said = node.detail.strip()
+    if not said:
+        return otherwise
+    first = re.split(r"(?<=[.!?])\s|:\s", said, maxsplit=1)[0].rstrip(".")
+    return first if len(first) <= 110 else otherwise
+
+
+def _fault_evidence(node: TopologyNode) -> tuple[tuple[str, str], ...]:
+    return (
+        ("What", f"{kind_label(node.kind_key)} {node.label}" if node.kind_key else node.label),
+        ("Status", node.status_label or node.status),
+        *drift_evidence(node),
+    )
+
+
 def _fault_remedies(node: TopologyNode) -> tuple[Remedy, ...]:
     """Drift has two honest answers, and reconciling alone is the destructive one.
 
@@ -319,20 +340,11 @@ def _reporting_a_fault(estate: FindingEstate) -> tuple[Finding, ...]:
         Finding(
             rule="reporting-a-fault",
             subject=node.id,
-            title=f"{node.label} reports {node.status_label or node.status}",
+            title=_fault_title(node, f"{node.label} has a problem"),
             severity="serious" if node.status == "serious" else "attention",
-            explanation=(
-                "The resource reports this itself, and a declared change is not "
-                "applied yet. The detail is the provider's message."
-            ),
-            evidence=(
-                ("Status", node.status_label or node.status),
-                ("Reason", node.reason or "none"),
-                ("Detail", node.detail or "none"),
-                ("Declared revision", str(node.declared_revision)),
-                ("Observed revision", str(node.observed_revision)),
-                *drift_evidence(node),
-            ),
+            explanation=node.detail
+            or "It reports a problem, and a change you made to it has not been applied yet.",
+            evidence=_fault_evidence(node),
             remedies=_fault_remedies(node),
         )
         for node in estate.nodes()
@@ -359,32 +371,30 @@ def _reconciled_but_still_wrong(estate: FindingEstate) -> tuple[Finding, ...]:
         Finding(
             rule="reconciled-but-still-wrong",
             subject=node.id,
-            title=f"{node.label} is still wrong after reconciling",
+            title=_fault_title(node, f"{node.label} does not match what HQ expects"),
             severity="serious",
-            explanation=(
-                "Declared and observed revisions match and the status is still "
-                f"{node.status_label or node.status}. HQ will not retry. "
-                "Check the declaration."
+            explanation=node.detail
+            or (
+                "HQ already applied its settings here and the live one still differs, so "
+                "applying them again will not help. Keep what is live, or change what HQ expects."
             ),
-            evidence=(
-                ("Status", node.status_label or node.status),
-                ("Declared revision", str(node.declared_revision)),
-                ("Observed revision", str(node.observed_revision)),
-                ("Reason", node.reason or "none"),
-                ("Detail", node.detail or "none"),
-                *drift_evidence(node),
-            ),
-            # Reconciling again is the one thing already known not to work, so
-            # the remedy is the declaration this rule points at: keep what the
-            # provider holds, when the change there was deliberate, or edit it.
+            evidence=_fault_evidence(node),
+            # Applying again is the one thing already known not to work. Where
+            # the live record was changed, the choice is which side to keep.
+            # Where the resource reports its own problem there is no side to
+            # keep: what it says is the instruction.
             remedies=(
-                _keep_live(node),
-                Remedy(
-                    capability="infrastructure.resource.update",
-                    target=node.label,
-                    label="Edit declaration",
-                    effect="",
-                ),
+                (
+                    _keep_live(node),
+                    Remedy(
+                        capability="infrastructure.resource.update",
+                        target=node.label,
+                        label="Change what HQ expects",
+                        effect="",
+                    ),
+                )
+                if node.status_label == DRIFT_LABEL
+                else ()
             ),
         )
         for node in estate.nodes()
@@ -564,7 +574,7 @@ RULES: tuple[FindingRule, ...] = (
     ),
     FindingRule(
         "reporting-a-fault",
-        "Resource reports a fault",
+        "Reports a problem",
         "serious",
         _reporting_a_fault,
         operator_action=(
@@ -576,7 +586,7 @@ RULES: tuple[FindingRule, ...] = (
     ),
     FindingRule(
         "reconciled-but-still-wrong",
-        "Still wrong after reconciling",
+        "Does not match what HQ expects",
         "serious",
         _reconciled_but_still_wrong,
         operator_action=(

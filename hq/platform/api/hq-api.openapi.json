@@ -3994,7 +3994,7 @@
     },
     "/api/v2/capabilities/calendar.entry.create/": {
       "post": {
-        "description": "Put an entry on My Calendar.\n\nRequires: write_calendar.",
+        "description": "Put an event on the calendar.\n\nRequires: write_calendar.",
         "operationId": "calendarEntryCreateV2",
         "parameters": [
           {
@@ -4067,7 +4067,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Add to calendar",
+        "summary": "Add event",
         "tags": [
           "hq.calendar",
           "api.v2"
@@ -4081,7 +4081,7 @@
     },
     "/api/v2/capabilities/calendar.entry.delete/": {
       "post": {
-        "description": "Remove an entry from My Calendar.\n\nRequires: delete_calendar.",
+        "description": "Delete one of your events from the calendar.\n\nRequires: delete_calendar.",
         "operationId": "calendarEntryDeleteV2",
         "parameters": [
           {
@@ -4154,7 +4154,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Remove calendar entry",
+        "summary": "Delete event",
         "tags": [
           "hq.calendar",
           "api.v2"
@@ -4168,7 +4168,7 @@
     },
     "/api/v2/capabilities/calendar.entry.update/": {
       "post": {
-        "description": "Change an entry on My Calendar.\n\nRequires: write_calendar.",
+        "description": "Change one of your events on the calendar.\n\nRequires: write_calendar.",
         "operationId": "calendarEntryUpdateV2",
         "parameters": [
           {
@@ -4241,7 +4241,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Change calendar entry",
+        "summary": "Edit event",
         "tags": [
           "hq.calendar",
           "api.v2"
@@ -8190,7 +8190,7 @@
     },
     "/api/v2/resources/calendar/": {
       "get": {
-        "description": "What every calendar source holds over a window, and My Calendar's entries.",
+        "description": "Everything on the calendar over a span of days, and your own events.",
         "operationId": "listCalendarV2",
         "parameters": [
           {
@@ -8329,7 +8329,7 @@
     },
     "/api/v2/resources/calendar/{identifier}/": {
       "get": {
-        "description": "What every calendar source holds over a window, and My Calendar's entries.",
+        "description": "Everything on the calendar over a span of days, and your own events.",
         "operationId": "getCalendarV2",
         "parameters": [
           {
@@ -11485,7 +11485,7 @@
       }
     },
     "get_resource": {
-      "description": "Get one record from any registered addressable resource.\nKinds:\n- `assets`: Assets and their safe cross-domain relationships. Identifier: `slug`.\n- `calendar`: What every calendar source holds over a window, and My Calendar's entries. Identifier: `uid`.\n- `connection.standing`: Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path. Identifier: `connection_ref`.\n- `contact.submissions`: Contact requests held in Cloudflare D1 and reviewed through HQ. Identifier: `id`.\n- `containers`: Every running container: what it runs and whether that is current and safe, how it is run, and its posture against the container standard. Identifier: `address`.\n- `credentials`: What each connection provider's credential can see, and what it would need to see more. Identifier: `provider`.\n- `domains`: Every domain HQ declares or a sweep has seen, its services and registration. Identifier: `name`.\n- `infrastructure.resources`: Canonical desired and observed infrastructure state. Identifier: `key`.\n- `machines`: Every machine anything reported, its roles, addresses and what runs on it. Identifier: `name`.\n- `paths`: The path a request for a hostname takes, hop by hop, with each hop's reading and certificate. Identifier: `hostname`.\n- `projects`: Projects and their safe cross-domain relationships. Identifier: `slug`.\n- `readings`: Each reading kind, its last read, and its stored records as its schema admits them. Identifier: `kind`.\n- `relationships`: One machine, service, domain or declaration and everything related to it. Identifier: `node`.\n- `services`: Declared hostnames and the state of their DNS, ingress, and TLS. Identifier: `hostname`.\n- `upgrades`: Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only. Identifier: `address`.",
+      "description": "Get one record from any registered addressable resource.\nKinds:\n- `assets`: Assets and their safe cross-domain relationships. Identifier: `slug`.\n- `calendar`: Everything on the calendar over a span of days, and your own events. Identifier: `uid`.\n- `connection.standing`: Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path. Identifier: `connection_ref`.\n- `contact.submissions`: Contact requests held in Cloudflare D1 and reviewed through HQ. Identifier: `id`.\n- `containers`: Every running container: what it runs and whether that is current and safe, how it is run, and its posture against the container standard. Identifier: `address`.\n- `credentials`: What each connection provider's credential can see, and what it would need to see more. Identifier: `provider`.\n- `domains`: Every domain HQ declares or a sweep has seen, its services and registration. Identifier: `name`.\n- `infrastructure.resources`: Canonical desired and observed infrastructure state. Identifier: `key`.\n- `machines`: Every machine anything reported, its roles, addresses and what runs on it. Identifier: `name`.\n- `paths`: The path a request for a hostname takes, hop by hop, with each hop's reading and certificate. Identifier: `hostname`.\n- `projects`: Projects and their safe cross-domain relationships. Identifier: `slug`.\n- `readings`: Each reading kind, its last read, and its stored records as its schema admits them. Identifier: `kind`.\n- `relationships`: One machine, service, domain or declaration and everything related to it. Identifier: `node`.\n- `services`: Declared hostnames and the state of their DNS, ingress, and TLS. Identifier: `hostname`.\n- `upgrades`: Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only. Identifier: `address`.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -11570,7 +11570,7 @@
       }
     },
     "list_resource": {
-      "description": "List any registered resource with schema-validated filters.\nKinds:\n- `action.items`: The composed action queue: what needs doing, from every domain.\n- `analytics`: What the published site was asked for, by any breakdown HQ records.\n- `assets`: Assets and their safe cross-domain relationships.\n- `calendar`: What every calendar source holds over a window, and My Calendar's entries.\n- `connection.standing`: Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path.\n- `contact.submissions`: Contact requests held in Cloudflare D1 and reviewed through HQ.\n- `containers`: Every running container: what it runs and whether that is current and safe, how it is run, and its posture against the container standard.\n- `credentials`: What each connection provider's credential can see, and what it would need to see more.\n- `domains`: Every domain HQ declares or a sweep has seen, its services and registration.\n- `estate`: Machines online, services, domains, next renewals and connections needing attention.\n- `expenses`: Expense records with stable relationship identifiers.\n- `infrastructure.resources`: Canonical desired and observed infrastructure state.\n- `machines`: Every machine anything reported, its roles, addresses and what runs on it.\n- `projects`: Projects and their safe cross-domain relationships.\n- `readings`: Each reading kind, its last read, and its stored records as its schema admits them.\n- `receipts`: Receipt metadata without file contents, storage paths, or URLs.\n- `request.path`: How the calling request reached HQ: HQ's own path hop by hop, each hop checked against what the request shows, with the admission layers decided there.\n- `search`: Machines, services and domains, then records, matching a query.\n- `services`: Declared hostnames and the state of their DNS, ingress, and TLS.\n- `tailnet`: The tailnet policy: settings, grants, shell rules, groups and tags with their machines, services, app connectors, tests, findings, and what could not be read.\n- `upgrades`: Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only.",
+      "description": "List any registered resource with schema-validated filters.\nKinds:\n- `action.items`: The composed action queue: what needs doing, from every domain.\n- `analytics`: What the published site was asked for, by any breakdown HQ records.\n- `assets`: Assets and their safe cross-domain relationships.\n- `calendar`: Everything on the calendar over a span of days, and your own events.\n- `connection.standing`: Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path.\n- `contact.submissions`: Contact requests held in Cloudflare D1 and reviewed through HQ.\n- `containers`: Every running container: what it runs and whether that is current and safe, how it is run, and its posture against the container standard.\n- `credentials`: What each connection provider's credential can see, and what it would need to see more.\n- `domains`: Every domain HQ declares or a sweep has seen, its services and registration.\n- `estate`: Machines online, services, domains, next renewals and connections needing attention.\n- `expenses`: Expense records with stable relationship identifiers.\n- `infrastructure.resources`: Canonical desired and observed infrastructure state.\n- `machines`: Every machine anything reported, its roles, addresses and what runs on it.\n- `projects`: Projects and their safe cross-domain relationships.\n- `readings`: Each reading kind, its last read, and its stored records as its schema admits them.\n- `receipts`: Receipt metadata without file contents, storage paths, or URLs.\n- `request.path`: How the calling request reached HQ: HQ's own path hop by hop, each hop checked against what the request shows, with the admission layers decided there.\n- `search`: Machines, services and domains, then records, matching a query.\n- `services`: Declared hostnames and the state of their DNS, ingress, and TLS.\n- `tailnet`: The tailnet policy: settings, grants, shell rules, groups and tags with their machines, services, app connectors, tests, findings, and what could not be read.\n- `upgrades`: Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {

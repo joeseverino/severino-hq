@@ -26,3 +26,12 @@ class ExpenseForm(forms.ModelForm):
             "business_purpose": forms.TextInput(),
             "notes": forms.Textarea(attrs={"rows": 4}),
         }
+        labels = {
+            "related_project": "Project",
+            "related_asset": "Asset",
+            "related_content": "Writeup or page",
+            "related_documentation": "Document",
+        }
+        help_texts = {
+            "business_use_percentage": "0 to 100. Used to estimate the deductible amount.",
+        }

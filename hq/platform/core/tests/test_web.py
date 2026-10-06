@@ -1086,7 +1086,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["docs_needing_review_count"], 1)
         self.assertEqual(
-            [record.doc_id for record in response.context["docs_needing_review"]],
+            [link.title for link, _reviewed in response.context["docs_needing_review"]],
             [stale.doc_id],
         )
 

@@ -11,10 +11,10 @@
 </form>
 
 <section class="kpi-grid">
-  <div class="kpi"><span class="label">Expenses {{ year }}</span><span class="value">${{ expenses_total|floatformat:2|intcomma }}</span><span class="muted">{{ expenses_count|counted:"record" }}</span></div>
-  <div class="kpi"><span class="label">Est. deductible {{ year }}</span><span class="value">${{ expenses_deductible|floatformat:2|intcomma }}</span><span class="muted">Estimate, not tax advice</span></div>
+  <div class="kpi"><span class="label">Expenses {{ year }}</span><span class="value">${{ expenses_total|floatformat:2|intcomma }}</span><span class="muted">{% if expenses_count %}<a href="{{ expenses_url }}">{{ expenses_count|counted:"expense" }}</a>{% else %}{{ expenses_count|counted:"expense" }}{% endif %}</span></div>
+  <div class="kpi"><span class="label">Deductible (est.) {{ year }}</span><span class="value">${{ expenses_deductible|floatformat:2|intcomma }}</span><span class="muted">Estimate, not tax advice</span></div>
   <div class="kpi"><span class="label">Assets purchased {{ year }}</span><span class="value">{{ assets_count }}</span><span class="muted">${{ assets_total|floatformat:2|intcomma }} total</span></div>
-  <div class="kpi"><span class="label">Docs needing review</span><span class="value">{{ docs_needing_review_count }}</span></div>
+  <div class="kpi"><span class="label">Documents due for review</span><span class="value">{% if docs_needing_review_count %}<a href="{{ docs_needing_review_url }}">{{ docs_needing_review_count }}</a>{% else %}0{% endif %}</span></div>
 </section>
 
 {% comment %}
@@ -26,10 +26,10 @@ A year with no expenses is said by the count above; its breakdowns do not draw.
     <h2>Expenses by category, {{ year }}</h2>
     <div class="table-scroll">
     <table class="data-table">
-      <thead><tr><th>Category</th><th>Total</th><th>Deductible</th></tr></thead>
+      <thead><tr><th>Category</th><th>Total</th><th>Deductible (est.)</th></tr></thead>
       <tbody>
         {% for row in expenses_by_category %}
-          <tr><td>{{ row.category }}</td><td>${{ row.total|floatformat:2|intcomma }}</td><td>${{ row.deductible|floatformat:2|intcomma }}</td></tr>
+          <tr><td><a href="{{ row.url }}">{{ row.label }}</a></td><td>${{ row.total|floatformat:2|intcomma }}</td><td>${{ row.deductible|floatformat:2|intcomma }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -40,7 +40,7 @@ A year with no expenses is said by the count above; its breakdowns do not draw.
     <h2>Largest expenses, {{ year }}</h2>
     <ul class="list-rows">
       {% for e in largest_expenses %}
-        <li><span class="row-main"><a href="{{ e.get_absolute_url }}">{{ e.vendor }} · {{ e.item }}</a></span><span class="row-meta">{{ e.date|when }} · {{ e.get_category_display }} · <strong>${{ e.total_cost|floatformat:2|intcomma }}</strong></span></li>
+        <li><span class="row-main">{% entity "expense"|entity_of:e.pk label=e.label %}</span><span class="row-meta">{{ e.date|when }} · {{ e.get_category_display }} · <strong>${{ e.total_cost|floatformat:2|intcomma }}</strong></span></li>
       {% endfor %}
     </ul>
   </section>
@@ -48,60 +48,62 @@ A year with no expenses is said by the count above; its breakdowns do not draw.
 {% endif %}
 
 {% comment %}
-Two small readings share a row: the status counts are a line or two each, and
-as two cards of their own they would be mostly empty card.
+Small readings pair up: each is a few lines, and a card of its own would be
+mostly empty card. A reading with nothing in it is not drawn.
 {% endcomment %}
+{% if status_groups or assets_by_category or docs_needing_review %}
 <div class="two-col">
+  {% if status_groups %}
   <section>
     <h2>By status</h2>
-    {% if content_status_counts or project_status_counts %}
-      <ul class="list-rows">
-        {% for row in content_status_counts %}<li><span class="row-main">Content · {{ row.status }}</span><span class="row-meta"><strong>{{ row.n }}</strong></span></li>{% endfor %}
-        {% for row in project_status_counts %}<li><span class="row-main">Projects · {{ row.status }}</span><span class="row-meta"><strong>{{ row.n }}</strong></span></li>{% endfor %}
-      </ul>
-    {% else %}<p class="muted">No content or projects yet.</p>{% endif %}
+    <ul class="list-rows">
+      {% for group in status_groups %}
+        <li><span class="row-main"><strong>{{ group.label }}</strong></span><span class="row-meta">{% for status in group.counts %}<a href="{{ status.url }}">{{ status.label }} {{ status.count }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</span></li>
+      {% endfor %}
+    </ul>
   </section>
+  {% endif %}
+
+  {% if assets_by_category %}
+  <section>
+    <h2>Assets by category</h2>
+    <ul class="list-rows">
+      {% for row in assets_by_category %}
+        <li><span class="row-main"><a href="{{ row.url }}">{{ row.label }}</a> <span class="muted">{{ row.n }}</span></span><span class="row-meta">{% if row.total %}<strong>${{ row.total|floatformat:2|intcomma }}</strong>{% endif %}</span></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
 
   {% if docs_needing_review %}
   <section>
-    <h2>Docs needing review</h2>
+    <div class="section-head">
+      <h2>Documents due for review</h2>
+      <a class="subtle-link" href="{{ docs_needing_review_url }}">All &rarr;</a>
+    </div>
     <ul class="list-rows">
-      {% for d in docs_needing_review %}
-        <li><span class="row-main"><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} · {{ d.title }}</a></span><span class="row-meta">last reviewed {{ d.last_reviewed|default:"never" }}</span></li>
+      {% for link, reviewed in docs_needing_review %}
+        <li><span class="row-main">{% entity link %}</span><span class="row-meta">{% if reviewed %}last reviewed {{ reviewed|when:"day" }}{% else %}never reviewed{% endif %}</span></li>
       {% endfor %}
     </ul>
   </section>
   {% endif %}
 </div>
+{% endif %}
 
 <section>
   <h2>Exports</h2>
-  <p class="muted">Exports exclude secrets, sensitive doc bodies, and receipt files.</p>
+  <p class="muted">Exports leave out secrets, the text of sensitive documents, and receipt files.</p>
   <div class="export-grid">
-    <a class="btn" href="{% url 'reports:expenses_csv' %}?year={{ year }}">expenses-{{ year }}.csv</a>
-    <a class="btn" href="{% url 'reports:assets_csv' %}?year={{ year }}">assets-{{ year }}.csv</a>
-    <a class="btn" href="{% url 'reports:expenses_csv' %}">expenses.csv (all)</a>
-    <a class="btn" href="{% url 'reports:assets_csv' %}">assets.csv (all)</a>
-    <a class="btn" href="{% url 'reports:content_csv' %}">content.csv</a>
-    <a class="btn" href="{% url 'reports:projects_csv' %}">projects.csv</a>
-    <a class="btn" href="{% url 'reports:documentation_csv' %}">documentation.csv</a>
-    <a class="btn" href="{% url 'reports:year_summary_json' %}?year={{ year }}">year-summary-{{ year }}.json</a>
-    <a class="btn" href="{% url 'reports:year_summary_md' %}?year={{ year }}">year-summary-{{ year }}.md</a>
+    <a class="btn" href="{% url 'reports:expenses_csv' %}?year={{ year }}">Expenses {{ year }} (CSV)</a>
+    <a class="btn" href="{% url 'reports:assets_csv' %}?year={{ year }}">Assets {{ year }} (CSV)</a>
+    <a class="btn" href="{% url 'reports:expenses_csv' %}">All expenses (CSV)</a>
+    <a class="btn" href="{% url 'reports:assets_csv' %}">All assets (CSV)</a>
+    <a class="btn" href="{% url 'reports:content_csv' %}">Writeups and pages (CSV)</a>
+    <a class="btn" href="{% url 'reports:projects_csv' %}">Projects (CSV)</a>
+    <a class="btn" href="{% url 'reports:documentation_csv' %}">Documents (CSV)</a>
+    <a class="btn" href="{% url 'reports:year_summary_json' %}?year={{ year }}">Year summary {{ year }} (JSON)</a>
+    <a class="btn" href="{% url 'reports:year_summary_md' %}?year={{ year }}">Year summary {{ year }} (Markdown)</a>
   </div>
-</section>
-
-<section>
-  <div class="section-head">
-    <h2>Recent audit events</h2>
-    <a class="subtle-link" href="{% url 'core:audit_list' %}">All &rarr;</a>
-  </div>
-  {% if recent_audit %}
-    <ul class="audit-list">
-      {% for ev in recent_audit %}
-        <li><span class="muted">{{ ev.created_at|when }}</span> <strong>{{ ev.actor_label }}</strong>
- {{ ev.get_action_display|lower }} {% if ev.object_type %}<span class="muted">{{ ev.type_label|lower }}</span>{% endif %}{% if ev.object_repr %} · {{ ev.object_repr }}{% endif %}</li>
-      {% endfor %}
-    </ul>
-  {% endif %}
 </section>
 {% endblock %}

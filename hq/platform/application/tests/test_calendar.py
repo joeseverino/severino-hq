@@ -316,7 +316,8 @@ class PageTests(TestCase):
         self.assertContains(response, "Dentist")
         self.assertContains(response, entry.get_absolute_url().replace("&", "&amp;"))
         self.assertContains(response, 'data-hotkey="t"')
-        self.assertContains(response, "Add to My Calendar")
+        self.assertContains(response, "Add event")
+        self.assertNotContains(response, "My Calendar")
         # An entry opens beside its day: once, with what can be done to it.
         opened = self.client.get(entry.get_absolute_url())
         self.assertContains(opened, '<article class="day-panel-entry"')
@@ -330,6 +331,25 @@ class PageTests(TestCase):
             entry.get_absolute_url(),
             fetch_redirect_response=False,
         )
+
+    def test_each_calendar_says_what_it_shows_on_the_page(self):
+        response = self.client.get(reverse("calendar:month"))
+
+        # Under its name, where a phone can read it; the operator's own events lead under no heading.
+        self.assertContains(response, '<span>My events<small class="calendar-source-note">Events you or your agents added.</small></span>')
+        self.assertNotContains(response, "<h3></h3>")
+        self.assertNotContains(response, "My calendars")
+
+    def test_one_label_adds_an_event(self):
+        month = self.client.get(reverse("calendar:month"), {"day": timezone.localdate().isoformat()})
+        form = self.client.get(reverse("calendar:entry_new"))
+
+        self.assertEqual(month.content.decode().count("Add event"), 2)  # the head and the day panel
+        self.assertContains(form, "<h1>Add event</h1>")
+        self.assertContains(form, '<button type="submit" class="primary">Add event</button>')
+        for gone in ("New entry", "Add to calendar"):
+            self.assertNotContains(month, gone)
+            self.assertNotContains(form, gone)
 
     def test_a_bar_keeps_its_height_across_the_week(self):
         """Marks share the date's row, so a dot in one cell and not the next

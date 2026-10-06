@@ -45,8 +45,8 @@ class DocsListView(PageMixin, TableListMixin, ListView):
     table_search_scope = "documentation"
     table_selectable = True
     table_columns = (
-        TableColumn("Doc ID", "doc_id"),
         TableColumn("Title", "title", css="key-col"),
+        TableColumn("ID", "doc_id"),
         TableColumn("Type", "doc_type"),
         TableColumn("Environment", "environment"),
         TableColumn("Status", "status"),
@@ -73,30 +73,30 @@ class DocsListView(PageMixin, TableListMixin, ListView):
     )
     table_sorts = (
         TableSort("-updated_at", "Recently updated", "-updated_at"),
-        TableSort("doc_id", "Document ID", "doc_id"),
-        TableSort("-doc_id", "Document ID reverse", "-doc_id"),
+        TableSort("doc_id", "ID A–Z", "doc_id"),
+        TableSort("-doc_id", "ID Z–A", "-doc_id"),
         TableSort("title", "Title A–Z", "title"),
         TableSort("-title", "Title Z–A", "-title"),
-        TableSort("doc_type", "Type", "doc_type"),
-        TableSort("-doc_type", "Type reverse", "-doc_type"),
-        TableSort("environment", "Environment", "environment"),
-        TableSort("-environment", "Environment reverse", "-environment"),
+        TableSort("doc_type", "Type A–Z", "doc_type"),
+        TableSort("-doc_type", "Type Z–A", "-doc_type"),
+        TableSort("environment", "Environment A–Z", "environment"),
+        TableSort("-environment", "Environment Z–A", "-environment"),
         TableSort("last_reviewed", "Oldest review", "last_reviewed"),
         TableSort("-last_reviewed", "Newest review", "-last_reviewed"),
-        TableSort("status", "Status", "status"),
-        TableSort("-status", "Status reverse", "-status"),
-        TableSort("sensitivity", "Sensitivity", "sensitivity"),
-        TableSort("-sensitivity", "Sensitivity reverse", "-sensitivity"),
+        TableSort("status", "Status A–Z", "status"),
+        TableSort("-status", "Status Z–A", "-status"),
+        TableSort("sensitivity", "Sensitivity A–Z", "sensitivity"),
+        TableSort("-sensitivity", "Sensitivity Z–A", "-sensitivity"),
         TableSort("updated_at", "Least recently updated", "updated_at"),
     )
-    table_toggles = (TableToggle("needs_review", "Needs review"),)
+    table_toggles = (TableToggle("needs_review", "Due for review"),)
     table_default_sort = "-updated_at"
     table_search_placeholder = "Search IDs, titles, systems, paths, and notes…"
 
     def get_page_actions(self):
         return (
             PageAction("Import manifest", reverse("docs_index:import")),
-            PageAction("New doc record", reverse("docs_index:create"), primary=True),
+            PageAction("New document", reverse("docs_index:create"), primary=True),
         )
 
     def get_queryset(self):
@@ -136,12 +136,13 @@ class DocsDetailView(PageMixin, DetailView):
     )
 
     def get_page_title(self):
-        return f"{self.object.doc_id} · {self.object.title}"
+        return self.object.title
 
     def get_page_lede(self):
         record = self.object
         return format_html(
-            '{} · {} · <span class="pill pill-{}">{}</span> · <span class="pill pill-{}">{}</span>',
+            '<code>{}</code> · {} · {} · <span class="pill pill-{}">{}</span> · <span class="pill pill-{}">{}</span>',
+            record.doc_id,
             record.get_doc_type_display(),
             record.get_environment_display(),
             record.status,
@@ -162,13 +163,13 @@ class DocsDetailView(PageMixin, DetailView):
 
 
 class DocsCreateView(DocsPage, RecordFormMixin, CreateView):
-    page_title = "New doc record"
+    page_title = "New document"
     form_class = DocumentationRecordForm
     template_name = "docs_index/docs_form.html"
 
 
 class DocsUpdateView(DocsPage, RecordFormMixin, UpdateView):
-    page_title = "Edit doc record"
+    page_title = "Edit document"
     model = DocumentationRecord
     form_class = DocumentationRecordForm
     template_name = "docs_index/docs_form.html"
@@ -177,7 +178,7 @@ class DocsUpdateView(DocsPage, RecordFormMixin, UpdateView):
 
 
 class DocsDeleteView(DocsPage, RecordDeleteMixin, DeleteView):
-    page_title = "Delete doc record?"
+    page_title = "Delete document?"
     model = DocumentationRecord
     template_name = "docs_index/docs_confirm_delete.html"
     slug_field = "doc_id"
@@ -197,7 +198,7 @@ class ManifestImportView(View):
                 "form": form,
                 **page_context(
                     "Import documentation manifest",
-                    "Upload a JSON array of doc records, one per vault doc.",
+                    "Upload a JSON list with one entry per vault document.",
                     trail=(DOCS_TRAIL,),
                 ),
             },
@@ -214,10 +215,10 @@ class ManifestImportView(View):
             raw = form.cleaned_data["manifest_file"].read()
             data = json.loads(raw.decode("utf-8"))
         except UnicodeDecodeError:
-            messages.error(request, "Invalid JSON: the file is not UTF-8 text.")
+            messages.error(request, "This file is not UTF-8 text, so it cannot be read as JSON.")
             return self.render_form(request, form)
         except json.JSONDecodeError as exc:
-            messages.error(request, f"Invalid JSON: {exc}")
+            messages.error(request, f"This file is not valid JSON: {exc}")
             return self.render_form(request, form)
         try:
             result = sync_documentation(
@@ -226,17 +227,17 @@ class ManifestImportView(View):
                 update_existing=form.cleaned_data["update_existing"],
             )
         except ManifestImportError as exc:
-            messages.error(request, f"Import failed: {exc}")
+            messages.error(request, f"Nothing was imported: {exc}")
             return self.render_form(request, form)
         if not result["ok"]:
-            messages.error(request, f"Import failed validation: {result['problems']}")
+            messages.error(request, f"Nothing was imported. Fix these entries first: {result['problems']}")
             return self.render_form(request, form)
         stats = result["stats"]
         messages.success(
             request,
             (
-                f"Manifest imported. Created {stats['created']}, "
-                f"updated {stats['updated']}, skipped {stats['skipped']}."
+                f"Manifest imported: {stats['created']} new, "
+                f"{stats['updated']} changed, {stats['skipped']} unchanged."
             ),
         )
         return redirect("docs_index:list")

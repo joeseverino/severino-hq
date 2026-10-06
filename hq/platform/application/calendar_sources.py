@@ -39,7 +39,7 @@ def estate_sources() -> tuple[CalendarSource, ...]:
             id="estate.certificates",
             label="Certificates",
             events=certificate_events,
-            description="Renewal windows of the certificates you renew, and any a provider let lapse.",
+            description="When each certificate you renew is due, and any that expired.",
         ),
         CalendarSource(
             id="estate.registrations",
@@ -79,7 +79,7 @@ def certificate_events(first: date, last: date) -> Iterator[CalendarEvent]:
                 id=f"certificate:{expiry.source}:{expiry.subject}",
                 title=f"{expiry.subject} expires",
                 starts=ends,
-                detail=f"{expiry.source} renews it and has not",
+                detail=f"{expiry.source} renews it and has not yet",
                 url=expiry.url,
             )
 
@@ -120,7 +120,7 @@ def history_sources() -> tuple[CalendarSource, ...]:
             id="history.deploys",
             label="Deploys",
             events=deploy_events,
-            description="Every deploy GitHub records.",
+            description="Each deploy GitHub recorded.",
             url=reverse("core:audit_list"),
             shown=False,
         ),
@@ -134,9 +134,9 @@ def history_sources() -> tuple[CalendarSource, ...]:
         ),
         CalendarSource(
             id="history.changes",
-            label="Changes",
+            label="Changes made in HQ",
             events=change_events,
-            description="What was changed through HQ, and what readings found changed outside it.",
+            description="Changes made in HQ, and changes HQ noticed that were made elsewhere.",
             url=reverse("core:audit_list"),
             shown=False,
         ),
@@ -173,6 +173,7 @@ def container_events(first: date, last: date) -> Iterator[CalendarEvent]:
             title=moment.title,
             starts=moment.at,
             detail=moment.detail,
+            url=moment.url,
             state="done",
         )
 
@@ -189,8 +190,8 @@ def change_events(first: date, last: date) -> Iterator[CalendarEvent]:
         outside = where == OUTSIDE_HQ
         yield CalendarEvent(
             id=f"changes:{where}:{day.isoformat()}",
-            title=counted(count, "change outside HQ" if outside else "change through HQ",
-                          "changes outside HQ" if outside else "changes through HQ"),
+            title=counted(count, "change made elsewhere" if outside else "change made in HQ",
+                          "changes made elsewhere" if outside else "changes made in HQ"),
             starts=day,
             url=f"{reverse('core:audit_list')}?on={day.isoformat()}&source={where}",
             state="done",

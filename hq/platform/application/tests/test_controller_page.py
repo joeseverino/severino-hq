@@ -103,10 +103,12 @@ class ControllerPageTests(TestCase):
 
         response = self.client.get(reverse("control_plane:controller"))
 
-        self.assertContains(response, "Silent for")
-        self.assertContains(response, "Nothing has been read or applied since.")
+        self.assertContains(response, "Not heard from for")
+        self.assertContains(response, "Nothing has been read or changed since.")
         self.assertContains(response, "<code>adguard.rewrite</code>")
-        self.assertContains(response, "Due now")
+        # A reading 26 hours old against a five-minute cadence is not "due": it is late, and says which.
+        self.assertContains(response, "Overdue")
+        self.assertContains(response, "Internal DNS record was last read")
 
     def test_the_page_needs_a_session_and_the_dashboard_links_to_it(self):
         self.assertEqual(self.client.get(reverse("control_plane:controller")).status_code, 302)

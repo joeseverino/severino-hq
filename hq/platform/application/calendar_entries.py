@@ -48,9 +48,9 @@ def own_sources() -> tuple[CalendarSource, ...]:
     return (
         CalendarSource(
             id=OWN_SOURCE,
-            label="My Calendar",
+            label="My events",
             events=entry_events,
-            description="What you and your agents put on the calendar.",
+            description="Events you or your agents added.",
             url=reverse("calendar:month"),
         ),
     )
@@ -227,7 +227,7 @@ def _entry(uid: str, *, lock: bool = False) -> Entry:
     try:
         return query.get(uid=uid)
     except (Entry.DoesNotExist, ValueError) as exc:
-        raise NotFoundError(f"Calendar entry {uid!r} was not found.") from exc
+        raise NotFoundError(f"Calendar event {uid!r} was not found.") from exc
 
 
 @transaction.atomic
@@ -246,7 +246,7 @@ def save_entry(
         else:
             entry, created = _entry(current_key, lock=True), False
             if expected_updated_at and entry.updated_at.isoformat() != expected_updated_at:
-                raise ConflictError("This entry changed after it was read.")
+                raise ConflictError("This event changed after it was read.")
         values = asdict(command)
         values["title"] = values["title"].strip()
         values["weekdays"] = ",".join(str(day) for day in sorted(set(values["weekdays"])))

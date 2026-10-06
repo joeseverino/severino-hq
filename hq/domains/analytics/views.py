@@ -24,4 +24,9 @@ class AnalyticsOverviewView(PageMixin, TemplateView):
             # The value comes from a link, and a mistyped one should still show
             # the operator their traffic.
             days = DEFAULT_WINDOW_DAYS
-        return super().get_context_data(**kwargs) | overview(days=days)
+        context = super().get_context_data(**kwargs) | overview(days=days)
+        # Page speed is three rates or, with no visit measured, one sentence.
+        context["vitals_measured"] = any(
+            metric["percent"] is not None for metric in context.get("vitals", {}).values()
+        )
+        return context

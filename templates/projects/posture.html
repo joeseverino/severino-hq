@@ -8,7 +8,7 @@ A check met everywhere is a word in one closing line.
 {% block page %}
 {% if repositories %}
   {% if unmet %}
-    <h2>Not met <span class="heading-aside">{{ unmet|length|counted:"check" }}</span></h2>
+    <h2>Failing <span class="heading-aside">{{ unmet|length|counted:"check" }}</span></h2>
     <ul class="posture-gaps">
       {% for gap in unmet %}
         <li class="{% if gap.check.serious %}is-serious{% endif %}">
@@ -19,7 +19,7 @@ A check met everywhere is a word in one closing line.
           </div>
           <div class="posture-gap-repos">
             {% for repo in gap.repos %}<a class="workflow-chip" href="{{ repo.url }}/settings" rel="noopener">{{ repo.short }}</a>{% endfor %}
-            <small class="muted">{{ gap.repos|length }} of {{ gap.of }}</small>
+            <small class="muted">{{ gap.repos|length }} of {{ gap.of|counted:"repository,repositories" }}</small>
           </div>
         </li>
       {% endfor %}
@@ -35,8 +35,8 @@ A check met everywhere is a word in one closing line.
           <small class="muted">{% if posture.subject.private %}Private{% else %}Public{% endif %}</small>
         </div>
         <strong class="posture-score {% if posture.unmet %}is-unmet{% else %}is-met{% endif %}">{{ posture.met }} of {{ posture.measured }}</strong>
-        <span class="posture-meter" role="img" aria-label="{{ posture.met }} of {{ posture.measured }} met">
-          {% for result in posture.results %}{% ifchanged result.check.scope %}{% if not forloop.first %}<span class="posture-meter-break" aria-hidden="true"></span>{% endif %}{% endifchanged %}<span class="is-{{ result.state }}" tabindex="0" data-tip="{{ result.check.label }}: {% if result.state == 'met' %}met{% elif result.state == 'unmet' %}not met{% else %}not available on this plan{% endif %}"></span>{% endfor %}
+        <span class="posture-meter" role="img" aria-label="{{ posture.met }} of {{ posture.measured|counted:"check passes,checks pass" }}">
+          {% for result in posture.results %}{% ifchanged result.check.scope %}{% if not forloop.first %}<span class="posture-meter-break" aria-hidden="true"></span>{% endif %}{% endifchanged %}<span class="is-{{ result.state }}" tabindex="0" data-tip="{{ result.check.label }}: {% if result.state == 'met' %}passes{% elif result.state == 'unmet' %}fails{% else %}GitHub does not offer this on this plan{% endif %}"></span>{% endfor %}
         </span>
         {% with access=posture.subject.access %}
           <span class="posture-access">{% if access %}{% with others=access.collaborators|length|add:-1 %}{% if others > 0 %}<span class="is-unmet">{{ others|counted:"other person has,other people have" }} access</span>{% else %}Only you{% endif %}{% endwith %}
@@ -49,7 +49,10 @@ A check met everywhere is a word in one closing line.
   </ul>
 
   {% if everywhere %}
-    <p class="posture-everywhere">{% include "partials/_icon.html" with name="check-circle" %}<span><strong>Met everywhere:</strong> {% for check in everywhere %}{{ check.label|lower }}{% if not forloop.last %}; {% endif %}{% endfor %}.</span></p>
+    <details class="posture-everywhere">
+      <summary>{{ everywhere|length|counted:"check passes,checks pass" }} on every repository</summary>
+      <ul>{% for check in everywhere %}<li>{{ check.label }}</li>{% endfor %}</ul>
+    </details>
   {% endif %}
 {% else %}
   {% include "partials/_empty_state.html" with message="HQ's GitHub App has not read any repository yet." %}

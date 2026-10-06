@@ -82,5 +82,5 @@ class ProjectPushedTests(TestCase):
 
         response = self.client.get(reverse("projects:detail", args=[project.slug]))
 
-        self.assertContains(response, "Pushed 5")
-        self.assertNotContains(response, "Updated ")
+        self.assertContains(response, "Last push 5")
+        self.assertNotContains(response, "Edited ")

@@ -61,14 +61,14 @@ class ReceiptListView(PageMixin, TableListMixin, ListView):
     table_search_scope = "receipts"
     table_selectable = True
     table_columns = (
-        TableColumn("Uploaded", "uploaded_at", "Least recently uploaded", "Recently uploaded"),
-        TableColumn("Vendor", "vendor", "Vendor A–Z", "Vendor Z–A", css="key-col"),
+        TableColumn("Vendor", "vendor"),
         TableColumn("Date", "date", "Oldest receipt date", "Newest receipt date"),
         TableColumn("Amount", "amount", "Lowest amount", "Highest amount", css="key-col"),
-        TableColumn("Filename", "original_filename", "Filename A–Z", "Filename Z–A"),
-        TableColumn("Links"),
+        TableColumn("For", css="key-col"),
+        TableColumn("File", "original_filename"),
+        TableColumn("Uploaded", "uploaded_at", "Least recently uploaded", "Recently uploaded"),
     )
-    table_toggles = (TableToggle("unlinked", "Unlinked only"),)
+    table_toggles = (TableToggle("unlinked", "No expense or asset"),)
     table_default_sort = "-uploaded_at"
     table_search_placeholder = "Search vendors, filenames, and notes…"
 
@@ -97,19 +97,17 @@ class ReceiptPage(PageMixin):
 
 
 class ReceiptDetailView(PageMixin, DetailView):
-    model = Receipt
+    queryset = Receipt.objects.select_related("related_expense", "related_asset")
     template_name = "receipts/receipt_detail.html"
     context_object_name = "receipt"
 
     def get_page_title(self):
-        return self.object.vendor or "Receipt"
+        return self.object.label
 
     def get_page_lede(self):
         receipt = self.object
-        return (
-            f"{receipt.original_filename or 'file'} · "
-            f"uploaded {when(receipt.uploaded_at)}"
-        )
+        named = f"{receipt.original_filename} · " if receipt.original_filename else ""
+        return f"{named}uploaded {when(receipt.uploaded_at)}"
 
     def get_page_trail(self):
         return (RECEIPTS_TRAIL,)
@@ -164,6 +162,7 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
         # Only suggest if it's currently unlinked.
         if receipt.related_expense or receipt.related_asset:
             ctx["already_linked"] = True
+            ctx["receipt"] = receipt
             return ctx
 
         # Find potential expenses with the same vendor or same amount.
@@ -205,7 +204,7 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
                 principal=web_principal(request.user),
                 current_id=receipt.id,
             )
-            messages.success(request, f"Receipt linked to expense: {expense}")
+            messages.success(request, f"Receipt linked to {expense.label}.")
 
         return redirect(receipt.get_absolute_url())
 
@@ -215,6 +214,15 @@ class ReceiptCreateView(ReceiptPage, CreateView):
     model = Receipt
     form_class = ReceiptUploadForm
     template_name = "receipts/receipt_form.html"
+
+    def get_initial(self):
+        """Opened from an expense's page, the form starts on that expense."""
+
+        initial = super().get_initial()
+        asked = self.request.GET.get("related_expense", "")
+        if asked.isdigit():
+            initial["related_expense"] = int(asked)
+        return initial
 
     def form_valid(self, form):
         upload = form.cleaned_data["file"]
@@ -270,13 +278,13 @@ class ReceiptFileView(View):
     def get(self, request, pk: int):
         receipt = get_object_or_404(Receipt, pk=pk)
         if not receipt.file:
-            raise Http404("Receipt has no attached file.")
+            raise Http404("This receipt has no file.")
         try:
             path = Path(receipt.file.path)
         except (ValueError, NotImplementedError) as exc:
-            raise Http404("Receipt file is not on a streamable backend.") from exc
+            raise Http404("This receipt's file cannot be opened from here.") from exc
         if not path.is_file():
-            raise Http404("Receipt file not found on disk.")
+            raise Http404("This receipt's file is missing.")
 
         record_event(
             action=AuditLog.Action.VIEWED,

@@ -1,13 +1,14 @@
 {% extends "list_page.html" %}
 {% load humanize %}
+{% block summary %}{% include "expenses/_cost_totals.html" %}{% endblock %}
 {% block row %}
   <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.item_name }}</strong></a></td>
-  <td>{{ row.vendor }}</td>
+  <td>{{ row.vendor|or_empty }}</td>
   <td>{{ row.get_category_display }}</td>
   <td class="muted">{{ row.purchase_date|when }}</td>
-  <td>${{ row.total_cost|floatformat:2|intcomma }}</td>
+  <td>{% if row.total_cost %}${{ row.total_cost|floatformat:2|intcomma }}{% else %}{% empty_value %}{% endif %}</td>
   <td class="muted">{{ row.business_use_percentage }}%</td>
-  <td>${{ row.estimated_deductible_amount|floatformat:2|intcomma }}</td>
+  <td>{% if row.total_cost %}${{ row.estimated_deductible_amount|floatformat:2|intcomma }}{% else %}{% empty_value %}{% endif %}</td>
   <td><span class="pill pill-{{ row.status }}">{{ row.get_status_display }}</span></td>
 {% endblock %}
-{% block empty %}No assets yet.{% endblock %}
+{% block empty %}No assets yet. <a href="{% url 'assets:create' %}">New asset</a>{% endblock %}

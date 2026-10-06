@@ -190,7 +190,7 @@ whatever the cadence says; when only requests make it due, `only_kinds` names
 every kind the controller reads. A request is answered once each forced reading
 is stored after it, and stops forcing after `SEVERINO_READ_REQUEST_SECONDS`.
 The web form is `POST /infrastructure/connections/read/`; a GET is refused. A
-finding whose evidence is a reading offers "Read now and check again" as its
+finding whose evidence is a reading offers "Check again" as its
 verification; one no reading involves offers "Check again".
 
 Each serialized finding may include a domain-neutral `workflow`: ordered steps

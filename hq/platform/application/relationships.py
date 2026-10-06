@@ -56,6 +56,20 @@ class RelationGroup:
             for item in self.items
         )
 
+    @property
+    def shared(self) -> Relationship | None:
+        """Who read every end and when, where one source read them all.
+
+        Said once under the group, as its oldest reading, rather than beside
+        each end. None where the ends have no source or more than one.
+        """
+
+        sources = {(item.source.label, item.source.url) if item.source else None for item in self.items}
+        if len(sources) != 1 or None in sources:
+            return None
+        read = [item.observed_at for item in self.items if item.observed_at is not None]
+        return Relationship(self.items[0].entity, self.items[0].source, min(read) if read else None)
+
 
 @dataclass(frozen=True)
 class Relationships:

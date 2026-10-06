@@ -1304,8 +1304,16 @@ td.row-actions > * + * { margin-left: var(--space-6); }
    neutral colour rather than a warning one. */
 .control-declared, .control-pending { color: var(--muted); }
 .compact-table { box-shadow: none; }
-/* A node's relationships: the phrase once per group, then each end. */
-.relationship-table th[scope="rowgroup"] { width: 12rem; color: var(--muted); font-weight: 600; vertical-align: top; }
+/* A node's relationships: the phrase once per group with its ends beside it,
+   and under it where there is no room beside. */
+.relation-list { display: grid; margin: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.relation-group { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); padding: var(--space-5) var(--space-6); }
+.relation-group + .relation-group { border-top: 1px solid var(--line); }
+.relation-group dt { flex: 0 0 12rem; color: var(--muted); font-weight: 600; }
+.relation-group dd { flex: 1 1 18rem; min-width: 0; margin: 0; }
+.relation-ends { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-5); margin: 0; padding: 0; list-style: none; }
+.relation-ends li { min-width: 0; overflow-wrap: anywhere; }
+.relation-source { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
 /* Policy names and ports: each chip whole, the row wrapping between them. */
 .code-list { display: inline-flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
 .code-list code { white-space: nowrap; }
@@ -2374,6 +2382,10 @@ a.kpi:hover { background: var(--surface-2); }
 .calendar-source > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .calendar-source small { color: var(--muted-2); font-size: var(--text-2xs); font-variant-numeric: tabular-nums; }
 .calendar-source .calendar-source-failure { color: var(--warn); }
+/* What a calendar shows, under its name, where a phone can read it. */
+.calendar-source-note { display: block; white-space: normal; font-variant-numeric: normal; }
+.calendar-source:has(.calendar-source-note) { align-items: start; }
+.calendar-source:has(.calendar-source-note) .calendar-check { margin-top: var(--space-1); }
 .calendar-check { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1.5px var(--source); }
 .calendar-source[aria-pressed="true"] .calendar-check { background: var(--source); }
 .calendar-source[aria-pressed="false"] > span { color: var(--muted); }
@@ -4038,14 +4050,17 @@ kbd {
 /* Overflow menu: the actions worth having, without a second row of buttons.
    The panel is the nav's dropdown (same box, same shadow, same radius) so
    there is one dropdown in HQ rather than two that nearly match. */
-.overflow-menu { position: relative; display: flex; }
+.overflow-menu { position: relative; display: flex; align-self: center; }
+/* Exactly a button's height, stated: its glyph comes from whatever face the
+   device has for it, and must not set the size of the control. */
 .overflow-menu > summary {
   display: inline-flex; align-items: center; justify-content: center;
-  min-width: 38px; padding: var(--space-3) var(--space-5);
+  box-sizing: border-box; height: var(--control-size); min-width: 38px;
+  padding: 0 var(--space-5);
   border: 1px solid var(--line); border-radius: var(--radius-sm);
   background: var(--surface); color: var(--ink);
   box-shadow: var(--shadow-sm); cursor: pointer;
-  font-size: var(--text-sm); font-weight: 500; line-height: 1.45;
+  font-size: var(--text-sm); font-weight: 500; line-height: 1;
   list-style: none;
 }
 .overflow-menu > summary::-webkit-details-marker { display: none; }
@@ -5154,9 +5169,8 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
   .posture-score { flex: 0 0 4.5rem; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
   .posture-score.is-met { color: var(--ok); }
   .posture-score.is-unmet { color: var(--danger); }
-  .posture-everywhere { display: flex; gap: var(--space-3); align-items: flex-start; color: var(--muted); font-size: var(--text-sm); }
-  .posture-everywhere .icon { color: var(--ok); flex: none; margin-top: 0.15em; }
-  .posture-everywhere strong { color: var(--ink); }
+  .posture-everywhere { color: var(--muted); font-size: var(--text-sm); }
+  .posture-everywhere > summary { color: var(--ink); }
 
   /* A project's addresses under its name: one line, dots between. */
   .project-meta { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); }
@@ -5328,8 +5342,8 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
 
   /* A section that folds: its heading is the toggle. */
   .section-fold > summary { display: flex; align-items: baseline; }
-  .section-fold > summary:hover h2 { color: var(--accent-2); }
-  .section-fold > summary h2 { margin: 0; }
+  .section-fold > summary:hover :is(h2, h3) { color: var(--accent-2); }
+  .section-fold > summary :is(h2, h3) { margin: 0; }
   .section-fold[open] > summary { margin-bottom: var(--space-5); }
 
   /* The topology's view picker, first in its own filter row. */

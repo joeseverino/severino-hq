@@ -10,7 +10,7 @@
 </div>
 
 <section class="card">
-  <div class="section-head"><h2>Message</h2><span class="pill pill-{{ submission.status|default:'unread' }}">{{ submission.status|default:"unread" }}</span></div>
+  <div class="section-head"><h2>Message</h2><span class="pill pill-{{ submission.status|default:'unread' }}">{{ submission.status|default:"unread"|capfirst }}</span></div>
   <dl class="kv">
     <dt>Name</dt><dd>{{ submission.name }}</dd>
     <dt>Email</dt><dd><a href="{{ reply_href }}">{{ submission.email }}</a></dd>
@@ -19,29 +19,29 @@
 </section>
 
 <section class="card">
-  <div class="section-head"><h2>Submission info</h2></div>
+  <div class="section-head"><h2>About this message</h2></div>
   <dl class="kv">
-    <dt>Entry ID</dt><dd>#{{ submission.id }}</dd>
-    <dt>Turnstile</dt><dd>{{ submission.turnstile|or_empty }}</dd>
-    <dt>Submitted</dt><dd>{{ submission.created_at|when }}</dd>
+    <dt>Number</dt><dd>#{{ submission.id }}</dd>
+    <dt>Bot check</dt><dd>{{ submission.turnstile|or_empty }}</dd>
+    <dt>Sent</dt><dd>{{ submission.created_at|when }}</dd>
     <dt>Updated</dt><dd>{{ submission.updated_at|when }}</dd>
     <dt>IP address</dt><dd>{{ submission.ip_address|or_empty }}</dd>
     <dt>Browser</dt><dd>{{ submission.browser|or_empty }}</dd>
     <dt>Device</dt><dd>{{ submission.device|or_empty }}</dd>
     <dt>Country</dt><dd>{{ submission.country|or_empty }}</dd>
-    {% if submission.source_url %}<dt>Source URL</dt><dd>{% if submission.source_url|web_url %}<a href="{{ submission.source_url|web_url }}" rel="noopener noreferrer">{{ submission.source_url }}</a>{% else %}{{ submission.source_url }}{% endif %}</dd>{% endif %}
+    {% if submission.source_url %}<dt>Sent from</dt><dd>{% if submission.source_url|web_url %}<a href="{{ submission.source_url|web_url }}" rel="noopener noreferrer">{{ submission.source_url }}</a>{% else %}{{ submission.source_url }}{% endif %}</dd>{% endif %}
     <dt>User agent</dt><dd class="muted">{{ submission.user_agent|or_empty }}</dd>
   </dl>
 </section>
 
 <section class="card">
-  <div class="section-head"><h2>Review</h2></div>
+  <div class="section-head"><h2>Your note</h2></div>
   <form method="post" class="form">
     {% csrf_token %}
     {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
     {% for field in form %}{% include "partials/_form_field.html" %}{% endfor %}
     <div class="form-actions">
-      <button type="submit" class="primary">Save review</button>
+      <button type="submit" class="primary">Save note</button>
     </div>
   </form>
 </section>

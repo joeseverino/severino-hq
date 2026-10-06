@@ -1,4 +1,4 @@
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.urls import reverse, reverse_lazy
 from django.utils.html import format_html
 from django.views.generic import (
@@ -9,6 +9,9 @@ from django.views.generic import (
     UpdateView,
 )
 
+from hq.platform.application.assets import managed_domain
+from hq.platform.application.documentation import related_documents
+from hq.platform.application.expenses import cost_totals
 from hq.platform.application.pages import PageAction, PageMixin, record_trail
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
@@ -33,11 +36,11 @@ class AssetListView(PageMixin, TableListMixin, ListView):
         TableColumn("Category", "category"),
         TableColumn("Purchased", "purchase_date", "Oldest purchase", "Newest purchase"),
         TableColumn("Cost", "total_cost", "Lowest cost", "Highest cost", css="key-col"),
-        TableColumn("% biz", "business_use_percentage", "Lowest business use", "Highest business use"),
-        TableColumn("Est. deduct.", "estimated_deductible_amount", "Lowest deductible", "Highest deductible"),
+        TableColumn("Business use", "business_use_percentage", "Lowest business use", "Highest business use"),
+        TableColumn("Deductible (est.)", "estimated_deductible_amount", "Lowest deductible", "Highest deductible"),
         TableColumn("Status", "status"),
     )
-    table_toggles = (TableToggle("missing_purchase", "Missing purchase info"),)
+    table_toggles = (TableToggle("missing_purchase", "No date or cost"),)
     table_default_sort = "-purchase_date"
     table_search_placeholder = "Search assets, vendors, serials, and notes…"
 
@@ -51,6 +54,14 @@ class AssetListView(PageMixin, TableListMixin, ListView):
                 Q(purchase_date__isnull=True) | Q(total_cost=0)
             )
         return self.apply_table_query(qs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        totals = self.object_list.aggregate(
+            total=Sum("total_cost"), deductible=Sum("estimated_deductible_amount")
+        )
+        context["totals"] = cost_totals(totals, narrowed=bool(context["table"]["active_count"]))
+        return context
 
 
 class AssetPage(PageMixin):
@@ -83,6 +94,15 @@ class AssetDetailView(PageMixin, DetailView):
 
     def get_page_trail(self):
         return (("Assets", reverse("assets:list")),)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        asset = self.object
+        context["documents"] = related_documents(
+            asset.documentation_records.all(), listed=asset.related_projects.all()
+        )
+        context["domain"] = managed_domain(asset)
+        return context
 
     def get_page_lede(self):
         return format_html(
