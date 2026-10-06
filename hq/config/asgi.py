@@ -104,8 +104,19 @@ async def bridge_serving():
 
 
 @contextlib.asynccontextmanager
+async def deriving_ahead():
+    """Derived answers asked again as their inputs change, for as long as the
+    web application runs, so a request finds its answer stored."""
+
+    from hq.platform.core.ahead import keeping
+
+    with keeping():
+        yield
+
+
+@contextlib.asynccontextmanager
 async def lifespan(app):
-    async with mcp.session_manager.run(), bridge_serving():
+    async with mcp.session_manager.run(), bridge_serving(), deriving_ahead():
         yield
 
 

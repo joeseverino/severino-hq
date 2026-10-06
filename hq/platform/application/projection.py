@@ -31,29 +31,44 @@ _MISSING = object()
 _READ_SCOPE: ContextVar[dict[str, Any] | None] = ContextVar(
     "hq_projection_read_scope", default=None
 )
+# Where a scope keeps what it was seeded with, apart from what it read since.
+_SEED = "projection.seed"
 
 
 @contextmanager
-def projection_scope(seed: Mapping[str, Any] | None = None) -> Iterator[None]:
+def projection_scope(
+    seed: Mapping[str, Any] | None = None, *, apart: bool = False
+) -> Iterator[None]:
     """Share exact read results for one assembled projection, then forget them.
 
     This is request/use-case memoisation, not a process cache. Nested composers
     reuse the active scope and the outermost caller clears it in ``finally``,
     so two consumers assembling one answer cannot disagree or repeat a read,
     while the next request always sees current state.
+
+    ``apart`` opens a scope of its own whatever is in progress, for asking a
+    question again as it was first asked: it starts from ``seed`` alone.
     """
 
     current = _READ_SCOPE.get()
-    if current is not None:
+    if current is not None and not apart:
         if seed:
             current.update(seed)
+            current[_SEED] = {**current.get(_SEED, {}), **seed}
         yield
         return
-    token = _READ_SCOPE.set(dict(seed or {}))
+    token = _READ_SCOPE.set({**(seed or {}), _SEED: dict(seed or {})})
     try:
         yield
     finally:
         _READ_SCOPE.reset(token)
+
+
+def seeded() -> dict[str, Any]:
+    """What the projection in progress was seeded with; nothing outside one."""
+
+    scope = _READ_SCOPE.get()
+    return dict(scope.get(_SEED, {})) if scope is not None else {}
 
 
 def read_once(key: str, loader: Callable[[], _T]) -> _T:

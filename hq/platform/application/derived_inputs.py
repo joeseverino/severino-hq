@@ -41,6 +41,29 @@ QUEUE_READS: tuple[str, ...] = ESTATE_READS + (
 )
 
 
+# The dashboard's cards and overviews: the estate, and each record domain's
+# headline reading.
+DASHBOARD_READS: tuple[str, ...] = ESTATE_READS + (
+    "content.ContentItem",
+    "docs_index.DocumentationRecord",
+    "expenses.Expense",
+)
+
+
+
+def composed_variant() -> tuple[Any, ...]:
+    """What a composition of every domain depends on besides rows and the clock.
+
+    What the estate does, whether the reader asked for a demo, which an
+    extension's part is worded by, and which providers compose it.
+    """
+
+    from .demo import showing_demo
+    from .domains import composition
+
+    return (*estate_variant(), showing_demo(), composition())
+
+
 def estate_variant(principal: Any = None) -> tuple[Any, ...]:
     """What an estate derivation depends on besides rows and the clock.
 

@@ -10,6 +10,13 @@ request, how many derivations the request ran, and the response size. The
 timed requests follow three others, so a page is measured as it is served
 between two changes of what it derives from.
 
+``--sweeps`` also measures the request a person actually makes: the first one
+after the controller reported. Before each timed request it lands a sweep that
+changes nothing (``bench.unchanged_sweep``) and asks again what no longer
+stands, as the web application does once a write commits (``core.ahead``);
+``--no-ahead`` leaves that out, which is what the request cost before. Run it
+with the extensions installed to measure what production serves.
+
 The pages are read from the URL configuration: every route that answers a GET.
 A route that takes arguments is requested with the seeded record ``SAMPLES``
 names for it; one with none listed is reported as not benched, so a new detail
@@ -45,10 +52,10 @@ from django.test import Client, override_settings
 from django.test.utils import CaptureQueriesContext, setup_databases, teardown_databases
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
 
-from hq.platform.application.derivations import counting
+from hq.platform.application.derivations import counting, derive_ahead
 from hq.platform.application.resources import describe_resources
 from hq.platform.application.security import host_capabilities
-from hq.platform.core.bench import ZONES, Seeded, seed
+from hq.platform.core.bench import ZONES, Seeded, seed, unchanged_sweep
 
 # Routes that are not a page an operator loads. Named, with the reason.
 SKIPPED = {
@@ -176,6 +183,13 @@ class Result:
     kilobytes: float
     # Derivations the measured request ran, rather than being served a stored answer.
     derived: int = 0
+    # The first request after a sweep that changed nothing: its median, the
+    # most derivations one ran, and the statuses answered. None when not measured.
+    swept_ms: float | None = None
+    swept_derived: int = 0
+    swept_status: str = ""
+    # What asking again cost per sweep, off the request.
+    ahead_ms: float | None = None
 
 
 def _routes(patterns=None, prefix: str = "") -> Iterator[tuple[str, URLPattern]]:
@@ -378,6 +392,39 @@ def _measure(
     )
 
 
+def _swept(client: Client, url: str, rounds: int, headers: dict[str, str] | None, ahead: bool) -> dict[str, Any]:
+    """The first request after each of ``rounds`` sweeps that changed nothing."""
+
+    times, asking, derived, statuses = [], [], 0, set()
+    for _ in range(rounds):
+        with _held_outside():
+            unchanged_sweep()
+        if ahead:
+            started = time.perf_counter()
+            derive_ahead()
+            asking.append((time.perf_counter() - started) * 1000)
+        with counting() as (ran, _served):
+            started = time.perf_counter()
+            response = client.get(url, headers=headers)
+            response.getvalue()
+            times.append((time.perf_counter() - started) * 1000)
+        derived = max(derived, sum(ran.values()))
+        statuses.add(response.status_code)
+    return {
+        "swept_ms": round(statistics.median(times), 2),
+        "swept_derived": derived,
+        "swept_status": "/".join(str(status) for status in sorted(statuses)),
+        "ahead_ms": round(statistics.median(asking), 2) if asking else None,
+    }
+
+
+def _swept_columns(result: Result) -> str:
+    if result.swept_ms is None:
+        return ""
+    asking = f" {result.ahead_ms:7.2f}ms" if result.ahead_ms is not None else ""
+    return f" {result.swept_ms:7.2f}ms {result.swept_derived:6d} {result.swept_status:>7s}{asking}"
+
+
 class Command(BaseCommand):
     help = "Time every page and action, with its query count, over a populated scratch database."
 
@@ -387,6 +434,14 @@ class Command(BaseCommand):
         parser.add_argument("--only", default="", help="Bench only pages and actions whose name contains this.")
         parser.add_argument("--sql", action="store_true", help="Print each benched page's queries.")
         parser.add_argument("--json", default="", help="Also write the results to this file.")
+        parser.add_argument(
+            "--sweeps", action="store_true",
+            help="Also time the first request after a sweep that changed nothing.",
+        )
+        parser.add_argument(
+            "--no-ahead", action="store_true",
+            help="With --sweeps: do not ask again after the sweep, so the request derives.",
+        )
 
     def handle(self, *args, **options):
         if not settings.STATIC_LIVE:
@@ -420,6 +475,19 @@ class Command(BaseCommand):
                 self._said(options, *_measure(client, page, url, options["rounds"], headers))
                 for page, url, headers in wanted + asked
             ]
+            if options["sweeps"]:
+                # The first sweep of the seeded estate adopts what it finds.
+                with _held_outside():
+                    unchanged_sweep()
+                for result, (_page, url, headers) in zip(results, wanted + asked):
+                    held = client.get(url)
+                    if headers and "If-None-Match" in headers and "ETag" in held:
+                        # The validator a browser holds now, after that sweep.
+                        headers = {**headers, "If-None-Match": held["ETag"]}
+                    for name, value in _swept(
+                        client, url, options["rounds"], headers, not options["no_ahead"]
+                    ).items():
+                        setattr(result, name, value)
             with _held_outside():
                 results += [
                     self._said(options, *_measure_action(client, name, url, action, seeded, options["rounds"]))
@@ -442,11 +510,13 @@ class Command(BaseCommand):
     ) -> None:
         self.stdout.write(
             f"\n{'page':58s} {'status':>6s} {'median':>9s} {'p95':>9s} {'queries':>7s} {'repeat':>6s} {'derive':>6s} {'KB':>8s}"
+            + (f" {'swept':>9s} {'derive':>6s} {'status':>7s} {'ahead':>9s}" if any(r.swept_ms is not None for r in results) else "")
         )
         for result in sorted(results, key=lambda result: -result.median_ms):
             self.stdout.write(
                 f"{result.page[:58]:58s} {result.status:6d} {result.median_ms:7.2f}ms {result.p95_ms:7.2f}ms "
                 f"{result.queries:7d} {result.repeated:6d} {result.derived:6d} {result.kilobytes:8.1f}"
+                + _swept_columns(result)
             )
         self.stdout.write("\nNot benched:")
         for name, reason in left:

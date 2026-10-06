@@ -25,13 +25,14 @@ from typing import Any
 from django.conf import settings
 from django.db.models import Count, Q, Sum
 from hq.platform.application.routes import reverse
-from django.utils import timezone
 
 from hq.domains.content.models import ContentItem
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 
+from .money import money
+from .derivations import passed, today as local_today
 from .projection import read_once
 from .ui import counted
 
@@ -167,7 +168,7 @@ def fiscal_year_start(today=None):
     report that has to agree with them must start counting on the same day.
     """
 
-    today = today or timezone.localdate()
+    today = today or local_today()
     start_month = getattr(settings, "SEVERINO_FISCAL_YEAR_START_MONTH", 1)
     start = today.replace(month=start_month, day=1)
     if start > today:
@@ -176,7 +177,7 @@ def fiscal_year_start(today=None):
 
 
 def _expenses_reading() -> dict[str, Any]:
-    today = timezone.localdate()
+    today = local_today()
     totals = Expense.objects.filter(
         date__range=(fiscal_year_start(today), today)
     ).aggregate(
@@ -203,9 +204,9 @@ def expenses() -> tuple[Card, ...]:
     return _card(
         id="hq.expenses.ytd",
         label=f"Expenses {reading['year']}",
-        value=f"${reading['total']:,.2f}",
+        value=money(reading["total"]),
         url=reverse("expenses:list"),
-        detail=f"${reading['deductible']:,.2f} deductible est.",
+        detail=f"{money(reading['deductible'])} deductible est.",
     )
 
 
@@ -302,11 +303,11 @@ def watching() -> tuple[Card, ...]:
     found = profile(logins[0])
     if found is None:
         return ()
-    since = timezone.now() - timedelta(days=30)
+    month = timedelta(days=30)
 
     def recent(stamp: str) -> bool:
         when = moment(stamp) if stamp else None
-        return when is not None and when >= since
+        return when is not None and not passed(when + month)
 
     advisories = sum(
         1 for repo in found["watched"] for item in repo["advisories"] if recent(item["published_at"])

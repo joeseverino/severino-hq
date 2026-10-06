@@ -8,6 +8,7 @@ from hq.platform.application.ui import DomainOverview
 from django.test import TestCase
 
 from hq.platform.application.dashboard import work_queue
+from hq.platform.application.derivations import uncached
 from hq.platform.application.plugins import gather_attention
 from hq.platform.application.ui import Insight
 from hq.platform.application.workflow_contracts import ActionLink
@@ -124,7 +125,8 @@ class DashboardQueueTests(TestCase):
             items = [{**work_queue()[0], "key": f"example:{i}", "label": f"Decision {i}"}
                      for i in range(size)]
             set_aside(self.user, [items[0]["key"]], aside=True, current=items)
-            with patch("hq.platform.application.dashboard.work_queue", return_value=items):
+            # The queue is replaced, not written: derive with the store bypassed.
+            with patch("hq.platform.application.dashboard.work_queue", return_value=items), uncached():
                 with CaptureQueriesContext(connection) as queries:
                     response = self.client.get("/")
             self.assertEqual(response.context["action_queue_count"], size - 1)

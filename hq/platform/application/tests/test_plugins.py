@@ -18,6 +18,7 @@ from ..plugins import (
     NavigationItem,
     PluginIntegration,
     PluginManifest,
+    answered_by,
     clear_plugin_composition_cache,
     describe_plugins,
     installed_integrations,
@@ -486,7 +487,12 @@ class PluginContractTests(TestCase):
                 ),
             ),
         ):
-            self.assertEqual(installed_integrations(), ((VALID, contribution),))
+            ((manifest, composed),) = installed_integrations()
+            self.assertEqual(manifest, VALID)
+            # A provider of a shared composition is asked through a derivation;
+            # every other is the extension's own callable.
+            self.assertIs(composed.health, health)
+            self.assertEqual(answered_by(composed.dashboard), answered_by(dashboard))
             dashboard.assert_not_called()
             health.assert_not_called()
             self.assertEqual(plugin_health(), {VALID.id: True})

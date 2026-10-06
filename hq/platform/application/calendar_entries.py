@@ -23,6 +23,7 @@ from hq.domains.calendars.models import Entry, Preference
 from hq.platform.core.audit import operation_context
 
 from .calendar import CalendarEvent, CalendarSource
+from .derivations import derivation
 from .security import Capability, Principal
 from .moments import when_day
 from .ui import counted
@@ -56,8 +57,15 @@ def own_sources() -> tuple[CalendarSource, ...]:
     )
 
 
-def entry_events(first: date, last: date) -> Iterator[CalendarEvent]:
-    """Every occurrence of every entry that touches the window."""
+# How many windows are kept current: the one the dashboard shows and the one
+# last paged to.
+WINDOWS = 2
+
+
+@derivation("calendar.mine", reads=("calendars.Entry",), ahead=WINDOWS)
+def entry_events(first: date, last: date) -> tuple[CalendarEvent, ...]:
+    """Every occurrence of every entry that touches the window, derived once
+    per change of the entries."""
 
     once = Q(repeat="") & Q(last_day__gte=first)
     repeating = ~Q(repeat="") & (Q(repeat_until__isnull=True) | Q(repeat_until__gte=first))
@@ -66,9 +74,9 @@ def entry_events(first: date, last: date) -> Iterator[CalendarEvent]:
         .filter(starts_on__lte=last)
         .filter(once | repeating)
     )
-    for entry in entries:
-        for day in occurrences(entry, first, last):
-            yield occurrence(entry, day)
+    return tuple(
+        occurrence(entry, day) for entry in entries for day in occurrences(entry, first, last)
+    )
 
 
 def _span_days(entry: Entry) -> int:
@@ -200,6 +208,8 @@ class EntryCommand:
     # Monday is 0.
     weekdays: tuple[int, ...] = ()
     repeat_until: date | None = None
+    # ``kind:identity`` of what the event is about.
+    about: str = ""
 
 
 def serialize_entry(entry: Entry) -> dict[str, Any]:
@@ -217,6 +227,7 @@ def serialize_entry(entry: Entry) -> dict[str, Any]:
         "interval": entry.interval,
         "weekdays": list(entry.weekday_numbers),
         "repeat_until": entry.repeat_until.isoformat() if entry.repeat_until else None,
+        "about": entry.about,
         "url": entry.get_absolute_url(),
         "updated_at": entry.updated_at.isoformat(),
     }
@@ -278,6 +289,14 @@ def choose_source(user: Any, source_id: str, shown: bool) -> dict[str, bool]:
     preference.choices = {**preference.choices, source_id: bool(shown)}
     preference.save(update_fields=("choices", "updated_at"))
     return calendar_choices(user)
+
+
+def attention() -> tuple[Any, ...]:
+    """An event about something HQ no longer has, for the queue."""
+
+    from .references import dangling
+
+    return dangling(Entry)
 
 
 # ----- Agenda -----------------------------------------------------------------
