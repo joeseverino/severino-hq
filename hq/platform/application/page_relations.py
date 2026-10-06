@@ -60,7 +60,8 @@ def for_machine(machine: Any, sections: Iterable[Any], *, principal: Principal) 
         whole = whole.without(RELATIONS["on_tailnet"].phrase)
     rendered = {kind for section in sections for kind in section.renders}
     if machine.containers:
-        rendered.add(IMAGE_KIND)
+        # The containers table names each container and the image it runs.
+        rendered.update((IMAGE_KIND, RUNTIME_KIND))
     shown = whole.without(
         RELATIONS["runs"].phrase,
         RELATIONS["runs_on"].inverse,

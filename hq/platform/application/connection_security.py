@@ -29,6 +29,20 @@ from .reach import TAILNET
 from .ui import counted
 
 
+# Each check is a statement that is true or not. The page answers it Yes, No,
+# Check or Unknown from the state beside it.
+EDGE_LABEL = "The proxy lets in tailnet addresses only"
+FIREWALL_LABEL = "Arrived on the tailnet interface"
+TAILNET_POLICY_LABEL = "HQ has read the tailnet policy"
+# The word the page answers each state with.
+ANSWERS = {
+    "good": "Yes",
+    "serious": "No",
+    "bad": "No",
+    "attention": "Check",
+    "neutral": "Unknown",
+}
+
 # Lifecycle states that need a person: stale evidence, missing access, a
 # failed probe, a rejected credential.
 ATTENTION_LIFECYCLES = ("stale", "unauthorized", "unreachable", "revoked")
@@ -42,6 +56,10 @@ class SecurityControl:
     state: str
     evidence: str
     detail: str
+
+    @property
+    def answer(self) -> str:
+        return ANSWERS.get(self.state, ANSWERS["neutral"])
 
 
 @dataclass(frozen=True)
@@ -76,36 +94,51 @@ class ConnectionSecurityPosture:
     external_custody_count: int
     dependency_count: int
 
+    @property
+    def check_summary(self) -> str:
+        """The checks counted by answer: "7 pass, 1 to look at, 2 unknown"."""
+
+        answers = Counter(control.answer for control in self.controls)
+        return ", ".join(
+            f"{answers[answer]} {words}"
+            for answer, words in (
+                ("Yes", "pass"),
+                ("No", "fail"),
+                ("Check", "to look at"),
+                ("Unknown", "unknown"),
+            )
+            if answers[answer]
+        )
+
 
 def _unattested_edge() -> SecurityControl:
     return SecurityControl(
         "edge",
-        "External edge",
+        EDGE_LABEL,
         "neutral",
-        "Not attested here",
-        "HQ has not received a provider observation that proves a source policy "
-        "for this hostname.",
+        "Not read",
+        "HQ has no reading of an access list for this name.",
     )
 
 
 def _unattested_firewall() -> SecurityControl:
     return SecurityControl(
         "host-firewall",
-        "Arrival interface",
+        FIREWALL_LABEL,
         "neutral",
-        "Not observed",
-        "No host firewall reading is available, so HQ cannot say whether the "
-        "packet had to arrive on the tailnet or merely to claim it did.",
+        "Not read",
+        "HQ has no firewall reading for this machine, so it cannot say which "
+        "interface this request had to arrive on.",
     )
 
 
 def _unattested_tailnet_policy() -> SecurityControl:
     return SecurityControl(
         "tailnet-policy",
-        "Tailscale policy",
+        TAILNET_POLICY_LABEL,
         "neutral",
-        "Not observed",
-        "No current Tailscale policy observation is available.",
+        "Not read",
+        "HQ has no reading of the tailnet policy.",
     )
 
 
@@ -164,50 +197,46 @@ def _judged(policy: IngressPolicy, *, reachable: bool, proxy: str) -> SecurityCo
     if not reachable:
         return SecurityControl(
             "edge",
-            "Ingress policy",
+            EDGE_LABEL,
             "neutral",
-            "Last proof is aging",
-            f"The {proxy} connection is not currently reachable. HQ keeps the last "
-            "observation visible without presenting it as current proof.",
+            "Last reading is out of date",
+            f"{proxy} is not answering, so this is from the last time HQ read it.",
         )
     if not policy.restricted:
         return SecurityControl(
             "edge",
-            "Ingress policy",
+            EDGE_LABEL,
             "serious",
-            "No source restriction",
-            f"{proxy} reports no access list on this hostname.",
+            "No access list",
+            f"{proxy} has no access list on this name.",
         )
     if policy.rules is None:
         return SecurityControl(
             "edge",
-            "Ingress policy",
+            EDGE_LABEL,
             "neutral",
-            "Rules not yet observed",
-            f"{proxy} reports an assigned policy, but the cached sweep predates "
-            "rule-level evidence.",
+            "Rules not read yet",
+            f"{proxy} has an access list on this name, and HQ has not read its rules.",
         )
     if not _tailnet_only(policy):
         return SecurityControl(
             "edge",
-            "Ingress policy",
+            EDGE_LABEL,
             "serious",
-            "Not Tailnet-only",
-            f"The assigned {proxy} policy does not exactly allow both Tailscale "
-            "address ranges and then deny every other source without proxy auth.",
+            "Other sources allowed",
+            f"The {proxy} access list on this name allows more than the two "
+            "tailnet address ranges.",
         )
     implicit = policy.implicit_deny and not any(
         directive == "deny" for directive, _address in policy.rules
     )
     return SecurityControl(
         "edge",
-        "Ingress policy",
+        EDGE_LABEL,
         "good",
         f"Tailnet ranges · {'implicit ' if implicit else ''}deny all",
-        f"{proxy}'s authenticated API reports that this hostname allows Tailscale "
-        "IPv4 and IPv6 sources, denies everything else"
-        f"{' through its generated final rule' if implicit else ''}, and passes "
-        "no proxy credentials to HQ.",
+        f"{proxy} allows tailnet IPv4 and IPv6 addresses for this name and "
+        "refuses every other source.",
     )
 
 
@@ -217,11 +246,10 @@ def _tailnet_policy_control(snapshot) -> SecurityControl:
     if not snapshot.reachable:
         return SecurityControl(
             "tailnet-policy",
-            "Tailscale policy",
+            TAILNET_POLICY_LABEL,
             "neutral",
-            "Last proof is aging",
-            "The Tailscale policy connection is not currently reachable. HQ "
-            "keeps the prior observation visible without calling it current.",
+            "Last reading is out of date",
+            "Tailscale is not answering, so this is from the last time HQ read it.",
         )
     record = next(
         (
@@ -237,14 +265,10 @@ def _tailnet_policy_control(snapshot) -> SecurityControl:
     tests = record.get("tests") if isinstance(record.get("tests"), list) else []
     return SecurityControl(
         "tailnet-policy",
-        "Tailscale policy",
+        TAILNET_POLICY_LABEL,
         "good",
-        (
-            f"Observed · {counted(len(grants), 'grant')} · "
-            f"{counted(len(tests), 'test')}"
-        ),
-        "HQ read the active policy through its scoped Tailscale connection. "
-        "The request inspector applies its device-to-HQ verdict to this request.",
+        f"{counted(len(grants), 'grant')} · {counted(len(tests), 'test')}",
+        "HQ read the policy that is active on the tailnet.",
     )
 
 
@@ -276,32 +300,28 @@ def _host_firewall_control(snapshot) -> SecurityControl:
     if accepts and drops:
         return SecurityControl(
             "host-firewall",
-            "Arrival interface",
+            FIREWALL_LABEL,
             "good",
             f"Required on {interface}",
-            "The firewall accepts this port only from packets that arrived on "
-            f"{interface}, and drops a tailnet source that reached the machine "
-            "any other way. The address in the verdict above was not taken on "
-            "the sender's word.",
+            f"The firewall accepts this port only on {interface}, and drops a "
+            "tailnet address that arrives on any other interface.",
         )
     if accepts:
         return SecurityControl(
             "host-firewall",
-            "Arrival interface",
+            FIREWALL_LABEL,
             "good",
             f"Required on {interface}",
-            "The firewall accepts this port only from packets that arrived on "
-            f"{interface}. It carries no rule that drops a tailnet source "
-            "arriving elsewhere, so nothing counts what such a packet would do.",
+            f"The firewall accepts this port only on {interface}. It has no rule "
+            "that drops a tailnet address arriving on another interface.",
         )
     return SecurityControl(
         "host-firewall",
-        "Arrival interface",
+        FIREWALL_LABEL,
         "bad",
         "Address only",
-        "The firewall admits this port on the source address alone, so an "
-        f"address claiming to be on {interface} is admitted without having "
-        "arrived there.",
+        "The firewall accepts this port by source address alone, so a tailnet "
+        "address is accepted on any interface.",
     )
 
 
@@ -368,41 +388,40 @@ def _admission(request, gate: bool) -> _Admission:
     return _Admission(
         network=SecurityControl(
             "network",
-            "Network admission",
+            "Only your networks can open HQ",
             "good" if gate and channel.private else "serious",
             f"{channel.label} · {'enforced' if gate else 'not enforced'}",
-            "HQ refuses addresses outside its private ranges before sessions, "
-            "authentication, static assets, or views run."
+            "HQ refuses any address outside its private ranges."
             if gate
-            else "This deployment is not enforcing HQ's trusted-network gate.",
+            else "HQ is not refusing addresses outside its private ranges.",
         ),
         transport=SecurityControl(
             "transport",
-            "Transport",
+            "This request was encrypted",
             "good" if secure else "attention",
-            "TLS" if secure else "Plain HTTP",
-            "This request arrived over TLS. Tailnet traffic has its own "
-            "WireGuard layer when the caller channel is Tailnet."
+            ("TLS inside WireGuard" if channel.id == "tailnet" else "TLS")
+            if secure
+            else "Plain HTTP",
+            "This request arrived over TLS."
             if secure
             else "This request did not arrive over TLS.",
         ),
         proxy=SecurityControl(
             "proxy",
-            "Proxy identity",
+            "Your address comes from a proxy HQ trusts",
             "good" if trusted_proxies else "neutral",
             (
-                counted(trusted_proxies, "trusted proxy hop", "trusted proxy hops")
+                counted(trusted_proxies, "trusted proxy", "trusted proxies")
                 if trusted_proxies
-                else "Forwarded identity ignored"
+                else "Forwarded address ignored"
                 if forwarded
-                else "Direct request"
+                else "No proxy"
             ),
-            "HQ walks the forwarded chain from the trusted peer inward and "
-            "judges the first address it can prove."
+            "A proxy HQ trusts passed your address on."
             if trusted_proxies
-            else "No trusted proxy supplied the caller identity for this request."
+            else "A proxy HQ does not trust sent an address, and HQ ignored it."
             if forwarded
-            else "No proxy assertion was needed for this request.",
+            else "This request came straight to HQ.",
         ),
         holds=gate and channel.private and secure,
         channel_id=channel.id,
@@ -416,10 +435,117 @@ def _headline(admission: _Admission | None) -> str:
     if admission is None:
         return ""
     if admission.holds and admission.channel_id == "tailnet":
-        return "Tailnet ingress. Explicit authority."
+        return "You are connected over the tailnet."
     if admission.holds:
-        return "Private ingress. Explicit authority."
-    return "Ingress needs attention. Authority stays explicit."
+        return "You are connected over a private network."
+    return "This connection needs a look."
+
+
+def _custody_control(groups: tuple[ConnectionGroup, ...]) -> SecurityControl:
+    """Whether every connection either names where its secret is kept or needs none."""
+
+    stores = Counter(
+        group.spec.secret_store
+        for group in groups
+        for _connection in group.connections
+        if group.spec.secret_store
+    )
+    unkept = tuple(
+        connection
+        for group in groups
+        if not group.spec.secret_store
+        for connection in group.connections
+    )
+    keyless = sum(connection.instance.credential_model == "none" for connection in unkept)
+    total = sum(stores.values()) + len(unkept)
+    unknown = len(unkept) - keyless
+    return SecurityControl(
+        "credentials",
+        "HQ knows where every secret is kept",
+        "good" if total and not unknown else "neutral",
+        " · ".join(
+            part
+            for part in (
+                *(f"{count} in {store}" for store, count in sorted(stores.items())),
+                f"{keyless} need no secret" if keyless else "",
+                f"{unknown} do not say" if unknown else "",
+            )
+            if part
+        )
+        or "No connections yet",
+        "HQ keeps no secret itself. Each connection names the place that keeps its secret."
+        if total
+        else "No connection has been read yet.",
+    )
+
+
+def _scope_control(evidence: Counter, any_abilities: bool) -> SecurityControl:
+    """Whether each thing HQ does through a credential is within checked permissions."""
+
+    unchecked = evidence["undeclared"] + evidence["unverified"]
+    unknown = evidence["unknown"]
+    missing = evidence["missing"] + evidence["revoked"]
+    coarse = evidence["coarse"]
+    if missing:
+        state, detail = "serious", "A credential lacks a permission HQ needs."
+    elif unchecked or unknown:
+        state, detail = (
+            "attention",
+            "HQ cannot confirm these credentials are limited to what it needs.",
+        )
+    elif coarse:
+        state, detail = (
+            "neutral",
+            "These services offer nothing narrower than full account access.",
+        )
+    else:
+        state, detail = "good", "Each service confirmed the permissions HQ needs."
+    return SecurityControl(
+        "scope",
+        "Every credential is limited to what HQ needs",
+        state,
+        " · ".join(
+            f"{count} {words}"
+            for count, words in (
+                (evidence["verified"], "checked"),
+                (coarse, "with full account access"),
+                (evidence["not_applicable"], "need no key"),
+                (unchecked, "not checked"),
+                (unknown, "not reported"),
+                (missing, "missing"),
+            )
+            if count
+        )
+        or "Nothing to check",
+        detail if any_abilities else "No connection reads or changes anything yet.",
+    )
+
+
+def _freshness_control(connections: tuple) -> SecurityControl:
+    """Whether every connection has a reading, and how old the oldest is."""
+
+    from .moments import ago
+
+    read = tuple(
+        connection for connection in connections if connection.instance.observed_at
+    )
+    oldest = min(
+        read, key=lambda connection: connection.instance.observed_at, default=None
+    )
+    unread = len(connections) - len(read)
+    return SecurityControl(
+        "freshness",
+        "Every connection has been read",
+        "good" if connections and not unread else "neutral",
+        (
+            f"Oldest reading {ago(oldest.instance.observed_at)}"
+            if oldest is not None
+            else "Nothing read yet"
+        ),
+        f"{counted(unread, 'connection has', 'connections have')} no reading."
+        if unread
+        else "This page shows the last reading of each connection.",
+    )
 
 
 def connection_security_posture(
@@ -475,73 +601,9 @@ def connection_security_posture(
         *((admission.network,) if admission else ()),
         tailnet_policy_control,
         *((admission.transport, admission.proxy) if admission else ()),
-        SecurityControl(
-            "credentials",
-            "Credential custody",
-            "good"
-            if connections and external_custody == len(connections)
-            else "neutral",
-            f"{external_custody} of {len(connections)} externally custodied",
-            "Credential values have no field in the connection contract. "
-            "Families emit identifiers and cached observations and name the "
-            "system that keeps their secrets."
-            if connections
-            else "No configured connection has reported credential custody yet.",
-        ),
-        SecurityControl(
-            "authorization",
-            "Capability authorization",
-            "good",
-            counted(len(groups), "permitted connection type", "permitted connection types"),
-            "HQ checks every family's required capabilities before invoking "
-            "its instance provider, so an unauthorized reader cannot trigger it.",
-        ),
-        SecurityControl(
-            "scope",
-            "Least-privilege evidence",
-            "serious"
-            if scope_missing
-            else "attention"
-            if scope_undeclared or scope_unknown
-            else "neutral"
-            if scope_coarse
-            else "good",
-            " · ".join(
-                part
-                for part in (
-                    f"{scope_verified} verified",
-                    f"{scope_coarse} whole-account",
-                    f"{scope_keyless} keyless",
-                    f"{scope_undeclared} undeclared" if scope_undeclared else "",
-                    f"{scope_unknown} unknown" if scope_unknown else "",
-                    f"{scope_missing} missing" if scope_missing else "",
-                )
-                if part
-            ),
-            "Verified means the provider reported the grants the ability needs. "
-            "Whole-account means the provider's credential model offers nothing "
-            "narrower, so the evidence is the credential kind itself. Keyless "
-            "abilities have no grant to prove. Undeclared and unknown evidence "
-            "never become permission, and a missing grant fails closed."
-            if states
-            else "No connection abilities have been declared yet.",
-        ),
-        SecurityControl(
-            "metadata",
-            "Safe metadata contract",
-            "good",
-            "Validated before display",
-            "Unknown abilities, unsafe relationship links, duplicate identities, "
-            "and endpoint userinfo, queries, or fragments fail closed.",
-        ),
-        SecurityControl(
-            "freshness",
-            "Cached evidence",
-            "good" if connections and len(observed) == len(connections) else "neutral",
-            f"{len(observed)} of {len(connections)} timestamped",
-            "This page derives its answer from stored observations; opening it "
-            "does not probe providers or open a secret store.",
-        ),
+        _custody_control(groups),
+        _scope_control(evidence, bool(states)),
+        _freshness_control(connections),
         edge_control,
     )
 
@@ -560,11 +622,10 @@ def connection_security_posture(
         state=state,
         headline=_headline(admission),
         summary=(
-            "Current request admission joined to every connection's cached "
-            "reach, abilities, scopes, and dependents. This page triggers no probe."
+            "How this request reached HQ, and what each connection could reach "
+            "the last time it was read."
             if admission
-            else "Every connection's cached reach, abilities, scopes, and "
-            "dependents. Reading it triggers no probe."
+            else "What each connection could reach the last time it was read."
         ),
         controls=tuple(controls),
         channel_label=admission.channel_label if admission else "",

@@ -16,6 +16,7 @@ is the sweep's to say.
 
 from __future__ import annotations
 
+import shlex
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -24,7 +25,14 @@ from typing import Any
 from hq.domains.control_plane.observations.host import UNIT_KIND
 
 from . import render_status_findings
-from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep
+from .finding_model import (
+    Finding,
+    FindingEstate,
+    FindingRule,
+    cannot_run_commands,
+    journal_step,
+    machine_step,
+)
 from .moments import duration
 from .reading_facts import FactRow, ago, rows_of, state_on_controller, stated
 from .timestamps import moment
@@ -49,8 +57,8 @@ STARTING_TOO_LONG = timedelta(hours=2)
 
 # Why the reading holds no state for a machine, as evidence says it.
 UNREAD_REASONS = {
-    "unread": "the controller could not take the reading",
-    "refused": "a record did not match the reading's schema",
+    "unread": "The controller could not read them",
+    "refused": "The answer could not be understood",
 }
 
 
@@ -95,11 +103,11 @@ class UnitState(FactRow):
         """Why the unit cannot do its work, or "" when nothing says so."""
 
         if not self.installed:
-            return f"not installed ({self.load})"
+            return "Not installed"
         if self.file_state in NOT_ENABLED:
-            return f"not enabled ({self.file_state})"
+            return "Switched off"
         if self.starter and self.active not in ("active", "failed"):
-            return f"not started ({self.active})"
+            return "Not started"
         return ""
 
     def behind(self, stamp: str, by: timedelta) -> bool:
@@ -152,22 +160,21 @@ def _units(estate: FindingEstate) -> Iterator[tuple[TopologyNode, tuple[UnitStat
             yield node, units
 
 
-def _names(units: tuple[UnitState, ...]) -> str:
-    return ", ".join(unit.unit for unit in units)
-
-
-def _journal(unit: str) -> OperatorStep:
-    return OperatorStep(
-        label=f"Read why {unit} last ended, on the machine",
-        command=f"sudo journalctl -u {unit} -n 50 --no-pager",
-    )
-
-
 def _ended(unit: UnitState) -> str:
     """How the last run ended, in systemd's words."""
 
     result = unit.result or "unknown"
     return f"{result}, status {unit.main_status}" if unit.main_status else result
+
+
+def _failed_when(machine: str, unit: UnitState, now: datetime) -> str:
+    return ago(unit.ended_at, now) if unit.ended_at else f"before {machine} last started"
+
+
+def _failed_since(machine: str, failed: tuple[UnitState, ...], now: datetime) -> str:
+    if len(failed) > 1:
+        return "None of them has run successfully since it failed."
+    return f"It failed {_failed_when(machine, failed[0], now)} and has not run successfully since."
 
 
 def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -189,34 +196,35 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="unit-failed",
                 subject=node.id,
                 scope=UNIT_KIND,
-                title=f"{counted(len(failed), 'unit')} failed on {node.label} ({_names(failed)})",
-                severity="serious",
-                explanation=(
-                    "systemd holds the unit as failed: its last run ended badly and "
-                    "nothing has run it successfully since. What it does for HQ has "
-                    "not been done since then. Read its journal for the cause, fix "
-                    "that, and start it again."
+                title=(
+                    f"{failed[0].unit} failed on {node.label}"
+                    if len(failed) == 1
+                    else f"{counted(len(failed), 'background job', 'background jobs')} failed on {node.label}"
                 ),
+                severity="serious",
+                explanation=_failed_since(node.label, failed, estate.now),
                 evidence=tuple(
                     item
                     for unit in failed
                     for item in (
-                        ("Unit", unit.unit),
-                        ("Last run", _ended(unit)),
-                        ("Failed", ago(unit.ended_at, estate.now) if unit.ended_at else "before this boot"),
+                        ("Job", unit.unit),
+                        ("How it ended", _ended(unit)),
+                        ("Failed", _failed_when(node.label, unit, estate.now)),
                     )
                 ),
                 steps=tuple(
                     step
                     for unit in failed
                     for step in (
-                        _journal(unit.unit),
-                        OperatorStep(
-                            label=f"Start {unit.unit} again once that is fixed",
-                            command=f"sudo systemctl restart {unit.unit}",
+                        *journal_step(f"See why {unit.unit} failed", node.label, unit.unit),
+                        *machine_step(
+                            f"Start {unit.unit} again",
+                            node.label,
+                            f"systemctl restart {shlex.quote(unit.unit)}",
                         ),
                     )
                 ),
+                no_help_reason=cannot_run_commands(node.label),
             )
         )
     return tuple(found)
@@ -237,28 +245,30 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                 subject=node.id,
                 scope=UNIT_KIND,
                 title=(
-                    f"{counted(len(absent), 'unit')} on {node.label} "
-                    f"{'is' if len(absent) == 1 else 'are'} not installed or not enabled"
+                    f"{absent[0].unit} is not set up on {node.label}"
+                    if len(absent) == 1
+                    else f"{counted(len(absent), 'background job', 'background jobs')} are not set up on {node.label}"
                 ),
                 severity="serious",
                 explanation=(
-                    "This release ships the unit and the machine is not running it: "
-                    "systemd has no configuration for it, its file is disabled or "
-                    "masked, or the timer or path that starts the work is not active. "
-                    "The work it does is not being done. A deploy installs and enables "
-                    "every shipped unit."
+                    "So its work is not happening. Deploying HQ sets it up."
+                    if len(absent) == 1
+                    else "So their work is not happening. Deploying HQ sets them up."
                 ),
                 evidence=tuple(
-                    item for unit in absent for item in (("Unit", unit.unit), ("State", unit.absent))
+                    item for unit in absent for item in (("Job", unit.unit), ("State", unit.absent))
                 ),
                 steps=tuple(
-                    OperatorStep(
-                        label=f"Enable and start {unit.unit} on the machine",
-                        command=f"sudo systemctl enable --now {unit.unit}",
-                    )
+                    step
                     for unit in absent
                     if unit.installed and unit.starter
+                    for step in machine_step(
+                        f"Turn on {unit.unit}",
+                        node.label,
+                        f"systemctl enable --now {shlex.quote(unit.unit)}",
+                    )
                 ),
+                no_help_reason=cannot_run_commands(node.label),
             )
         )
     return tuple(found)
@@ -268,15 +278,15 @@ def _stall(timer: UnitState, started: UnitState | None) -> str:
     """Why an active timer is not starting its unit, or ""."""
 
     if timer.sub == "elapsed":
-        return "it has elapsed and nothing is scheduled"
+        return "It has run out and nothing more is scheduled"
     if timer.sub == "waiting" and timer.behind(timer.next_elapse_at, OVERDUE_AFTER):
-        return f"it was due more than {duration(OVERDUE_AFTER)} before it was read"
+        return f"It was more than {duration(OVERDUE_AFTER)} overdue when HQ last read it"
     if started is None:
         return ""
     # systemd answers "no" for a unit it has not started since boot, with no
     # time: only a condition it checked was not met.
     if started.condition == "no" and started.condition_at:
-        return f"{started.unit} was skipped: its condition was not met"
+        return f"{started.unit} was skipped because a condition it needs was not met"
     if started.active == "activating" and started.behind(started.started_at, STARTING_TOO_LONG):
         return f"{started.unit} had been starting for more than {duration(STARTING_TOO_LONG)}"
     return ""
@@ -319,14 +329,16 @@ def _stalled_finding(
         rule="timer-stalled",
         subject=node.id,
         scope=UNIT_KIND,
-        title=f"{counted(len(timers), 'timer')} on {node.label} "
-        f"{'is' if len(timers) == 1 else 'are'} not running the work ({_names(timers)})",
+        title=(
+            f"{timers[0].unit} on {node.label} is on but its job is not running"
+            if len(timers) == 1
+            else f"{counted(len(timers), 'timer')} on {node.label} are on but their jobs are not running"
+        ),
         severity="serious",
         explanation=(
-            "The timer is active and the unit it starts is not being run as "
-            "scheduled. systemd does not count this as a failure, so nothing "
-            "else reports it. See when the timer last fired and what its unit "
-            "last did, then start the unit."
+            f"{stalled[0][1]}."
+            if len(stalled) == 1
+            else "Each timer is on and the job it starts is not running on schedule."
         ),
         evidence=tuple(
             item
@@ -334,20 +346,26 @@ def _stalled_finding(
             for item in (
                 ("Timer", timer.unit),
                 ("Why", why),
-                ("Last fired", ago(timer.last_trigger_at, now)),
+                ("Last ran", ago(timer.last_trigger_at, now)),
             )
         ),
         steps=tuple(
             step
             for timer in timers
             for step in (
-                OperatorStep(
-                    label=f"See when {timer.unit} last fired and is next due, on the machine",
-                    command=f"systemctl list-timers {timer.unit}",
+                *machine_step(
+                    f"See when {timer.unit} last ran and is next due",
+                    node.label,
+                    f"systemctl list-timers {shlex.quote(timer.unit)}",
                 ),
-                *((_journal(timer.activates),) if timer.activates else ()),
+                *(
+                    journal_step(f"See what {timer.activates} last did", node.label, timer.activates)
+                    if timer.activates
+                    else ()
+                ),
             )
         ),
+        no_help_reason=cannot_run_commands(node.label),
     )
 
 
@@ -368,78 +386,68 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="unit-state-unread",
                 subject=node.id,
                 scope=UNIT_KIND,
-                title=f"The units on {node.label} could not be read",
+                title=f"HQ cannot check the background jobs on {node.label}",
                 severity="attention",
-                explanation=(
-                    "The launcher asks systemd for the state of every unit this "
-                    "release ships and hands the controller the answer. No answer "
-                    "arrived, or it was not one this release reads, so a unit that "
-                    "failed there would not be reported. Check that systemd answers "
-                    "on the machine, and deploy if the answer is still refused."
-                ),
+                explanation="If one of them failed, HQ would not know.",
                 evidence=tuple(
-                    ("Unit state", UNREAD_REASONS.get(reason, "could not be read")) for reason in reasons
+                    ("Why", UNREAD_REASONS.get(reason, "Could not be read")) for reason in reasons
                 ),
-                steps=(
-                    OperatorStep(
-                        label="See whether systemd answers for the shipped units, on the machine",
-                        command="systemctl list-units 'severino-hq-*' --all --no-pager",
-                    ),
+                steps=machine_step(
+                    "See whether systemd answers for HQ's jobs",
+                    node.label,
+                    "systemctl list-units 'severino-hq-*' --all --no-pager",
+                    ("If that works and this stays, deploy HQ.",),
                 ),
+                no_help_reason=cannot_run_commands(node.label),
             )
         )
     return tuple(found)
 
 
-_NO_SHELL = (
-    "The unit runs under systemd on the machine, outside any container, and HQ holds "
-    "no shell there and no credential that can start a unit."
-)
-
 # The rules this module raises, beside the detectors that decide them.
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "unit-failed",
-        "Unit failed",
+        "A background job failed",
         "serious",
         _failed,
         operator_action=(
-            "Read the unit's journal on the machine for why its last run ended, "
-            "fix that, then start the unit."
+            "On the machine, read the job's log for why it failed, fix that, "
+            "then start it again."
         ),
-        no_help_reason=_NO_SHELL,
+        no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
         "unit-not-installed",
-        "Unit not installed or not enabled",
+        "A background job is not set up",
         "serious",
         _absent,
         operator_action=(
-            "Deploy, which installs and enables every shipped unit, or enable and "
-            "start the unit on the machine."
+            "Deploy HQ, which sets up every background job, or turn the job on "
+            "on the machine."
         ),
-        no_help_reason=_NO_SHELL,
+        no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
         "timer-stalled",
-        "Timer not running its work",
+        "A scheduled job is not running",
         "serious",
         _stalled,
         operator_action=(
-            "On the machine, see when the timer last fired and read its unit's "
-            "journal, then start the unit."
+            "On the machine, see when the timer last ran and read its job's log, "
+            "then start the job."
         ),
-        no_help_reason=_NO_SHELL,
+        no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
         "unit-state-unread",
-        "Unit state not read",
+        "Cannot check background jobs",
         "attention",
         _unread,
         operator_action=(
-            "Check that systemd answers on the machine the controller runs on, "
-            "and deploy if the controller still refuses the answer."
+            "Check that systemd answers on the controller's machine. If it does "
+            "and this stays, deploy HQ."
         ),
-        no_help_reason=_NO_SHELL,
+        no_help_reason=cannot_run_commands(),
     ),
 )

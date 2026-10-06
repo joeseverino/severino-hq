@@ -52,7 +52,7 @@
   <section class="card">
     <div class="tool-intro">
       <h2>Address lookup</h2>
-      <p class="help">Reverse DNS and the registry allocation.</p>
+      <p class="help">The name for an address, and who owns it.</p>
     </div>
     <form method="get" class="lookup-form">
       <input type="hidden" name="tab" value="dns">
@@ -98,13 +98,13 @@
           </dl>
           {% if reading.observed_at %}
             <p class="help">
-              From
+              Read
               {{ reading.observed_at|when }}
               <form method="post" class="inline-form">
                 {% csrf_token %}
                 <input type="hidden" name="tab" value="dns">
                 <input type="hidden" name="address" value="{{ asked|dictkey:'lookup.address' }}">
-                <button type="submit" class="btn ghost compact">Refresh</button>
+                <button type="submit" class="btn ghost compact">Read now</button>
               </form>
             </p>
           {% endif %}

@@ -9,6 +9,7 @@ already pulled onto the machine.
 
 from __future__ import annotations
 
+import shlex
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
 from typing import Any
@@ -17,7 +18,13 @@ from hq.domains.control_plane.observations.portainer import IMAGE_KIND, short_id
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .facts import inventory_records
-from .finding_model import FindingRule, built_findings
+from .finding_model import (
+    CANNOT_EDIT_COMPOSE,
+    FindingRule,
+    built_findings,
+    cannot_run_commands,
+    machine_step,
+)
 
 IMAGE_BEHIND = "image-behind"
 IMAGE_UNTAGGED = "image-untagged"
@@ -167,14 +174,13 @@ def unrecognised_containers(estate: Any) -> tuple[dict[str, Any], ...]:
                     title=f"Unrecognised container {name} on {node.label}",
                     severity="serious",
                     explanation=(
-                        "No compose project started it, so HQ has not taken it on. "
+                        "No compose project started it, so HQ is not tracking it. "
                         "Adopt it if you started it. Otherwise find what did and remove it."
                     ),
-                    steps=(
-                        _step(
-                            label=f"If nothing needs it, remove it on {host or node.label}",
-                            command=f"docker rm -f {name}",
-                        ),
+                    steps=machine_step(
+                        f"If nothing needs it, remove it from {host or node.label}",
+                        host or node.label,
+                        f"docker rm -f {shlex.quote(name)}",
                     ),
                     evidence=(("Container", name), ("Machine", node.label)),
                     remedies=(
@@ -276,14 +282,14 @@ def _recreate(container: str, service: str, host: str) -> tuple:
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "unrecognised-container",
-        "A container no compose project declares",
+        "A container no compose project started",
         "serious",
         lambda estate: built_findings(unrecognised_containers(estate)),
         operator_action=(
-            "Adopt it if you started it; otherwise remove it on its machine with docker rm -f and the container's name."
+            "Adopt it if you started it. Otherwise remove it on its machine."
         ),
         no_help_reason=(
-            "HQ adopts a container but never removes one it did not start; removal runs on the machine."
+            "HQ cannot remove a container it did not start."
         ),
     ),
     FindingRule(
@@ -294,9 +300,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Recreate the container from its compose project so it runs the image its tag names now."
         ),
-        no_help_reason=(
-            "HQ has no shell on the machine, so recreating the compose service runs there, not here."
-        ),
+        no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
         "container-image-untagged",
@@ -306,8 +310,6 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Pin a tag for the image in the container's compose file and recreate it."
         ),
-        no_help_reason=(
-            "Which tag to pin is a choice in the compose file, which HQ reads but does not write."
-        ),
+        no_help_reason=CANNOT_EDIT_COMPOSE,
     ),
 )

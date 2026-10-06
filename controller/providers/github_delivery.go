@@ -27,9 +27,13 @@ const (
 	githubCheckName = "Severino HQ · Production"
 	// githubDeploy is where a composition goes after Compose publishes it:
 	// approval, then the host.
-	githubDeploy        = ".github/workflows/deploy.yml"
-	githubDeliveryMark  = "<!-- severino-hq-delivery:%s -->"
-	githubPipelinePage  = 20
+	githubDeploy       = ".github/workflows/deploy.yml"
+	githubDeliveryMark = "<!-- severino-hq-delivery:%s -->"
+	githubPipelinePage = 20
+	// githubAdmissionPage is how many successful admissions are read to find
+	// the newest: GitHub promises no order for a filtered listing, so the
+	// first of a page of one is whichever run the listing happened to lead with.
+	githubAdmissionPage = 20
 	githubWeb           = "https://github.com"
 	githubComposedImage = "the composed image"
 )
@@ -113,30 +117,33 @@ func short(sha string, n int) string { return sha[:min(n, len(sha))] }
 func (e extensionDelivery) stage() string {
 	run := e.run
 	if run == nil {
-		return "no composition has started"
+		return "No deploy has started"
 	}
 	which := orDefault(run.Name, "Compose") + " run " + strconv.Itoa(run.ID)
 	switch {
 	case run.Status == "waiting":
-		return which + " is waiting for deploy approval"
+		return which + " is waiting for approval"
 	case githubPipelineRunning[run.Status]:
 		return which + " is running"
 	}
-	switch conclusion := orDefault(run.Conclusion, "ended"); conclusion {
+	switch run.Conclusion {
 	case "success":
 		return which + " finished without deploying it"
 	case "failure":
 		return which + " failed"
+	case "":
+		return which + " ended"
 	default:
-		return which + " " + conclusion
+		return which + " ended (" + strings.ReplaceAll(run.Conclusion, "_", " ") + ")"
 	}
 }
 
+// says is one plugin's distance from production, as whole sentences.
 func (e extensionDelivery) says() string {
 	if e.behind() {
-		return e.plugin + " " + short(e.admitted, 7) + " is admitted and production runs " + short(e.running, 7) + ": " + e.stage()
+		return e.plugin + ": " + short(e.admitted, 7) + " is approved, production still runs " + short(e.running, 7) + ". " + e.stage() + "."
 	}
-	return e.plugin + " " + short(e.running, 7) + " is live, not yet confirmed on GitHub"
+	return e.plugin + ": " + short(e.running, 7) + " is live, not yet confirmed on GitHub."
 }
 
 func (e extensionDelivery) pending() bool { return e.behind() || e.unreported != nil }
@@ -177,6 +184,33 @@ func (r *Registry) checkRun(ctx context.Context, c githubConnection, repository,
 	return &answer.CheckRuns[0], nil
 }
 
+// createdLater is whether a was created after b: by the moment each was
+// created, and by run number where the moments are equal or do not read.
+func createdLater(a, b *githubapi.WorkflowRun) bool {
+	at, errA := time.Parse(time.RFC3339, a.CreatedAt)
+	bt, errB := time.Parse(time.RFC3339, b.CreatedAt)
+	if errA == nil && errB == nil && !at.Equal(bt) {
+		return at.After(bt)
+	}
+	return a.ID > b.ID
+}
+
+// newestRun is the run created last among those keep admits, wherever the
+// listing put it: the order of a listing is never read.
+func newestRun(runs []githubapi.WorkflowRun, keep func(*githubapi.WorkflowRun) bool) *githubapi.WorkflowRun {
+	var newest *githubapi.WorkflowRun
+	for i := range runs {
+		run := &runs[i]
+		if keep != nil && !keep(run) {
+			continue
+		}
+		if newest == nil || createdLater(run, newest) {
+			newest = run
+		}
+	}
+	return newest
+}
+
 // runAfter is the newest run created at or after since. A run whose time does
 // not read is kept; a since that does not read matches none.
 func runAfter(runs []githubapi.WorkflowRun, since string) *githubapi.WorkflowRun {
@@ -184,17 +218,10 @@ func runAfter(runs []githubapi.WorkflowRun, since string) *githubapi.WorkflowRun
 	if err != nil {
 		return nil
 	}
-	var newest *githubapi.WorkflowRun
-	for i := range runs {
-		run := &runs[i]
-		if created, err := time.Parse(time.RFC3339, run.CreatedAt); err == nil && created.Before(start) {
-			continue
-		}
-		if newest == nil || run.CreatedAt > newest.CreatedAt {
-			newest = run
-		}
-	}
-	return newest
+	return newestRun(runs, func(run *githubapi.WorkflowRun) bool {
+		created, err := time.Parse(time.RFC3339, run.CreatedAt)
+		return err != nil || !created.Before(start)
+	})
 }
 
 // delivery is every extension, with how far its latest admission is from production.
@@ -213,12 +240,12 @@ func (r *Registry) delivery(ctx context.Context, c githubConnection, spec GitHub
 	for _, extension := range composed.Extensions {
 		found := extensionDelivery{plugin: extension.Plugin, repository: extension.SourceRepository, workflow: extension.SourceWorkflow, running: extension.SourceCommit}
 		admissions, err := r.workflowRuns(ctx, c, found.repository, found.workflow,
-			url.Values{"branch": {githubMainBranch}, "status": {"success"}, "per_page": {"1"}}, every)
+			url.Values{"branch": {githubMainBranch}, "status": {"success"}, "per_page": {strconv.Itoa(githubAdmissionPage)}}, every)
 		if err != nil {
 			return nil, err
 		}
-		if len(admissions) > 0 {
-			found.admitted, found.admittedAt = admissions[0].HeadSha, admissions[0].UpdatedAt
+		if latest := newestRun(admissions, nil); latest != nil {
+			found.admitted, found.admittedAt = latest.HeadSha, latest.UpdatedAt
 		}
 		if found.behind() {
 			if !pipelineRead {
@@ -270,7 +297,7 @@ func production(extensions []extensionDelivery) string {
 	if len(pending) == 0 {
 		return string(runtime.GitHubDeliveryProductionCurrent)
 	}
-	return strings.Join(pending, "; ")
+	return strings.Join(pending, " ")
 }
 
 func deliveryRecord(spec GitHubDeliverySpec, extensions []extensionDelivery) GitHubDeliveryRecord {
@@ -323,7 +350,7 @@ func checkReport(extension extensionDelivery, spec GitHubDeliverySpec, image str
 	run := extension.run
 	if run == nil {
 		return githubCheckReport{Status: "queued", DetailsURL: githubWeb + "/" + spec.Repository + "/actions/workflows/" + path.Base(spec.Workflow),
-			Title: "Waiting for its composition", Summary: "Its admission starts the composition. If that admission failed, re-run it."}
+			Title: "Waiting for its deploy", Summary: "Its approval starts the deploy. If that approval failed, re-run it."}
 	}
 	report := githubCheckReport{DetailsURL: run.HTMLURL, ExternalID: strconv.Itoa(run.ID), Summary: extension.stage()}
 	if report.DetailsURL == "" {
@@ -333,11 +360,11 @@ func checkReport(extension extensionDelivery, spec GitHubDeliverySpec, image str
 	case run.Status == "waiting":
 		report.Status, report.Title = "in_progress", "Waiting for deploy approval"
 	case run.Status == "queued":
-		report.Status, report.Title = "queued", "Composition queued"
+		report.Status, report.Title = "queued", "Deploy queued"
 	case githubPipelineRunning[run.Status]:
-		report.Status, report.Title = "in_progress", "Composing"
+		report.Status, report.Title = "in_progress", "Deploying"
 	default:
-		report.Status, report.Conclusion, report.Title = "completed", "failure", "Not delivered"
+		report.Status, report.Conclusion, report.Title = "completed", "failure", "Not deployed"
 		report.Summary = extension.stage() + ". Re-run it from the run page."
 	}
 	return report
@@ -454,11 +481,23 @@ func (r *Registry) githubDeliveryReconcile(ctx context.Context, spec GitHubDeliv
 	conditions := []Condition{}
 	switch {
 	case len(failed) > 0:
-		conditions = append(conditions, condition(runtime.ConditionDegraded, "NotDelivered", strings.Join(failed, "; ")+". Re-run the composition from its run page."))
+		conditions = append(conditions, condition(runtime.ConditionDegraded, "NotDelivered", strings.Join(failed, " ")+" Re-run it on GitHub."))
 	case len(reporting) > 0:
-		conditions = append(conditions, condition(runtime.ConditionReady, "Delivering", status.Production+"."))
+		conditions = append(conditions, condition(runtime.ConditionReady, "Delivering", status.Production))
 	default:
 		conditions = append(conditions, condition(runtime.ConditionReady, "Current", status.Production+"."))
 	}
-	return Result{Changed: len(reporting) > 0, Status: status, Conditions: conditions, Message: "Delivery reported."}, nil
+	return Result{Changed: len(reporting) > 0, Status: status, Conditions: conditions, Message: deliveryMessage(len(failed), len(reporting))}, nil
+}
+
+// deliveryMessage is one reconcile's result in a line.
+func deliveryMessage(failed, reporting int) string {
+	switch {
+	case failed > 0:
+		return "Not deployed."
+	case reporting > 0:
+		return "Deploying."
+	default:
+		return "Up to date."
+	}
 }

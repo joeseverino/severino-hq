@@ -113,11 +113,11 @@ class GraphTests(TestCase):
         with projection_scope():
             found = relationships_for("machine:lab-1", principal=READER)
 
-        self.assertEqual(found.labels("Docker network"), ("bridge", "shop_default"))
-        self.assertIn("shop_data", found.labels("Holds data in"))
-        self.assertIn("/opt/apps/shop/config", found.labels("Holds data in"))
-        self.assertEqual(found.labels("Docker environment"), ("local",))
-        self.assertEqual(found.labels("Compose project"), ("shop",))
+        self.assertEqual(found.labels("Networks"), ("bridge", "shop_default"))
+        self.assertIn("shop_data", found.labels("Stores data in"))
+        self.assertIn("/opt/apps/shop/config", found.labels("Stores data in"))
+        self.assertEqual(found.labels("Docker"), ("local",))
+        self.assertEqual(found.labels("Started by compose project"), ("shop",))
 
     def test_a_declared_container_says_what_it_talks_to(self):
         with projection_scope():
@@ -168,7 +168,7 @@ class MachinePageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         for text in ("Docker environment", "Where data lives", "/opt/apps/shop/config",
                      "Networks", "172.18.0.0/16", "Compose projects", "/opt/apps/shop",
-                     "Behind its tag", "Untagged", "27.1.1"):
+                     "Newer build pulled", "No tag", "27.1.1"):
             self.assertContains(response, text)
 
     def test_a_machine_nothing_reads_docker_for_has_no_docker_bands(self):
@@ -197,9 +197,9 @@ class MachinePageTests(TestCase):
         edge = self.client.get(reverse("control_plane:machine", args=["edge-2"]))
         lab = self.client.get(reverse("control_plane:machine", args=["lab-1"]))
 
-        self.assertRegex(edge.content.decode(), r"Not readable: [^<]*Docker image")
-        self.assertNotRegex(lab.content.decode(), r"Not readable: [^<]*Docker image")
-        self.assertContains(lab, "Behind its tag")
+        self.assertRegex(edge.content.decode(), r"Could not be read: [^<]*Docker image")
+        self.assertNotRegex(lab.content.decode(), r"Could not be read: [^<]*Docker image")
+        self.assertContains(lab, "Newer build pulled")
 
     def test_a_machine_known_by_its_address_alone_still_hears_it(self):
         from ..facts import Subject, refusals_about

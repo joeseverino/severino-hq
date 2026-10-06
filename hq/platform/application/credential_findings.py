@@ -21,7 +21,7 @@ from hq.domains.control_plane.provider_adapters.contracts import (
 from .derivations import reached
 from .timestamps import moment
 from .ui import counted
-from .finding_model import FindingRule, OperatorStep, built_findings, fact_values
+from .finding_model import THEN_READ_NOW, FindingRule, OperatorStep, built_findings, fact_values
 
 # Fact keys a connection node carries; ``topology`` writes them.
 FAILURE = "connection-failure"
@@ -65,9 +65,9 @@ def operator_steps(
         )
     return (
         OperatorStep(
-            label="Mint a replacement on your machine" if command else "Replace the credential",
+            label="Make a new token on your Mac" if command else "Make a new token",
             command=command,
-            notes=notes,
+            notes=(*notes, THEN_READ_NOW),
         ),
     )
 
@@ -116,11 +116,12 @@ def answer_steps(node: Any) -> tuple[OperatorStep, ...]:
     if failure == ADDRESS_FAILURE:
         return (
             OperatorStep(
-                label="Point the connection at the provider's direct API address",
+                label=f"Point the connection at {_service(node)}'s own API address",
                 notes=(
-                    *((f"{endpoint} does not answer as the API.",) if endpoint else ()),
-                    "Set the direct address in the connection's 1Password item, "
-                    f"{address_fields()}, then request a fresh sweep.",
+                    *((f"{endpoint} is not the API.",) if endpoint else ()),
+                    "Set the address in the connection's 1Password item, "
+                    f"{address_fields()}.",
+                    THEN_READ_NOW,
                 ),
             ),
         )
@@ -128,18 +129,24 @@ def answer_steps(node: Any) -> tuple[OperatorStep, ...]:
         where = _host(endpoint) or "the machine it points at"
         return (
             OperatorStep(
-                label=f"Check that {where} is up and the controller has a route to it",
-                notes=("Then request a fresh sweep.",),
+                label=f"Check that {where} is up and the controller can reach it",
+                notes=(THEN_READ_NOW,),
             ),
         )
     if failure in REFUSALS:
         return mint_steps(node) or (
             OperatorStep(
-                label="Replace the credential in the connection's 1Password item, "
-                "then request a fresh sweep."
+                label="Replace the credential in the connection's 1Password item",
+                notes=(THEN_READ_NOW,),
             ),
         )
     return ()
+
+
+def _service(node: Any) -> str:
+    """What a connection talks to, by the name its owner knows it by."""
+
+    return node.subtitle or "the service"
 
 
 def _host(endpoint: str) -> str:
@@ -166,17 +173,16 @@ def missing_permissions(estate: Any) -> tuple[dict[str, Any], ...]:
             dict(
                 rule="credential-missing-permissions",
                 subject=node.id,
-                title=f"{node.label} lacks {counted(len(missing), 'permission')}",
+                title=f"{node.label}'s token is missing {counted(len(missing), 'permission')}",
                 severity="attention",
                 explanation=(
-                    "The credential is valid, and the provider refuses "
-                    f"{', '.join(unseen) or 'some readings'} for want of these "
-                    "permissions. Mint a replacement with every permission HQ reads "
-                    "through it."
+                    f"The token works, but {_service(node)} will not let it read "
+                    f"{', '.join(unseen) or 'everything HQ asks for'}. "
+                    "Make a new token that includes them."
                 ),
                 evidence=(
                     *(("Missing", name) for name in missing),
-                    *(("Cannot see", label) for label in unseen),
+                    *(("Cannot read", label) for label in unseen),
                 ),
                 steps=mint_steps(node),
             )
@@ -189,6 +195,9 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
 
     from hq.domains.control_plane.provider_spec import expiry_phrase
 
+    from .expiry import days_until
+    from .moments import span
+
     found = []
     for node in estate.nodes():
         if node.kind != "connection":
@@ -198,19 +207,24 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
         if when is None:
             continue
         expired = reached(when)
+        left = days_until(when)
         found.append(
             dict(
                 rule="credential-expiring",
                 subject=node.id,
                 title=(
-                    f"{node.label}'s credential has expired"
+                    f"{node.label}'s token has expired"
                     if expired
-                    else f"{node.label}'s credential expires {expiry_phrase(stamp)}"
+                    else f"{node.label}'s token expires in {span(left)}"
                 ),
                 severity="serious" if expired else "attention",
                 explanation=(
-                    "The provider stops honouring it at expiry, and HQ reads "
-                    "nothing through it after that. Mint its replacement now."
+                    (
+                        f"HQ cannot read anything through {node.label} until it is replaced."
+                        if expired
+                        else f"After that HQ cannot read anything through {node.label}."
+                    )
+                    + " Make a new one now."
                 ),
                 evidence=(("Expires", expiry_phrase(stamp)),),
                 steps=mint_steps(node),
@@ -219,30 +233,28 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
     return tuple(sorted(found, key=lambda finding: finding["title"]))
 
 
+_CANNOT_ISSUE = "HQ cannot issue a token."
+
 # The rules this module raises, beside the detectors that decide them.
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "credential-missing-permissions",
-        "Credential missing permissions",
+        "A token is missing permissions",
         "attention",
         lambda estate: built_findings(missing_permissions(estate)),
         operator_action=(
-            "Mint a credential with the missing permissions using the command on the connection's row, then request a fresh sweep."
+            f"Make a new token with the command on the connection's page. {THEN_READ_NOW}"
         ),
-        no_help_reason=(
-            "Only the provider mints a credential, and HQ never holds the authority to mint its own."
-        ),
+        no_help_reason=_CANNOT_ISSUE,
     ),
     FindingRule(
         "credential-expiring",
-        "Credential expiring",
+        "A token is expiring",
         "attention",
         lambda estate: built_findings(expiring(estate)),
         operator_action=(
-            "Mint a replacement using the command on the connection's row before it expires, then request a fresh sweep."
+            f"Make a new token with the command on the connection's page before it expires. {THEN_READ_NOW}"
         ),
-        no_help_reason=(
-            "Only the provider mints a credential, and HQ never holds the authority to mint its own."
-        ),
+        no_help_reason=_CANNOT_ISSUE,
     ),
 )

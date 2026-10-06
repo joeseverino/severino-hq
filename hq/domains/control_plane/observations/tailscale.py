@@ -81,7 +81,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         requires=("dns:read",),
         addresses=_resolvers,
         title=_dns_title,
-        relation="Tailnet DNS server",
+        relation="Tailnet DNS settings",
     ),
     ObservationSpec(
         "tailscale.settings",
@@ -94,7 +94,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         ),
         parts=tuple(SETTING_PARTS.values()),
         title=lambda record: "Tailnet settings",
-        relation="Governed by",
+        relation="Tailnet settings",
     ),
     ObservationSpec(
         "tailscale.user",
@@ -105,6 +105,6 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         title=lambda record: str(
             record.get("display_name") or record.get("login_name") or ""
         ),
-        relation="Tailnet member",
+        relation="Owner",
     ),
 )

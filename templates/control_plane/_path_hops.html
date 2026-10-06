@@ -2,8 +2,8 @@
 One route as a strip of hops, from application.paths: the route's line_hops,
 each machine once and no forwarding; the hop-by-hop table keeps every hop.
 On HQ's own name, viewed through it, the route is the one this request took
-(service_context.routes_for): a dot on each hop it proved, and the evidence
-left to the connection page. Shared by the service
+(service_context.routes_for): a dot on each hop it proved, said once in the
+key under the strip, and the evidence left to the connection page. Shared by the service
 page and the connections page. A hop HQ could not read says why. A certificate
 it could read is a lock after the hop's name.
 {% endcomment %}
@@ -16,8 +16,8 @@ it could read is a lock after the hop's name.
       {% if hop.certificate.unread %}<small>{{ hop.certificate.line }}</small>{% endif %}
       {% if hop.facts %}<small class="hop-facts">{% for text, url in hop.facts %}{% if url %}<a class="external-link" href="{{ url }}" rel="noopener">{{ text }}</a>{% else %}{{ text }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</small>{% endif %}
       {% if hop.unread %}<small>{{ hop.unread|capfirst }}</small>{% endif %}
-      {% if hop.check %}<span class="hop-proof" tabindex="0" data-tip="{{ hop.check.label }}{% if hop.check.detail %}&#10;{{ hop.check.detail }}{% endif %}"><span class="visually-hidden">{{ hop.check.label }}</span></span>{% endif %}
+      {% if hop.check %}<span class="hop-proof" tabindex="0" data-tip="{% if hop.check.state != "proven" %}{{ hop.check.label }}{% if hop.check.detail %}&#10;{% endif %}{% endif %}{{ hop.check.detail }}"><span class="visually-hidden">{{ hop.check.label }}</span></span>{% endif %}
     </li>
   {% endfor %}
 </ol>
-{% for hop in route.line_hops %}{% if hop.check and forloop.first %}<p class="path-proof-note"><span class="hop-proof-key"></span>Your request came this way. <a href="{% url 'connection' %}">How HQ knows</a></p>{% endif %}{% endfor %}
+{% for hop in route.line_hops %}{% if hop.check and forloop.first %}<p class="path-proof-note"><span class="hop-proof-key"></span>Confirmed by this request. <a href="{% url 'connection' %}">How I am connected</a></p>{% endif %}{% endfor %}

@@ -242,6 +242,7 @@ POLICY = ProviderSpec(
     sample_record={"document": ""},
     identity=lambda spec: ("tailnet",),
     key_hint=lambda spec: "tailnet-policy",
+    name=lambda spec: "Tailnet policy",
     # As for a device: a policy reading returns the document, not how HQ
     # fetched it.
     unobservable_fields=("connection_ref",),

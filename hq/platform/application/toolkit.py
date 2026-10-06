@@ -53,7 +53,7 @@ TOOL_TABS: tuple[ToolTab, ...] = (
     ToolTab(
         id="dns",
         label="DNS",
-        summary="Read from outside this network, not through its rewrites.",
+        summary="Looked up on the public internet, not in AdGuard.",
         capabilities=("lookup.name", "lookup.address"),
         template="control_plane/_tool_dns.html",
     ),

@@ -140,13 +140,13 @@ func (r *Registry) adguardReconcile(ctx context.Context, spec AdGuardRewriteSpec
 	}
 	status := AdGuardRewriteStatus{Domain: spec.Domain, Answer: spec.Answer, Enabled: rewriteEnabled(live)}
 	if !status.Enabled {
-		return Result{Changed: changed, Status: status, Conditions: []Condition{condition(runtime.ConditionDegraded, "Disabled", "The rewrite is disabled in AdGuard, so the name does not resolve. Enable it in AdGuard.")}, Message: "AdGuard rewrite is present but disabled."}, nil
+		return Result{Changed: changed, Status: status, Conditions: []Condition{condition(runtime.ConditionDegraded, "Disabled", "The record is switched off in AdGuard, so the name does not resolve. Switch it on in AdGuard.")}, Message: "The AdGuard record is switched off."}, nil
 	}
-	message := "AdGuard rewrite unchanged."
+	message := "AdGuard record unchanged."
 	if changed {
-		message = "AdGuard rewrite updated."
+		message = "AdGuard record updated."
 	}
-	return result(changed, status, "Reconciled", "AdGuard rewrite is current.", message), nil
+	return result(changed, status, "Reconciled", "The AdGuard record is as HQ set it.", message), nil
 }
 
 func matchingRewrites(rewrites []adguardapi.RewriteEntry, domain string) []adguardapi.RewriteEntry {
@@ -167,7 +167,7 @@ func (r *Registry) adguardDelete(ctx context.Context, spec AdGuardRewriteSpec, _
 	matches := matchingRewrites(rewrites, spec.Domain)
 	status := AdGuardDeleteStatus{Domain: spec.Domain, Removed: true}
 	if len(matches) == 0 {
-		return result(false, status, "Absent", "No such rewrite in AdGuard.", "AdGuard rewrite was already absent."), nil
+		return result(false, status, "Absent", "No such record in AdGuard.", "AdGuard record was already gone."), nil
 	}
 	if apply {
 		for _, match := range matches {
@@ -176,7 +176,7 @@ func (r *Registry) adguardDelete(ctx context.Context, spec AdGuardRewriteSpec, _
 			}
 		}
 	}
-	return result(true, status, "Removed", "AdGuard rewrite was removed.", "AdGuard rewrite removed."), nil
+	return result(true, status, "Removed", "The AdGuard record was removed.", "AdGuard record removed."), nil
 }
 
 func (r *Registry) adguardInventory(ctx context.Context) ([]any, error) {

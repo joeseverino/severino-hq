@@ -52,6 +52,28 @@ class DeviceApprovalTests(TestCase):
         self.assertEqual(finding["title"], "New devices join the tailnet without approval")
         self.assertIn("auth key", finding["explanation"])
 
+    def test_the_tailnet_page_marks_the_setting_and_links_the_problem(self):
+        from ..tailnet_context import tailnet_context
+
+        policy(
+            settings={"devicesApprovalOn": False},
+            grants=[{"src": ["*"], "dst": ["*"]}],
+            tags=[{"name": "tag:server", "owners": []}, {"name": "tag:spare", "owners": []}],
+        )
+        store("tailscale.device", {"name": "example-host", "tags": ["tag:server"]})
+
+        found = tailnet_context(principal=EVERYTHING)
+
+        marked = {item.label: item.problem_url for item in found.settings if item.problem_url}
+        self.assertEqual(
+            marked,
+            {"New devices": reverse("control_plane:findings") + "?rule=devices-join-without-approval"},
+        )
+        self.assertEqual(
+            {row.tag["name"]: row.unworn for row in found.tags},
+            {"tag:server": False, "tag:spare": True},
+        )
+
     def test_approval_on_or_unread_says_nothing(self):
         policy(settings={"devicesApprovalOn": True})
         self.assertEqual(raised("devices-join-without-approval"), [])
@@ -124,7 +146,7 @@ class RefusedConnectionTests(TestCase):
 
         (finding,) = raised("connection-not-answering")
 
-        self.assertEqual(finding["title"], "example-cf's credential is refused")
+        self.assertEqual(finding["title"], "example-cf: credential refused")
         self.assertIn("Invalid API token", finding["explanation"])
         self.assertIn({"label": "State", "value": "Refused"}, finding["evidence"])
 
@@ -166,6 +188,18 @@ class PortNameTests(TestCase):
 
     def test_a_published_container_names_its_port(self):
         self.assertEqual(self.names("tcp:9000")["tcp:9000"], "example-admin")
+
+    def test_a_connection_to_a_service_names_its_port(self):
+        from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+
+        ProviderConnection.objects.create(
+            connection_ref="example-dns", controller_id="example-host",
+            provider="adguard", endpoint="http://127.0.0.1:3001", reachable=True,
+            probed=True, observed_at=timezone.now(),
+        )
+
+        self.assertEqual(self.names("tcp:3001")["tcp:3001"], CONNECTION_LABELS["adguard"])
+        self.assertEqual(self.names("tcp:3001", dst=("tag:other",))["tcp:3001"], "")
 
     def test_well_known_ports_fall_back_to_the_registry(self):
         found = self.names("tcp:443", "53", "udp:53")

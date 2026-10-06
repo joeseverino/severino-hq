@@ -464,9 +464,9 @@ class ProviderSurfaceTests(TestCase):
         # Asserted on the promise, not on the sentence explaining its absence,
         # so the reason can be reworded without editing a test that is not
         # about it.
-        self.assertNotIn("Applies at the provider", _apply_note(ZONE_KIND))
+        self.assertNotIn("The controller applies it", _apply_note(ZONE_KIND))
         self.assertIn("no settings to reconcile", _apply_note(ZONE_KIND))
-        self.assertIn("Applies at the provider", _apply_note(RECORD_KIND))
+        self.assertIn("The controller applies it", _apply_note(RECORD_KIND))
 
     def test_a_zone_declares_no_service_facet(self):
         # A zone is a namespace, not a name that answers. Given a facet it would
@@ -1200,7 +1200,7 @@ class ResourceDetailIsProviderDeclaredTests(TestCase):
         page = self.client.get(response.url)
         self.assertContains(page, "cf-example")
         self.assertContains(page, reverse("control_plane:edit", args=["a-domain"]))
-        self.assertContains(page, "Stop managing")
+        self.assertContains(page, "Stop tracking in HQ")
 
     def test_the_kinds_that_had_hand_written_cards_still_read_the_same(self):
         response = self._detail(
@@ -1224,7 +1224,7 @@ class ResourceDetailIsProviderDeclaredTests(TestCase):
         )
 
         self.assertContains(response, "10.0.0.99")
-        self.assertContains(response, "declared 10.0.0.10")
+        self.assertContains(response, "HQ expects 10.0.0.10")
 
 
 class ResourcePageAfterWalkthroughTests(TestCase):
@@ -1352,7 +1352,7 @@ class PublishAServiceTests(TestCase):
         service = service_or_prospect("new.example.com")
 
         self.assertEqual(service.status, "unknown")
-        self.assertEqual(service.status_label, "Nothing declared")
+        self.assertEqual(service.status_label, "Nothing set up in HQ")
 
     def test_a_wildcard_covering_a_name_does_not_make_it_declared(self):
         """A certificate answers for a name without anyone having declared it.
@@ -1374,7 +1374,7 @@ class PublishAServiceTests(TestCase):
 
         certificate = next(f for f in service.facets if f.id == "certificate")
         self.assertTrue(certificate.present)
-        self.assertEqual(service.status_label, "Nothing declared")
+        self.assertEqual(service.status_label, "Nothing set up in HQ")
 
     def test_the_hostname_is_all_it_asks_for(self):
         response = self.client.post(
@@ -1792,7 +1792,7 @@ class PendingRemovalTests(TestCase):
     def test_it_offers_the_usual_actions_while_nothing_is_pending(self):
         response = self._page()
 
-        self.assertContains(response, "Reconcile")
+        self.assertContains(response, "Apply again")
         self.assertNotContains(response, "Removal in progress")
 
     def test_a_queued_removal_withdraws_them(self):
@@ -1836,7 +1836,7 @@ class PendingRemovalTests(TestCase):
             current_key="going",
         )
 
-        self.assertContains(self._page(), "Download report")
+        self.assertContains(self._page(), "Download this record (JSON)")
 
 
 class ProxyDecisionTests(TestCase):
@@ -1906,20 +1906,20 @@ class ResourceListReadabilityTests(TestCase):
 
         response = self.client.get(reverse("control_plane:list"))
         rows = response.content.decode()
-        row = rows[rows.index("example-com<"):]
+        row = rows[rows.index('title="example-com">example.com<'):]
         row = row[: row.index("</tr>")]
 
-        self.assertIn("Declared", row)
-        self.assertNotIn("Pending", row)
-        self.assertNotIn("Not observed", row)
+        self.assertIn("Recorded only", row)
+        self.assertNotIn("Change waiting to apply", row)
+        self.assertNotIn("Not read yet", row)
 
     def test_a_resource_with_a_controller_still_reports_its_sync(self):
         response = self.client.get(reverse("control_plane:list"))
         rows = response.content.decode()
-        row = rows[rows.index("example-com-caa<"):]
+        row = rows[rows.index('title="example-com-caa">example.com CAA<'):]
         row = row[: row.index("</tr>")]
 
-        self.assertIn("Pending", row)
+        self.assertIn("Change waiting to apply", row)
 
 
 class LabelAndDensityTests(TestCase):

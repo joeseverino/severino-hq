@@ -251,7 +251,7 @@ RESOURCE_TONES = {
 
 # What a drifted resource reads as. The finding that offers the two ways out
 # keys on it, so the wording and the test for it are one value.
-DRIFT_LABEL = "Drift detected"
+DRIFT_LABEL = "Changed outside HQ"
 
 
 def is_drifted(resource: ManagedResource) -> bool:
@@ -271,8 +271,8 @@ def resource_health(resource: ManagedResource) -> dict[str, str]:
     }
     for condition_type, state, label in (
         ("Drifted", "drifted", DRIFT_LABEL),
-        ("Degraded", "degraded", "Needs attention"),
-        ("Ready", "healthy", "Healthy"),
+        ("Degraded", "degraded", "Has a problem"),
+        ("Ready", "healthy", "Working"),
     ):
         if condition_type in active:
             condition = active[condition_type]
@@ -288,7 +288,7 @@ def resource_health(resource: ManagedResource) -> dict[str, str]:
     if not kind_converges(resource.kind):
         return {
             "state": "declared",
-            "label": "Recorded",
+            "label": "Not checked",
             "reason": "",
             "message": "",
         }
@@ -298,15 +298,15 @@ def resource_health(resource: ManagedResource) -> dict[str, str]:
     if resource.observed_generation != resource.generation:
         return {
             "state": "pending",
-            "label": "Awaiting first check",
+            "label": "Change waiting to apply",
             "reason": "",
             "message": "",
         }
     return {
         "state": "unknown",
-        "label": "Not observed",
+        "label": "Not read yet",
         "reason": "",
-        "message": "The controller has not reported health.",
+        "message": "The controller has not read it yet.",
     }
 
 
@@ -410,7 +410,7 @@ def save_managed_resource(
         raise PolicyError(
             "Public DNS changes are off. Set "
             "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS to allow them, or save "
-            "this resource disabled."
+            "this record switched off."
         )
     # An authored or edited declaration is one HQ would act on; its connection
     # must manage. An adopted spec restates what the provider holds.

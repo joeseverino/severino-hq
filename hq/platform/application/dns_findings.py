@@ -12,6 +12,7 @@ from typing import Any
 from hq.domains.control_plane.observations.adguard import (
     FILTERING_OFF,
     NAME_UNUSED,
+    UNUSED_AFTER_HOURS,
     PLAIN_UPSTREAM,
     PROTECTION_OFF,
 )
@@ -33,10 +34,10 @@ def protection_off(estate: Any) -> tuple[dict[str, Any], ...]:
         dict(
             rule="dns-protection-off",
             subject=node.id,
-            title=f"{node.label} answers DNS with protection off",
+            title=f"AdGuard protection is off on {node.label}",
             severity="attention",
             explanation=(
-                "AdGuard resolves every query without applying blocklists, "
+                "AdGuard is answering every lookup without blocklists, "
                 "safe browsing or client rules."
             ),
             evidence=(("Protection", "Off"),),
@@ -51,9 +52,9 @@ def filtering_off(estate: Any) -> tuple[dict[str, Any], ...]:
         dict(
             rule="dns-filtering-off",
             subject=node.id,
-            title=f"{node.label} does not filter DNS",
+            title=f"AdGuard filtering is off on {node.label}",
             severity="attention",
-            explanation="Filtering is off in AdGuard, so no blocklist applies to any query.",
+            explanation="No blocklist applies to any lookup.",
             evidence=(("Filtering", "Off"),),
         )
         for node in _connections(estate)
@@ -72,15 +73,16 @@ def plain_upstream(estate: Any) -> tuple[dict[str, Any], ...]:
                 rule="dns-plain-upstream",
                 subject=node.id,
                 title=(
-                    f"{node.label} forwards queries over plain DNS to "
-                    f"{counted(len(hosts), 'upstream')}"
+                    f"AdGuard on {node.label} sends lookups to "
+                    f"{', '.join(hosts) if len(hosts) <= 2 else counted(len(hosts), 'server')} "
+                    "unencrypted"
                 ),
                 severity="neutral",
                 explanation=(
-                    "These upstreams are off the site and are queried without "
-                    "encryption, so the network between can read every name looked up."
+                    "Your internet provider, and anyone else on the way, can see "
+                    "every name your devices look up."
                 ),
-                evidence=tuple(("Plain upstream", host) for host in hosts),
+                evidence=tuple(("Unencrypted server", host) for host in hosts),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding["title"]))
@@ -104,60 +106,54 @@ def unused_names(estate: Any) -> tuple[dict[str, Any], ...]:
                     title=f"No device looked up {name}",
                     severity="neutral",
                     explanation=(
-                        f"AdGuard rewrites {name}, and its query log shows no lookup "
-                        "of it over the span it covers, up to a day."
+                        "AdGuard has a record for it, and no device asked for it in "
+                        f"the time AdGuard's query log covers, {UNUSED_AFTER_HOURS} hours or more."
                     ),
-                    evidence=(("Name", name), ("Query log", node.label)),
+                    evidence=(("Name", name), ("Read from", node.label)),
                 )
             )
     return tuple(sorted(found, key=lambda finding: finding["title"]))
 
 
+_CANNOT_SWITCH_ON = "HQ cannot switch it on."
+
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         name="dns-protection-off",
-        title="DNS protection off",
+        title="DNS protection is off",
         severity="attention",
         detect=lambda estate, detect=protection_off: built_findings(detect(estate)),
-        operator_action="Turn protection back on from the AdGuard dashboard.",
-        no_help_reason=(
-            "HQ reads AdGuard's protection state but has no capability that changes it."
-        ),
+        operator_action="Turn protection back on in AdGuard.",
+        no_help_reason=_CANNOT_SWITCH_ON,
     ),
     FindingRule(
         name="dns-filtering-off",
-        title="DNS filtering off",
+        title="DNS filtering is off",
         severity="attention",
         detect=lambda estate, detect=filtering_off: built_findings(detect(estate)),
         operator_action="Turn filtering on under Filters, DNS blocklists in AdGuard.",
-        no_help_reason=(
-            "HQ reads AdGuard's filtering state but has no capability that changes it."
-        ),
+        no_help_reason=_CANNOT_SWITCH_ON,
     ),
     FindingRule(
         name="dns-plain-upstream",
-        title="Upstream DNS unencrypted",
+        title="DNS lookups sent unencrypted",
         severity="neutral",
         detect=lambda estate, detect=plain_upstream: built_findings(detect(estate)),
         operator_action=(
-            "Replace each plain upstream with its provider's DNS-over-TLS or DNS-over-HTTPS "
-            "address under Settings, DNS settings in AdGuard, if queries should be encrypted."
+            "Replace each one with its DNS-over-TLS or DNS-over-HTTPS address "
+            "under Settings, DNS settings in AdGuard."
         ),
-        no_help_reason=(
-            "Which encrypted upstream to use is your choice, and no HQ capability writes AdGuard's upstreams."
-        ),
+        no_help_reason="HQ cannot change AdGuard's upstream servers.",
     ),
     FindingRule(
         name="dns-name-unused",
-        title="Name nobody looks up",
+        title="A name nothing looks up",
         severity="neutral",
         detect=lambda estate, detect=unused_names: built_findings(detect(estate)),
         operator_action=(
-            "Remove the service and its rewrite if nothing uses it; otherwise point the "
-            "device that should use it at AdGuard for DNS."
+            "If nothing uses it, remove the service. If something should, check "
+            "that device uses AdGuard for DNS."
         ),
-        no_help_reason=(
-            "Whether anything still needs the name is something only you know."
-        ),
+        no_help_reason="HQ cannot tell whether anything still needs it.",
     ),
 )

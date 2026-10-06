@@ -253,7 +253,7 @@ class DerivedTopologyTests(TestCase):
         )
 
         self.assertEqual(node.status, "neutral")
-        self.assertEqual(node.status_label, "Disabled")
+        self.assertEqual(node.status_label, "Switched off in HQ")
         self.assertEqual(
             [action.name for action in node.actions],
             ["open", "edit", "remove"],
@@ -389,7 +389,7 @@ class TopologyPageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "data-topology")
-        self.assertContains(response, 'class="visually-hidden">Filter topology')
+        self.assertContains(response, 'class="visually-hidden">Filter<')
         self.assertContains(response, '<fieldset class="topology-kind-filters">')
         self.assertContains(response, 'id="map" tabindex="-1"')
         self.assertContains(response, "internal-name")
@@ -402,7 +402,7 @@ class TopologyPageTests(TestCase):
         self.assertNotContains(response, "<script>")
 
         focused = self.page(focus="resource:internal-name")
-        self.assertContains(focused, "Relationships in this trace</h2>")
+        self.assertContains(focused, "Links shown</h2>")
         self.assertContains(focused, '<div class="table-scroll">')
         self.assertNotContains(focused, "table-scroll table-sticky-header")
         self.assertContains(
@@ -416,7 +416,7 @@ class TopologyPageTests(TestCase):
         managing_everything()
         response = self.page()
 
-        self.assertNotContains(response, "Relationships in this trace")
+        self.assertNotContains(response, "Links shown")
         self.assertNotContains(response, "topology-relation-verb")
         reconcile = reverse("control_plane:reconcile", kwargs={"key": "internal-name"})
         self.assertNotContains(response, f'formaction="{reconcile}"')
@@ -471,9 +471,9 @@ class TopologyPageTests(TestCase):
         self.assertEqual(trace.focus, "resource:internal-name")
         self.assertEqual(trace.direction, "inbound")
         self.assertEqual(trace.depth, 1)
-        self.assertContains(response, '<span class="eyebrow">Trace</span>')
-        self.assertContains(response, "Trace outgoing")
-        self.assertContains(response, "Clear trace")
+        self.assertContains(response, '<span class="eyebrow">Showing</span>')
+        self.assertContains(response, "What this depends on")
+        self.assertContains(response, ">Clear</a>")
 
     def page(self, **params):
         with mock.patch(
@@ -496,7 +496,7 @@ class TopologyPageTests(TestCase):
         self.assertContains(
             response,
             f'<a class="topology-node-link" href="{detail}" data-entity="Internal DNS record">'
-            "internal-name</a>",
+            "app.example.test → 192.0.2.10</a>",
         )
         # The anchor sits inside the title's <strong>, which both the stylesheet
         # and the explorer's status line read as the node's name.
@@ -524,26 +524,26 @@ class TopologyPageTests(TestCase):
              for row in relations["resource:internal-name"]],
             # Incoming rows say the edge from this end.
             [
-                ("in", "Declares", "service:app.example.test"),
-                ("in", "Governed by", ability_id),
+                ("in", "For", "service:app.example.test"),
+                ("in", "Changed through", ability_id),
             ],
         )
         self.assertEqual(
             [(row["direction"], row["label"], row["other"].id)
              for row in relations[ability_id]],
-            [("out", "Governs", "resource:internal-name")],
+            [("out", "Can change", "resource:internal-name")],
         )
 
         # The same edge renders once as incoming and once as outgoing, and each
         # row walks to the other end.
         resource, ability = self.body("resource:internal-name"), self.body(ability_id)
         self.assertContains(
-            resource, '<span class="eyebrow topology-relation-heading">Incoming</span>'
+            resource, '<span class="eyebrow topology-relation-heading">Used by</span>'
         )
         self.assertContains(
-            ability, '<span class="eyebrow topology-relation-heading">Outgoing</span>'
+            ability, '<span class="eyebrow topology-relation-heading">Uses</span>'
         )
-        self.assertContains(resource, '<span class="topology-relation-verb">Governed by</span>')
+        self.assertContains(resource, '<span class="topology-relation-verb">Changed through</span>')
         self.assertContains(resource, f'href="{TopologyView._focus_link(ability_id)}"')
         self.assertContains(
             ability,
@@ -588,19 +588,19 @@ class TopologyPageTests(TestCase):
         unswept = self.body("resource:example-stack")
 
         # A comparison, not two raw numbers.
-        self.assertContains(response, "Behind")
-        self.assertContains(response, "Declared revision 4, last confirmed 2")
+        self.assertContains(response, "Your last change is not applied yet")
+        self.assertNotContains(response, "evision")
         # The field the reading declined to echo back, as the list it is.
         self.assertContains(response, "<li><code>answer</code></li>")
-        self.assertContains(response, "Not confirmed by the last reading")
+        self.assertContains(response, "HQ could not check")
         # Age, not an ISO timestamp, and the absence of one said out loud.
         self.assertContains(response, "3\xa0hours ago")
         # A kind a sweep reads is not observed yet; one no sweep reads never is.
-        self.assertContains(disabled, "Not observed yet.")
-        self.assertNotContains(disabled, "Nothing observes this")
-        self.assertContains(unswept, "Never. Nothing observes this.")
+        self.assertContains(disabled, "Not read yet.")
+        self.assertNotContains(disabled, "HQ does not read this.")
+        self.assertContains(unswept, "HQ does not read this.")
         # A disabled declaration is not a finding.
-        self.assertContains(disabled, ">Unmanaged</span>")
+        self.assertContains(disabled, "HQ only reads this. It does not change it.")
 
     def test_a_node_nothing_reaches_says_so_rather_than_drawing_an_empty_box(self):
         alone = next(
@@ -610,7 +610,7 @@ class TopologyPageTests(TestCase):
             if not item["degree"]
         )
 
-        self.assertContains(self.body(alone), '<p class="muted">No relationships.</p>')
+        self.assertContains(self.body(alone), '<p class="muted">Connected to nothing.</p>')
 
 
 class FocusedPageTests(TestCase):
@@ -638,7 +638,7 @@ class FocusedPageTests(TestCase):
         self.assertIn('data-topology-body-of="zone:example.com"', panel)
         lanes = body[body.index('id="map"'):body.index('id="topology-detail"')]
         self.assertNotIn("topology-node-body", lanes)
-        self.assertNotIn("Last observed", lanes)
+        self.assertNotIn("Last read", lanes)
 
     def test_each_value_is_on_a_line_of_its_own_with_its_source_and_age(self):
         body = self.page("zone:example.com").content.decode()
@@ -664,7 +664,7 @@ class FocusedPageTests(TestCase):
 
     def test_the_trace_ledger_is_drawn_only_with_relationships_in_it(self):
         related = self.page("zone:example.com")
-        self.assertContains(related, "Relationships in this trace</h2>")
+        self.assertContains(related, "Links shown</h2>")
         self.assertContains(related, "data-topology-edge=")
         self.assertNotContains(related, "All relationships")
 
@@ -680,8 +680,8 @@ class FocusedPageTests(TestCase):
         )
         alone = self.page(lonely)
         self.assertEqual(alone.context["focus_node"], lonely)
-        self.assertContains(alone, '<p class="muted">No relationships.</p>')
-        self.assertNotContains(alone, "Relationships in this trace")
+        self.assertContains(alone, '<p class="muted">Connected to nothing.</p>')
+        self.assertNotContains(alone, "Links shown")
         self.assertNotContains(alone, 'id="topology-relations"')
 
     def test_a_domain_is_observed_when_its_zone_reading_is(self):
@@ -700,7 +700,7 @@ class FocusedPageTests(TestCase):
         detail = response.context["topology_detail"]
         self.assertEqual(detail["observed_age"], read)
         self.assertContains(response, "2\xa0hours ago")
-        self.assertNotContains(response, "Nothing observes this")
+        self.assertNotContains(response, "HQ does not read this.")
 
     def test_a_card_says_what_its_number_counts(self):
         response = self.page("zone:example.com")
@@ -711,7 +711,7 @@ class FocusedPageTests(TestCase):
             if item["node"].id == "zone:example.com"
         )
 
-        noun = "direct relationship" if degree == 1 else "direct relationships"
+        noun = "link" if degree == 1 else "links"
         self.assertContains(
             response, f'aria-label="Details for example.com, {degree} {noun}"'
         )

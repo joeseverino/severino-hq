@@ -19,6 +19,7 @@ import re
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
+from ipaddress import ip_address
 
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
@@ -28,6 +29,8 @@ from .ui import counted
 
 # The settings row naming the tailnet's resolvers, by address.
 RESOLVES_THROUGH = "Resolves through"
+# The setting row that says whether a new device waits for approval.
+NEW_DEVICES = "New devices"
 
 
 @dataclass(frozen=True)
@@ -287,7 +290,7 @@ def may_reach(
     if who_asks is None or who_answers is None:
         missing = source if who_asks is None else target
         return Verdict(
-            False, False, f"{missing} was not in the last sweep."
+            False, False, f"{missing} was not in the last read of the tailnet."
         )
     if not who_asks.principals:
         return Verdict(
@@ -362,9 +365,9 @@ class Policy:
         rows.append(("MagicDNS", "On" if self.dns.get("magicDNS") else "Off"))
         days = self.settings.get("devicesKeyDurationDays")
         if days:
-            rows.append(("Node keys last", f"{days} days"))
+            rows.append(("Device keys expire after", f"{days} days"))
         rows.append((
-            "New devices",
+            NEW_DEVICES,
             "Need approval" if self.settings.get("devicesApprovalOn") else "Join without approval",
         ))
         rows.append((
@@ -376,8 +379,8 @@ class Policy:
             "Automatic" if self.settings.get("devicesAutoUpdatesOn") else "Manual",
         ))
         rows.append((
-            "Policy authored",
-            "Outside Tailscale" if self.settings.get("aclsExternallyManagedOn") else "In Tailscale",
+            "Policy edited in",
+            "Outside Tailscale" if self.settings.get("aclsExternallyManagedOn") else "Tailscale",
         ))
         # Only when the reading exists. A tailnet whose daemon never answered
         # should say nothing here rather than report lock as off, which is a
@@ -620,7 +623,7 @@ def _grant_ports(grants, known, machines) -> tuple[dict, ...]:
     for item in machines:
         for name in (item.name, *item.aliases):
             by_name.setdefault(str(name).lower(), item)
-    namer = _PortNamer(_ssh_ports())
+    namer = _PortNamer(_ssh_ports(), _service_ports())
     shown = []
     for grant in grants:
         targets = _grant_machines(grant.get("dst") or (), known, by_name)
@@ -648,6 +651,47 @@ def _ssh_ports() -> dict[str, set[int]]:
     return found
 
 
+@dataclass(frozen=True)
+class _ServicePort:
+    """A port a connection to a service names, and where that connection points."""
+
+    ref: str
+    controller: str
+    host: str
+    port: int
+    label: str
+
+
+def _service_ports() -> tuple[_ServicePort, ...]:
+    """The port each connection to a service names in its URL, with the service's name."""
+
+    from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+
+    from .connections import connection_rows
+    from .locate import points_at_host, split_endpoint
+
+    found = []
+    for row in connection_rows():
+        label = CONNECTION_LABELS.get(row.provider, "")
+        if not label or points_at_host(row.endpoint):
+            continue
+        host, port = split_endpoint(row.endpoint)
+        if host and port.isdigit():
+            found.append(
+                _ServicePort(row.connection_ref, row.controller_id, host, int(port), label)
+            )
+    return tuple(found)
+
+
+def _is_loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def _grant_machines(names, known, by_name) -> tuple:
     """The machines a grant's destinations name, through their tailnet devices."""
 
@@ -667,10 +711,13 @@ def _grant_machines(names, known, by_name) -> tuple:
 class _PortNamer:
     """What answers on a port of a grant's machines: HQ, SSH, a container, a service."""
 
-    def __init__(self, ssh_ports: dict[str, set[int]]):
+    def __init__(
+        self, ssh_ports: dict[str, set[int]], service_ports: tuple[_ServicePort, ...] = ()
+    ):
         from .hq_self import scoped_served_port
 
         self.ssh_ports = ssh_ports
+        self.service_ports = service_ports
         self.hq_port = scoped_served_port()
 
     def name(self, port: int, targets) -> str:
@@ -686,7 +733,27 @@ class _PortNamer:
             for running in sorted(target.containers, key=lambda item: item.name):
                 if port in running.ports:
                     return running.name
+        for target in targets:
+            label = self._service(target, port)
+            if label:
+                return label
         return WELL_KNOWN_PORTS.get(port, "")
+
+    def _service(self, target, port: int) -> str:
+        """The service a connection reads on this port of this machine."""
+
+        from .locate import host_of
+
+        refs = {*target.reached_by, *target.opened_by}
+        names = {str(name).lower() for name in (target.name, *target.aliases)}
+        addresses = {host_of(address) for address in getattr(target, "addresses", ())}
+        for item in self.service_ports:
+            if item.port != port:
+                continue
+            here = _is_loopback(item.host) and item.controller.lower() in names
+            if here or item.ref in refs or item.host in addresses:
+                return item.label
+        return ""
 
     def _opens(self, target, port: int) -> bool:
         refs = {*target.reached_by, *target.opened_by}

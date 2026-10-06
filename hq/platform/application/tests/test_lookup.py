@@ -146,7 +146,7 @@ class AddressLookupTests(TestCase):
         reading = self._look(PRIVATE, resolver=_fails, allocations=_fails)
 
         self.assertTrue(reading["ok"])
-        self.assertIn("not routable on the public internet", reading["note"])
+        self.assertIn("private address", reading["note"])
         self.assertEqual(reading["hostnames"], [])
 
     def test_one_registry_failing_does_not_take_the_other_down(self):

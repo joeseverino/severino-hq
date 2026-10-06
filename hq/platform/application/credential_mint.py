@@ -211,9 +211,9 @@ def mint_command(
             arguments += [minter.account_flag, accounts[0]]
         else:
             blocking.append(
-                "No reading names the account yet."
+                "HQ has not read the account id yet."
                 if not accounts
-                else f"The readings name {len(accounts)} accounts."
+                else f"HQ has read {len(accounts)} accounts and cannot tell which one this is."
             )
     vault, item = store.get("vault", ""), store.get("item", "")
     if vault and item:
@@ -221,8 +221,8 @@ def mint_command(
             arguments += [flag, _reference(vault, item, variable)]
     else:
         blocking.append(
-            "The controller has not reported which 1Password item holds this "
-            "credential; it does once it runs this release."
+            "The controller has not said which 1Password item holds this "
+            "token. It will once it is up to date."
         )
     prefix: list[str] = []
     bootstrap = _BOOTSTRAP.match(store.get("bootstrap", ""))
@@ -234,7 +234,7 @@ def mint_command(
     else:
         names = " and ".join(name for name, _ in minter.bootstrap)
         notes.append(
-            f"The connection's item names no bootstrap item, so set {names} "
+            f"The connection's 1Password item names no bootstrap item. Set {names} "
             "first, or add a bootstrap field (op://<vault>/<item>) to the item."
         )
     if blocking:

@@ -29,7 +29,7 @@ from .action_links import (
     connection_action_links,
     topology_url,
 )
-from .entity_links import entity_link, kind_label
+from .entity_links import entity_link, kind_label, record_name
 from .infrastructure import is_drifted, resource_health
 from .resource_capabilities import removals_pending, resource_capabilities
 from .derivations import derivation
@@ -69,7 +69,7 @@ def _focus_url(node_id: str) -> str:
 
 def _resource_status(resource: ManagedResource) -> tuple[str, str, str]:
     if not resource.enabled:
-        return "neutral", "Disabled", "This declaration is not reconciled."
+        return "neutral", "Switched off in HQ", ""
     health = resource_health(resource)
     from .infrastructure import RESOURCE_TONES
 
@@ -94,7 +94,7 @@ def _resource_actions(
     actions.append(
         TopologyAction(
             "edit",
-            "Edit declaration",
+            "Change what HQ expects",
             "remote_write",
             reverse("control_plane:edit", kwargs={"key": key}),
             capability="infrastructure.resource.update",
@@ -123,7 +123,7 @@ def _resource_actions(
         actions.append(
             TopologyAction(
                 "reconcile",
-                "Restore HQ's version" if drifted else "Reconcile",
+                "Restore HQ's version" if drifted else "Apply again",
                 "infrastructure_change",
                 reverse("control_plane:reconcile", kwargs={"key": key}),
                 method="POST",
@@ -152,7 +152,7 @@ def _resource_actions(
         actions.append(
             TopologyAction(
                 "remove",
-                "Stop managing" if capabilities.removal == "forget" else "Review removal",
+                "Stop tracking in HQ" if capabilities.removal == "forget" else "Remove",
                 "destructive",
                 reverse("control_plane:remove", kwargs={"key": key}),
                 capability="infrastructure.resource.remove",
@@ -162,13 +162,20 @@ def _resource_actions(
     return tuple(actions)
 
 
-def _link_node(link: ConnectionLink, *, kind: str) -> TopologyNode:
+def _link_node(link: ConnectionLink, *, kind: str, through: str = "") -> TopologyNode:
+    """A node for something a connection names and HQ keeps no record of.
+
+    A link carries a name and a page, and no noun for what the thing is. A
+    target says which connection reaches it. Nothing reads a dependency.
+    """
+
     node_id = derived_id(kind, link.url, link.label)
+    reached = f"Reached through {through}" if through else "Reached by a connection"
     return TopologyNode(
         id=node_id,
         kind=kind,
         label=link.label,
-        subtitle="Observed target" if kind == "target" else "Declared dependency",
+        subtitle=reached if kind == "target" else "Not read yet",
         url=link.url,
         actions=(
             (TopologyAction("open", "Open", "read", link.url),) if link.url else ()
@@ -198,12 +205,12 @@ def _ability_actions(
     """
 
     actions = [
-        TopologyAction("focus", "Show relationships", "read", _focus_url(ability_id))
+        TopologyAction("focus", "Show links", "read", _focus_url(ability_id))
     ]
     command = capability_action_link(
         ability.capability,
         ability.effect,
-        "Open command",
+        "Run",
         principal=principal,
     )
     if command is not None:
@@ -280,7 +287,7 @@ def _merge_controller_node(
     refresh = capability_action_link(
         "infrastructure.controller.refresh",
         "infrastructure_change",
-        "Request fresh sweep",
+        "Read now",
         principal=principal,
     )
     emitted = tuple(item for item in (action, refresh) if item is not None)
@@ -342,7 +349,7 @@ def _declared_ability_nodes(group, nodes, principal) -> None:
                 id=ability_id,
                 kind="ability",
                 label=ability.label,
-                subtitle=ability.name,
+                subtitle=group.spec.label,
                 detail=ability.summary,
                 url=_focus_url(ability_id),
                 actions=_ability_actions(ability, ability_id, principal),
@@ -386,21 +393,21 @@ def _controller_edge(group, instance, node, connection_url, nodes, edges, princi
         principal=principal,
         observed_at=node.observed_at,
     )
-    relation = edge_between(controller_id, node.id, "carries", "Carries")
+    relation = edge_between(controller_id, node.id, "carries")
     edges[relation.id] = relation
 
 
 def _target_edges(instance, connection_id, nodes, edges) -> None:
     for target in instance.targets:
-        node = _link_node(target, kind="target")
+        node = _link_node(target, kind="target", through=instance.label)
         nodes.setdefault(node.id, node)
-        relation = edge_between(connection_id, node.id, "reaches", "Reaches", instance.status)
+        relation = edge_between(connection_id, node.id, "reaches", status=instance.status)
         edges[relation.id] = relation
         # A target that is also a declaration using this connection.
         resource_id = f"resource:{target.resource_key}"
         if target.resource_key and resource_id in nodes:
             relation = edge_between(
-                connection_id, resource_id, "used_by", "Used by", instance.status
+                connection_id, resource_id, "used_by", status=instance.status
             )
             edges[relation.id] = relation
 
@@ -414,7 +421,7 @@ def _dependency_edges(instance, connection_id, nodes, edges) -> None:
             node = _link_node(dependency, kind="dependency")
             nodes.setdefault(node.id, node)
             target_id = node.id
-        relation = edge_between(connection_id, target_id, "used_by", "Used by", instance.status)
+        relation = edge_between(connection_id, target_id, "used_by", status=instance.status)
         edges[relation.id] = relation
 
 
@@ -426,7 +433,7 @@ def _ability_edges(group, connection, connection_id, edges) -> None:
             if state.available is True
             else "serious" if state.available is False else "neutral"
         )
-        relation = edge_between(connection_id, ability_id, "enables", "Enables", available)
+        relation = edge_between(connection_id, ability_id, "enables", status=available)
         edges[relation.id] = relation
 
 
@@ -495,10 +502,13 @@ def _resource_node(resource: ManagedResource) -> TopologyNode:
 
     name = str((resource.spec or {}).get("name", "") or "") if resource.kind == CONTAINER_KIND else ""
     host = str((resource.spec or {}).get("host", "") or "") if name else ""
+    label = name or resource.key
+    shown = record_name(resource.kind, resource.spec or {}, resource.key)
     return TopologyNode(
         id=f"resource:{resource.key}",
         kind="resource",
-        label=name or resource.key,
+        label=label,
+        name=shown if shown != label else "",
         subtitle=f"{kind_label(resource.kind)} on {host}" if host else kind_label(resource.kind),
         url=resource.get_absolute_url(),
         kind_key=resource.kind,
@@ -632,7 +642,7 @@ def _governs_edges(groups, resources, edges: dict[str, TopologyEdge]) -> None:
             ability_id = f"ability:{group.spec.name}:{ability.name}"
             for kind in ability.governs_kinds:
                 for resource_id in resources_by_kind.get(kind, ()):
-                    relation = edge_between(ability_id, resource_id, "governs", "Governs")
+                    relation = edge_between(ability_id, resource_id, "governs")
                     edges[relation.id] = relation
 
 

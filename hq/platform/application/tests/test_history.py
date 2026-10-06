@@ -112,7 +112,7 @@ class HistoryTests(TestCase):
 
         self.assertIn("drift-since", [key for key, _value in facts])
         near_then = [value for key, value in facts if key == "drift-near"]
-        self.assertTrue(near_then[0].startswith("Deploy: Deployed abc1234 to production"))
+        self.assertTrue(near_then[0].startswith("Deployed abc1234 to production"))
 
 
 def event(action="created", *, ago, repr_="", type_="Container", message="", **extra):

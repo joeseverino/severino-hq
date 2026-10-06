@@ -59,9 +59,9 @@ def addresses_of(found: Connection) -> tuple[Address, ...]:
 
     current = found.peer_address
     current_source = (
-        "reported by the forwarding hop; not used for admission"
+        "given by a proxy HQ does not trust, so HQ does not use it"
         if found.untrusted_forwarding
-        else "this request arrived from it"
+        else "this request came from it"
     )
     rows: list[Address | None] = [
         _address_row(current, current_source, current=True)
@@ -78,11 +78,11 @@ def addresses_of(found: Connection) -> tuple[Address, ...]:
         rows.append(
             _address_row(
                 presence.direct_endpoint,
-                "the last Tailnet sweep observed this tunnel endpoint",
+                "seen as this device's endpoint",
             )
         )
         rows.extend(
-            _address_row(endpoint, "the last Tailnet sweep observed this endpoint")
+            _address_row(endpoint, "seen as one of this device's endpoints")
             for endpoint in presence.endpoints
         )
     return tuple(_deduplicated(rows))

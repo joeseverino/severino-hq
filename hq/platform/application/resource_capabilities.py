@@ -26,7 +26,7 @@ VERB_LABELS = {
     "start": "Start",
     "stop": "Stop",
     "restart": "Restart",
-    "reconcile": "Reconcile",
+    "reconcile": "Apply again",
     "renew": "Request renewal",
     "approve-routes": "Approve routes",
 }
@@ -127,7 +127,7 @@ def _allowed(verb, policy, resource, provider, removal_pending, observes_only) -
     if removal_pending:
         return Allowed(False, "A removal is in progress.", policy.automatic)
     if not resource.enabled:
-        return Allowed(False, "This resource is disabled.", policy.automatic)
+        return Allowed(False, "It is switched off in HQ.", policy.automatic)
     if observes_only:
         return Allowed(False, OBSERVES_ONLY, policy.automatic)
     if (
@@ -157,7 +157,7 @@ def _removal(provider, policies, removal_pending, observes_only) -> tuple[str, s
     return "unavailable", (
         (provider.removal_gap if provider is not None else "")
         or (delete.reason if delete else "")
-        or "The controller cannot delete this kind."
+        or "The controller cannot remove this."
     )
 
 

@@ -447,7 +447,7 @@ class WiringFaultTests(TestCase):
 
         service = find_service("app.example.test")
 
-        self.assertIn("No declared certificate covers this name", " ".join(service.faults))
+        self.assertIn("No certificate in HQ covers this name", " ".join(service.faults))
         self.assertEqual(service.status, "attention")
 
     def test_two_declarations_of_the_same_kind_contradict_each_other(self):
@@ -462,7 +462,7 @@ class WiringFaultTests(TestCase):
 
         faults = " ".join(find_service("app.example.com").faults)
 
-        self.assertIn("Two adguard.rewrite resources declare this name", faults)
+        self.assertIn("Two internal DNS records are set up for this name", faults)
 
     def test_two_declarations_of_different_kinds_on_one_facet_are_not_a_fault(self):
         """An internal answer and a public one are both DNS and legitimately differ."""
@@ -522,7 +522,7 @@ class WiringFaultTests(TestCase):
 
         self.assertEqual(service.faults, ())
         self.assertEqual(service.status, "attention")
-        self.assertEqual(service.status_label, "Unverified")
+        self.assertEqual(service.status_label, "Not checked yet")
 
     def test_a_degraded_resource_outranks_a_wiring_gap(self):
         """Something that was working and is not is not the same as never wired."""
@@ -596,7 +596,7 @@ class ServiceResolutionTests(TestCase):
         certificate = facet(service, "certificate")
         self.assertTrue(certificate.present)
         self.assertNotIn(
-            "No declared certificate covers this name", " ".join(service.faults)
+            "No certificate in HQ covers this name", " ".join(service.faults)
         )
 
     def test_a_project_publishing_to_a_name_is_an_annotation_not_a_requirement(self):

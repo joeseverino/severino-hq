@@ -45,9 +45,9 @@ from .connection_catalog import CONTROLLER_CONNECTIONS, connection_catalog, seri
 # A reading's status in words. The age shown beside it is when the controller
 # reported, which is not when anything was probed.
 _READING_STATUS_LABELS = {
-    "unreachable": "Unreachable",
-    "reachable": "Reachable",
-    "unprobed": "Not probed",
+    "unreachable": "Not answering",
+    "reachable": "Working",
+    "unprobed": "Not tested",
 }
 
 
@@ -340,7 +340,7 @@ def _controller_contract() -> tuple[
                 label=reading.label,
                 summary=" ".join(
                     (
-                        f"Reads {reading.label} records.",
+                        f"Reads {reading.label}.",
                         *((f"Needs {', '.join(reading.requires)}.",) if reading.requires else ()),
                     )
                 ),
@@ -387,7 +387,7 @@ def _controller_instances(
                         ConnectionFact("Controller", reading.controller_id)
                         if name_controller and reading.controller_id
                         else None,
-                        ConnectionFact("Probed", ago(reading.probed_at))
+                        ConnectionFact("Tested", ago(reading.probed_at))
                         if reading.probed_at
                         else None,
                         *(
@@ -412,15 +412,15 @@ def _controller_connection_spec() -> ConnectionSpec:
     abilities, ability_names = _controller_contract()
     return ConnectionSpec(
         name=CONTROLLER_CONNECTIONS,
-        label="Infrastructure connections",
-        summary="Controller credentials and the systems they reach.",
+        label="Infrastructure",
+        summary="What the controller connects to.",
         required_capability=Capability.READ,
         instance_provider=lambda: _controller_instances(ability_names),
         abilities=abilities,
         secret_store="1Password",
         # The one family fed by sweeps rather than by its own configuration,
         # so the one whose emptiness means a report has not arrived.
-        empty_message="No controller has reported yet.",
+        empty_message="The controller has not read anything yet.",
     )
 
 

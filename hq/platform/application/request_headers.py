@@ -32,12 +32,12 @@ class Header:
 # because the thing being described is what the code does with it, and a
 # header nobody reads has no entry, which is the point of the second list.
 HEADERS_READ = {
-    "Host": "Which site this is, checked against the hosts HQ will answer for.",
-    "X-Forwarded-For": "The chain HQ walks to decide the address it judges you by.",
-    "X-Forwarded-Proto": "Whether the proxy terminated TLS, so HQ knows the request was encrypted.",
-    "Origin": "Checked against the origins allowed to submit forms here.",
-    "Referer": "The same check, for browsers that send this instead.",
-    "Cookie": "Carries the session. Its contents are never shown, here or anywhere.",
+    "Host": "The name asked for. HQ answers only for names on its list.",
+    "X-Forwarded-For": "The addresses this request passed through. HQ takes yours from it.",
+    "X-Forwarded-Proto": "Whether the request reached the proxy over HTTPS.",
+    "Origin": "The site a form was sent from, checked against the sites allowed to send forms to HQ.",
+    "Referer": "The page a form was sent from, used when Origin is absent.",
+    "Cookie": "Holds your session. HQ never shows its contents.",
 }
 REDACTED = {"Cookie", "Authorization", "X-Csrftoken", "Proxy-Authorization"}
 # A proxy or an identity-aware gateway in front of HQ can add credentials of
@@ -54,19 +54,14 @@ def is_redacted(name: str) -> bool:
 # an oversight rather than as the safer of two choices.
 HEADERS_DECLINED = {
     "X-Real-Ip": (
-        "Carries one address the proxy asserts, with no chain behind it to "
-        "check. HQ reads the forwarded chain instead, which it can walk back "
-        "through the proxies it knows and stop at the first hop it cannot "
-        "vouch for. Believing a single asserted value would be weaker."
+        "One address from the proxy. HQ takes your address from "
+        "X-Forwarded-For instead."
     ),
     "X-Forwarded-Scheme": (
-        "Says the same thing as X-Forwarded-Proto, which is the one Django is "
-        "configured to read. Two sources for one fact is one more than can be "
-        "trusted to agree."
+        "Repeats X-Forwarded-Proto, which is the one HQ reads."
     ),
     "X-Forwarded-Host": (
-        "The host is taken from the request line and checked against the hosts "
-        "HQ will answer for. A forwarded copy could disagree with it."
+        "HQ takes the name from the Host header and ignores this copy."
     ),
 }
 

@@ -309,7 +309,7 @@ def _declaration_actions(zone) -> tuple[PageAction, ...]:
     if capabilities.removal != "unavailable":
         actions.append(
             PageAction(
-                "Stop managing" if capabilities.removal == "forget" else "Remove",
+                "Stop tracking in HQ" if capabilities.removal == "forget" else "Remove",
                 reverse("control_plane:remove", args=[resource.key]),
                 danger=True,
             )

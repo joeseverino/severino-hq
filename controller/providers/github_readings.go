@@ -300,7 +300,7 @@ func asRepositoryRefusal(err error) error {
 	if failure, _, _ := runtime.Classify(err); failure != runtime.FailureClassPermission {
 		return err
 	}
-	return &ProviderError{Message: "Not offered on this repository: its plan or its settings leave it off"}
+	return &ProviderError{Message: "not available on this repository (its plan or settings leave it off)"}
 }
 
 func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, error) {

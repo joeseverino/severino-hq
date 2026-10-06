@@ -236,7 +236,7 @@ class MintCommandTests(TestCase):
         fix = credential_fixes()["example-api"]
 
         self.assertEqual(fix.command, "")
-        self.assertIn("No reading names the account yet.", fix.gaps)
+        self.assertIn("HQ has not read the account id yet.", fix.gaps)
 
     def test_no_bootstrap_item_reads_the_bootstrap_from_the_environment(self):
         production_shape()

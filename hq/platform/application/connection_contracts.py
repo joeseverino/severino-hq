@@ -131,8 +131,7 @@ class ConnectionSpec:
     # family that emits from configuration; one fed by controller reports
     # overrides it to say so.
     empty_message: str = (
-        "No credential for this is configured in this environment. "
-        "Connections appear once one is present."
+        "Not set up here yet. Its connections appear once a credential is added."
     )
 
     @property

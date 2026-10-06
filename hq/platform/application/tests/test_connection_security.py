@@ -134,7 +134,7 @@ class OneStateModelTests(TestCase):
         authority = connection_authority(coarse)
 
         self.assertEqual(authority, "whole_account")
-        self.assertEqual(AUTHORITY_LABELS[authority], "Whole-account credential")
+        self.assertEqual(AUTHORITY_LABELS[authority], "Credential has full account access")
         observed = replace(view.instance, observed_at=timezone.now())
         self.assertEqual(
             connection_lifecycle(observed, authority, stale_after_hours=24, now=timezone.now()),
@@ -156,7 +156,7 @@ class ConnectionSecurityPostureTests(TestCase):
     def test_tailnet_ingress_and_connection_authority_are_derived_together(self):
         posture = connection_security_posture(_groups(), request=self.request())
 
-        self.assertEqual(posture.headline, "Tailnet ingress. Explicit authority.")
+        self.assertEqual(posture.headline, "You are connected over the tailnet.")
         self.assertEqual(posture.external_custody_count, 1)
         self.assertEqual(posture.scope_verified_count, 1)
         self.assertEqual(posture.dependency_count, 1)
@@ -174,7 +174,7 @@ class ConnectionSecurityPostureTests(TestCase):
 
         proxy = next(control for control in posture.controls if control.id == "proxy")
         self.assertEqual(proxy.state, "good")
-        self.assertEqual(proxy.evidence, "1 trusted proxy hop")
+        self.assertEqual(proxy.evidence, "1 trusted proxy")
 
     def test_unknown_scope_evidence_stays_visibly_unknown(self):
         posture = connection_security_posture(
@@ -183,7 +183,7 @@ class ConnectionSecurityPostureTests(TestCase):
 
         scope = next(control for control in posture.controls if control.id == "scope")
         self.assertEqual(scope.state, "attention")
-        self.assertIn("1 unknown", scope.evidence)
+        self.assertIn("1 not reported", scope.evidence)
         self.assertEqual(posture.state, "neutral")
 
     def test_an_ability_that_declared_no_proof_is_reported_as_undeclared(self):
@@ -196,8 +196,8 @@ class ConnectionSecurityPostureTests(TestCase):
 
         scope = next(control for control in posture.controls if control.id == "scope")
         self.assertEqual(scope.state, "attention")
-        self.assertIn("1 undeclared", scope.evidence)
-        self.assertNotIn("unknown", scope.evidence)
+        self.assertIn("1 not checked", scope.evidence)
+        self.assertNotIn("not reported", scope.evidence)
         self.assertEqual(posture.scope_undeclared_count, 1)
         self.assertEqual(posture.scope_unknown_count, 0)
         self.assertEqual(posture.state, "neutral")
@@ -207,7 +207,7 @@ class ConnectionSecurityPostureTests(TestCase):
 
         scope = next(control for control in posture.controls if control.id == "scope")
         self.assertEqual(scope.state, "good")
-        self.assertEqual(scope.evidence, "1 verified · 0 whole-account · 0 keyless")
+        self.assertEqual(scope.evidence, "1 checked")
 
     def test_missing_scope_or_untrusted_ingress_never_gets_a_green_summary(self):
         missing = connection_security_posture(
@@ -346,7 +346,7 @@ class ConnectionSecurityPostureTests(TestCase):
             )
 
         self.assertEqual(tailnet_policy.state, "good")
-        self.assertEqual(tailnet_policy.evidence, "Observed · 1 grant · 1 test")
+        self.assertEqual(tailnet_policy.evidence, "1 grant · 1 test")
 
 
 class ArrivalInterfaceTests(TestCase):
@@ -391,7 +391,7 @@ class ArrivalInterfaceTests(TestCase):
         control = observed_firewall_control()
         self.assertEqual(control.state, "good")
         self.assertIn("tailscale0", control.evidence)
-        self.assertIn("sender's word", control.detail)
+        self.assertIn("drops a tailnet address", control.detail)
 
     def test_admitting_on_the_address_alone_is_reported_as_such(self):
         self._reading(accept_requires_interface=False, foreign_interface_dropped=False)
@@ -403,7 +403,7 @@ class ArrivalInterfaceTests(TestCase):
         self._reading(foreign_interface_dropped=False)
         control = observed_firewall_control()
         self.assertEqual(control.state, "good")
-        self.assertIn("no rule that drops", control.detail)
+        self.assertIn("has no rule that drops", control.detail)
 
 
 class IngressRegistryTests(TestCase):
@@ -434,5 +434,5 @@ class IngressRegistryTests(TestCase):
             edge = observed_ingress_control("hq.example.test")
 
         self.assertEqual(edge.state, "serious")
-        self.assertEqual(edge.evidence, "No source restriction")
+        self.assertEqual(edge.evidence, "No access list")
         self.assertIn("SSH", edge.detail)

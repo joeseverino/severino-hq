@@ -20,6 +20,7 @@ deriving findings costs no query.
 from __future__ import annotations
 
 import json
+import shlex
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -28,7 +29,16 @@ from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import command_url
 from .exposure import public_name
-from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, Remedy, fact_values
+from .finding_model import (
+    CANNOT_EDIT_COMPOSE,
+    Finding,
+    FindingEstate,
+    FindingRule,
+    OperatorStep,
+    Remedy,
+    fact_values,
+    on_machine,
+)
 
 # The fact a contradiction travels on, from the topology to the rule reading it.
 FACT = "contradiction"
@@ -108,13 +118,13 @@ def _answered_by_nothing() -> tuple[Finding, ...]:
                     title=f"{name} points at {last.name}, which serves nothing for it",
                     severity="attention",
                     explanation=(
-                        f"Public DNS sends {name} to {last.name}. No proxy HQ reads answers for "
+                        f"Public DNS sends {name} to {last.name}. No proxy answers for "
                         f"this name, and no container on {last.name} answers on a web port. "
-                        "Either the record is left over from something removed, or the route "
-                        "that should serve it is missing."
+                        "Either the record is left over from something removed, or the proxy "
+                        "route that should serve it is missing."
                     ),
-                    evidence=(("Name", name), ("Route", route.line), ("Machine", last.name)),
-                    remedies=tuple(_update(key, f"Repoint {key}") for key in keys),
+                    evidence=(("Name", name), ("Path", route.line), ("Machine", last.name)),
+                    remedies=tuple(_update(key, f"Change where {name} points") for key in keys),
                     steps=(
                         OperatorStep(
                             label=f"Remove the public record for {name} if nothing should answer "
@@ -156,6 +166,12 @@ def _stopped_targets(route, containers) -> list[tuple[str, str, str]]:
     return found
 
 
+def _said(state: str) -> str:
+    """Docker's word for a container's state, as a person says it."""
+
+    return {"exited": "stopped", "dead": "stopped", "created": "not started"}.get(state, state)
+
+
 def _routed_to_stopped() -> tuple[Finding, ...]:
     from .paths import path_to, routed_names
 
@@ -169,19 +185,18 @@ def _routed_to_stopped() -> tuple[Finding, ...]:
                     Finding(
                         rule="route-to-stopped-container",
                         subject=_subject(name),
-                        title=f"{name} routes to {container} on {machine}, which is {state}",
+                        title=f"{name} leads to {container} on {machine}, which is {_said(state)}",
                         severity="serious",
                         explanation=(
-                            f"The route for {name} ends at the container {container}, and Docker "
-                            f"on {machine} reports it {state}. Requests for the name fail until "
-                            "it runs again or the route points at what replaced it."
+                            f"Requests for {name} fail until {container} runs again or "
+                            "the proxy route points at what replaced it."
                         ),
-                        evidence=(("Name", name), ("Route", route.line), ("Container state", state)),
-                        remedies=tuple(_update(key, f"Repoint {key}") for key in proxies),
+                        evidence=(("Name", name), ("Path", route.line), ("Container", _said(state))),
+                        remedies=tuple(_update(key, f"Change where {name} points") for key in proxies),
                         steps=(
                             OperatorStep(
                                 label=f"Start {container} on {machine}",
-                                command=f"docker start {container}",
+                                command=on_machine(machine, f"docker start {shlex.quote(container)}"),
                             ),
                         ),
                     )
@@ -219,19 +234,17 @@ def _gates_guarding_nothing() -> tuple[Finding, ...]:
                     Finding(
                         rule="gate-guards-nothing",
                         subject=f"service:{name}",
-                        title=f"{spec.label} {title} guards {name}, which no DNS record names",
+                        title=f"{spec.label} {title} protects {name}, which has no DNS record",
                         severity="neutral",
                         explanation=(
-                            f"{spec.label} {title} protects {name}, but no DNS record HQ reads "
-                            "or declares answers for that name, so the gate guards nothing. "
-                            "Remove the name from it, or it will quietly admit whoever it "
-                            "allows the day the name is published again."
+                            f"Nothing answers at {name}. If the name is published again "
+                            "later, this rule will apply to it without anyone reviewing it."
                         ),
-                        evidence=(("Gate", f"{spec.label} {title}"), ("Name", name)),
+                        evidence=(("Access rule", f"{spec.label} {title}"), ("Name", name)),
                         steps=(
                             OperatorStep(
-                                label=f"Remove {name} from {title}"
-                                + (f" in the provider console: {console}" if console else "")
+                                label=f"Remove {name} from {title}",
+                                notes=((console,) if console else ()),
                             ),
                         ),
                     )
@@ -258,20 +271,25 @@ def _split_horizon() -> tuple[Finding, ...]:
         if not public or not internal or public & internal or internal <= crossed:
             continue
         rewrites = _declared(name, (kind for kind, provider in PROVIDERS.items() if provider.facet == "dns" and not provider.public_effect))
+        records = _declared(name, (kind for kind, provider in PROVIDERS.items() if provider.facet == "dns" and provider.public_effect))
         found.append(
             Finding(
                 rule="split-horizon-disagrees",
                 subject=_subject(name),
-                title=f"{name} lives on {', '.join(sorted(public))} publicly and {', '.join(sorted(internal))} inside",
+                title=(
+                    f"{name} goes to {', '.join(sorted(public))} from the internet "
+                    f"and {', '.join(sorted(internal))} from home"
+                ),
                 severity="attention",
                 explanation=(
-                    f"The public record for {name} leads to {', '.join(sorted(public))}; the "
-                    f"internal record leads to {', '.join(sorted(internal))}. Inside and outside "
-                    "then reach different machines under one name, which is either a migration "
-                    "left half done or a rewrite pointing at the wrong place."
+                    "That is right only if you meant it. Otherwise the public record "
+                    "or the internal record is out of date."
                 ),
-                evidence=tuple(("Route", route.line) for route in routes),
-                remedies=tuple(_update(key, f"Repoint {key}") for key in rewrites),
+                evidence=tuple(("Path", route.line) for route in routes),
+                remedies=(
+                    *(_update(key, "Change the internal record") for key in rewrites),
+                    *(_update(key, "Change the public record") for key in records),
+                ),
                 steps=(
                     OperatorStep(
                         label=f"Point the internal record for {name} at the machine the public one reaches, or the other way round."
@@ -307,24 +325,24 @@ def _unfronted_ports() -> tuple[Finding, ...]:
             Finding(
                 rule="published-port-unfronted",
                 subject=f"machine:{machine.name}",
-                title=f"{item.running.name} on {machine.name} answers the internet on port "
-                f"{', '.join(str(port) for port in open_ports)}, and no name routes to it",
+                title=f"{item.running.name} on {machine.name} is open to the internet on "
+                f"{'port' if len(open_ports) == 1 else 'ports'} "
+                f"{', '.join(str(port) for port in open_ports)}",
                 severity="serious",
                 explanation=(
-                    "Docker publishes the port on every interface, the perimeter check saw it "
-                    "answer from outside, and no proxy or DNS record HQ reads leads to it. "
-                    "Whatever it serves is reachable by address alone, with nothing in front."
+                    "It answered a test from outside your network, and no proxy or DNS "
+                    "name leads to it, so anyone with the address reaches it directly."
                 ),
                 evidence=(
                     ("Container", item.running.name),
                     ("Published", item.running.published),
-                    ("Answered publicly", ", ".join(str(port) for port in open_ports)),
+                    ("Open to the internet", ", ".join(str(port) for port in open_ports)),
                 ),
                 steps=(
                     OperatorStep(
-                        label=f"Bind {item.running.name}'s ports to 127.0.0.1 in its compose file "
-                        f"(its page has the change: {item.url}#hardening), "
+                        label=f"Bind {item.running.name}'s ports to 127.0.0.1 in its compose file, "
                         "or put a proxy route in front of it.",
+                        notes=(f"{item.running.name}'s page shows the exact change.",),
                     ),
                 ),
             )
@@ -364,9 +382,8 @@ def _served_not_held() -> tuple[Finding, ...]:
                 title=f"{names} serves a certificate other than {resource.key}",
                 severity="serious",
                 explanation=(
-                    f"HQ holds and renews {resource.key}, and the controller found "
-                    f"{names} serving a different certificate. A renewal changes "
-                    "nothing a visitor sees until the host serves the one HQ installs."
+                    f"HQ renews {resource.key}, but {names} is serving a different "
+                    "one. Visitors will not get renewals until it serves HQ's."
                 ),
                 evidence=tuple(
                     (
@@ -428,7 +445,7 @@ def _encoded(finding: Finding) -> str:
             "explanation": finding.explanation,
             "evidence": [list(pair) for pair in finding.evidence],
             "remedies": [[remedy.capability, remedy.target, remedy.label, remedy.url] for remedy in finding.remedies],
-            "steps": [[step.label, step.command] for step in finding.steps],
+            "steps": [[step.label, step.command, list(step.notes)] for step in finding.steps],
         }
     )
 
@@ -446,7 +463,10 @@ def _decoded(value: str) -> Finding:
             Remedy(capability=capability, target=target, label=label, effect="", url=url)
             for capability, target, label, url in item["remedies"]
         ),
-        steps=tuple(OperatorStep(label=label, command=command) for label, command in item["steps"]),
+        steps=tuple(
+            OperatorStep(label=label, command=command, notes=tuple(notes))
+            for label, command, notes in item["steps"]
+        ),
     )
 
 
@@ -466,50 +486,50 @@ def _raised(rule: str):
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "served-certificate-not-held",
-        "A host serving a certificate HQ does not hold",
+        "A site is serving a different certificate",
         "serious",
         _raised("served-certificate-not-held"),
-        operator_action="Install the certificate HQ holds again, or point the host at it.",
-        no_help_reason="HQ installs its certificate; it cannot tell why the host serves another.",
+        operator_action="Install HQ's certificate again, or point the site at it.",
+        no_help_reason="HQ cannot tell why the site is serving another certificate.",
     ),
     FindingRule(
         "public-name-served-by-nothing",
-        "A public name nothing at its address serves",
+        "A public name that leads nowhere",
         "attention",
         _raised("public-name-served-by-nothing"),
-        operator_action="Remove the stale record, or add the route that should serve the name.",
-        no_help_reason="Removing a record is destructive, so HQ offers to repoint it and leaves removal to its page.",
+        operator_action="Remove the public record, or add the proxy route that should serve the name.",
+        no_help_reason="HQ cannot tell whether the name should still exist.",
     ),
     FindingRule(
         "route-to-stopped-container",
         "A route to a container that is not running",
         "serious",
         _raised("route-to-stopped-container"),
-        operator_action="Start the container, or repoint the route at what replaced it.",
-        no_help_reason="HQ does not start containers; it can repoint a route it declares.",
+        operator_action="Start the container, or point the proxy route at what replaced it.",
+        no_help_reason="HQ cannot start containers.",
     ),
     FindingRule(
         "gate-guards-nothing",
-        "A gate on a name no record answers",
+        "Access rule for a name that no longer exists",
         "neutral",
         _raised("gate-guards-nothing"),
-        operator_action="Remove the name from the gate.",
-        no_help_reason="HQ reads Access applications and access lists but does not write them.",
+        operator_action="Remove the name from the rule.",
+        no_help_reason="HQ cannot edit Access applications or access lists.",
     ),
     FindingRule(
         "split-horizon-disagrees",
-        "Inside and outside reach different machines under one name",
+        "One name, two different machines",
         "attention",
         _raised("split-horizon-disagrees"),
         operator_action="Point the internal and public records at the same machine.",
-        no_help_reason="HQ can repoint a record it declares, but cannot tell which side is right.",
+        no_help_reason="HQ cannot tell which one is right.",
     ),
     FindingRule(
         "published-port-unfronted",
-        "A container answering the internet with nothing in front",
+        "A container is open to the internet",
         "serious",
         _raised("published-port-unfronted"),
-        operator_action="Bind the published ports to loopback, or front them with a proxy.",
-        no_help_reason="HQ writes the compose change but does not edit compose files on a machine.",
+        operator_action="Bind the published ports to 127.0.0.1, or put a proxy route in front of them.",
+        no_help_reason=CANNOT_EDIT_COMPOSE,
     ),
 )

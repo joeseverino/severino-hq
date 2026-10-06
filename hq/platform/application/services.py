@@ -38,7 +38,8 @@ from urllib.parse import urlparse
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.names import certificate_covers, in_zone, normalized_hostname
-from hq.domains.control_plane.providers import PROVIDERS, service_facets, resource_home
+from .labels import lower_first, plural
+from hq.domains.control_plane.providers import PROVIDERS, registry_label, service_facets, resource_home
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 
@@ -273,7 +274,7 @@ class Service:
         """
 
         return tuple(
-            ListRow(title=fault, status="attention", badge="Wiring")
+            ListRow(title=fault, status="attention", badge="Setup")
             for fault in self.faults
         )
 
@@ -728,7 +729,7 @@ def _faults(
         # one is decided by whichever reconciled last.
         for kind in sorted({kind for kind in kinds if kinds.count(kind) > 1}):
             faults.append(
-                f"Two {kind} resources declare this name. Remove one."
+                f"Two {plural(lower_first(registry_label(kind)))} are set up for this name. Remove one."
             )
 
     # These two rules are statements about particular facets, so they name them.
@@ -748,12 +749,12 @@ def _faults(
     )
     if serves and not certificate.present and not served_with:
         faults.append(
-            "Served without TLS. No declared certificate covers this name, "
+            "Served without TLS. No certificate in HQ covers this name, "
             "and the proxy host uses none."
         )
     if serves and origin is not None and not origin.known:
         faults.append(
-            f"Ingress forwards to {origin.address}, which matches no known machine."
+            f"The proxy forwards to {origin.address}, which matches no known machine."
         )
     return tuple(faults)
 

@@ -29,7 +29,7 @@ from .inventory import record_identity, record_token, service_hostnames
 from .security import Principal
 
 
-OBSERVES_ONLY = "Its connection only observes. Set manages on the connection to act."
+OBSERVES_ONLY = "HQ only reads through this connection. Allow it to manage on the connection to change things."
 
 
 def manages_through(
@@ -377,8 +377,8 @@ def adopt_service(
     )
     if found is None:
         raise NotFoundError(
-            f"Nothing unmanaged was last seen for {command.hostname!r}. It may "
-            "have been adopted already, or removed at the provider."
+            f"HQ found nothing it does not already manage for {command.hostname!r}. "
+            "It may be managed already, or gone."
         )
     from .infrastructure import PolicyError
 
@@ -443,8 +443,8 @@ def adopt(
     if found is None:
         subject = command.hostname or command.token or "that record"
         raise NotFoundError(
-            f"No unmanaged {command.kind} was last seen for {subject!r}. "
-            "It may have been adopted already, or removed at the provider."
+            f"HQ found no {registry_label(command.kind).lower()} it does not already manage "
+            f"for {subject!r}. It may be managed already, or gone."
         )
     if PROVIDERS[found.kind].adoption_gap:
         raise PolicyError(PROVIDERS[found.kind].adoption_gap)
@@ -501,7 +501,7 @@ def _record_as_observed(key: str, found: "Unmanaged") -> None:
             "type": "Ready",
             "status": True,
             "reason": "Adopted",
-            "message": "Adopted from what the provider was holding.",
+            "message": "Added to HQ from what was live.",
         }
     ])
     resource.save(

@@ -27,7 +27,6 @@ from hq.platform.core.models import AuditLog
 
 from hq.domains.control_plane.names import normalized_hostname
 from . import docker_sections
-from .action_links import topology_url
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import entity_link, kind_label
 from .projection import projection_scope
@@ -80,7 +79,7 @@ def _identity(machine) -> ServiceSection | None:
             Cell.of(entity_link(by_key[key].kind if key in by_key else "resource", key)),
             Cell(kind_label(by_key[key].kind) if key in by_key else MISSING, muted=key not in by_key),
             Cell(
-                "Filed under a suffixed key because the plain one was taken"
+                "Its key ends in a number because the plain key was already in use"
                 if key.rpartition("-")[2].isdigit() and not key.rpartition("-")[2].startswith("0")
                 else "",
                 muted=True,
@@ -90,10 +89,14 @@ def _identity(machine) -> ServiceSection | None:
     )
     return ServiceSection(
         id="identity",
-        label="Declared as",
-        columns=("Declaration", "Kind", "Note"),
+        label="Records in HQ",
+        columns=("Record", "Type", "Note"),
         records=records,
     )
+
+
+# What supplies a name, as this page heads each column.
+_SUPPLIED_BY = {"runtime": "Container", "dns": "DNS record", "proxy": "Proxy", "certificate": "Certificate"}
 
 
 def _names(machine) -> ServiceSection | None:
@@ -133,7 +136,7 @@ def _names(machine) -> ServiceSection | None:
         claim = next(iter(facet.claims), None) if facet and facet.present else None
         if claim is None:
             return Cell(MISSING, muted=True)
-        return Cell(claim.resource_key, getattr(claim, "url", ""))
+        return Cell.of(claim.link)
 
     def traffic(hostname: str) -> Cell:
         reading = measured.get(normalized_hostname(hostname))
@@ -154,7 +157,7 @@ def _names(machine) -> ServiceSection | None:
     # say one thing nine times, and the reachable-but-unmeasured finding is
     # where that absence is raised as a fact about HQ.
     any_measured = any(measured.get(normalized_hostname(host)) for host in hostnames)
-    label = "Names it answers"
+    label = "Serves"
     if any_measured:
         label = f"{label} · traffic over {HOST_TRAFFIC_DAYS} days"
     return ServiceSection(
@@ -162,7 +165,7 @@ def _names(machine) -> ServiceSection | None:
         label=label,
         columns=(
             "Name",
-            *(facet_label for _facet, facet_label in facets),
+            *(_SUPPLIED_BY.get(facet, facet_label) for facet, facet_label in facets),
             *(("Pageviews",) if any_measured else ()),
         ),
         records=tuple(
@@ -172,14 +175,6 @@ def _names(machine) -> ServiceSection | None:
                 *((traffic(hostname),) if any_measured else ()),
             )
             for hostname in ordered
-        ),
-        # The whole graph, rather than more rows here. Every other relationship
-        # this machine has is an edge, and the topology is where edges live.
-        actions=(
-            (
-                "See this machine in the topology",
-                topology_url(f"machine:{getattr(machine, 'name', '')}"),
-            ),
         ),
     )
 
@@ -213,7 +208,7 @@ def _activity(machine) -> ServiceSection | None:
     return ServiceSection(
         id="activity",
         label="Recent changes",
-        columns=("Object", "Change", "When"),
+        columns=("What", "Change", "When"),
         records=records,
     )
 
@@ -260,12 +255,17 @@ def machine_links(machine, relationships) -> dict[str, object]:
         "declaration_links": tuple(
             entity_link("resource", key) for key in machine.other_declarations
         ),
+        "labelled_addresses": (),
+        "tailscale_version": "",
         "device_link": None,
         "magic_dns_link": None,
         "opening_links": (),
     }
     if presence is None:
         return links
+    links["labelled_addresses"] = labelled_addresses(machine)
+    # The release, without the build it was cut from.
+    links["tailscale_version"] = str(presence.client_version or "").partition("-")[0]
     record = {"addresses": presence.addresses}
     links["device_link"] = (
         entity_link(TAILNET_KIND, machine.route_approval_key, label=presence.tailnet_name)
@@ -281,6 +281,23 @@ def machine_links(machine, relationships) -> dict[str, object]:
         (port, names.of(who)) for port, who in presence.openings
     )
     return links
+
+
+_NETWORKS = {"tailnet": "Tailnet", "network": "LAN", "public": "Public"}
+
+
+def labelled_addresses(machine) -> tuple[tuple[str, str], ...]:
+    """``(label, address)`` for each address the machine is reached at, by the
+    network it is on. A loopback address is left out: it places no machine."""
+
+    from .locate import host_of
+    from .reach import network_of
+
+    return tuple(
+        (_NETWORKS.get(network, ""), address)
+        for address in getattr(machine, "addresses", ()) or ()
+        if (network := network_of(host_of(address))) != "loopback"
+    )
 
 
 def header_addresses(machine) -> tuple[tuple[str, str, str], ...]:

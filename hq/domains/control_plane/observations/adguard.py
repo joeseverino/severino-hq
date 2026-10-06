@@ -254,7 +254,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         title=lambda record: str(
             record.get("name") or next(iter(record.get("addresses") or ()), "")
         ),
-        relation="Known to DNS as",
+        relation="Name in AdGuard",
     ),
     ObservationSpec(
         QUERY_KIND,
@@ -265,7 +265,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         # what that device looks up.
         hostnames=lambda record: (str(record.get("domain", "")),),
         title=_query_title,
-        relation="Looked up on the network",
+        relation="DNS lookups",
         facts=_query_facts,
         parts=(CLIENTS_PART,),
     ),
@@ -276,7 +276,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         AdGuardDnsRecord,
         addresses=_listen_addresses,
         title=_dns_title,
-        relation="Answers DNS here",
+        relation="DNS server",
         facts=_dns_facts,
         parts=DNS_PARTS,
     ),

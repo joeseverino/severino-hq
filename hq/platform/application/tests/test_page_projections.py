@@ -229,10 +229,10 @@ class ConnectionProjectionTests(TestCase):
         self.assertEqual(ssh["machine"]["name"], "example-host")
         self.assertEqual(ssh["peer_path"], "direct")
         self.assertEqual(ssh["direct_endpoint"], "198.51.100.7:41641")
-        self.assertEqual(ssh["summary"], "Tailnet · direct · on example-host")
+        self.assertEqual(ssh["summary"], "Reached over the tailnet at example-host")
         api = rows["example-tailnet"]["reach"]
         self.assertEqual(api["network"], "public")
-        self.assertEqual(api["summary"], "Public internet")
+        self.assertEqual(api["summary"], "Reached over the internet")
         self.assertIsNone(api["peer_path"])
 
     def test_what_more_scope_would_show(self):
@@ -252,7 +252,7 @@ class ConnectionProjectionTests(TestCase):
         response = self.client.get(reverse("control_plane:connections"))
 
         self.assertContains(response, "Would also see Tailnet user with users:read")
-        self.assertContains(response, "Public internet")
+        self.assertContains(response, "Reached over the internet")
         self.assertContains(response, "Read all now")
         self.assertContains(
             response, 'formaction="/infrastructure/connections/read/?connection_ref=example-host"'

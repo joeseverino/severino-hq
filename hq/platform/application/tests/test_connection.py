@@ -172,12 +172,12 @@ class LayerTests(TestCase):
         self.assertEqual(found.peer_address, A_TAILNET_ADDRESS)
         self.assertEqual(found.address, A_LAN_ADDRESS)
         self.assertEqual(found.channel.id, "network")
-        self.assertEqual(found.path_label, "Via forwarding peer")
+        self.assertEqual(found.path_label, "Through a proxy")
         self.assertEqual(found.identity.tailnet_user, "")
         forwarder = self.layer(found, "forwarder")
         self.assertFalse(forwarder.holds)
         self.assertTrue(forwarder.conclusive)
-        self.assertIn("not in HQ's exact proxy allowlist", forwarder.detail)
+        self.assertIn("not on HQ's list of trusted proxies", forwarder.detail)
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
     def test_a_trusted_forwarder_remains_a_hop_not_the_caller(self):
@@ -194,7 +194,7 @@ class LayerTests(TestCase):
         self.assertTrue(forwarder.holds)
         self.assertTrue(forwarder.conclusive)
         self.assertEqual(forwarder.evidence, A_LAN_ADDRESS)
-        self.assertEqual(forwarder.mechanism, "Exact proxy allowlist")
+        self.assertEqual(forwarder.mechanism, "HQ's list of trusted proxies")
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
     def test_npm_redundant_headers_corroborate_the_canonical_inputs(self):
@@ -208,7 +208,7 @@ class LayerTests(TestCase):
         layer = self.layer(connection(request), "proxy-evidence")
 
         self.assertTrue(layer.holds)
-        self.assertIn("not a second identity authority", layer.detail)
+        self.assertIn("match the address and scheme HQ used", layer.detail)
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
     def test_disagreeing_npm_headers_are_a_visible_proxy_failure(self):
@@ -275,8 +275,8 @@ class LayerTests(TestCase):
 
         layer = self.layer(found, "transport")
         self.assertFalse(layer.holds)
-        self.assertEqual(layer.evidence, "No verified encryption")
-        self.assertEqual(found.transport, "No verified encryption")
+        self.assertEqual(layer.evidence, "Encryption not confirmed")
+        self.assertEqual(found.transport, "Encryption not confirmed")
 
     def test_the_gate_reports_when_it_is_not_being_enforced(self):
         """The check that would otherwise be a sentence rather than a fact."""
@@ -285,7 +285,7 @@ class LayerTests(TestCase):
             found = connection(a_request())
 
         self.assertFalse(self.layer(found, "gate").holds)
-        self.assertIn("not being enforced", self.layer(found, "gate").detail)
+        self.assertIn("not checking which address", self.layer(found, "gate").detail)
 
     @override_settings(
         AUTHENTICATION_BACKENDS=["django.contrib.auth.backends.ModelBackend"]
@@ -337,7 +337,7 @@ class LayerTests(TestCase):
         self.assertFalse(layer.holds)
         self.assertFalse(layer.conclusive)
         self.assertEqual(layer.state, "unknown")
-        self.assertIn("unverified", found.summary)
+        self.assertIn("not confirmed", found.summary)
 
     def test_a_device_awaiting_approval_is_not_a_known_node(self):
         """Being listed is not being admitted. A device pending approval is in
@@ -349,7 +349,7 @@ class LayerTests(TestCase):
 
         layer = self.layer(found, "device")
         self.assertFalse(layer.holds)
-        self.assertIn("not been authorised", layer.detail)
+        self.assertIn("not been approved", layer.detail)
 
     def test_a_device_lock_has_not_signed_is_not_a_known_node(self):
         """Under tailnet lock an unsigned node is filtered out by every peer
@@ -621,7 +621,7 @@ class AddressEvidenceTests(TestCase):
 
         self.assertIsNotNone(found.tailnet_observed_at)
         self.assertIn(
-            "the last Tailnet sweep observed this tunnel endpoint",
+            "seen as this device's endpoint",
             {row.source for row in rows},
         )
 
@@ -684,7 +684,7 @@ class HopTests(TestCase):
         found = self.hops(peer="10.0.0.9", forwarded="172.18.0.1")
 
         judged = next(hop for hop in found if hop.role == "judged")
-        self.assertIn("no distinct caller address was supplied", judged.detail)
+        self.assertIn("HQ has no address for the caller", judged.detail)
 
     def test_a_forwarded_header_from_an_unknown_peer_is_not_believed(self):
         """Otherwise a caller picks the address HQ judges them by."""
@@ -847,7 +847,7 @@ class ProxyThatDropsTheCallerTests(TestCase):
         )
 
         self.assertFalse(gate.holds)
-        self.assertIn("admitting the proxy", gate.detail)
+        self.assertIn("checking the proxy's address", gate.detail)
 
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
@@ -869,7 +869,7 @@ class DeclinedHeaderTests(TestCase):
         found = self.header("X-Real-Ip", HTTP_X_REAL_IP="100.64.0.5")
 
         self.assertEqual(found.state, "declined")
-        self.assertIn("chain", found.declined)
+        self.assertIn("X-Forwarded-For", found.declined)
 
     def test_a_second_source_for_the_scheme_is_declined(self):
         found = self.header("X-Forwarded-Scheme", HTTP_X_FORWARDED_SCHEME="https")
@@ -1015,7 +1015,7 @@ class ServingDeviceTests(TestCase):
         self.assertEqual(found.observer.name, "example-controller")
         policy = next(layer for layer in found.layers if layer.id == "policy")
         self.assertFalse(policy.conclusive)
-        self.assertIn("HQ's Tailnet node", policy.evidence)
+        self.assertIn("HQ's machine not found", policy.evidence)
 
     def test_an_unrecognised_address_never_guesses_a_node(self):
         found = self.serving({"198.51.100.7"})
@@ -1224,7 +1224,7 @@ class TailnetLockTests(TestCase):
         found = self.layer(connection(a_request()))
         self.assertFalse(found.holds)
         self.assertFalse(found.conclusive)
-        self.assertIn("coordination server's word alone", found.detail)
+        self.assertIn("node keys are not signed", found.detail)
 
     def test_an_unsigned_node_fails_the_layer(self):
         a_tailnet_policy(enabled=True, trusted_keys=2)

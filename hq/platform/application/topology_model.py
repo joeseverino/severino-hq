@@ -24,6 +24,10 @@ class TopologyNode:
     kind: str
     label: str
     subtitle: str
+    # What a page calls it, where ``label`` is the key HQ files it under: the
+    # name a record stands for (``entity_links.record_name``). "" when the
+    # label is already that name.
+    name: str = ""
     status: str = "neutral"
     status_label: str = ""
     detail: str = ""
@@ -123,15 +127,15 @@ RELATIONS: dict[str, RelationKind] = {
     "runs_on": RelationKind("Runs on", "Serves", 10),
     "runs": RelationKind("Runs", "Runs on", 15),
     "talks_to": RelationKind("Talks to", "Talks to", 20),
-    "contains": RelationKind("Contains", "In domain", 30),
+    "contains": RelationKind("Names", "In domain", 30),
     "redirects_to": RelationKind("Redirects to", "Redirected from", 25),
-    "reaches": RelationKind("Reaches", "Reached through", 70),
-    "on_tailnet": RelationKind("On the tailnet as", "Tailnet device of", 75),
-    "declared_by": RelationKind("Declared by", "Declares", 80),
-    "carries": RelationKind("Carries", "Carried by", 85),
-    "used_by": RelationKind("Used by", "Uses", 85),
-    "enables": RelationKind("Enables", "Enabled by", 85),
-    "governs": RelationKind("Governs", "Governed by", 85),
+    "reaches": RelationKind("Reads", "Read through", 70),
+    "on_tailnet": RelationKind("Tailnet device", "Machine", 75),
+    "declared_by": RelationKind("Record in HQ", "For", 80),
+    "carries": RelationKind("Holds the connections", "Held on", 85),
+    "used_by": RelationKind("Reads", "Read through", 85),
+    "enables": RelationKind("Can read", "Read through", 85),
+    "governs": RelationKind("Can change", "Changed through", 85),
     "reading": RelationKind("", "Reads", 88),
 }
 

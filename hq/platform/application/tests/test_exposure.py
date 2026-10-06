@@ -38,7 +38,7 @@ class ExposureTests(TestCase):
 
         self.assertEqual(exposure.level, GATED)
         self.assertEqual(exposure.worst.gates, ("Behind Access: Shop admin",))
-        self.assertIn("behind a gate as shop.example.com", exposure.sentence)
+        self.assertIn("behind a login as shop.example.com", exposure.sentence)
 
     def test_a_gate_on_every_path_gates_the_name(self):
         store("cloudflare.access_app", {"connection_ref": CLOUDFLARE, "id": "a1", "name": "Shop",
@@ -56,7 +56,7 @@ class ExposureTests(TestCase):
         self.assertEqual(exposure.level, OPEN)
         self.assertEqual(exposure.worst.gates, ())
         self.assertEqual(exposure.worst.path_gates, ("/admin*",))
-        self.assertIn("gated only at /admin*", exposure.sentence)
+        self.assertIn("login only at /admin*", exposure.sentence)
 
     def test_a_name_nothing_resolves_is_unrouted(self):
         self.assertEqual(self.level("nothing.example.com"), UNROUTED)
@@ -107,7 +107,7 @@ class ServiceReachTests(TestCase):
     def test_a_private_name_offers_no_gate(self):
         body = self.service("app.example.com")
 
-        self.assertIn("Private networks only", body)
+        self.assertIn("Tailnet or home network only", body)
         self.assertNotIn("Put an access list in front", body)
 
     def test_an_open_name_behind_a_declared_proxy_offers_its_access_list(self):

@@ -68,7 +68,7 @@ Rules:
   field, so a count never includes it. The whole kind on one zone, or on one
   machine (`scope` its name, `address` its address), is the part `""`. Resource kinds swept in parts declare them on their provider, `ProviderSpec.parts` (a zone's
   TLS posture and registration, the tailnet policy's settings, DNS and
-  services). A refused part reads as **Partly refused** in credential sight,
+  services). A refused part reads as **Partly read** in credential sight,
   its permissions join the missing-permissions finding and the mint, it is an
   unreadable fact on every subject it could hide something about, and a path
   hop that depends on it says "<part> not read: missing <permissions>". The
@@ -740,11 +740,11 @@ reading it feeds and every resource kind a sweep reads. A kind with an
   see <label>"; `credential` when it refused the credential itself (invalid,
   expired, locked out, used from a refused location), and the row says so once
   for the connection.
-- **Partly refused**: read, with a declared part refused; the missing
+- **Partly read**: read, with a declared part refused; the missing
   permissions and the parts they would show are named.
-- **Unreadable**: the read failed for another reason, shown with its error.
+- **Could not be read**: the read failed for another reason, shown with its error.
 - **Not connected**: the controller holds no connection that can read it.
-- **Never swept**.
+- **Never read**.
 
 A readable kind older than its cadence allows reads **Out of date**
 (`hq.platform.application.freshness`). The services page's provider readings use the same
@@ -760,4 +760,4 @@ and route to check.
 
 Providers with no connection are listed once under "Not connected", with the
 readings a connection would let HQ see. Each reading is also listed under the
-connection's "Can do".
+connection's "Reads".

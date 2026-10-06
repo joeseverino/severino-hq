@@ -99,7 +99,7 @@ class VulnerabilityTests(TestCase):
 
         inventory("registry.vulnerabilities", [checked(APP, [found("HIGH")])])
         standing = item("app").standing
-        self.assertEqual((standing.state, standing.summary, standing.worst), (VULNERABLE, "1 serious, fixable", "high"))
+        self.assertEqual((standing.state, standing.summary, standing.worst), (VULNERABLE, "1 serious vulnerability", "high"))
 
 
 class StandardTests(TestCase):

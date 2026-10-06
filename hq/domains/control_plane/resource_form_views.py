@@ -90,7 +90,7 @@ class ResourceFormView(View):
                     ],
                     **page_context(
                         "What do you want to add?",
-                        "HQ creates it at the provider and keeps it in sync.",
+                        "HQ creates it and keeps it the way you set it.",
                     ),
                 },
             )
@@ -149,7 +149,7 @@ class ResourceFormView(View):
         resource = self._existing(key)
         kind = self._kind(request, resource)
         if kind not in PROVIDERS:
-            raise Http404("Unknown provider kind.")
+            raise Http404("Unknown type of record.")
         identity = ResourceIdentityForm(request.POST) if resource else None
         spec = spec_form_class(
             kind,
@@ -224,7 +224,7 @@ class ResourceFormView(View):
         messages.success(
             request,
             f"{'Added' if result['created'] else 'Updated'} “{saved}”. "
-            "Applies at the provider within about a minute.",
+            "The controller applies it within about a minute.",
         )
         # Back where the operator was working. Publishing a service
         # takes two or three declarations, and landing on each one's
@@ -256,7 +256,7 @@ def _apply_note(kind: str) -> str:
         kind, OperationRequest.Action.RECONCILE
     )
     if applies:
-        return "Applies at the provider within about a minute."
+        return "The controller applies it within about a minute."
     return explanation
 
 
@@ -477,7 +477,7 @@ class AdoptView(View):
         adopted = ", ".join(result["adopted"])
         messages.success(
             request,
-            f"Adopted {hostname} as {adopted}. Nothing changed at the provider.",
+            f"HQ now manages {hostname} as {adopted}. Nothing live was changed.",
         )
         return redirect("control_plane:service", hostname=result["hostname"])
 
@@ -528,7 +528,7 @@ class CertificateUploadView(View):
                 messages.success(
                     request,
                     f"Stored a certificate for {', '.join(stored['domains'])}. "
-                    "It installs on the next controller pass.",
+                    "The controller installs it within a few minutes.",
                 )
                 return redirect("control_plane:detail", key=resource.key)
         return render(
@@ -567,6 +567,6 @@ class AdoptRecordView(View):
         else:
             messages.success(
                 request,
-                f"Adopted “{result['resource']['key']}”. Nothing changed.",
+                f"HQ now manages “{result['resource']['key']}”. Nothing live was changed.",
             )
         return redirect(safe_next(request, fallback=reverse("control_plane:list")))

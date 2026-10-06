@@ -39,7 +39,7 @@ from .conditions import stamped
 from .contracts import endpoint_has_private_parts
 from .credential_mint import parse_expiry, store_references
 from .security import Capability, Principal
-from .ui import counted
+from .ui import counted, ended
 
 
 def record_token(kind: str, identity: tuple[str, ...]) -> str:
@@ -265,6 +265,10 @@ def confirm_observed(payload: dict[str, Any]) -> int:
     return confirmed
 
 
+# What a record found exactly as HQ set it says of itself.
+MATCHES = "Matches HQ's settings."
+
+
 def _live_specs(kind: str, records: list[Any]) -> dict[tuple[str, ...], dict[str, Any]]:
     """Each live record as the spec a declaration of it would hold, by identity."""
 
@@ -285,7 +289,7 @@ def _observe(resource: ManagedResource, found: dict[str, Any], seen: datetime) -
             "type": "Ready",
             "status": True,
             "reason": "Observed",
-            "message": "The last sweep found this exactly as declared.",
+            "message": MATCHES,
         }
     ], seen)
     if (
@@ -447,20 +451,52 @@ def _record_drift(
     # nothing looks at.
     # Stamped, so the drift keeps the moment it was first seen however many
     # sweeps find it again: that is what lets a finding say what happened then.
-    conditions = stamped(resource.conditions, [
-        {
-            "type": "Drifted",
-            "status": True,
-            "reason": "Drifted",
-            "message": "The last sweep found "
-            + "; ".join(_difference_phrase(field, asked, live) for field, asked, live in drift)
-            + ".",
-        }
-    ])
+    conditions = stamped(resource.conditions, [_difference_condition(resource.kind, drift)])
     if conditions == resource.conditions:
         return
     resource.conditions = conditions
     resource.save(update_fields=["conditions"])
+
+
+def _difference_condition(
+    kind: str, drift: tuple[tuple[str, str, str], ...]
+) -> dict[str, Any]:
+    """The condition a difference raises: changed outside HQ, or the thing's own report.
+
+    A field its kind marks as reported (``ProviderSpec.reported_fields``) holds
+    what the thing says about itself, so a difference there is a problem in
+    those words and nobody changed anything. Any other differing field is a
+    change made outside HQ, and names every field that differs.
+    """
+
+    provider = PROVIDERS[kind]
+    reported = [live for field, _, live in drift if field in provider.reported_fields]
+    if reported and len(reported) == len(drift):
+        return {
+            "type": "Degraded",
+            "status": True,
+            "reason": "Reported",
+            "message": " ".join(ended(said) for said in reported),
+        }
+    titles = provider.spec_type.model_fields
+    return {
+        "type": "Drifted",
+        "status": True,
+        "reason": "Drifted",
+        "message": " ".join(
+            _difference_phrase(_field_title(titles, field), asked, live)
+            for field, asked, live in drift
+        ),
+    }
+
+
+def _field_title(fields: Any, name: str) -> str:
+    """A setting by the title its form gives it, never its key."""
+
+    field = fields.get(name)
+    return (field.title if field is not None and field.title else "") or name.replace(
+        "_", " "
+    ).capitalize()
 
 
 # Past this, a value is described rather than repeated: a policy document is
@@ -477,7 +513,7 @@ def _difference_phrase(field: str, asked: str, live: str) -> str:
     """
 
     if len(asked) <= _QUOTABLE and len(live) <= _QUOTABLE:
-        return f"{field} is {live or 'blank'}, where this asks for {asked or 'blank'}"
+        return f"{field} is now {live or 'blank'}. HQ set it to {asked or 'blank'}."
     try:
         wanted, found = json.loads(asked), json.loads(live)
     except ValueError:
@@ -491,8 +527,10 @@ def _difference_phrase(field: str, asked: str, live: str) -> str:
             *(f"- {key}" for key in missing),
             *(f"{key} changed" for key in changed),
         ]
-        return f"{field} differs from what this asks for: {', '.join(parts) or 'layout only'}"
-    return f"{field} differs from what this asks for ({len(live)} characters live, {len(asked)} declared)"
+        return f"{field} differs from HQ's copy: {', '.join(parts) or 'layout only'}."
+    return (
+        f"{field} differs from HQ's copy ({len(live)} characters live, {len(asked)} in HQ)."
+    )
 
 
 @transaction.atomic

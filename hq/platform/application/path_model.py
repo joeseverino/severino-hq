@@ -48,8 +48,8 @@ class Source:
     @property
     def phrase(self) -> str:
         if self.declared:
-            return f"Declared as {self.declared}; not read"
-        return f"{self.label} via {self.connection}" if self.connection else self.label
+            return f"In HQ as {self.declared}, not read"
+        return f"{self.label} through {self.connection}" if self.connection else self.label
 
 
 @dataclass(frozen=True)
@@ -85,17 +85,13 @@ class Certificate:
         from .moments import ago
 
         when = self.source.observed_at if self.source else None
-        checked = f", checked {ago(when)}" if when else ""
-        return (
-            f"Verified: serves {self.verified_fingerprint[:12]}…, "
-            f"the certificate HQ installed{checked}"
-        )
+        return f"confirmed on this site {ago(when)}" if when else "confirmed on this site"
 
     @property
     def tip(self) -> str:
         """The hover card: the verdict, then which certificate, who, how long."""
 
-        verdict = "Verified" if self.attestation else "Not verified yet"
+        verdict = "Confirmed" if self.attestation else "Not confirmed yet"
         facts = " · ".join(part for part in (self.name, self.issuer, self.left) if part)
         return f"{verdict}\n{facts}" if facts else verdict
 

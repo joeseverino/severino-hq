@@ -184,11 +184,11 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
         labels = {label for label, _url in _command_links(self.emitted())}
 
         # The fixture is only worth something while it raises these.
-        self.assertIn("Repoint example-db-rewrite", labels)
+        self.assertIn("Change the internal record", labels)
         self.assertIn("Put an access list in front of example-shop-proxy", labels)
         self.assertIn("Keep the live version", labels)
         self.assertIn("Remove empty groups", labels)
-        self.assertIn("Edit the tailnet policy", labels)
+        self.assertIn("Change what HQ expects", labels)
 
     def test_every_command_remedy_opens_with_its_target_chosen_and_no_trap(self):
         followed = _command_links(self.emitted())

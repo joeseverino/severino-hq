@@ -202,7 +202,7 @@ class JoinedReadingTests(TestCase):
 
         pin = next(step for step in plan.steps if step.id == "pin")
         self.assertIn("compose override", pin.label)
-        self.assertTrue(pin.detail.startswith("/opt/apps/app/docker-compose.override.yml;"))
+        self.assertTrue(pin.detail.startswith("/opt/apps/app/docker-compose.override.yml."))
 
     def test_the_pin_step_names_the_stacks_own_override_when_it_has_one(self):
         estate()
@@ -216,7 +216,7 @@ class JoinedReadingTests(TestCase):
         plan = next(plan for plan in plans() if plan.container.running.name == "app")
 
         pin = next(step for step in plan.steps if step.id == "pin")
-        self.assertTrue(pin.detail.startswith("/opt/apps/app/compose.override.yaml;"))
+        self.assertTrue(pin.detail.startswith("/opt/apps/app/compose.override.yaml."))
 
 
 class ReadinessTests(TestCase):

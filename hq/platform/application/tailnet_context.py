@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
 from typing import Any
+from urllib.parse import urlencode
 
 from hq.domains.control_plane.providers import PROVIDERS
 
@@ -22,8 +23,17 @@ from .findings import estate_findings, serialize_finding
 from .finding_model import Finding
 from .policy_links import PolicyName, PolicyNames, tagged
 from .projection import projection_scope
+from .routes import reverse
 from .security import Capability, Principal
-from .tailnet import RESOLVES_THROUGH, Policy, declaration, devices, grant_ports, policy
+from .tailnet import (
+    NEW_DEVICES,
+    RESOLVES_THROUGH,
+    Policy,
+    declaration,
+    devices,
+    grant_ports,
+    policy,
+)
 from .topology import derive_topology
 
 TAILNET_KINDS = (TAILNET_KIND, TAILNET_POLICY_KIND)
@@ -53,12 +63,16 @@ class Setting:
     label: str
     value: str
     addresses: tuple[PolicyName, ...] | None = None
+    # The findings page filtered to the rule this setting breaks, when it does.
+    problem_url: str = ""
 
 
 @dataclass(frozen=True)
 class TagRow:
     tag: dict
     devices: tuple[EntityLink, ...]
+    # Devices were read and none of them has this tag.
+    unworn: bool = False
 
 
 @dataclass(frozen=True)
@@ -177,6 +191,21 @@ def _findings(principal: Principal) -> tuple[Finding, ...]:
     )
 
 
+# The setting row each rule is about.
+_SETTING_RULES = {"devices-join-without-approval": NEW_DEVICES}
+
+
+def _setting_problems(findings: tuple[Finding, ...]) -> dict[str, str]:
+    """Each setting row an open finding is about, and the findings page for that rule."""
+
+    found: dict[str, str] = {}
+    for finding in findings:
+        label = _SETTING_RULES.get(finding.rule)
+        if label:
+            found[label] = f"{reverse('control_plane:findings')}?{urlencode({'rule': finding.rule})}"
+    return found
+
+
 def _sight() -> tuple[tuple[Sight, ...], str]:
     """Tailnet readings not read, and the provider's refusal of the credential."""
 
@@ -199,8 +228,12 @@ def tailnet_context(*, principal: Principal) -> TailnetContext:
         found = policy()
         found = replace(found, grants=grant_ports(found.grants))
         names = PolicyNames(hosts=found.hosts)
-        carried = tagged(devices(), names)
+        known = devices()
+        carried = tagged(known, names)
+        worn = {tag for device in known.values() for tag in device.tags}
         unread, refusal = _sight()
+        findings = _findings(principal)
+        problems = _setting_problems(findings)
         return TailnetContext(
             policy=found,
             declaration=declaration(),
@@ -209,6 +242,7 @@ def tailnet_context(*, principal: Principal) -> TailnetContext:
                     label,
                     value,
                     names.addresses(value.split(", ")) if label == RESOLVES_THROUGH else None,
+                    problems.get(label, ""),
                 )
                 for label, value in found.facts
             ),
@@ -220,8 +254,15 @@ def tailnet_context(*, principal: Principal) -> TailnetContext:
                 NamedRule(rule, names.of(rule.get("src") or ()), names.of(rule.get("dst") or ()))
                 for rule in found.ssh_rules
             ),
-            tags=tuple(TagRow(tag, carried.get(tag.get("name"), ())) for tag in found.tags),
-            findings=_findings(principal),
+            tags=tuple(
+                TagRow(
+                    tag,
+                    carried.get(tag.get("name"), ()),
+                    unworn=bool(known) and tag.get("name") not in worn,
+                )
+                for tag in found.tags
+            ),
+            findings=findings,
             unread=unread,
             credential_refusal=refusal,
         )

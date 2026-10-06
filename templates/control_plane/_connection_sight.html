@@ -1,21 +1,24 @@
 {% comment %}
-What one connection's credential can see: the tally always, each kind when
-the row is expanded. A reading that names the connection it was read through
-is counted only there.
+What one connection reads: the tally and its age always, each thing when the
+row is expanded. The age is said once for the connection. A state word stands
+beside a thing only when it was not read cleanly, and a thing read cleanly
+with nothing in it is counted, not listed.
 {% endcomment %}
 <div class="connection-sight">
-  <span class="connection-sight-tally">Can see {% for count, label in sight.tally %}{{ count }} {{ label|lower }}{% if not forloop.last %} · {% endif %}{% endfor %}</span>
+  <span class="connection-sight-tally">{{ sight.summary }}{% if sight.read_at %} · {{ sight.read_at|ago }}{% endif %}</span>
   <ul class="row-more">
-    {% for item in sight.sights %}
-      <li class="connection-sight-{{ item.state }}">
+    {% for item in sight.listed %}
+      <li class="connection-sight-{{ item.state }}"{% if item.observed_at %} title="{% if item.state == "readable" or item.state == "partial" %}Read{% else %}Tried{% endif %} {{ item.observed_at|ago }}"{% endif %}>
         <strong>{{ item.label }}</strong>
-        <span class="connection-sight-state">{{ item.state_label }}</span>
-        {% if item.state == "readable" or item.state == "partial" %}<span class="muted">{{ item.records|counted:"record,records" }} · {{ item.observed_at|ago }}</span>{% endif %}
+        {% if item.state != "readable" %}<span class="connection-sight-state">{{ item.state_label }}</span>{% endif %}
+        {% if item.state == "readable" or item.state == "partial" %}<span class="muted">{{ item.records }}</span>{% endif %}
         {% if item.state != "readable" %}
-          {% if item.remedy %}<span>{{ item.remedy }}.{% if item.error %} <span class="muted">{{ item.error }}</span>{% endif %}</span>
+          {% if item.part_reasons %}<ul>{% for reason in item.part_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+          {% elif item.remedy %}<span>{{ item.remedy }}.{% if item.error %} <span class="muted">{{ item.error }}</span>{% endif %}</span>
           {% elif item.error %}<span class="muted">{{ item.error }}</span>{% endif %}
         {% endif %}
       </li>
     {% endfor %}
+    {% if sight.empty_count %}<li class="muted">{{ sight.empty_count|counted:"other is empty,others are empty" }}</li>{% endif %}
   </ul>
 </div>

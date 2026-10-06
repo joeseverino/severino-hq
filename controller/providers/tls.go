@@ -205,7 +205,7 @@ func (r *Registry) deployTransaction(ctx context.Context, spec TLSCertificateSpe
 	status.TLSDeployment = deployment
 	status.ArtifactSource = artifactSource
 	status.RenewedFingerprint = expected
-	return Result{Changed: true, Status: status, Conditions: []Condition{condition(runtime.ConditionReady, reason, "All TLS consumers serve the certificate.")}, Message: message}, nil
+	return Result{Changed: true, Status: status, Conditions: []Condition{condition(runtime.ConditionReady, reason, "Every site is serving this certificate.")}, Message: message}, nil
 }
 
 func rollbackSource(spec TLSCertificateSpec) (TLSConsumer, bool) {
@@ -241,7 +241,7 @@ func (r *Registry) applyTLSReconcile(ctx context.Context, spec TLSCertificateSpe
 	if consumersServe(spec, observed, expected) {
 		matchEvidence(observed, expected)
 		observed.ArtifactSource = "existing_lineage"
-		return Result{Changed: false, Status: observed, Conditions: []Condition{condition(runtime.ConditionReady, "Verified", "All TLS consumers match.")}, Message: "Certificate consumers already match the managed lineage."}, nil
+		return Result{Changed: false, Status: observed, Conditions: []Condition{condition(runtime.ConditionReady, "Verified", "Every site is serving this certificate.")}, Message: "Every site already serves this certificate."}, nil
 	}
 	caddy, ok := rollbackSource(spec)
 	if !ok {
@@ -255,7 +255,7 @@ func (r *Registry) applyTLSReconcile(ctx context.Context, spec TLSCertificateSpe
 	if err != nil {
 		return Result{}, err
 	}
-	return r.deployTransaction(ctx, spec, fullchain, privateKey, previousFullchain, previousKey, plan, "existing_lineage", "Reconciled", "Certificate redistributed and verified without issuance.", known)
+	return r.deployTransaction(ctx, spec, fullchain, privateKey, previousFullchain, previousKey, plan, "existing_lineage", "Reconciled", "Installed again everywhere and checked. No new certificate was needed.", known)
 }
 
 func (r *Registry) renewTLS(ctx context.Context, spec TLSCertificateSpec, known npmCertificateIDs) (Result, error) {

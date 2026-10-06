@@ -24,7 +24,7 @@ readings. The path is the next section, drawn once.
   {% endif %}
 </div>
 {% if service.faults %}
-  {% include "partials/_record_list.html" with rows=service.fault_rows label="Wiring faults" %}
+  {% include "partials/_record_list.html" with rows=service.fault_rows label="Setup problems" %}
 {% endif %}
 </section>
 
@@ -33,17 +33,17 @@ readings. The path is the next section, drawn once.
   <h2>Path{% if routes|length == 1 %} <span class="heading-aside">via {{ routes.0.via_phrase }}</span>{% endif %}</h2>
   {% if topology_url %}<a class="btn ghost compact" href="{{ topology_url }}">See in topology</a>{% endif %}
 </div>
-<p class="path-reach"><span class="exposure exposure-{{ exposure.level }}">{{ exposure.label }}</span>{% if exposure.worst.path_gates %} <span class="muted">· gated only at {% for path in exposure.worst.path_gates %}<code>{{ path }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</p>
+<p class="path-reach"><span class="exposure exposure-{{ exposure.level }}">{{ exposure.label }}</span>{% if exposure.worst.path_gates %} <span class="muted">· login only at {% for path in exposure.worst.path_gates %}<code>{{ path }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</p>
 {% if gate_fixes and not read_only %}
   <div class="notice notice-attention">
-    <strong>Anyone on the internet reaches this unasked</strong>
+    <strong>Anyone on the internet can open this without signing in</strong>
     <p>{% for fix in gate_fixes %}<a class="btn compact" href="{{ fix.url }}" title="{{ fix.reason }}">{{ fix.label }}</a> {% endfor %}</p>
   </div>
 {% endif %}
 {% for route, parts in route_parts %}
   {% if routes|length > 1 %}<h3 class="section-heading">Via {{ route.via_phrase }}</h3>{% endif %}
   {% include "control_plane/_path_hops.html" with route=route label="Path via "|add:route.via %}
-  <h3 class="section-heading">Every part</h3>
+  <h3 class="section-heading">Each step</h3>
   {% include "control_plane/_service_parts.html" %}
 {% empty %}
   {% if declared_parts %}{% with parts=declared_parts %}{% include "control_plane/_service_parts.html" %}{% endwith %}{% endif %}
@@ -55,8 +55,8 @@ readings. The path is the next section, drawn once.
 </section>
 
 {% if missing_facets or service.origin.parked or service.origin and not service.origin.external and not service.origin.known %}
-<section id="parts" class="page-section" aria-label="Not declared" data-page-section>
-<h2>Not declared</h2>
+<section id="parts" class="page-section" aria-label="Not set up" data-page-section>
+<h2>Not set up</h2>
 <div class="control-summary">
   {% comment %}
   The headline is the value, not the word "Declared". Each row comes from the
@@ -88,7 +88,7 @@ readings. The path is the next section, drawn once.
               {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}<dt>Compose project</dt><dd><code>{{ facet.observed.stack }}</code></dd>{% endif %}
               <dt>Seen</dt><dd>{{ facet.observed.observed_at|when:"ago" }}</dd>
             </dl>
-            <span class="readout"><a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">Edit declaration &rarr;</a></span>
+            <span class="readout"><a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">Change what HQ expects &rarr;</a></span>
           </details>
         {% endwith %}
       {% elif facet.present %}
@@ -96,15 +96,15 @@ readings. The path is the next section, drawn once.
           {% for reading in claim.readings %}
             {% if forloop.parentloop.first and forloop.first %}
               <strong>{{ reading.value }}</strong>
-              {% if reading.drifted %}<span class="pill pill-serious">Drifted: declared {{ reading.desired }}</span>{% endif %}
+              {% if reading.drifted %}<span class="pill pill-serious">Changed outside HQ: HQ expects {{ reading.desired }}</span>{% endif %}
             {% else %}
-              <span class="readout"><span class="readout-label">{{ reading.label }}</span> {{ reading.value }}{% if reading.drifted %} <span class="pill pill-serious">declared {{ reading.desired }}</span>{% endif %}</span>
+              <span class="readout"><span class="readout-label">{{ reading.label }}</span> {{ reading.value }}{% if reading.drifted %} <span class="pill pill-serious">HQ expects {{ reading.desired }}</span>{% endif %}</span>
             {% endif %}
           {% empty %}
-            <strong>Declared</strong>
+            <strong>In HQ</strong>
           {% endfor %}
           <span class="readout">
-            {% entity claim.link code=True %}
+            {% entity claim.within_service code=True %}
             <span class="pill control-{{ claim.health.state }}">{{ claim.health.label }}</span>
             <a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">Edit</a>
           </span>
@@ -200,10 +200,10 @@ readings. The path is the next section, drawn once.
           <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label }} &rarr;</a></span>
         {% endfor %}{% endif %}
       {% elif read_only %}
-        <strong class="control-unknown">Not declared</strong>
+        <strong class="control-unknown">Not set up</strong>
       {% else %}
-        <strong class="control-unknown">Not declared</strong>
-        <span>None for {{ service.hostname }}.</span>
+        <strong class="control-unknown">Not set up</strong>
+        <span>HQ has none for {{ service.hostname }}.</span>
         {% comment %}
         Named by the provider's own label. The bare kind reads as
         "Add cloudflare.dns_record": an identifier where a sentence belongs.
@@ -224,7 +224,7 @@ readings. The path is the next section, drawn once.
       {% endif %}
       {% comment %}One line per reading kind. The kind is named unless the headline above already is it.{% endcomment %}
       {% for line in facet.reading_lines %}
-        <span class="readout">{% if facet.present or facet.observed or not forloop.first %}<span class="readout-label">{{ line.label }}</span> {% endif %}{% if line.issued %}{{ line.detail }}{% else %}{% for link in line.entities %}{% entity link %}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}{% if line.expiry %} · expires {{ line.expiry }}{% endif %}{% if line.stale %} <span class="pill pill-attention">Stale</span>{% endif %}</span>
+        <span class="readout">{% if facet.present or facet.observed or not forloop.first %}<span class="readout-label">{{ line.label }}</span> {% endif %}{% if line.issued %}{{ line.detail }}{% else %}{% for link in line.entities %}{% entity link %}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}{% if line.expiry %} · expires {{ line.expiry }}{% endif %}{% if line.stale %} <span class="pill pill-attention">Out of date</span>{% endif %}</span>
       {% endfor %}
     </div>
 
@@ -240,7 +240,7 @@ answers, or at an address no known machine holds.
   <p class="control-origin">Parked. The name resolves to <code>{{ service.origin.address }}</code>, where nothing answers.</p>
 {% elif service.origin and not service.origin.external and not service.origin.known %}
   <p class="control-origin">
-    {% if service.origin.routed %}Ingress forwards to{% else %}The name resolves to{% endif %}
+    {% if service.origin.routed %}The proxy forwards to{% else %}The name resolves to{% endif %}
     <code>{{ service.origin.address }}</code>, which <strong>matches no known machine</strong>.
     If it belongs to one, add it to that machine's addresses.
   </p>
@@ -275,7 +275,7 @@ it is not what anyone opens this page to read.
     <summary>{{ service.alias_summary }}</summary>
     <div class="table-scroll">
       <table class="data-table">
-        <thead><tr><th>Resource</th><th>Kind</th><th>For</th><th class="key-col">Health</th></tr></thead>
+        <thead><tr><th>Record</th><th>Type</th><th>For</th><th class="key-col">State</th></tr></thead>
         <tbody>
           {% for alias, claim in service.alias_claims %}
             <tr>

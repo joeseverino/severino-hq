@@ -319,8 +319,8 @@ def _socket(container, runtime, unmet):
     if "no-docker-socket" in unmet:
         yield Unwritten(
             "no-docker-socket",
-            "Which Docker calls it makes is not in its inspect, so HQ cannot write a socket proxy's allow-list for "
-            "it. If holding the socket is its job, mark it as holding it.",
+            "HQ cannot tell which Docker calls it needs, so it cannot write a socket proxy for it. "
+            "If this container is meant to control Docker, say so and HQ stops warning about it.",
         )
 
 

@@ -105,19 +105,18 @@ class Reach:
 TAILNET_ONLY = Reach(
     "tailnet",
     "Tailnet only",
-    "Answers with a tailnet address, so nothing off the tailnet can open a "
-    "connection to it at all.",
+    "It answers with a tailnet address, so only tailnet devices can connect.",
 )
 LOCAL_NETWORK = Reach(
     "network",
-    "Tailnet and your network",
-    "Answers with a private address, so anything on that network can reach it "
-    "whether or not it is on the tailnet.",
+    "Home network and tailnet",
+    "It answers with a private address, so anything on your home network can "
+    "reach it, on the tailnet or not.",
 )
 PUBLIC = Reach(
     "public",
-    "The internet",
-    "Answers with a public address.",
+    "Internet",
+    "It answers with a public address.",
 )
 UNKNOWN = Reach("unknown", "", "")
 

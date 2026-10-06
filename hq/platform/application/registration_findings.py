@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import timezone as dt_timezone
 
 from .expiry import days_until
-from .finding_model import Finding, FindingEstate, parse_stamp, FindingRule
+from .finding_model import Finding, FindingEstate, OperatorStep, parse_stamp, FindingRule
+from .moments import span, when_day
 
 
 def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -42,21 +43,31 @@ def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
         if days > 90:
             continue
         domain = facts.get("domain", node.label)
+        registrar = facts.get("registrar", "")
         found.append(
             Finding(
                 rule="registration-lapsing",
                 subject=node.id,
-                title=f"{domain} expires in {days} days and will not renew",
+                title=(
+                    f"{domain} has expired and will not renew"
+                    if days < 0
+                    else f"{domain} expires in {span(days)} and will not renew"
+                ),
                 severity="serious" if days <= 30 else "attention",
                 explanation=(
-                    f"On {expires.date().isoformat()} its "
-                    "records, certificate and every name under it stop working. "
-                    "Renew it or turn on auto-renew at the registrar."
+                    f"On {when_day(expires.date())} its "
+                    "records, certificate and every name under it stop working."
                 ),
                 evidence=(
-                    ("Expires", expires.date().isoformat()),
-                    ("Auto-renew", "off"),
-                    ("Registrar", facts.get("registrar", "unknown")),
+                    ("Expires", when_day(expires.date())),
+                    ("Auto-renew", "Off"),
+                    ("Registrar", registrar or "Unknown"),
+                ),
+                steps=(
+                    OperatorStep(
+                        label=f"Renew {domain} or turn on auto-renew at "
+                        f"{registrar or 'its registrar'}."
+                    ),
                 ),
             )
         )
@@ -74,7 +85,7 @@ RULES: tuple[FindingRule, ...] = (
             "Renew the domain or turn on auto-renew at its registrar."
         ),
         no_help_reason=(
-            "HQ reads the registrar but holds no credential that renews a domain or turns on auto-renew."
+            "HQ cannot renew a domain."
         ),
     ),
 )

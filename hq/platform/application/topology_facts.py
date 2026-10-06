@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from dataclasses import replace
 from typing import Any
 
@@ -241,12 +243,21 @@ def _drift_facts(resource) -> tuple[tuple[str, str], ...]:
     since = held_since(resource.conditions, "Drifted")
     if since is None:
         return ()
+    # What a person or another system did. HQ's own record of reading and
+    # applying this record is the check that found the change, never its cause.
+    others = [item for item in near(since, limit=20) if not _own_bookkeeping(item, resource.key)]
     return (
         ("drift-since", since.isoformat()),
-        *(
-            ("drift-near", f"{item.source}: {item.title} ({ago(item.at)})")
-            for item in near(since)
-        ),
+        *(("drift-near", f"{item.title} ({ago(item.at)})") for item in others[:5]),
+    )
+
+
+_OPERATION_STATE = re.compile(r"\((queued|claimed|succeeded|failed)\)$")
+
+
+def _own_bookkeeping(item, key: str) -> bool:
+    return item.source == "HQ" and (
+        item.title.endswith(f" {key}") or _OPERATION_STATE.search(item.title) is not None
     )
 
 

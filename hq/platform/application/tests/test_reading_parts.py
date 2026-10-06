@@ -82,7 +82,7 @@ class PartlyRefusedReadingTests(TestCase):
         provider, seen = self.sight()
 
         self.assertEqual(seen.state, PARTIAL)
-        self.assertEqual(seen.state_label, "Partly refused")
+        self.assertEqual(seen.state_label, "Partly read")
         self.assertEqual(seen.records, 0)
         self.assertEqual(seen.missing, (MISSING,))
         self.assertIn(MISSING, provider.missing)
@@ -91,10 +91,10 @@ class PartlyRefusedReadingTests(TestCase):
     def test_the_sweep_summary_and_provider_readings_say_partly_refused(self):
         reported = self.summary["kinds"][REDIRECT]
 
-        self.assertEqual((reported["label"], reported["records"]), ("Partly refused", 0))
+        self.assertEqual((reported["label"], reported["records"]), ("Partly read", 0))
         self.assertEqual(reported["refused_parts"], [PHRASE, PHRASE])
         state = {item["kind"]: item for item in inventory_state()}[REDIRECT]
-        self.assertEqual((state["state_label"], state["count"]), ("Partly refused", 0))
+        self.assertEqual((state["state_label"], state["count"]), ("Partly read", 0))
 
     def test_the_names_facts_say_the_part_was_not_read(self):
         with projection_scope():

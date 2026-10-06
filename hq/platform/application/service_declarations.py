@@ -6,7 +6,7 @@ and whether a provider fronts them. Read once per projection.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, NamedTuple
 
 from hq.platform.application.routes import reverse
@@ -75,6 +75,15 @@ class Claim:
     @property
     def link(self) -> EntityLink:
         return entity_link(self.kind, self.resource_key)
+
+    @property
+    def within_service(self) -> EntityLink:
+        """The link on a row about its own service: where the record leads,
+        since the row is already the name it answers for."""
+
+        link = self.link
+        _name, arrow, leads_to = link.label.partition(" → ")
+        return replace(link, label=leads_to) if arrow else link
 
     @property
     def edit_url(self) -> str:

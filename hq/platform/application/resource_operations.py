@@ -65,45 +65,90 @@ def serialize_operation(operation: OperationRequest) -> dict[str, Any]:
     }
 
 
+# What each action is called in a row of history.
+ACTION_LABELS = {
+    OperationRequest.Action.RECONCILE: "Apply HQ's settings",
+    OperationRequest.Action.RENEW: "Renew certificate",
+    OperationRequest.Action.DELETE: "Remove",
+    OperationRequest.Action.RESTART: "Restart",
+    OperationRequest.Action.START: "Start",
+    OperationRequest.Action.STOP: "Stop",
+    OperationRequest.Action.APPROVE_ROUTES: "Approve routes",
+}
+# Conditions that say something is wrong, whatever the operation's own state.
+_PROBLEM_CONDITIONS = ("Degraded", "Drifted")
+_AUTOMATIC = "controller"
+# How many past operations are read to find the ones that changed something.
+HISTORY_WINDOW = 200
+
+
+def _active(result: dict[str, Any]) -> list[dict[str, Any]]:
+    return [item for item in result.get("conditions") or [] if item.get("status") is True]
+
+
+def _problem(result: dict[str, Any]) -> dict[str, Any] | None:
+    """The condition saying something is wrong, which a result can carry while succeeding."""
+
+    return next(
+        (item for item in _active(result) if item.get("type") in _PROBLEM_CONDITIONS), None
+    )
+
+
+def _outcome(operation: OperationRequest) -> tuple[str, str, str]:
+    """``(tone, label, headline)``: how one operation ended, in a pill and a sentence.
+
+    Read from the result's condition before the operation's state, so a run
+    that finished and found a problem never reads as done.
+    """
+
+    result = operation.result or {}
+    active = _active(result)
+    said = result.get("message") or operation.reason
+    if operation.state == OperationRequest.State.QUEUED:
+        return "paused", "Waiting", "Waiting for the controller."
+    if operation.state == OperationRequest.State.CLAIMED:
+        return "active", "Running", "The controller is working on it."
+    if operation.state == OperationRequest.State.FAILED:
+        headline = (active[0].get("message") if active else "") or said or "It failed."
+        return "serious", "Failed", headline
+    problem = _problem(result)
+    if problem is not None:
+        return "attention", "Problem found", problem.get("message") or said or "It found a problem."
+    return "good", "Done", said or "Done."
+
+
+def requested_by(operation: OperationRequest) -> str:
+    """Who asked, as a person reads it."""
+
+    from .approvals import AGENT_SURFACES
+
+    if operation.requested_interface == _AUTOMATIC:
+        return "Automatic"
+    if operation.requested_interface in AGENT_SURFACES:
+        return f"{operation.requested_actor} (agent)"
+    return operation.requested_actor
+
+
 def operation_summary(operation: OperationRequest) -> dict[str, Any]:
-    """Project one operation into concise operator guidance and structured evidence."""
+    """Project one operation into one sentence and its structured evidence."""
     result = operation.result or {}
     status = result.get("status") or {}
-    conditions = result.get("conditions") or []
     evidence = status.get("consumers") or []
     affected = [item for item in evidence if item.get("matches_expected") is False]
-    condition = next((item for item in conditions if item.get("status") is True), None)
-    message = result.get("message") or operation.reason
-
-    if operation.state == OperationRequest.State.QUEUED:
-        headline = "Waiting for the controller"
-        guidance = "The controller picks this up automatically."
-    elif operation.state == OperationRequest.State.CLAIMED:
-        headline = "Controller is applying the change"
-        guidance = "Wait for it to finish before retrying."
-    elif operation.state == OperationRequest.State.FAILED:
-        headline = (
-            (condition or {}).get("message") or message or "Provider operation failed"
-        )
-        guidance = (
-            "Check the affected targets and the provider reason. Fix the "
-            "declaration or the provider access, then reconcile again."
-        )
-    else:
-        headline = message or "Operation completed successfully"
-        guidance = "No action is required."
+    tone, label, headline = _outcome(operation)
 
     return {
         "id": str(operation.id),
         "action": operation.action,
-        "action_label": operation.get_action_display(),
+        "action_label": ACTION_LABELS.get(operation.action, operation.get_action_display()),
         "state": operation.state,
-        "state_label": operation.get_state_display(),
+        "state_label": label,
+        "tone": tone,
         "headline": headline,
-        "guidance": guidance,
-        "automatic": operation.requested_interface == "controller",
+        "automatic": operation.requested_interface == _AUTOMATIC,
         "requested_actor": operation.requested_actor,
         "requested_interface": operation.requested_interface,
+        "by": requested_by(operation),
         # Blank for almost everything, and the point when it is not: this is the
         # person who agreed to a change a credential asked for.
         "approved_by": (operation.input or {}).get("approved_by", ""),
@@ -113,12 +158,65 @@ def operation_summary(operation: OperationRequest) -> dict[str, Any]:
         ),
         "attempt_count": operation.attempt_count,
         "reason": operation.reason,
-        "condition": condition,
+        "condition": next(iter(_active(result)), None),
         "affected": affected,
         "evidence": evidence,
+        "matched": sum(1 for item in evidence if item.get("matches_expected") is True),
         "expected_fingerprint_sha256": status.get("expected_fingerprint_sha256", ""),
-        "raw_result": result,
+        # The certificate itself is on the record's page; a history row is not a second copy.
+        "raw_result": {
+            **result,
+            **({"status": {k: v for k, v in status.items() if k != "certificate_pem"}} if status else {}),
+        },
     }
+
+
+def changes(operations: Any, limit: int) -> list[OperationRequest]:
+    """The operations worth a row of history, newest first.
+
+    ``operations`` is newest first. An automatic run that ended exactly as the
+    run before it on the same record (same state, same sentence, same
+    conditions) repeats what is already listed, so it is left out: a check
+    that runs every minute is one row until its answer changes. Anything a
+    person or an agent asked for, anything unfinished and anything that failed
+    is always listed.
+    """
+
+    def signature(operation: OperationRequest) -> tuple[Any, ...]:
+        result = operation.result or {}
+        return (
+            operation.state,
+            result.get("message", ""),
+            tuple(
+                (item.get("type"), item.get("reason"), item.get("message"))
+                for item in _active(result)
+            ),
+        )
+
+    last: dict[tuple[Any, str], tuple[Any, ...]] = {}
+    kept: list[OperationRequest] = []
+    for operation in reversed(list(operations)):
+        key = (operation.resource_id, operation.action)
+        said = signature(operation)
+        repeats = (
+            operation.requested_interface == _AUTOMATIC
+            and operation.state == OperationRequest.State.SUCCEEDED
+            and last.get(key) == said
+        )
+        last[key] = said
+        if not repeats:
+            kept.append(operation)
+    kept.reverse()
+    return kept[:limit]
+
+
+def resource_history(resource: ManagedResource, limit: int = 20) -> list[dict[str, Any]]:
+    """One record's history: each operation that changed something, newest first."""
+
+    return [
+        operation_summary(operation)
+        for operation in changes(resource.operations.all()[:HISTORY_WINDOW], limit)
+    ]
 
 
 def refuse_while_drifted(resource: ManagedResource) -> None:
@@ -153,7 +251,7 @@ def _queue_operation(
     require_enabled: bool = True,
 ) -> dict[str, Any]:
     if require_enabled and not resource.enabled:
-        raise PolicyError(f"Managed resource {resource.key!r} is disabled.")
+        raise PolicyError(f"{resource.key} is switched off in HQ.")
     if observes_only(resource.kind, resource.spec):
         raise PolicyError(OBSERVES_ONLY)
     # Nothing enters the queue for a gated kind without a person behind it. The
@@ -434,9 +532,9 @@ def request_removal(
 
 def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, str]:
     if resource.kind != CERTIFICATE_KIND:
-        return False, "Only tls.certificate resources may be renewed."
+        return False, "Only a certificate HQ issues can be renewed."
     if not resource.enabled:
-        return False, "The certificate resource is disabled."
+        return False, "The certificate is switched off in HQ."
     allowed, explanation = controller_action_policy(
         resource.kind, OperationRequest.Action.RENEW
     )
@@ -447,21 +545,23 @@ def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, str]:
         and condition.get("type") in {"Drifted", "Degraded"}
         for condition in resource.conditions
     ):
-        return True, "A consumer is drifted or degraded."
+        return True, "A place it is installed is serving a different certificate or has a problem."
 
     if not resource.status.get("not_after"):
-        return True, "No verified certificate expiry has been reported."
+        return True, "HQ has not read when it expires."
     expiry = certificate_expiry(resource.status)
     if expiry is None:
-        return True, "The reported certificate expiry is invalid."
+        return True, "The expiry HQ read is not a date."
     window = renewal_window(resource.spec)
     left = max(0, days_until(expiry))
     if datetime.now(timezone.utc) >= renewal_opens_at(expiry, window):
         return True, f"{counted(left, 'day')} remaining."
+    from .moments import when_day
+
     return (
         False,
-        f"{counted(left, 'day')} remaining. Renewal opens at "
-        f"{counted(window, 'day')}.",
+        f"Renews automatically from {when_day(renewal_opens_at(expiry, window))} "
+        f"({counted(window, 'day')} before it expires).",
     )
 
 
@@ -534,8 +634,8 @@ def request_reach_allow(
     watcher = observer(known)
     if watcher is None:
         raise PolicyError(
-            "No device in the last sweep is marked as the observer. There is "
-            "no source to grant from."
+            "HQ does not know which tailnet device the controller runs on, so "
+            "there is nothing to allow access from."
         )
 
     shut: list[tuple[str, int]] = []
@@ -554,13 +654,13 @@ def request_reach_allow(
             shut.append((target.name, port))
     if not shut:
         raise PolicyError(
-            "The tailnet policy does not block any unreachable target. A new "
-            "grant will not fix this."
+            "The tailnet policy does not block any place that could not be reached. "
+            "Allowing more will not fix this."
         )
 
     policy = ManagedResource.objects.filter(kind=POLICY_KIND).first()
     if policy is None:
-        raise PolicyError("No tailnet policy is declared.")
+        raise PolicyError("The tailnet policy is not managed in HQ.")
     refuse_while_drifted(policy)
 
     document = str(policy.spec.get("document", ""))

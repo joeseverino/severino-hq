@@ -98,7 +98,7 @@ def capability_action_link(
         effect,
         url,
         capability=name,
-        reason="Connection scopes and permissions confirmed.",
+        reason="Its permissions were checked.",
     )
 
 
@@ -160,7 +160,7 @@ def read_now_link(
         method="POST",
         capability=READ_NOW_CAPABILITY,
         target=connection_ref or kind,
-        reason="The controller reads it on its next pull.",
+        reason="The controller reads it within a minute.",
     )
 
 
@@ -210,17 +210,17 @@ def topology_investigation_links(node_id: str) -> tuple[ActionLink, ...]:
     return (
         ActionLink(
             "topology",
-            "Show in topology",
+            "See it in the topology",
             "read",
             focus_url,
-            reason="What this finding is based on.",
+            reason="What this is connected to.",
         ),
         ActionLink(
             "impact",
-            "Trace impact",
+            "See what depends on it",
             "read",
             impact_url,
-            reason="Everything downstream of it.",
+            reason="Everything that stops working if this does.",
         ),
     )
 
@@ -249,10 +249,10 @@ def connection_relationship_link(spec_name: str, instance_id: str) -> ActionLink
         return None
     return ActionLink(
         "relationships",
-        "Show relationships",
+        "Show links",
         "read",
         url,
-        reason="Its targets, dependencies, abilities and resources.",
+        reason="What it reads, reaches and changes.",
     )
 
 
@@ -274,14 +274,14 @@ def recommend_connection_action(
     if missing_scope_count:
         label = "Review access"
         reason = (
-            f"Missing {counted(missing_scope_count, 'required provider scope', 'required provider scopes')}."
+            f"Missing {counted(missing_scope_count, 'permission')} it needs."
         )
     elif unhealthy:
-        label = "Inspect issue"
-        reason = "The last reading of this connection is unhealthy."
+        label = "See the problem"
+        reason = "The last read through this connection failed."
     elif unknown_scope_count:
         label = "Verify access"
-        reason = "The provider did not report its scopes."
+        reason = "The service did not say what this token may do."
     else:
         return actions
 

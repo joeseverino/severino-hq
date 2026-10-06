@@ -164,7 +164,30 @@ class Machine:
             return ("away", "unprobed") if self.presence.personal else ("offline", "unreachable")
         if self.reached_by:
             return ("online", "reachable") if self.reachable else ("not answering", "unreachable")
-        return ("no credential", "unprobed")
+        return ("not monitored", "unprobed")
+
+    @property
+    def state_since(self) -> str:
+        """The day the tailnet last saw a machine that is away or offline, or ""."""
+
+        from .moments import when_day
+        from .timestamps import moment
+
+        if self.presence is None or self.presence.online:
+            return ""
+        seen = moment(str(self.presence.last_seen or ""))
+        return when_day(seen) if seen is not None else ""
+
+
+def _own(address: str) -> bool:
+    """Whether an address says where a machine is. A loopback address is
+    every machine's name for itself, so it places none of them."""
+
+    from .locate import host_of
+    from .reach import network_of
+
+    host = host_of(address)
+    return network_of(host) != "loopback" and host.lower() != "localhost"
 
 
 def machine_catalog(*, served_at: tuple[str, ...] | None = None) -> tuple[Machine, ...]:
@@ -270,7 +293,7 @@ def machine_catalog(*, served_at: tuple[str, ...] | None = None) -> tuple[Machin
                 sorted(alias for alias, target in aliases.items() if target == name)
             ),
             address=(
-                addresses.get(name, "")
+                next(filter(_own, (addresses.get(name, ""),)), "")
                 or _address(name, connections)
                 # Told, rather than found. A machine nothing sweeps still has
                 # an address (it is how a proxy forwarding there was matched
@@ -287,7 +310,7 @@ def machine_catalog(*, served_at: tuple[str, ...] | None = None) -> tuple[Machin
                             addresses.get(name, ""),
                             _address(name, connections),
                         )
-                        if address
+                        if address and _own(address)
                     ]
                     + list(declared.get(name, Declared()).addresses)
                     + list(

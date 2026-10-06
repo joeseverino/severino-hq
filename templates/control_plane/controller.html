@@ -75,7 +75,7 @@ for it. Nothing here asks it anything.
       <tbody>
         {% for reading in controller.readings %}
           <tr>
-            <td><strong>{{ reading.label }}</strong><br><code>{{ reading.kind }}</code></td>
+            <td><strong title="{{ reading.kind }}">{{ reading.label }}</strong></td>
             <td>{{ reading.attempted_at|when:"ago" }}</td>
             <td>{{ reading.observed_at|when:"ago" }}</td>
             <td class="num-col">{{ reading.records }}</td>

@@ -442,7 +442,7 @@ func TestGitHubRepositoryReading(t *testing.T) {
 	}
 	// A 403 under a token that holds every read permission is a feature the
 	// repository does not offer, never a permission to grant.
-	if len(refused) != 1 || refused[0].Part != runtime.PartLeakedCredentials || refused[0].Scope != "example/app" || refused[0].Refusal == runtime.FailureClassPermission || !strings.HasPrefix(refused[0].Reason, "Not offered") {
+	if len(refused) != 1 || refused[0].Part != runtime.PartLeakedCredentials || refused[0].Scope != "example/app" || refused[0].Refusal == runtime.FailureClassPermission || !strings.HasPrefix(refused[0].Reason, "not available on this repository") {
 		t.Fatalf("refused %+v", refused)
 	}
 	resolved := 0
@@ -541,9 +541,9 @@ func TestGitHubImagesOfTheComposition(t *testing.T) {
 // deliveryRoutes is a host and one extension whose latest admission is admitted.
 func deliveryRoutes(admitted string, pipeline string) map[string]string {
 	return map[string]string{
-		githubFakeAPI + " /repos/example/ext/actions/workflows/admit.yml/runs?branch=main&per_page=1&status=success": `{"workflow_runs":[{"id":50,"head_sha":"` + admitted + `","updated_at":"2030-01-05T00:00:00Z"}]}`,
-		githubFakeAPI + " /repos/example/host/actions/workflows/compose.yml/runs?branch=main&per_page=20":            pipeline,
-		githubFakeAPI + " /repos/example/host/actions/workflows/deploy.yml/runs?branch=main&per_page=20":             `{"workflow_runs":[]}`,
+		githubFakeAPI + " /repos/example/ext/actions/workflows/admit.yml/runs?branch=main&per_page=20&status=success": `{"workflow_runs":[{"id":50,"head_sha":"` + admitted + `","created_at":"2030-01-04T23:50:00Z","updated_at":"2030-01-05T00:00:00Z"}]}`,
+		githubFakeAPI + " /repos/example/host/actions/workflows/compose.yml/runs?branch=main&per_page=20":             pipeline,
+		githubFakeAPI + " /repos/example/host/actions/workflows/deploy.yml/runs?branch=main&per_page=20":              `{"workflow_runs":[]}`,
 	}
 }
 
@@ -579,13 +579,13 @@ func TestGitHubDelivery(t *testing.T) {
 			"Current", "live", nil, ""},
 		{"an admission with no composition yet is reported and nothing is started", admitted, `{"workflow_runs":[{"id":60,"name":"Compose","status":"completed","conclusion":"success","created_at":"2030-01-04T00:00:00Z"}]}`,
 			map[string]string{admitted: `{"check_runs":[]}`}, nil,
-			"Delivering", "no composition has started", []string{"POST /repos/example/ext/check-runs"}, "queued"},
+			"Delivering", "No deploy has started", []string{"POST /repos/example/ext/check-runs"}, "queued"},
 		{"a running composition is reported, not restarted", admitted, `{"workflow_runs":[{"id":61,"name":"Compose","status":"in_progress","created_at":"2030-01-05T00:01:00Z","html_url":"https://github.com/example/host/actions/runs/61"}]}`,
 			map[string]string{admitted: `{"check_runs":[{"id":9,"conclusion":null}]}`}, nil,
 			"Delivering", "Compose run 61 is running", []string{"PATCH /repos/example/ext/check-runs/9"}, "in_progress"},
 		{"a composition waiting for approval", admitted, `{"workflow_runs":[{"id":62,"name":"Deploy","status":"waiting","created_at":"2030-01-05T00:01:00Z"}]}`,
 			map[string]string{admitted: `{"check_runs":[]}`}, nil,
-			"Delivering", "Deploy run 62 is waiting for deploy approval", []string{"POST /repos/example/ext/check-runs"}, "in_progress"},
+			"Delivering", "Deploy run 62 is waiting for approval", []string{"POST /repos/example/ext/check-runs"}, "in_progress"},
 		{"a failed composition is degraded and never retried", admitted, `{"workflow_runs":[{"id":63,"name":"Compose","status":"completed","conclusion":"failure","created_at":"2030-01-05T00:01:00Z"}]}`,
 			map[string]string{admitted: `{"check_runs":[]}`}, nil,
 			"NotDelivered", "Compose run 63 failed", []string{"POST /repos/example/ext/check-runs"}, "completed"},
@@ -665,12 +665,71 @@ func TestGitHubDeliveryRunBeforeTheAdmissionDoesNotCarryIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	record := records[0].(GitHubDeliveryRecord)
-	want := "ext 2222222 is admitted and production runs 1111111: Compose run 64 is running"
+	want := "ext: 2222222 is approved, production still runs 1111111. Compose run 64 is running."
 	if record.Production != want || record.Extensions[0].Admitted != admitted || record.Workflow != githubCompose {
 		t.Fatalf("%+v", record)
 	}
-	if report := checkReport(extensionDelivery{admitted: admitted, running: running, run: &githubapi.WorkflowRun{ID: 64, Status: "queued"}}, GitHubDeliverySpec{Repository: "example/host", Workflow: githubCompose}, ""); report.Status != "queued" || report.Title != "Composition queued" || report.DetailsURL != "https://github.com/example/host/actions/workflows/compose.yml" {
+	if report := checkReport(extensionDelivery{admitted: admitted, running: running, run: &githubapi.WorkflowRun{ID: 64, Status: "queued"}}, GitHubDeliverySpec{Repository: "example/host", Workflow: githubCompose}, ""); report.Status != "queued" || report.Title != "Deploy queued" || report.DetailsURL != "https://github.com/example/host/actions/workflows/compose.yml" {
 		t.Fatalf("report %+v", report)
+	}
+}
+
+// The latest admission is the one created last, wherever GitHub lists it: an
+// older admission listed first, or beside the one production runs, is never
+// read as the latest.
+func TestGitHubDeliveryLatestAdmissionIsTheNewestListed(t *testing.T) {
+	const older = "3333333333333333333333333333333333333333"
+	admissions := githubFakeAPI + " /repos/example/ext/actions/workflows/admit.yml/runs?branch=main&per_page=20&status=success"
+	run := func(id int, sha, created string) string {
+		return `{"id":` + strconv.Itoa(id) + `,"head_sha":"` + sha + `","created_at":"` + created + `","updated_at":"` + created + `"}`
+	}
+	newest := run(52, running, "2030-01-05T00:00:00Z")
+	old := run(40, older, "2029-12-01T00:00:00Z")
+	sameMoment := run(51, older, "2030-01-05T00:00:00Z")
+	for name, listed := range map[string]string{
+		"an older admission listed first":         old + "," + newest,
+		"an older admission listed after":         newest + "," + old,
+		"an older admission of the same moment":   sameMoment + "," + newest,
+		"older admissions on both sides":          old + "," + newest + "," + run(41, older, "2029-12-02T00:00:00Z"),
+		"a moment that does not read loses by id": run(39, older, "") + "," + newest,
+	} {
+		t.Run(name, func(t *testing.T) {
+			routes := deliveryRoutes(running, `{"workflow_runs":[]}`)
+			routes[admissions] = `{"workflow_runs":[` + listed + `]}`
+			key, value := checkRunsRoute(running, `{"check_runs":[{"id":8,"conclusion":"success"}]}`)
+			routes[key] = value
+			h := deliveryHarness(t, routes)
+			result, err := h.r.runAction(runtime.ResourceKindGitHubDelivery, "reconcile", t.Context(), deliverySpec, nil, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			status := result.Status.(GitHubDeliveryRecord)
+			if status.Extensions[0].Admitted != running || status.Extensions[0].Stage != "live" || result.Conditions[0].Reason != "Current" {
+				t.Fatalf("production runs the newest admission: %+v %+v", status, result.Conditions)
+			}
+			if result.Message != "Up to date." || len(h.writes()) != 0 {
+				t.Fatalf("nothing is reported for a current production: %q %v", result.Message, h.writes())
+			}
+		})
+	}
+}
+
+// A result says in its own line whether anything is waiting on the owner.
+func TestGitHubDeliveryResultNeverReadsAsDoneWhileNotDeployed(t *testing.T) {
+	routes := deliveryRoutes(admitted, `{"workflow_runs":[{"id":63,"name":"Deploy","status":"completed","conclusion":"success","created_at":"2030-01-05T00:01:00Z","html_url":"https://github.com/example/host/actions/runs/63"}]}`)
+	key, value := checkRunsRoute(admitted, `{"check_runs":[]}`)
+	routes[key] = value
+	h := deliveryHarness(t, routes)
+	result, err := h.r.runAction(runtime.ResourceKindGitHubDelivery, "reconcile", t.Context(), deliverySpec, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "ext: 2222222 is approved, production still runs 1111111. Deploy run 63 finished without deploying it. Re-run it on GitHub."
+	if result.Message != "Not deployed." || result.Conditions[0].Message != want {
+		t.Fatalf("%q %q", result.Message, result.Conditions[0].Message)
+	}
+	if status := result.Status.(GitHubDeliveryRecord); status.Extensions[0].RunURL != "https://github.com/example/host/actions/runs/63" {
+		t.Fatalf("the run to re-run is named: %+v", status.Extensions[0])
 	}
 }
 

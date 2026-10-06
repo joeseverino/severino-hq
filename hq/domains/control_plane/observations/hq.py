@@ -34,7 +34,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
         ARRIVAL_KIND,
         "hq",
-        "Request arrival",
+        "Requests reaching HQ",
         ArrivalRecord,
         title=lambda record: str(record.get("device") or record.get("address") or ""),
         relation="Reached HQ",

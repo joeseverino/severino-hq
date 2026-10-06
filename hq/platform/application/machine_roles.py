@@ -52,13 +52,13 @@ ROLES: tuple[MachineRole, ...] = (
     MachineRole(
         "exit-node",
         "Exit node",
-        "Carries tailnet traffic to the internet.",
+        "Other tailnet devices can send their internet traffic through it.",
         _exit_node,
     ),
     MachineRole(
         "tailnet-dns",
         "Tailnet DNS",
-        "The tailnet's nameserver.",
+        "Tailnet devices use it for DNS.",
         _tailnet_dns,
     ),
 )

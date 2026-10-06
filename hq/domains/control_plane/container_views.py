@@ -44,16 +44,23 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
 
 
 class ContainerListView(PageMixin, TemplateView):
-    """Led by what needs you (``needs_you``): a version with a known
-    vulnerability or a newer release, each once however many containers run
-    it. Then every container, one row each."""
+    """Led by what to act on (``needs_you``): a version with a newer release,
+    or a vulnerable one the internet may reach, each once however many
+    containers run it. Then every container, one row each."""
 
     template_name = "control_plane/container_list.html"
     page_title = "Containers"
 
     def get_context_data(self, **kwargs):
         from hq.platform.application.container_attention import needs_you
-        from hq.platform.application.containers import BEHIND, CURRENT, VULNERABLE, containers
+        from hq.platform.application.containers import (
+            BEHIND,
+            CURRENT,
+            UP_TO_DATE,
+            UPDATE_AVAILABLE,
+            VULNERABLE,
+            containers,
+        )
         from hq.platform.application.upgrades import plan_for
 
         context = super().get_context_data(**kwargs)
@@ -65,17 +72,39 @@ class ContainerListView(PageMixin, TemplateView):
                     item.standing.label, {"standing": item.standing, "containers": [], "plan": plan_for(item)}
                 )["containers"].append(item)
         read = [item.standing.read_at for item in found if item.standing.read_at]
+        needs = [group for group in groups.values() if needs_you(group["standing"], group["containers"])]
+        # An image is listed to update when a newer version is published. One
+        # with a vulnerability and no newer version is listed only while the
+        # internet may reach it.
+        update_now = [group for group in needs if group["standing"].newer]
+        no_update = [group for group in needs if not group["standing"].newer]
+        updates = [item.standing.update_state for item in found]
         context.update(
             containers=found,
-            needs=[group for group in groups.values() if needs_you(group["standing"], group["containers"])],
+            needs=needs,
+            need_sections=[
+                (heading, listed, sum(len(group["containers"]) for group in listed))
+                for heading, listed in (
+                    ("Update now", update_now),
+                    ("Vulnerable, no update yet, and the internet may reach it", no_update),
+                )
+                if listed
+            ],
             machines=len({item.machine.name for item in found}),
             vulnerable=sum(1 for group in groups.values() if group["standing"].state == VULNERABLE),
+            vulnerable_containers=sum(1 for item in found if item.standing.state == VULNERABLE),
             behind=sum(1 for group in groups.values() if group["standing"].state == BEHIND),
             # Only what a registry answered for is current; silence is not.
             current=sum(1 for item in found if item.standing.state == CURRENT),
+            # Counted per container and apart from vulnerabilities, so the
+            # three add up to the containers listed.
+            update_available=updates.count(UPDATE_AVAILABLE),
+            up_to_date=updates.count(UP_TO_DATE),
+            update_unknown=len(found) - updates.count(UPDATE_AVAILABLE) - updates.count(UP_TO_DATE),
             pinned=sum(1 for item in found if item.standing.pinned),
             # Checked against its source's advisories or its packages against OSV.
-            matched=sum(1 for item in found if item.standing.source or item.standing.checked),
+            matched=sum(1 for item in found if item.standing.checkable),
+            unchecked=sum(1 for item in found if not item.standing.checkable),
             read_at=min(read) if read else None,
         )
         return context

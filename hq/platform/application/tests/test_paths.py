@@ -162,7 +162,8 @@ class PathTests(TestCase):
         )
         self.assertEqual(certificate.link.url, reverse("control_plane:detail", args=["example-wildcard"]))
         self.assertTrue(certificate.line.startswith("Served certificate example-wildcard · Example CA, expires"))
-        self.assertIn("Verified: serves abababababab…, the certificate HQ installed", certificate.attestation)
+        self.assertTrue(certificate.attestation.startswith("confirmed on this site"))
+        self.assertNotIn("abababababab", certificate.attestation)
 
     def test_a_name_serving_another_certificate_is_not_shown_as_the_declared_one(self):
         declare_certificate(matches=False)
@@ -255,7 +256,7 @@ class PathTests(TestCase):
         path = self.walk("app.example.com")
 
         self.assertEqual(path.primary.hops[0].source.declared, "app-dns")
-        self.assertEqual(path.primary.hops[0].source.phrase, "Declared as app-dns; not read")
+        self.assertEqual(path.primary.hops[0].source.phrase, "In HQ as app-dns, not read")
 
     def test_a_name_nothing_resolves_says_why(self):
         path = self.walk("nothing.example.org")
@@ -321,7 +322,7 @@ class HqPathTests(TestCase):
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "Path to HQ")
+        self.assertContains(response, "How this page reached you")
         self.assertContains(response, "Proxy host")
 
 
@@ -356,10 +357,10 @@ class ListedServiceTests(TestCase):
         self.assertTrue(found["admin.example.com"].is_observed)
         # The badge says observed; the state says what the reading does.
         self.assertEqual(
-            found["admin.example.com"].status_label, "Observed"
+            found["admin.example.com"].status_label, "Read only"
         )
         self.assertTrue(found["example.net"].is_observed)
-        self.assertEqual(found["example.net"].status_label, "Observed")
+        self.assertEqual(found["example.net"].status_label, "Read only")
         self.assertEqual(found["example.net"].health.detail, "Redirects to example.com")
         # A certificate's names are not services.
         self.assertNotIn("*.example.com", found)
@@ -369,7 +370,7 @@ class ListedServiceTests(TestCase):
 
     def test_an_observed_row_links_to_a_page_that_is_not_empty(self):
         response = self.client.get(reverse("control_plane:services"))
-        self.assertContains(response, "Observed")
+        self.assertContains(response, "Read only")
         self.assertContains(response, reverse("control_plane:service", args=["admin.example.com"]))
 
         page = self.client.get(reverse("control_plane:service", args=["example.net"]))
@@ -427,7 +428,7 @@ class ServicePageTests(TestCase):
         )]
         self.assertEqual(order, sorted(order))
         self.assertIn("Served certificate example wildcard · Let&#x27;s Encrypt", page)
-        self.assertIn("Requests stop reaching what it forwards to.", page)
+        self.assertIn("If it is removed, the name stops reaching the app.", page)
 
     def test_the_served_certificate_is_a_verified_lock_with_a_short_tip(self):
         declare_certificate()
@@ -435,7 +436,7 @@ class ServicePageTests(TestCase):
         page = self.page("app.example.com")
 
         # Not a link of its own: the hop's name beside it already is one.
-        self.assertIn('<span class="cert-mark" tabindex="0" data-tip="Verified\nexample-wildcard · Example CA', page)
+        self.assertIn('<span class="cert-mark" tabindex="0" data-tip="Confirmed\nexample-wildcard · Example CA', page)
         self.assertIn('data-tip-host="app.example.com"', page)
 
     def test_a_redirecting_apex_is_not_parked_and_its_target_names_it(self):
@@ -498,7 +499,7 @@ class ObservedNameTests(TestCase):
         summary = {item.label: item for item in response.context["summary"]}
 
         self.assertIn("No public DNS record names this host.", page)
-        self.assertEqual(summary["Health"].value, "Observed")
+        self.assertEqual(summary["Health"].value, "Read only")
         self.assertEqual(summary["Health"].detail, "Behind Access · No DNS record")
         self.assertEqual(
             summary["What it is"].value,
@@ -529,7 +530,8 @@ class ObservedNameTests(TestCase):
             if 'data-entity="Service">admin.example.com</a>' in chunk
         )
 
-        self.assertEqual(row.count("Observed"), 1)
+        self.assertEqual(row.count("Read only"), 1)
+        self.assertNotIn("Observed", row)
         self.assertIn(">Cloudflare Access<", row)
         self.assertIn('<span class="muted">No record</span>', row)
         self.assertNotIn("service-observed", row)
@@ -541,7 +543,7 @@ class ObservedNameTests(TestCase):
 
         (observed,) = found["path"]["observed"]
         self.assertEqual((observed["relation"], observed["name"]), ("Behind Access", "Admin"))
-        self.assertEqual(found["service"]["status_label"], "Observed")
+        self.assertEqual(found["service"]["status_label"], "Read only")
 
 
 @PUBLIC_RANGE
@@ -569,7 +571,7 @@ class HqHealthTests(TestCase):
             health = self.summary()["Health"]
 
         self.assertEqual((health.value, health.tone), ("Up", "attention"))
-        self.assertIn("1 finding names HQ.", health.detail)
+        self.assertIn("1 open problem is about HQ.", health.detail)
 
     def test_only_findings_about_hq_count(self):
         from ..finding_model import Finding
@@ -599,7 +601,7 @@ class HqHealthTests(TestCase):
         with projection_scope():
             (service,) = prospects(("nothing.example.org",))
 
-        self.assertEqual(service.status_label, "Nothing declared")
+        self.assertEqual(service.status_label, "Nothing set up in HQ")
 
 
 class RoutedNamesTests(TestCase):

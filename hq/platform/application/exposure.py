@@ -42,13 +42,13 @@ OPEN, GATED, PRIVATE, UNKNOWN, UNROUTED = "open", "gated", "private", "unknown",
 LEVELS = (OPEN, UNKNOWN, GATED, PRIVATE, UNROUTED)
 LABELS = {
     OPEN: "Open to the internet",
-    GATED: "Internet, behind a gate",
-    PRIVATE: "Private networks only",
-    UNKNOWN: "Reach not known",
-    UNROUTED: "Nothing routes to it",
+    GATED: "Open to the internet, behind a login",
+    PRIVATE: "Tailnet or home network only",
+    UNKNOWN: "Not known who can reach it",
+    UNROUTED: "Not reachable",
 }
 # One word each, for a table column; the sentence says the rest.
-SHORT = {OPEN: "Internet", GATED: "Gated", PRIVATE: "Private", UNKNOWN: "Unknown", UNROUTED: "No route"}
+SHORT = {OPEN: "Internet", GATED: "Behind a login", PRIVATE: "Private", UNKNOWN: "Unknown", UNROUTED: "Not reachable"}
 # What a serious problem becomes at each exposure. Unknown keeps it serious.
 _SERIOUS_AT = {
     OPEN: "serious", GATED: "attention", PRIVATE: "attention", UNKNOWN: "serious", UNROUTED: "neutral",
@@ -112,7 +112,7 @@ class Exposure:
         if worst is None:
             return LABELS[self.level]
         gate = f" ({'; '.join(worst.gates)})" if worst.gates else ""
-        partial = f"; gated only at {', '.join(worst.path_gates)}" if worst.path_gates else ""
+        partial = f"; login only at {', '.join(worst.path_gates)}" if worst.path_gates else ""
         return f"{worst.label} as {worst.hostname}{gate}{partial}"
 
 

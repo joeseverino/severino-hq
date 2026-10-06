@@ -474,7 +474,7 @@ class TopologyEstateTests(TestCase):
             (cloudflare, "service:admin.example.com", "Behind Access"),
             (cloudflare, "service:app.example.com", "Published through tunnel"),
             (cloudflare, "service:app.example.com", "Covered by edge certificate"),
-            (tailnet, "machine:example-host", "Tailnet DNS server"),
+            (tailnet, "machine:example-host", "Tailnet DNS settings"),
         ):
             edge = edges[(source, target, label)]
             self.assertEqual(edge.kind, "reading")

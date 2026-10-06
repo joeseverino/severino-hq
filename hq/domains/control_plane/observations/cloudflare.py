@@ -232,7 +232,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
             ReadingPart("apps", "Applications admitting it", ("Access: Apps Read (account)",)),
         ),
         title=lambda record: str(record.get("name", "")),
-        relation="Admitted by service token",
+        relation="Let in by service token",
         expires=lambda record: str(record.get("expires_at", "")),
     ),
     ObservationSpec(

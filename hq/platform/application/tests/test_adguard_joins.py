@@ -136,7 +136,7 @@ class AdGuardJoinTests(TestCase):
         self.assertNotIn("dns-protection-off", by_rule)
         self.assertEqual(by_rule["dns-filtering-off"].severity, "attention")
         self.assertEqual(by_rule["dns-plain-upstream"].evidence,
-                         (("Plain upstream", "198.51.100.53"),))
+                         (("Unencrypted server", "198.51.100.53"),))
         unused = by_rule["dns-name-unused"]
         self.assertEqual(unused.subject, "service:idle.example.com")
         self.assertEqual(unused.title, "No device looked up idle.example.com")

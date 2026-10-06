@@ -423,4 +423,4 @@ class RenameWarningTests(TestCase):
 
         domain = next(field for field in form.primary if field.name == "domain")
 
-        self.assertIn("renames the record", domain.help_text)
+        self.assertIn("renames the live record", domain.help_text)

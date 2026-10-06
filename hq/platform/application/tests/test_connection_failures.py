@@ -64,13 +64,13 @@ class FixFollowsCauseTests(TestCase):
 
         found = finding()
 
-        self.assertEqual(found["title"], "example-npm does not answer as its API")
+        self.assertEqual(found["title"], "example-npm: the address is not Nginx Proxy Manager's API")
         (step,) = found["operator_steps"]
         self.assertEqual(
-            step["label"], "Point the connection at the provider's direct API address"
+            step["label"], "Point the connection at Nginx Proxy Manager's own API address"
         )
         self.assertIn(address_fields(), " ".join(step["notes"]))
-        self.assertIn("https://proxy.example.com does not answer as the API.", step["notes"])
+        self.assertIn("https://proxy.example.com is not the API.", step["notes"])
         self.assertIn({"label": "Cause", "value": "The address is not the API"}, found["evidence"])
         self.assertNotIn("credential", step["label"].lower())
 
@@ -81,7 +81,7 @@ class FixFollowsCauseTests(TestCase):
 
         self.assertEqual(
             step["label"],
-            "Check that proxy.example.com is up and the controller has a route to it",
+            "Check that proxy.example.com is up and the controller can reach it",
         )
 
     def test_a_refused_credential_asks_for_a_replacement(self):
@@ -96,7 +96,7 @@ class FixFollowsCauseTests(TestCase):
 
         (step,) = finding()["operator_steps"]
 
-        self.assertIn("Fix what the connection's error names", step["label"])
+        self.assertIn("fix what its error says", step["label"])
 
     def test_the_page_leads_with_the_cause_specific_fix(self):
         report(detail=SIGN_IN, failure="address")
@@ -105,7 +105,7 @@ class FixFollowsCauseTests(TestCase):
 
         response = self.client.get(reverse("control_plane:findings"))
 
-        self.assertContains(response, "Point the connection at the provider&#x27;s direct API address")
+        self.assertContains(response, "Point the connection at Nginx Proxy Manager&#x27;s own API address")
         self.assertNotContains(response, "Fix or replace the connection")
 
 
@@ -120,7 +120,7 @@ class SshTransportTests(TestCase):
         (step,) = finding()["operator_steps"]
 
         self.assertEqual(
-            step["label"], "Check that 192.0.2.9 is up and the controller has a route to it"
+            step["label"], "Check that 192.0.2.9 is up and the controller can reach it"
         )
 
 

@@ -122,8 +122,8 @@ class ReachedThroughTests(TestCase):
 
         self.assertContains(listing, f"<code>{TAILNET_REF}</code>")
         self.assertContains(page, f"<code>{TAILNET_REF}</code>")
-        self.assertNotContains(page, "No credential reaches this machine")
-        self.assertNotContains(page, "no credential")
+        self.assertNotContains(page, "no connection reads it")
+        self.assertNotContains(page, "not monitored")
 
     def test_the_connections_page_names_the_devices(self):
         reading = next(r for r in connection_readings() if r.connection_ref == TAILNET_REF)
@@ -161,8 +161,8 @@ class PanelTests(TestCase):
     def test_it_is_reached_through_the_tailnet_connection(self):
         found = self.relationships("example-host")
 
-        self.assertEqual(found.labels("Reached through"), (TAILNET_REF,))
-        (item,) = found.group("Reached through").items
+        self.assertEqual(found.labels("Read through"), (TAILNET_REF,))
+        (item,) = found.group("Read through").items
         self.assertIn("#connection-", item.entity.url)
 
     def test_a_refused_kind_is_named_only_where_it_could_join(self):

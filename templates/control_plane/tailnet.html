@@ -33,7 +33,7 @@
       <table class="data-table compact-table">
         <tbody>
           {% for setting in tailnet.settings %}
-            <tr><th scope="row">{{ setting.label }}</th><td>{% if setting.addresses %}{% include "control_plane/_policy_names.html" with names=setting.addresses %}{% else %}{{ setting.value }}{% endif %}</td></tr>
+            <tr><th scope="row">{{ setting.label }}</th><td>{% if setting.addresses %}{% include "control_plane/_policy_names.html" with names=setting.addresses %}{% else %}{{ setting.value }}{% endif %}{% if setting.problem_url %} <a class="pill pill-attention" href="{{ setting.problem_url }}">Problem</a>{% endif %}</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -45,7 +45,7 @@
   </div>
   <div class="table-scroll">
     <table class="data-table">
-      <thead><tr><th>From</th><th>To</th><th>On</th></tr></thead>
+      <thead><tr><th>From</th><th>To</th><th>Ports</th></tr></thead>
       <tbody>
         {% for grant in tailnet.grants %}
           <tr>
@@ -74,7 +74,7 @@
           <tr>
             <td><code>{{ row.tag.name }}</code></td>
             <td><span class="muted">owned by</span> {{ row.tag.owners|join:", " }}</td>
-            <td>{% for link in row.devices %}{% entity link %}{% if not forloop.last %}, {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
+            <td>{% for link in row.devices %}{% entity link %}{% if not forloop.last %}, {% endif %}{% empty %}{% if row.unworn %}<span class="muted">no device has this tag</span>{% else %}{% empty_value %}{% endif %}{% endfor %}</td>
           </tr>
         {% endfor %}
       </tbody>

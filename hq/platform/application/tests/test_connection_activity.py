@@ -13,6 +13,7 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest, P
 from hq.platform.core.audit import CONNECTION_AUDIT_TYPE
 from hq.platform.core.models import AuditLog
 
+from ..connection_context import get_connection_standing
 from ..report_testing import report_connections
 from ..security import cli_principal
 
@@ -121,7 +122,7 @@ class LastActivityPageTests(TestCase):
             observed_at=timezone.now(),
         )
 
-    def test_a_row_links_its_last_activity(self):
+    def test_a_row_does_not_paste_its_last_activity(self):
         self._connection("example-dns")
         self._connection("example-quiet", provider="ssh")
         event = AuditLog.objects.create(
@@ -132,9 +133,12 @@ class LastActivityPageTests(TestCase):
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, reverse("core:audit_detail", args=[event.pk]))
-        self.assertContains(response, "Reconciled example.com · ")
-        self.assertContains(response, 'class="connection-last-activity narrow-more"', count=1)
+        # The state cell is one word and one line. The projection still
+        # carries the last activity for the adapters that ask for it.
+        self.assertNotContains(response, "Reconciled example.com")
+        self.assertNotContains(response, "connection-last-activity")
+        row = get_connection_standing("example-dns", principal=cli_principal())
+        self.assertEqual(row["last_activity"]["audit_id"], event.pk)
 
     def test_last_activity_does_not_cost_a_query_per_row(self):
         def queries_with(count):

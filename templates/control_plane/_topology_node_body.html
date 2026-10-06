@@ -1,7 +1,7 @@
 <div class="topology-node-body" data-topology-body-of="{{ item.node.id }}">
   <header class="topology-detail-head">
     <h2>{% entity item.link %}</h2>
-    <span class="muted">{{ item.node.subtitle }} · {{ item.degree|counted:"direct relationship,direct relationships" }}</span>
+    <span class="muted">{{ item.node.subtitle }} · {{ item.degree|counted:"link" }}</span>
     {% if item.node.status_label %}<span class="pill pill-{{ item.node.status }}">{{ item.node.status_label }}</span>{% endif %}
   </header>
   {% if item.node.detail %}<p class="muted">{{ item.node.detail }}</p>{% endif %}
@@ -23,48 +23,43 @@
     {% endif %}
     {% if not item.node.managed %}
       <div class="topology-fact">
-        <dt>Management</dt>
-        <dd><span class="pill">Unmanaged</span> Not declared, so differences are not findings.</dd>
+        <dt>Changes</dt>
+        <dd>HQ only reads this. It does not change it.</dd>
       </div>
     {% endif %}
     {% if item.node.declared_revision or item.node.observed_revision %}
       <div class="topology-fact">
-        <dt>Convergence</dt>
+        <dt>Settings</dt>
         <dd>
           {% if not item.node.observed_revision %}
-            <span class="pill pill-attention">Never confirmed</span>
-            Revision {{ item.node.declared_revision }} not read back yet.
+            <span class="pill pill-attention">Applied, not yet checked</span>
           {% elif item.node.observed_revision == item.node.declared_revision %}
-            <span class="pill pill-good">Reconciled</span>
-            Revision {{ item.node.declared_revision }} is current and reconciled.
+            <span class="pill pill-good">Applied and checked</span>
           {% else %}
-            <span class="pill pill-attention">Behind</span>
-            Declared revision {{ item.node.declared_revision }}, last confirmed {{ item.node.observed_revision }}.
+            <span class="pill pill-attention">Your last change is not applied yet</span>
           {% endif %}
         </dd>
       </div>
     {% endif %}
     {% if item.node.unconfirmed_fields %}
       <div class="topology-fact">
-        <dt>Not confirmed by the last reading</dt>
+        <dt>HQ could not check</dt>
         <dd>
           <ul class="topology-field-list">
             {% for field in item.node.unconfirmed_fields %}<li><code>{{ field }}</code></li>{% endfor %}
           </ul>
-          <span class="muted">Declared here but not reported back by the provider.</span>
         </dd>
       </div>
     {% endif %}
     <div class="topology-fact">
-      <dt>Last observed</dt>
+      <dt>Last read</dt>
       <dd>
         {% if item.observed_age %}
           {{ item.node.observed_at|when:"ago" }}
-          {% if item.node.reason %}<span class="muted">· {{ item.node.reason }}</span>{% endif %}
         {% elif item.observable %}
-          <span class="muted">Not observed yet.</span>
+          <span class="muted">Not read yet.</span>
         {% else %}
-          <span class="muted">Never. Nothing observes this.</span>
+          <span class="muted">HQ does not read this.</span>
         {% endif %}
       </dd>
     </div>
@@ -79,13 +74,13 @@
     {% regroup item.relations by direction as relation_groups %}
     <div class="topology-relation-set">
       {% for group in relation_groups %}
-        <span class="eyebrow topology-relation-heading">{% if group.grouper == "out" %}Outgoing{% else %}Incoming{% endif %}</span>
+        <span class="eyebrow topology-relation-heading">{% if group.grouper == "out" %}Uses{% else %}Used by{% endif %}</span>
         <ul class="topology-relation-list topology-relation-{{ group.grouper }}">
           {% for row in group.list %}
             <li class="topology-relation">
               <a class="topology-relation-link" href="{{ row.url }}" data-entity="{{ row.other_link.kind_label }}">
                 <span class="topology-relation-arrow" aria-hidden="true">{% if group.grouper == "out" %}&rarr;{% else %}&larr;{% endif %}</span>
-                <span class="visually-hidden">{% if group.grouper == "out" %}Outgoing:{% else %}Incoming:{% endif %}</span>
+                <span class="visually-hidden">{% if group.grouper == "out" %}Uses:{% else %}Used by:{% endif %}</span>
                 <span class="topology-relation-verb">{{ row.label }}</span>
                 <span class="topology-relation-other">{{ row.other.label }}</span>
                 <span class="topology-relation-kind">{{ row.other_link.kind_label }}</span>
@@ -109,10 +104,10 @@
       {% endfor %}
     </div>
   {% else %}
-    <p class="muted">No relationships.</p>
+    <p class="muted">Connected to nothing.</p>
   {% endif %}
 
-  {% if topology_trace and item.hop %}<p class="topology-hop"><span class="pill">Hop {{ item.hop }}</span> from {{ topology_trace_focus.label }}</p>{% endif %}
+  {% if topology_trace and item.hop %}<p class="topology-hop"><span class="pill">{{ item.hop|counted:"step" }}</span> from {{ topology_trace_focus.label }}</p>{% endif %}
   {% if item.node.actions %}
     <div class="topology-node-actions">
       {% for action in item.node.actions %}
@@ -130,8 +125,8 @@
       {% endfor %}
     </div>
   {% endif %}
-  <div class="topology-node-actions" aria-label="Trace from {{ item.node.label }}">
-    <a class="btn ghost compact" href="{{ item.inbound_url }}">Trace incoming</a>
-    <a class="btn ghost compact" href="{{ item.outbound_url }}">Trace outgoing</a>
+  <div class="topology-node-actions" aria-label="Follow links from {{ item.node.label }}">
+    <a class="btn ghost compact" href="{{ item.inbound_url }}">What depends on this</a>
+    <a class="btn ghost compact" href="{{ item.outbound_url }}">What this depends on</a>
   </div>
 </div>

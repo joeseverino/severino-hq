@@ -40,11 +40,11 @@ NEVER_SWEPT = "never_swept"
 
 STATE_LABELS = {
     READABLE: "Readable",
-    PARTIAL: "Partly refused",
+    PARTIAL: "Partly read",
     REFUSED: "Refused",
-    UNREADABLE: "Unreadable",
+    UNREADABLE: "Could not be read",
     NOT_CONNECTED: "Not connected",
-    NEVER_SWEPT: "Never swept",
+    NEVER_SWEPT: "Never read",
 }
 
 
@@ -103,8 +103,22 @@ class Sight:
         if self.missing:
             return f"Add {', '.join(self.missing)} to see {', '.join(self.unseen)}"
         if self.parts:
-            return "; ".join(dict.fromkeys(part.phrase for part in self.parts))
+            return "; ".join(self.part_reasons)
         return ""
+
+    @property
+    def part_reasons(self) -> tuple[str, ...]:
+        """Why each refused part was not read, once each, where no permission opens it."""
+
+        if self.missing:
+            return ()
+        return tuple(dict.fromkeys(part.phrase for part in self.parts))
+
+    @property
+    def listed(self) -> bool:
+        """Whether the connection's list names it: not for a clean read of nothing."""
+
+        return self.state != READABLE or self.records > 0
 
 
 @dataclass(frozen=True)
@@ -129,6 +143,46 @@ class ProviderSight:
             for state, label in STATE_LABELS.items()
             if (count := self._count(state))
         )
+
+    @property
+    def summary(self) -> str:
+        """The tally as a sentence: "Reads 4 things", "Reads 1 thing, 1 partly read"."""
+
+        from .ui import counted
+
+        read = self._count(READABLE)
+        parts = [f"Reads {counted(read, 'thing')}" if read else "Reads nothing"]
+        parts.extend(
+            f"{count} {label.lower()}"
+            for state, label in STATE_LABELS.items()
+            if state != READABLE and (count := self._count(state))
+        )
+        return ", ".join(parts)
+
+    @property
+    def read_at(self) -> datetime | None:
+        """When what it reads was last read: the oldest of them, said once."""
+
+        return min(
+            (
+                sight.observed_at
+                for sight in self.sights
+                if sight.state in (READABLE, PARTIAL) and sight.observed_at
+            ),
+            default=None,
+        )
+
+    @property
+    def listed(self) -> tuple[Sight, ...]:
+        """The sights the row names, see ``Sight.listed``."""
+
+        return tuple(sight for sight in self.sights if sight.listed)
+
+    @property
+    def empty_count(self) -> int:
+        """How many it reads cleanly and finds nothing in."""
+
+        return len(self.sights) - len(self.listed)
 
     @property
     def sees(self) -> tuple[str, ...]:
@@ -257,7 +311,7 @@ def refused_outright(rows: Iterable[Any]) -> str:
         return ""
     return next(
         (
-            row.error or "The provider refused the credential."
+            row.error or "The service refused the credential."
             for row in rows
             if row.refusal == CREDENTIAL_REFUSAL
         ),

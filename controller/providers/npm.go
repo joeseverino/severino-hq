@@ -312,7 +312,7 @@ func (r *Registry) npmReconcile(ctx context.Context, spec NPMProxyHostSpec, obse
 			return Result{}, err
 		}
 		if spec.ForceSSL && current.CertificateId == 0 {
-			return Result{}, &ProviderError{Message: "proxy host forces HTTPS but has no certificate; attach one, then reconcile"}
+			return Result{}, &ProviderError{Message: "proxy host forces HTTPS but has no certificate; attach one, then apply again"}
 		}
 		if spec.CertificateID == 0 {
 			desired.CertificateID = int(current.CertificateId)

@@ -27,6 +27,7 @@ from .cadence import (
 )
 from .entity_links import kind_label
 from .moments import duration
+from .resource_operations import ACTION_LABELS
 
 
 @dataclass(frozen=True)
@@ -104,8 +105,8 @@ def controller_page(now: datetime | None = None) -> ControllerPage:
     queue = tuple(
         QueuedWork(
             resource=operation.resource.key,
-            action=operation.get_action_display(),
-            state=operation.get_state_display(),
+            action=ACTION_LABELS.get(operation.action, operation.get_action_display()),
+            state="Running" if operation.state == OperationRequest.State.CLAIMED else "Waiting",
             created_at=operation.created_at,
         )
         for operation in OperationRequest.objects.filter(

@@ -18,10 +18,10 @@ from .entity_links import EntityLink, entity_link
 from .reach import network_of
 
 NETWORK_LABELS = {
-    "loopback": "HQ's own machine",
-    "tailnet": "Tailnet",
-    "network": "Your network",
-    "public": "Public internet",
+    "loopback": "Reached locally",
+    "tailnet": "Reached over the tailnet",
+    "network": "Reached on your network",
+    "public": "Reached over the internet",
 }
 # RFC 6761 and RFC 8375 names no public resolver answers.
 _SPECIAL_USE = (".local", ".home.arpa", ".internal", ".localhost")
@@ -58,18 +58,29 @@ class ConnectionReach:
         return path
 
     @property
-    def summary(self) -> str:
-        """One line: network, peering, machine."""
+    def machine_word(self) -> str:
+        """The word between the network and its machine: "on" where HQ runs, else "at"."""
 
-        return " · ".join(
-            part
-            for part in (
-                self.label,
-                self.peering,
-                f"on {self.machine.label}" if self.machine else "",
-            )
-            if part
+        return "on" if self.network == "loopback" else "at"
+
+    @property
+    def relay(self) -> str:
+        """How the tailnet leg is carried, said only when it is not direct."""
+
+        return "" if self.peer_path == "direct" else self.peering
+
+    @property
+    def summary(self) -> str:
+        """One line: network, machine, and the relay when there is one."""
+
+        if not self.label:
+            return ""
+        line = (
+            f"{self.label} {self.machine_word} {self.machine.label}"
+            if self.machine
+            else self.label
         )
+        return f"{line}, {self.relay}" if self.relay else line
 
     def as_dict(self) -> dict[str, Any]:
         presence = self.presence if self.peer_path else None
