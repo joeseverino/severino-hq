@@ -16,6 +16,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -107,12 +108,8 @@ func tailnetRegistry(t *testing.T, api *tailnetAPIServer) *Registry {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := New(runtime.Environment{
-		"TAILSCALE_CONNECTION_REF": "example-tailnet",
-		"TAILSCALE_CLIENT_ID":      "client-id",
-		"TAILSCALE_CLIENT_SECRET":  "client-secret",
-		"TAILSCALE_URL":            api.server.URL + "/api/v2",
-	}, client)
+	r := New(runtime.Environment{}, supplied(oauthConnection(runtime.ConnectionProviderTailscale, "example-tailnet", "client-id", "client-secret")), client)
+	r.TailnetURL = api.server.URL + "/api/v2"
 	t.Cleanup(r.BeginSnapshot())
 	return r
 }
@@ -206,7 +203,7 @@ func TestTailnetDeviceReconcile(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			api := newTailnetAPI(t, map[string]tailnetAnswer{"POST /device/nEDGE/key": c.answer})
 			r := tailnetRegistry(t, api)
-			r.Env["SEVERINO_TAILNET_STATUS"] = writeTailnetStatus(t, tailnetStatus)
+			r.Env.TailnetStatus = writeTailnetStatus(t, tailnetStatus)
 			res, err := r.runAction(runtime.ResourceKindTailscaleDevice, "reconcile", t.Context(), c.spec, nil, c.apply)
 			if c.failure != "" || c.name == "unknown device" {
 				if failure, _, _ := runtime.Classify(err); err == nil || failure != c.failure {
@@ -248,7 +245,7 @@ func TestTailscaleApproveRoutes(t *testing.T) {
 				"POST /device/nEDGE/routes": {body: `{"advertisedRoutes":["10.0.0.0/24","10.0.1.0/24"],"enabledRoutes":["10.0.0.0/24","10.0.1.0/24"]}`},
 			})
 			r := tailnetRegistry(t, api)
-			r.Env["SEVERINO_TAILNET_STATUS"] = writeTailnetStatus(t, tailnetStatus)
+			r.Env.TailnetStatus = writeTailnetStatus(t, tailnetStatus)
 			res, err := r.runAction(runtime.ResourceKindTailscaleDevice, "approve-routes", t.Context(), Object{"name": "an-edge"}, nil, c.apply)
 			if c.read.status != 0 || c.name == "malformed routes" {
 				if failure, _, _ := runtime.Classify(err); err == nil || failure != c.failure {
@@ -554,7 +551,7 @@ func TestDeviceInventoryFromTheAPI(t *testing.T) {
 func TestDeviceInventoryFromTheLocalReading(t *testing.T) {
 	api := newTailnetAPI(t, map[string]tailnetAnswer{"GET /tailnet/-/devices?fields=all": {body: apiDevices}})
 	r := tailnetRegistry(t, api)
-	r.Env["SEVERINO_TAILNET_STATUS"] = writeTailnetStatus(t, tailnetStatus)
+	r.Env.TailnetStatus = writeTailnetStatus(t, tailnetStatus)
 	records, err := r.tailscaleDeviceInventory(t.Context())
 	if err != nil || len(records) != 3 {
 		t.Fatalf("%v %#v", err, records)
@@ -564,11 +561,11 @@ func TestDeviceInventoryFromTheLocalReading(t *testing.T) {
 		t.Fatalf("%#v\n%#v\n%#v", self, edge, server)
 	}
 
-	r.Env["SEVERINO_TAILNET_STATUS"] = writeTailnetStatus(t, `{"Self": "not a node"}`)
+	r.Env.TailnetStatus = writeTailnetStatus(t, `{"Self": "not a node"}`)
 	if _, err := r.tailscaleDeviceInventory(t.Context()); err == nil {
 		t.Fatal("an unreadable local reading is an error")
 	}
-	r.Env["SEVERINO_TAILNET_STATUS"] = filepath.Join(t.TempDir(), "absent.json")
+	r.Env.TailnetStatus = filepath.Join(t.TempDir(), "absent.json")
 	if _, err := r.tailscaleDeviceInventory(t.Context()); err == nil {
 		t.Fatal("a missing local reading is an error")
 	}
@@ -612,10 +609,10 @@ func TestTailnetPolicyInventoryKeepsWhatWasReadBeforeARefusal(t *testing.T) {
 // host that moved SSH off 22 is still answered for. A connection whose port
 // does not parse adds nothing.
 func TestReachAsksAboutDeclaredSSHPorts(t *testing.T) {
-	r := New(runtime.Environment{
-		"EDGE_CONNECTION_REF": "edge", "EDGE_HOST": "192.0.2.9", "EDGE_USER": "hq", "EDGE_PORT": "2222", "EDGE_HOST_KEY": "ssh-ed25519 AAAA",
-		"ODD_CONNECTION_REF": "odd", "ODD_HOST": "192.0.2.10", "ODD_USER": "hq", "ODD_PORT": "ssh", "ODD_HOST_KEY": "ssh-ed25519 AAAA",
-	}, &fakeHTTP{})
+	r := New(runtime.Environment{}, supplied(
+		sshConnection("edge", connections.SSHTransport{Host: "192.0.2.9", User: "hq", Port: "2222", HostKey: "ssh-ed25519 AAAA"}),
+		sshConnection("odd", connections.SSHTransport{Host: "192.0.2.10", User: "hq", Port: "ssh", HostKey: "ssh-ed25519 AAAA"}),
+	), &fakeHTTP{})
 	if got := r.portsWorthAsking(t.Context()); !slices.Equal(got, []int{22, 53, 80, 443, 2222}) {
 		t.Fatalf("tailnet reach ports = %v", got)
 	}

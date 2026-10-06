@@ -106,26 +106,27 @@ func keys(input Input, document connections.Document) ([]File, int, int, error) 
 	var knownHosts bytes.Buffer
 	identities, signing := 0, 0
 	for _, connection := range document.Connections {
-		ref, values := connection.Ref, connection.Values
-		if identity, ok := values["IDENTITY"]; ok {
+		ref := connection.Ref
+		if transport := connection.SSHTransport; transport != nil {
+			identity := transport.Identity
 			if !fileName(ref) {
 				return nil, 0, 0, refuse("Connection ", ref, " has a name its identity files would collide with.")
 			}
 			if !keyName(identity) {
 				return nil, 0, 0, refuse("Connection ", ref, " names an invalid identity item.")
 			}
-			if !sshHost.MatchString(values["HOST"]) {
+			if !sshHost.MatchString(transport.Host) {
 				return nil, 0, 0, refuse("Connection ", ref, " has an invalid host.")
 			}
-			if !sshUser.MatchString(values["USER"]) {
+			if !sshUser.MatchString(transport.User) {
 				return nil, 0, 0, refuse("Connection ", ref, " has an invalid user.")
 			}
-			port, err := strconv.Atoi(values["PORT"])
-			if !digits.MatchString(values["PORT"]) || err != nil || port < 1 || port > 65535 {
+			port, err := strconv.Atoi(transport.Port)
+			if !digits.MatchString(transport.Port) || err != nil || port < 1 || port > 65535 {
 				return nil, 0, 0, refuse("Connection ", ref, " has an invalid port.")
 			}
-			hostKey, _, _, rest, err := ssh.ParseAuthorizedKey([]byte(values["HOST_KEY"]))
-			if !strings.HasPrefix(values["HOST_KEY"], ssh.KeyAlgoED25519+" ") || err != nil ||
+			hostKey, _, _, rest, err := ssh.ParseAuthorizedKey([]byte(transport.HostKey))
+			if !strings.HasPrefix(transport.HostKey, ssh.KeyAlgoED25519+" ") || err != nil ||
 				hostKey.Type() != ssh.KeyAlgoED25519 || len(bytes.TrimSpace(rest)) != 0 {
 				return nil, 0, 0, refuse("Connection ", ref, " must pin an ssh-ed25519 host key.")
 			}
@@ -141,22 +142,22 @@ func keys(input Input, document connections.Document) ([]File, int, int, error) 
 			files[ref+".pub"] = File{Name: ref + ".pub", Data: ssh.MarshalAuthorizedKey(public), Mode: 0o444}
 			// As ssh looks a host up: by bare name on port 22, bracketed with
 			// the port otherwise, and by the number the controller dials.
-			known := values["HOST"]
+			known := transport.Host
 			if port != 22 {
 				known = "[" + known + "]:" + strconv.Itoa(port)
 			}
 			knownHosts.WriteString(known + " " + strings.TrimSpace(string(ssh.MarshalAuthorizedKey(hostKey))) + "\n")
 			identities++
 		}
-		if name, ok := values["SIGNING_KEY"]; ok {
+		// One connection holds one shape, so none has both an identity and a
+		// signing key.
+		if app := connection.GitHubApp; app != nil {
+			name := app.SigningKey
 			if !fileName(ref) {
 				return nil, 0, 0, refuse("Connection ", ref, " has an invalid name.")
 			}
 			if !keyName(name) {
 				return nil, 0, 0, refuse("Connection ", ref, " names an invalid signing key item.")
-			}
-			if _, both := files[ref]; both {
-				return nil, 0, 0, refuse("Connection ", ref, " declares both an SSH identity and a signing key.")
 			}
 			raw, public, problem := pair(input.Items, name)
 			if problem != "" {

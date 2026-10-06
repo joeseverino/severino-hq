@@ -9,6 +9,7 @@ from pydantic import Field
 from hq.platform.core.network import split_host_port
 
 from ..names import normalized_hostname
+from ..connection_shapes import LOGIN
 from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, applies
 from .contracts import IngressPolicy, ServedCertificate
 
@@ -225,4 +226,4 @@ DEFINITIONS = (DEFINITION,)
 
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.
-CONNECTIONS = {"npm": ConnectionKind("Nginx Proxy Manager", "coarse")}
+CONNECTIONS = {"npm": ConnectionKind("Nginx Proxy Manager", "coarse", LOGIN)}

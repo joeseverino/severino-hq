@@ -32,7 +32,7 @@ capability sees the finding and the evidence and no remedy at all.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
@@ -50,6 +50,7 @@ from . import (
     dns_findings,
     docker_estate,
     perimeter_findings,
+    reference_findings,
     registration_findings,
     render_status_findings,
     tailnet_findings,
@@ -75,6 +76,7 @@ from .finding_model import (
 from .security import Capability, Principal
 from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
+from .first_seen import recorded
 from .topology import derive_topology
 from .topology_model import (
     JOINED_KINDS,
@@ -180,6 +182,7 @@ RULE_MODULES = (
     unit_findings,
     certificate_expiry,
     registration_findings,
+    reference_findings,
     controller_findings,
     tailnet_findings,
     dns_findings,
@@ -512,7 +515,15 @@ def estate_findings(*, principal: Principal, rule: str = "") -> tuple[Any, ...]:
     vary=lambda principal, rule: (estate_variant(principal), rule),
 )
 def _estate_findings(principal: Principal, rule: str) -> tuple[Any, ...]:
-    return derive_findings(derive_topology(principal=principal), principal=principal, rule=rule)
+    raised = derive_findings(derive_topology(principal=principal), principal=principal, rule=rule)
+    seen = recorded() if raised else {}
+    return tuple(replace(finding, since=seen.get(finding_key(finding))) for finding in raised)
+
+
+def finding_key(finding: Finding) -> str:
+    """What a finding is about, as its item in the queue is keyed."""
+
+    return f"finding:{finding.rule}:{finding.subject or finding.scope}"
 
 
 def serialize_finding(finding: Finding) -> dict[str, Any]:
@@ -547,6 +558,7 @@ def serialize_finding(finding: Finding) -> dict[str, Any]:
         "workflow": serialize_workflow(finding.workflow),
         "operator_steps": [asdict(step) for step in finding.steps],
         "no_help_reason": finding.no_help_reason or None,
+        "since": finding.since.isoformat() if finding.since else None,
     }
 
 

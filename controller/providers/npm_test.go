@@ -15,12 +15,7 @@ func npmFixture() *Registry {
 		},
 		fail: map[string]error{},
 	}
-	return New(runtime.Environment{
-		"NPM_CONNECTION_REF": "example-npm",
-		"NPM_URL":            "https://example.invalid",
-		"NPM_USERNAME":       "user",
-		"NPM_PASSWORD":       "synthetic",
-	}, h)
+	return New(runtime.Environment{}, supplied(loginConnection(runtime.ConnectionProviderNPM, "example-npm", "https://example.invalid", "user", "synthetic")), h)
 }
 
 func sampleProxySpec() Object {

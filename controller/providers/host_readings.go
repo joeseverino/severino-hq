@@ -52,17 +52,13 @@ type perimeterReading struct {
 
 func (r *Registry) admitHostReadings() {
 	r.reader(runtime.ResourceKindHostFirewall, r.hostFirewall)
-	r.readsHeld(runtime.ResourceKindHostFirewall, func() bool { return r.Env["SEVERINO_HOST_FIREWALL"] != "" })
+	r.readsHeld(runtime.ResourceKindHostFirewall, func() bool { return r.Env.HostFirewall != "" })
 	r.reader(runtime.ResourceKindHostPerimeter, r.hostPerimeter)
 	r.reader(runtime.ResourceKindHostRenderStatus, r.hostRenderStatus)
-	r.readsHeld(runtime.ResourceKindHostRenderStatus, func() bool { return r.Env[renderStatusEnv] != "" })
+	r.readsHeld(runtime.ResourceKindHostRenderStatus, func() bool { return r.Env.RenderStatus != "" })
 	r.reader(runtime.ResourceKindHostUnit, r.hostUnits)
-	r.readsHeld(runtime.ResourceKindHostUnit, func() bool { return r.Env[hostUnitsEnv] != "" })
+	r.readsHeld(runtime.ResourceKindHostUnit, func() bool { return r.Env.HostUnits != "" })
 }
-
-// renderStatusEnv names the status documents run-controller.sh mounts, as
-// name=path pairs separated by commas. The names are the launcher's own.
-const renderStatusEnv = "SEVERINO_RENDER_STATUS"
 
 // What a status document's record says of the read itself.
 const (
@@ -87,7 +83,7 @@ type HostRenderStatusRecord struct {
 // writes the document and the launcher mounts a copy; nothing here reads a
 // secret or the directory the secrets are in.
 func (r *Registry) hostRenderStatus(context.Context) ([]any, error) {
-	configured := strings.TrimSpace(r.Env[renderStatusEnv])
+	configured := r.Env.RenderStatus
 	if configured == "" {
 		return nil, &ProviderError{Message: "no render status was configured"}
 	}
@@ -141,7 +137,7 @@ type HostFirewallRecord struct {
 // hostFirewall is whether HQ's port must arrive on the tailnet interface. Root
 // reads the ruleset and mounts one distilled answer; this never reads the rules.
 func (r *Registry) hostFirewall(context.Context) ([]any, error) {
-	path := r.Env["SEVERINO_HOST_FIREWALL"]
+	path := r.Env.HostFirewall
 	if path == "" {
 		return nil, &ProviderError{Message: "no host firewall reading was mounted"}
 	}
@@ -166,7 +162,7 @@ func (r *Registry) hostFirewall(context.Context) ([]any, error) {
 // publish and on SSH, which must answer only on the tailnet.
 func (r *Registry) hostPerimeter(ctx context.Context) ([]any, error) {
 	found := []any{}
-	for _, ref := range r.Env.RoleRefs(caddyRole) {
+	for _, ref := range r.Supplied.RoleRefs(caddyRole) {
 		output, err := r.commands().SSH(ctx, ref, "perimeter", nil)
 		if err != nil {
 			return nil, err
@@ -183,7 +179,7 @@ func (r *Registry) hostPerimeter(ctx context.Context) ([]any, error) {
 				addresses = append(addresses, address)
 			}
 		}
-		target, err := r.Env.SSH(ref)
+		target, err := r.Supplied.SSH(ref)
 		if err != nil {
 			return nil, err
 		}

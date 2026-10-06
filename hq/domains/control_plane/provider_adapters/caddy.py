@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import Field
 
-from ..bridge_contract import keyword
 from ..names import normalized_hostname
-from ..provider_spec import ProviderModel, ProviderSpec, applies
+from ..provider_spec import ProviderModel, ProviderSpec, SharedValue, applies
 from .contracts import ServedCertificate
 
 
@@ -20,7 +19,8 @@ CADDY_ROUTE_KIND = "caddy.route"
 _PLACEHOLDER = re.compile(r"\{[^{}\s]+\}")
 # The placeholders that stand for the host the request itself names; its group
 # is the fixed port, when one follows.
-_REQUESTED_HOST = re.compile(keyword("CaddyRequestedHost", "pattern"))
+REQUESTED_HOST = r"^\{http\.request\.host(?:port)?\}(?::([0-9]{1,5}))?$"
+_REQUESTED_HOST = re.compile(REQUESTED_HOST)
 
 
 def decided_per_request(upstream: Any) -> bool:
@@ -62,12 +62,12 @@ def served_certificate(record: dict[str, Any]) -> ServedCertificate | None:
 # carrying a newline or a brace would become directives of its own (a second
 # site, a file server, an import), and the typed route would be arbitrary edge
 # configuration. Each is one token: a hostname (a wildcard allowed), an upstream
-# as host:port or scheme://host:port, a plain absolute directory. The patterns
-# are the bridge contract's, and the controller (controller/providers/caddy.go)
-# checks the same ones where it writes the file.
-DOMAIN = keyword("CaddyRouteInFile", "properties", "domain", "pattern")
-UPSTREAM = keyword("CaddyRouteInFile", "properties", "upstream", "pattern")
-DIRECTORY = keyword("CaddyCertificateDirectory", "pattern")
+# as host:port or scheme://host:port, a plain absolute directory. They are
+# shared values (``SHARED``): the controller (controller/providers/caddy.go)
+# checks the same patterns where it writes the file.
+DOMAIN = r"^(?:\*\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.?$"
+UPSTREAM = r"^(?:(?:https?|h2c)://)?[A-Za-z0-9](?:[A-Za-z0-9._-]*|\[[0-9A-Fa-f:.]+\])(?::[0-9]{1,5})?$"
+DIRECTORY = r"^(?:/[A-Za-z0-9._-]+)+/?$"
 
 
 def _resolve(authored: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -197,3 +197,26 @@ DEFINITION = ProviderSpec(
     ),
 )
 DEFINITIONS = (DEFINITION,)
+
+SHARED = (
+    SharedValue(
+        "CaddyRouteInFile",
+        CaddyRouteInFile,
+        "One route in the file HQ writes on a Caddy edge. The file is text, so each "
+        "value is one token: a hostname (a wildcard allowed) and an upstream as "
+        "host:port or scheme://host:port. HQ validates a declaration with these "
+        "patterns and the controller checks them again on the line that writes the file.",
+    ),
+    SharedValue(
+        "CaddyCertificateDirectory",
+        Annotated[str, Field(max_length=500, pattern=DIRECTORY)],
+        "The directory a Caddy edge loads delivered certificates from: one plain "
+        "absolute path.",
+    ),
+    SharedValue(
+        "CaddyRequestedHost",
+        Annotated[str, Field(pattern=REQUESTED_HOST)],
+        "An upstream that names the host each request names, with an optional fixed "
+        "port (the captured group).",
+    ),
+)

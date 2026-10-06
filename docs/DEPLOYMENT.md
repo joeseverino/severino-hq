@@ -96,11 +96,12 @@ Rotating it makes anything already sealed unreadable, and unsealing reports that
 rather than returning an empty secret. Rotate only when you are willing to
 re-upload every stored certificate.
 
-Connection projections are declared once in
-`hq/config/controller-connections.json`. The renderer derives each
-connection's settings from that registry, and HQ reads the same file to say
-where a credential is kept; a new credential shape is added as a projection
-there and nowhere else.
+Connection shapes are declared once, in
+`hq/domains/control_plane/connection_shapes.py`. `manage.py bridge_contract`
+emits `hq/config/controller-connections.json` from them: the renderer derives
+each connection's settings from that registry, and HQ says where a credential
+is kept from the same declarations. A new credential shape is declared there
+and nowhere else.
 Built-in 1Password fields may be selected by stable ID. Custom fields must be
 selected by their stable, unique label because 1Password assigns an opaque ID
 per item; the renderer rejects missing or duplicate matches.

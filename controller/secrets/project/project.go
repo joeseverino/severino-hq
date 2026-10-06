@@ -164,9 +164,25 @@ func hasControl(value string) bool {
 	return strings.ContainsFunc(value, func(r rune) bool { return r < 0x20 || r == 0x7f })
 }
 
+// projected is one connection item as a connection, and the env_prefix the
+// item names itself by.
+type projected struct {
+	connection connections.Connection
+	prefix     string
+}
+
+// manages reads an item's manages field: only an explicit yes allows writes.
+func manages(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes":
+		return true
+	}
+	return false
+}
+
 // connection projects one connection item, or returns nil for an item that is
 // not a connection.
-func connection(input Input, item connectapi.FullItem) (*connections.Connection, error) {
+func connection(input Input, item connectapi.FullItem) (*projected, error) {
 	ref, err := byLabel(item, "connection_ref")
 	if err != nil {
 		return nil, err
@@ -213,7 +229,8 @@ func connection(input Input, item connectapi.FullItem) (*connections.Connection,
 	if !known {
 		return nil, refuse("Connection ", ref, " names an unknown projection.")
 	}
-	values := map[string]string{}
+	found := connections.Connection{Ref: ref}
+	settings := map[string]string{}
 	for _, variable := range variables(projection) {
 		entry := projection[variable]
 		value := ""
@@ -231,19 +248,21 @@ func connection(input Input, item connectapi.FullItem) (*connections.Connection,
 			if entry.ID != "" {
 				kind, selector = "id", entry.ID
 			}
-			found := 0
+			matched := 0
 			for _, field := range fields(item) {
 				if (kind == "id" && field.Id == selector) || (kind == "label" && text(field.Label) == selector) {
-					found++
+					matched++
 					value = text(field.Value)
 				}
 			}
-			if found == 0 && entry.Optional {
-				continue
+			if matched == 0 && entry.Optional {
+				value = entry.Default
+			} else if matched != 1 {
+				return nil, refuse("Connection ", ref, " must contain exactly one field ", kind, "=", selector, "; found ", strconv.Itoa(matched), ".")
 			}
-			if found != 1 {
-				return nil, refuse("Connection ", ref, " must contain exactly one field ", kind, "=", selector, "; found ", strconv.Itoa(found), ".")
-			}
+		}
+		if value == "" && entry.Optional {
+			value = entry.Default
 		}
 		if value == "" {
 			if entry.Optional {
@@ -257,11 +276,28 @@ func connection(input Input, item connectapi.FullItem) (*connections.Connection,
 		if strings.Contains(value, "op://") {
 			return nil, refuse("Refusing: an unresolved reference survived injection.")
 		}
-		values[variable] = value
+		switch variable {
+		case RefVariable:
+		case ProviderVariable:
+			found.Provider = value
+		case ManagesVariable:
+			found.Manages = manages(value)
+		default:
+			settings[variable] = value
+		}
 	}
+	// An item that names no provider is for the one its env_prefix spells.
+	if found.Provider == "" {
+		found.Provider = strings.ToLower(prefix)
+	}
+	typed, err := found.WithSettings(name, settings)
+	if err != nil {
+		return nil, refuse("Connection ", ref, " names a projection the controller does not read.")
+	}
+	found = typed
 	// Where the credential is kept, so HQ can name the item a replacement is
 	// stored into.
-	values[StoreVault], values[StoreItem] = input.Vault.Configured, text(item.Id)
+	found.Store = connections.Store{Vault: input.Vault.Configured, Item: text(item.Id)}
 	if hasControl(input.Vault.Configured) || input.Vault.Configured == "" {
 		return nil, refuse("The vault name is not a single line.")
 	}
@@ -273,9 +309,9 @@ func connection(input Input, item connectapi.FullItem) (*connections.Connection,
 		if err := checkBootstrap(input.Vault, ref, bootstrap); err != nil {
 			return nil, err
 		}
-		values[Bootstrap] = bootstrap
+		found.Store.Bootstrap = bootstrap
 	}
-	return &connections.Connection{Ref: ref, Prefix: prefix, Values: values}, nil
+	return &projected{connection: found, prefix: prefix}, nil
 }
 
 // checkBootstrap accepts op://<vault>/<item> in a vault the renderer does not
@@ -323,14 +359,14 @@ func Project(input Input) (Output, error) {
 		if found == nil {
 			continue
 		}
-		if refs[found.Ref] {
-			return Output{}, refuse("More than one 1Password item declares connection_ref=", found.Ref, ".")
+		if refs[found.connection.Ref] {
+			return Output{}, refuse("More than one 1Password item declares connection_ref=", found.connection.Ref, ".")
 		}
-		if prefixes[found.Prefix] {
+		if prefixes[found.prefix] {
 			return Output{}, refuse("More than one connection declares the same env_prefix.")
 		}
-		refs[found.Ref], prefixes[found.Prefix] = true, true
-		document.Connections = append(document.Connections, *found)
+		refs[found.connection.Ref], prefixes[found.prefix] = true, true
+		document.Connections = append(document.Connections, found.connection)
 	}
 	// The renderer validates each connection; an empty inventory is also an error.
 	if len(document.Connections) == 0 {

@@ -34,7 +34,8 @@ type state struct {
 	AttributeVersion *int      `json:"attribute_version,omitzero"`
 	// Salt keys every digest below: they cover secrets, so none is a bare hash.
 	Salt string `json:"salt"`
-	// Inputs covers the registry and the configuration.
+	// Inputs covers the registry, the configuration and the version of the
+	// connections document this renderer writes.
 	Inputs string              `json:"inputs"`
 	Files  []installed         `json:"files"`
 	Counts secretstatus.Counts `json:"counts"`

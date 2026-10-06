@@ -20,20 +20,22 @@ fi
 controller_ssh_lock shared
 controller_require_connections
 
-# One setting of the named connection, read as data: the reference is an
-# argument to jq, never part of its program or of a shell word.
+# One setting of the named connection's SSH transport, read as data: the
+# reference is an argument to jq, never part of its program or of a shell word.
+# A connection that arrived in another shape has no transport, so every
+# setting of one reads as empty.
 connection_value() {
     jq -er --arg ref "${connection_ref}" --arg name "$1" '
         [.connections[] | select(.ref == $ref)]
-        | if length == 1 then .[0].values[$name] // "" else error("unknown connection") end
+        | if length == 1 then .[0].ssh_transport[$name] // "" else error("unknown connection") end
     ' "${controller_connections}" 2>/dev/null
 }
-if ! host="$(connection_value HOST)"; then
+if ! host="$(connection_value host)"; then
     echo "Unknown SSH connection_ref=${connection_ref}." >&2
     exit 1
 fi
-port="$(connection_value PORT)"
-user="$(connection_value USER)"
+port="$(connection_value port)"
+user="$(connection_value user)"
 if [ -z "${host}" ] || [ -z "${port}" ] || [ -z "${user}" ]; then
     echo "Connection ${connection_ref} has no SSH host, port and user." >&2
     exit 1

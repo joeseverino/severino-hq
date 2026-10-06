@@ -13,6 +13,7 @@ from pydantic import Field, field_validator
 
 from hq.platform.application.github_public import GitHubRepositoryURL
 
+from ..connection_shapes import API_TOKEN
 from ..provider_spec import (
     ConnectionKind,
     NameContext,
@@ -394,4 +395,4 @@ DEFINITIONS = (STACK, CONTAINER)
 
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.
-CONNECTIONS = {"portainer": ConnectionKind("Portainer", "coarse")}
+CONNECTIONS = {"portainer": ConnectionKind("Portainer", "coarse", API_TOKEN)}

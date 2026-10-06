@@ -5,13 +5,13 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Annotated, Any, Callable, Literal
+from typing import Annotated, Any, Callable, Literal, get_args
 
 from pydantic import Field, field_validator, model_validator
 
-from ..bridge_contract import keyword, limit
 from ..names import certificate_covers, normalized_hostname
 from ..provider_spec import (
+    SharedValue,
     ControllerVerification,
     NameContext,
     ProviderModel,
@@ -75,9 +75,10 @@ class OnePasswordPublication(ProviderModel):
 
 
 # A certbot lineage name: it becomes --cert-name and a directory under live/.
-# The bridge contract states it, and the controller checks the same pattern
-# where the name reaches certbot.
-CERTIFICATE_NAME_PATTERN = keyword("TLSCertificateName", "pattern")
+# A shared value (``SHARED``): the controller checks the same pattern where
+# the name reaches certbot.
+CERTIFICATE_NAME_PATTERN = r"^[a-z0-9][a-z0-9-]*$"
+CERTIFICATE_NAME_LENGTH = 160
 
 
 class TLSCertificateSpec(ProviderModel):
@@ -91,7 +92,7 @@ class TLSCertificateSpec(ProviderModel):
     """
 
     certificate_name: str = Field(
-        max_length=limit("TLSCertificateName", "maxLength"),
+        max_length=CERTIFICATE_NAME_LENGTH,
         pattern=CERTIFICATE_NAME_PATTERN,
         title="Certificate name",
         description="Lowercase, no spaces.",
@@ -552,3 +553,33 @@ UPLOADED_CERTIFICATE = ProviderSpec(
 
 # Declarations only: the controller half is still the core's.
 DEFINITIONS = (CERTIFICATE, UPLOADED_CERTIFICATE)
+
+
+def consumer_kinds() -> tuple[str, ...]:
+    """Every kind of consumer a certificate spec can declare."""
+
+    union, _field = get_args(TLSConsumer)
+    return tuple(
+        sorted(
+            literal
+            for model in get_args(union)
+            for literal in get_args(model.model_fields["kind"].annotation)
+        )
+    )
+
+
+SHARED = (
+    SharedValue(
+        "TLSCertificateName",
+        Annotated[str, Field(max_length=CERTIFICATE_NAME_LENGTH, pattern=CERTIFICATE_NAME_PATTERN)],
+        "A certbot lineage name: it becomes --cert-name and a directory under live/. "
+        "HQ's tls.certificate declaration validates with it and the controller checks "
+        "it again where it reaches certbot's argv and a path.",
+    ),
+    SharedValue(
+        "TLSConsumerKind",
+        consumer_kinds(),
+        "Where a certificate is served from: the kinds of TLS consumer a certificate "
+        "spec declares.",
+    ),
+)

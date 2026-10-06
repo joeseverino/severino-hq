@@ -20,12 +20,8 @@ import (
 // provider, so all three see the same environments and containers.
 func TestPortainerFeedsGlanceAndPublishedPorts(t *testing.T) {
 	ctx := t.Context()
-	env := runtime.Environment{
-		"PORTAINER_CONNECTION_REF": "portainer-example",
-		"PORTAINER_URL":            "https://example.invalid",
-		"PORTAINER_API_TOKEN":      "synthetic",
-		"HQ_CONTROLLER_ID":         "hq-node",
-	}
+	env := runtime.Environment{ID: "hq-node"}
+	held := supplied(apiTokenConnection(runtime.ConnectionProviderPortainer, "portainer-example", "https://example.invalid", "synthetic"))
 	routes := map[string]any{
 		"/api/endpoints": []any{
 			map[string]any{"Id": 1, "Name": "local", "URL": "unix:///var/run/docker.sock", "Type": 1, "Status": 1},
@@ -38,7 +34,7 @@ func TestPortainerFeedsGlanceAndPublishedPorts(t *testing.T) {
 			},
 		},
 	}
-	r := New(env, &fakeHTTP{routes: routes, fail: map[string]error{}})
+	r := New(env, held, &fakeHTTP{routes: routes, fail: map[string]error{}})
 	if r.Portainer == nil || r.PublishedContainers == nil {
 		t.Fatal("New left the Portainer hooks unwired")
 	}
@@ -92,8 +88,8 @@ func inspectFixture(count int, failOn string) (*Registry, *inspectCounting) {
 	h := &inspectCounting{fakeHTTP: &fakeHTTP{routes: map[string]any{
 		"/api/endpoints/1/docker/containers/json?all=1": containers,
 	}, fail: map[string]error{}}, failOn: failOn}
-	env := runtime.Environment{"PORTAINER_CONNECTION_REF": "portainer-example", "PORTAINER_URL": "https://example.invalid", "PORTAINER_API_TOKEN": "synthetic"}
-	return New(env, h), h
+	held := supplied(apiTokenConnection(runtime.ConnectionProviderPortainer, "portainer-example", "https://example.invalid", "synthetic"))
+	return New(runtime.Environment{}, held, h), h
 }
 
 // The inspects sleep on a synthetic clock: the bubble advances it only once

@@ -66,11 +66,10 @@ func newCloudflare(t *testing.T, routes map[string]http.HandlerFunc) (*Registry,
 	if err != nil {
 		t.Fatal(err)
 	}
-	env := runtime.Environment{
-		"CLOUDFLARE_DNS_CONNECTION_REF": "example-dns", "CLOUDFLARE_DNS_API_TOKEN": "synthetic", "CLOUDFLARE_DNS_URL": server.URL,
-		"CLOUDFLARE_API_CONNECTION_REF": "example-api", "CLOUDFLARE_API_API_TOKEN": "synthetic", "CLOUDFLARE_API_URL": server.URL,
-	}
-	r := New(env, client)
+	r := New(runtime.Environment{}, supplied(
+		apiTokenConnection(runtime.ConnectionProviderCloudflareDNS, "example-dns", server.URL, "synthetic"),
+		apiTokenConnection(runtime.ConnectionProviderCloudflareAPI, "example-api", server.URL, "synthetic"),
+	), client)
 	r.Now = func() time.Time { return time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC) }
 	return r, fake
 }

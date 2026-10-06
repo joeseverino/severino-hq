@@ -20,9 +20,10 @@ from hq.domains.control_plane.provider_adapters import (
     admitted_connections,
     undeclared_connections,
 )
+from hq.domains.control_plane.connection_shapes import API_TOKEN, LOGIN
 from hq.domains.control_plane.provider_spec import ConnectionKind
 
-EXAMPLE = ConnectionKind("Example", "scoped")
+EXAMPLE = ConnectionKind("Example", "scoped", API_TOKEN)
 
 
 class ConnectionAdmissionTests(SimpleTestCase):
@@ -39,7 +40,7 @@ class ConnectionAdmissionTests(SimpleTestCase):
 
     def test_one_provider_is_declared_once(self):
         first = SimpleNamespace(CONNECTIONS={"example_api": EXAMPLE})
-        second = SimpleNamespace(CONNECTIONS={"example_api": ConnectionKind("Other", "coarse")})
+        second = SimpleNamespace(CONNECTIONS={"example_api": ConnectionKind("Other", "coarse", LOGIN)})
 
         with self.assertRaisesRegex(ValueError, "example_api"):
             admitted_connections((first, second))

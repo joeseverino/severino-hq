@@ -26,13 +26,24 @@ func main() {
 	code := 1
 	if len(os.Args) > 1 && os.Args[1] == "job" {
 		code = job(ctx, os.Args[2:], os.Getenv(BridgeSocket), os.Stdout)
-	} else if env, err := runtime.LoadEnvironment(os.Environ()); err != nil {
+	} else if env, supplied, err := load(os.Environ()); err != nil {
 		json.NewEncoder(os.Stdout).Encode(failure{Message: err.Error()})
 	} else {
-		code = run(ctx, os.Args[1:], env, os.Stdout, os.Stderr)
+		code = run(ctx, os.Args[1:], env, supplied, os.Stdout, os.Stderr)
 	}
 	stop()
 	os.Exit(code)
+}
+
+// load is what a pass is told: the facts in its environment, and the
+// connections in the document the environment names.
+func load(entries []string) (runtime.Environment, runtime.Connections, error) {
+	env, err := runtime.ReadEnvironment(entries)
+	if err != nil {
+		return runtime.Environment{}, runtime.Connections{}, err
+	}
+	supplied, err := runtime.LoadConnections(env)
+	return env, supplied, err
 }
 
 // BridgeSocket names the variable holding the path of HQ's bridge socket,
@@ -75,7 +86,7 @@ func job(ctx context.Context, args []string, socket string, stdout io.Writer) in
 	return 1
 }
 
-func run(ctx context.Context, args []string, env runtime.Environment, stdout, stderr io.Writer) int {
+func run(ctx context.Context, args []string, env runtime.Environment, supplied runtime.Connections, stdout, stderr io.Writer) int {
 	options := flag.NewFlagSet("hq-controller", flag.ContinueOnError)
 	options.SetOutput(stderr)
 	controllerID := options.String("controller-id", env.ControllerID(), "the controller this pass reports as")
@@ -92,7 +103,7 @@ func run(ctx context.Context, args []string, env runtime.Environment, stdout, st
 	}
 	// The bridge carries no credential in either direction: HQ persists, it
 	// does not reach providers, and the socket itself is the authorization.
-	bridge, err := runtime.NewSocketBridge(strings.TrimSpace(env[BridgeSocket]))
+	bridge, err := runtime.NewSocketBridge(env.BridgeSocket)
 	if err != nil {
 		return fail(err)
 	}
@@ -103,11 +114,11 @@ func run(ctx context.Context, args []string, env runtime.Environment, stdout, st
 		}
 		return fail(err)
 	}
-	transport, err := runtime.NewHTTPClient(strings.TrimSpace(env["HQ_CONTROLLER_CA_FILE"]))
+	transport, err := runtime.NewHTTPClient(env.CAFile)
 	if err != nil {
 		return fail(err)
 	}
-	registry := providers.New(env, transport)
+	registry := providers.New(env, supplied, transport)
 	registry.ControllerID = *controllerID
 	registry.Commands.Log = log
 	controller := providers.NewController(registry, declared)

@@ -105,7 +105,7 @@ func (h *fakeHTTP) answer(_ context.Context, address, method string, headers map
 	return nil, nil
 }
 func adguardFixture() *Registry {
-	return New(runtime.Environment{"ADGUARD_CONNECTION_REF": "example", "ADGUARD_URL": "https://example.invalid", "ADGUARD_USERNAME": "user", "ADGUARD_PASSWORD": "synthetic"}, &fakeHTTP{routes: map[string]any{}, fail: map[string]error{}})
+	return New(runtime.Environment{}, supplied(loginConnection(runtime.ConnectionProviderAdGuard, "example", "https://example.invalid", "user", "synthetic")), &fakeHTTP{routes: map[string]any{}, fail: map[string]error{}})
 }
 func TestAdguardReconcileAndPlan(t *testing.T) {
 	for _, tc := range []struct {
@@ -242,8 +242,12 @@ func TestDNSOptionalPartFailureDoesNotEraseReadableStatus(t *testing.T) {
 }
 
 func TestCommandOutputPastTheLimitIsAFailedStep(t *testing.T) {
-	commands := &Commands{Env: runtime.Environment{"PATH": "/usr/bin:/bin"}}
-	_, err := commands.Run(t.Context(), []string{"sh", "-c", "head -c 16777217 /dev/zero"}, nil, "a step", "edge", nil)
+	env, err := runtime.ReadEnvironment([]string{"PATH=/usr/bin:/bin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commands := &Commands{Env: env}
+	_, err = commands.Run(t.Context(), []string{"sh", "-c", "head -c 16777217 /dev/zero"}, nil, "a step", "edge", nil)
 	if err == nil || err.Error() != "a step: output over limit" {
 		t.Fatalf("%v", err)
 	}

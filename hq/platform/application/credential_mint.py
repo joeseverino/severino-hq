@@ -14,7 +14,6 @@ bootstrap item. No value HQ holds is a secret, so no secret can reach it.
 
 from __future__ import annotations
 
-import json
 import re
 import shlex
 from collections.abc import Mapping
@@ -23,7 +22,6 @@ from datetime import datetime, timedelta
 from functools import cache
 from typing import Any
 
-from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 
@@ -73,8 +71,9 @@ def parse_expiry(raw: Any) -> datetime | None:
 
 @cache
 def _projections() -> dict[str, dict[str, Any]]:
-    path = settings.BASE_DIR / "hq/config" / "controller-connections.json"
-    return json.loads(path.read_text())["projections"]
+    from hq.domains.control_plane.connection_shapes import projections
+
+    return projections()
 
 
 @cache

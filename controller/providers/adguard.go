@@ -39,24 +39,16 @@ func (r *Registry) admitAdGuard() {
 }
 
 func (r *Registry) adguardRequest(ctx context.Context, ref, path, method string, payload any) (json.RawMessage, error) {
-	prefix, err := r.Env.Prefix(runtime.ConnectionProviderAdGuard, ref)
+	connection, err := r.Supplied.For(runtime.ConnectionProviderAdGuard, ref)
 	if err != nil {
 		return nil, err
 	}
-	base, err := r.Env.Required(prefix, "URL")
+	login, err := runtime.Need(connection.Login)
 	if err != nil {
 		return nil, err
 	}
-	user, err := r.Env.Required(prefix, "USERNAME")
-	if err != nil {
-		return nil, err
-	}
-	password, err := r.Env.Required(prefix, "PASSWORD")
-	if err != nil {
-		return nil, err
-	}
-	headers := map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+password))}
-	return r.HTTP.Request(ctx, strings.TrimRight(base, "/")+path, method, headers, payload)
+	headers := map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(login.Username+":"+login.Password))}
+	return r.HTTP.Request(ctx, strings.TrimRight(login.URL, "/")+path, method, headers, payload)
 }
 
 // adguardDecode decodes one AdGuard answer into its generated type; an empty

@@ -342,11 +342,7 @@ func (r *Registry) cloudflareZonePosture(ctx context.Context, zoneID, zone strin
 // cloudflareZoneInventory reports every zone the credential can see, declared
 // or not: which of them HQ manages is an operator's decision.
 func (r *Registry) cloudflareZoneInventory(ctx context.Context) ([]any, error) {
-	prefix, err := r.Env.Prefix(runtime.ConnectionProviderCloudflareDNS, "")
-	if err != nil {
-		return nil, err
-	}
-	connectionRef, err := r.Env.Required(prefix, "CONNECTION_REF")
+	connectionRef, _, err := r.cloudflareCredential(runtime.ConnectionProviderCloudflareDNS, "")
 	if err != nil {
 		return nil, err
 	}

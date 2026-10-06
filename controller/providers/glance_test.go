@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -28,7 +29,7 @@ func TestEnvironmentGlanceMeasuresRunningContainers(t *testing.T) {
 			"cpu_stats":{"cpu_usage":{"total_usage":50,"percpu_usage":[1,2]},"system_cpu_usage":100},
 			"precpu_stats":{"cpu_usage":{"total_usage":50},"system_cpu_usage":0}}`,
 	})
-	r := portainerRegistry(t, server.URL, nil)
+	r := portainerRegistry(t, server.URL, runtime.Environment{})
 	machines, err := r.portainerGlance(t.Context())
 	if err != nil || len(machines) != 1 {
 		t.Fatalf("%+v %v", machines, err)
@@ -90,7 +91,7 @@ func TestGlanceFailedPanelCarriesItsClass(t *testing.T) {
 
 	api, server := newPortainerAPI(t, map[string]string{})
 	api.status["/api/endpoints"] = 401
-	r := portainerRegistry(t, server.URL, nil)
+	r := portainerRegistry(t, server.URL, runtime.Environment{})
 	plan := runtime.GlancePlan{Panels: []runtime.GlancePanelID{runtime.GlancePanelIDInfrastructure},
 		Targets: runtime.GlancePlanTargets{Infrastructure: []runtime.GlanceMachineTarget{{Key: "hq-node"}}}}
 	observations, err := r.Glance(t.Context(), plan)
@@ -105,10 +106,10 @@ func TestGlanceFailedPanelCarriesItsClass(t *testing.T) {
 
 func hostGlanceRegistry(t *testing.T, stdout string) *Registry {
 	t.Helper()
-	env := runtime.Environment{"SRV_CONNECTION_REF": "srv", "SRV_HOST": "192.0.2.5", "SRV_USER": "hq", "SRV_PORT": "22", "SRV_HOST_KEY": "ssh-ed25519 AAAA",
-		"HQ_CONTROLLER_SSH_DIR": t.TempDir()}
-	r := New(env, &fakeHTTP{})
-	r.Commands = &Commands{Env: env, Exec: func(context.Context, []string, []byte, []string) ([]byte, []byte, int, error) {
+	env := runtime.Environment{SSHDir: t.TempDir()}
+	held := supplied(sshConnection("srv", connections.SSHTransport{Host: "192.0.2.5", User: "hq", Port: "22", HostKey: "ssh-ed25519 AAAA"}))
+	r := New(env, held, &fakeHTTP{})
+	r.Commands = &Commands{Env: env, Supplied: held, Exec: func(context.Context, []string, []byte, []string) ([]byte, []byte, int, error) {
 		return []byte(stdout), nil, 0, nil
 	}}
 	return r
@@ -146,7 +147,7 @@ func TestWeatherGlance(t *testing.T) {
 		{"startTime":"2026-07-01T00:00:00-04:00","temperature":70.5,"probabilityOfPrecipitation":{"value":null}}]}}`
 	api.routes["/gridpoints/PHI/1,1/forecast/hourly"] = forecast
 	api.routes["/points/40.0000,-75.0000"] = strings.Replace(api.routes["/points/40.0000,-75.0000"], "SERVER", server.URL, 1)
-	r := New(runtime.Environment{}, mustClient(t))
+	r := New(runtime.Environment{}, supplied(), mustClient(t))
 	// NWS takes no API key; the test server asks for one, so send it.
 	r.HTTP = keyed{r.HTTP}
 	panel, err := r.weatherGlance(t.Context(), runtime.GlanceWeatherTarget{Point: " 40, -75 ", Endpoint: server.URL})
@@ -215,7 +216,7 @@ func TestHostFirewallReadingIsTyped(t *testing.T) {
 			if err := os.WriteFile(path, []byte(c.body), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			records, err := New(runtime.Environment{"SEVERINO_HOST_FIREWALL": path}, &fakeHTTP{}).hostFirewall(t.Context())
+			records, err := New(runtime.Environment{HostFirewall: path}, supplied(), &fakeHTTP{}).hostFirewall(t.Context())
 			if c.err == "" {
 				want := HostFirewallRecord{Record: "interface-binding", Interface: "tailscale0", AcceptRequiresInterface: true, ReadAt: "2026-01-01T00:00:00Z"}
 				if err != nil || !reflect.DeepEqual(records, []any{want}) {
@@ -228,14 +229,14 @@ func TestHostFirewallReadingIsTyped(t *testing.T) {
 			}
 		})
 	}
-	if _, err := New(runtime.Environment{}, &fakeHTTP{}).hostFirewall(t.Context()); err == nil {
+	if _, err := New(runtime.Environment{}, supplied(), &fakeHTTP{}).hostFirewall(t.Context()); err == nil {
 		t.Error("no mounted reading is an error")
 	}
 }
 
 func TestHostPerimeterChecksPublishedPortsAndSSH(t *testing.T) {
-	env := runtime.Environment{"EDGE_CONNECTION_REF": "edge", "EDGE_HOST": "192.0.2.9", "EDGE_USER": "hq", "EDGE_PORT": "7722", "EDGE_ROLE": "caddy", "EDGE_HOST_KEY": "ssh-ed25519 AAAA",
-		"HQ_CONTROLLER_SSH_DIR": t.TempDir()}
+	env := runtime.Environment{SSHDir: t.TempDir()}
+	held := supplied(sshConnection("edge", connections.SSHTransport{Host: "192.0.2.9", User: "hq", Port: "7722", Role: "caddy", HostKey: "ssh-ed25519 AAAA"}))
 	cases := []struct {
 		name, stdout, unit string
 		addresses          []string
@@ -247,8 +248,8 @@ func TestHostPerimeterChecksPublishedPortsAndSSH(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			r := New(env, &fakeHTTP{})
-			r.Commands = &Commands{Env: env, Exec: func(context.Context, []string, []byte, []string) ([]byte, []byte, int, error) {
+			r := New(env, held, &fakeHTTP{})
+			r.Commands = &Commands{Env: env, Supplied: held, Exec: func(context.Context, []string, []byte, []string) ([]byte, []byte, int, error) {
 				return []byte(c.stdout), nil, 0, nil
 			}}
 			r.PublishedContainers = func(context.Context) ([]PublishedContainer, error) {

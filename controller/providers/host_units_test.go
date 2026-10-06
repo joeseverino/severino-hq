@@ -45,7 +45,7 @@ func writeHostUnits(t *testing.T, body string) string {
 
 func hostUnits(t *testing.T, path string) ([]any, error) {
 	t.Helper()
-	return New(runtime.Environment{hostUnitsEnv: path}, &fakeHTTP{}).hostUnits(t.Context())
+	return New(runtime.Environment{HostUnits: path}, supplied(), &fakeHTTP{}).hostUnits(t.Context())
 }
 
 func TestHostUnitsAreWhatSystemdSaysOfEachUnit(t *testing.T) {
@@ -168,7 +168,7 @@ func TestHostUnitsAreReadOnlyWhereTheLauncherNamesTheReading(t *testing.T) {
 	declared := runtime.ControllerRegistry{Observations: map[string]string{string(kind): "host"}}
 	shown := writeHostUnits(t, hostUnitsShown)
 	for path, want := range map[string]int{"": -1, shown: 3} {
-		controller := &Controller{Registry: New(runtime.Environment{hostUnitsEnv: path}, &fakeHTTP{}), Declared: declared}
+		controller := &Controller{Registry: New(runtime.Environment{HostUnits: path}, supplied(), &fakeHTTP{}), Declared: declared}
 		inventory, err := controller.Inventory(t.Context(), []runtime.ResourceKind{kind})
 		if err != nil {
 			t.Fatal(err)

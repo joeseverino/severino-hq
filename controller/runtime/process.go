@@ -49,7 +49,7 @@ func (e Environment) ChildEnvironment(overrides map[string]string) []string {
 		if _, replaced := overrides[name]; replaced {
 			continue
 		}
-		if value, ok := e[name]; ok {
+		if value, ok := e.inherited[name]; ok {
 			env = append(env, name+"="+value)
 		}
 	}

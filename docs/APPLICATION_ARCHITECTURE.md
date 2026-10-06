@@ -360,24 +360,74 @@ A person's pins and set-aside items are applied after the derivation.
 
 **It fails toward deriving.** Revisions that cannot be read, a missing
 trigger, an unreadable cache or a value that does not load all mean the
-function runs. A derivation that reads a table it did not declare is logged
-and never stored; one that calls another must declare the other's tables or
-the call raises. `test_derivations` holds every declared derivation to its
+function runs. A table a derivation reads beyond its `reads` is learned and
+its answers are keyed on it from then on; one that calls another must declare
+the other's tables or the call raises, unless its own reads are learned. What
+one derivation reads and how long it stands is passed to the one that asks it
+on every call, whether or not it was already answered in that projection.
+`test_derivations` holds every declared derivation to its
 `reads` over the bench estate, forbids a direct clock read inside one, and
 writes a row every way Django can to show the revision moves.
 
+**An extension's part.** What an installed extension contributes to a shared
+composition (its attention items, dashboard cards, overview and each calendar
+source's events) is asked through a derivation the host declares as it meets
+the provider, `extension.<plugin id>.<provider>` (`plugins.provided`). It
+declares no reads: the tables are learned from the statements the provider
+runs, in a projection of its own so that a read another part of the request
+already made is still seen. It varies by whether the reader asked for a demo
+and by which function answers.
+
+**A clock the host cannot see.** An extension's computation is `unseen`: the
+host cannot follow it to the clock, and a test of the host cannot cover code
+in another repository. Its answer stands until what it asked of the helpers,
+and in any case one minute (`UNSEEN`) and never past local midnight. A count
+of days turns at midnight and nothing HQ words is finer than a minute, so the
+bound is the largest that keeps every statement within one unit of the truth.
+Whatever asks an unseen derivation stands no longer than it does.
+
+**Asked again when the change lands.** The controller reports about once a
+minute and every report moves a revision the estate reads, so the first
+request after each would otherwise derive the estate while a person waits.
+Instead, every question a request asks at the top level is remembered as it
+was asked: its arguments, the context it ran in and what its projection was
+seeded with. `hq.platform.core.ahead` watches every statement a connection
+runs; one that writes a table a remembered question reads wakes one thread
+once its transaction commits, and `derive_ahead` asks again whatever no longer
+stands. The same thread wakes when the earliest remembered answer's moment
+comes. It runs for as long as the web application does (the ASGI lifespan),
+never inside the writing transaction, and a write that is rolled back says
+nothing. Writes that land together are one pass, which starts once none has
+landed for 50 ms; writes that land during a pass are answered by one more. A
+question is derived at most once per state of its tables, and an answer two
+threads want at once is derived by one of them. A request and the pass never
+derive side by side, where each would run at half speed: a request deriving
+for itself goes first, and one that arrives while the pass is asking waits
+for its own answer, which the pass asks next. Such a request costs what
+deriving costs; every other is answered from what is stored. `ahead=` on a
+derivation is how many ways of asking are kept current (eight unless it says
+otherwise), and a way nobody has asked for a day is forgotten. A question
+asked ahead counts as HQ being in use, because the request it stands in for
+would be.
+
 The declared derivations are `estate.topology`, `estate.relations`,
-`estate.findings`, `estate.services` and `attention.queue` (the host's whole
-queue; an extension's items are gathered per request and merged in). A new one
-is a decorator and a line in `SAMPLES` in that test. `derivations.uncached()`
-runs a block with the store bypassed, for budgets on what a derivation itself
-costs.
+`estate.findings`, `estate.services`; `attention.queue` (the host's part of
+the queue), `attention.work` (the composed queue as it travels) and
+`attention.count` (how many wait on one person); `dashboard.sections`,
+`dashboard.highlights`, `dashboard.snapshot` and `dashboard.links`; and one
+per calendar source the host owns (`calendar.*`). A new one is a decorator and
+a line in `SAMPLES` in that test. A derivation that composes every domain
+varies by `composed_variant`, which includes which providers compose it.
+`derivations.uncached()` runs a block with the store bypassed, for budgets on
+what a derivation itself costs and for a test that replaces an input no stored
+answer varies by.
 
 **The header's count** (`/action-items/count/`) answers a conditional request.
-Its `ETag` names the queue's key, the person, the revision of their set-aside
-rows and the second the answer stops holding; a request that presents it while
-all of that stands is answered `304` from three queries without composing the
-queue. A queue that includes an extension's items carries no validator.
+The count is `attention.count`, so asking costs the table revisions and one
+stored number. Its `ETag` names the answer, the count and whose it is, not
+what it was derived from: a browser holding it is answered `304` for as long
+as the count is the same, whatever was written or read again in between,
+with every extension installed.
 
 What a stored page still costs is its own reads and its template: the
 findings page renders 700 KB, and the record forms that offer every expense as
@@ -399,7 +449,7 @@ costs nobody:
   sweeps between carry it without a call. `github.profile` is the example: the
   profile and stars behind Watching, read under the GitHub App's allowance
   where one is connected and anonymously otherwise, at a cost the
-  bridge contract's `GitHubProfileBounds` states once.
+  record's own bounds state once (`observations/github.py`).
 - **Long local work is a job** (`hq/domains/jobs/`): its own thread, progress
   notes, a heartbeat, one live job per kind. A project's refresh is one.
 
@@ -959,21 +1009,64 @@ the declared actions it has a handler for, and refuses a locked action with the
 registry's reason. Vendor responses decode into types generated from each
 vendor's OpenAPI description (`controller/api/vendor/`); bridge messages into
 types generated from `controller/api/hq-controller.openapi.json`. A Go test holds
-the registered readers equal to the contract's `SweptKind`, and Django's contract
-test holds `SweptKind` to the kinds HQ expects a sweep to read.
+the registered readers equal to the contract's `SweptKind`, which is derived:
+every reading a controller takes, and every resource kind that does not say why
+nothing reads it.
 
-The bridge contract is written by hand and both sides take it. The
-controller's client (every path, parameter and message type) is generated from
-it, and HQ's bridge application builds its routes and parses each request from
-the same document, so an action, a parameter or a limit exists once. What the
-Go generator does not emit (a pattern, a default) the controller reads from the
-copy embedded in its binary (`controller/api/contract.go`), and a declaration
-reads from the same file (`hq/domains/control_plane/bridge_contract.py`): the
-Caddyfile token patterns, the `github.delivery` defaults, the claim lease and
-the largest message either side accepts are stated there and nowhere else. A
-keyword the contract does not state stops the controller at start and fails
-the declaration's import. A vendor's base URL is the
-`servers` entry of its vendored description, generated as a constant.
+**The bridge contract is emitted, and each fact in it has one owner.** What the
+bridge alone defines is written by hand in
+`hq/domains/control_plane/bridge_base.json`: each action's path, parameters and
+payload, and the messages that are not registry facts (claims, reports, sweep
+verdicts, problems). Everything the registry owns is built from its
+declarations by `bridge_registry`: the resource kinds, the swept kinds, the
+connection providers, the failure classes, the reading parts, the record of
+every reading a controller takes (from the pydantic model HQ validates it
+with), and the values both sides check. A module that owns such a value (a
+Caddyfile token pattern, the `github.delivery` defaults, a certificate name)
+declares it once in `SHARED` and uses the same type in its own models.
+`manage.py bridge_contract` joins the two and writes the document; `--check`
+is a gate of `mise run checks`, and `go generate` then regenerates the
+controller's types under its own no-diff gate. A name both halves state, or a
+reference to a schema neither states, fails the join.
+
+HQ never reads the written file. Its bridge application builds its routes and
+parses each request from the same join in memory, so an action, a parameter or
+a limit exists once and a fact HQ declared comes from the declaration. What the
+Go generator does not emit (a pattern, a default, a bound) the controller reads
+from the copy embedded in its binary (`controller/api/contract.go`); a keyword
+the contract does not state stops the controller at start. A constant's name is
+a function of the registry name it stands for (`bridge_registry.go_name`), so a
+kind that keeps its name keeps its constant, and a rename fails the controller's
+build wherever the old one was used.
+
+**A connection is a typed value.** The shapes a credential arrives in (a
+login, an API token, an OAuth client, an SSH transport) are declared once, in
+`hq/domains/control_plane/connection_shapes.py`, with each setting's name,
+whether it is required and whether it is secret; a `ConnectionKind` names the
+shape its provider's credential arrives in. The same command emits from them
+the renderer's registry (`hq/config/controller-connections.json`: where on a
+vault item each setting comes from) and the schema of the connections document
+(`controller/api/hq-connections.openapi.json`), from which the Go types both
+the renderer and the controller use are generated
+(`controller/connections/document.gen.go`). The controller decodes the document
+once into one typed value per connection and hands a provider its own
+(`runtime.Connections.For`); the environment (`runtime.Environment`) is a
+struct of the facts that are not connections. No setting is looked up by a name
+spelled at the call, which a test in `controller/providers` holds, so two
+connections cannot collide and a provider cannot read a setting of a shape it
+was not handed.
+A vendor's base URL is the `servers` entry of its vendored description,
+generated as a constant.
+
+**A reference is a derived link.** A declaration points at another thing by a
+name in its `spec`: the domain a DNS record is in, the connection a record is
+read and changed through. The database derives each into an indexed column of
+the same name (`ManagedResource.zone`, `ManagedResource.connection_ref`, both
+`GeneratedField`), so a filter or a join reads a column that cannot differ from
+the spec. Nothing refuses a name that matches nothing, because a declaration
+may name what HQ only reads; the `names-nothing` finding
+(`hq/platform/application/reference_findings.py`) reports a record whose
+connection no controller has, or whose domain HQ neither expects nor has read.
 
 The homelab controller is a separate root-owned systemd oneshot, not a web
 process. It starts a disposable, capability-dropped container from the exact

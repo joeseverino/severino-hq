@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Literal, get_args
+from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field, model_validator
 
-from ..bridge_contract import keyword
+from ..connection_shapes import API_TOKEN
 from ..consoles import cloudflare_dashboard
 from ..credential_reads import REGISTRAR_READ
 from ..names import normalized_hostname
@@ -18,6 +18,7 @@ from ..provider_spec import (
     NameContext,
     ProviderModel,
     ProviderSpec,
+    SharedValue,
     applies,
     locked,
     named_page,
@@ -147,7 +148,7 @@ if set(DNS_RECORD_TYPES_BY_ID) != set(get_args(DNSRecordTypeId)):
 
 # One expression, used both to validate a CAA value and to take it apart, so a
 # value the form accepts is one the canonicaliser can parse.
-_CAA_VALUE_PARTS = keyword("CloudflareCAAValue", "pattern")
+_CAA_VALUE_PARTS = r'^\s*(\d{1,3})\s+(issue|issuewild|iodef)\s+"([^"]*)"\s*$'
 
 
 class CloudflareDNSRecordSpec(ProviderModel):
@@ -566,9 +567,19 @@ ZONE = ProviderSpec(
 # Declarations only: the controller half is still the core's.
 DEFINITIONS = (DNS_RECORD, ZONE)
 
+SHARED = (
+    SharedValue(
+        "CloudflareCAAValue",
+        Annotated[str, Field(pattern=_CAA_VALUE_PARTS)],
+        "A CAA record's content as flags, tag and quoted value (the three groups). HQ "
+        "validates a declared CAA record with it and both sides take the content apart "
+        "with it.",
+    ),
+)
+
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.
 CONNECTIONS = {
-    "cloudflare_api": ConnectionKind("Cloudflare API", "scoped"),
-    "cloudflare_dns": ConnectionKind("Cloudflare DNS", "scoped"),
+    "cloudflare_api": ConnectionKind("Cloudflare API", "scoped", API_TOKEN),
+    "cloudflare_dns": ConnectionKind("Cloudflare DNS", "scoped", API_TOKEN),
 }

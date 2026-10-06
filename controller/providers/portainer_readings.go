@@ -173,7 +173,7 @@ func (r *Registry) portainerListed(ctx context.Context, ref string) ([]Portainer
 func (r *Registry) portainerEnvironmentReading(ctx context.Context) ([]any, error) {
 	local := r.controllerID()
 	found := []any{}
-	for _, ref := range r.Env.Refs(runtime.ConnectionProviderPortainer) {
+	for _, ref := range r.Supplied.Refs(runtime.ConnectionProviderPortainer) {
 		environments, err := r.portainerListed(ctx, ref)
 		if err != nil {
 			return nil, err
@@ -200,7 +200,7 @@ func (r *Registry) portainerEach(what string, build portainerBuild) Reader {
 	return func(ctx context.Context) ([]any, error) {
 		local := r.controllerID()
 		reachable := []portainerSite{}
-		for _, ref := range r.Env.Refs(runtime.ConnectionProviderPortainer) {
+		for _, ref := range r.Supplied.Refs(runtime.ConnectionProviderPortainer) {
 			environments, err := r.portainerListed(ctx, ref)
 			if err != nil {
 				return nil, err
@@ -394,12 +394,11 @@ const securityOptMax = 64
 const (
 	portainerInspectLimit    = 8
 	portainerInspectMaxLimit = 64
-	inspectConcurrencyEnv    = "HQ_PORTAINER_INSPECT_CONCURRENCY"
 )
 
 // inspectLimit is the operator's inspect concurrency, clamped to 1..64.
 func (r *Registry) inspectLimit() int {
-	limit, err := strconv.Atoi(strings.TrimSpace(r.Env[inspectConcurrencyEnv]))
+	limit, err := strconv.Atoi(r.Env.PortainerInspectConcurrency)
 	if err != nil {
 		return portainerInspectLimit
 	}

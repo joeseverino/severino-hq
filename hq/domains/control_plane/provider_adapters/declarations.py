@@ -12,6 +12,7 @@ from typing import Any, Literal
 from django.urls.converters import StringConverter
 from pydantic import Field, field_validator, model_validator
 
+from ..connection_shapes import SERVICE_ACCOUNT, SSH_TRANSPORT
 from ..provider_spec import (
     ConnectionKind,
     ProviderModel,
@@ -545,6 +546,6 @@ CONNECTIONS = {
     # one HQ carries can be write access to a single item's vault and nothing
     # else. That is the property the publishing adapter is built to deserve
     # rather than to rely on.
-    "onepassword": ConnectionKind("1Password", "scoped"),
-    "ssh": ConnectionKind("SSH", "coarse"),
+    "onepassword": ConnectionKind("1Password", "scoped", SERVICE_ACCOUNT),
+    "ssh": ConnectionKind("SSH", "coarse", SSH_TRANSPORT),
 }

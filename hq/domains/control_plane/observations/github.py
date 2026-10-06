@@ -18,7 +18,6 @@ from typing import Any
 
 from pydantic import Field
 
-from ..bridge_contract import limit
 from .contract import ObservationRecord, ObservationSpec, ReadingPart
 
 PROVIDER = "github_app"
@@ -86,12 +85,17 @@ class RepositoryRecord(ObservationRecord):
 # itself, not a connection.
 PUBLIC_PROVIDER = "github"
 PROFILE_KIND = "github.profile"
-# GitHub rations anonymous calls by the hour (the bridge contract's
-# ``GitHubProfileBounds`` states what one read costs), and a profile changes
-# slowly, so it is read this often and when somebody asks.
+# GitHub rations anonymous calls by the hour, and a profile changes slowly, so
+# it is read this often and when somebody asks.
 PROFILE_EVERY = timedelta(hours=6)
 AVATAR = ReadingPart("avatar", "Profile picture")
-_PROFILE_BOUNDS = ("GitHubProfileBounds", "properties")
+# The bounds of a profile record, which the controller reads from the record's
+# schema in the bridge contract. GitHub allows an address 60 anonymous calls an
+# hour, and one account costs the profile, the stars and the picture, then a
+# release call and an advisory call for each watched repository:
+# 3 + 2 x WATCHED_KEPT.
+WATCHED_KEPT = 15
+AVATAR_LENGTH = 90000
 
 
 class ProfileRecord(ObservationRecord):
@@ -110,13 +114,11 @@ class ProfileRecord(ObservationRecord):
     public_gists: int = 0
     hireable: bool = False
     # A ``data:`` URI: a page loads no image from another host.
-    avatar: str = Field(default="", max_length=limit(*_PROFILE_BOUNDS, "avatar", "maxLength"))
+    avatar: str = Field(default="", max_length=AVATAR_LENGTH)
     # How many repositories the account stars, of which the newest are watched.
     starred: int = 0
     # ``{name, url, description, language, stars, starred_at, release, advisories}``.
-    watched: list[dict[str, Any]] = Field(
-        default=[], max_length=limit(*_PROFILE_BOUNDS, "watched", "maxItems")
-    )
+    watched: list[dict[str, Any]] = Field(default=[], max_length=WATCHED_KEPT)
 
 
 OBSERVATIONS: tuple[ObservationSpec, ...] = (

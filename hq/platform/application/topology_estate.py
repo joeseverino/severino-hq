@@ -20,6 +20,7 @@ from typing import Any
 
 
 from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.domains.control_plane.observations.adguard import QUERY_KIND
 from hq.domains.control_plane.providers import PROVIDERS
 
 
@@ -494,12 +495,19 @@ def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
 def _derived_from_readings(nodes, edges, resources, estate: _Estate) -> None:
     """What provider-specific joins add: container edges, and image, render status, unit and certificate facts."""
 
-    from . import certificate_expiry, docker_estate, render_status_findings, unit_findings
+    from . import (
+        certificate_expiry,
+        docker_estate,
+        reference_findings,
+        render_status_findings,
+        unit_findings,
+    )
 
     if estate.machine_ids:
         docker_estate.add(nodes, edges, resources, estate.machine)
     render_status_findings.add(nodes, estate.machine)
     unit_findings.add(nodes, estate.machine)
+    reference_findings.add(nodes, resources)
     by_ref, by_provider = _reader_index(nodes)
     certificate_expiry.add(
         nodes,
@@ -526,9 +534,15 @@ def _reading_edges(nodes, edges, estate: _Estate) -> None:
         # through what it read.
         if not nodes[source].observed_at:
             estate.saw(source, *moments)
-        titles = tuple(dict.fromkeys(item.title for item in items if item.title))
+        about = nodes[target].label
+        titles = tuple(
+            dict.fromkeys(_named(item, about) or item.title for item in items if item.title)
+        )
         entities = tuple(
-            dict.fromkeys(entity_link(item.kind, "", record=item.record) for item in items)
+            dict.fromkeys(
+                entity_link(item.kind, "", record=item.record, label=_named(item, about))
+                for item in items
+            )
         )
         relation = TopologyEdge(
             id=derived_id("edge", source, target, kind),
@@ -544,6 +558,23 @@ def _reading_edges(nodes, edges, estate: _Estate) -> None:
             facet=items[0].facet,
         )
         edges[relation.id] = relation
+
+
+# Readings whose title counts something about a name without saying the name.
+_TITLED_BY_A_COUNT = frozenset({QUERY_KIND})
+
+
+def _named(joined: Joined, about: str) -> str:
+    """A reading's title led by the name it is about, where that is not the
+    thing whose page it is read on: a domain's page lists the lookups of many
+    names, and a title that is only a count says nothing there. "" for a
+    reading whose title is already a name."""
+
+    if joined.kind not in _TITLED_BY_A_COUNT:
+        return ""
+    title = joined.title
+    name = next((name for name in joined.hostnames if name != about), "")
+    return f"{name}: {title}" if name and title else ""
 
 
 def _readers(joined: Joined, by_ref, by_provider, nodes) -> tuple[str, ...]:

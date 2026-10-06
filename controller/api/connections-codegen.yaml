@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.0/configuration-schema.json
+package: connections
+output: ../connections/document.gen.go
+generate:
+  # A file, not an API: the document has no operation to build a client for.
+  models: true
+output-options:
+  skip-prune: true
+  prefer-skip-optional-pointer: true

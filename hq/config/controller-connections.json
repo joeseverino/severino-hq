@@ -166,7 +166,8 @@
       "PROVIDER": {
         "source": "field",
         "label": "provider",
-        "optional": true
+        "optional": true,
+        "default": "ssh"
       },
       "ROLE": {
         "source": "field",

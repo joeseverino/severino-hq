@@ -5,9 +5,8 @@ from __future__ import annotations
 import re
 from typing import Annotated, Any, Literal
 
-from pydantic import BeforeValidator, Field
+from pydantic import BeforeValidator, ConfigDict, Field
 
-from ..bridge_contract import keyword, limit
 from .contract import ObservationRecord, ObservationSpec
 
 class HostFirewallRecord(ObservationRecord):
@@ -114,41 +113,61 @@ class HostRenderStatusRecord(ObservationRecord):
     status: SecretRenderStatus | None = None
 
 
-# A unit's name, one of systemd's state words and an instant in UTC, each as
-# the bridge contract states it for the controller, which checks them first.
-UNIT_NAME = keyword("HostUnitRecord", "properties", "unit", "pattern")
-UNIT_WORD = keyword("HostUnitRecord", "properties", "active", "pattern")
-UNIT_INSTANT = keyword("HostUnitRecord", "properties", "read_at", "pattern")
+# A unit's name, one of systemd's state words and an instant in UTC. The
+# controller reads each pattern from this record's schema in the bridge
+# contract and checks it first.
+UNIT_NAME = r"^[A-Za-z0-9:_.@-]+\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$"
+UNIT_WORD = r"^[a-z][a-z0-9-]{0,31}$"
+UNIT_INSTANT = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+UNIT_NAME_LENGTH = 255
 
-UnitName = Annotated[str, Field(pattern=UNIT_NAME, max_length=limit("HostUnitRecord", "properties", "unit", "maxLength"))]
+
+def _or_blank(pattern: str) -> str:
+    """``pattern``, or nothing: a property systemd leaves unset."""
+
+    return rf"^(?:|{pattern[1:-1]})$"
+
+
+UnitName = Annotated[str, Field(pattern=UNIT_NAME, max_length=UNIT_NAME_LENGTH)]
 UnitWord = Annotated[str, Field(pattern=UNIT_WORD)]
 UnitInstant = Annotated[str, Field(pattern=UNIT_INSTANT)]
+OptionalUnitName = Annotated[
+    str, Field(pattern=_or_blank(UNIT_NAME), max_length=UNIT_NAME_LENGTH)
+]
+OptionalUnitWord = Annotated[str, Field(pattern=_or_blank(UNIT_WORD))]
+OptionalUnitInstant = Annotated[str, Field(pattern=_or_blank(UNIT_INSTANT))]
 
 
 class HostUnitRecord(ObservationRecord):
-    """One systemd unit as ``systemctl show`` states it (``HostUnitRecord`` in
-    the bridge contract).
-
-    It holds a unit's name, state words, an exit status and instants: nothing
-    a unit runs, is given or reads.
+    """One systemd unit on the controller's machine, as `systemctl show` states
+    it: the host.unit reading's record. The launcher asks systemd for exactly
+    these properties of the units the repository ships, and the controller
+    reports no other. Each string is a unit name, one of systemd's state words
+    or an instant in UTC; none is a path, a command line or an environment.
     """
 
-    unit: UnitName
-    load: UnitWord
-    file_state: UnitWord | Literal[""] = ""
-    active: UnitWord
-    sub: UnitWord
-    result: UnitWord | Literal[""] = ""
-    main_code: int = Field(default=0, ge=0)
-    main_status: int = Field(default=0, ge=0)
-    started_at: UnitInstant | Literal[""] = ""
-    ended_at: UnitInstant | Literal[""] = ""
-    condition: UnitWord | Literal[""] = ""
-    condition_at: UnitInstant | Literal[""] = ""
-    last_trigger_at: UnitInstant | Literal[""] = ""
-    next_elapse_at: UnitInstant | Literal[""] = ""
-    activates: UnitName | Literal[""] = ""
-    read_at: UnitInstant
+    # The controller sends these members and no other; HQ drops one it does
+    # not name, so nothing a unit runs, is given or reads has a field to keep.
+    model_config = ConfigDict(
+        extra="ignore", frozen=True, json_schema_extra={"additionalProperties": False}
+    )
+
+    unit: UnitName = Field(description="Id: the unit's name.")
+    load: UnitWord = Field(description="LoadState: loaded, or why systemd holds no configuration for it (not-found, masked, error, bad-setting).")
+    file_state: OptionalUnitWord = Field(default="", description="UnitFileState: whether the unit file is enabled, static or disabled. Absent for a unit with no file.")
+    active: UnitWord = Field(description="ActiveState: active, inactive, activating, deactivating, failed and the like.")
+    sub: UnitWord = Field(description="SubState: the unit type's own word for the same state, such as waiting or elapsed for a timer.")
+    result: OptionalUnitWord = Field(default="", description="Result: success, or why the last run failed (exit-code, signal, timeout and the like).")
+    main_code: int = Field(default=0, ge=0, description="ExecMainCode: how the main process of the last run ended, as the kernel's code (1 exited, 2 killed, 3 dumped).")
+    main_status: int = Field(default=0, ge=0, description="ExecMainStatus: the exit status or signal number of the main process of the last run.")
+    started_at: OptionalUnitInstant = Field(default="", description="InactiveExitTimestamp: when the last start began, on this boot.")
+    ended_at: OptionalUnitInstant = Field(default="", description="InactiveEnterTimestamp: when the unit last became inactive or failed, on this boot.")
+    condition: OptionalUnitWord = Field(default="", description="ConditionResult: yes or no, whether the unit's conditions held when last checked. A start whose conditions do not hold is skipped without failing.")
+    condition_at: OptionalUnitInstant = Field(default="", description="ConditionTimestamp: when the conditions were last checked.")
+    last_trigger_at: OptionalUnitInstant = Field(default="", description="LastTriggerUSec: when a timer last started its unit.")
+    next_elapse_at: OptionalUnitInstant = Field(default="", description="NextElapseUSecRealtime: when a timer with a calendar schedule next elapses.")
+    activates: OptionalUnitName = Field(default="", description="Unit: the unit a timer or path starts.")
+    read_at: UnitInstant = Field(description="When the launcher asked systemd.")
 
 
 FIREWALL_KIND = "host.firewall"

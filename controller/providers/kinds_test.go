@@ -14,7 +14,7 @@ import (
 // Every kind this controller registers is one the contract names, so a kind
 // spelled differently here than in HQ's registry cannot register.
 func TestRegisteredKindsAreContractKinds(t *testing.T) {
-	coverage := New(runtime.Environment{}, &fakeHTTP{}).Coverage()
+	coverage := New(runtime.Environment{}, supplied(), &fakeHTTP{}).Coverage()
 	kinds := append([]string{}, coverage.Readers...)
 	for _, action := range coverage.Actions {
 		kind, _, _ := strings.Cut(action, ":")
@@ -50,7 +50,7 @@ func TestReadersAreTheContractsSweptKinds(t *testing.T) {
 		t.Fatal(err)
 	}
 	swept := slices.Sorted(slices.Values(contract.Components.Schemas.SweptKind.Enum))
-	readers := New(runtime.Environment{}, &fakeHTTP{}).Coverage().Readers
+	readers := New(runtime.Environment{}, supplied(), &fakeHTTP{}).Coverage().Readers
 	if !slices.Equal(readers, swept) {
 		t.Errorf("readers %v\nSweptKind %v", readers, swept)
 	}
@@ -67,7 +67,7 @@ func (r *Registry) runAction(kind runtime.ResourceKind, action string, ctx conte
 }
 
 func TestActionsDecodeOnceAtTheBoundary(t *testing.T) {
-	r := New(runtime.Environment{}, &fakeHTTP{})
+	r := New(runtime.Environment{}, supplied(), &fakeHTTP{})
 	ctx := t.Context()
 	bad := Object{"consumers": "not a list"}
 	if res, err := r.runAction(runtime.ResourceKindTLSCertificate, "renew", ctx, bad, nil, false); err != nil || !res.Changed {

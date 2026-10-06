@@ -32,7 +32,7 @@ func adguardServer(t *testing.T, bodies map[string]string, refuse map[string]int
 	if err != nil {
 		t.Fatal(err)
 	}
-	return New(runtime.Environment{"ADGUARD_CONNECTION_REF": "dns", "ADGUARD_URL": server.URL, "ADGUARD_USERNAME": "user", "ADGUARD_PASSWORD": "synthetic"}, client)
+	return New(runtime.Environment{}, supplied(loginConnection(runtime.ConnectionProviderAdGuard, "dns", server.URL, "user", "synthetic")), client)
 }
 
 // dns_addresses null is AdGuard listening on no address: the probe still

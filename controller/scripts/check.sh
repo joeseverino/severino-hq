@@ -15,6 +15,7 @@ echo "==> generated types match their specs"
 # Each generated file and the spec it comes from.
 generated=(
     "runtime/bridge.gen.go:api/hq-controller.openapi.json"
+    "connections/document.gen.go:api/hq-connections.openapi.json"
     "providers/cfapi/cloudflare.gen.go:api/vendor/cloudflare/openapi.slice.json"
     "providers/adguardapi/adguard.gen.go:api/vendor/adguard/openapi.yaml"
     "providers/npmapi/npm.gen.go:api/vendor/npm/openapi.bundled.json"

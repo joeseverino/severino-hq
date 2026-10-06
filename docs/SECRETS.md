@@ -111,8 +111,13 @@ The renderer rejects failed discovery, a vault that does not resolve to exactly
 one, duplicate connection metadata, refs and prefixes, invalid names, an
 unknown projection, a required field that is missing or present twice, and
 values containing control characters. The connection registry
-(`hq/config/controller-connections.json`) defines shapes and is read strictly;
-the vault remains the connection inventory. A render that resolved no
+(`hq/config/controller-connections.json`) says where on a vault item each
+setting of each shape comes from. HQ emits it from the connection shapes its
+registry declares (`manage.py bridge_contract`), it is read strictly, and one
+whose projections are not the shapes the connections document is typed with is
+refused whole; the vault remains the connection inventory. An item that names
+no provider is for the one its `env_prefix` spells, except an SSH transport,
+which is for `ssh`. A render that resolved no
 connection, an empty application environment, or one with fewer than fifteen
 variables is a failure, not an empty success.
 In the application environment a carriage return or a variable set
@@ -177,26 +182,36 @@ same-filesystem rename. The directory is never mounted into the web container;
 renderer and all consumers, with matching systemd write permissions. A
 `SEVERINO_CONTROLLER_ENV` override is refused.
 
-The document's shape is declared once, in `controller/connections`, and both
-the renderer and the controller use that type. An unknown or repeated field, a
-wrong `schema_version`, or a second value is an error on both sides:
+The document's schema is emitted from the connection shapes HQ's registry
+declares (`controller/api/hq-connections.openapi.json`), and both the renderer
+and the controller use the Go types generated from it
+(`controller/connections`). A connection states its ref, the provider it is
+for, whether HQ may change things through it and where its credential is kept,
+and holds its settings under the one shape it arrived in. An unknown or
+repeated field, another `schema_version`, a connection with no shape or with
+two, a setting its shape does not declare, a required setting that is missing,
+or a second value is an error on both sides:
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "connections": [
-    {"ref": "example", "prefix": "EXAMPLE",
-     "values": {"CONNECTION_REF": "example", "API_TOKEN": "..."}}
+    {"ref": "example", "provider": "example", "manages": false,
+     "store": {"vault": "example-vault", "item": "example-item"},
+     "api_token": {"api_token": "...", "url": "https://api.example.com"}}
   ]
 }
 ```
 
+The document's version is part of what makes a render current, so a renderer
+that writes another version rewrites the document on its first run and never
+leaves the controller one it refuses.
+
 The launcher copies the document into the run's directory on the same tmpfs,
 gives it to the controller's account with mode 0400, bind-mounts it read-only
 and passes `HQ_CONTROLLER_CONNECTIONS`, its path. The controller refuses a
-document that is not its own account's private, single-link regular file, a
-setting that is already in its environment, and a connection set in the
-environment beside it. No connection value is an environment variable, so
+document that is not its own account's private, single-link regular file, and
+a connection set in its environment. No connection value is an environment variable, so
 `docker inspect` and the container's on-disk configuration show none. This is
 not protection against Docker administrators or host root, who can read the
 mount.

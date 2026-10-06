@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/providers/githubapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -160,12 +161,13 @@ func newGitHubHarness(t *testing.T, routes map[string]string, extra runtime.Envi
 	maps.Copy(fake.routes, routes)
 	server := httptest.NewServer(fake)
 	t.Cleanup(server.Close)
-	env := runtime.Environment{"GITHUB_APP_CONNECTION_REF": "hq-app", "GITHUB_APP_APP_ID": "12345", "HQ_CONTROLLER_SSH_DIR": t.TempDir()}
-	maps.Copy(env, extra)
+	env := extra
+	env.SSHDir = t.TempDir()
+	held := supplied(githubAppConnection("hq-app", "12345", "synthetic"))
 	h := &githubHarness{githubFake: fake}
-	h.r = New(env, &runtime.HTTPClient{Transport: toFake{server}})
+	h.r = New(env, held, &runtime.HTTPClient{Transport: toFake{server}})
 	h.r.Now = func() time.Time { return time.Unix(1_900_000_000, 0) }
-	h.r.Commands = &Commands{Env: env, Exec: func(_ context.Context, argv []string, stdin []byte, _ []string) ([]byte, []byte, int, error) {
+	h.r.Commands = &Commands{Env: env, Supplied: held, Exec: func(_ context.Context, argv []string, stdin []byte, _ []string) ([]byte, []byte, int, error) {
 		if argv[0] != "openssl" {
 			return nil, nil, 0, errors.New("unexpected command")
 		}
@@ -178,7 +180,7 @@ func newGitHubHarness(t *testing.T, routes map[string]string, extra runtime.Envi
 }
 
 func TestGitHubAppJWTIsSignedByOpenSSLWithTheConnectionsKey(t *testing.T) {
-	h := newGitHubHarness(t, nil, nil)
+	h := newGitHubHarness(t, nil, runtime.Environment{})
 	c, err := h.r.githubConnection("")
 	if err != nil {
 		t.Fatal(err)
@@ -202,7 +204,7 @@ func TestGitHubAppJWTIsSignedByOpenSSLWithTheConnectionsKey(t *testing.T) {
 	h.signedMu.Lock()
 	argv := h.signed[0]
 	h.signedMu.Unlock()
-	want := []string{"openssl", "dgst", "-sha256", "-sign", filepath.Join(h.r.Env["HQ_CONTROLLER_SSH_DIR"], "hq-app.key")}
+	want := []string{"openssl", "dgst", "-sha256", "-sign", filepath.Join(h.r.Env.SSHDir, "hq-app.key")}
 	if !slices.Equal(argv[:5], want) || argv[5] != parts[0]+"."+parts[1] {
 		t.Fatalf("signed %v", argv)
 	}
@@ -212,13 +214,14 @@ func TestGitHubConnectionRefusals(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		env  runtime.Environment
+		app  connections.Connection
 	}{
-		{"an app id that is not a number", runtime.Environment{"GITHUB_APP_CONNECTION_REF": "hq-app", "GITHUB_APP_APP_ID": "12a"}},
-		{"no app id", runtime.Environment{"GITHUB_APP_CONNECTION_REF": "hq-app"}},
-		{"a key name that leaves the key directory", runtime.Environment{"GITHUB_APP_CONNECTION_REF": "../hq-app", "GITHUB_APP_APP_ID": "1", "HQ_CONTROLLER_SSH_DIR": "/keys"}},
+		{"an app id that is not a number", runtime.Environment{}, githubAppConnection("hq-app", "12a", "synthetic")},
+		{"no app id", runtime.Environment{}, githubAppConnection("hq-app", "", "synthetic")},
+		{"a key name that leaves the key directory", runtime.Environment{SSHDir: "/keys"}, githubAppConnection("../hq-app", "1", "synthetic")},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			r := New(test.env, &fakeHTTP{})
+			r := New(test.env, supplied(test.app), &fakeHTTP{})
 			c, err := r.githubConnection("")
 			if err == nil {
 				_, err = r.githubJWT(t.Context(), c)
@@ -231,7 +234,7 @@ func TestGitHubConnectionRefusals(t *testing.T) {
 }
 
 func TestGitHubTokensAreScopedAndMintedOncePerSweep(t *testing.T) {
-	h := newGitHubHarness(t, map[string]string{githubFakeAPI + " /repos/example/app": `{}`}, nil)
+	h := newGitHubHarness(t, map[string]string{githubFakeAPI + " /repos/example/app": `{}`}, runtime.Environment{})
 	c, _ := h.r.githubConnection("")
 	ctx := t.Context()
 	call := func(perms githubapi.AppPermissions) {
@@ -272,8 +275,8 @@ func TestGitHubTokensAreScopedAndMintedOncePerSweep(t *testing.T) {
 func TestGitHubProbe(t *testing.T) {
 	public, _, _ := ed25519.GenerateKey(rand.Reader)
 	key, _ := ssh.NewPublicKey(public)
-	h := newGitHubHarness(t, map[string]string{githubFakeAPI + " /app": `{"slug":"hq-example"}`}, nil)
-	if err := os.WriteFile(filepath.Join(h.r.Env["HQ_CONTROLLER_SSH_DIR"], "hq-app.key.pub"), ssh.MarshalAuthorizedKey(key), 0o600); err != nil {
+	h := newGitHubHarness(t, map[string]string{githubFakeAPI + " /app": `{"slug":"hq-example"}`}, runtime.Environment{})
+	if err := os.WriteFile(filepath.Join(h.r.Env.SSHDir, "hq-app.key.pub"), ssh.MarshalAuthorizedKey(key), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	result, err := h.r.githubProbe(t.Context(), "hq-app")
@@ -400,7 +403,7 @@ func readRepository(t *testing.T, h *githubHarness) (GitHubRepositoryRecord, []r
 
 func TestGitHubRepositoryReading(t *testing.T) {
 	routes := githubRepositoryRoutes()
-	h := newGitHubHarness(t, routes, nil)
+	h := newGitHubHarness(t, routes, runtime.Environment{})
 	h.refuse(githubFakeAPI, "/repos/example/app/secret-scanning/alerts?state=open&per_page=100", 403)
 	record, refused := readRepository(t, h)
 
@@ -488,7 +491,7 @@ func TestGitHubRepositoryParts(t *testing.T) {
 			func(r GitHubRepositoryRecord) bool { return r.Variables == nil }, runtime.FailureClassCredential},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			h := newGitHubHarness(t, githubRepositoryRoutes(), nil)
+			h := newGitHubHarness(t, githubRepositoryRoutes(), runtime.Environment{})
 			for path, code := range test.status {
 				h.refuse(githubFakeAPI, "/repos/example/app"+path, code)
 			}
@@ -507,7 +510,7 @@ func TestGitHubRepositoryParts(t *testing.T) {
 			}
 		})
 	}
-	h := newGitHubHarness(t, githubRepositoryRoutes(), nil)
+	h := newGitHubHarness(t, githubRepositoryRoutes(), runtime.Environment{})
 	h.refuse(githubFakeAPI, "/repos/example/app/commits/main", 502)
 	report := NewController(h.r, runtime.ControllerRegistry{}).readKind(t.Context(), h.r.readers[string(runtime.ResourceKindGitHubRepository)])
 	if report.OK {
@@ -519,7 +522,7 @@ func TestGitHubImagesOfTheComposition(t *testing.T) {
 	routes := githubRepositoryRoutes()
 	routes[githubFakeRegistry+" /token?scope=repository%3Aexample%2Fapp%3Apull&service=ghcr.io"] = `{"token":"pull-app"}`
 	routes[githubFakeRegistry+" /v2/example/app/tags/list?n=1000"] = `{"tags":["v1","v2","sha256-abc.sig","sha256-def.att","sha256-012.sig"]}`
-	h := newGitHubHarness(t, routes, runtime.Environment{"SEVERINO_HQ_SOURCE_REPOSITORY": "example/app", "HQ_CONTROLLER_IMAGE": "ghcr.io/example/app-composed:v9@sha256:0000"})
+	h := newGitHubHarness(t, routes, runtime.Environment{SourceRepository: "example/app", Image: "ghcr.io/example/app-composed:v9@sha256:0000"})
 	h.refuse(githubFakeRegistry, "/token?scope=repository%3Aexample%2Fapp-composed%3Apull&service=ghcr.io", 403)
 	record, refused := readRepository(t, h)
 	if encoded, _ := json.Marshal(record.Images); string(encoded) != `[{"name":"example/app","tags":2,"signed":["012","abc"]}]` {
@@ -551,7 +554,7 @@ const running = "1111111111111111111111111111111111111111"
 const admitted = "2222222222222222222222222222222222222222"
 
 func deliveryHarness(t *testing.T, routes map[string]string) *githubHarness {
-	h := newGitHubHarness(t, routes, runtime.Environment{"SEVERINO_HQ_SOURCE_REPOSITORY": "example/host", "HQ_CONTROLLER_IMAGE": "ghcr.io/example/host:v1"})
+	h := newGitHubHarness(t, routes, runtime.Environment{SourceRepository: "example/host", Image: "ghcr.io/example/host:v1"})
 	h.r.Extensions = []runtime.AdmittedExtension{{Plugin: "ext", SourceRepository: "example/ext", SourceWorkflow: ".github/workflows/admit.yml", SourceCommit: running}}
 	return h
 }
@@ -736,7 +739,11 @@ func TestGitHubDeliveryResultNeverReadsAsDoneWhileNotDeployed(t *testing.T) {
 // The extensions delivery follows are the ones HQ's registry names.
 func TestTheRegistryNamesTheComposedExtensions(t *testing.T) {
 	declared := runtime.ControllerRegistry{Extensions: []runtime.AdmittedExtension{{Plugin: "ext", SourceRepository: "example/ext"}}}
-	r := New(runtime.Environment{"SEVERINO_HQ_SOURCE_REPOSITORY": " example/host ", "HQ_CONTROLLER_IMAGE": "ghcr.io/example/host:v1"}, &fakeHTTP{})
+	env, err := runtime.ReadEnvironment([]string{"SEVERINO_HQ_SOURCE_REPOSITORY= example/host ", "HQ_CONTROLLER_IMAGE=ghcr.io/example/host:v1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := New(env, supplied(), &fakeHTTP{})
 	composed := NewController(r, declared).composition()
 	if composed.Repository != "example/host" || composed.Image != "ghcr.io/example/host:v1" || len(composed.Extensions) != 1 || composed.Extensions[0].Plugin != "ext" {
 		t.Fatalf("%+v", composed)
@@ -744,7 +751,7 @@ func TestTheRegistryNamesTheComposedExtensions(t *testing.T) {
 }
 
 func TestGitHubDeliveryWithoutASourceRepositoryReadsNothing(t *testing.T) {
-	h := newGitHubHarness(t, nil, nil)
+	h := newGitHubHarness(t, nil, runtime.Environment{})
 	records, err := h.r.githubDeliveryInventory(t.Context())
 	if err != nil || len(records) != 0 || len(h.recorded()) != 0 {
 		t.Fatalf("%v %v %v", records, err, h.recorded())

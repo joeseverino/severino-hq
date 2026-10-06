@@ -187,7 +187,7 @@ func (r *Registry) Glance(ctx context.Context, plan runtime.GlancePlan) (runtime
 
 func (r *Registry) infrastructureGlance(ctx context.Context, targets []runtime.GlanceMachineTarget) (infrastructurePanel, error) {
 	available := map[string]bool{}
-	for _, ref := range r.Env.SSHRefs() {
+	for _, ref := range r.Supplied.SSHRefs() {
 		available[ref] = true
 	}
 	reachable := func(target runtime.GlanceMachineTarget) string {
@@ -315,7 +315,7 @@ func dockerStorage(disk dockerDiskUsage) int64 {
 // portainerGlance is each reachable Portainer environment's containers measured
 // against their machine.
 func (r *Registry) portainerGlance(ctx context.Context) ([]GlanceMachine, error) {
-	refs := r.Env.Refs(runtime.ConnectionProviderPortainer)
+	refs := r.Supplied.Refs(runtime.ConnectionProviderPortainer)
 	if len(refs) == 0 {
 		return nil, &ProviderError{Message: "no Portainer connection was supplied"}
 	}

@@ -45,12 +45,6 @@ var (
 	githubMainBranch = api.MustKeyword("GitHubDeliverySpec", "properties", "branch", "default")
 )
 
-// The environment run-controller.sh hands the controller about its own image.
-const (
-	sourceRepositoryEnv = "SEVERINO_HQ_SOURCE_REPOSITORY"
-	controllerImageEnv  = "HQ_CONTROLLER_IMAGE"
-)
-
 // A composition run that has not finished.
 var githubPipelineRunning = map[string]bool{"queued": true, "in_progress": true, "requested": true, "pending": true}
 
@@ -73,8 +67,8 @@ type Composition struct {
 
 func (r *Registry) composition() Composition {
 	return Composition{
-		Repository: strings.TrimSpace(r.Env[sourceRepositoryEnv]),
-		Image:      strings.TrimSpace(r.Env[controllerImageEnv]),
+		Repository: r.Env.SourceRepository,
+		Image:      r.Env.Image,
 		Extensions: r.Extensions,
 	}
 }

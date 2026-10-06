@@ -6,11 +6,33 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from django.db.models.fields.json import KT
+from django.db.models.functions import Coalesce, Lower, NullIf, Trim
 from django.utils import timezone
 
 from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule, one_of, singleton
+
+
+def _named(key: str) -> models.Expression:
+    """The text a declaration's ``spec`` holds under ``key``, or "" when none.
+
+    ``KT`` spells a JSON null as the text ``null``; that is no name either.
+    """
+
+    return Coalesce(
+        NullIf(KT(f"spec__{key}"), models.Value("null")),
+        models.Value(""),
+        output_field=models.TextField(),
+    )
+
+
+# The keys of ``spec`` that point one declaration at another thing, each a
+# column of the same name the database derives. They mean the same thing in
+# every kind that has them: the domain a record is in, and the connection a
+# record is read and changed through.
+REFERENCE_COLUMNS = ("zone", "connection_ref")
 
 
 class ManagedResource(TimestampedModel):
@@ -32,12 +54,37 @@ class ManagedResource(TimestampedModel):
     status = models.JSONField(default=dict, blank=True)
     conditions = models.JSONField(default=list, blank=True)
     last_observed_at = models.DateTimeField(null=True, blank=True)
+    # What this declaration points at, derived by the database from ``spec``
+    # (``REFERENCE_COLUMNS``): a link to filter and join on that cannot differ
+    # from the spec it is read from. Nothing refuses a row whose link names
+    # nothing, because a declaration may name what HQ only reads; the
+    # ``names-nothing`` finding reports one that names nothing at all.
+    #
+    # The domain is one spelling of a DNS name, as ``names.normalized_hostname``
+    # gives it: lowercase, trimmed, no trailing dot.
+    zone = models.GeneratedField(
+        expression=models.Func(
+            Lower(Trim(_named("zone"))),
+            models.Value("."),
+            function="RTRIM",
+            output_field=models.TextField(),
+        ),
+        output_field=models.CharField(max_length=253),
+        db_persist=True,
+    )
+    connection_ref = models.GeneratedField(
+        expression=Trim(_named("connection_ref")),
+        output_field=models.CharField(max_length=160),
+        db_persist=True,
+    )
 
     class Meta:
         ordering = ("kind", "key")
         indexes = [
             models.Index(fields=("kind", "enabled")),
             models.Index(fields=("last_observed_at",)),
+            models.Index(fields=("zone",), name="resource_zone"),
+            models.Index(fields=("connection_ref",), name="resource_connection_ref"),
         ]
         constraints = [
             Rule(

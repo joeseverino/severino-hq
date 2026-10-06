@@ -40,6 +40,84 @@ def adapter(spec_type: Any) -> TypeAdapter[Any]:
 
 
 @dataclass(frozen=True)
+class SharedValue:
+    """One value the controller checks as HQ does: a pattern, a bound, a default.
+
+    The module that owns the value declares it in ``SHARED`` and uses the same
+    type in its own models. The bridge contract carries it under ``name``, and
+    the controller reads it from there, so the text exists once.
+    """
+
+    name: str
+    # A pydantic model, an annotated type, or the names of an enumeration.
+    schema: Any
+    description: str
+    # "serialization" for what HQ sends (every field present), "validation"
+    # for what HQ is sent (a field with a default may be absent).
+    mode: Literal["validation", "serialization"] = "serialization"
+    # Properties that are another shared value, by that value's name.
+    refs: tuple[tuple[str, str], ...] = ()
+    # The controller's constant for each value of an enumeration whose values
+    # are not names.
+    varnames: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Setting:
+    """One setting of a connection, and where its vault item holds it.
+
+    Exactly one of ``item_field`` (a built-in field's stable id), ``label`` (a
+    custom field's label) and ``url`` (the item's URL at that index) says
+    where. ``secret`` marks a value no log, report or page may carry.
+    """
+
+    name: str
+    item_field: str = ""
+    label: str = ""
+    url: int | None = None
+    optional: bool = False
+    secret: bool = False
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[A-Z][A-Z0-9_]*", self.name):
+            raise ValueError(f"{self.name!r} is not a setting name.")
+        if sum((bool(self.item_field), bool(self.label), self.url is not None)) != 1:
+            raise ValueError(f"{self.name} comes from exactly one place on its item.")
+
+
+@dataclass(frozen=True)
+class ConnectionShape:
+    """The settings one kind of credential arrives as: a login, an API token.
+
+    A vault item names its shape. The renderer projects the item into these
+    settings, and the controller is handed them as one typed value.
+    ``provider`` fixes the provider of every connection of the shape.
+    ``default_provider`` is the provider of an item that names none; without
+    either, such an item is for the provider its ``env_prefix`` spells.
+    """
+
+    name: str
+    settings: tuple[Setting, ...]
+    provider: str = ""
+    default_provider: str = ""
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[a-z][a-z0-9_]*", self.name):
+            raise ValueError(f"{self.name!r} is not a shape name.")
+        names = [setting.name for setting in self.settings]
+        if not names or len(names) != len(set(names)):
+            raise ValueError(f"{self.name} declares settings with unique names.")
+        if set(names) & ENVELOPE_SETTINGS:
+            raise ValueError(f"{self.name} declares a setting every connection already has.")
+        if self.provider and self.default_provider:
+            raise ValueError(f"{self.name} fixes its provider or defaults it, not both.")
+
+
+# What every connection states about itself, whatever its shape.
+ENVELOPE_SETTINGS = frozenset({"CONNECTION_REF", "MANAGES", "PROVIDER"})
+
+
+@dataclass(frozen=True)
 class ConnectionKind:
     """One connection provider: its name on the page, and how its credential is held.
 
@@ -53,6 +131,8 @@ class ConnectionKind:
 
     label: str
     credential: Literal["scoped", "coarse"]
+    # The settings its credential arrives as.
+    shape: ConnectionShape
 
 
 class ProviderModel(BaseModel):

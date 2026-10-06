@@ -3,7 +3,7 @@
   "info": {
     "title": "HQ controller bridge",
     "version": "1.0.0",
-    "description": "The contract between Severino HQ and its infrastructure controller. Each path is one bridge action: a POST over HTTP on HQ's private Unix socket, parameters in the query, the payload as the JSON body, the answer as JSON, and a refusal as an RFC 9457 problem. Go types and the controller's client are generated from this document; HQ's bridge application takes its routes, parameters and limits from it, and Django's tests validate every action against it."
+    "description": "The contract between Severino HQ and its infrastructure controller. Each path is one bridge action: a POST over HTTP on HQ's private Unix socket, parameters in the query, the payload as the JSON body, the answer as JSON, and a refusal as an RFC 9457 problem. The actions and the bridge's own messages are written by hand; every schema HQ's registry owns is generated from its declarations and joined to them. Go types and the controller's client are generated from this document; HQ's bridge application takes its routes, parameters and limits from the same joined document, and Django's tests validate every action against it."
   },
   "paths": {
     "/claim": {
@@ -1787,9 +1787,2536 @@
         ],
         "additionalProperties": false
       },
+      "PassMode": {
+        "type": "string",
+        "enum": [
+          "plan",
+          "apply"
+        ],
+        "x-enum-varnames": [
+          "PassModePlan",
+          "PassModeApply"
+        ],
+        "description": "Whether a pass only looked (plan) or claimed and executed work (apply)."
+      },
+      "PlannedOperation": {
+        "type": "object",
+        "description": "The operation a plan pass would run next and what it would change.",
+        "properties": {
+          "operation": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "would_change": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "resource",
+          "action",
+          "would_change",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "PlanPassOutput": {
+        "type": "object",
+        "description": "The line a plan pass prints on stdout.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/PassMode"
+          },
+          "claimed": {
+            "type": "boolean"
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionRecord"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlannedOperation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "x-go-type": "PlannedOperation",
+            "x-go-type-skip-optional-pointer": false
+          }
+        },
+        "required": [
+          "ok",
+          "mode",
+          "claimed",
+          "connections",
+          "warnings",
+          "plan"
+        ],
+        "additionalProperties": false
+      },
+      "IdlePassOutput": {
+        "type": "object",
+        "description": "The line an apply pass prints when it found nothing to claim.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/PassMode"
+          },
+          "claimed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "mode",
+          "claimed"
+        ],
+        "additionalProperties": false
+      },
+      "AppliedOperationOutput": {
+        "type": "object",
+        "description": "The line an apply pass prints for one operation it ran.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "changed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "operation",
+          "resource",
+          "changed"
+        ],
+        "additionalProperties": false
+      },
+      "RefusedOperationOutput": {
+        "type": "object",
+        "description": "The line an apply pass prints for one operation a provider refused.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "operation",
+          "resource",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "GlancePanelID": {
+        "type": "string",
+        "description": "A dashboard panel the glance plan can ask the controller to read.",
+        "enum": [
+          "infrastructure",
+          "weather"
+        ],
+        "x-enum-varnames": [
+          "GlancePanelIDInfrastructure",
+          "GlancePanelIDWeather"
+        ]
+      },
+      "GitHubProfilePlan": {
+        "type": "object",
+        "description": "Whose public GitHub profile the controller reads, and whether to read now. The accounts are the ones a person's sign-in names. The profile keeps a slower clock than the sweep, which HQ holds: due says the reading is old enough or somebody asked.",
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9-]{1,39}$"
+            },
+            "description": "GitHub logins."
+          },
+          "due": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "accounts",
+          "due"
+        ]
+      },
+      "TLSCertificateDomain": {
+        "type": "string",
+        "description": "A domain certbot is asked for: DNS labels, optionally under one wildcard. The controller checks it where it reaches certbot's argv.",
+        "pattern": "^(\\*\\.)?([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
+      },
+      "ConditionType": {
+        "type": "string",
+        "description": "What a condition says of a resource: it is as declared, it differs from the declaration, or it needs attention.",
+        "enum": [
+          "Ready",
+          "Drifted",
+          "Degraded"
+        ],
+        "x-enum-varnames": [
+          "ConditionReady",
+          "ConditionDrifted",
+          "ConditionDegraded"
+        ]
+      },
+      "Problem": {
+        "type": "object",
+        "description": "An RFC 9457 problem: why HQ refused or failed a bridge call.",
+        "required": [
+          "title",
+          "status",
+          "detail"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BridgeBody": {
+        "type": "string",
+        "maxLength": 67108864,
+        "description": "One bridge message as sent: maxLength is the most bytes either side accepts as a request or an answer."
+      },
+      "LeaseSeconds": {
+        "type": "integer",
+        "minimum": 30,
+        "maximum": 3600,
+        "default": 300,
+        "description": "How long a claimed operation is leased, in seconds. The controller sends the default; HQ applies it when none is sent."
+      },
+      "JobOutcome": {
+        "type": "object",
+        "description": "How one piece of scheduled work ended. Running means a job of this kind was already live.",
+        "required": [
+          "name",
+          "state",
+          "note"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/JobState"
+          },
+          "note": {
+            "type": "string"
+          },
+          "job": {
+            "type": "string"
+          }
+        }
+      },
+      "JobState": {
+        "type": "string",
+        "description": "How a job stands when HQ answers for it.",
+        "enum": [
+          "succeeded",
+          "failed",
+          "lost",
+          "running"
+        ],
+        "x-enum-varnames": [
+          "JobStateSucceeded",
+          "JobStateFailed",
+          "JobStateLost",
+          "JobStateRunning"
+        ]
+      },
+      "AdGuardClientRecord": {
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "addresses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "use_global_settings": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "filtering_enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "type": "object",
+        "description": "One adguard.client record: DNS client."
+      },
+      "AdGuardDNSRecord": {
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "version": {
+            "default": "",
+            "type": "string"
+          },
+          "running": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "protection_enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "dns_addresses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "upstreams": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AdGuardDNSUpstreamRecord"
+            },
+            "type": "array"
+          },
+          "upstream_mode": {
+            "default": "",
+            "type": "string"
+          },
+          "dnssec_enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "filtering_enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "filter_lists": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "filter_rules": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "rewrites_enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "querylog_enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "querylog_retention_hours": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
+          },
+          "anonymize_client_ip": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "type": "object",
+        "description": "One adguard.dns record: DNS server."
+      },
+      "AdGuardDNSUpstreamRecord": {
+        "properties": {
+          "host": {
+            "default": "",
+            "type": "string"
+          },
+          "transport": {
+            "default": "dns",
+            "type": "string"
+          },
+          "domains": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "AdGuardQuerySummaryQueryClientRecord": {
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "queries": {
+            "default": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "address"
+        ],
+        "type": "object"
+      },
+      "AdGuardQuerySummaryRecord": {
+        "description": "One rewritten name over the window: counts, never the queries.",
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "queries": {
+            "default": 0,
+            "type": "integer"
+          },
+          "blocked": {
+            "default": 0,
+            "type": "integer"
+          },
+          "client_count": {
+            "default": 0,
+            "type": "integer"
+          },
+          "clients": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AdGuardQuerySummaryQueryClientRecord"
+            },
+            "type": "array"
+          },
+          "last_seen": {
+            "default": "",
+            "type": "string"
+          },
+          "window_hours": {
+            "default": 0.0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object"
+      },
+      "CaddyCertificateDirectory": {
+        "maxLength": 500,
+        "pattern": "^(?:/[A-Za-z0-9._-]+)+/?$",
+        "type": "string",
+        "description": "The directory a Caddy edge loads delivered certificates from: one plain absolute path."
+      },
+      "CaddyRequestedHost": {
+        "pattern": "^\\{http\\.request\\.host(?:port)?\\}(?::([0-9]{1,5}))?$",
+        "type": "string",
+        "description": "An upstream that names the host each request names, with an optional fixed port (the captured group)."
+      },
+      "CaddyRouteInFile": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "maxLength": 253,
+            "minLength": 1,
+            "pattern": "^(?:\\*\\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\\.?$",
+            "type": "string"
+          },
+          "upstream": {
+            "maxLength": 253,
+            "minLength": 1,
+            "pattern": "^(?:(?:https?|h2c)://)?[A-Za-z0-9](?:[A-Za-z0-9._-]*|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]{1,5})?$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "upstream"
+        ],
+        "type": "object",
+        "description": "One route in the file HQ writes on a Caddy edge. The file is text, so each value is one token: a hostname (a wildcard allowed) and an upstream as host:port or scheme://host:port. HQ validates a declaration with these patterns and the controller checks them again on the line that writes the file."
+      },
+      "CloudflareAccessAppAccessPolicyRecord": {
+        "properties": {
+          "id": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CloudflareAccessAppRecord": {
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "account_id": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "type": {
+            "default": "",
+            "type": "string"
+          },
+          "domain": {
+            "default": "",
+            "type": "string"
+          },
+          "destinations": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "session_duration": {
+            "default": "",
+            "type": "string"
+          },
+          "policies": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CloudflareAccessAppAccessPolicyRecord"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "description": "One cloudflare.access_app record: Access application."
+      },
+      "CloudflareAccessServiceTokenAccessAppRef": {
+        "properties": {
+          "id": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CloudflareAccessServiceTokenRecord": {
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "expires_at": {
+            "default": "",
+            "type": "string"
+          },
+          "created_at": {
+            "default": "",
+            "type": "string"
+          },
+          "apps": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CloudflareAccessServiceTokenAccessAppRef"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "description": "One cloudflare.access_service_token record: Access service token."
+      },
+      "CloudflareCAAValue": {
+        "pattern": "^\\s*(\\d{1,3})\\s+(issue|issuewild|iodef)\\s+\"([^\"]*)\"\\s*$",
+        "type": "string",
+        "description": "A CAA record's content as flags, tag and quoted value (the three groups). HQ validates a declared CAA record with it and both sides take the content apart with it."
+      },
+      "CloudflareD1DatabaseRecord": {
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "account_id": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "uuid": {
+            "type": "string"
+          },
+          "created_at": {
+            "default": "",
+            "type": "string"
+          },
+          "version": {
+            "default": "",
+            "type": "string"
+          },
+          "file_size": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "uuid"
+        ],
+        "type": "object",
+        "description": "One cloudflare.d1_database record: D1 database."
+      },
+      "CloudflareEdgeCertificateRecord": {
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "account_id": {
+            "default": "",
+            "type": "string"
+          },
+          "zone": {
+            "type": "string"
+          },
+          "id": {
+            "default": "",
+            "type": "string"
+          },
+          "type": {
+            "default": "",
+            "type": "string"
+          },
+          "hosts": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "default": "",
+            "type": "string"
+          },
+          "certificate_authority": {
+            "default": "",
+            "type": "string"
+          },
+          "expires_on": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "zone"
+        ],
+        "type": "object",
+        "description": "One cloudflare.edge_certificate record: Edge certificate."
+      },
+      "CloudflarePagesProjectRecord": {
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "account_id": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "subdomain": {
+            "default": "",
+            "type": "string"
+          },
+          "domains": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "production_branch": {
+            "default": "",
+            "type": "string"
+          },
+          "deployment_id": {
+            "default": "",
+            "type": "string"
+          },
+          "deployment_commit": {
+            "default": "",
+            "type": "string"
+          },
+          "deployment_created_on": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "description": "One cloudflare.pages_project record: Pages project."
+      },
+      "CloudflareRedirectRecord": {
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "account_id": {
+            "default": "",
+            "type": "string"
+          },
+          "zone": {
+            "type": "string"
+          },
+          "source": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "default": "",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "type": "string"
+          },
+          "hostnames": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "target": {
+            "default": "",
+            "type": "string"
+          },
+          "target_host": {
+            "default": "",
+            "type": "string"
+          },
+          "status_code": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "preserve_query_string": {
+            "default": false,
+            "type": "boolean"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "zone"
+        ],
+        "type": "object",
+        "description": "One cloudflare.redirect record: Redirect."
+      },
+      "CloudflareTunnelRecord": {
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "account_id": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "status": {
+            "default": "",
+            "type": "string"
+          },
+          "created_at": {
+            "default": "",
+            "type": "string"
+          },
+          "conns_active_at": {
+            "default": "",
+            "type": "string"
+          },
+          "config_source": {
+            "default": "",
+            "type": "string"
+          },
+          "ingress": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CloudflareTunnelTunnelIngressRecord"
+            },
+            "type": "array"
+          },
+          "connections": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CloudflareTunnelTunnelConnectionRecord"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "description": "One cloudflare.tunnel record: Tunnel."
+      },
+      "CloudflareTunnelTunnelConnectionRecord": {
+        "properties": {
+          "version": {
+            "default": "",
+            "type": "string"
+          },
+          "colo": {
+            "default": "",
+            "type": "string"
+          },
+          "origin_ip": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CloudflareTunnelTunnelIngressRecord": {
+        "properties": {
+          "hostname": {
+            "type": "string"
+          },
+          "service": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hostname"
+        ],
+        "type": "object"
+      },
+      "ConnectionProvider": {
+        "type": "string",
+        "description": "A connection provider HQ's registry declares: what a credential is for.",
+        "enum": [
+          "adguard",
+          "cloudflare_api",
+          "cloudflare_dns",
+          "github_app",
+          "npm",
+          "onepassword",
+          "portainer",
+          "ssh",
+          "tailscale"
+        ],
+        "x-enum-varnames": [
+          "ConnectionProviderAdGuard",
+          "ConnectionProviderCloudflareAPI",
+          "ConnectionProviderCloudflareDNS",
+          "ConnectionProviderGitHubApp",
+          "ConnectionProviderNPM",
+          "ConnectionProviderOnePassword",
+          "ConnectionProviderPortainer",
+          "ConnectionProviderSSH",
+          "ConnectionProviderTailscale"
+        ]
+      },
+      "FailureClass": {
+        "type": "string",
+        "description": "Why a read got no usable answer: a refusal, an address that answered as something other than the API, or nothing answering. Empty when unclassified.",
+        "enum": [
+          "",
+          "credential",
+          "permission",
+          "address",
+          "network"
+        ],
+        "x-enum-varnames": [
+          "FailureClassUnclassified",
+          "FailureClassCredential",
+          "FailureClassPermission",
+          "FailureClassAddress",
+          "FailureClassNetwork"
+        ]
+      },
+      "GitHubDeliveryProduction": {
+        "type": "string",
+        "description": "What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.",
+        "enum": [
+          "Every extension's latest admission, confirmed on GitHub"
+        ],
+        "x-enum-varnames": [
+          "GitHubDeliveryProductionCurrent"
+        ]
+      },
+      "GitHubDeliverySpec": {
+        "additionalProperties": false,
+        "properties": {
+          "repository": {
+            "description": "The repository whose deploy workflow deploys HQ.",
+            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+            "type": "string"
+          },
+          "workflow": {
+            "default": ".github/workflows/compose.yml",
+            "pattern": "^\\.github/workflows/[A-Za-z0-9_.-]+\\.ya?ml$",
+            "type": "string"
+          },
+          "branch": {
+            "default": "main",
+            "pattern": "^[A-Za-z0-9_./-]+$",
+            "type": "string"
+          },
+          "production": {
+            "$ref": "#/components/schemas/GitHubDeliveryProduction"
+          }
+        },
+        "required": [
+          "repository",
+          "workflow",
+          "branch",
+          "production"
+        ],
+        "type": "object",
+        "description": "A github.delivery declaration. The defaults are the declaration a sweep reports and HQ adopts."
+      },
+      "GitHubProfileRecord": {
+        "properties": {
+          "login": {
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "bio": {
+            "default": "",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "type": "string"
+          },
+          "followers": {
+            "default": 0,
+            "type": "integer"
+          },
+          "following": {
+            "default": 0,
+            "type": "integer"
+          },
+          "public_repos": {
+            "default": 0,
+            "type": "integer"
+          },
+          "created_at": {
+            "default": "",
+            "type": "string"
+          },
+          "company": {
+            "default": "",
+            "type": "string"
+          },
+          "location": {
+            "default": "",
+            "type": "string"
+          },
+          "website": {
+            "default": "",
+            "type": "string"
+          },
+          "social": {
+            "default": "",
+            "type": "string"
+          },
+          "public_gists": {
+            "default": 0,
+            "type": "integer"
+          },
+          "hireable": {
+            "default": false,
+            "type": "boolean"
+          },
+          "avatar": {
+            "default": "",
+            "maxLength": 90000,
+            "type": "string"
+          },
+          "starred": {
+            "default": 0,
+            "type": "integer"
+          },
+          "watched": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "maxItems": 15,
+            "type": "array"
+          }
+        },
+        "required": [
+          "login"
+        ],
+        "type": "object",
+        "description": "One github.profile record: GitHub profile."
+      },
+      "GitHubRepositoryRecord": {
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "private": {
+            "default": false,
+            "type": "boolean"
+          },
+          "url": {
+            "default": "",
+            "type": "string"
+          },
+          "default_branch": {
+            "default": "",
+            "type": "string"
+          },
+          "pushed_at": {
+            "default": "",
+            "type": "string"
+          },
+          "head": {
+            "additionalProperties": true,
+            "default": {},
+            "type": "object"
+          },
+          "checks": {
+            "additionalProperties": true,
+            "default": {},
+            "type": "object"
+          },
+          "pull_requests": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "pull_request_checks": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "runs": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "waiting": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "release": {
+            "additionalProperties": true,
+            "type": [
+              "object",
+              "null"
+            ],
+            "default": null
+          },
+          "deployments": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "alerts": {
+            "additionalProperties": true,
+            "default": {},
+            "type": "object"
+          },
+          "artifacts": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "rules": {
+            "additionalProperties": true,
+            "type": [
+              "object",
+              "null"
+            ],
+            "default": null
+          },
+          "environments": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "runners": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "images": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "access": {
+            "additionalProperties": true,
+            "type": [
+              "object",
+              "null"
+            ],
+            "default": null
+          },
+          "variables": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ],
+            "default": null
+          },
+          "pins": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ],
+            "default": null
+          },
+          "called_workflows": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "connection_ref",
+          "repository"
+        ],
+        "type": "object",
+        "description": "One github.repository record: GitHub repository."
+      },
+      "HostFirewallRecord": {
+        "properties": {
+          "record": {
+            "type": "string"
+          },
+          "interface": {
+            "default": "",
+            "type": "string"
+          },
+          "accept_requires_interface": {
+            "default": false,
+            "type": "boolean"
+          },
+          "foreign_interface_dropped": {
+            "default": false,
+            "type": "boolean"
+          },
+          "read_at": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record"
+        ],
+        "type": "object",
+        "description": "One host.firewall record: Host firewall."
+      },
+      "HostPerimeterRecord": {
+        "properties": {
+          "record": {
+            "type": "string"
+          },
+          "connection_ref": {
+            "type": "string"
+          },
+          "firewall_unit": {
+            "default": "unknown",
+            "type": "string"
+          },
+          "public_addresses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ports_checked": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "answered_publicly": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "read_at": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record",
+          "connection_ref"
+        ],
+        "type": "object",
+        "description": "One host.perimeter record: Open-port test."
+      },
+      "HostRenderStatusRecord": {
+        "description": "One secret renderer's account of its own runs, or why it has none. It holds no secret, no vault or item name and no connection ref: times, versions, counts and short words.",
+        "properties": {
+          "renderer": {
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "read",
+              "unreadable"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "enum": [
+              "",
+              "missing",
+              "unreadable",
+              "oversized",
+              "invalid"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HostRenderStatusSecretRenderStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "renderer",
+          "state"
+        ],
+        "type": "object"
+      },
+      "HostRenderStatusSecretRenderAttempt": {
+        "properties": {
+          "at": {
+            "default": "",
+            "type": "string"
+          },
+          "outcome": {
+            "default": "unreadable",
+            "type": "string"
+          },
+          "failure": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "HostRenderStatusSecretRenderConnect": {
+        "properties": {
+          "read_at": {
+            "default": "",
+            "type": "string"
+          },
+          "version": {
+            "default": "unreadable",
+            "type": "string"
+          },
+          "dependencies": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HostRenderStatusSecretRenderDependency"
+            },
+            "maxItems": 16,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "HostRenderStatusSecretRenderCounts": {
+        "properties": {
+          "items_read": {
+            "default": 0,
+            "type": "integer"
+          },
+          "connections": {
+            "default": 0,
+            "type": "integer"
+          },
+          "app_variables": {
+            "default": 0,
+            "type": "integer"
+          },
+          "identities": {
+            "default": 0,
+            "type": "integer"
+          },
+          "signing_keys": {
+            "default": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "HostRenderStatusSecretRenderDependency": {
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "service",
+          "status"
+        ],
+        "type": "object"
+      },
+      "HostRenderStatusSecretRenderStatus": {
+        "description": "The renderer's status document, as ``secretstatus.Status`` declares it.",
+        "properties": {
+          "last_attempt": {
+            "$ref": "#/components/schemas/HostRenderStatusSecretRenderAttempt"
+          },
+          "last_success": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HostRenderStatusSecretRenderSuccess"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "connect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HostRenderStatusSecretRenderConnect"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "last_attempt"
+        ],
+        "type": "object"
+      },
+      "HostRenderStatusSecretRenderSuccess": {
+        "properties": {
+          "at": {
+            "default": "",
+            "type": "string"
+          },
+          "rendered_at": {
+            "default": "",
+            "type": "string"
+          },
+          "content_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "attribute_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "counts": {
+            "$ref": "#/components/schemas/HostRenderStatusSecretRenderCounts",
+            "default": {
+              "items_read": 0,
+              "connections": 0,
+              "app_variables": 0,
+              "identities": 0,
+              "signing_keys": 0
+            }
+          }
+        },
+        "type": "object"
+      },
+      "HostUnitRecord": {
+        "additionalProperties": false,
+        "description": "One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships, and the controller reports no other. Each string is a unit name, one of systemd's state words or an instant in UTC; none is a path, a command line or an environment.",
+        "properties": {
+          "unit": {
+            "description": "Id: the unit's name.",
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9:_.@-]+\\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$",
+            "type": "string"
+          },
+          "load": {
+            "description": "LoadState: loaded, or why systemd holds no configuration for it (not-found, masked, error, bad-setting).",
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "type": "string"
+          },
+          "file_state": {
+            "default": "",
+            "description": "UnitFileState: whether the unit file is enabled, static or disabled. Absent for a unit with no file.",
+            "pattern": "^(?:|[a-z][a-z0-9-]{0,31})$",
+            "type": "string"
+          },
+          "active": {
+            "description": "ActiveState: active, inactive, activating, deactivating, failed and the like.",
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "type": "string"
+          },
+          "sub": {
+            "description": "SubState: the unit type's own word for the same state, such as waiting or elapsed for a timer.",
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "type": "string"
+          },
+          "result": {
+            "default": "",
+            "description": "Result: success, or why the last run failed (exit-code, signal, timeout and the like).",
+            "pattern": "^(?:|[a-z][a-z0-9-]{0,31})$",
+            "type": "string"
+          },
+          "main_code": {
+            "default": 0,
+            "description": "ExecMainCode: how the main process of the last run ended, as the kernel's code (1 exited, 2 killed, 3 dumped).",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "main_status": {
+            "default": 0,
+            "description": "ExecMainStatus: the exit status or signal number of the main process of the last run.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "started_at": {
+            "default": "",
+            "description": "InactiveExitTimestamp: when the last start began, on this boot.",
+            "pattern": "^(?:|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$",
+            "type": "string"
+          },
+          "ended_at": {
+            "default": "",
+            "description": "InactiveEnterTimestamp: when the unit last became inactive or failed, on this boot.",
+            "pattern": "^(?:|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$",
+            "type": "string"
+          },
+          "condition": {
+            "default": "",
+            "description": "ConditionResult: yes or no, whether the unit's conditions held when last checked. A start whose conditions do not hold is skipped without failing.",
+            "pattern": "^(?:|[a-z][a-z0-9-]{0,31})$",
+            "type": "string"
+          },
+          "condition_at": {
+            "default": "",
+            "description": "ConditionTimestamp: when the conditions were last checked.",
+            "pattern": "^(?:|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$",
+            "type": "string"
+          },
+          "last_trigger_at": {
+            "default": "",
+            "description": "LastTriggerUSec: when a timer last started its unit.",
+            "pattern": "^(?:|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$",
+            "type": "string"
+          },
+          "next_elapse_at": {
+            "default": "",
+            "description": "NextElapseUSecRealtime: when a timer with a calendar schedule next elapses.",
+            "pattern": "^(?:|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$",
+            "type": "string"
+          },
+          "activates": {
+            "default": "",
+            "description": "Unit: the unit a timer or path starts.",
+            "maxLength": 255,
+            "pattern": "^(?:|[A-Za-z0-9:_.@-]+\\.(?:service|socket|mount|automount|swap|target|path|timer|slice))$",
+            "type": "string"
+          },
+          "read_at": {
+            "description": "When the launcher asked systemd.",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "unit",
+          "load",
+          "active",
+          "sub",
+          "read_at"
+        ],
+        "type": "object"
+      },
+      "NPMAccessListAccessRule": {
+        "properties": {
+          "directive": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "directive",
+          "address"
+        ],
+        "type": "object"
+      },
+      "NPMAccessListRecord": {
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "satisfy_any": {
+            "default": false,
+            "type": "boolean"
+          },
+          "pass_auth": {
+            "default": false,
+            "type": "boolean"
+          },
+          "clients": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NPMAccessListAccessRule"
+            },
+            "type": "array"
+          },
+          "logins": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "protects": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "description": "One npm.access_list record: NPM access list."
+      },
+      "NPMCertificateRecord": {
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "provider": {
+            "default": "",
+            "type": "string"
+          },
+          "domains": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "expires_on": {
+            "default": "",
+            "type": "string"
+          },
+          "serves": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "description": "One npm.certificate record: NPM certificate."
+      },
+      "NPMDeadHostRecord": {
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "hostnames": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "certificate": {
+            "default": "",
+            "type": "string"
+          },
+          "ssl_forced": {
+            "default": false,
+            "type": "boolean"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "description": "One npm.dead_host record: NPM dead host."
+      },
+      "NPMRedirectRecord": {
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "hostnames": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "target": {
+            "default": "",
+            "type": "string"
+          },
+          "target_host": {
+            "default": "",
+            "type": "string"
+          },
+          "status_code": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "preserve_path": {
+            "default": false,
+            "type": "boolean"
+          },
+          "ssl_forced": {
+            "default": false,
+            "type": "boolean"
+          },
+          "certificate": {
+            "default": "",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "description": "One npm.redirect record: NPM redirect."
+      },
+      "NPMStreamRecord": {
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "incoming_port": {
+            "type": "integer"
+          },
+          "forwarding_host": {
+            "default": "",
+            "type": "string"
+          },
+          "forwarding_port": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "tcp": {
+            "default": false,
+            "type": "boolean"
+          },
+          "udp": {
+            "default": false,
+            "type": "boolean"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "incoming_port"
+        ],
+        "type": "object",
+        "description": "One npm.stream record: NPM stream."
+      },
+      "PortainerComposeProjectRecord": {
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "environment_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "host": {
+            "default": "",
+            "type": "string"
+          },
+          "host_address": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "source": {
+            "default": "compose",
+            "type": "string"
+          },
+          "status": {
+            "default": "",
+            "type": "string"
+          },
+          "working_dir": {
+            "default": "",
+            "type": "string"
+          },
+          "config_files": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "entry_point": {
+            "default": "",
+            "type": "string"
+          },
+          "containers": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "connection_ref"
+        ],
+        "type": "object",
+        "description": "One portainer.compose_project record: Compose project."
+      },
+      "PortainerEnvironmentRecord": {
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "host": {
+            "default": "",
+            "type": "string"
+          },
+          "address": {
+            "default": "",
+            "type": "string"
+          },
+          "local": {
+            "default": false,
+            "type": "boolean"
+          },
+          "type": {
+            "default": "",
+            "type": "string"
+          },
+          "status": {
+            "default": "",
+            "type": "string"
+          },
+          "agent_version": {
+            "default": "",
+            "type": "string"
+          },
+          "docker_version": {
+            "default": "",
+            "type": "string"
+          },
+          "containers_running": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "containers_total": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "snapshot_at": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connection_ref",
+          "id"
+        ],
+        "type": "object",
+        "description": "One portainer.environment record: Docker environment."
+      },
+      "PortainerImageImageUser": {
+        "properties": {
+          "container": {
+            "type": "string"
+          },
+          "reference": {
+            "default": "",
+            "type": "string"
+          },
+          "service": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "container"
+        ],
+        "type": "object"
+      },
+      "PortainerImageRecord": {
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "environment_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "host": {
+            "default": "",
+            "type": "string"
+          },
+          "host_address": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "default": "",
+            "type": "string"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "digests": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "default": "",
+            "type": "string"
+          },
+          "size": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "containers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PortainerImageImageUser"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "connection_ref"
+        ],
+        "type": "object",
+        "description": "One portainer.image record: Docker image."
+      },
+      "PortainerNetworkRecord": {
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "environment_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "host": {
+            "default": "",
+            "type": "string"
+          },
+          "host_address": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "driver": {
+            "default": "",
+            "type": "string"
+          },
+          "scope": {
+            "default": "",
+            "type": "string"
+          },
+          "internal": {
+            "default": false,
+            "type": "boolean"
+          },
+          "subnets": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "containers": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "connection_ref"
+        ],
+        "type": "object",
+        "description": "One portainer.network record: Docker network."
+      },
+      "PortainerRuntimePortBinding": {
+        "properties": {
+          "container_port": {
+            "default": "",
+            "type": "string"
+          },
+          "host_ip": {
+            "default": "",
+            "type": "string"
+          },
+          "host_port": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PortainerRuntimeRecord": {
+        "description": "How one container is run, from Docker's inspect of it. Only what decides what the container can reach or do on its machine. The inspect document also carries the environment, the command line and every label, where secrets live, and none of those is named here, so none can be stored.",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "environment_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "host": {
+            "default": "",
+            "type": "string"
+          },
+          "host_address": {
+            "default": "",
+            "type": "string"
+          },
+          "container": {
+            "type": "string"
+          },
+          "stack": {
+            "default": "",
+            "type": "string"
+          },
+          "service": {
+            "default": "",
+            "type": "string"
+          },
+          "image_id": {
+            "default": "",
+            "type": "string"
+          },
+          "user": {
+            "default": "",
+            "type": "string"
+          },
+          "privileged": {
+            "default": false,
+            "type": "boolean"
+          },
+          "read_only_rootfs": {
+            "default": false,
+            "type": "boolean"
+          },
+          "network_mode": {
+            "default": "",
+            "type": "string"
+          },
+          "pid_mode": {
+            "default": "",
+            "type": "string"
+          },
+          "ipc_mode": {
+            "default": "",
+            "type": "string"
+          },
+          "cap_add": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "cap_drop": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "security_opt": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "devices": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "mounts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PortainerRuntimeRuntimeMount"
+            },
+            "type": "array"
+          },
+          "port_bindings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PortainerRuntimePortBinding"
+            },
+            "type": "array"
+          },
+          "exposed_ports": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "memory_limit": {
+            "default": 0,
+            "type": "integer"
+          },
+          "cpu_limit": {
+            "default": 0.0,
+            "type": "number"
+          },
+          "pids_limit": {
+            "default": 0,
+            "type": "integer"
+          },
+          "restart_policy": {
+            "default": "",
+            "type": "string"
+          },
+          "healthcheck": {
+            "default": false,
+            "type": "boolean"
+          },
+          "health": {
+            "default": "",
+            "type": "string"
+          },
+          "restart_count": {
+            "default": 0,
+            "type": "integer"
+          },
+          "started_at": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connection_ref",
+          "container"
+        ],
+        "type": "object"
+      },
+      "PortainerRuntimeRuntimeMount": {
+        "properties": {
+          "type": {
+            "default": "",
+            "type": "string"
+          },
+          "source": {
+            "default": "",
+            "type": "string"
+          },
+          "destination": {
+            "default": "",
+            "type": "string"
+          },
+          "read_only": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "PortainerVolumeMountUser": {
+        "properties": {
+          "container": {
+            "type": "string"
+          },
+          "destination": {
+            "default": "",
+            "type": "string"
+          },
+          "read_only": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "container"
+        ],
+        "type": "object"
+      },
+      "PortainerVolumeRecord": {
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "environment_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "host": {
+            "default": "",
+            "type": "string"
+          },
+          "host_address": {
+            "default": "",
+            "type": "string"
+          },
+          "type": {
+            "default": "volume",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "driver": {
+            "default": "",
+            "type": "string"
+          },
+          "source": {
+            "default": "",
+            "type": "string"
+          },
+          "stack": {
+            "default": "",
+            "type": "string"
+          },
+          "created_at": {
+            "default": "",
+            "type": "string"
+          },
+          "used_by": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PortainerVolumeMountUser"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "connection_ref"
+        ],
+        "type": "object",
+        "description": "One portainer.volume record: Volumes and mounts."
+      },
+      "ReadingPartName": {
+        "type": "string",
+        "description": "A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares.",
+        "enum": [
+          "",
+          "access",
+          "acl_management",
+          "apps",
+          "avatar",
+          "branch_rules",
+          "clients",
+          "code_scanning",
+          "configuration",
+          "connections",
+          "dead_hosts",
+          "dependabot",
+          "dns",
+          "environments",
+          "file_size",
+          "filtering",
+          "https",
+          "images",
+          "leaked_credentials",
+          "page_rules",
+          "posture",
+          "proxy_hosts",
+          "querylog",
+          "redirection_hosts",
+          "registration",
+          "rewrites",
+          "rules",
+          "runners",
+          "services",
+          "settings",
+          "streams",
+          "upstreams",
+          "variables",
+          "workflow_pins"
+        ],
+        "x-enum-varnames": [
+          "PartWhole",
+          "PartAccess",
+          "PartACLManagement",
+          "PartApps",
+          "PartAvatar",
+          "PartBranchRules",
+          "PartClients",
+          "PartCodeScanning",
+          "PartConfiguration",
+          "PartConnections",
+          "PartDeadHosts",
+          "PartDependabot",
+          "PartDNS",
+          "PartEnvironments",
+          "PartFileSize",
+          "PartFiltering",
+          "PartHTTPS",
+          "PartImages",
+          "PartLeakedCredentials",
+          "PartPageRules",
+          "PartPosture",
+          "PartProxyHosts",
+          "PartQueryLog",
+          "PartRedirectionHosts",
+          "PartRegistration",
+          "PartRewrites",
+          "PartRules",
+          "PartRunners",
+          "PartServices",
+          "PartSettings",
+          "PartStreams",
+          "PartUpstreams",
+          "PartVariables",
+          "PartWorkflowPins"
+        ]
+      },
+      "Refusal": {
+        "type": "string",
+        "description": "Why a provider refused a read: the credential itself, or one permission it lacks. Empty when the reason is unclassified.",
+        "enum": [
+          "",
+          "credential",
+          "permission"
+        ],
+        "x-enum-varnames": [
+          "RefusalUnclassified",
+          "RefusalCredential",
+          "RefusalPermission"
+        ]
+      },
       "ResourceKind": {
         "type": "string",
-        "description": "Every kind of resource or reading HQ's provider registry declares. Django's contract test holds this list equal to the registry, so a kind added on either side fails the build.",
+        "description": "Every kind of resource or reading HQ's provider registry declares.",
         "enum": [
           "adguard.client",
           "adguard.dns",
@@ -1987,197 +4514,11 @@
           "SweptTailscaleUser"
         ]
       },
-      "Refusal": {
+      "TLSCertificateName": {
+        "maxLength": 160,
+        "pattern": "^[a-z0-9][a-z0-9-]*$",
         "type": "string",
-        "description": "Why a provider refused a read: the credential itself, or one permission it lacks. Empty when the reason is unclassified.",
-        "enum": [
-          "",
-          "credential",
-          "permission"
-        ],
-        "x-enum-varnames": [
-          "RefusalUnclassified",
-          "RefusalCredential",
-          "RefusalPermission"
-        ]
-      },
-      "FailureClass": {
-        "type": "string",
-        "description": "Why a read got no usable answer: a refusal, an address that answered as something other than the API, or nothing answering. Empty when unclassified.",
-        "enum": [
-          "",
-          "credential",
-          "permission",
-          "address",
-          "network"
-        ],
-        "x-enum-varnames": [
-          "FailureClassUnclassified",
-          "FailureClassCredential",
-          "FailureClassPermission",
-          "FailureClassAddress",
-          "FailureClassNetwork"
-        ]
-      },
-      "PassMode": {
-        "type": "string",
-        "enum": [
-          "plan",
-          "apply"
-        ],
-        "x-enum-varnames": [
-          "PassModePlan",
-          "PassModeApply"
-        ],
-        "description": "Whether a pass only looked (plan) or claimed and executed work (apply)."
-      },
-      "PlannedOperation": {
-        "type": "object",
-        "description": "The operation a plan pass would run next and what it would change.",
-        "properties": {
-          "operation": {
-            "type": "string"
-          },
-          "resource": {
-            "type": "string"
-          },
-          "action": {
-            "type": "string"
-          },
-          "would_change": {
-            "type": "boolean"
-          },
-          "message": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "operation",
-          "resource",
-          "action",
-          "would_change",
-          "message"
-        ],
-        "additionalProperties": false
-      },
-      "PlanPassOutput": {
-        "type": "object",
-        "description": "The line a plan pass prints on stdout.",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          },
-          "mode": {
-            "$ref": "#/components/schemas/PassMode"
-          },
-          "claimed": {
-            "type": "boolean"
-          },
-          "connections": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ConnectionRecord"
-            }
-          },
-          "warnings": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "plan": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PlannedOperation"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "x-go-type": "PlannedOperation",
-            "x-go-type-skip-optional-pointer": false
-          }
-        },
-        "required": [
-          "ok",
-          "mode",
-          "claimed",
-          "connections",
-          "warnings",
-          "plan"
-        ],
-        "additionalProperties": false
-      },
-      "IdlePassOutput": {
-        "type": "object",
-        "description": "The line an apply pass prints when it found nothing to claim.",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          },
-          "mode": {
-            "$ref": "#/components/schemas/PassMode"
-          },
-          "claimed": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok",
-          "mode",
-          "claimed"
-        ],
-        "additionalProperties": false
-      },
-      "AppliedOperationOutput": {
-        "type": "object",
-        "description": "The line an apply pass prints for one operation it ran.",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          },
-          "operation": {
-            "type": "string"
-          },
-          "resource": {
-            "type": "string"
-          },
-          "changed": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok",
-          "operation",
-          "resource",
-          "changed"
-        ],
-        "additionalProperties": false
-      },
-      "RefusedOperationOutput": {
-        "type": "object",
-        "description": "The line an apply pass prints for one operation a provider refused.",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          },
-          "operation": {
-            "type": "string"
-          },
-          "resource": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "ok",
-          "operation",
-          "resource",
-          "message"
-        ],
-        "additionalProperties": false
+        "description": "A certbot lineage name: it becomes --cert-name and a directory under live/. HQ's tls.certificate declaration validates with it and the controller checks it again where it reaches certbot's argv and a path."
       },
       "TLSConsumerKind": {
         "type": "string",
@@ -2193,442 +4534,153 @@
           "TLSConsumerKindNPM"
         ]
       },
-      "GlancePanelID": {
-        "type": "string",
-        "description": "A dashboard panel the glance plan can ask the controller to read.",
-        "enum": [
-          "infrastructure",
-          "weather"
-        ],
-        "x-enum-varnames": [
-          "GlancePanelIDInfrastructure",
-          "GlancePanelIDWeather"
-        ]
-      },
-      "CaddyRouteInFile": {
-        "type": "object",
-        "description": "One route in the file HQ writes on a Caddy edge. The file is text, so each value is one token: a hostname (a wildcard allowed) and an upstream as host:port or scheme://host:port. HQ validates a declaration with these patterns and the controller checks them again on the line that writes the file.",
+      "TailscaleDNSRecord": {
         "properties": {
-          "domain": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 253,
-            "pattern": "^(?:\\*\\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\\.?$"
-          },
-          "upstream": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 253,
-            "pattern": "^(?:(?:https?|h2c)://)?[A-Za-z0-9](?:[A-Za-z0-9._-]*|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]{1,5})?$"
-          }
-        },
-        "required": [
-          "domain",
-          "upstream"
-        ],
-        "additionalProperties": false
-      },
-      "CaddyCertificateDirectory": {
-        "type": "string",
-        "description": "The directory a Caddy edge loads delivered certificates from: one plain absolute path.",
-        "maxLength": 500,
-        "pattern": "^(?:/[A-Za-z0-9._-]+)+/?$"
-      },
-      "CaddyRequestedHost": {
-        "type": "string",
-        "description": "An upstream that names the host each request names, with an optional fixed port (the captured group).",
-        "pattern": "^\\{http\\.request\\.host(?:port)?\\}(?::([0-9]{1,5}))?$"
-      },
-      "GitHubDeliveryProduction": {
-        "type": "string",
-        "description": "What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.",
-        "enum": [
-          "Every extension's latest admission, confirmed on GitHub"
-        ],
-        "x-enum-varnames": [
-          "GitHubDeliveryProductionCurrent"
-        ]
-      },
-      "GitHubDeliverySpec": {
-        "type": "object",
-        "description": "A github.delivery declaration. The defaults are the declaration a sweep reports and HQ adopts.",
-        "properties": {
-          "repository": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
-            "description": "owner/name of the repository whose composition workflow deploys HQ."
-          },
-          "workflow": {
-            "type": "string",
-            "pattern": "^\\.github/workflows/[A-Za-z0-9_.-]+\\.ya?ml$",
-            "default": ".github/workflows/compose.yml"
-          },
-          "branch": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9_./-]+$",
-            "default": "main"
-          },
-          "production": {
-            "$ref": "#/components/schemas/GitHubDeliveryProduction"
-          }
-        },
-        "required": [
-          "repository",
-          "workflow",
-          "branch",
-          "production"
-        ],
-        "additionalProperties": false
-      },
-      "GitHubProfilePlan": {
-        "type": "object",
-        "description": "Whose public GitHub profile the controller reads, and whether to read now. The accounts are the ones a person's sign-in names. The profile keeps a slower clock than the sweep, which HQ holds: due says the reading is old enough or somebody asked.",
-        "properties": {
-          "accounts": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9-]{1,39}$"
-            },
-            "description": "GitHub logins."
-          },
-          "due": {
-            "type": "boolean"
-          }
-        },
-        "additionalProperties": false,
-        "required": [
-          "accounts",
-          "due"
-        ]
-      },
-      "GitHubProfileBounds": {
-        "type": "object",
-        "description": "The bounds of a github.profile record, stated here for both sides. GitHub allows an address 60 anonymous calls an hour, and one account costs the profile, the stars and the picture, then a release call and an advisory call for each watched repository: 3 + 2 x watched.maxItems.",
-        "properties": {
-          "watched": {
-            "type": "array",
-            "maxItems": 15,
-            "description": "The newest starred repositories, each with its latest release and published advisories.",
-            "items": {
-              "type": "object",
-              "additionalProperties": true,
-              "x-go-type": "any"
-            }
-          },
-          "avatar": {
-            "type": "string",
-            "maxLength": 90000,
-            "description": "The picture as a data: URI, so a page loads no image from another host."
-          }
-        },
-        "additionalProperties": false
-      },
-      "HostUnitRecord": {
-        "type": "object",
-        "description": "One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships, and the controller reports no other. Each string is a unit name, one of systemd's state words or an instant in UTC; none is a path, a command line or an environment.",
-        "properties": {
-          "unit": {
-            "type": "string",
-            "maxLength": 255,
-            "pattern": "^[A-Za-z0-9:_.@-]+\\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$",
-            "description": "Id: the unit's name."
-          },
-          "load": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9-]{0,31}$",
-            "description": "LoadState: loaded, or why systemd holds no configuration for it (not-found, masked, error, bad-setting)."
-          },
-          "file_state": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9-]{0,31}$",
-            "description": "UnitFileState: whether the unit file is enabled, static or disabled. Absent for a unit with no file."
-          },
-          "active": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9-]{0,31}$",
-            "description": "ActiveState: active, inactive, activating, deactivating, failed and the like."
-          },
-          "sub": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9-]{0,31}$",
-            "description": "SubState: the unit type's own word for the same state, such as waiting or elapsed for a timer."
-          },
-          "result": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9-]{0,31}$",
-            "description": "Result: success, or why the last run failed (exit-code, signal, timeout and the like)."
-          },
-          "main_code": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "ExecMainCode: how the main process of the last run ended, as the kernel's code (1 exited, 2 killed, 3 dumped)."
-          },
-          "main_status": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "ExecMainStatus: the exit status or signal number of the main process of the last run."
-          },
-          "started_at": {
-            "type": "string",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
-            "description": "InactiveExitTimestamp: when the last start began, on this boot."
-          },
-          "ended_at": {
-            "type": "string",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
-            "description": "InactiveEnterTimestamp: when the unit last became inactive or failed, on this boot."
-          },
-          "condition": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9-]{0,31}$",
-            "description": "ConditionResult: yes or no, whether the unit's conditions held when last checked. A start whose conditions do not hold is skipped without failing."
-          },
-          "condition_at": {
-            "type": "string",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
-            "description": "ConditionTimestamp: when the conditions were last checked."
-          },
-          "last_trigger_at": {
-            "type": "string",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
-            "description": "LastTriggerUSec: when a timer last started its unit."
-          },
-          "next_elapse_at": {
-            "type": "string",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
-            "description": "NextElapseUSecRealtime: when a timer with a calendar schedule next elapses."
-          },
-          "activates": {
-            "type": "string",
-            "maxLength": 255,
-            "pattern": "^[A-Za-z0-9:_.@-]+\\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$",
-            "description": "Unit: the unit a timer or path starts."
-          },
-          "read_at": {
-            "type": "string",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
-            "description": "When the launcher asked systemd."
-          }
-        },
-        "required": [
-          "unit",
-          "load",
-          "active",
-          "sub",
-          "read_at"
-        ],
-        "additionalProperties": false
-      },
-      "ConnectionProvider": {
-        "type": "string",
-        "description": "A connection provider HQ's registry declares: what a credential is for. Django's contract test holds this to the admitted connections.",
-        "enum": [
-          "adguard",
-          "cloudflare_api",
-          "cloudflare_dns",
-          "github_app",
-          "npm",
-          "onepassword",
-          "portainer",
-          "ssh",
-          "tailscale"
-        ],
-        "x-enum-varnames": [
-          "ConnectionProviderAdGuard",
-          "ConnectionProviderCloudflareAPI",
-          "ConnectionProviderCloudflareDNS",
-          "ConnectionProviderGitHubApp",
-          "ConnectionProviderNPM",
-          "ConnectionProviderOnePassword",
-          "ConnectionProviderPortainer",
-          "ConnectionProviderSSH",
-          "ConnectionProviderTailscale"
-        ]
-      },
-      "ReadingPartName": {
-        "type": "string",
-        "description": "A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares, and Django's contract test holds this to the declared parts.",
-        "enum": [
-          "",
-          "access",
-          "acl_management",
-          "apps",
-          "avatar",
-          "branch_rules",
-          "clients",
-          "code_scanning",
-          "configuration",
-          "connections",
-          "dead_hosts",
-          "dependabot",
-          "dns",
-          "environments",
-          "file_size",
-          "filtering",
-          "https",
-          "images",
-          "leaked_credentials",
-          "page_rules",
-          "posture",
-          "proxy_hosts",
-          "querylog",
-          "redirection_hosts",
-          "registration",
-          "rewrites",
-          "rules",
-          "runners",
-          "services",
-          "settings",
-          "streams",
-          "upstreams",
-          "variables",
-          "workflow_pins"
-        ],
-        "x-enum-varnames": [
-          "PartWhole",
-          "PartAccess",
-          "PartACLManagement",
-          "PartApps",
-          "PartAvatar",
-          "PartBranchRules",
-          "PartClients",
-          "PartCodeScanning",
-          "PartConfiguration",
-          "PartConnections",
-          "PartDeadHosts",
-          "PartDependabot",
-          "PartDNS",
-          "PartEnvironments",
-          "PartFileSize",
-          "PartFiltering",
-          "PartHTTPS",
-          "PartImages",
-          "PartLeakedCredentials",
-          "PartPageRules",
-          "PartPosture",
-          "PartProxyHosts",
-          "PartQueryLog",
-          "PartRedirectionHosts",
-          "PartRegistration",
-          "PartRewrites",
-          "PartRules",
-          "PartRunners",
-          "PartServices",
-          "PartSettings",
-          "PartStreams",
-          "PartUpstreams",
-          "PartVariables",
-          "PartWorkflowPins"
-        ]
-      },
-      "TLSCertificateName": {
-        "type": "string",
-        "description": "A certbot lineage name: it becomes --cert-name and a directory under live/. HQ's tls.certificate declaration validates with it and the controller checks it again where it reaches certbot's argv and a path.",
-        "maxLength": 160,
-        "pattern": "^[a-z0-9][a-z0-9-]*$"
-      },
-      "TLSCertificateDomain": {
-        "type": "string",
-        "description": "A domain certbot is asked for: DNS labels, optionally under one wildcard. The controller checks it where it reaches certbot's argv.",
-        "pattern": "^(\\*\\.)?([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
-      },
-      "CloudflareCAAValue": {
-        "type": "string",
-        "description": "A CAA record's content as flags, tag and quoted value (the three groups). HQ validates a declared CAA record with it and both sides take the content apart with it.",
-        "pattern": "^\\s*(\\d{1,3})\\s+(issue|issuewild|iodef)\\s+\"([^\"]*)\"\\s*$"
-      },
-      "ConditionType": {
-        "type": "string",
-        "description": "What a condition says of a resource: it is as declared, it differs from the declaration, or it needs attention.",
-        "enum": [
-          "Ready",
-          "Drifted",
-          "Degraded"
-        ],
-        "x-enum-varnames": [
-          "ConditionReady",
-          "ConditionDrifted",
-          "ConditionDegraded"
-        ]
-      },
-      "Problem": {
-        "type": "object",
-        "description": "An RFC 9457 problem: why HQ refused or failed a bridge call.",
-        "required": [
-          "title",
-          "status",
-          "detail"
-        ],
-        "properties": {
-          "type": {
+          "record": {
             "type": "string"
           },
-          "title": {
+          "nameservers": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "override_local_dns": {
+            "default": false,
+            "type": "boolean"
+          },
+          "magic_dns": {
+            "default": false,
+            "type": "boolean"
+          },
+          "search_paths": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "split_dns": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "default": {},
+            "type": "object"
+          }
+        },
+        "required": [
+          "record"
+        ],
+        "type": "object",
+        "description": "One tailscale.dns record: Tailnet DNS."
+      },
+      "TailscaleSettingsRecord": {
+        "properties": {
+          "record": {
+            "type": "string"
+          },
+          "devices_approval_on": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "devices_key_duration_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "devices_auto_updates_on": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "users_approval_on": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "regional_routing_on": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "posture_identity_collection_on": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "https_enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "acls_externally_managed_on": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "record"
+        ],
+        "type": "object",
+        "description": "One tailscale.settings record: Tailnet settings."
+      },
+      "TailscaleUserRecord": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "display_name": {
+            "default": "",
+            "type": "string"
+          },
+          "login_name": {
+            "default": "",
+            "type": "string"
+          },
+          "role": {
+            "default": "",
             "type": "string"
           },
           "status": {
-            "type": "integer",
-            "minimum": 400,
-            "maximum": 599
+            "default": "",
+            "type": "string"
           },
-          "detail": {
+          "created": {
+            "default": "",
+            "type": "string"
+          },
+          "last_seen": {
+            "default": "",
             "type": "string"
           }
         },
-        "additionalProperties": false
-      },
-      "BridgeBody": {
-        "type": "string",
-        "maxLength": 67108864,
-        "description": "One bridge message as sent: maxLength is the most bytes either side accepts as a request or an answer."
-      },
-      "LeaseSeconds": {
-        "type": "integer",
-        "minimum": 30,
-        "maximum": 3600,
-        "default": 300,
-        "description": "How long a claimed operation is leased, in seconds. The controller sends the default; HQ applies it when none is sent."
-      },
-      "JobOutcome": {
-        "type": "object",
-        "description": "How one piece of scheduled work ended. Running means a job of this kind was already live.",
         "required": [
-          "name",
-          "state",
-          "note"
+          "id"
         ],
-        "additionalProperties": false,
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "state": {
-            "$ref": "#/components/schemas/JobState"
-          },
-          "note": {
-            "type": "string"
-          },
-          "job": {
-            "type": "string"
-          }
-        }
-      },
-      "JobState": {
-        "type": "string",
-        "description": "How a job stands when HQ answers for it.",
-        "enum": [
-          "succeeded",
-          "failed",
-          "lost",
-          "running"
-        ],
-        "x-enum-varnames": [
-          "JobStateSucceeded",
-          "JobStateFailed",
-          "JobStateLost",
-          "JobStateRunning"
-        ]
+        "type": "object",
+        "description": "One tailscale.user record: Tailnet user."
       }
     }
   }

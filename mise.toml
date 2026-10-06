@@ -280,6 +280,11 @@ shellcheck -x $sources
 for suite in scripts/test-*.sh; do "$suite"; done
 '''
 
+[tasks."checks:bridge-contract"]
+description = "The controller's contracts are the ones the registry derives"
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+run = "uv run --locked python manage.py bridge_contract --check"
+
 [tasks."checks:deploycheck"]
 description = "Production settings raise no security warning"
 # DEBUG off, a real host. The values mirror a production configuration so the

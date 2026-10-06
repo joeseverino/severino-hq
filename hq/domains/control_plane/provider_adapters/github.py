@@ -12,17 +12,16 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from ..bridge_contract import keyword
+from ..connection_shapes import GITHUB_APP
 from ..observations.github import PROVIDER
-from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, applies
+from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, SharedValue, applies
 
 KIND = "github.delivery"
-# The bridge contract states these; the controller reports a sweep's record
-# with the same defaults, which is what lets `adopts` recognise it.
-_FIELDS = ("GitHubDeliverySpec", "properties")
-CURRENT = keyword("GitHubDeliveryProduction", "enum", 0)
-COMPOSE_WORKFLOW = keyword(*_FIELDS, "workflow", "default")
-MAIN_BRANCH = keyword(*_FIELDS, "branch", "default")
+# Shared values (``SHARED``): the controller reports a sweep's record with the
+# same defaults, which is what lets `adopts` recognise it.
+CURRENT = "Every extension's latest admission, confirmed on GitHub"
+COMPOSE_WORKFLOW = ".github/workflows/compose.yml"
+MAIN_BRANCH = "main"
 
 
 def _from_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -69,17 +68,17 @@ def _console(record: dict[str, Any]) -> str:
 
 class GitHubDeliverySpec(ProviderModel):
     repository: str = Field(
-        pattern=keyword(*_FIELDS, "repository", "pattern"),
+        pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
         title="Repository",
         description="The repository whose deploy workflow deploys HQ.",
     )
     workflow: str = Field(
         default=COMPOSE_WORKFLOW,
-        pattern=keyword(*_FIELDS, "workflow", "pattern"),
+        pattern=r"^\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml$",
         title="Deploy workflow",
     )
     branch: str = Field(
-        default=MAIN_BRANCH, pattern=keyword(*_FIELDS, "branch", "pattern"), title="Branch"
+        default=MAIN_BRANCH, pattern=r"^[A-Za-z0-9_./-]+$", title="Branch"
     )
     production: Literal[CURRENT] = Field(  # type: ignore[valid-type]
         default=CURRENT, title="Production"
@@ -119,10 +118,27 @@ DEFINITION = ProviderSpec(
 )
 DEFINITIONS = (DEFINITION,)
 
+SHARED = (
+    SharedValue(
+        "GitHubDeliveryProduction",
+        (CURRENT,),
+        "What a github.delivery record says of production once every extension's "
+        "latest admission runs there. Until then it says what stands between.",
+        varnames=("GitHubDeliveryProductionCurrent",),
+    ),
+    SharedValue(
+        "GitHubDeliverySpec",
+        GitHubDeliverySpec,
+        "A github.delivery declaration. The defaults are the declaration a sweep "
+        "reports and HQ adopts.",
+        refs=(("production", "GitHubDeliveryProduction"),),
+    ),
+)
+
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.
 CONNECTIONS = {
     # An app's permissions are fine-grained and each token HQ mints is
     # narrowed again to one call's repositories and permissions.
-    PROVIDER: ConnectionKind("GitHub App", "scoped"),
+    PROVIDER: ConnectionKind("GitHub App", "scoped", GITHUB_APP),
 }

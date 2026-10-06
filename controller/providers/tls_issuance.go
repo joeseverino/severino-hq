@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/api"
+	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -166,7 +167,10 @@ func validateCertificate(fullchain, privateKey []byte, domains []string) (string
 }
 
 func (r *Registry) acmeDir() (string, error) {
-	return r.Env.Required("HQ", "ACME_DIR")
+	if r.Env.ACMEDir == "" {
+		return "", &ProviderError{Err: runtime.ErrSettingMissing}
+	}
+	return r.Env.ACMEDir, nil
 }
 
 // certificateName and certificateDomain are the contract's patterns, which
@@ -333,11 +337,8 @@ func writePrivate(path, text string) error {
 
 // cloudflareToken is the DNS-edit token the ACME DNS-01 challenge uses.
 func (r *Registry) cloudflareToken() (string, error) {
-	prefix, err := r.Env.Prefix(runtime.ConnectionProviderCloudflareDNS, "")
-	if err != nil {
-		return "", err
-	}
-	return r.Env.Required(prefix, "API_TOKEN")
+	_, token, err := r.cloudflareCredential(runtime.ConnectionProviderCloudflareDNS, "")
+	return token.APIToken, err
 }
 
 // issueCertificate runs certbot's DNS-01 issuance and returns the new lineage.
@@ -373,15 +374,13 @@ func (r *Registry) issueCertificate(ctx context.Context, spec TLSCertificateSpec
 		return nil, nil, &ProviderError{Message: "ACME credentials could not be written"}
 	}
 	defer os.Remove(credentials)
-	email, err := r.Env.Required("ACME", "EMAIL")
+	// The certificate authority account is the one connection of its shape.
+	account, err := runtime.Only(r.Supplied, func(c connections.Connection) *connections.ACME { return c.ACME })
 	if err != nil {
 		return nil, nil, err
 	}
-	directory, err := r.Env.Required("ACME", "DIRECTORY_URL")
-	if err != nil {
-		return nil, nil, err
-	}
-	propagation := r.Env["ACME_PROPAGATION_SECONDS"]
+	email, directory := account.Email, account.DirectoryURL
+	propagation := r.Env.ACMEPropagationSeconds
 	if propagation == "" {
 		propagation = "30"
 	}

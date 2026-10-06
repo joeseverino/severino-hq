@@ -1,0 +1,2083 @@
+{
+  "openapi": "3.2.0",
+  "info": {
+    "title": "HQ controller bridge",
+    "version": "1.0.0",
+    "description": "The contract between Severino HQ and its infrastructure controller. Each path is one bridge action: a POST over HTTP on HQ's private Unix socket, parameters in the query, the payload as the JSON body, the answer as JSON, and a refusal as an RFC 9457 problem. The actions and the bridge's own messages are written by hand; every schema HQ's registry owns is generated from its declarations and joined to them. Go types and the controller's client are generated from this document; HQ's bridge application takes its routes, parameters and limits from the same joined document, and Django's tests validate every action against it."
+  },
+  "paths": {
+    "/claim": {
+      "post": {
+        "operationId": "claim",
+        "summary": "Lease the next compatible operation.",
+        "x-bridge-action": "claim",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lease-seconds",
+            "in": "query",
+            "required": false,
+            "description": "Lease length in seconds.",
+            "schema": {
+              "$ref": "#/components/schemas/LeaseSeconds"
+            }
+          },
+          {
+            "name": "capability",
+            "in": "query",
+            "required": false,
+            "description": "A kind:action the controller can perform.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pending"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/peek": {
+      "post": {
+        "operationId": "peek",
+        "summary": "Read the next compatible operation without leasing it.",
+        "x-bridge-action": "peek",
+        "parameters": [
+          {
+            "name": "capability",
+            "in": "query",
+            "required": false,
+            "description": "A kind:action the controller can perform.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pending"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/export": {
+      "post": {
+        "operationId": "export",
+        "summary": "The contract for one resource.",
+        "x-bridge-action": "export",
+        "parameters": [
+          {
+            "name": "resource",
+            "in": "query",
+            "required": true,
+            "description": "Managed resource key.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Contract"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/material": {
+      "post": {
+        "operationId": "material",
+        "summary": "Certificate material for one resource.",
+        "x-bridge-action": "material",
+        "parameters": [
+          {
+            "name": "resource",
+            "in": "query",
+            "required": true,
+            "description": "Managed resource key.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/report": {
+      "post": {
+        "operationId": "report",
+        "summary": "Report an operation's result.",
+        "x-bridge-action": "report",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "operation",
+            "in": "query",
+            "required": true,
+            "description": "Operation id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControllerReport"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/schedule": {
+      "post": {
+        "operationId": "schedule",
+        "summary": "Queue the operations the contracts call for.",
+        "x-bridge-action": "schedule",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sweep-due": {
+      "post": {
+        "operationId": "sweep_due",
+        "summary": "Whether to sweep now, and why.",
+        "x-bridge-action": "sweep-due",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SweepVerdict"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/connections": {
+      "post": {
+        "operationId": "connections",
+        "summary": "Record the connections this controller carries.",
+        "x-bridge-action": "connections",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ConnectionRecord"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/inventory": {
+      "post": {
+        "operationId": "inventory",
+        "summary": "Record one sweep.",
+        "x-bridge-action": "inventory",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Inventory"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/steps": {
+      "post": {
+        "operationId": "steps",
+        "summary": "Record the work one pass could not finish.",
+        "x-bridge-action": "steps",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/StepFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics-plan": {
+      "post": {
+        "operationId": "analytics_plan",
+        "summary": "The window to read for each site.",
+        "x-bridge-action": "analytics-plan",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsPlan"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AnalyticsSiteIdentity"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics": {
+      "post": {
+        "operationId": "analytics",
+        "summary": "Record site analytics.",
+        "x-bridge-action": "analytics",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyticsReadings"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/glance-plan": {
+      "post": {
+        "operationId": "glance_plan",
+        "summary": "The dashboard panels to refresh.",
+        "x-bridge-action": "glance-plan",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlancePlan"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/glance": {
+      "post": {
+        "operationId": "glance",
+        "summary": "Record dashboard observations.",
+        "x-bridge-action": "glance",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GlanceObservations"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/registry": {
+      "post": {
+        "operationId": "registry",
+        "summary": "The provider declarations the controller acts on.",
+        "x-bridge-action": "registry",
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControllerRegistry"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/job": {
+      "post": {
+        "operationId": "job",
+        "summary": "Do one piece of scheduled work to its end, as a job.",
+        "x-bridge-action": "job",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "description": "The scheduled work, as HQ declares it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOutcome"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Operation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "requested_actor": {
+            "type": "string"
+          },
+          "requested_interface": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "x-go-type-skip-optional-pointer": false
+          },
+          "claimed_by": {
+            "type": "string"
+          },
+          "lease_expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "x-go-type-skip-optional-pointer": false
+          },
+          "attempt_count": {
+            "type": "integer"
+          },
+          "result": {
+            "description": "The provider's last result for this operation, as Django stored it.",
+            "x-go-type": "any"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "resource",
+          "action",
+          "state",
+          "reason",
+          "requested_actor",
+          "requested_interface",
+          "created_at",
+          "completed_at",
+          "claimed_by",
+          "lease_expires_at",
+          "attempt_count",
+          "result"
+        ],
+        "description": "A queued or claimed operation, as serialize_operation emits it."
+      },
+      "Resource": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ResourceKind"
+          },
+          "generation": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "spec": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Desired state, resolved for the kind. Each provider decodes it into its own type."
+          },
+          "observed": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "What the provider was last seen holding for this resource."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "kind",
+          "generation",
+          "enabled",
+          "spec",
+          "observed"
+        ]
+      },
+      "Contract": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "type": "integer"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/Resource"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "resource"
+        ],
+        "description": "The desired-only contract for one resource (export)."
+      },
+      "Pending": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Operation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "x-go-type-skip-optional-pointer": false
+          },
+          "schema_version": {
+            "type": "integer"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/Resource"
+          },
+          "unresolvable": {
+            "type": "string"
+          },
+          "verification": {
+            "$ref": "#/components/schemas/Verification",
+            "description": "The operation's action's verification policy, when it declares one.",
+            "x-go-type-skip-optional-pointer": false
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "operation"
+        ],
+        "description": "The next operation (claim/peek). schema_version and resource accompany an operation whose contract resolved; unresolvable explains one that did not (peek only); verification is the action's declared verification policy, when it has one."
+      },
+      "Material": {
+        "type": "object",
+        "properties": {
+          "fullchain": {
+            "type": "string"
+          },
+          "private_key": {
+            "type": "string"
+          },
+          "domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "fullchain",
+          "private_key",
+          "domains"
+        ],
+        "description": "A stored certificate's material, released only to the controller applying it."
+      },
+      "Condition": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/ConditionType"
+          },
+          "status": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "status",
+          "reason",
+          "message"
+        ]
+      },
+      "ControllerReport": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "observed_generation": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "type": "object",
+            "additionalProperties": true,
+            "x-go-type": "any",
+            "description": "The provider's status for the resource; its shape belongs to the kind."
+          },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Condition"
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "observed_generation"
+        ]
+      },
+      "ConnectionRecord": {
+        "type": "object",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "manages": {
+            "type": "boolean"
+          },
+          "probed": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "reaches": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "failure": {
+            "$ref": "#/components/schemas/FailureClass"
+          },
+          "carried": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "Credential expiry the probe read, when it read one."
+          },
+          "store": {
+            "x-go-type": "any",
+            "description": "Where the connection's credentials are stored, as connection_env reports it."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "connection_ref",
+          "provider",
+          "endpoint",
+          "manages",
+          "probed",
+          "ok",
+          "detail",
+          "reaches"
+        ],
+        "description": "One connection the controller carries and what its probe found."
+      },
+      "StepFailure": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "step",
+          "subject",
+          "reason"
+        ],
+        "description": "Work one pass could not finish; subject is the connection ref it used."
+      },
+      "RefusedPart": {
+        "type": "object",
+        "properties": {
+          "part": {
+            "$ref": "#/components/schemas/ReadingPartName"
+          },
+          "connection_ref": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "refusal": {
+            "$ref": "#/components/schemas/FailureClass"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "part",
+          "refusal",
+          "reason",
+          "scope",
+          "connection_ref"
+        ],
+        "description": "One declared part of a reading that was refused: which part, why, and on what (\"\" scope for all of it)."
+      },
+      "KindReport": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "connected": {
+            "type": "boolean",
+            "description": "False when nothing this controller holds can read the kind; absent means it was read.",
+            "x-go-type-skip-optional-pointer": false
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "One record of the kind; Django validates it against that kind's observation schema.",
+              "x-go-type": "any"
+            }
+          },
+          "error": {
+            "type": "string"
+          },
+          "refusal": {
+            "$ref": "#/components/schemas/Refusal"
+          },
+          "refused_parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RefusedPart"
+            }
+          },
+          "carried": {
+            "type": "boolean",
+            "description": "True when the kind keeps its own clock and was neither due nor asked for: nothing was asked of the provider, and HQ keeps the last records and when they were read."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "records"
+        ]
+      },
+      "Inventory": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/KindReport"
+        },
+        "description": "One sweep: each kind read, by kind name."
+      },
+      "AnalyticsSiteIdentity": {
+        "type": "object",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "site_tag": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "connection_ref",
+          "site_tag"
+        ]
+      },
+      "AnalyticsWindow": {
+        "type": "object",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "site_tag": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string",
+            "format": "date",
+            "x-go-type": "string"
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "x-go-type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "backfill",
+              "refresh"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "connection_ref",
+          "site_tag",
+          "start",
+          "end",
+          "reason"
+        ]
+      },
+      "AnalyticsPlan": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsWindow"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "windows"
+        ]
+      },
+      "AnalyticsReadings": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "One controller's reading of every analytics site it can see (record_analytics).",
+        "properties": {
+          "sites": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsSiteReading"
+            }
+          }
+        },
+        "required": [
+          "sites"
+        ]
+      },
+      "GlanceMachineTarget": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "connections",
+          "request_id"
+        ]
+      },
+      "GlanceWeatherTarget": {
+        "type": "object",
+        "properties": {
+          "point": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string",
+            "description": "The National Weather Service API the forecast is read from, as HQ's connection states it."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "point",
+          "endpoint"
+        ]
+      },
+      "GlancePlanTargets": {
+        "type": "object",
+        "properties": {
+          "infrastructure": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlanceMachineTarget"
+            }
+          },
+          "weather": {
+            "$ref": "#/components/schemas/GlanceWeatherTarget"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "infrastructure",
+          "weather"
+        ]
+      },
+      "GlancePlan": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "panels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlancePanelID"
+            }
+          },
+          "targets": {
+            "$ref": "#/components/schemas/GlancePlanTargets"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "panels",
+          "targets"
+        ]
+      },
+      "GlanceObservations": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "One dashboard panel observation (record_dashboard_observations). Not yet produced by the Go controller."
+        }
+      },
+      "ForcedRead": {
+        "type": "object",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ResourceKind"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "kinds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ResourceKind"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "connection_ref",
+          "kind",
+          "requested_at",
+          "kinds"
+        ],
+        "description": "An operator's pending read request."
+      },
+      "SweepVerdict": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "interval_seconds": {
+            "type": "integer"
+          },
+          "carry": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "forced": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ForcedRead"
+            }
+          },
+          "only_kinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResourceKind"
+            }
+          },
+          "due": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "age_seconds": {
+            "type": "integer",
+            "description": "Absent before anything has been swept."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "interval_seconds",
+          "carry",
+          "forced",
+          "only_kinds",
+          "due",
+          "reason"
+        ]
+      },
+      "Acknowledgement": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true,
+        "description": "Django's answer to a report; the controller reads only ok."
+      },
+      "Capability": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ResourceKind"
+          },
+          "action": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "action"
+        ]
+      },
+      "LockedAction": {
+        "type": "object",
+        "description": "An action the registry refuses, and the reason it gives.",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ResourceKind"
+          },
+          "action": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "action",
+          "reason"
+        ]
+      },
+      "AdmittedExtension": {
+        "type": "object",
+        "description": "One admitted extension's source, from the plugin lock the image carries.",
+        "properties": {
+          "plugin": {
+            "type": "string"
+          },
+          "source_repository": {
+            "type": "string",
+            "description": "owner/name of the repository the extension is built from."
+          },
+          "source_workflow": {
+            "type": "string",
+            "description": "The workflow whose successful run on main admits it."
+          },
+          "source_commit": {
+            "type": "string",
+            "description": "The commit the image runs."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "plugin",
+          "source_repository",
+          "source_workflow",
+          "source_commit"
+        ]
+      },
+      "ControllerRegistry": {
+        "type": "object",
+        "description": "What the controller may do and where each kind is read, from HQ's provider declarations.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "capabilities": {
+            "type": "array",
+            "description": "Actions the controller may apply.",
+            "items": {
+              "$ref": "#/components/schemas/Capability"
+            }
+          },
+          "locked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LockedAction"
+            }
+          },
+          "material_kinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResourceKind"
+            },
+            "description": "Kinds whose work needs material HQ holds."
+          },
+          "connection_providers": {
+            "type": "object",
+            "description": "Each resource kind's connection providers.",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/ConnectionProvider"
+              }
+            }
+          },
+          "observations": {
+            "type": "object",
+            "description": "Each reading kind's provider.",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "connection_credentials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionProvider"
+            },
+            "description": "Providers a connection credential is modelled for."
+          },
+          "extensions": {
+            "type": "array",
+            "description": "Each admitted extension the running image composes, which delivery follows.",
+            "items": {
+              "$ref": "#/components/schemas/AdmittedExtension"
+            }
+          },
+          "github_profiles": {
+            "$ref": "#/components/schemas/GitHubProfilePlan"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "capabilities",
+          "locked",
+          "material_kinds",
+          "connection_providers",
+          "observations",
+          "connection_credentials",
+          "extensions",
+          "github_profiles"
+        ]
+      },
+      "AnalyticsSiteReading": {
+        "type": "object",
+        "description": "One site's traffic and vitals over whole UTC days, start to end inclusive.",
+        "properties": {
+          "site_tag": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "connection_ref": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string",
+            "format": "date",
+            "x-go-type": "string"
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "x-go-type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsRow"
+            }
+          },
+          "vitals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsVitals"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "site_tag",
+          "host",
+          "connection_ref",
+          "start",
+          "end",
+          "rows",
+          "vitals"
+        ]
+      },
+      "AnalyticsRow": {
+        "type": "object",
+        "description": "One day's count for one value of one breakdown.",
+        "properties": {
+          "dimension": {
+            "type": "string",
+            "enum": [
+              "path",
+              "referrer",
+              "country",
+              "device",
+              "browser",
+              "os"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-go-type-skip-optional-pointer": false
+          },
+          "pageviews": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "visits": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sample_interval": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "dimension",
+          "value",
+          "date",
+          "pageviews",
+          "visits",
+          "sample_interval"
+        ]
+      },
+      "AnalyticsVitals": {
+        "type": "object",
+        "description": "One day's site-wide Core Web Vitals.",
+        "properties": {
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-go-type-skip-optional-pointer": false
+          },
+          "sample_interval": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cumulative_layout_shift": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-go-type-skip-optional-pointer": false,
+            "x-go-type": "float64"
+          },
+          "largest_contentful_paint_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "x-go-type-skip-optional-pointer": false,
+            "description": "p75 in milliseconds; null when there were no samples.",
+            "minimum": 0
+          },
+          "interaction_to_next_paint_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "x-go-type-skip-optional-pointer": false,
+            "description": "p75 in milliseconds; null when there were no samples.",
+            "minimum": 0
+          },
+          "first_contentful_paint_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "x-go-type-skip-optional-pointer": false,
+            "description": "p75 in milliseconds; null when there were no samples.",
+            "minimum": 0
+          },
+          "time_to_first_byte_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "x-go-type-skip-optional-pointer": false,
+            "description": "p75 in milliseconds; null when there were no samples.",
+            "minimum": 0
+          },
+          "lcp_good": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lcp_needs_improvement": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lcp_poor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "inp_good": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "inp_needs_improvement": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "inp_poor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cls_good": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cls_needs_improvement": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cls_poor": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "date",
+          "sample_interval",
+          "cumulative_layout_shift",
+          "largest_contentful_paint_ms",
+          "interaction_to_next_paint_ms",
+          "first_contentful_paint_ms",
+          "time_to_first_byte_ms",
+          "lcp_good",
+          "lcp_needs_improvement",
+          "lcp_poor",
+          "inp_good",
+          "inp_needs_improvement",
+          "inp_poor",
+          "cls_good",
+          "cls_needs_improvement",
+          "cls_poor"
+        ]
+      },
+      "Verification": {
+        "type": "object",
+        "description": "How long the controller keeps checking that an applied change is actually served, declared by the action it belongs to.",
+        "properties": {
+          "timeout_seconds": {
+            "type": "integer"
+          },
+          "interval_seconds": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "timeout_seconds",
+          "interval_seconds"
+        ],
+        "additionalProperties": false
+      },
+      "PassMode": {
+        "type": "string",
+        "enum": [
+          "plan",
+          "apply"
+        ],
+        "x-enum-varnames": [
+          "PassModePlan",
+          "PassModeApply"
+        ],
+        "description": "Whether a pass only looked (plan) or claimed and executed work (apply)."
+      },
+      "PlannedOperation": {
+        "type": "object",
+        "description": "The operation a plan pass would run next and what it would change.",
+        "properties": {
+          "operation": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "would_change": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "resource",
+          "action",
+          "would_change",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "PlanPassOutput": {
+        "type": "object",
+        "description": "The line a plan pass prints on stdout.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/PassMode"
+          },
+          "claimed": {
+            "type": "boolean"
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionRecord"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlannedOperation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "x-go-type": "PlannedOperation",
+            "x-go-type-skip-optional-pointer": false
+          }
+        },
+        "required": [
+          "ok",
+          "mode",
+          "claimed",
+          "connections",
+          "warnings",
+          "plan"
+        ],
+        "additionalProperties": false
+      },
+      "IdlePassOutput": {
+        "type": "object",
+        "description": "The line an apply pass prints when it found nothing to claim.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/PassMode"
+          },
+          "claimed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "mode",
+          "claimed"
+        ],
+        "additionalProperties": false
+      },
+      "AppliedOperationOutput": {
+        "type": "object",
+        "description": "The line an apply pass prints for one operation it ran.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "changed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "operation",
+          "resource",
+          "changed"
+        ],
+        "additionalProperties": false
+      },
+      "RefusedOperationOutput": {
+        "type": "object",
+        "description": "The line an apply pass prints for one operation a provider refused.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "operation",
+          "resource",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "GlancePanelID": {
+        "type": "string",
+        "description": "A dashboard panel the glance plan can ask the controller to read.",
+        "enum": [
+          "infrastructure",
+          "weather"
+        ],
+        "x-enum-varnames": [
+          "GlancePanelIDInfrastructure",
+          "GlancePanelIDWeather"
+        ]
+      },
+      "GitHubProfilePlan": {
+        "type": "object",
+        "description": "Whose public GitHub profile the controller reads, and whether to read now. The accounts are the ones a person's sign-in names. The profile keeps a slower clock than the sweep, which HQ holds: due says the reading is old enough or somebody asked.",
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9-]{1,39}$"
+            },
+            "description": "GitHub logins."
+          },
+          "due": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "accounts",
+          "due"
+        ]
+      },
+      "TLSCertificateDomain": {
+        "type": "string",
+        "description": "A domain certbot is asked for: DNS labels, optionally under one wildcard. The controller checks it where it reaches certbot's argv.",
+        "pattern": "^(\\*\\.)?([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
+      },
+      "ConditionType": {
+        "type": "string",
+        "description": "What a condition says of a resource: it is as declared, it differs from the declaration, or it needs attention.",
+        "enum": [
+          "Ready",
+          "Drifted",
+          "Degraded"
+        ],
+        "x-enum-varnames": [
+          "ConditionReady",
+          "ConditionDrifted",
+          "ConditionDegraded"
+        ]
+      },
+      "Problem": {
+        "type": "object",
+        "description": "An RFC 9457 problem: why HQ refused or failed a bridge call.",
+        "required": [
+          "title",
+          "status",
+          "detail"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BridgeBody": {
+        "type": "string",
+        "maxLength": 67108864,
+        "description": "One bridge message as sent: maxLength is the most bytes either side accepts as a request or an answer."
+      },
+      "LeaseSeconds": {
+        "type": "integer",
+        "minimum": 30,
+        "maximum": 3600,
+        "default": 300,
+        "description": "How long a claimed operation is leased, in seconds. The controller sends the default; HQ applies it when none is sent."
+      },
+      "JobOutcome": {
+        "type": "object",
+        "description": "How one piece of scheduled work ended. Running means a job of this kind was already live.",
+        "required": [
+          "name",
+          "state",
+          "note"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/JobState"
+          },
+          "note": {
+            "type": "string"
+          },
+          "job": {
+            "type": "string"
+          }
+        }
+      },
+      "JobState": {
+        "type": "string",
+        "description": "How a job stands when HQ answers for it.",
+        "enum": [
+          "succeeded",
+          "failed",
+          "lost",
+          "running"
+        ],
+        "x-enum-varnames": [
+          "JobStateSucceeded",
+          "JobStateFailed",
+          "JobStateLost",
+          "JobStateRunning"
+        ]
+      }
+    }
+  }
+}

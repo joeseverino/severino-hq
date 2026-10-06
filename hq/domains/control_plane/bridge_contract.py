@@ -1,20 +1,27 @@
-"""The controller bridge's contract, read where a declaration states what the controller also checks.
+"""The controller bridge's contract: what the bridge alone defines, joined to
+what the registry declares.
 
-``controller/api/hq-controller.openapi.json`` is written once. The controller
-embeds it (``controller/api/contract.go``) and generates its client from it; a
-declaration here takes a pattern, a default or a fixed value from it instead
-of restating it, and the bridge application takes its routes, parameters,
-size limit and the shape of every payload from it, so the two cannot differ.
+``bridge_base.json`` is written by hand and holds only the bridge's own: each
+action's path, parameters and payload, and the messages that are not registry
+facts (claims, reports, sweep verdicts, problems). Everything the registry
+owns (kinds, connection providers, failure classes, reading parts, each
+reading's record, the values both sides check) is built from its declarations
+by ``bridge_registry`` and joined here in memory. ``manage.py bridge_contract``
+writes the joined document to ``controller/api/hq-controller.openapi.json``,
+which the controller embeds and generates its client and types from. HQ never
+reads that file: a fact it declared comes from the declaration.
 
-A payload is held to the schema its operation declares, which is JSON Schema
-2020-12 as OpenAPI 3.2 embeds it. What an action is handed has the types, the
-required members and the bounds the contract states, so an action reads a
-member and never coerces one.
+The bridge application takes its routes, parameters, size limit and the shape
+of every payload from the joined document. A payload is held to the schema its
+operation declares, which is JSON Schema 2020-12 as OpenAPI 3.2 embeds it.
+What an action is handed has the types, the required members and the bounds
+the contract states, so an action reads a member and never coerces one.
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -27,40 +34,92 @@ from jsonschema.exceptions import ValidationError, best_match  # type: ignore[im
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
+# What the bridge alone defines, written by hand.
+BASE_PATH = Path(__file__).with_name("bridge_base.json")
+# The joined document, written for the controller's generator.
 CONTRACT_PATH = Path(settings.BASE_DIR) / "controller" / "api" / "hq-controller.openapi.json"
+# The connections document's schema, written for the same generator.
+CONNECTIONS_PATH = Path(settings.BASE_DIR) / "controller" / "api" / "hq-connections.openapi.json"
+# The shapes a vault item is projected into, written for the secret renderer.
+SHAPES_PATH = Path(settings.BASE_DIR) / "hq" / "config" / "controller-connections.json"
 # The name the contract's own references resolve against.
 CONTRACT_URI = "urn:hq:controller-bridge"
+_REFERENCE = "#/components/schemas/"
+
+
+def _references(node: Any) -> Iterator[str]:
+    """Every component a document refers to."""
+
+    if isinstance(node, dict):
+        reference = node.get("$ref")
+        if isinstance(reference, str):
+            yield reference
+        for value in node.values():
+            yield from _references(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _references(value)
+
+
+def joined(base: dict[str, Any], declared: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """The base with the registry's schemas among its components.
+
+    A name both state, or a reference to a component neither states, is an
+    error: a fact has one owner, and a message cannot name a schema that is
+    not there.
+    """
+
+    own: dict[str, Any] = base["components"]["schemas"]
+    twice = sorted(set(own) & set(declared))
+    if twice:
+        raise ValueError(f"the bridge base restates what the registry declares: {twice}")
+    schemas = {**own, **declared}
+    missing = sorted(
+        {
+            reference
+            for reference in _references({"paths": base["paths"], "schemas": schemas})
+            if reference.removeprefix(_REFERENCE) not in schemas
+        }
+    )
+    if missing:
+        raise ValueError(f"the bridge contract refers to schemas nothing declares: {missing}")
+    return {**base, "components": {**base["components"], "schemas": schemas}}
 
 
 @cache
 def contract() -> dict[str, Any]:
-    document: dict[str, Any] = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
-    return document
+    from .bridge_registry import schemas
+
+    with BASE_PATH.open(encoding="utf-8") as source:
+        base: dict[str, Any] = json.load(source)
+    return joined(base, schemas())
 
 
-def _node(schema: str, path: tuple[str | int, ...]) -> Any:
-    node: Any = contract()["components"]["schemas"][schema]
-    for key in path:
-        node = node[key]
-    return node
+def render(document: dict[str, Any]) -> str:
+    """A document as the file that carries it."""
+
+    return json.dumps(document, indent=2) + "\n"
 
 
-def keyword(schema: str, *path: str | int) -> str:
-    """One string keyword of a component schema, by the keys and indexes under it.
+def emitted() -> dict[Path, str]:
+    """Every file written from the registry, with its content."""
 
-    A keyword the contract does not state fails the import that asked for it.
-    """
+    from .bridge_registry import connections_document
+    from .connection_shapes import renderer_registry
 
-    node = _node(schema, path)
-    if not isinstance(node, str) or not node:
-        raise ValueError(f"the bridge contract's {'.'.join(map(str, (schema, *path)))} is not a value")
-    return node
+    return {
+        CONTRACT_PATH: render(contract()),
+        CONNECTIONS_PATH: render(connections_document()),
+        SHAPES_PATH: render(renderer_registry()),
+    }
 
 
 def limit(schema: str, *path: str | int) -> int:
-    """One positive integer keyword, such as a ``maxLength``."""
+    """One positive integer keyword of a component schema, such as a ``maxLength``."""
 
-    node = _node(schema, path)
+    node: Any = contract()["components"]["schemas"][schema]
+    for key in path:
+        node = node[key]
     if isinstance(node, bool) or not isinstance(node, int) or node <= 0:
         raise ValueError(f"the bridge contract's {'.'.join(map(str, (schema, *path)))} is not a limit")
     return node

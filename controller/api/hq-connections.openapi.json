@@ -1,0 +1,323 @@
+{
+  "openapi": "3.2.0",
+  "info": {
+    "title": "HQ controller connections",
+    "version": "2.0.0",
+    "description": "The document that carries provider connections from the secret renderer to the controller. It is a file, not an API: there are no paths. Emitted from the connection shapes HQ's registry declares; the Go types both programs use are generated from it."
+  },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "Connection": {
+        "type": "object",
+        "description": "One connection: its reference, the provider it is for, whether HQ may change things through it, where its credential is kept, and its settings under the one shape it arrived in.",
+        "properties": {
+          "ref": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "manages": {
+            "type": "boolean"
+          },
+          "store": {
+            "$ref": "#/components/schemas/Store"
+          },
+          "acme": {
+            "$ref": "#/components/schemas/ACME",
+            "x-go-name": "ACME",
+            "x-go-type-skip-optional-pointer": false
+          },
+          "api_token": {
+            "$ref": "#/components/schemas/APIToken",
+            "x-go-name": "APIToken",
+            "x-go-type-skip-optional-pointer": false
+          },
+          "github_app": {
+            "$ref": "#/components/schemas/GitHubApp",
+            "x-go-name": "GitHubApp",
+            "x-go-type-skip-optional-pointer": false
+          },
+          "login": {
+            "$ref": "#/components/schemas/Login",
+            "x-go-name": "Login",
+            "x-go-type-skip-optional-pointer": false
+          },
+          "oauth_client": {
+            "$ref": "#/components/schemas/OAuthClient",
+            "x-go-name": "OAuthClient",
+            "x-go-type-skip-optional-pointer": false
+          },
+          "service_account": {
+            "$ref": "#/components/schemas/ServiceAccount",
+            "x-go-name": "ServiceAccount",
+            "x-go-type-skip-optional-pointer": false
+          },
+          "ssh_transport": {
+            "$ref": "#/components/schemas/SSHTransport",
+            "x-go-name": "SSHTransport",
+            "x-go-type-skip-optional-pointer": false
+          }
+        },
+        "required": [
+          "ref",
+          "provider",
+          "manages",
+          "store"
+        ],
+        "additionalProperties": false
+      },
+      "Document": {
+        "type": "object",
+        "description": "Every connection the controller may open.",
+        "properties": {
+          "schema_version": {
+            "type": "integer"
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Connection"
+            }
+          }
+        },
+        "required": [
+          "schema_version",
+          "connections"
+        ],
+        "additionalProperties": false
+      },
+      "Store": {
+        "type": "object",
+        "description": "Where a connection's credential is kept, as references only: the vault, the item, and the bootstrap item a replacement is minted with.",
+        "properties": {
+          "vault": {
+            "type": "string"
+          },
+          "item": {
+            "type": "string"
+          },
+          "bootstrap": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "vault",
+          "item"
+        ],
+        "additionalProperties": false
+      },
+      "ACME": {
+        "type": "object",
+        "description": "The settings a connection of the acme shape arrives with.",
+        "properties": {
+          "directory_url": {
+            "type": "string",
+            "x-go-name": "DirectoryURL",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "DIRECTORY_URL"
+            }
+          },
+          "email": {
+            "type": "string",
+            "x-go-name": "Email",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "EMAIL"
+            }
+          }
+        },
+        "required": [
+          "directory_url",
+          "email"
+        ],
+        "additionalProperties": false
+      },
+      "APIToken": {
+        "type": "object",
+        "description": "The settings a connection of the api_token shape arrives with.",
+        "properties": {
+          "api_token": {
+            "type": "string",
+            "x-go-name": "APIToken",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "API_TOKEN",
+              "secret": "true"
+            }
+          },
+          "url": {
+            "type": "string",
+            "x-go-name": "URL",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "URL"
+            }
+          }
+        },
+        "required": [
+          "api_token",
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "GitHubApp": {
+        "type": "object",
+        "description": "The settings a connection of the github_app shape arrives with.",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "x-go-name": "AppID",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "APP_ID"
+            }
+          },
+          "signing_key": {
+            "type": "string",
+            "x-go-name": "SigningKey",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "SIGNING_KEY"
+            }
+          }
+        },
+        "required": [
+          "app_id",
+          "signing_key"
+        ],
+        "additionalProperties": false
+      },
+      "Login": {
+        "type": "object",
+        "description": "The settings a connection of the login shape arrives with.",
+        "properties": {
+          "password": {
+            "type": "string",
+            "x-go-name": "Password",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "PASSWORD",
+              "secret": "true"
+            }
+          },
+          "url": {
+            "type": "string",
+            "x-go-name": "URL",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "URL"
+            }
+          },
+          "username": {
+            "type": "string",
+            "x-go-name": "Username",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "USERNAME"
+            }
+          }
+        },
+        "required": [
+          "password",
+          "url",
+          "username"
+        ],
+        "additionalProperties": false
+      },
+      "OAuthClient": {
+        "type": "object",
+        "description": "The settings a connection of the oauth_client shape arrives with.",
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "x-go-name": "ClientID",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "CLIENT_ID"
+            }
+          },
+          "client_secret": {
+            "type": "string",
+            "x-go-name": "ClientSecret",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "CLIENT_SECRET",
+              "secret": "true"
+            }
+          }
+        },
+        "required": [
+          "client_id",
+          "client_secret"
+        ],
+        "additionalProperties": false
+      },
+      "SSHTransport": {
+        "type": "object",
+        "description": "The settings a connection of the ssh_transport shape arrives with.",
+        "properties": {
+          "host": {
+            "type": "string",
+            "x-go-name": "Host",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "HOST"
+            }
+          },
+          "host_key": {
+            "type": "string",
+            "x-go-name": "HostKey",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "HOST_KEY"
+            }
+          },
+          "identity": {
+            "type": "string",
+            "x-go-name": "Identity",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "IDENTITY"
+            }
+          },
+          "port": {
+            "type": "string",
+            "x-go-name": "Port",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "PORT"
+            }
+          },
+          "role": {
+            "type": "string",
+            "x-go-name": "Role",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "ROLE"
+            }
+          },
+          "user": {
+            "type": "string",
+            "x-go-name": "User",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "USER"
+            }
+          }
+        },
+        "required": [
+          "host",
+          "host_key",
+          "identity",
+          "port",
+          "user"
+        ],
+        "additionalProperties": false
+      },
+      "ServiceAccount": {
+        "type": "object",
+        "description": "The settings a connection of the service_account shape arrives with.",
+        "properties": {
+          "api_token": {
+            "type": "string",
+            "x-go-name": "APIToken",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "API_TOKEN",
+              "secret": "true"
+            }
+          }
+        },
+        "required": [
+          "api_token"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

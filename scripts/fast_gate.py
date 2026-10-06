@@ -279,6 +279,9 @@ def main(argv: list[str]) -> int:
         [python, "manage.py", "api_openapi", "--check"],
         {key: value for key, value in env.items() if key != "SEVERINO_HQ_PLUGINS"},
     )
+    ok &= step(
+        "controller contract drift", [python, "manage.py", "bridge_contract", "--check"], env
+    )
     typed = mypy_targets(changed)
     if typed:
         ok &= step("mypy (changed typed modules)", [python, "-m", "mypy", *typed], env)

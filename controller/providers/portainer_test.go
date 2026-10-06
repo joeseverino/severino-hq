@@ -25,7 +25,7 @@ func TestUnixStamp(t *testing.T) {
 }
 
 func TestAnAddressResolvesNamesAndKeepsAddresses(t *testing.T) {
-	r := New(runtime.Environment{}, &fakeHTTP{routes: map[string]any{}, fail: map[string]error{}})
+	r := New(runtime.Environment{}, supplied(), &fakeHTTP{routes: map[string]any{}, fail: map[string]error{}})
 	r.Resolve = func(host string) (string, error) {
 		if host == "named.example" {
 			return "192.0.2.7", nil
@@ -40,7 +40,7 @@ func TestAnAddressResolvesNamesAndKeepsAddresses(t *testing.T) {
 }
 
 func TestPortainerCoverage(t *testing.T) {
-	coverage := New(runtime.Environment{}, &fakeHTTP{}).Coverage()
+	coverage := New(runtime.Environment{}, supplied(), &fakeHTTP{}).Coverage()
 	want := map[string][]string{
 		"actions": {"portainer.container:restart", "portainer.container:start", "portainer.container:stop", "portainer.stack:delete", "portainer.stack:reconcile"},
 		"readers": {"portainer.compose_project", "portainer.container", "portainer.environment", "portainer.image", "portainer.network", "portainer.runtime", "portainer.volume"},

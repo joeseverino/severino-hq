@@ -83,13 +83,24 @@ esac
         path.write_text("#!/bin/sh\nset -eu\n" + body)
         path.chmod(0o700)
 
+    @staticmethod
+    def connection(ref, **shape):
+        """One connection of the document, holding its settings under one shape."""
+
+        store = {"vault": "example-vault", "item": "example-item"}
+        return {"ref": ref, "provider": "example", "manages": False, "store": store, **shape}
+
+    @staticmethod
+    def transport(**settings):
+        return {"host": "example.test", "host_key": "ssh-ed25519 example", "identity": "example",
+                "port": "22", "user": "reader", **settings}
+
     def write_document(self, connections=None):
         if self.document.exists():
             self.document.chmod(0o600)
-        self.document.write_text(json.dumps({"schema_version": 1, "connections": connections or [
-            {"ref": REFERENCE, "prefix": "EXAMPLE", "values": {
-                "CONNECTION_REF": REFERENCE, "API_TOKEN": SENTINEL, "HOST": "example.test",
-                "PORT": "22", "USER": "reader"}},
+        self.document.write_text(json.dumps({"schema_version": 2, "connections": connections or [
+            self.connection(REFERENCE, ssh_transport=self.transport()),
+            self.connection("sentinel-api", api_token={"api_token": SENTINEL, "url": "https://api.example.test"}),
         ]}))
         self.document.chmod(0o400)
 
@@ -201,18 +212,17 @@ if ( : >&8 ) 2>/dev/null; then echo "lock: held"; else echo "lock: released"; fi
                 self.assertEqual(denied.stdout, "")
 
     def test_a_destination_that_reads_as_an_option_is_refused(self):
-        for values in ({"HOST": "-oProxyCommand=x"}, {"USER": "root@other"}, {"PORT": "22 -oProxyCommand=x"},
-                       {"HOST": ""}, {"USER": "-l"}):
+        for values in ({"host": "-oProxyCommand=x"}, {"user": "root@other"}, {"port": "22 -oProxyCommand=x"},
+                       {"host": ""}, {"user": "-l"}):
             with self.subTest(values=values):
-                self.write_document([{"ref": REFERENCE, "prefix": "EXAMPLE", "values": {
-                    "CONNECTION_REF": REFERENCE, "HOST": "example.test", "PORT": "22", "USER": "reader", **values}}])
+                self.write_document([self.connection(REFERENCE, ssh_transport=self.transport(**values))])
                 denied = self.run_script("controller-ssh.sh", REFERENCE, "preflight")
                 self.assertNotEqual(denied.returncode, 0)
                 self.assertEqual(denied.stdout, "")
 
     def test_a_connection_that_is_not_ssh_is_refused(self):
-        self.write_document([{"ref": REFERENCE, "prefix": "EXAMPLE",
-                              "values": {"CONNECTION_REF": REFERENCE, "API_TOKEN": SENTINEL}}])
+        self.write_document([self.connection(
+            REFERENCE, api_token={"api_token": SENTINEL, "url": "https://api.example.test"})])
         denied = self.run_script("controller-ssh.sh", REFERENCE, "preflight")
         self.assertNotEqual(denied.returncode, 0)
         self.assertNotIn(SENTINEL, denied.stdout + denied.stderr)
