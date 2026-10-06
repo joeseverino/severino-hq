@@ -60,9 +60,8 @@ class AssetCommand:
     status: str = Asset.Status.ACTIVE
     notes: str = ""
     related_projects: tuple[str, ...] = ()
-
-
-
+    # ``kind:identity`` of the machine, domain or certificate this asset is.
+    infrastructure: str = ""
 
 
 
@@ -81,6 +80,7 @@ def serialize_asset(asset: Asset, *, relationships: bool = False) -> dict[str, A
         "serial_number": asset.serial_number,
         "warranty_date": iso(asset.warranty_date),
         "notes": asset.notes,
+        "infrastructure": asset.infrastructure,
         "updated_at": iso(asset.updated_at),
     }
     if relationships:

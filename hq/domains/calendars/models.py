@@ -15,6 +15,7 @@ from django.db.models.functions import Length, Trim
 from django.db.models.lookups import GreaterThan
 from django.urls import reverse
 
+from hq.platform.application.references import ReferenceField
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule
 
@@ -49,6 +50,14 @@ class Entry(TimestampedModel):
     # Monday is 0. Only a weekly entry names its days; blank means the day it starts.
     weekdays = models.CharField(max_length=20, blank=True)
     repeat_until = models.DateField(null=True, blank=True)
+    # What the event is about, when that is something HQ has a page for.
+    about = ReferenceField(
+        "about",
+        heading="On the calendar",
+        shows=("uid", "title", "starts_on", "ends_on", "repeat", "interval", "weekdays", "repeat_until"),
+        note="when_note",
+    )
+    about_name = models.CharField(max_length=200, blank=True, default="", editable=False)
 
     class Meta:
         ordering = ("starts_on", "starts_at", "title")
@@ -117,6 +126,15 @@ class Entry(TimestampedModel):
         """An entry is read on the calendar: its day, with it open beside the month."""
 
         return f"{reverse('calendar:month')}?day={self.starts_on.isoformat()}&entry={self.uid}"
+
+    @property
+    def when_note(self) -> str:
+        """Its day, or how it repeats, beside its title where something else lists it."""
+
+        from hq.platform.application.calendar_entries import repeat_label
+        from hq.platform.application.moments import when_day
+
+        return repeat_label(self) or when_day(self.starts_on)
 
     @property
     def all_day(self) -> bool:

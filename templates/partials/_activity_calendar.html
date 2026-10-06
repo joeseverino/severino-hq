@@ -18,7 +18,7 @@ can be linked to directly and works without JavaScript.
       {% if calendar.previous_url or calendar.next_url %}
         <nav class="calendar-nav" aria-label="Change month">
           {% if calendar.previous_url %}<a href="{{ calendar.previous_url }}" rel="prev" aria-label="Previous month">&lsaquo;</a>{% else %}<span aria-hidden="true">&lsaquo;</span>{% endif %}
-          {% if calendar.current_url %}<a class="calendar-now" href="{{ calendar.current_url }}">Now</a>{% endif %}
+          {% if calendar.current_url %}<a class="calendar-now" href="{{ calendar.current_url }}">Today</a>{% endif %}
           {% if calendar.next_url %}<a href="{{ calendar.next_url }}" rel="next" aria-label="Next month">&rsaquo;</a>{% else %}<span aria-hidden="true">&rsaquo;</span>{% endif %}
         </nav>
       {% endif %}

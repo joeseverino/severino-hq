@@ -1,9 +1,8 @@
 {% extends "list_page.html" %}
-{% load humanize %}
 {% block row %}
   <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.label }}</strong></a></td>
   <td>{{ row.date|when }}</td>
-  <td>${{ row.amount|floatformat:2|intcomma }}</td>
+  <td>{{ row.amount|money }}</td>
   <td>{% if row.related_expense or row.related_asset %}{% include "receipts/_linked_to.html" with receipt=row %}{% else %}{% empty_value %}{% endif %}</td>
   <td class="muted">{{ row.original_filename|or_empty }}</td>
   <td class="muted">{{ row.uploaded_at|when:"ago" }}</td>

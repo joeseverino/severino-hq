@@ -1,6 +1,8 @@
 {% comment %}
 What a list of costs adds up to, between its toolbar and its table. `totals`
 is application.expenses.CostTotals; a list with nothing to add up says nothing.
+`by_category` are application.expenses.CategoryTotal, each a link to the list
+narrowed to it.
 {% endcomment %}
-{% load humanize %}
-{% if totals %}<p class="muted">{% if totals.narrowed %}Matching: {% else %}Total {% endif %}<strong>${{ totals.total|floatformat:2|intcomma }}</strong>{% if totals.narrowed %} total{% endif %} · deductible (est.) <strong>${{ totals.deductible|floatformat:2|intcomma }}</strong></p>{% endif %}
+{% if totals %}<p class="muted">{% if totals.narrowed %}Matching: {% else %}Total {% endif %}<strong>{{ totals.total|money }}</strong>{% if totals.narrowed %} total{% endif %} · deductible (est.) <strong>{{ totals.deductible|money }}</strong></p>{% endif %}
+{% if by_category %}<nav class="window-switch" aria-label="Totals by category">{% for row in by_category %}<a class="chip" href="{{ row.url }}">{{ row.label }} <strong>{{ row.total|money }}</strong></a>{% endfor %}</nav>{% endif %}

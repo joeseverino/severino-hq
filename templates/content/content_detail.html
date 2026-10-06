@@ -1,5 +1,4 @@
 {% extends "page.html" %}
-{% load humanize %}
 {% block page %}
 <dl class="kv">
   {% if item.topic %}<dt>Description</dt><dd>{{ item.topic }}</dd>{% endif %}
@@ -44,7 +43,7 @@
       {% if documents.sources %}<div><h3>Source document</h3><ul>{% for link in documents.sources %}<li>{% entity link %}</li>{% endfor %}</ul></div>{% endif %}
       {% if projects or documents.projects %}<div><h3>Projects</h3><ul>{% for p in projects %}<li>{% entity "project"|entity_of:p.slug label=p.name %}</li>{% endfor %}{% for link in documents.projects %}<li>{% entity link %}</li>{% endfor %}</ul></div>{% endif %}
       {% if assets %}<div><h3>Assets</h3><ul>{% for a in assets %}<li>{% entity "asset"|entity_of:a.slug label=a.item_name %}</li>{% endfor %}</ul></div>{% endif %}
-      {% if expenses %}<div><h3>Expenses</h3><ul>{% for e in expenses %}<li>{% entity "expense"|entity_of:e.pk label=e.label %} <span class="muted">{{ e.date|when:"day" }} · ${{ e.total_cost|floatformat:2|intcomma }}</span></li>{% endfor %}</ul></div>{% endif %}
+      {% if expenses %}<div><h3>Expenses</h3><ul>{% for e in expenses %}<li>{% entity "expense"|entity_of:e.pk label=e.label %} <span class="muted">{{ e.date|when:"day" }} · {{ e.total_cost|money }}</span></li>{% endfor %}</ul></div>{% endif %}
       {% include "docs_index/_related_documents.html" %}
     </div>
   {% else %}

@@ -20,6 +20,7 @@ class AssetForm(forms.ModelForm):
             "status",
             "notes",
             "related_projects",
+            "infrastructure",
         ]
         widgets = {
             "notes": forms.Textarea(attrs={"rows": 4}),
@@ -30,6 +31,8 @@ class AssetForm(forms.ModelForm):
             ),
             "related_projects": forms.SelectMultiple(attrs={"size": 6}),
         }
+        labels = {"infrastructure": "This is"}
         help_texts = {
             "business_use_percentage": "0 to 100. Used to estimate the deductible amount.",
+            "infrastructure": "The machine, domain or certificate this asset is, when HQ has a page for it.",
         }

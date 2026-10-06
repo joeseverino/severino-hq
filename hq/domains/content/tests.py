@@ -245,6 +245,49 @@ class ContentPageTests(TestCase):
         self.assertNotContains(published, "<dt>Slug</dt>")
         self.assertContains(published, "<dt>Added to HQ</dt>")
 
+    def _published(self, slug: str, url: str) -> ContentItem:
+        return ContentItem.objects.create(
+            title=slug, slug=slug, status=ContentItem.Status.PUBLISHED, published_url=url
+        )
+
+    def test_the_writeups_list_says_once_where_it_is_published(self):
+        from django.urls import reverse
+
+        site = Project.objects.create(name="Example Site", slug="example-site", public_url="https://example.com/")
+        self._published("one", "https://example.com/portfolio/one/")
+        self._published("two", "https://example.com/portfolio/two/")
+        ContentItem.objects.create(title="A draft", slug="a-draft")
+
+        response = self.client.get(reverse("content:writeups"))
+
+        self.assertContains(
+            response,
+            f'<p class="muted">Published on <a href="{site.get_absolute_url()}" data-entity="Project">example.com</a></p>',
+            html=True,
+        )
+        self.assertEqual(response.content.decode().count("Published on"), 1)
+
+    def test_a_site_no_project_publishes_is_named_without_a_page(self):
+        from django.urls import reverse
+
+        self._published("one", "https://example.com/portfolio/one/")
+
+        response = self.client.get(reverse("content:writeups"))
+
+        self.assertContains(response, 'Published on <span data-entity="Site">example.com</span>', html=True)
+
+    def test_two_sites_or_none_are_not_said(self):
+        from django.urls import reverse
+
+        empty = self.client.get(reverse("content:writeups"))
+        self._published("one", "https://example.com/portfolio/one/")
+        self._published("two", "https://example.org/two/")
+
+        both = self.client.get(reverse("content:writeups"))
+
+        self.assertNotContains(empty, "Published on")
+        self.assertNotContains(both, "Published on")
+
     def test_its_own_vault_note_is_its_source_document(self):
         from hq.domains.docs_index.models import DocumentationRecord
 

@@ -13,6 +13,8 @@ from hq.platform.application.assets import managed_domain
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.expenses import cost_totals
 from hq.platform.application.pages import PageAction, PageMixin, record_trail
+from hq.platform.application.references import ReferencePickerMixin, reference_of, referenced_by_row
+from hq.platform.application.security import web_principal
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from .forms import AssetForm
@@ -101,7 +103,11 @@ class AssetDetailView(PageMixin, DetailView):
         context["documents"] = related_documents(
             asset.documentation_records.all(), listed=asset.related_projects.all()
         )
-        context["domain"] = managed_domain(asset)
+        principal = web_principal(self.request.user)
+        context["thing"] = reference_of(asset, "infrastructure", principal=principal)
+        # A domain asset with no link is matched to the domain of its name.
+        context["domain"] = None if asset.infrastructure else managed_domain(asset)
+        context["mentions"] = referenced_by_row(asset, principal=principal)
         return context
 
     def get_page_lede(self):
@@ -120,13 +126,13 @@ class AssetDetailView(PageMixin, DetailView):
         )
 
 
-class AssetCreateView(AssetPage, RecordFormMixin, CreateView):
+class AssetCreateView(AssetPage, ReferencePickerMixin, RecordFormMixin, CreateView):
     page_title = "New asset"
     form_class = AssetForm
     template_name = "assets/asset_form.html"
 
 
-class AssetUpdateView(AssetPage, RecordFormMixin, UpdateView):
+class AssetUpdateView(AssetPage, ReferencePickerMixin, RecordFormMixin, UpdateView):
     page_title = "Edit asset"
     model = Asset
     form_class = AssetForm

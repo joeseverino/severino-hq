@@ -1,0 +1,25 @@
+{% comment %}
+What names a thing, on that thing's page: one list per kind of reference,
+under the heading the reference declares.
+
+  {% referenced_by vehicle %}
+  {% referenced_by "machine" machine.name cards=True %}
+  {% include "partials/_referenced_by.html" with mentions=mentions %}
+
+`mentions` are application.references.Mentions. `cards` draws each list as a
+card, for a page built of cards; without it each is a heading and a list, for
+a page's own grid. Nothing names it: nothing is drawn.
+{% endcomment %}
+{% for group in mentions %}
+  {% if cards %}
+    <section class="card">
+      <div class="section-head"><h2>{{ group.heading }}</h2><span class="count">{{ group.items|length }}</span></div>
+      <ul class="list-rows">{% for item in group.items %}<li><span class="row-main">{% entity item.link %}</span>{% if item.note %}<span class="row-meta">{{ item.note }}</span>{% endif %}</li>{% endfor %}</ul>
+    </section>
+  {% else %}
+    <div>
+      <h3>{{ group.heading }}</h3>
+      <ul>{% for item in group.items %}<li>{% entity item.link %}{% if item.note %} <span class="muted">{{ item.note }}</span>{% endif %}</li>{% endfor %}</ul>
+    </div>
+  {% endif %}
+{% endfor %}

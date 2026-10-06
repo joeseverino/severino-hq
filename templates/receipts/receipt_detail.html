@@ -1,9 +1,8 @@
 {% extends "page.html" %}
-{% load humanize %}
 {% block page %}
 <dl class="kv">
   <dt>Date</dt><dd>{{ receipt.date|when }}</dd>
-  <dt>Amount</dt><dd>${{ receipt.amount|floatformat:2|intcomma }}</dd>
+  <dt>Amount</dt><dd>{{ receipt.amount|money }}</dd>
   {% if receipt.file_type %}<dt>File type</dt><dd>{{ receipt.file_type }}</dd>{% endif %}
   {% if receipt.size_bytes %}<dt>Size</dt><dd>{{ receipt.size_bytes|bytes }}</dd>{% endif %}
   {% if receipt.related_expense %}<dt>Expense</dt><dd>{% entity "expense"|entity_of:receipt.related_expense.pk label=receipt.related_expense.label %} <span class="muted">{{ receipt.related_expense.date|when:"day" }}</span></dd>{% endif %}

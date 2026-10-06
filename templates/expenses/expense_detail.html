@@ -1,16 +1,17 @@
 {% extends "page.html" %}
-{% load humanize %}
 {% block page %}
 <dl class="kv">
-  <dt>Cost</dt><dd>${{ expense.total_cost|floatformat:2|intcomma }}</dd>
+  <dt>Cost</dt><dd>{{ expense.total_cost|money }}</dd>
   <dt>Business use</dt><dd>{{ expense.business_use_percentage }}%</dd>
-  <dt>Deductible (est.)</dt><dd>${{ expense.estimated_deductible_amount|floatformat:2|intcomma }} <span class="muted">(estimate, not tax advice)</span></dd>
+  <dt>Deductible (est.)</dt><dd>{{ expense.estimated_deductible_amount|money }} <span class="muted">(estimate, not tax advice)</span></dd>
   {% if expense.payment_method %}<dt>Payment method</dt><dd>{{ expense.get_payment_method_display }}</dd>{% endif %}
+  {% if account %}<dt>Paid from</dt><dd>{% entity account %}</dd>{% endif %}
   {% if expense.business_purpose %}<dt>Business purpose</dt><dd>{{ expense.business_purpose }}</dd>{% endif %}
   {% if expense.related_project %}<dt>Project</dt><dd>{% entity "project"|entity_of:expense.related_project.slug label=expense.related_project.name %}</dd>{% endif %}
   {% if expense.related_asset %}<dt>Asset</dt><dd>{% entity "asset"|entity_of:expense.related_asset.slug label=expense.related_asset.item_name %}</dd>{% endif %}
   {% if expense.related_content %}<dt>Writeup or page</dt><dd>{% entity "writeup"|entity_of:expense.related_content.slug label=expense.related_content.title %}</dd>{% endif %}
   {% if document %}<dt>Document</dt><dd>{% entity document %}</dd>{% endif %}
+  {% if about %}<dt>For</dt><dd>{{ about.kind_label }} {% entity about %}</dd>{% endif %}
 </dl>
 
 {% if expense.notes %}<h2>Notes</h2><p>{{ expense.notes|linebreaksbr }}</p>{% endif %}
@@ -18,9 +19,10 @@
 <section>
   <h2>Receipts</h2>
   {% if expense.receipts.all %}
-    <ul>{% for r in expense.receipts.all %}<li>{% entity "receipt"|entity_of:r.pk label=r.label %} <span class="muted">${{ r.amount|floatformat:2|intcomma }}</span></li>{% endfor %}</ul>
+    <ul>{% for r in expense.receipts.all %}<li>{% entity "receipt"|entity_of:r.pk label=r.label %} <span class="muted">{{ r.amount|money }}</span></li>{% endfor %}</ul>
   {% else %}
     <p class="muted">No receipts. <a href="{% url 'receipts:create' %}?related_expense={{ expense.pk }}">Upload one</a></p>
   {% endif %}
 </section>
+{% if mentions %}<section><h2>Related</h2><div class="two-col">{% include "partials/_referenced_by.html" %}</div></section>{% endif %}
 {% endblock %}

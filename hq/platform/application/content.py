@@ -14,6 +14,7 @@ from hq.platform.core.audit import operation_context
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from .entity_links import EntityLink, entity_link
 from .labels import plural
 from .sensitivity import safe_doc_ids
 from .domains import records_of
@@ -21,6 +22,29 @@ from .security import Principal
 from .projection import iso
 from .ui import counted
 
+
+
+def published_on(urls) -> EntityLink | None:
+    """The one site every one of ``urls`` is on, as a link to the project that publishes there.
+
+    None when nothing is published or the addresses are on more than one
+    site. A site no project publishes is named without a page.
+    """
+
+    from urllib.parse import urlsplit
+
+    from .entity_links import web_url
+    from .published_sites import projects_by_hostname
+
+    hosts = {urlsplit(web_url(url)).hostname for url in urls if url}
+    hosts.discard(None)
+    if len(hosts) != 1:
+        return None
+    (host,) = hosts
+    project = projects_by_hostname().get(host)
+    if project is None:
+        return EntityLink(label=host, kind="service", kind_label="Site")
+    return entity_link("project", project.slug, label=host)
 
 
 class NotFoundError(ValueError):

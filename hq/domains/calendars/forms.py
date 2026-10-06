@@ -27,6 +27,7 @@ class EntryForm(forms.ModelForm):
             "ends_at",
             "ends_on",
             "location",
+            "about",
             "repeat",
             "interval",
             "weekdays",
@@ -40,11 +41,13 @@ class EntryForm(forms.ModelForm):
             "ends_at": "To",
             "interval": "Every",
             "repeat_until": "Stop repeating after",
+            "about": "About",
         }
         help_texts = {
             "starts_at": "Leave the times blank for all day.",
             "ends_on": "For something over several days.",
             "interval": "1 for every one, 2 for every other one.",
+            "about": "Something HQ has a page for. The event is listed on that page.",
         }
         widgets = {
             "starts_on": forms.DateInput(attrs={"type": "date"}),

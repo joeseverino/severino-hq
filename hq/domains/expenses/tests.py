@@ -40,6 +40,64 @@ class ExpenseListTests(_Signed):
         self.assertContains(narrowed, "Matching: <strong>$20.00</strong> total")
         self.assertIn("Year", [item["label"] for item in whole.context["table"]["filters"]])
 
+    def test_the_list_says_what_each_category_adds_up_to_as_a_link_to_it(self):
+        Expense.objects.create(date="2030-01-02", vendor="Example Host", item="Hosting", category="hosting", total_cost=Decimal("12.00"))
+        Expense.objects.create(date="2030-01-09", vendor="Example Host", item="Hosting", category="hosting", total_cost=Decimal("12.00"))
+        Expense.objects.create(date="2030-02-02", vendor="Example Registrar", item="Domain", category="domains", total_cost=Decimal("8.00"))
+
+        whole = self.client.get(reverse("expenses:list"), {"year": "2030", "page": "1"})
+        chosen = self.client.get(reverse("expenses:list"), {"category": "hosting"})
+
+        self.assertEqual(
+            [(row.label, row.total, row.url) for row in whole.context["by_category"]],
+            [
+                ("Hosting", Decimal("24.00"), "?year=2030&category=hosting"),
+                ("Domains", Decimal("8.00"), "?year=2030&category=domains"),
+            ],
+        )
+        self.assertContains(whole, '<a class="chip" href="?year=2030&amp;category=hosting">Hosting <strong>$24.00</strong></a>')
+        self.assertContains(whole, "Matching: <strong>$32.00</strong> total")
+        # A list already narrowed to one category is not divided by category.
+        self.assertEqual(chosen.context["by_category"], ())
+        self.assertContains(chosen, "Matching: <strong>$24.00</strong> total")
+
+    def test_one_category_is_not_a_division(self):
+        Expense.objects.create(date="2030-01-02", vendor="Example Host", item="Hosting", total_cost=Decimal("12.00"))
+
+        response = self.client.get(reverse("expenses:list"))
+
+        self.assertEqual(response.context["by_category"], ())
+        self.assertNotContains(response, 'class="chip"')
+
+    def test_the_totals_of_a_list_with_a_toggle_on_count_each_expense_once(self):
+        from hq.domains.receipts.models import Receipt
+
+        with_receipts = Expense.objects.create(date="2030-01-02", vendor="Example Host", item="Hosting", category="hosting", total_cost=Decimal("12.00"))
+        Receipt.objects.create(vendor="Example Host", related_expense=with_receipts)
+        Receipt.objects.create(vendor="Example Host", related_expense=with_receipts)
+        Expense.objects.create(date="2030-02-02", vendor="Example Registrar", item="Domain", category="domains", total_cost=Decimal("8.00"))
+        Expense.objects.create(date="2030-02-03", vendor="Example Host", item="Hosting", category="hosting", total_cost=Decimal("5.00"))
+
+        response = self.client.get(reverse("expenses:list"), {"no_receipts": "1"})
+
+        self.assertEqual(response.context["totals"].total, Decimal("13.00"))
+        self.assertEqual(
+            [(row.label, row.total) for row in response.context["by_category"]],
+            [("Domains", Decimal("8.00")), ("Hosting", Decimal("5.00"))],
+        )
+
+    def test_the_totals_and_the_categories_are_one_statement(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        Expense.objects.create(date="2030-01-02", vendor="Example Host", item="Hosting", category="hosting", total_cost=Decimal("12.00"))
+        Expense.objects.create(date="2030-02-02", vendor="Example Registrar", item="Domain", category="domains", total_cost=Decimal("8.00"))
+
+        with CaptureQueriesContext(connection) as queries:
+            self.client.get(reverse("expenses:list"))
+
+        self.assertEqual(len([query for query in queries if "SUM(" in query["sql"]]), 1)
+
     def test_an_expense_names_its_document_by_title(self):
         record = DocumentationRecord.objects.create(doc_id="rb-example-renewal", title="Renew the example domain")
         expense = Expense.objects.create(

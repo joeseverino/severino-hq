@@ -35,6 +35,7 @@ opening a day ask this page for the `calendar` part and take it in place.
             <h3>{{ entry.object.title }}</h3>
             <p class="day-panel-when">{{ entry.when }}</p>
             {% if entry.object.location or entry.repeat %}<p class="muted">{% if entry.object.location %}{{ entry.object.location }}{% endif %}{% if entry.object.location and entry.repeat %} · {% endif %}{{ entry.repeat }}</p>{% endif %}
+            {% if entry.about %}<p class="muted">About {{ entry.about.kind_label|lower }} {% entity entry.about %}</p>{% endif %}
             {% if entry.next %}<p class="muted">Next {% for when, url in entry.next %}<a href="{{ url }}">{{ when|date:"M j" }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</p>{% endif %}
             {% if entry.object.notes %}<p>{{ entry.object.notes|linebreaksbr }}</p>{% endif %}
             <p class="page-actions">{% for action in entry.actions %}{% include "partials/_page_action.html" %}{% endfor %}</p>

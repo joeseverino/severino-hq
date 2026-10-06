@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import math
 
+from .money import MINUS
+
 # Round numbers an axis may end on. The intermediate steps keep the labels
 # round while landing close to the data, so bars fill the plot rather than half
 # of it.
@@ -25,9 +27,39 @@ def _format_tooltip_value(value: float) -> str:
     An axis tick is glanced at and can be rounded; a tooltip is the reason
     someone pointed at the bar, so it keeps the precision the axis dropped.
     """
-    if value >= 1000:
+    if abs(value) >= 1000:
         return f"{value:,.0f}"
     return f"{value:.0f}" if float(value).is_integer() else f"{value:.1f}"
+
+
+# Units written before the number, as money is. Every other unit follows it.
+_CURRENCY = frozenset("$€£")
+
+
+def _format_reading(value: float, unit: str) -> str:
+    """One reading with its unit, as a tooltip says it: "52 bpm", "$1,250"."""
+    if unit in _CURRENCY:
+        # Whole units and a true minus sign, as ``money`` writes a figure that is scanned.
+        return f"{MINUS if value < 0 else ''}{unit}{abs(value):,.0f}"
+    return f"{_format_tooltip_value(value)} {unit}".rstrip()
+
+
+def _format_table_value(value: float, unit: str) -> str:
+    """One reading in the chart's data table, at the tooltip's precision.
+
+    A column heading carries a unit that follows its numbers, so the cell is
+    the number alone. Money carries its own sign in every cell.
+    """
+    if unit in _CURRENCY:
+        return _format_reading(value, unit)
+    return _format_tooltip_value(value)
+
+
+def _table_heading(label: str, unit: str) -> str:
+    """A data table column: the series, and its unit unless a cell or the label says it."""
+    if not unit or unit in _CURRENCY or unit.casefold() == label.casefold():
+        return label
+    return f"{label} ({unit})"
 
 
 def _format_fitted_value(value: float, span: float) -> str:

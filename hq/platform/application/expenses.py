@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from django.db import transaction
+from django.db.models import Sum
 
 from hq.domains.assets.models import Asset
 from hq.domains.content.models import ContentItem
@@ -42,6 +43,55 @@ def cost_totals(sums: dict[str, Any], *, narrowed: bool) -> CostTotals:
     return CostTotals(sums.get("total") or zero, sums.get("deductible") or zero, narrowed)
 
 
+@dataclass(frozen=True)
+class CategoryTotal:
+    """What one category of a list of costs adds up to, and the list narrowed to it."""
+
+    label: str
+    total: Decimal
+    url: str
+
+
+def costs_by_category(
+    rows, *, query, choices, narrowed: bool
+) -> tuple[CostTotals, tuple[CategoryTotal, ...]]:
+    """What a list of expenses adds up to, whole and by category, from one statement.
+
+    ``rows`` is the list as its filters leave it and ``query`` the request's
+    own, which each category's link keeps. The categories are said only where
+    they divide the list: two or more, and none already chosen.
+    """
+
+    from hq.domains.expenses.models import Expense
+
+    sums = list(
+        Expense.objects.filter(pk__in=rows.order_by().values("pk"))
+        .order_by()
+        .values("category")
+        .annotate(total=Sum("total_cost"), deductible=Sum("estimated_deductible_amount"))
+    )
+    zero = Decimal("0.00")
+    totals = CostTotals(
+        sum((row["total"] or zero for row in sums), zero),
+        sum((row["deductible"] or zero for row in sums), zero),
+        narrowed,
+    )
+    if len(sums) < 2 or query.get("category"):
+        return totals, ()
+    labels = dict(choices)
+    kept = query.copy()
+    kept.pop("page", None)
+
+    def narrowed_to(category: str) -> str:
+        kept["category"] = category
+        return f"?{kept.urlencode()}"
+
+    return totals, tuple(
+        CategoryTotal(labels.get(row["category"], row["category"]), row["total"] or zero, narrowed_to(row["category"]))
+        for row in sorted(sums, key=lambda row: row["total"] or zero, reverse=True)
+    )
+
+
 class NotFoundError(ValueError):
     pass
 
@@ -65,6 +115,9 @@ class ExpenseCommand:
     related_asset: str | None = None
     related_content: str | None = None
     related_documentation: str | None = None
+    # ``kind:identity`` of the account that paid, and of what it was for.
+    paid_from: str = ""
+    about: str = ""
 
 
 def serialize_expense(expense: Expense) -> dict[str, Any]:
@@ -87,6 +140,8 @@ def serialize_expense(expense: Expense) -> dict[str, Any]:
         "related_documentation": (
             doc.doc_id if doc and doc.sensitivity in SAFE_SENSITIVITIES else None
         ),
+        "paid_from": expense.paid_from,
+        "about": expense.about,
         "updated_at": expense.updated_at.isoformat(),
     }
 

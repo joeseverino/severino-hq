@@ -35,8 +35,8 @@
       <summary>View chart data</summary>
       <div class="table-scroll">
         <table class="data-table compact-table">
-          <thead><tr><th>Period</th>{% for series in chart.series %}<th>{{ series.label }} ({{ chart.unit }})</th>{% endfor %}</tr></thead>
-          <tbody>{% for row in chart.rows %}<tr><th>{{ row.label }}</th>{% for value in row.values %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+          <thead><tr><th>Period</th>{% for heading in chart.table_headings %}<th>{{ heading }}</th>{% endfor %}</tr></thead>
+          <tbody>{% for row in chart.table_rows %}<tr><th>{{ row.label }}</th>{% for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
         </table>
       </div>
     </details>

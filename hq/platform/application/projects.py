@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from django.conf import settings
 from django.db import transaction
@@ -25,6 +25,10 @@ from .domains import records_of
 from .security import Principal
 from .upserts import upsert_by_slug
 from .projection import addressable, iso, listing
+
+
+if TYPE_CHECKING:
+    from .entity_links import EntityLink
 
 
 class NotFoundError(ValueError):
@@ -59,6 +63,35 @@ def hq_sections(project: Project) -> tuple[tuple[str, str], ...]:
         home = min(manifest.navigation, key=lambda item: item.order)
         found.append((manifest.name, reverse(home.route)))
     return tuple(found)
+
+
+def built_from(plugin_id: str) -> EntityLink | None:
+    """The project an installed extension is built from, as a link to its page.
+
+    The other end of ``hq_sections``: the extension names its repository and a
+    project names the same one. None when no project does.
+    """
+
+    from .entity_links import entity_link
+    from .github_public import github_repository
+    from .plugins import installed_plugins
+    from .projection import read_once
+
+    wanted = next(
+        (manifest.source_repository.lower() for manifest in installed_plugins() if manifest.id == plugin_id),
+        "",
+    )
+    if not wanted:
+        return None
+    projects = read_once(
+        "projects.repositories",
+        lambda: tuple(Project.objects.exclude(repository_url="").values_list("slug", "name", "repository_url")),
+    )
+    for slug, name, url in projects:
+        parts = github_repository(url)
+        if parts and "/".join(parts).lower() == wanted:
+            return entity_link("project", slug, label=name)
+    return None
 
 
 GitHubFetcher = Callable[..., datetime | None]

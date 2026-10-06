@@ -13,6 +13,7 @@ from django.utils.text import slugify
 # which extensions can reach through hq_sdk and a domain app cannot.
 from hq.platform.application.money import quantize_money
 from hq.platform.application import business_use
+from hq.platform.application.references import CERTIFICATE, Referable, ReferenceField
 from hq.platform.core.models import TimestampedModel
 
 
@@ -85,6 +86,17 @@ class Asset(TimestampedModel):
     related_projects = models.ManyToManyField(
         "projects.Project", blank=True, related_name="assets"
     )
+    # The machine, domain or certificate this asset is.
+    infrastructure = ReferenceField(
+        "this is",
+        kinds=("machine", "zone", CERTIFICATE),
+        heading="Assets",
+        shows=("slug", "item_name", "purchase_date"),
+        note="bought_note",
+    )
+    infrastructure_name = models.CharField(max_length=200, blank=True, default="", editable=False)
+
+    referable = Referable(kind="asset", key="slug", shows=("item_name",))
 
     class Meta:
         ordering = ("-purchase_date", "item_name")
@@ -115,3 +127,11 @@ class Asset(TimestampedModel):
 
     def get_absolute_url(self) -> str:
         return reverse("assets:detail", args=[self.slug])
+
+    @property
+    def bought_note(self) -> str:
+        """When it was bought, beside its name where something else lists it."""
+
+        from hq.platform.application.moments import when_day
+
+        return f"Bought {when_day(self.purchase_date)}" if self.purchase_date else ""

@@ -6,6 +6,7 @@ from django.db import models
 from django.urls import reverse
 from django.utils.text import slugify
 
+from hq.platform.application.references import Referable
 from hq.platform.core.models import TimestampedModel
 
 
@@ -56,6 +57,8 @@ class Project(TimestampedModel):
     deployment_notes = models.TextField(blank=True)
     security_notes = models.TextField(blank=True)
     notes = models.TextField(blank=True)
+
+    referable = Referable(kind="project", key="slug", shows=("name",))
 
     class Meta:
         ordering = ("-updated_at",)

@@ -16,6 +16,7 @@ from hq.platform.application.moments import (
     when_exact as _when_exact,
 )
 from hq.platform.application.labels import human_bytes
+from hq.platform.application.money import money as _money
 from hq.platform.application.ui import MISSING, counted as _counted
 
 register = template.Library()
@@ -50,6 +51,23 @@ def bytes_(value):
     same count differently."""
 
     return human_bytes(value)
+
+
+@register.filter
+def money(value, form=""):
+    """``{{ amount|money }}``: "$1,234.50", the one way a page writes an amount.
+
+    ``{{ amount|money:"whole" }}`` leaves the cents off a figure that is
+    scanned, never reconciled. A negative amount takes a true minus sign and a
+    missing one the mark for a missing value. Never ``floatformat`` and
+    ``intcomma`` behind a dollar sign, which say a negative amount as "$-5.00".
+    """
+
+    if form not in ("", "whole"):
+        raise template.TemplateSyntaxError(f"money takes 'whole' or nothing; got {form!r}.")
+    if value is None or value == "":
+        return or_empty(value)
+    return _money(value, cents=form != "whole")
 
 
 @register.filter
@@ -267,6 +285,45 @@ def entity(context, link, code=False, label=""):
     return format_html('<span data-entity="{}">{}</span>', link.kind_label, label)
 
 
+def _viewer(context):
+    """Who the page is rendered for, as the application asks about them."""
+
+    from hq.platform.application.security import web_principal
+
+    return web_principal(context["request"].user)
+
+
+@register.simple_tag(takes_context=True)
+def reference(context, row, field):
+    """``{% reference expense "paid_from" as account %}``: the link for the
+    reference a row holds, for ``{% entity %}``. None when it holds none, or
+    one this viewer may not be told about."""
+
+    from hq.platform.application.references import reference_of
+
+    return reference_of(row, field, principal=_viewer(context))
+
+
+@register.inclusion_tag("partials/_referenced_by.html", takes_context=True)
+def referenced_by(context, thing, identity="", cards=False):
+    """Everything that names a thing, for that thing's page.
+
+    ``{% referenced_by vehicle %}`` for a row of a model that can be referred
+    to; ``{% referenced_by "machine" machine.name %}`` for a kind and what its
+    page is addressed by. ``cards=True`` draws each list as a card. One
+    statement, whatever names it.
+    """
+
+    from hq.platform.application import references
+
+    principal = _viewer(context)
+    if isinstance(thing, str):
+        found = references.referenced_by(thing, str(identity), principal=principal)
+    else:
+        found = references.referenced_by_row(thing, principal=principal)
+    return {"mentions": found, "cards": cards, "request": context.get("request")}
+
+
 @register.filter
 def kind_label(kind):
     """What a registry kind is called in a sentence: ``tailscale.device`` reads "Tailnet device"."""
@@ -325,3 +382,32 @@ def web_url(value):
 
     return _web_url(value)
 
+
+
+@register.filter
+def where_it_runs(public_url):
+    """The service, machine and container behind a published address, for
+    ``partials/_runs_on.html``; nothing when no service answers there."""
+    from hq.platform.application.where_it_runs import where_it_runs as found
+
+    return found(public_url)
+
+
+@register.filter
+def named_links(text):
+    """Free text as plain stretches and the links of the names HQ knows in
+    it, for ``partials/_linked_text.html``."""
+    from hq.platform.application.where_it_runs import named_links as found
+
+    return found(text)
+
+
+@register.simple_tag(takes_context=True)
+def problems_about(context, url=""):
+    """The open problems about the thing at ``url``, by default the page this
+    is drawn on, for ``partials/_problems.html``. One read of a stored answer,
+    made only by a page that asks."""
+    from hq.platform.application.problems import problems_about as found
+
+    request = context.get("request")
+    return found(url or (request.path if request is not None else ""))

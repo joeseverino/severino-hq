@@ -26,6 +26,7 @@ from hq.domains.content.models import ContentItem
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.application.money import money
 from hq.platform.application.ui import MISSING
 
 
@@ -300,23 +301,23 @@ def _totals_section(totals) -> list[str]:
         "## Totals",
         "",
         f"- Expenses: {totals['expenses_count']} records · "
-        f"${totals['expenses_total']} total, "
-        f"${totals['expenses_deductible_total']} estimated deductible",
+        f"{money(totals['expenses_total'])} total, "
+        f"{money(totals['expenses_deductible_total'])} estimated deductible",
         f"- Assets purchased this year: {totals['assets_count']} · "
-        f"${totals['assets_total']} total, "
-        f"${totals['assets_deductible_total']} estimated deductible",
+        f"{money(totals['assets_total'])} total, "
+        f"{money(totals['assets_deductible_total'])} estimated deductible",
         "",
     ]
 
 
 def _category_line(row) -> str:
-    return f"- **{row['category']}** ${row['total']} (${row['deductible']} deductible)"
+    return f"- **{row['category']}** {money(row['total'])} ({money(row['deductible'])} deductible)"
 
 
 def _expense_line(row) -> str:
     return (
         f"- {row['date'] or MISSING} · {row['vendor']} · {row['item']} "
-        f"(`{row['category']}`) **${row['total_cost']}**"
+        f"(`{row['category']}`) **{money(row['total_cost'])}**"
     )
 
 
@@ -353,9 +354,9 @@ def _documentation_line(d) -> str:
 def _asset_line(a) -> str:
     return (
         f"- **{a['item_name']}** (`{a['slug']}`, {a['category']}, "
-        f"{a['status']}) · ${a['total_cost']} on {a['purchase_date'] or MISSING} "
+        f"{a['status']}) · {money(a['total_cost'])} on {a['purchase_date'] or MISSING} "
         f"({a['business_use_percentage']}% business, "
-        f"${a['estimated_deductible_amount']} deductible)"
+        f"{money(a['estimated_deductible_amount'])} deductible)"
     )
 
 

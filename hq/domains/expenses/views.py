@@ -1,4 +1,4 @@
-from django.db.models import Count, Sum
+from django.db.models import Count
 from django.urls import reverse, reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -9,9 +9,11 @@ from django.views.generic import (
 )
 
 from hq.platform.application.documentation import document_link
-from hq.platform.application.expenses import cost_totals
+from hq.platform.application.expenses import costs_by_category
 from hq.platform.application.pages import PageAction, PageMixin, record_trail
 from hq.platform.application.projection import years_of
+from hq.platform.application.references import ReferencePickerMixin, referenced_by_row, resolve_many
+from hq.platform.application.security import web_principal
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from hq.platform.application.moments import when_day
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
@@ -58,11 +60,12 @@ class ExpenseListView(PageMixin, TableListMixin, ListView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        totals = self.object_list.aggregate(
-            total=Sum("total_cost"),
-            deductible=Sum("estimated_deductible_amount"),
+        ctx["totals"], ctx["by_category"] = costs_by_category(
+            self.object_list,
+            query=self.request.GET,
+            choices=EXPENSE_CATEGORY_CHOICES,
+            narrowed=bool(ctx["table"]["active_count"]),
         )
-        ctx["totals"] = cost_totals(totals, narrowed=bool(ctx["table"]["active_count"]))
         return ctx
 
 
@@ -91,6 +94,12 @@ class ExpenseDetailView(PageMixin, DetailView):
         context = super().get_context_data(**kwargs)
         record = self.object.related_documentation
         context["document"] = document_link(record) if record is not None else None
+        expense, principal = self.object, web_principal(self.request.user)
+        context["account"], context["about"] = resolve_many(
+            [(expense.paid_from, expense.paid_from_name), (expense.about, expense.about_name)],
+            principal=principal,
+        )
+        context["mentions"] = referenced_by_row(expense, principal=principal)
         return context
 
     def get_page_title(self):
@@ -110,7 +119,7 @@ class ExpenseDetailView(PageMixin, DetailView):
         )
 
 
-class ExpenseCreateView(ExpensePage, RecordFormMixin, CreateView):
+class ExpenseCreateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, CreateView):
     page_title = "New expense"
     form_class = ExpenseForm
     template_name = "expenses/expense_form.html"
@@ -126,7 +135,7 @@ class ExpenseCreateView(ExpensePage, RecordFormMixin, CreateView):
         return initial
 
 
-class ExpenseUpdateView(ExpensePage, RecordFormMixin, UpdateView):
+class ExpenseUpdateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, UpdateView):
     page_title = "Edit expense"
     model = Expense
     form_class = ExpenseForm

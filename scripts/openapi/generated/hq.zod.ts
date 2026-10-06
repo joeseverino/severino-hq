@@ -9,6 +9,7 @@ export const AssetCreateRequestSchema = z.object({
         business_use_percentage: z.number().int().optional(),
         category: z.string().optional(),
         idempotency_key: z.string().min(1).max(128).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")).optional(),
+        infrastructure: z.string().optional(),
         item_name: z.string(),
         notes: z.string().optional(),
         payment_method: z.string().optional(),
@@ -38,6 +39,7 @@ export const AssetUpdateRequestSchema = z.object({
         business_use_percentage: z.number().int().optional(),
         category: z.string().optional(),
         idempotency_key: z.string().min(1).max(128).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")).optional(),
+        infrastructure: z.string().optional(),
         item_name: z.string(),
         notes: z.string().optional(),
         payment_method: z.string().optional(),
@@ -59,6 +61,7 @@ export const AssetUpsertRequestSchema = z.object({
         business_use_percentage: z.number().int().optional(),
         category: z.string().optional(),
         idempotency_key: z.string().min(1).max(128).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")).optional(),
+        infrastructure: z.string().optional(),
         item_name: z.string(),
         notes: z.string().optional(),
         payment_method: z.string().optional(),
@@ -76,6 +79,7 @@ export const AssetUpsertRequestSchema = z.object({
 export const CalendarEntryCreateRequestSchema = z.object({
     expected_updated_at: z.string().optional(),
     payload: z.object({
+        about: z.string().optional(),
         ends_at: z.union([z.string(), z.null()]).optional(),
         ends_on: z.union([z.string(), z.null()]).optional(),
         idempotency_key: z.string().min(1).max(128).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")).optional(),
@@ -103,6 +107,7 @@ export const CalendarEntryDeleteRequestSchema = z.object({
 export const CalendarEntryUpdateRequestSchema = z.object({
     expected_updated_at: z.string().optional(),
     payload: z.object({
+        about: z.string().optional(),
         ends_at: z.union([z.string(), z.null()]).optional(),
         ends_on: z.union([z.string(), z.null()]).optional(),
         idempotency_key: z.string().min(1).max(128).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")).optional(),
@@ -318,6 +323,7 @@ export const ErrorDetailSchema = z.object({
 export const ExpenseCreateRequestSchema = z.object({
     expected_updated_at: z.string().optional(),
     payload: z.object({
+        about: z.string().optional(),
         business_purpose: z.string().optional(),
         business_use_percentage: z.number().int().optional(),
         category: z.string().optional(),
@@ -325,6 +331,7 @@ export const ExpenseCreateRequestSchema = z.object({
         idempotency_key: z.string().min(1).max(128).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")).optional(),
         item: z.string(),
         notes: z.string().optional(),
+        paid_from: z.string().optional(),
         payment_method: z.string().optional(),
         related_asset: z.union([z.string(), z.null()]).optional(),
         related_content: z.union([z.string(), z.null()]).optional(),
@@ -347,6 +354,7 @@ export const ExpenseDeleteRequestSchema = z.object({
 export const ExpenseUpdateRequestSchema = z.object({
     expected_updated_at: z.string().optional(),
     payload: z.object({
+        about: z.string().optional(),
         business_purpose: z.string().optional(),
         business_use_percentage: z.number().int().optional(),
         category: z.string().optional(),
@@ -354,6 +362,7 @@ export const ExpenseUpdateRequestSchema = z.object({
         idempotency_key: z.string().min(1).max(128).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")).optional(),
         item: z.string(),
         notes: z.string().optional(),
+        paid_from: z.string().optional(),
         payment_method: z.string().optional(),
         related_asset: z.union([z.string(), z.null()]).optional(),
         related_content: z.union([z.string(), z.null()]).optional(),

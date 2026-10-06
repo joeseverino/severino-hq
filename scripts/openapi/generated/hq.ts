@@ -21,6 +21,7 @@ export type AssetCreateRequest = {
          * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
          */
         idempotency_key?: string;
+        infrastructure?: string;
         item_name: string;
         notes?: string;
         payment_method?: string;
@@ -71,6 +72,7 @@ export type AssetUpdateRequest = {
          * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
          */
         idempotency_key?: string;
+        infrastructure?: string;
         item_name: string;
         notes?: string;
         payment_method?: string;
@@ -104,6 +106,7 @@ export type AssetUpsertRequest = {
          * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
          */
         idempotency_key?: string;
+        infrastructure?: string;
         item_name: string;
         notes?: string;
         payment_method?: string;
@@ -127,6 +130,7 @@ export type CalendarEntryCreateRequest = {
      * One entry, as every surface states it.
      */
     payload?: {
+        about?: string;
         ends_at?: string | null;
         ends_on?: string | null;
         /**
@@ -181,6 +185,7 @@ export type CalendarEntryUpdateRequest = {
      * One entry, as every surface states it.
      */
     payload?: {
+        about?: string;
         ends_at?: string | null;
         ends_on?: string | null;
         /**
@@ -519,6 +524,7 @@ export type ExpenseCreateRequest = {
      */
     expected_updated_at?: string;
     payload?: {
+        about?: string;
         business_purpose?: string;
         business_use_percentage?: number;
         category?: string;
@@ -535,6 +541,7 @@ export type ExpenseCreateRequest = {
         idempotency_key?: string;
         item: string;
         notes?: string;
+        paid_from?: string;
         payment_method?: string;
         related_asset?: string | null;
         related_content?: string | null;
@@ -569,6 +576,7 @@ export type ExpenseUpdateRequest = {
      */
     expected_updated_at?: string;
     payload?: {
+        about?: string;
         business_purpose?: string;
         business_use_percentage?: number;
         category?: string;
@@ -585,6 +593,7 @@ export type ExpenseUpdateRequest = {
         idempotency_key?: string;
         item: string;
         notes?: string;
+        paid_from?: string;
         payment_method?: string;
         related_asset?: string | null;
         related_content?: string | null;

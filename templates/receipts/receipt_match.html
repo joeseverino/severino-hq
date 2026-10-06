@@ -1,5 +1,4 @@
 {% extends "page.html" %}
-{% load humanize %}
 {% block page %}
 {% if already_linked %}
   <div class="msg msg-info">Already linked to {% include "receipts/_linked_to.html" %}.</div>
@@ -23,7 +22,7 @@
               <td>{{ exp.date|when }}</td>
               <td><strong>{{ exp.vendor }}</strong></td>
               <td>{{ exp.item }}</td>
-              <td>${{ exp.total_cost|floatformat:2|intcomma }}</td>
+              <td>{{ exp.total_cost|money }}</td>
               <td>{% post_button "Link this" request.path name="expense_id" value=exp.pk css="btn primary small" %}</td>
             </tr>
           {% endfor %}
@@ -45,7 +44,7 @@
   <dl class="kv">
     <dt>Vendor</dt><dd>{{ receipt.vendor|or_empty }}</dd>
     <dt>Date</dt><dd>{{ receipt.date|when }}</dd>
-    <dt>Amount</dt><dd>${{ receipt.amount|floatformat:2|intcomma }}</dd>
+    <dt>Amount</dt><dd>{{ receipt.amount|money }}</dd>
     <dt>Original file</dt><dd>{{ receipt.original_filename }}</dd>
   </dl>
 </section>
