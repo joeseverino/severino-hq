@@ -25,7 +25,8 @@ from hq.platform.application.calendar_entries import (
 )
 from hq.platform.application.deletion import delete_calendar_entry
 from hq.platform.application.pages import PageAction, PageMixin
-from hq.platform.application.security import safe_next
+from hq.platform.application.references import ReferencePickerMixin, reference_of
+from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.ui import ListRow
 from hq.platform.application.writes import ServiceCreateMixin, ServiceDeleteMixin, ServiceUpdateMixin
 
@@ -96,6 +97,7 @@ class CalendarView(PageMixin, TemplateView):
             return None
         return {
             "object": entry,
+            "about": reference_of(entry, "about", principal=web_principal(self.request.user)),
             "when": when_label(entry),
             "repeat": repeat_label(entry),
             "next": [
@@ -187,7 +189,7 @@ class EntryDetailView(RedirectView):
         return get_object_or_404(Entry, uid=uid).get_absolute_url()
 
 
-class EntryCreateView(EntryWrite, EntryPage, ServiceCreateMixin, CreateView):
+class EntryCreateView(EntryWrite, EntryPage, ReferencePickerMixin, ServiceCreateMixin, CreateView):
     page_title = "Add event"
     form_class = EntryForm
     template_name = "calendars/entry_form.html"
@@ -199,7 +201,7 @@ class EntryCreateView(EntryWrite, EntryPage, ServiceCreateMixin, CreateView):
         return {"starts_on": on or timezone.localdate()}
 
 
-class EntryUpdateView(EntryWrite, EntryPage, ServiceUpdateMixin, UpdateView):
+class EntryUpdateView(EntryWrite, EntryPage, ReferencePickerMixin, ServiceUpdateMixin, UpdateView):
     page_title = "Edit event"
     form_class = EntryForm
     template_name = "calendars/entry_form.html"

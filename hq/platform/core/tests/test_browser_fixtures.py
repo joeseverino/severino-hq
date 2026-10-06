@@ -172,6 +172,7 @@ def build_estate():
         },
     )
     _calendar()
+    _records()
     return user
 
 
@@ -347,6 +348,55 @@ def _calendar():
     Entry.objects.create(title="Example class", starts_on=today, repeat="weekly", weekdays="0,2", starts_at=time(18))
 
 
+ASSET = "example-server"
+
+
+def _records():
+    """Records that name each other: an asset that is the machine, with an
+    event and an expense about it, and a ledger in every category."""
+
+    from decimal import Decimal
+
+    from hq.domains.assets.models import Asset
+    from hq.domains.calendars.models import Entry
+    from hq.domains.expenses.models import EXPENSE_CATEGORY_CHOICES, Expense
+
+    machine = f"machine:{MACHINE}"
+    asset = Asset.objects.create(
+        item_name="Example server with a long descriptive product name",
+        slug=ASSET,
+        purchase_date=date(2025, 1, 5),
+        total_cost=Decimal("1234.50"),
+        infrastructure=machine,
+        infrastructure_name=MACHINE,
+    )
+    today = timezone.localdate()
+    Entry.objects.create(
+        title="Example yearly service with a long descriptive title",
+        starts_on=today + timedelta(days=3),
+        repeat="yearly",
+        about=f"asset:{asset.slug}",
+        about_name=asset.item_name,
+    )
+    for index, (category, _label) in enumerate(EXPENSE_CATEGORY_CHOICES):
+        Expense.objects.create(
+            date=today - timedelta(days=index),
+            vendor=f"Example vendor {index}",
+            item="An example purchase with a long description",
+            category=category,
+            total_cost=Decimal("1234.50") * (index + 1),
+            related_asset=asset if index == 0 else None,
+            about=machine if index < 2 else "",
+            about_name=MACHINE if index < 2 else "",
+        )
+
+
+def _expense() -> str:
+    from hq.domains.expenses.models import Expense
+
+    return Expense.objects.exclude(about="").first().get_absolute_url()
+
+
 def _calendar_day() -> str:
     from hq.domains.calendars.models import Entry
 
@@ -389,6 +439,10 @@ PAGES = {
     "calendar": (lambda: reverse("calendar:month"), ExitStack),
     # A day open beside the month, with an entry open in it.
     "calendar-day": (_calendar_day, ExitStack),
+    # Records that name each other, and the form that picks what one names.
+    "asset": (lambda: reverse("assets:detail", args=[ASSET]), ExitStack),
+    "expense": (_expense, ExitStack),
+    "event-form": (lambda: reverse("calendar:entry_new"), ExitStack),
 }
 
 

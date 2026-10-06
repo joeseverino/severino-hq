@@ -1,4 +1,5 @@
 {% extends "list_page.html" %}
+{% block summary %}{% if site %}<p class="muted">Published on {% entity site %}</p>{% endif %}{% endblock %}
 {% block row %}
   <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.title }}</strong></a></td>
   {% if show_type %}<td>{{ row.get_content_type_display }}</td>{% endif %}

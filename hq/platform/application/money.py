@@ -38,4 +38,24 @@ def to_money(value, default: Decimal | None = None) -> Decimal | None:
         return default
 
 
-__all__ = ["CENTS", "quantize_money", "to_money"]
+# A true minus sign. A hyphen beside a figure reads as a dash.
+MINUS = "\u2212"
+
+
+def money(value: Decimal | int | float | None, *, cents: bool = True) -> str:
+    """An amount as every page writes one: "$1,234.50", and "\u2212$5.00" when negative.
+
+    ``cents=False`` is for a figure that is scanned, never reconciled: a
+    balance, a total over a year. Nothing shows the mark for a missing value.
+    """
+
+    from .ui import MISSING
+
+    amount = to_money(value)
+    if amount is None:
+        return MISSING
+    sign = MINUS if amount < 0 else ""
+    return f"{sign}${abs(amount):,.2f}" if cents else f"{sign}${abs(amount):,.0f}"
+
+
+__all__ = ["CENTS", "MINUS", "money", "quantize_money", "to_money"]

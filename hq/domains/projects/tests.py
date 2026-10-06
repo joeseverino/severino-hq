@@ -127,6 +127,20 @@ class ProjectSectionTests(ComposedPluginTestCase, TestCase):
         response = self.client.get(reverse("projects:detail", args=[built.slug]))
         self.assertContains(response, f'<a href="{reverse("projects:list")}">Alpha in HQ</a>')
 
+    def test_an_extension_names_the_project_it_is_built_from(self):
+        from hq_sdk.pages import built_from
+
+        Project.objects.create(name="Example Tool", slug="example-tool", repository_url="https://github.com/example/tool")
+        self.assertIsNone(built_from("example.alpha"))
+        built = Project.objects.create(
+            name="Example Alpha", slug="example-alpha", repository_url="https://github.com/Example/example-alpha.git"
+        )
+
+        link = built_from("example.alpha")
+
+        self.assertEqual((link.label, link.url), ("Example Alpha", built.get_absolute_url()))
+        self.assertIsNone(built_from("example.missing"))
+
 
 class ProjectListTests(TestCase):
     def setUp(self):

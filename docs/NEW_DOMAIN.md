@@ -43,7 +43,7 @@ same commit as the rule. Extensions are a different path: `docs/PLUGINS.md`.
 | Every template sets `{% block title %}` to the page's own name, without the site name | `PageTitleTests.test_every_page_names_itself`, `PageTitleTests.test_no_page_appends_the_site_name_itself`, `PageTitleTests.test_the_layout_is_what_appends_it` |
 | Link a command's form with `command_url`, never `reverse("command")` or `{% url "command" %}` | `OnePrimitiveTests.test_a_command_is_linked_through_command_url` |
 | Name hosts with `normalized_hostname` and zone membership with `in_zone` | `OnePrimitiveTests.test_hostnames_are_spelled_by_normalized_hostname`, `OnePrimitiveTests.test_zone_membership_is_asked_of_in_zone` |
-| Templates show ages with `ago`, byte counts with `bytes` (`human_bytes` in Python) and name entities with the entity tag; Python links entities with `entity_link` | `OnePrimitiveTests.test_templates_say_ages_through_the_ago_filter`, `OnePrimitiveTests.test_templates_say_byte_counts_through_the_bytes_filter`, `OnePrimitiveTests.test_python_says_byte_counts_through_human_bytes`, `OnePrimitiveTests.test_templates_name_entities_through_the_entity_tag`, `OnePrimitiveTests.test_entity_pages_are_addressed_by_entity_link` |
+| Templates show ages with `ago`, byte counts with `bytes` (`human_bytes` in Python), amounts with `money` (`application.money.money` in Python) and name entities with the entity tag; Python links entities with `entity_link` | `OnePrimitiveTests.test_templates_say_ages_through_the_ago_filter`, `OnePrimitiveTests.test_templates_say_byte_counts_through_the_bytes_filter`, `OnePrimitiveTests.test_python_says_byte_counts_through_human_bytes`, `OnePrimitiveTests.test_templates_write_amounts_through_the_money_filter`, `OnePrimitiveTests.test_python_writes_amounts_through_money`, `OnePrimitiveTests.test_templates_name_entities_through_the_entity_tag`, `OnePrimitiveTests.test_entity_pages_are_addressed_by_entity_link` |
 | Declare the domain once in `HOST_DOMAINS` (`hq/platform/application/domains.py`): a unique `hq.<name>` id, nav routes that resolve, grouped nav at order 100 or above (machinery at 900) | `DomainRegistryTests.test_domain_ids_are_unique`, `DomainRegistryTests.test_every_declared_route_resolves`, `DomainRegistryTests.test_host_sections_never_squat_the_extension_order_band`, `DomainRegistryTests.test_machinery_sorts_after_every_section_that_holds_work` |
 | Keep no second roster of sections: no nav list in `hq/platform/core/context_processors.py`, no code-to-URL table in a core view | `DomainRegistryTests.test_the_registry_is_the_only_list_of_sections`, `DomainRegistryTests.test_the_view_keeps_no_code_to_url_table` |
 | List its apps and mounts on the descriptor, never in `hq/config/settings.py` or `hq/config/urls.py` | `DomainRegistryTests.test_apps_and_urls_are_read_off_the_declarations` |
@@ -62,12 +62,13 @@ package or a `test*.py` module.
 
 Rules that hold for every change, not a domain in particular; the class docstring
 is the rule. `StyleContractTests` and `SharedPrimitiveStyleTests` (CSS, tokens,
-layers, spacing, colour), `TemplateCommentTests` (no multi-line `{# #}`),
+layers, spacing, colour), `TemplateCommentTests` (what a `{# #}` comment left open is),
 `CognitiveComplexityTests` (score 20 per function), `CommentHistoryTests` (comments
 describe the present), `AssertionPrecisionTests` (`assertEqual(a, b)`, not
 `assertTrue(a == b)`), `SourceEscapeTests` (no invalid string escapes),
 `CountedTests` (plurals), `InterfaceTextTests` (no em dash, hand-built plural,
-nested form or `counted` phrase that cannot agree, in HQ or an extension; no
+nested form, `counted` phrase that cannot agree or `{# #}` comment that spans
+lines, in HQ or an extension; no
 system check reads source), `PlainWordsTests` (no word HQ keeps to itself in
 what its owner reads; `hq/platform/core/plain_words.py` holds the words and
 what to say instead), `PostButtonTests` (the shared post button),

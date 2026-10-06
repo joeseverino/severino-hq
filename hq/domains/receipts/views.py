@@ -12,8 +12,6 @@ from django.contrib import messages
 from django.db.models import Count
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect
-from django.contrib.humanize.templatetags.humanize import intcomma
-from django.template.defaultfilters import floatformat
 from django.urls import reverse, reverse_lazy
 from django.utils.html import format_html
 from django.views.generic import (
@@ -28,6 +26,7 @@ from django.views.generic import (
 
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
+from hq.platform.application.money import money
 from hq.platform.application.receipts import (
     ReceiptMetadataCommand,
     receipt_command_from_cleaned_data,
@@ -82,8 +81,6 @@ class ReceiptListView(PageMixin, TableListMixin, ListView):
         return self.apply_table_query(qs)
 
 
-def dollars(amount) -> str:
-    return f"${intcomma(floatformat(amount, 2))}"
 
 
 class ReceiptPage(PageMixin):
@@ -149,7 +146,7 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
         return format_html(
             "<strong>{}</strong> · {}",
             receipt.vendor or "(Unknown vendor)",
-            dollars(receipt.amount),
+            money(receipt.amount),
         )
 
     def get_page_actions(self):

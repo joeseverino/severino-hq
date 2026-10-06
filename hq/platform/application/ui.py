@@ -8,8 +8,10 @@ from datetime import date, datetime, timedelta
 from .chart_numbers import (
     _format_chart_value,
     _format_fitted_value,
-    _format_tooltip_value,
+    _format_reading,
+    _format_table_value,
     _nice_ceiling,
+    _table_heading,
 )
 from .drawings import Dots, Trend
 from .labels import plural
@@ -273,95 +275,6 @@ class Timeline:
             raise ValueError("Timeline items must be sorted chronologically.")
 
 
-@dataclass(frozen=True)
-class CadenceWeek:
-    """One period in a "did I do this" strip.
-
-    Answers a different question from a chart. A bar says how much; this says
-    whether, week after week, at a glance, which is what a habit is actually
-    judged on. A gap in a row of filled marks is visible in a way a short bar
-    beside tall ones is not.
-    """
-
-    label: str
-    hit: bool
-    # How many times in the period, when more than once is meaningful.
-    count: int = 0
-    # Read out for assistive technology, and shown on hover.
-    detail: str = ""
-
-
-def _hits(weeks: tuple[CadenceWeek, ...]) -> int:
-    return sum(1 for week in weeks if week.hit)
-
-
-def _streak(weeks: tuple[CadenceWeek, ...]) -> int:
-    """Consecutive periods with a hit, counting back from the most recent."""
-
-    run = 0
-    for week in reversed(weeks):
-        if not week.hit:
-            break
-        run += 1
-    return run
-
-
-@dataclass(frozen=True)
-class Cadence:
-    title: str
-    description: str
-    weeks: tuple[CadenceWeek, ...]
-
-    @property
-    def hits(self) -> int:
-        return _hits(self.weeks)
-
-    @property
-    def streak(self) -> int:
-        """Consecutive periods, counting back from the most recent."""
-        return _streak(self.weeks)
-
-
-@dataclass(frozen=True)
-class CadenceRow:
-    """One thing tracked across the shared periods of a matrix."""
-
-    label: str
-    weeks: tuple[CadenceWeek, ...]
-    url: str = ""
-    detail: str = ""
-
-    @property
-    def hits(self) -> int:
-        return _hits(self.weeks)
-
-    @property
-    def streak(self) -> int:
-        return _streak(self.weeks)
-
-
-@dataclass(frozen=True)
-class CadenceMatrix:
-    """Several cadences sharing one set of periods, so they can be compared.
-
-    Separate strips answer "did I keep this up" one at a time; stacked in
-    columns that line up they answer "which of these am I neglecting", which is
-    the question worth asking when there is more than one. The period labels
-    appear once, at the top, because that alignment is the whole point.
-    """
-
-    periods: tuple[str, ...]
-    rows: tuple[CadenceRow, ...]
-
-    def __post_init__(self) -> None:
-        for row in self.rows:
-            if len(row.weeks) != len(self.periods):
-                raise ValueError(
-                    f"{row.label!r} has {len(row.weeks)} periods; the matrix "
-                    f"has {len(self.periods)}. Columns that do not line up "
-                    "make the comparison wrong rather than merely ugly."
-                )
-
 
 # The plot rectangle every chart in HQ draws inside. Stated once so a line and
 # a bar chart placed one above the other share an axis position rather than
@@ -457,6 +370,14 @@ class ChartRow:
     values: tuple[float, ...]
 
 
+@dataclass(frozen=True)
+class ChartTableRow:
+    """One row of a chart's data table, as the words it shows."""
+
+    label: str
+    cells: tuple[str, ...]
+
+
 @dataclass(frozen=True, kw_only=True)
 class Chart:
     """What every chart in HQ is, and the one place its axis is derived.
@@ -516,6 +437,25 @@ class Chart:
         actually has rather than the one this file happens to default to.
         """
         return self.plot_left / self.width * 100
+
+    @property
+    def table_headings(self) -> tuple[str, ...]:
+        """The data table's value columns, one per series."""
+        return tuple(
+            _table_heading(series.label, self.unit)
+            for series in getattr(self, "series", ())
+        )
+
+    @property
+    def table_rows(self) -> tuple[ChartTableRow, ...]:
+        """The data table's rows, each value written as its tooltip writes it."""
+        return tuple(
+            ChartTableRow(
+                row.label,
+                tuple(_format_table_value(value, self.unit) for value in row.values),
+            )
+            for row in self.rows
+        )
 
     @property
     def axis_x(self) -> tuple:
@@ -700,7 +640,7 @@ def line_chart(
                 y=place_y(value),
                 value=value,
                 label=f"{day:%b %-d, %Y}",
-                tooltip=f"{day:%b %-d, %Y} · {label}: {_format_tooltip_value(value)} {unit}",
+                tooltip=f"{day:%b %-d, %Y} · {label}: {_format_reading(value, unit)}",
             )
             for day, value in points
         )
@@ -1033,8 +973,7 @@ def stacked_bar_chart(
                     label=item.label,
                     slot=item.slot,
                     tooltip=(
-                        f"{label} · {item.label}: "
-                        f"{_format_tooltip_value(value)} {unit}"
+                        f"{label} · {item.label}: {_format_reading(value, unit)}"
                     ),
                 )
             )

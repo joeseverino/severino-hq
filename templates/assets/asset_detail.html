@@ -1,14 +1,14 @@
 {% extends "page.html" %}
-{% load humanize %}
 {% block page %}
 <dl class="kv">
+  {% if thing %}<dt>This is</dt><dd>{{ thing.kind_label }} {% entity thing %}</dd>{% endif %}
   {% if domain %}<dt>Domain page</dt><dd>{% entity domain %}</dd>{% endif %}
   {% if asset.vendor %}<dt>Vendor</dt><dd>{{ asset.vendor }}</dd>{% endif %}
   <dt>Purchased</dt><dd>{{ asset.purchase_date|when }}</dd>
   {% if asset.total_cost %}
-    <dt>Cost</dt><dd>${{ asset.total_cost|floatformat:2|intcomma }}</dd>
+    <dt>Cost</dt><dd>{{ asset.total_cost|money }}</dd>
     <dt>Business use</dt><dd>{{ asset.business_use_percentage }}%</dd>
-    <dt>Deductible (est.)</dt><dd>${{ asset.estimated_deductible_amount|floatformat:2|intcomma }} <span class="muted">(estimate, not tax advice)</span></dd>
+    <dt>Deductible (est.)</dt><dd>{{ asset.estimated_deductible_amount|money }} <span class="muted">(estimate, not tax advice)</span></dd>
   {% else %}
     <dt>Cost</dt><dd class="muted">Not recorded</dd>
   {% endif %}
@@ -22,13 +22,14 @@
 {% with projects=asset.related_projects.all content=asset.content_items.all expenses=asset.expenses.all receipts=asset.receipts.all %}
 <section>
   <h2>Related</h2>
-  {% if projects or content or documents or expenses or receipts %}
+  {% if projects or content or documents or expenses or receipts or mentions %}
     <div class="two-col">
       {% if projects or documents.projects %}<div><h3>Projects</h3><ul>{% for p in projects %}<li>{% entity "project"|entity_of:p.slug label=p.name %}</li>{% endfor %}{% for link in documents.projects %}<li>{% entity link %}</li>{% endfor %}</ul></div>{% endif %}
       {% if content %}<div><h3>Writeups and pages</h3><ul>{% for c in content %}<li>{% entity "writeup"|entity_of:c.slug label=c.title %}</li>{% endfor %}</ul></div>{% endif %}
-      {% if expenses %}<div><h3>Expenses</h3><ul>{% for e in expenses %}<li>{% entity "expense"|entity_of:e.pk label=e.label %} <span class="muted">{{ e.date|when:"day" }} · ${{ e.total_cost|floatformat:2|intcomma }}</span></li>{% endfor %}</ul></div>{% endif %}
-      {% if receipts %}<div><h3>Receipts</h3><ul>{% for r in receipts %}<li>{% entity "receipt"|entity_of:r.pk label=r.label %} <span class="muted">${{ r.amount|floatformat:2|intcomma }}</span></li>{% endfor %}</ul></div>{% endif %}
+      {% if expenses %}<div><h3>Expenses</h3><ul>{% for e in expenses %}<li>{% entity "expense"|entity_of:e.pk label=e.label %} <span class="muted">{{ e.date|when:"day" }} · {{ e.total_cost|money }}</span></li>{% endfor %}</ul></div>{% endif %}
+      {% if receipts %}<div><h3>Receipts</h3><ul>{% for r in receipts %}<li>{% entity "receipt"|entity_of:r.pk label=r.label %} <span class="muted">{{ r.amount|money }}</span></li>{% endfor %}</ul></div>{% endif %}
       {% include "docs_index/_related_documents.html" %}
+      {% include "partials/_referenced_by.html" %}
     </div>
   {% else %}
     <p class="muted">Nothing is linked to this asset yet.</p>

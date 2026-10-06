@@ -57,8 +57,8 @@ a zero-based axis would draw every reading as the same height.
       <summary>View chart data</summary>
       <div class="table-scroll">
         <table class="data-table compact-table">
-          <thead><tr><th>Date</th>{% for series in chart.series %}<th class="num-col">{{ series.label }} ({{ chart.unit }})</th>{% endfor %}</tr></thead>
-          <tbody>{% for row in chart.rows %}<tr><th>{{ row.label }}</th>{% for value in row.values %}<td class="num-col">{{ value|floatformat:"-2" }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+          <thead><tr><th>Date</th>{% for heading in chart.table_headings %}<th class="num-col">{{ heading }}</th>{% endfor %}</tr></thead>
+          <tbody>{% for row in chart.table_rows %}<tr><th>{{ row.label }}</th>{% for cell in row.cells %}<td class="num-col">{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
         </table>
       </div>
     </details>

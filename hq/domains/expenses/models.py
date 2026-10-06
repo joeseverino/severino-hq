@@ -8,6 +8,7 @@ from django.db import models
 
 from hq.platform.application import business_use
 from hq.domains.assets.models import PAYMENT_METHOD_CHOICES, quantize_money
+from hq.platform.application.references import Referable, ReferenceField
 from hq.platform.core.models import TimestampedModel
 
 
@@ -88,6 +89,27 @@ class Expense(TimestampedModel):
         related_name="expenses",
     )
 
+    # The account that paid, where a section of HQ keeps accounts.
+    paid_from = ReferenceField(
+        "paid from",
+        role="account",
+        heading="Expenses paid from this account",
+        shows=("vendor", "item", "date", "total_cost"),
+        note="paid_note",
+    )
+    paid_from_name = models.CharField(max_length=200, blank=True, default="", editable=False)
+    # What it was for, where that is not one of the four records above.
+    about = ReferenceField(
+        "for",
+        but=("project", "asset", "writeup", "document", "expense", "receipt"),
+        heading="Expenses",
+        shows=("vendor", "item", "date", "total_cost"),
+        note="paid_note",
+    )
+    about_name = models.CharField(max_length=200, blank=True, default="", editable=False)
+
+    referable = Referable(kind="expense", shows=("vendor", "item"), name="label", pickable=False)
+
     class Meta:
         ordering = ("-date", "-id")
         indexes = [
@@ -105,6 +127,15 @@ class Expense(TimestampedModel):
         """What the expense is called wherever it is named: who was paid, and for what."""
 
         return f"{self.vendor} · {self.item}"
+
+    @property
+    def paid_note(self) -> str:
+        """When and how much, beside its name where something else lists it."""
+
+        from hq.platform.application.moments import when_day
+        from hq.platform.application.money import money
+
+        return f"{when_day(self.date)} · {money(self.total_cost)}"
 
     def save(self, *args, **kwargs):
         cost = self.total_cost or Decimal("0.00")

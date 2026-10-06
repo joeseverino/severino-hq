@@ -15,6 +15,11 @@ HTML has no nested forms: the parser drops the inner opening tag and takes the
 inner closing tag as the end of the outer form, so every control after it
 belongs to no form.
 
+Django's ``{# #}`` comment ends at the end of its line. One that runs onto a
+second line is not a comment: the page prints it. A note longer than a line is
+``{% comment %}``. ``open_comment_lines`` is the rule, read over every template
+of HQ and of every installed extension.
+
 These are properties of the source, so a gate reads them and a running HQ
 never does: ``read`` walks each tree once and parses each file once, and
 ``InterfaceTextTests`` (the architecture tests) fails on anything it finds.
@@ -58,6 +63,7 @@ class Reading:
     em_dashes: list[tuple[Path, int]] = field(default_factory=list)
     hand_plurals: list[tuple[Path, int]] = field(default_factory=list)
     nested_forms: list[tuple[Path, int]] = field(default_factory=list)
+    open_comments: list[tuple[Path, int]] = field(default_factory=list)
     unagreeable_counts: list[tuple[Path, int, str]] = field(default_factory=list)
 
 
@@ -144,7 +150,41 @@ def _template_forms(path: Path, number: int, line: str, depth: int, reading: Rea
     return depth
 
 
+def open_comment_lines(source: str) -> list[int]:
+    """Each line of a template that opens ``{#`` and does not close it there."""
+    found = []
+    for number, line in enumerate(source.splitlines(), 1):
+        opened = line.rfind("{#")
+        if opened != -1 and "#}" not in line[opened:]:
+            found.append(number)
+    return found
+
+
+def unclosed_template_comments(template_root: str | Path) -> list[str]:
+    """Every comment left open under ``template_root``, as "page.html:line".
+
+    For an extension's own suite, which reads its own templates:
+
+        class TemplateCommentTests(SimpleTestCase):
+            def test_every_short_comment_closes_on_its_own_line(self):
+                root = Path(__file__).resolve().parents[1] / "templates"
+                self.assertEqual(unclosed_template_comments(root), [])
+    """
+    root = Path(template_root)
+    found = []
+    for path in sorted(root.rglob("*.html")):
+        source = _text(path)
+        if source is None:
+            found.append(f"{path.relative_to(root)}: unreadable")
+            continue
+        found.extend(
+            f"{path.relative_to(root)}:{number}" for number in open_comment_lines(source)
+        )
+    return found
+
+
 def _read_template(path: Path, source: str, worded: bool, reading: Reading) -> None:
+    reading.open_comments.extend((path, number) for number in open_comment_lines(source))
     text = TEMPLATE_COMMENT.sub(lambda match: "\n" * match.group().count("\n"), source)
     depth = 0
     for number, line in enumerate(text.splitlines(), 1):
@@ -236,8 +276,9 @@ def read() -> Reading:
     """One pass over HQ and its extensions: each tree walked and each file parsed once.
 
     Wording and markup are read in HQ and in each extension checked out beside
-    it. ``counted`` phrases are read in those and in every installed extension
-    as well, because a phrase that cannot agree fails a page wherever it lives.
+    it. ``counted`` phrases and comments left open are read in those and in
+    every installed extension as well, because a phrase that cannot agree fails
+    a page, and an open comment is printed on one, wherever it lives.
     """
     worded_roots = _roots()
     reading = Reading()

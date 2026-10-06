@@ -27,11 +27,11 @@ Pass compact=True where it shares a row with a chart rather than owning a page.
           </th>
           {% for week in row.weeks %}
             <td class="cadence-cell">
-              <span class="cadence-mark{% if week.hit %} is-hit{% endif %}" data-tip="{{ week.detail }}" aria-hidden="true">{% if week.count > 1 %}{{ week.count }}{% endif %}</span>
-              <span class="visually-hidden">{{ week.detail }}</span>
+              <span class="cadence-mark{% if week.hit %} is-hit{% elif week.no_data %} is-no-data{% endif %}" data-tip="{{ week.said }}" aria-hidden="true">{% if week.count > 1 %}{{ week.count }}{% endif %}</span>
+              <span class="visually-hidden">{{ week.said }}</span>
             </td>
           {% endfor %}
-          <td class="cadence-total">{{ row.hits }}/{{ matrix.periods|length }}</td>
+          <td class="cadence-total">{{ row.tally }}</td>
         </tr>
       {% endfor %}
     </tbody>

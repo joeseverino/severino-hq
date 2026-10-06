@@ -1,13 +1,12 @@
 {% extends "list_page.html" %}
-{% load humanize %}
 {% block summary %}{% include "expenses/_cost_totals.html" %}{% endblock %}
 {% block row %}
   <td><a href="{{ row.get_absolute_url }}">{{ row.date|when }}</a></td>
   <td>{{ row.vendor }}</td>
   <td>{{ row.item }}</td>
   <td>{{ row.get_category_display }}</td>
-  <td>${{ row.total_cost|floatformat:2|intcomma }}</td>
+  <td>{{ row.total_cost|money }}</td>
   <td class="muted">{{ row.business_use_percentage }}%</td>
-  <td>${{ row.estimated_deductible_amount|floatformat:2|intcomma }}</td>
+  <td>{{ row.estimated_deductible_amount|money }}</td>
 {% endblock %}
 {% block empty %}No expenses yet. <a href="{% url 'expenses:create' %}">New expense</a>{% endblock %}

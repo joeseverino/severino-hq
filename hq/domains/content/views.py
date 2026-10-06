@@ -11,6 +11,7 @@ from django.views.generic import (
 )
 
 from hq.platform.application.analytics import CONTENT_TRAFFIC_DAYS, attach_traffic, item_traffic
+from hq.platform.application.content import published_on
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.pages import PageAction, PageMixin, record_trail
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
@@ -68,12 +69,20 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
         return (PageAction(self.new_label, self.new_url, primary=True),)
 
     @cached_property
-    def types_held(self) -> frozenset[str]:
-        return frozenset(
+    def _held(self) -> tuple[tuple[str, str], ...]:
+        """Each type this section holds with each address one is published at, in one read."""
+
+        return tuple(
             ContentItem.objects.filter(content_type__in=self.content_types)
-            .values_list("content_type", flat=True)
+            .order_by()
+            .values_list("content_type", "published_url")
             .distinct()
         )
+
+    @cached_property
+    def types_held(self) -> frozenset[str]:
+        return frozenset(content_type for content_type, _url in self._held)
+
 
     @cached_property
     def table_columns(self) -> tuple[TableColumn, ...]:
@@ -117,6 +126,8 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
         # keeps ownership of which rows and in what order.
         attach_traffic(context["items"])
         context.update(
+            # Where the section is published, said once when it is all one site.
+            site=published_on(url for _type, url in self._held),
             show_type=len(self.types_held) > 1,
             new_label=self.new_label,
             new_url=self.new_url,

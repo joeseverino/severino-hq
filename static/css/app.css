@@ -1986,6 +1986,9 @@ a.kpi:hover { background: var(--surface-2); }
 .attention-row[data-dismissed]::before { content: attr(data-dismissed); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attention-clear { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
 .action-items-card { padding-top: var(--space-5); }
+/* The open problems about the thing a page shows: the queue's cards under one count. */
+.problems-here { padding-top: var(--space-5); margin-bottom: var(--space-8); border-left: 3px solid var(--attn); }
+.problems-here > h2 { margin: 0; font-size: var(--text-sm); color: var(--attn); }
 /* The short queue on the dashboard, under the greeting. */
 .dash-needs { margin-bottom: var(--stack-gap); padding-top: var(--space-5); }
 
@@ -3252,6 +3255,10 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-last-activity { display: grid; max-width: 26ch; font-size: var(--text-2xs); }
 .connection-last-activity > span:first-child { overflow: hidden; text-overflow: ellipsis; }
 .connection-authority { color: var(--muted); font-size: var(--text-2xs); }
+.connection-problems { color: var(--attn); font-size: var(--text-2xs); font-weight: 650; }
+/* Where a published thing runs, and a note with the names in it as links. */
+.runs-on { margin: 0 0 var(--space-5); }
+.linked-text { white-space: pre-line; overflow-wrap: anywhere; }
 .connection-authority-proven { color: var(--muted); }
 .connection-authority-missing { color: var(--danger); }
 .connection-ability-more { display: block; margin-top: var(--space-2); font-size: var(--text-3xs); color: var(--muted); }
@@ -3616,6 +3623,11 @@ kbd {
   font-feature-settings: "tnum";
 }
 .cadence-mark.is-hit { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+/* A period nothing is known about. Dashed and unfilled with the missing-value
+   dash inside, so it reads as "no reading" beside a period that was skipped,
+   by shape as well as by colour. */
+.cadence-mark.is-no-data { background: transparent; border-style: dashed; color: var(--muted-2); }
+.cadence-mark.is-no-data::before { content: "\2013"; }
 .cadence-label { font-size: var(--text-3xs); color: var(--muted-2); white-space: nowrap; }
 .cadence-note { margin: 0; font-size: var(--text-xs); color: var(--muted); line-height: 1.5; }
 /* Anchored at the top-left of its containing block. At its static position, a

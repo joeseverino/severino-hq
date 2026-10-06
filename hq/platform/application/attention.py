@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import re
 
-from django.db.models import Count, Q
+from django.db.models import BooleanField, Count, ExpressionWrapper, Q
 from hq.platform.application.routes import reverse
 
 from hq.domains.assets.models import Asset
@@ -30,13 +30,16 @@ from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 
 from .conditions import held_since
-from .entity_links import entity_link, kind_label
+from .delivery_progress import STALLED_AFTER, WAITING, delivery_progress
+from .entity_links import EntityLink, entity_link, kind_label
 from .estate import subject_link
-from .findings import estate_findings, rule_for
+from .findings import estate_findings, finding_key, rule_for
+from .first_seen import dated
 from .infrastructure import enabled_resources, resource_health
 from .item_help import commands, finding_plan, instructions, remedy_link
 from .moments import ago, when_day
 from .projection import read_once
+from .references import dangling
 from .security import cli_principal
 from .services import service_catalog
 from . import sections
@@ -52,6 +55,8 @@ from .workflow_contracts import ActionLink, WorkflowPlan
 # an operator about. Pending clears itself on the next pass; degraded and
 # unknown do not.
 UNSETTLED_RESOURCE_STATES = frozenset({"degraded", "unknown"})
+# How many of a backlog's things a card says by name before it counts the rest.
+MOST_NAMED = 3
 CONTACTS_STATE_KEY = "attention.contacts-state"
 
 
@@ -66,15 +71,24 @@ def _backlog(
     url: str,
     body: str = "",
     notice: bool = False,
+    named: tuple[EntityLink, ...] = (),
 ) -> tuple[Insight, ...]:
     """One Insight when there is something to do, nothing when there is not.
 
     The title is the count and what is true of them, said whole for one and
     for many. ``action`` names the page the work is done on, which is the
-    help every backlog comes with."""
+    help every backlog comes with. ``named`` is the things themselves, where
+    the domain read them: the first few are said by name, each a link to its
+    own page, and the rest are a count."""
 
     if not count:
         return ()
+    first = named[:MOST_NAMED]
+    more = count - len(first)
+    names = ", ".join(link.label for link in first) + (
+        f" and {counted(more, 'other')}" if first and more > 0 else ""
+    )
+    body = " ".join(part for part in (f"{names}." if names else "", body) if part)
     return (
         Insight(
             status="attention",
@@ -87,10 +101,14 @@ def _backlog(
             magnitude=count,
             key=key,
             notice=notice,
+            actions=tuple(
+                ActionLink("open", link.label, "read", link.url) for link in first if link.url
+            ),
         ),
     )
 
 
+@dated
 def documentation() -> tuple[Insight, ...]:
     return _backlog(
         count=sections.documentation_reading()["needing_review"],
@@ -103,6 +121,7 @@ def documentation() -> tuple[Insight, ...]:
     )
 
 
+@dated
 def content() -> tuple[Insight, ...]:
     return (
         *_backlog(
@@ -142,6 +161,7 @@ def contacts_state() -> tuple[int, str]:
     return read_once(CONTACTS_STATE_KEY, inbox.unread)
 
 
+@dated
 def contacts() -> tuple[Insight, ...]:
     """Unread submissions from the public site.
 
@@ -163,13 +183,16 @@ def contacts() -> tuple[Insight, ...]:
     )
 
 
+@dated
 def expenses() -> tuple[Insight, ...]:
-    return _backlog(
-        count=(
-            Expense.objects.annotate(receipt_count=Count("receipts"))
-            .filter(receipt_count=0)
-            .count()
-        ),
+    # One statement says how many lack a receipt and whether any names
+    # something, so a ledger with no links costs nothing more to check.
+    counts = Expense.objects.aggregate(
+        bare=Count("pk", filter=Q(receipts__isnull=True), distinct=True),
+        linked=Count("pk", filter=~Q(paid_from="") | ~Q(about=""), distinct=True),
+    )
+    backlog = _backlog(
+        count=counts["bare"],
         key="expenses-without-receipts",
         eyebrow="Expenses",
         one="expense has no receipt",
@@ -177,8 +200,12 @@ def expenses() -> tuple[Insight, ...]:
         action="Attach receipts",
         url=f"{reverse('expenses:list')}?no_receipts=1",
     )
+    if not counts["linked"]:
+        return backlog
+    return (*backlog, *dangling(Expense, principal=cli_principal(), source=lambda expense: expense.label))
 
 
+@dated
 def receipts() -> tuple[Insight, ...]:
     return _backlog(
         count=Receipt.objects.filter(
@@ -193,13 +220,33 @@ def receipts() -> tuple[Insight, ...]:
     )
 
 
+def _asset_backlog() -> tuple[tuple[EntityLink, ...], bool]:
+    """Each active asset with no purchase date or no cost, by name, and
+    whether any asset holds a link to check. One read."""
+
+    unpriced = Q(status=Asset.Status.ACTIVE) & (Q(purchase_date__isnull=True) | Q(total_cost=0))
+    rows = tuple(
+        Asset.objects.filter(unpriced | ~Q(infrastructure=""))
+        .annotate(unpriced=ExpressionWrapper(unpriced, output_field=BooleanField()))
+        .order_by("item_name")
+        .values_list("item_name", "slug", "unpriced", "infrastructure")
+    )
+    missing = tuple(entity_link("asset", slug, label=name) for name, slug, lacks, _linked in rows if lacks)
+    return missing, any(linked for _name, _slug, _lacks, linked in rows)
+
+
+def assets_missing_purchase() -> tuple[EntityLink, ...]:
+    """Each active asset with no purchase date or no cost, by name."""
+
+    return _asset_backlog()[0]
+
+
+@dated
 def assets() -> tuple[Insight, ...]:
-    return _backlog(
-        count=(
-            Asset.objects.filter(status=Asset.Status.ACTIVE)
-            .filter(Q(purchase_date__isnull=True) | Q(total_cost=0))
-            .count()
-        ),
+    missing, linked = _asset_backlog()
+    backlog = _backlog(
+        count=len(missing),
+        named=missing,
         key="assets-missing-purchase",
         eyebrow="Assets",
         one="asset has no purchase date or cost",
@@ -208,6 +255,9 @@ def assets() -> tuple[Insight, ...]:
         action="Fill them in",
         url=f"{reverse('assets:list')}?missing_purchase=1",
     )
+    if not linked:
+        return backlog
+    return (*backlog, *dangling(Asset, principal=cli_principal()))
 
 
 # A node key lasts 180 days here, so a warning at 75 would sit in the queue for
@@ -461,6 +511,7 @@ def _node_link(node) -> ActionLink | None:
     return ActionLink("subject", node.label, "read", node.url)
 
 
+@dated
 def infrastructure() -> tuple[Insight, ...]:
     """What infrastructure needs looking at: unsettled state, and deadlines.
 
@@ -507,15 +558,14 @@ def infrastructure() -> tuple[Insight, ...]:
             # A rule's findings are one kind of matter, named as the rule
             # names itself.
             family=getattr(rule_for(finding.rule), "title", ""),
-            key=f"finding:{finding.rule}:{finding.subject or finding.scope}",
+            key=finding_key(finding),
             title=finding.title,
             value="",
             body=finding.explanation,
             url=f"{findings_url}?rule={finding.rule}",
             subject=_node_link(nodes.get(finding.subject)),
-            workflow=finding_plan(
-                finding, f"finding:{finding.rule}:{finding.subject or finding.scope}"
-            ),
+            since=finding.since,
+            workflow=finding_plan(finding, finding_key(finding)),
         )
         for finding in findings
     ]
@@ -526,12 +576,15 @@ def infrastructure() -> tuple[Insight, ...]:
     }
     covered_kinds = {finding.scope for finding in findings if finding.scope}
     for resource in resources:
+        health = health_by_key[resource.key]
+        if health["state"] == "deploying":
+            # Told whatever else is open about it: no finding says this.
+            items.append(_deploying(resource, health))
+            continue
         if resource.key in covered_resources or resource.kind in covered_kinds:
             continue
-        health = health_by_key[resource.key]
-        if health["state"] not in UNSETTLED_RESOURCE_STATES:
-            continue
-        items.append(_unsettled(resource, health))
+        if health["state"] in UNSETTLED_RESOURCE_STATES:
+            items.append(_unsettled(resource, health))
     return tuple(items) + tailnet()
 
 
@@ -558,6 +611,41 @@ def _unsettled(resource, health: dict[str, str]) -> Insight:
         subject=subject_link("resource", resource.key),
         since=held_since(resource.conditions, "Degraded") if failed else None,
         **_apply_help(resource),
+    )
+
+
+def _deploying(resource, health: dict[str, str]) -> Insight:
+    """A delivery on its way to production: a notice while a deploy runs or is
+    about to, and a thing to do while a run waits for approval."""
+
+    progress = delivery_progress(resource)
+    link = entity_link("resource", resource.key)
+    said = ended(health["message"])
+    if progress.state == WAITING:
+        return Insight(
+            status="attention",
+            eyebrow="Infrastructure",
+            key=f"resource:{resource.key}",
+            title="A deploy is waiting for your approval",
+            value="1",
+            body=said,
+            action="Approve on GitHub" if progress.run_url else "Open the deploy",
+            url=progress.run_url or link.url,
+            subject=subject_link("resource", resource.key),
+            since=progress.since,
+        )
+    minutes = int(STALLED_AFTER.total_seconds() // 60)
+    return Insight(
+        status="attention",
+        eyebrow="Infrastructure",
+        key=f"resource:{resource.key}",
+        title="A deploy is running" if progress.state == "running" else "A deploy is about to start",
+        value="1",
+        body=f"{said} It becomes a problem if production is still behind after {counted(minutes, 'minute')}.",
+        action="Open the deploy",
+        url=link.url,
+        subject=subject_link("resource", resource.key),
+        notice=True,
     )
 
 
@@ -644,6 +732,7 @@ def _asked_change(shown) -> str:
     )
 
 
+@dated
 def services() -> tuple[Insight, ...]:
     """One entry per hostname whose wiring is incomplete.
 

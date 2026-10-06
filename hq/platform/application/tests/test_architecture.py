@@ -948,26 +948,40 @@ class TemplateCommentTests(SimpleTestCase):
 
     A multi-line one is not a comment: it renders verbatim into the page. The
     failure is invisible in review because it looks exactly like a comment.
+    The rule is ``interface_text.open_comment_lines``; ``InterfaceTextTests``
+    holds every template of HQ and of each installed extension to it.
     """
 
-    def test_no_multi_line_hash_comments_in_templates(self):
+    def test_a_comment_closed_on_its_line_is_fine(self):
+        from hq.platform.core.interface_text import open_comment_lines
 
-        root = Path(__file__).resolve().parents[4] / "templates"
-        offenders = []
-        for template in sorted(root.rglob("*.html")):
-            text = template.read_text(encoding="utf-8")
-            for match in re.finditer(r"\{#(.*?)#\}", text, re.DOTALL):
-                if "\n" in match.group(1):
-                    line = text[: match.start()].count("\n") + 1
-                    offenders.append(f"{template.relative_to(root)}:{line}")
-            for number, line in enumerate(text.splitlines(), 1):
-                if "{#" in line and "#}" not in line:
-                    offenders.append(f"{template.relative_to(root)}:{number}")
+        self.assertEqual(open_comment_lines("<p>{# one #} and {# two #}</p>\n"), [])
 
-        self.assertEqual(
-            sorted(set(offenders)),
-            [],
-            "use {% comment %}…{% endcomment %} for multi-line comments",
+    def test_a_comment_left_open_is_found_on_the_line_that_opens_it(self):
+        from hq.platform.core.interface_text import open_comment_lines
+
+        source = "<p>{# closed #} fine</p>\n<p>{# closed #} {# left\n   open #}</p>\n"
+
+        self.assertEqual(open_comment_lines(source), [2])
+
+    def test_a_template_root_is_read_whole(self):
+        from hq.platform.core.interface_text import unclosed_template_comments
+
+        with TemporaryDirectory() as root:
+            Path(root, "partials").mkdir()
+            Path(root, "page.html").write_text("<p>{# fine #}</p>\n", encoding="utf-8")
+            Path(root, "partials", "_row.html").write_text(
+                "<td>\n{# left\n   open #}</td>\n", encoding="utf-8"
+            )
+
+            self.assertEqual(unclosed_template_comments(root), ["partials/_row.html:2"])
+
+    def test_the_sdk_exports_the_same_walk(self):
+        from hq.platform.core import interface_text
+        from hq_sdk import testing
+
+        self.assertIs(
+            testing.unclosed_template_comments, interface_text.unclosed_template_comments
         )
 
 
@@ -1280,6 +1294,10 @@ class InterfaceTextTests(SimpleTestCase):
         """Close the outer form first, or point the control at a form with form="id"."""
         self.assertEqual(self._places(self.reading.nested_forms), [])
 
+    def test_no_template_comment_is_left_open(self):
+        """A {# #} comment ends on its own line. Use {% comment %}…{% endcomment %} for more."""
+        self.assertEqual(self._places(self.reading.open_comments), [])
+
     def test_every_counted_phrase_agrees(self):
         """Give both forms: counted(n, "zone band", "zone bands")."""
         self.assertEqual(self._places(self.reading.unagreeable_counts), [])
@@ -1565,6 +1583,50 @@ class OnePrimitiveTests(SimpleTestCase):
             path.relative_to(self.ROOT).as_posix()
             for path in sorted((self.ROOT / "templates").rglob("*.html"))
             if "filesizeformat" in path.read_text(encoding="utf-8")
+        ]
+        self.assertEqual(found, [])
+
+    def test_templates_write_amounts_through_the_money_filter(self):
+        """``{{ amount|money }}``, never a dollar sign in front of a number filter,
+        which writes a negative amount as "$-5.00"."""
+
+        built = re.compile(r"\$\{\{")
+        found = [
+            path.relative_to(self.ROOT).as_posix()
+            for path in sorted((self.ROOT / "templates").rglob("*.html"))
+            if built.search(path.read_text(encoding="utf-8"))
+        ]
+        self.assertEqual(found, [])
+
+    def test_python_writes_amounts_through_money(self):
+        """``application.money.money`` is the one place a dollar sign meets a
+        number: no other f-string puts one in front of a value."""
+
+        def builds_an_amount(path: Path) -> bool:
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if not isinstance(node, ast.JoinedStr):
+                    continue
+                for before, after in zip(node.values, node.values[1:]):
+                    if (
+                        isinstance(before, ast.Constant)
+                        and str(before.value).endswith("$")
+                        and isinstance(after, ast.FormattedValue)
+                    ):
+                        return True
+            return False
+
+        sources = [
+            path
+            for package in ("hq", "hq_sdk")
+            for path in sorted((self.ROOT / package).rglob("*.py"))
+            if "tests" not in path.parts and path.name != "tests.py"
+        ]
+        self.assertTrue(sources)
+        found = [
+            path.relative_to(self.ROOT).as_posix()
+            for path in sources
+            if path.relative_to(self.ROOT).as_posix() != "hq/platform/application/money.py"
+            and builds_an_amount(path)
         ]
         self.assertEqual(found, [])
 

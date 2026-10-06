@@ -1,5 +1,4 @@
 {% extends "page.html" %}
-{% load humanize %}
 {% block page %}
 <form method="get" class="filter-bar" role="search">
   <select name="year" aria-label="Year" data-submit-on-change>
@@ -11,9 +10,9 @@
 </form>
 
 <section class="kpi-grid">
-  <div class="kpi"><span class="label">Expenses {{ year }}</span><span class="value">${{ expenses_total|floatformat:2|intcomma }}</span><span class="muted">{% if expenses_count %}<a href="{{ expenses_url }}">{{ expenses_count|counted:"expense" }}</a>{% else %}{{ expenses_count|counted:"expense" }}{% endif %}</span></div>
-  <div class="kpi"><span class="label">Deductible (est.) {{ year }}</span><span class="value">${{ expenses_deductible|floatformat:2|intcomma }}</span><span class="muted">Estimate, not tax advice</span></div>
-  <div class="kpi"><span class="label">Assets purchased {{ year }}</span><span class="value">{{ assets_count }}</span><span class="muted">${{ assets_total|floatformat:2|intcomma }} total</span></div>
+  <div class="kpi"><span class="label">Expenses {{ year }}</span><span class="value">{{ expenses_total|money }}</span><span class="muted">{% if expenses_count %}<a href="{{ expenses_url }}">{{ expenses_count|counted:"expense" }}</a>{% else %}{{ expenses_count|counted:"expense" }}{% endif %}</span></div>
+  <div class="kpi"><span class="label">Deductible (est.) {{ year }}</span><span class="value">{{ expenses_deductible|money }}</span><span class="muted">Estimate, not tax advice</span></div>
+  <div class="kpi"><span class="label">Assets purchased {{ year }}</span><span class="value">{{ assets_count }}</span><span class="muted">{{ assets_total|money }} total</span></div>
   <div class="kpi"><span class="label">Documents due for review</span><span class="value">{% if docs_needing_review_count %}<a href="{{ docs_needing_review_url }}">{{ docs_needing_review_count }}</a>{% else %}0{% endif %}</span></div>
 </section>
 
@@ -29,7 +28,7 @@ A year with no expenses is said by the count above; its breakdowns do not draw.
       <thead><tr><th>Category</th><th>Total</th><th>Deductible (est.)</th></tr></thead>
       <tbody>
         {% for row in expenses_by_category %}
-          <tr><td><a href="{{ row.url }}">{{ row.label }}</a></td><td>${{ row.total|floatformat:2|intcomma }}</td><td>${{ row.deductible|floatformat:2|intcomma }}</td></tr>
+          <tr><td><a href="{{ row.url }}">{{ row.label }}</a></td><td>{{ row.total|money }}</td><td>{{ row.deductible|money }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -40,7 +39,7 @@ A year with no expenses is said by the count above; its breakdowns do not draw.
     <h2>Largest expenses, {{ year }}</h2>
     <ul class="list-rows">
       {% for e in largest_expenses %}
-        <li><span class="row-main">{% entity "expense"|entity_of:e.pk label=e.label %}</span><span class="row-meta">{{ e.date|when }} · {{ e.get_category_display }} · <strong>${{ e.total_cost|floatformat:2|intcomma }}</strong></span></li>
+        <li><span class="row-main">{% entity "expense"|entity_of:e.pk label=e.label %}</span><span class="row-meta">{{ e.date|when }} · {{ e.get_category_display }} · <strong>{{ e.total_cost|money }}</strong></span></li>
       {% endfor %}
     </ul>
   </section>
@@ -69,7 +68,7 @@ mostly empty card. A reading with nothing in it is not drawn.
     <h2>Assets by category</h2>
     <ul class="list-rows">
       {% for row in assets_by_category %}
-        <li><span class="row-main"><a href="{{ row.url }}">{{ row.label }}</a> <span class="muted">{{ row.n }}</span></span><span class="row-meta">{% if row.total %}<strong>${{ row.total|floatformat:2|intcomma }}</strong>{% endif %}</span></li>
+        <li><span class="row-main"><a href="{{ row.url }}">{{ row.label }}</a> <span class="muted">{{ row.n }}</span></span><span class="row-meta">{% if row.total %}<strong>{{ row.total|money }}</strong>{% endif %}</span></li>
       {% endfor %}
     </ul>
   </section>

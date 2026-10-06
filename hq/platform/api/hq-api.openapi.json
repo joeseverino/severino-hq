@@ -153,6 +153,11 @@
                 "title": "Idempotency Key",
                 "type": "string"
               },
+              "infrastructure": {
+                "default": "",
+                "title": "Infrastructure",
+                "type": "string"
+              },
               "item_name": {
                 "title": "Item Name",
                 "type": "string"
@@ -312,6 +317,11 @@
                 "title": "Idempotency Key",
                 "type": "string"
               },
+              "infrastructure": {
+                "default": "",
+                "title": "Infrastructure",
+                "type": "string"
+              },
               "item_name": {
                 "title": "Item Name",
                 "type": "string"
@@ -438,6 +448,11 @@
                 "title": "Idempotency Key",
                 "type": "string"
               },
+              "infrastructure": {
+                "default": "",
+                "title": "Infrastructure",
+                "type": "string"
+              },
               "item_name": {
                 "title": "Item Name",
                 "type": "string"
@@ -541,6 +556,11 @@
             "additionalProperties": false,
             "description": "One entry, as every surface states it.",
             "properties": {
+              "about": {
+                "default": "",
+                "title": "About",
+                "type": "string"
+              },
               "ends_at": {
                 "anyOf": [
                   {
@@ -707,6 +727,11 @@
             "additionalProperties": false,
             "description": "One entry, as every surface states it.",
             "properties": {
+              "about": {
+                "default": "",
+                "title": "About",
+                "type": "string"
+              },
               "ends_at": {
                 "anyOf": [
                   {
@@ -1890,6 +1915,11 @@
           "payload": {
             "additionalProperties": false,
             "properties": {
+              "about": {
+                "default": "",
+                "title": "About",
+                "type": "string"
+              },
               "business_purpose": {
                 "default": "",
                 "title": "Business Purpose",
@@ -1925,6 +1955,11 @@
               "notes": {
                 "default": "",
                 "title": "Notes",
+                "type": "string"
+              },
+              "paid_from": {
+                "default": "",
+                "title": "Paid From",
                 "type": "string"
               },
               "payment_method": {
@@ -2066,6 +2101,11 @@
           "payload": {
             "additionalProperties": false,
             "properties": {
+              "about": {
+                "default": "",
+                "title": "About",
+                "type": "string"
+              },
               "business_purpose": {
                 "default": "",
                 "title": "Business Purpose",
@@ -2101,6 +2141,11 @@
               "notes": {
                 "default": "",
                 "title": "Notes",
+                "type": "string"
+              },
+              "paid_from": {
+                "default": "",
+                "title": "Paid From",
                 "type": "string"
               },
               "payment_method": {
@@ -11221,19 +11266,19 @@
     },
     {
       "kind": "nav",
-      "name": "nav.build",
-      "summary": "Build"
+      "name": "nav.projects",
+      "summary": "Projects"
     },
     {
       "kind": "nav",
       "name": "hq.projects",
-      "parent": "nav.build",
+      "parent": "nav.projects",
       "summary": "Projects"
     },
     {
       "kind": "nav",
       "name": "hq.docs",
-      "parent": "nav.build",
+      "parent": "nav.projects",
       "summary": "Docs"
     },
     {
