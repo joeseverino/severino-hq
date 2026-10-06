@@ -27,6 +27,7 @@ from .connection_contracts import (
     ConnectionSpec,
 )
 from .integrations import integration_graph
+from .projection import read_once
 from .integration_validation import safe_connection_url
 from .action_links import (
     ActionLink,
@@ -448,15 +449,20 @@ def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
 
 
 def _connection_instances(spec: ConnectionSpec) -> tuple[ConnectionInstance, ...]:
-    instances = tuple(
-        _validate_instance(spec, instance) for instance in spec.instance_provider()
-    )
-    ids = [instance.id for instance in instances]
-    if len(ids) != len(set(ids)):
-        raise ImproperlyConfigured(
-            f"Connection {spec.name!r} emitted duplicate instance ids."
+    """One family's instances, asked of its provider once per request."""
+
+    def load() -> tuple[ConnectionInstance, ...]:
+        instances = tuple(
+            _validate_instance(spec, instance) for instance in spec.instance_provider()
         )
-    return instances
+        ids = [instance.id for instance in instances]
+        if len(ids) != len(set(ids)):
+            raise ImproperlyConfigured(
+                f"Connection {spec.name!r} emitted duplicate instance ids."
+            )
+        return instances
+
+    return read_once(f"connections.instances:{spec.name}", load)
 
 
 def _ability_state(

@@ -146,6 +146,24 @@ class ConnectionExecutionTests(TestCase):
             ("transactions:read",),
         )
 
+    def test_a_provider_is_asked_once_for_one_answer(self):
+        from ..projection import projection_scope
+
+        spec = _finance_spec()
+        provider = mock.Mock(side_effect=spec.instance_provider)
+        spec = replace(spec, instance_provider=provider)
+        with (
+            mock.patch(
+                "hq.platform.application.plugins.plugin_connection_specs",
+                return_value=(spec,),
+            ),
+            projection_scope(),
+        ):
+            connection_catalog(principal=FINANCE)
+            connection_catalog(principal=FINANCE)
+
+        self.assertEqual(provider.call_count, 1)
+
     def test_unknown_scope_coverage_stays_unknown(self):
         spec = _finance_spec()
         instance = replace(spec.instance_provider()[0], scopes_known=False)
