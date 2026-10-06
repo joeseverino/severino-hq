@@ -154,9 +154,11 @@ class PageTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user("op", password="x" * 20)
         self.client.force_login(self.user)
-        patcher = mock.patch("hq.platform.core.action_item_views.work_queue", return_value=[ITEM, OTHER])
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        # The page asks for the queue; the header's count derives from it.
+        for name in ("hq.platform.core.action_item_views", "hq.platform.application.dashboard"):
+            patcher = mock.patch(f"{name}.work_queue", return_value=[ITEM, OTHER])
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def shown(self, page, name="action_groups"):
         return [item["label"] for group in page.context[name] for item in group["items"]]

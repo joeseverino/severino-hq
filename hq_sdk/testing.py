@@ -10,9 +10,11 @@ from hq.domains.jobs.testing import held_jobs
 from hq.platform.application.demo import demo_scope
 from hq.platform.application.plugin_testing import (
     ComposedPluginTestCase,
+    providers_derived_again,
     sibling,
     undefined_style_classes,
 )
+from hq.platform.core.interface_text import unclosed_template_comments
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import OutboundInRequest
 from hq_sdk.validation import unsupported_hq_imports
@@ -64,8 +66,10 @@ __all__ = [
     "audit_writer",
     "demo_scope",
     "held_jobs",
+    "providers_derived_again",
     "reaches_out",
     "sibling",
+    "unclosed_template_comments",
     "undefined_style_classes",
     "unsupported_hq_imports",
 ]

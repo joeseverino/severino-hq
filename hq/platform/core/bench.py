@@ -66,6 +66,39 @@ class Seeded:
     approval: ApprovalRequest
 
 
+def unchanged_sweep() -> None:
+    """What the controller reports when nothing changed.
+
+    The bridge's own ``inventory`` and ``connections`` actions, given what the
+    estate already holds: every row is written again and none says anything
+    new. The first sweep of a seeded estate adopts what it finds; every one
+    after it changes nothing but when it was read.
+    """
+
+    from hq.domains.control_plane.bridge_actions import ACTIONS
+
+    by_name = {action.name: action for action in ACTIONS}
+    inventory = {
+        row.kind: {"ok": True, "connected": True, "records": row.records}
+        for row in ProviderInventory.objects.all()
+    }
+    connections = [
+        {
+            "connection_ref": row.connection_ref,
+            "provider": row.provider,
+            "endpoint": row.endpoint,
+            "reaches": row.reaches,
+            "ok": row.reachable,
+            "probed": row.probed,
+            "detail": row.detail,
+            "manages": row.manages,
+        }
+        for row in ProviderConnection.objects.all()
+    ]
+    by_name["inventory"].run({"controller-id": CONTROLLER}, inventory)
+    by_name["connections"].run({"controller-id": CONTROLLER}, connections)
+
+
 def _count(scale: float, full: int) -> int:
     return max(2, round(full * scale))
 
@@ -269,6 +302,19 @@ def _entries(scale: float, today: date) -> list[Entry]:
         )
         for index in range(_count(scale, 300))
     ])
+
+
+def _references(assets, expenses, entries) -> None:
+    """The sampled records name each other, so their pages list what names them."""
+
+    asset, machine = assets[0], "machine:lab-1"
+    Asset.objects.filter(pk=asset.pk).update(infrastructure=machine, infrastructure_name="lab-1")
+    Expense.objects.filter(pk__in=[expense.pk for expense in expenses[::25]]).update(
+        about=machine, about_name="lab-1"
+    )
+    about_asset = [entry.pk for entry in entries[::10]]
+    Entry.objects.filter(pk__in=about_asset).update(about=f"asset:{asset.slug}", about_name=asset.item_name)
+    Entry.objects.filter(pk=entries[1].pk).update(about=machine, about_name="lab-1")
 
 
 def _history(rng, scale, user, expenses, assets) -> list[AuditLog]:
@@ -540,6 +586,7 @@ def seed(scale: float = 1.0) -> Seeded:
     _analytics(rng, scale, today)
     resources = _infrastructure(scale)
     _operations(scale, user, resources)
+    _references(assets, expenses, entries)
     rebuild_search_index()
     return Seeded(
         user=user,

@@ -409,6 +409,7 @@ host templates:
 | `partials/_empty_state.html` | Consistent empty state and optional action |
 | `partials/_form_field.html` | Label, control, help text, and validation errors |
 | `partials/_pagination.html` | Query-preserving paginated navigation |
+| `partials/_referenced_by.html` | What names a thing, drawn by `{% referenced_by %}` |
 
 Standard cards, section headings, data tables, list rows, forms, buttons, tags,
 and two-column layouts use the classes demonstrated by `example_hq_plugin`.
@@ -418,6 +419,14 @@ pattern belongs in HQ first; copying host CSS or markup into every plugin is a
 contract failure. The rules those classes follow (one frame per thing, tables
 sized to content, one head, menu, disclosure and filter bar) are in
 `docs/DESIGN.md`.
+
+An amount is written by `{{ amount|money }}` in a template and
+`hq_sdk.money.money` in Python: "$1,234.50", a true minus sign before the
+dollar, `money:"whole"` or `cents=False` for a figure that is scanned. An
+overview says what it is built from with `hq_sdk.pages.built_from(plugin.id)`,
+a link to the project that names the extension's repository. An extension's
+suite checks its templates for a `{# #}` comment left open with
+`hq_sdk.testing.unclosed_template_comments`.
 
 Wrap a `.data-table` in `.table-scroll`; HQ preserves horizontal scrolling and
 keeps its headings visible through long result sets. The enhancement is visual
@@ -526,10 +535,40 @@ without reaching it. `example_hq_plugin` and
 
 ## Derived reads
 
-`hq_sdk.reads` is how an extension's page stays cheap without a cache of its
-own. `read_once` shares one read among the functions assembling a page.
-`derivation` keeps a computed fact across requests until a table it reads is
-written:
+What an extension contributes to a page many domains share is derived once per
+change, by the host. HQ asks `attention`, `dashboard`, `overview` and each
+calendar source's `events` through a derivation of its own, named
+`extension.<plugin id>.<provider>`: the answer is kept until a table the
+provider was seen to read is written, every request in between is answered
+from what is stored, and after a write the answer is derived again before the
+next request asks. An extension does nothing to be kept, and keeps three rules
+so that what is stored is true:
+
+- **Answer from rows, the clock and the demo switch.** HQ sees the tables a
+  provider reads and counts every write to them. It cannot see a module-level
+  cache, a file, the environment or the signed-in person, so an answer that
+  depends on one of those is served to a request it is wrong for.
+- **Return a value that pickles and compares equal.** Dataclasses, dicts,
+  tuples, dates and decimals do; a lambda, a generator held inside the value,
+  an open file or a lazy queryset does not. An answer that cannot be kept is
+  derived on every request, and the log says so.
+- **Expect the clock a minute late at most.** HQ cannot see where an extension
+  reads the clock, so a kept answer stands one minute and never past local
+  midnight. A count of days turns on time; an age worded in minutes may be a
+  minute behind.
+
+`hq_sdk.testing.providers_derived_again(plugin_id)` holds an extension to
+them: with its records in place, it names every provider that is not answered
+from what is stored.
+
+```python
+def test_every_provider_is_answered_from_what_is_stored(self):
+    self.assertEqual(providers_derived_again("example.notes"), [])
+```
+
+`hq_sdk.reads` is for an extension's own pages. `read_once` shares one read
+among the functions assembling a page. `derivation` keeps a fact of the
+extension's own across requests, by the same rules:
 
 ```python
 from hq_sdk.reads import derivation, today
@@ -541,10 +580,63 @@ def overview():
 
 HQ counts writes to every model table in the writing transaction, an
 extension's included, so nothing is invalidated by hand and nothing is served
-older than its rows. A derivation reads the clock through `today`, `reached`,
-`passed`, `since` and `whole`, which also record when the answer stops being
-true. An extension does not keep a process-level cache, a `cache.set` or a
-timestamp table beside this.
+older than its rows. Asking `today`, `reached`, `passed`, `since` or `whole`
+also derives the answer again at the moment one of them would change. An
+extension does not keep a process-level cache, a `cache.set` or a timestamp
+table beside this.
+
+## References
+
+A record names a thing in HQ one way, whoever owns either end. A reference is
+the text `kind:identity`: `machine:lab-1`, `zone:example.com`,
+`asset:<slug>`, `project:<slug>`, `expense:<id>`, a certificate by its registry
+kind and key, or a row of a model by that model's label and key. `hq_sdk.references`
+is the whole surface:
+
+```python
+from hq_sdk.references import CERTIFICATE, Referable, ReferenceField
+
+
+class Note(models.Model):
+    title = models.CharField(max_length=200)
+    review_on = models.DateField()
+    # What the note is about, and what it was called when this was saved.
+    about = ReferenceField(
+        kinds=("asset", "zone", CERTIFICATE),
+        heading="Notes",
+        shows=("title", "review_on"),
+        note="review_note",
+    )
+    about_name = models.CharField(max_length=200, blank=True, default="")
+
+    # Other records may refer to a note.
+    referable = Referable(shows=("title",), requires="notes.read")
+```
+
+- **A reference is two columns.** The `ReferenceField` and a text column of the
+  same name ending `_name`. A migration sees two plain text columns. The system
+  check fails a field without its name column or its `heading`.
+- **What it may name.** `kinds` lists them; `role` takes any model that declares
+  that role; neither takes anything HQ names, less the kinds in `but`.
+- **Being referred to.** A model with `referable = Referable(...)` and a
+  `get_absolute_url` is a kind of its own, named by its model label. `requires`
+  is the capability a viewer needs before a row is named to them: without it
+  the picker does not offer the kind and a page shows nothing for the reference.
+  `role` lets a host field take the model without naming it.
+- **Showing one.** `{% reference note "about" as thing %}` then
+  `{% entity thing %}`. A reference that names nothing is its stored name as
+  plain text, never an error.
+- **Both ends.** `{% referenced_by note %}` on the note's page lists every row
+  of every installed model that names it, each under its field's `heading`, in
+  one statement. `shows` are the columns a line is built from: its link is
+  `str(row)` to `row.get_absolute_url()`, and `note` an attribute that says a
+  few words beside it.
+- **Writing one.** A `ModelForm` field for it is the shared picker; the view
+  takes `ReferencePickerMixin`. A save through `full_clean` stores the name and
+  refuses a new reference that names nothing. A sync that copies records in
+  stores what `as_stored(text)` answers, which keeps one that names nothing.
+- **Reporting one that names nothing.** Return `dangling(Note)` from the
+  domain's attention provider.
 
 ## Calendar sources
 

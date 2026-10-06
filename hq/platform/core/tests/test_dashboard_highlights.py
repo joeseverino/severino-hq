@@ -9,6 +9,7 @@ from django.test import SimpleTestCase, TestCase
 from django.test.utils import CaptureQueriesContext
 
 from hq.platform.application.dashboard import dashboard_highlights
+from hq.platform.application.derivations import uncached
 from hq.platform.application.domains import Domain, domain_dashboard_cards
 from hq.platform.application.plugins import NavigationItem, PluginIntegration
 from hq.platform.application.projection import projection_scope
@@ -50,6 +51,7 @@ class DashboardHighlightTests(SimpleTestCase):
         with (
             patch("hq.platform.application.domains.all_domains", return_value=(domain,)),
             patch("hq.platform.application.dashboard.all_domains", return_value=(domain,)),
+            uncached(),
             projection_scope(),
         ):
             cards = domain_dashboard_cards()
@@ -71,6 +73,7 @@ class DashboardHighlightTests(SimpleTestCase):
         with (
             patch("hq.platform.application.domains.all_domains", return_value=(domain,)),
             patch("hq.platform.application.dashboard.all_domains", return_value=(domain,)),
+            uncached(),
             projection_scope(),
         ):
             result = dashboard_highlights()
@@ -84,7 +87,7 @@ class DashboardHighlightTests(SimpleTestCase):
 
     def test_cross_domain_card_collisions_are_still_rejected(self):
         domain = contributor(1)
-        with patch("hq.platform.application.domains.all_domains", return_value=(domain, domain)):
+        with patch("hq.platform.application.domains.all_domains", return_value=(domain, domain)), uncached():
             with self.assertRaises(ImproperlyConfigured):
                 domain_dashboard_cards()
 
@@ -97,6 +100,7 @@ class DashboardHighlightTests(SimpleTestCase):
         with (
             patch("hq.platform.application.domains.all_domains", return_value=(domain,)),
             patch("hq.platform.application.dashboard.all_domains", return_value=(domain,)),
+            uncached(),
         ):
             result = dashboard_highlights()
         overview.assert_not_called()
@@ -248,6 +252,8 @@ class DashboardHighlightQueryTests(TestCase):
                 patch("hq.platform.application.domains.all_domains", return_value=domains),
                 patch("hq.platform.application.dashboard.all_domains", return_value=domains),
                 projection_scope(),
+                # What composing costs, apart from keeping the answer.
+                uncached(),
                 CaptureQueriesContext(connection) as queries,
             ):
                 domain_dashboard_cards()

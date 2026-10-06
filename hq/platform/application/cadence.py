@@ -40,7 +40,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
 
-from .derivations import holds_until
+from .derivations import asked_ahead, holds_until
 from .moments import duration
 from .security import Capability, Principal
 
@@ -99,6 +99,9 @@ def note_activity() -> None:
 def recently_used(now: float | None = None) -> bool:
     """Whether HQ has been used inside the active window."""
 
+    if asked_ahead():
+        # Asked on behalf of the next request, which is itself use.
+        return True
     marker = _path("SEVERINO_ACTIVITY_MARKER", "hq-activity")
     window = _seconds("SEVERINO_ACTIVE_WINDOW_SECONDS", 900)
     try:

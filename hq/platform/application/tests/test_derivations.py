@@ -5,7 +5,7 @@ from __future__ import annotations
 import pickle
 import sys
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone as utc
+from datetime import date, datetime, timedelta, timezone as utc
 from unittest import mock
 
 from django.core.cache import caches
@@ -29,6 +29,8 @@ from hq.platform.core.bench import seed
 from hq.platform.core.models import ActionItemRead, Revision, UpstreamReading
 
 READING = UpstreamReading._meta.db_table
+# A window the seeded estate has events in.
+WINDOW = (date(2026, 1, 1), date(2027, 12, 31))
 MOMENT = datetime(2026, 1, 1, 12, 0, tzinfo=utc.utc)
 
 
@@ -423,6 +425,18 @@ SAMPLES = {
     "estate.findings": lambda s: _of("findings", "estate_findings")(principal=web_principal(s.user)),
     "estate.services": lambda s: _of("services", "_service_catalog")(),
     "attention.queue": lambda s: _of("domains", "_host_attention")(),
+    "attention.by_subject": lambda s: _of("problems", "_by_subject")(),
+    "attention.work": lambda s: _of("dashboard", "work_queue")(),
+    "attention.count": lambda s: _of("dashboard", "waiting")(s.user.pk),
+    "dashboard.sections": lambda s: _of("domains", "domain_dashboard_sections")(),
+    "dashboard.highlights": lambda s: _of("dashboard", "dashboard_highlights")(),
+    "dashboard.snapshot": lambda s: _of("dashboard", "_operating_snapshot")(web_principal(s.user)),
+    "dashboard.links": lambda s: _of("outward_links", "offered_links")(),
+    "calendar.mine": lambda s: _of("calendar_entries", "entry_events")(*WINDOW),
+    **{
+        f"calendar.{name}": (lambda s, name=name: _of("calendar_sources", f"{name[:-1]}_events")(*WINDOW))
+        for name in ("certificates", "registrations", "deploys", "containers", "changes")
+    },
 }
 
 
@@ -464,7 +478,9 @@ class DeclaredDerivationTests(TestCase):
     def test_every_derivation_has_a_sample(self):
         for name in SAMPLES:
             self._run(name)
-        host = {name for name in DERIVATIONS if not name.startswith("test.")}
+        # An installed extension's providers are derivations the host
+        # declares as it meets them; ``test_provided`` holds those.
+        host = {name for name in DERIVATIONS if not name.startswith(("test.", "extension."))}
 
         self.assertEqual(host, set(SAMPLES))
 
@@ -519,36 +535,56 @@ class ActionItemCountTests(TestCase):
             self.addCleanup(patch.stop)
         self.url = reverse("action_item_count")
 
-    def test_an_unchanged_queue_is_answered_not_modified_without_composing_it(self):
+    def test_an_unchanged_count_is_answered_not_modified_from_one_stored_number(self):
         first = self.client.get(self.url)
         etag = first.headers["ETag"]
 
-        with counting() as (ran, served), self.assertNumQueries(3):
-            # The session, the person and the table revisions.
+        with counting() as (ran, served), self.assertNumQueries(4):
+            # The session, the person, the table revisions and the stored count.
             again = self.client.get(self.url, headers={"if-none-match": etag})
 
         self.assertEqual((first.status_code, again.status_code), (200, 304))
-        self.assertEqual((ran, served), ({}, {}))
+        self.assertEqual((dict(ran), dict(served)), ({}, {"attention.count": 1}))
+        self.assertEqual(again.headers["ETag"], etag)
         self.assertEqual(first.headers["Cache-Control"], "private, no-cache")
 
-    def test_a_change_to_the_estate_is_answered_in_full(self):
+    def test_the_validator_names_the_count_not_what_it_was_derived_from(self):
+        """A write that leaves the count as it was is still "not modified"."""
+
         etag = self.client.get(self.url).headers["ETag"]
+        UpstreamReading.objects.create(key="example", value={}, observed_at=MOMENT)
+
+        with counting() as (ran, _served):
+            again = self.client.get(self.url, headers={"if-none-match": etag})
+
+        self.assertIn("attention.count", ran)
+        self.assertEqual(again.status_code, 304)
+        self.assertEqual(again.headers["ETag"], etag)
+
+    def test_a_change_to_the_count_is_answered_in_full(self):
+        first = self.client.get(self.url)
         ManagedResource.objects.update(enabled=False)
 
-        again = self.client.get(self.url, headers={"if-none-match": etag})
+        again = self.client.get(self.url, headers={"if-none-match": first.headers["ETag"]})
 
+        self.assertNotEqual(again.json(), first.json())
         self.assertEqual(again.status_code, 200)
-        self.assertNotEqual(again.headers["ETag"], etag)
+        self.assertNotEqual(again.headers["ETag"], first.headers["ETag"])
 
     def test_setting_an_item_aside_is_answered_in_full(self):
+        from hq.platform.application.dashboard import work_queue
+
         first = self.client.get(self.url)
+        with projection_scope():
+            item = work_queue()[0]
         ActionItemRead.objects.create(
-            user=self.seeded.user, key="any", revision="1", read_at=timezone.now()
+            user=self.seeded.user, key=item["key"], revision=item["revision"], read_at=timezone.now()
         )
 
         again = self.client.get(self.url, headers={"if-none-match": first.headers["ETag"]})
 
         self.assertEqual(again.status_code, 200)
+        self.assertEqual(again.json()["count"], first.json()["count"] - 1)
 
     def test_another_person_holds_another_validator(self):
         from django.contrib.auth import get_user_model
@@ -557,34 +593,31 @@ class ActionItemCountTests(TestCase):
         other = get_user_model().objects.create_superuser("other", "other@example.com", "x")
         self.client.force_login(other)
 
-        self.assertEqual(
-            self.client.get(self.url, headers={"if-none-match": etag}).status_code, 200
-        )
+        again = self.client.get(self.url, headers={"if-none-match": etag})
 
-    def test_a_validator_past_its_moment_is_answered_in_full(self):
-        etag = self.client.get(self.url).headers["ETag"]
-        lapsed = etag.rsplit("-", 1)[0] + '-1"'
+        self.assertEqual(again.status_code, 200)
+        self.assertNotEqual(again.headers["ETag"], etag)
 
-        self.assertEqual(
-            self.client.get(self.url, headers={"if-none-match": lapsed}).status_code, 200
-        )
+    def test_a_validator_that_names_nothing_is_answered_in_full(self):
         self.assertEqual(
             self.client.get(self.url, headers={"if-none-match": '"anything"'}).status_code, 200
         )
 
-    def test_a_queue_with_an_undeclared_source_carries_no_validator(self):
+    def test_a_queue_an_extension_reports_work_to_carries_a_validator(self):
         from hq.platform.application.domains import Domain, all_domains
-        from hq.platform.application.plugins import PluginIntegration
+        from hq.platform.application.plugins import PluginIntegration, provided
+        from hq.platform.application.ui import Insight
 
+        item = Insight("attention", "Example", "Something waits", "1", "Body.")
         extra = Domain(
             "example.extension", "Example", "extension", (),
-            PluginIntegration(attention=lambda: ()),
+            PluginIntegration(attention=provided("extension.example.extension.attention", lambda: (item,))),
         )
         with mock.patch(
             "hq.platform.application.domains.all_domains",
             return_value=(*all_domains(), extra),
         ):
-            response = self.client.get(self.url)
+            first = self.client.get(self.url)
+            again = self.client.get(self.url, headers={"if-none-match": first.headers["ETag"]})
 
-        self.assertEqual(response.status_code, 200)
-        self.assertNotIn("ETag", response.headers)
+        self.assertEqual((first.status_code, again.status_code), (200, 304))

@@ -579,6 +579,18 @@
         "kind": "value",
         "type": "Decimal"
       },
+      "MINUS": {
+        "kind": "value",
+        "type": "str"
+      },
+      "money": {
+        "kind": "function",
+        "parameters": [
+          "value",
+          "*",
+          "cents="
+        ]
+      },
       "quantize_money": {
         "kind": "function",
         "parameters": [
@@ -728,6 +740,12 @@
             ]
           }
         }
+      },
+      "built_from": {
+        "kind": "function",
+        "parameters": [
+          "plugin_id"
+        ]
       },
       "page_context": {
         "kind": "function",
@@ -885,6 +903,167 @@
           "unit",
           "*",
           "now="
+        ]
+      }
+    },
+    "references": {
+      "CERTIFICATE": {
+        "kind": "value",
+        "type": "str"
+      },
+      "Mention": {
+        "bases": [],
+        "constructor": [
+          "link",
+          "note="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "Mentions": {
+        "bases": [],
+        "constructor": [
+          "heading",
+          "items"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "Referable": {
+        "bases": [],
+        "constructor": [
+          "kind=",
+          "key=",
+          "shows=",
+          "name=",
+          "noun=",
+          "plural=",
+          "role=",
+          "requires=",
+          "pickable="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "ReferenceField": {
+        "bases": [
+          "CharField"
+        ],
+        "constructor": [
+          "*args",
+          "kinds=",
+          "role=",
+          "but=",
+          "heading=",
+          "shows=",
+          "note=",
+          "**kwargs"
+        ],
+        "kind": "class",
+        "members": {
+          "accepts": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "kind"
+            ]
+          },
+          "check": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "**kwargs"
+            ]
+          },
+          "clean": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "value",
+              "model_instance"
+            ]
+          },
+          "deconstruct": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
+          "formfield": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "**kwargs"
+            ]
+          },
+          "name_attname": {
+            "kind": "property"
+          },
+          "pre_save": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "model_instance",
+              "add"
+            ]
+          }
+        }
+      },
+      "ReferencePickerMixin": {
+        "bases": [],
+        "constructor": [],
+        "kind": "class",
+        "members": {
+          "get_form": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "form_class="
+            ]
+          }
+        }
+      },
+      "as_stored": {
+        "kind": "function",
+        "parameters": [
+          "value"
+        ]
+      },
+      "dangling": {
+        "kind": "function",
+        "parameters": [
+          "*models_",
+          "principal=",
+          "source="
+        ]
+      },
+      "reference_of": {
+        "kind": "function",
+        "parameters": [
+          "row",
+          "field",
+          "*",
+          "principal"
+        ]
+      },
+      "referenced_by": {
+        "kind": "function",
+        "parameters": [
+          "kind",
+          "identity",
+          "*",
+          "principal"
+        ]
+      },
+      "referenced_by_row": {
+        "kind": "function",
+        "parameters": [
+          "row",
+          "*",
+          "principal"
         ]
       }
     },
@@ -1177,6 +1356,14 @@
         "kind": "function",
         "parameters": []
       },
+      "providers_derived_again": {
+        "kind": "function",
+        "parameters": [
+          "plugin_id",
+          "*",
+          "window="
+        ]
+      },
       "reaches_out": {
         "kind": "function",
         "parameters": []
@@ -1191,6 +1378,12 @@
           "attention=",
           "overview=",
           "**manifest_fields"
+        ]
+      },
+      "unclosed_template_comments": {
+        "kind": "function",
+        "parameters": [
+          "template_root"
         ]
       },
       "undefined_style_classes": {
@@ -1248,6 +1441,9 @@
           },
           "streak": {
             "kind": "property"
+          },
+          "tally": {
+            "kind": "property"
           }
         }
       },
@@ -1277,6 +1473,9 @@
           },
           "streak": {
             "kind": "property"
+          },
+          "tally": {
+            "kind": "property"
           }
         }
       },
@@ -1286,11 +1485,16 @@
           "label",
           "hit",
           "count=",
-          "detail="
+          "detail=",
+          "no_data="
         ],
         "fields": [],
         "kind": "dataclass",
-        "members": {}
+        "members": {
+          "said": {
+            "kind": "property"
+          }
+        }
       },
       "CalendarDay": {
         "bases": [],

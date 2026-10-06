@@ -14,6 +14,8 @@ from django.utils import timezone
 
 from . import sections
 from .attention import contacts_state
+from .derivations import derivation
+from .derived_inputs import DASHBOARD_READS, QUEUE_READS, composed_variant
 from .domains import (
     all_domains,
     domain_attention_items,
@@ -26,8 +28,13 @@ from .security import Capability
 from .workflows import serialize_workflow
 
 
+@derivation("dashboard.highlights", reads=DASHBOARD_READS, vary=composed_variant)
 def dashboard_highlights() -> dict[str, Any]:
-    """Group headline readings and optional visuals from existing contracts."""
+    """Group headline readings and optional visuals from existing contracts.
+
+    Derived once per change: each extension's cards and overview are
+    derivations of their own, so this composes what is stored.
+    """
     from django.core.exceptions import ImproperlyConfigured
 
     from .ui import DomainOverview
@@ -46,19 +53,36 @@ def dashboard_highlights() -> dict[str, Any]:
     return {"highlights": highlights, "compact": compact}
 
 
+@derivation("attention.work", reads=QUEUE_READS, vary=composed_variant)
 def work_queue() -> list[dict[str, Any]]:
-    """The composed queue, flattened for transport.
+    """The composed queue, flattened for transport, derived once per change.
 
     Projected from ``domain_attention_items`` rather than assembled here: the
     domains own what needs doing, and this is only the shape it travels in.
     ``url`` rides along so no consumer needs a table to turn an entry back into
-    a link.
+    a link. The host's part and each extension's are derived on their own, so
+    a change to one composes the rest from what is stored.
     """
 
     return [
         queue_item(entry["source_id"], entry["source"], entry["item"])
         for entry in domain_attention_items()
     ]
+
+
+def _count_variant(user_pk: int) -> tuple[Any, ...]:
+    return (user_pk, *composed_variant())
+
+
+@derivation(
+    "attention.count", reads=(*QUEUE_READS, "core.ActionItemRead"), vary=_count_variant
+)
+def waiting(user_pk: int) -> int:
+    """How many items wait on one person: the queue, less what they set aside."""
+
+    from .action_items import waiting_count
+
+    return waiting_count(work_queue(), user_pk)
 
 
 def queue_item(source_id: str, source: str, item: Any) -> dict[str, Any]:
@@ -95,9 +119,36 @@ def operating_snapshot(*, principal) -> dict[str, Any]:
     may read the audit log.
     """
     with projection_scope():
-        return _operating_snapshot(principal)
+        # When it was asked for, not when it was derived.
+        return {"generated_at": timezone.now().isoformat(), **_operating_snapshot(principal)}
 
 
+def _snapshot_variant(principal) -> tuple[Any, ...]:
+    """Who is reading, since the audit lines are theirs to see or not."""
+
+    return (
+        principal.actor,
+        principal.interface,
+        tuple(sorted(str(item) for item in principal.capabilities)),
+        *composed_variant(),
+    )
+
+
+# The operating snapshot: the queue, the cards, each record domain's recent
+# rows and the audit lines.
+_SNAPSHOT_READS: tuple[str, ...] = tuple(
+    dict.fromkeys(
+        (
+            *QUEUE_READS,
+            *DASHBOARD_READS,
+            "content.ContentItem_related_projects",
+            "core.AuditLog",
+        )
+    )
+)
+
+
+@derivation("dashboard.snapshot", reads=_SNAPSHOT_READS, vary=_snapshot_variant)
 def _operating_snapshot(principal) -> dict[str, Any]:
     unread_contacts_count, contacts_status = contacts_state()
     projects = sections.projects_reading()
@@ -107,7 +158,6 @@ def _operating_snapshot(principal) -> dict[str, Any]:
     priority = work_queue()
 
     return {
-        "generated_at": timezone.now().isoformat(),
         "upstreams": {"contacts": contacts_status},
         "year": expenses["year"],
         # Every figure here is a section's own answer, asked once above. This

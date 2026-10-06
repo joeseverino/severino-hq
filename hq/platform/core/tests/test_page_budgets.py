@@ -124,24 +124,39 @@ class RouteContextTests(SimpleTestCase):
 # What a page costs once its derivations are stored: (queries, derivations served).
 # The same at both sizes, and no derivation runs.
 STORED_PAGE_COSTS = {
-    "action_item_count": (5, 1),
-    "dashboard": (44, 2),
+    # The session, the person, the table revisions and one stored number.
+    "action_item_count": (4, 1),
+    "dashboard": (31, 9),
     "action_items": (7, 1),
     "control_plane:findings": (6, 1),
     "control_plane:topology": (6, 1),
-    "control_plane:tailnet": (14, 2),
-    "control_plane:machine": (20, 2),
-    "control_plane:detail": (18, 1),
+    "control_plane:tailnet": (12, 2),
+    # A page about one thing is also served the open problems about it.
+    "control_plane:machine": (21, 3),
+    "control_plane:detail": (19, 2),
     "control_plane:services": (14, 1),
-    "control_plane:service": (19, 2),
-    "zones:detail": (22, 2),
-    "calendar:month": (14, 1),
+    "control_plane:service": (19, 3),
+    "zones:detail": (22, 3),
+    "calendar:month": (12, 6),
     "search?q=example": (22, 1),
 }
 # The derivations one change of the estate costs, whichever page pays for them.
 # The topology and its findings are derived per reader: the queue's and the operator's.
 DERIVATIONS_PER_CHANGE = {
+    "attention.by_subject": 1,
+    "attention.count": 1,
     "attention.queue": 1,
+    "attention.work": 1,
+    "calendar.certificates": 1,
+    "calendar.changes": 1,
+    "calendar.containers": 1,
+    "calendar.deploys": 1,
+    "calendar.mine": 1,
+    "calendar.registrations": 1,
+    "dashboard.highlights": 1,
+    "dashboard.links": 1,
+    "dashboard.sections": 1,
+    "dashboard.snapshot": 1,
     "estate.findings": 2,
     "estate.relations": 1,
     "estate.services": 1,

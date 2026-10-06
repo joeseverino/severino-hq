@@ -27,16 +27,17 @@ from django.urls import URLResolver, include, path
 from django.utils.module_loading import import_string
 
 from .plugins import (
+    DERIVED_PROVIDERS,
     NavigationItem,
     PluginIntegration,
+    answered_by,
     gather_attention,
     ordered_attention,
     gather_cards,
     installed_integrations,
 )
-from .derivations import Standing, derivation, standing, standing_key
-from .derived_inputs import QUEUE_READS, estate_variant
-from .projection import read_once
+from .derivations import derivation
+from .derived_inputs import DASHBOARD_READS, QUEUE_READS, composed_variant, estate_variant
 
 # Order bands. Below HOST_ORDER_FLOOR is reserved for extension-supplied
 # domains, so an installed extension leads the bar ahead of the host's own
@@ -197,6 +198,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         integration=PluginIntegration(
             capabilities=_provider("hq.platform.application.calendar_specs:capabilities"),
             resources=_provider("hq.platform.application.calendar_specs:resources"),
+            attention=_provider("hq.platform.application.calendar_entries:attention"),
         ),
         apps=("hq.domains.calendars",),
         mounts=(Mount("calendar/", "hq.domains.calendars.urls"),),
@@ -205,7 +207,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         id="hq.projects",
         label="Projects",
         navigation=(
-            NavigationItem("Projects", "projects:list", "projects", 100, "Build"),
+            NavigationItem("Projects", "projects:list", "projects", 100, "Projects"),
         ),
         # No attention provider, deliberately. "Active work with nothing
         # written about it yet" is a shape of the portfolio, not a decision:
@@ -234,20 +236,20 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
     ),
     DomainDescriptor(
         id="hq.watching",
-        label="Watching",
-        navigation=(NavigationItem("Watching", "watching", "", 102, "Build"),),
+        label="Starred repos",
+        navigation=(NavigationItem("Starred repos", "watching", "", 102, "Projects"),),
         integration=PluginIntegration(dashboard=_provider("hq.platform.application.sections:watching")),
     ),
     DomainDescriptor(
         id="hq.posture",
-        label="Posture",
-        navigation=(NavigationItem("Posture", "posture", "", 103, "Build"),),
+        label="Repo checks",
+        navigation=(NavigationItem("Repo checks", "posture", "", 103, "Projects"),),
     ),
     DomainDescriptor(
         id="hq.docs",
         label="Docs",
         navigation=(
-            NavigationItem("Docs", "docs_index:list", "docs_index", 101, "Build"),
+            NavigationItem("Docs", "docs_index:list", "docs_index", 101, "Projects"),
         ),
         integration=PluginIntegration(
             resources=_provider("hq.domains.docs_index.specs:resources"),
@@ -452,7 +454,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # entry point that explains how every narrower workspace fits together.
         navigation=(
             NavigationItem(
-                "Topology", "control_plane:topology", "control_plane", 129,
+                "Map", "control_plane:topology", "control_plane", 129,
                 "Infrastructure",
             ),
         ),
@@ -491,7 +493,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Infrastructure",
         navigation=(
             NavigationItem(
-                "Resources", "control_plane:list", "control_plane", 131,
+                "All records", "control_plane:list", "control_plane", 131,
                 "Infrastructure",
             ),
         ),
@@ -703,6 +705,22 @@ def all_domains() -> tuple[Domain, ...]:
     )
 
 
+def composition() -> tuple[tuple[str, str, str], ...]:
+    """Which function answers for each extension's part of a shared composition.
+
+    A derivation that composes every domain varies by this: the same rows
+    composed by other providers are another answer.
+    """
+
+    return tuple(
+        (domain.id, field, answered_by(provider))
+        for domain in all_domains()
+        if domain.origin != "host"
+        for field in DERIVED_PROVIDERS
+        if (provider := getattr(domain.integration, field)) is not None
+    )
+
+
 def host_specs(kind: str) -> tuple[Any, ...]:
     """What the host's domains declare of one kind: connections, capabilities, resources.
 
@@ -771,6 +789,8 @@ def domain_attention_items() -> tuple[dict[str, Any], ...]:
     excluded here the same way they are for extensions.
     """
 
+    # Each extension's provider is a derivation of its own (``plugins``), so
+    # this gathers stored answers and orders them.
     extensions = gather_attention(
         (domain.id, domain.label, domain.integration.attention)
         for domain in all_domains()
@@ -791,35 +811,6 @@ def _host_attention() -> tuple[dict[str, Any], ...]:
     )
 
 
-def attention_standing() -> Standing | None:
-    """What the composed queue was derived at; None when that is not known.
-
-    Known only while every item comes from the host's derivation. An extension
-    that reports work derives it on its own, so the queue it joins is composed
-    on every request and vouched for by nothing.
-    """
-
-    if any(
-        domain.integration.attention is not None
-        for domain in all_domains()
-        if domain.origin != "host"
-    ):
-        return None
-    return standing(_host_attention)
-
-
-def attention_key() -> str | None:
-    """The key the host's queue is answered under now, under the same condition."""
-
-    if any(
-        domain.integration.attention is not None
-        for domain in all_domains()
-        if domain.origin != "host"
-    ):
-        return None
-    return standing_key(_host_attention)
-
-
 def domain_dashboard_cards() -> tuple[dict[str, Any], ...]:
     """Every domain's headline reading, in the order the nav presents them.
 
@@ -836,17 +827,18 @@ def domain_dashboard_cards() -> tuple[dict[str, Any], ...]:
     )
 
 
-def domain_dashboard_sections() -> tuple[dict[str, Any], ...]:
-    """Keep each contributor's metrics together without naming its domain."""
-
-    return read_once("domains.dashboard_sections", _dashboard_sections)
-
-
 def _given(cards: tuple[dict[str, Any], ...]) -> Callable[[], tuple[dict[str, Any], ...]]:
     return lambda: cards
 
 
-def _dashboard_sections() -> tuple[dict[str, Any], ...]:
+@derivation("dashboard.sections", reads=DASHBOARD_READS, vary=composed_variant)
+def domain_dashboard_sections() -> tuple[dict[str, Any], ...]:
+    """Keep each contributor's metrics together without naming its domain.
+
+    Derived once per change of what the host's sections read; each
+    extension's cards are a derivation of their own.
+    """
+
     sections: list[dict[str, Any]] = []
     for domain in sorted(all_domains(), key=lambda domain: domain.bar_order):
         if domain.integration.dashboard is None:

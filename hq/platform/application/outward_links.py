@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from hq.domains.control_plane.models import ProviderConnection
 
+from .derivations import derivation
+
 
 # Declared next to the domains that emit them, so a gateway can import the
 # record without importing this reader. Re-exported here as the one name
@@ -65,11 +67,28 @@ def outward_links(user=None) -> tuple[list[dict[str, str]], bool]:
 
     from .pins import DASHBOARD_LINK, pinned
 
+    offered = offered_links()
+    chosen = pinned(user, DASHBOARD_LINK)
+    if not chosen:
+        return offered, False
+    return [item for item in offered if item["href"].lower() in chosen] or offered, True
+
+
+@derivation(
+    "dashboard.links",
+    reads=("control_plane.ManagedResource", "control_plane.ProviderConnection", "projects.Project"),
+)
+def offered_links() -> list[dict[str, str]]:
+    """Every link HQ can offer, derived once per change of what it is read from.
+
+    The same for every reader: which of them a person chose is applied after.
+    """
+
     from hq.platform.application.routes import reverse
 
     from .published_sites import public_sites
 
-    offered = [
+    return [
         {
             "label": "Health endpoint",
             "sub": "HQ's own health check",
@@ -85,10 +104,6 @@ def outward_links(user=None) -> tuple[list[dict[str, str]], bool]:
         ),
         *operator_links(),
     ]
-    chosen = pinned(user, DASHBOARD_LINK)
-    if not chosen:
-        return offered, False
-    return [item for item in offered if item["href"].lower() in chosen] or offered, True
 
 
 def link_choices(user=None) -> list[dict[str, object]]:
@@ -101,7 +116,7 @@ def link_choices(user=None) -> list[dict[str, object]]:
     from .pins import DASHBOARD_LINK, pinned
 
     chosen = pinned(user, DASHBOARD_LINK)
-    offered, _ = outward_links(None)
+    offered = offered_links()
     return [{**item, "chosen": item["href"].lower() in chosen} for item in offered]
 
 

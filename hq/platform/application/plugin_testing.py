@@ -24,6 +24,8 @@ out. They exist to make "something else is installed" true.
 from __future__ import annotations
 
 from contextlib import ExitStack
+from datetime import date, timedelta
+from functools import partial
 import os
 from pathlib import Path
 import re
@@ -114,6 +116,63 @@ def sibling(
         overview=(lambda: overview) if overview is not None else None,
     )
     return manifest, integration
+
+
+def providers_derived_again(plugin_id: str, *, window: tuple[date, date] | None = None) -> list[str]:
+    """Each provider of ``plugin_id`` that is not answered from what is stored.
+
+    HQ asks a plugin's attention, dashboard, overview and calendar providers
+    through a derivation, and answers a second question from the first's
+    stored answer until a table the provider read is written. A provider is
+    named here when that does not hold: what it returned could not be kept (it
+    does not pickle), it comes back unequal to what was stored, or it is
+    built anew on every call around something that cannot be compared.
+
+        def test_every_provider_is_answered_from_what_is_stored(self):
+            self.assertEqual(providers_derived_again("example.notes"), [])
+
+    Call it with the extension's records in place, so the providers have
+    something to say. ``window`` is the days the calendar sources are asked
+    for; the year around today when left out.
+    """
+
+    from django.utils import timezone
+
+    from .derivations import counting
+    from .plugins import DERIVED_PROVIDERS, installed_integrations
+    from .projection import projection_scope
+
+    first, last = window or (
+        timezone.localdate() - timedelta(days=183),
+        timezone.localdate() + timedelta(days=183),
+    )
+
+    def questions() -> dict[str, Any]:
+        integration = next(
+            (found for plugin, found in installed_integrations() if plugin.id == plugin_id), None
+        )
+        if integration is None:
+            raise LookupError(f"No installed plugin has the id {plugin_id!r}.")
+        asked = {
+            field: provider
+            for field in DERIVED_PROVIDERS
+            if (provider := getattr(integration, field)) is not None
+        }
+        for source in integration.calendars() if integration.calendars else ():
+            asked[f"calendar {source.id}"] = partial(source.events, first, last)
+        return asked
+
+    with projection_scope():
+        stored = {name: ask() for name, ask in questions().items()}
+    again: list[str] = []
+    for name, ask in questions().items():
+        with projection_scope(), counting() as (ran, served):
+            answer = ask()
+        if ran or not served:
+            again.append(f"{name}: derived again, its answer was not kept")
+        elif answer != stored[name]:
+            again.append(f"{name}: the stored answer is not equal to the one derived")
+    return again
 
 
 class ComposedPluginTestCase:

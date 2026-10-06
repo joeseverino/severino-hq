@@ -22,14 +22,20 @@ from ..dashboard import operating_snapshot
 from ..resource_operations import operation_summary
 from ..resource_context import get_managed_resource
 from ..projection import projection_scope, read_once
+from ..cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
 from ..ui import (
+    MISSING,
     PLOT_LEFT,
     PLOT_WIDTH,
+    ActivityCalendar,
+    CalendarDay,
     ChartSeries,
     PageNavigation,
     PageSection,
+    PlannedDay,
     Timeline,
     TimelineItem,
+    WeekPlan,
     line_chart,
     stacked_bar_chart,
 )
@@ -334,6 +340,170 @@ class LineChartTests(TestCase):
         self.assertAlmostEqual(line.plot_left, bars.plot_left, places=1)
 
 
+class ChartDataTableTests(TestCase):
+    """The table under a chart says each value as the chart's tooltip does."""
+
+    def table(self, template, chart):
+        rendered = render_to_string(template, {"chart": chart})
+        return rendered[rendered.index('<details class="chart-data">'):]
+
+    def test_a_line_charts_table_rounds_as_its_tooltip_does(self):
+        chart = line_chart(
+            "Resting",
+            "",
+            (("Resting heart rate", ((date(2026, 1, 1), 52.25), (date(2026, 1, 2), 1250.0)), 1),),
+            unit="bpm",
+        )
+
+        table = self.table("partials/_line_chart.html", chart)
+
+        self.assertIn('<td class="num-col">52.2</td>', table)
+        self.assertIn('<td class="num-col">1,250</td>', table)
+        self.assertNotIn("52.25", table)
+        self.assertIn("Resting heart rate (bpm)", table)
+        for point, row in zip(chart.series[0].points, chart.table_rows):
+            self.assertIn(f": {row.cells[0]} bpm", point.tooltip)
+
+    def test_a_bar_charts_table_shows_no_raw_float(self):
+        chart = stacked_bar_chart(
+            "Training",
+            "",
+            ("Aug 3", "Aug 10"),
+            (ChartSeries("Run", (30.0, 45.5), 1),),
+            unit="minutes",
+        )
+
+        table = self.table("partials/_stacked_bar_chart.html", chart)
+
+        self.assertIn("<td>30</td>", table)
+        self.assertIn("<td>45.5</td>", table)
+        self.assertNotIn("30.0", table)
+        self.assertIn("Run (minutes)", table)
+
+    def test_money_is_whole_and_signed_in_every_cell_and_in_the_tooltip(self):
+        chart = line_chart(
+            "Balance",
+            "",
+            (("Balance", ((date(2026, 1, 1), 12345.678), (date(2026, 1, 2), -980.4)), 1),),
+            unit="$",
+        )
+
+        table = self.table("partials/_line_chart.html", chart)
+
+        self.assertIn('<td class="num-col">$12,346</td>', table)
+        self.assertIn('<td class="num-col">\u2212$980</td>', table)
+        self.assertIn('<th class="num-col">Balance</th>', table)
+        self.assertIn("Balance: $12,346", chart.series[0].points[0].tooltip)
+
+    def test_a_unit_the_series_already_names_is_said_once(self):
+        chart = stacked_bar_chart(
+            "Distance", "", ("Aug 3",), (ChartSeries("Miles", (12.0,), 1),), unit="miles"
+        )
+
+        self.assertEqual(chart.table_headings, ("Miles",))
+
+    def test_the_table_keeps_every_row(self):
+        chart = line_chart(
+            "Resting",
+            "",
+            (("Resting", tuple((date(2026, 1, day), 50.0 + day) for day in range(1, 29)), 1),),
+            unit="bpm",
+        )
+
+        self.assertEqual(len(chart.table_rows), 28)
+        self.assertEqual([row.label for row in chart.table_rows], [row.label for row in chart.rows])
+
+
+class CadenceTests(TestCase):
+    """A period with no data is drawn as that and is in no total."""
+
+    WEEKS = (
+        CadenceWeek("Sep 1", True, 2, "2 sessions"),
+        CadenceWeek("Sep 8", False, detail="None"),
+        CadenceWeek("Sep 15", True, 1, "1 session"),
+        CadenceWeek("Sep 22", False, no_data=True),
+        CadenceWeek("Sep 29", False, no_data=True),
+    )
+
+    def test_totals_count_only_periods_with_data(self):
+        cadence = Cadence("", "", self.WEEKS)
+
+        self.assertEqual(cadence.hits, 2)
+        self.assertEqual(cadence.tally, "2/3")
+        # The newest period with data was a hit: periods with none do not end the run.
+        self.assertEqual(cadence.streak, 1)
+
+    def test_a_row_with_no_data_at_all_has_no_total(self):
+        row = CadenceRow("Legs", tuple(CadenceWeek(str(n), False, no_data=True) for n in range(3)))
+
+        self.assertEqual(row.tally, MISSING)
+
+    def test_a_period_cannot_have_no_data_and_a_hit(self):
+        with self.assertRaises(ValueError):
+            CadenceWeek("Sep 1", True, no_data=True)
+
+    def test_the_strip_draws_no_data_apart_from_a_miss(self):
+        rendered = render_to_string("partials/_cadence.html", {"cadence": Cadence("", "", self.WEEKS)})
+
+        self.assertEqual(rendered.count("cadence-mark is-no-data"), 2)
+        self.assertEqual(rendered.count("cadence-mark is-hit"), 2)
+        self.assertEqual(rendered.count('<span class="visually-hidden">No data</span>'), 2)
+        self.assertIn('<span class="cadence-count">2/3</span>', rendered)
+
+    def test_the_matrix_draws_no_data_apart_from_a_miss(self):
+        matrix = CadenceMatrix(
+            tuple(week.label for week in self.WEEKS), (CadenceRow("Chest", self.WEEKS),)
+        )
+
+        rendered = render_to_string("partials/_cadence_matrix.html", {"matrix": matrix})
+
+        self.assertEqual(rendered.count("cadence-mark is-no-data"), 2)
+        self.assertEqual(rendered.count('<span class="visually-hidden">No data</span>'), 2)
+        self.assertIn('<td class="cadence-total">2/3</td>', rendered)
+
+    def test_the_owners_own_words_for_a_period_are_kept(self):
+        week = CadenceWeek("Sep 22", False, detail="No data for the week of Sep 22", no_data=True)
+
+        self.assertEqual(week.said, "No data for the week of Sep 22")
+
+    def test_the_no_data_mark_is_styled(self):
+        from django.conf import settings
+        from pathlib import Path
+
+        css = (Path(settings.BASE_DIR) / "static" / "css" / "app.css").read_text(encoding="utf-8")
+
+        self.assertIn(".cadence-mark.is-no-data", css)
+
+
+class SharedPartialLabelTests(TestCase):
+    def test_a_week_plans_link_says_what_it_changes(self):
+        plan = WeekPlan(
+            "Weekly plan",
+            tuple(PlannedDay(label, label) for label in "MTWTFSS"),
+            url="/example/plan/",
+        )
+
+        rendered = render_to_string("partials/_week_plan.html", {"plan": plan})
+
+        self.assertIn('<a class="subtle-link" href="/example/plan/">Change plan</a>', rendered)
+        self.assertNotIn("&rarr;", rendered)
+        self.assertNotIn("\u2192", rendered)
+
+    def test_a_calendar_jumps_back_to_today(self):
+        calendar = ActivityCalendar(
+            "Example calendar",
+            "",
+            (tuple(CalendarDay(date(2026, 1, 5) + timedelta(days=day)) for day in range(7)),),
+            previous_url="/example/calendar/?month=2025-12",
+            current_url="/example/calendar/",
+        )
+
+        rendered = render_to_string("partials/_activity_calendar.html", {"calendar": calendar})
+
+        self.assertIn('<a class="calendar-now" href="/example/calendar/">Today</a>', rendered)
+        self.assertNotIn(">Now<", rendered)
+
+
 class ChartAxisSpanTests(TestCase):
     """What the axis calls a date depends on how much time the chart covers."""
 
@@ -492,10 +662,13 @@ class DashboardProjectionTests(TestCase):
             total_cost=Decimal("99.00"),
         )
 
+        # A setting is the deployment's and holds for the life of a process, so
+        # no stored answer varies by it: each half derives with the store bypassed.
         # Fiscal year starting this month: the 45-day-old expense falls outside.
         with (
             override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=today.month),
             patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")),
+            uncached(),
         ):
             snapshot = operating_snapshot(principal=cli_principal())
         self.assertEqual(snapshot["kpis"]["expenses_count"], 1)
@@ -506,6 +679,7 @@ class DashboardProjectionTests(TestCase):
         with (
             override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=today.month % 12 + 1),
             patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")),
+            uncached(),
         ):
             snapshot = operating_snapshot(principal=cli_principal())
         self.assertEqual(snapshot["kpis"]["expenses_count"], 2)

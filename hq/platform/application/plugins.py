@@ -2,17 +2,27 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from functools import cache
+from dataclasses import asdict, dataclass, is_dataclass, replace
+from functools import cache, lru_cache, partial
+import hashlib
 from importlib import import_module
+import inspect
+import itertools
+import marshal
 import os
+import pickle
 import re
+import time
+from types import CodeType
+import weakref
 from typing import Any, Callable, Iterable
 
 from django.core.exceptions import ImproperlyConfigured
 from django.urls import URLResolver, include, path
 from hq.platform.application.routes import reverse
 
+from .demo import showing_demo
+from .derivations import derivation, forget
 from .ui import STATUS_VALUES, DomainOverview
 
 PLUGIN_API_VERSION = 4
@@ -368,6 +378,8 @@ def clear_plugin_composition_cache() -> None:
     """Forget plugin identity and every graph derived from that identity."""
 
     _installed_plugins.cache_clear()
+    # A question asked of the composition that was is not asked of this one.
+    forget()
     from .integrations import clear_integration_graph_cache
     from .outbound_work import clear_outbound_work_cache
 
@@ -434,8 +446,175 @@ def installed_integrations() -> tuple[tuple[PluginManifest, PluginIntegration], 
                 f"Plugin {plugin.id!r} integration fields must be callable: "
                 f"{', '.join(invalid)}."
             )
-        integrations.append((plugin, integration))
+        integrations.append((plugin, _derived(plugin.id, integration)))
     return tuple(integrations)
+
+
+# ----- An extension's part of a shared composition, derived once per change ---
+#
+# What an extension contributes to a page many domains share (the queue, the
+# dashboard, the calendar) is asked for on every request that composes one. The
+# host therefore asks through a derivation of its own, named for the plugin
+# and the provider: the answer is kept until a table the provider was seen to
+# read is written, and an extension is cached without knowing a cache exists.
+#
+# The host cannot see where a provider reads the clock, so each is ``unseen``:
+# its answer stands a minute at most and never past local midnight. It varies
+# by the one thing a provider is given that is not a row or the clock: whether
+# the reader asked for a demo.
+
+# The providers answered with one value for everybody, by field.
+DERIVED_PROVIDERS = ("attention", "dashboard", "overview")
+# How many windows of one calendar source are kept current: the one the
+# dashboard shows and the one last paged to.
+CALENDAR_WINDOWS = 2
+
+_PROVIDERS: dict[str, Callable[..., Any]] = {}
+_ANSWERS: dict[str, Callable[..., Any]] = {}
+
+
+# This process, and each provider met in it that nothing else tells apart.
+_PROCESS = time.time_ns()
+_UNNAMED: weakref.WeakKeyDictionary[Any, int] = weakref.WeakKeyDictionary()
+_SERIAL = itertools.count(1)
+
+
+def _itself(provider: Any) -> str:
+    """A provider known only as the object it is, and only in this process."""
+
+    try:
+        serial = _UNNAMED.get(provider)
+        if serial is None:
+            serial = _UNNAMED[provider] = next(_SERIAL)
+    except TypeError:
+        # Not weakly referable: its address names it while it lives.
+        return f"{_PROCESS}:at:{id(provider)}"
+    return f"{_PROCESS}:{serial}"
+
+
+def _holding(values: Any) -> str | None:
+    """What a provider was built holding, as a digest; None when it cannot be told."""
+
+    try:
+        return hashlib.sha256(pickle.dumps(values)).hexdigest()[:16]
+    except Exception:  # noqa: BLE001 - whatever cannot be pickled cannot be compared
+        return None
+
+
+@lru_cache(maxsize=1024)
+def _written(code: CodeType) -> str:
+    """A function's own code as a digest: two functions of one name differ by it."""
+
+    return hashlib.sha256(marshal.dumps(code)).hexdigest()[:16]
+
+
+def _identity(provider: Callable[..., Any]) -> str:
+    """Which function answers, so one provider is never answered with what
+    another stored.
+
+    A function is named by where it is defined and what it is written to do,
+    which every process running one release agrees on, and by what it was
+    built holding: a closure made again on every call is the same provider
+    while it holds the same things. Anything that cannot be told apart that
+    way is known only as itself.
+    """
+
+    if isinstance(provider, partial):
+        held = _holding((provider.args, sorted(provider.keywords.items())))
+        return _itself(provider) if held is None else f"{_identity(provider.func)}({held})"
+    if not inspect.isfunction(provider):
+        return _itself(provider)
+    name = f"{provider.__module__}:{provider.__qualname__}:{_written(provider.__code__)}"
+    if provider.__closure__ is None:
+        return name
+    try:
+        held = _holding(tuple(cell.cell_contents for cell in provider.__closure__))
+    except ValueError:
+        # A cell not yet filled.
+        held = None
+    return _itself(provider) if held is None else f"{name}[{held}]"
+
+
+def answered_by(provider: Callable[..., Any]) -> str:
+    """Which function answers when ``provider`` is asked: the one registered
+    behind a derived provider, the provider itself otherwise."""
+
+    for name, answer in _ANSWERS.items():
+        if answer is provider:
+            return _identity(_PROVIDERS[name])
+    return _identity(provider)
+
+
+def _kept(value: Any) -> Any:
+    """What a provider returned, as a value that can be stored: a generator's
+    items, anything else as it is."""
+
+    if isinstance(value, (str, bytes, dict)) or not isinstance(value, Iterable):
+        return value
+    return tuple(value)
+
+
+def provided(name: str, provider: Callable[..., Any], *, ahead: int | None = None) -> Callable[..., Any]:
+    """``provider`` asked through the derivation ``name``, declared on first use.
+
+    The derivation outlives one composition: it answers with whichever
+    provider is registered under its name now.
+    """
+
+    _PROVIDERS[name] = provider
+    answer = _ANSWERS.get(name)
+    if answer is None:
+
+        def vary(*args: Any) -> tuple[Any, ...]:
+            return (*args, showing_demo(), _identity(_PROVIDERS[name]))
+
+        def compute(*args: Any) -> Any:
+            return _kept(_PROVIDERS[name](*args))
+
+        declare = (
+            derivation(name, reads=(), vary=vary, unseen=True)
+            if ahead is None
+            else derivation(name, reads=(), vary=vary, unseen=True, ahead=ahead)
+        )
+        answer = _ANSWERS[name] = declare(compute)
+    return answer
+
+
+def _is_source(source: Any) -> bool:
+    """Whether this is a calendar source to wrap; anything else is the
+    calendar's to refuse, by name."""
+
+    return is_dataclass(source) and not isinstance(source, type) and callable(getattr(source, "events", None))
+
+
+def _derived_calendars(plugin_id: str, provider: Callable[[], Iterable[Any]]) -> Callable[[], tuple[Any, ...]]:
+    """The provider's sources, each reading its window through a derivation."""
+
+    def derived(source: Any) -> Any:
+        if not _is_source(source):
+            return source
+        events = provided(
+            f"extension.{plugin_id}.calendar.{source.id}", source.events, ahead=CALENDAR_WINDOWS
+        )
+        return replace(source, events=events)
+
+    def sources() -> tuple[Any, ...]:
+        return tuple(derived(source) for source in provider())
+
+    return sources
+
+
+def _derived(plugin_id: str, integration: PluginIntegration) -> PluginIntegration:
+    """``integration`` with each provider of a shared composition derived."""
+
+    derived: dict[str, Any] = {
+        field: provided(f"extension.{plugin_id}.{field}", provider)
+        for field in DERIVED_PROVIDERS
+        if (provider := getattr(integration, field)) is not None
+    }
+    if integration.calendars is not None:
+        derived["calendars"] = _derived_calendars(plugin_id, integration.calendars)
+    return replace(integration, **derived)
 
 
 def _provided(attribute: str) -> tuple[Any, ...]:

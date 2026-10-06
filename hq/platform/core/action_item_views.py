@@ -12,17 +12,13 @@ from django.views.decorators.http import condition
 from django.views.generic import TemplateView, View
 
 from hq.platform.application import action_items as queue_state
-from hq.platform.application import fragments
-from hq.platform.application.dashboard import work_queue
-from hq.platform.application.derivations import table_revisions
-from hq.platform.application.domains import attention_key, attention_standing
-from hq.platform.core.models import ActionItemRead
+from hq.platform.application.dashboard import waiting, work_queue
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import safe_next
 from hq.platform.application.pages import PageMixin
 
 
-ACTION_ITEM_FILTERS = ("q", "status", "source")
+ACTION_ITEM_FILTERS = ("q", "status", "source", "about")
 
 
 def _action_items(request, current=None):
@@ -37,6 +33,7 @@ def _action_items(request, current=None):
         query=request.GET.get("q", ""),
         status=request.GET.get("status", ""),
         source=request.GET.get("source", ""),
+        about=request.GET.get("about", ""),
     )
     return all_items, items
 
@@ -81,58 +78,37 @@ class ActionItemsView(PageMixin, TemplateView):
             action_query=self.request.GET.get("q", "").strip(),
             action_status=status,
             action_source=source,
+            action_about=self.request.GET.get("about", "").strip(),
         )
         return context
 
 
-def _count_base(request) -> str | None:
-    """What the header's count is derived from now; None when that is not known.
+def _count_etag(request) -> str:
+    """The count and whose it is: the validator says what the answer is.
 
-    The key the queue is answered under, the person, and the revision of their
-    set-aside rows.
+    Named for the answer, not for what it was derived from, so a browser
+    holding it is told "not modified" for as long as the count is the same,
+    whatever was written or read again in between. The count is a derivation
+    (``attention.count``): asking costs the table revisions and one stored
+    number.
     """
 
-    queue = attention_key()
-    aside = table_revisions((ActionItemRead._meta.db_table,))
-    if queue is None or aside is None:
-        return None
-    return hashlib.sha256(f"{queue}|{request.user.pk}|{aside[0]}".encode()).hexdigest()
-
-
-def _count_etag(request) -> str | None:
-    """The validator the request presented, if it still vouches for the count.
-
-    It does when nothing the count reads has been written since and the moment
-    the answer stops holding has not come. Anything else is None, and the count
-    is composed: an unknown state is never answered "not modified".
-    """
-
-    return fragments.presented(request, _count_base(request))
-
-
-def _count_validator(request) -> str | None:
-    """The validator for the count this request just composed."""
-
-    queue = attention_standing()
-    if queue is None:
-        return None
-    return fragments.standing(_count_base(request), queue.until)
+    return hashlib.sha256(f"{waiting(request.user.pk)}|{request.user.pk}".encode()).hexdigest()
 
 
 @method_decorator(condition(etag_func=_count_etag), name="get")
 class ActionItemCountView(View):
     """How many items wait, for the header, fetched after the page rather than during it.
 
-    A request carrying the validator of an answer that still stands is
-    answered 304 from the table revisions alone, without composing the queue.
+    A request carrying the validator of the count as it stands is answered 304.
     """
 
     def get(self, request):
-        count = queue_state.waiting_count(work_queue(), request.user)
+        count: int = int(waiting(request.user.pk))
         response = JsonResponse({"count": count})
         # Kept by the browser, and asked about before every reuse.
         response.headers["Cache-Control"] = "private, no-cache"
-        return fragments.hold(response, _count_validator(request))
+        return response
 
 
 class ActionItemAsideView(View):
