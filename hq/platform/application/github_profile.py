@@ -3,10 +3,11 @@
 Whose profile is the signed-in person's: the login their sign-in claims
 (``application.linked_accounts``), never one typed into HQ.
 
-HQ reads nothing here. The controller reads GitHub's public API without a
-credential (``controller/providers/github_profile.go``) and reports the
-``github.profile`` reading, which is what a page shows. GitHub rations
-anonymous calls by the hour, so the reading keeps a clock of its own
+HQ reads nothing here. The controller reads GitHub's public API
+(``controller/providers/github_profile.go``), under the connected GitHub App's
+allowance where there is one and anonymously where there is not, and reports
+the ``github.profile`` reading, which is what a page shows. GitHub rations
+calls by the hour, so the reading keeps a clock of its own
 (``observations.github.PROFILE_EVERY``): ``plan`` tells the controller whose
 profile to read and whether it is due, and ``request_read`` asks for one now.
 The bridge contract's ``GitHubProfileBounds`` states what a read costs.

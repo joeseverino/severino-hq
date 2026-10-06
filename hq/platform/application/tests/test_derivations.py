@@ -253,17 +253,38 @@ class DerivationTests(TestCase):
             with self.assertRaisesMessage(ImproperlyConfigured, "assets_asset"):
                 outer()
 
-    def test_reading_an_undeclared_table_is_never_stored(self):
+    def test_a_table_it_did_not_declare_is_learned_and_keyed_on(self):
+        """An installed extension's table cannot be named by the host. The
+        first read of one is noticed, and the answer moves with it from then on."""
+
         with declared("test.undeclared", reads=("assets.Asset",)) as (register, calls):
             count = register(_readings)
 
-            with self.assertLogs("severino.derivations", "ERROR"):
-                count()
-            with self.assertLogs("severino.derivations", "ERROR"):
-                count()
+            with self.assertLogs("severino.derivations", "INFO"):
+                self.assertEqual(count(), 0)
+            # Stored the first time, under a key that already moves with the table.
+            self.assertEqual((count(), len(calls)), (0, 1))
 
-            self.assertEqual(len(calls), 2)
+            UpstreamReading.objects.create(key="example", value={}, observed_at=MOMENT)
+            self.assertEqual((count(), len(calls)), (1, 2))
+            self.assertEqual((count(), len(calls)), (1, 2))
             self.assertEqual(derivations.UNDECLARED.pop("test.undeclared"), {READING})
+
+    def test_a_table_read_through_another_derivation_is_learned_by_its_caller(self):
+        with (
+            declared("test.inner", reads=("assets.Asset",)) as (register_inner, inner_calls),
+            declared("test.outer", reads=("assets.Asset",)) as (register_outer, outer_calls),
+        ):
+            inner = register_inner(_readings)
+            outer = register_outer(lambda: inner() + 100)
+
+            self.assertEqual(outer(), 100)
+            UpstreamReading.objects.create(key="example", value={}, observed_at=MOMENT)
+            # The outer answer is keyed on the table the inner one was seen to read.
+            self.assertEqual(outer(), 101)
+            self.assertEqual((outer(), len(outer_calls), len(inner_calls)), (101, 2, 2))
+            derivations.UNDECLARED.pop("test.inner", None)
+            derivations.UNDECLARED.pop("test.outer", None)
 
     def test_unreadable_revisions_mean_deriving(self):
         with (
@@ -322,13 +343,15 @@ class DerivationTests(TestCase):
             self.assertNotIn(derivations.standing_key(due), (None, first))
 
     def test_an_answer_that_was_not_stored_has_no_standing(self):
-        with declared("test.unstored", reads=("assets.Asset",)) as (register, _):
+        with (
+            declared("test.unstored", reads=("core.UpstreamReading",)) as (register, _),
+            mock.patch.object(derivations, "_keep", return_value=False),
+        ):
             count = register(_readings)
 
-            with projection_scope(), self.assertLogs("severino.derivations", "ERROR"):
+            with projection_scope():
                 count()
                 self.assertIsNone(derivations.standing(count))
-            derivations.UNDECLARED.pop("test.unstored")
 
 
 class ClockTests(SimpleTestCase):

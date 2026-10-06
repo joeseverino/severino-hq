@@ -397,7 +397,8 @@ costs nobody:
   reading whose provider rations calls keeps a clock of its own
   (`ObservationSpec.every`): HQ tells the controller when it is due, and the
   sweeps between carry it without a call. `github.profile` is the example: the
-  profile and stars behind Watching, read without a credential, at a cost the
+  profile and stars behind Watching, read under the GitHub App's allowance
+  where one is connected and anonymously otherwise, at a cost the
   bridge contract's `GitHubProfileBounds` states once.
 - **Long local work is a job** (`hq/domains/jobs/`): its own thread, progress
   notes, a heartbeat, one live job per kind. A project's refresh is one.
