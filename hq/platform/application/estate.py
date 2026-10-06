@@ -23,6 +23,7 @@ from hq.domains.control_plane.provider_spec import expiry_phrase
 
 from .derivations import reached
 from .entity_links import entity_link
+from .first_seen import dated
 from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
 from .item_help import cannot_help, remedy_link
 from .projection import read_once
@@ -308,9 +309,16 @@ def cards() -> tuple[dict[str, Any], ...]:
             "url": reverse("zones:index"),
         },
     ]
-    for card_id, label, expiries in (
-        ("hq.estate.registration", "Next renewal", estate.registrations),
-        ("hq.estate.certificate", "Next certificate expiry", estate.operator_certificates),
+    # Each figure leads to the thing it is about, and to the list of them
+    # when that thing has no page of its own.
+    for card_id, label, expiries, listed in (
+        ("hq.estate.registration", "Next renewal", estate.registrations, "zones:index"),
+        (
+            "hq.estate.certificate",
+            "Next certificate expiry",
+            estate.operator_certificates,
+            "control_plane:services",
+        ),
     ):
         if expiries:
             first = expiries[0]
@@ -319,28 +327,30 @@ def cards() -> tuple[dict[str, Any], ...]:
                     "id": card_id,
                     "label": label,
                     "value": counted(max(first.days, 0), "day"),
-                    "url": first.url,
+                    "url": first.url or reverse(listed),
                     "detail": f"{first.subject} · {first.source}"
                     + (" · not renewed by its issuer" if first.overdue else ""),
                     **({"status": "attention"} if first.overdue else {}),
                 }
             )
-    found.append(
-        {
-            "id": "hq.estate.connections",
-            "label": "Connections needing attention",
-            "value": str(len(estate.connections)),
-            "url": reverse("control_plane:connections"),
-            **(
-                {
-                    "detail": f"{estate.connections[0].ref} {estate.connections[0].state}",
-                    "status": "attention",
-                }
-                if estate.connections
-                else {}
-            ),
-        }
-    )
+    # Said only when there is one: a figure of nought here says nothing.
+    if estate.connections:
+        first = estate.connections[0]
+        found.append(
+            {
+                "id": "hq.estate.connections",
+                "label": "Connections with a problem",
+                "value": str(len(estate.connections)),
+                # One leads to its own row; several to the page that lists them.
+                "url": (
+                    entity_link("connection", first.ref).url
+                    if len(estate.connections) == 1
+                    else reverse("control_plane:connections")
+                ),
+                "detail": f"{first.ref} {first.state}",
+                "status": "attention",
+            }
+        )
     return tuple(found)
 
 
@@ -397,7 +407,7 @@ def overview():
         "hq.estate.machines": "Machines",
         "hq.estate.registration": "Renewal",
         "hq.estate.certificate": "Certificate",
-        "hq.estate.connections": "Attention",
+        "hq.estate.connections": "Connections",
     }
     notes = {"hq.estate.machines": "" if estate.offline else f"of {len(estate.watched)} online"}
     for card_id, expiries in (
@@ -435,6 +445,7 @@ def overview():
 # ----- Action items ---------------------------------------------------------
 
 
+@dated
 def attention() -> tuple[Insight, ...]:
     """Offline machines the estate depends on, and certificates the operator must renew.
 
@@ -484,6 +495,7 @@ def _offline(estate: Estate) -> tuple[Insight, ...]:
                 action="Open machine",
                 url=machine.url,
                 subject=subject_link("machine", machine.name),
+                since=seen,
                 workflow=cannot_help(
                     f"estate-offline:{machine.name}",
                     "HQ has no power or console access to a machine, so it is brought back "

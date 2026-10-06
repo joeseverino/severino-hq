@@ -330,7 +330,8 @@ class PageTests(PolicyTestCase):
         )
 
     def page(self):
-        return self.client.get(reverse("agent_policy"))
+        # Every action: the page opens on the rules that differ, and here none do.
+        return self.client.get(reverse("agent_policy"), {"all": 1})
 
     def test_it_shows_both_surfaces_and_every_agent_seen(self):
         page = self.page()

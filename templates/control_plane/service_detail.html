@@ -23,7 +23,13 @@ readings. The path is the next section, drawn once.
     <p class="band-meta"><span>Also at {% for alias in service.aliases %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</span></p>
   {% endif %}
 </div>
-{% if service.faults %}
+{% comment %}
+What is wrong with this name, as the queue says it. The card about its setup
+carries the faults as its sentence, so they are listed here only when no card
+is open.
+{% endcomment %}
+{% problems_about as problems %}{% include "partials/_problems.html" %}
+{% if service.faults and not problems %}
   {% include "partials/_record_list.html" with rows=service.fault_rows label="Setup problems" %}
 {% endif %}
 </section>
@@ -31,7 +37,7 @@ readings. The path is the next section, drawn once.
 <section id="path" class="page-section" data-page-section>
 <div class="section-head">
   <h2>Path{% if routes|length == 1 %} <span class="heading-aside">via {{ routes.0.via_phrase }}</span>{% endif %}</h2>
-  {% if topology_url %}<a class="btn ghost compact" href="{{ topology_url }}">See in topology</a>{% endif %}
+  {% if topology_url %}<a class="btn ghost compact" href="{{ topology_url }}">See on the map</a>{% endif %}
 </div>
 <p class="path-reach"><span class="exposure exposure-{{ exposure.level }}">{{ exposure.label }}</span>{% if exposure.worst.path_gates %} <span class="muted">· login only at {% for path in exposure.worst.path_gates %}<code>{{ path }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</p>
 {% if gate_fixes and not read_only %}
@@ -256,6 +262,7 @@ the same shape from the same file.
 {% endcomment %}
 {% include "partials/_page_sections.html" %}
 {% include "partials/_relationships.html" %}
+{% referenced_by "service" service.hostname cards=True %}
 
 {% if service.alias_claims %}
 <section id="resources" class="page-section" data-page-section>

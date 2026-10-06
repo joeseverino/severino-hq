@@ -22,7 +22,7 @@ from hq.platform.application.routes import reverse
 from .derivations import passed
 from .github_estate import Repository, repositories
 from .github_estate import attention as repository_attention
-from .item_help import cannot_help, commands
+from .item_help import cannot_help, do_step, run_step, steps
 from .standards import UNMET, Posture, measure
 from .standards import Check as _Check
 from .timestamps import moment
@@ -348,10 +348,11 @@ PINS_UNREAD = (
     "Its workflows were not read, so HQ cannot say which uses: lines to pin, and requiring "
     "pinning first would stop every run that uses a tag."
 )
-# Said beside a pinning plan for a repository calling another's workflows.
+# Said once on a pinning plan where a repository calls another's workflows.
+# Which workflows is the list of steps under it.
 PINS_CALLED = (
-    "Requiring pinning also applies to the actions a called workflow uses, which HQ did not "
-    "read, so it is not offered here: check those workflows pin theirs before requiring it for"
+    "Requiring pinning is not offered for a repository that calls another repository's "
+    "workflow, because HQ did not read what that workflow uses."
 )
 
 
@@ -362,7 +363,21 @@ def help_for(check: _Check, missing: list[Repository]) -> Any:
     derive = COMMANDS.get(check.id)
     if derive is None:
         return cannot_help(key, REASONS[check.id])
-    return commands(key, tuple(run for repo in missing for run in derive(repo)), reason=_left_out(check, missing))
+    runs = tuple(run_step(label, command) for repo in missing for label, command in derive(repo))
+    return steps(key, runs + _called_workflows(check, missing), reason=_left_out(check, missing))
+
+
+def _called_workflows(check: _Check, missing: list[Repository]) -> tuple[Any, ...]:
+    """One step for each workflow a repository calls from another: the thing
+    to check before requiring pinning there."""
+
+    if check.id != "actions-pinned":
+        return ()
+    return tuple(
+        do_step(f"{repo.short}: check that {workflow} pins its own actions, then require pinning.")
+        for repo in missing
+        for workflow in calls_workflows(repo)
+    )
 
 
 def _left_out(check: _Check, missing: list[Repository]) -> str:
@@ -372,7 +387,7 @@ def _left_out(check: _Check, missing: list[Repository]) -> str:
         return ""
     unread = [repo.short for repo in missing if pins_unread(repo)]
     unresolved = [f"{repo.short} ({', '.join(pins_unresolved(repo))})" for repo in missing if pins_unresolved(repo)]
-    called = [f"{repo.short} ({', '.join(calls_workflows(repo))})" for repo in missing if calls_workflows(repo)]
+    called = any(calls_workflows(repo) for repo in missing)
     parts = []
     if unread:
         parts.append(f"{', '.join(unread)}: {PINS_UNREAD}")
@@ -381,7 +396,7 @@ def _left_out(check: _Check, missing: list[Repository]) -> str:
             f"Pin these by hand; their tags could not be read, so pinning is not required yet: {'; '.join(unresolved)}."
         )
     if called:
-        parts.append(f"{PINS_CALLED} {'; '.join(called)}.")
+        parts.append(PINS_CALLED)
     return " ".join(parts)
 
 
@@ -407,15 +422,15 @@ def attention() -> tuple[Insight, ...]:
         items.append(
             Insight(
                 status="serious" if check.serious else "attention",
-                eyebrow="Posture",
-                family="Repository posture",
+                eyebrow="Repo checks",
+                family="Repository checks",
                 key=f"github-posture:{check.id}",
                 title=f"{check.label}: not met in {counted(len(missing), 'repository', 'repositories')}",
                 value=str(len(missing)),
                 # A setting to change in each repository that misses it.
                 magnitude=len(missing),
                 body=f"{', '.join(missing)}. {check.fix}",
-                action="Open posture",
+                action="Open repo checks",
                 url=reverse("posture"),
                 workflow=help_for(check, unmet),
             )

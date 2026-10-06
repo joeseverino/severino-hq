@@ -596,7 +596,7 @@ _PHONE_TABLE = """(scroll) => {
     headings: table.querySelectorAll('thead th').length,
     columns: [...table.querySelectorAll('thead th')].filter(showing)
       .map((heading) => Math.round(heading.getBoundingClientRect().width)),
-    rows: [...table.querySelectorAll('tbody > tr:not([data-row-detail])')]
+    rows: [...table.querySelectorAll('tbody > tr:not([data-row-detail]):not(:has(> th[scope="rowgroup"]))')]
       .map((row) => Math.round(row.getBoundingClientRect().height)),
     toggles: table.querySelectorAll('tbody button[aria-expanded]').length,
     details: [...table.querySelectorAll('tr[data-row-detail] dt')].map((term) => term.textContent),

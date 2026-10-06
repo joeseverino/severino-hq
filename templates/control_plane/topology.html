@@ -46,6 +46,11 @@
       {% endfor %}
     </fieldset>
     <button class="btn ghost compact" type="button" data-topology-reset>Clear selection</button>
+    {% comment %}
+    One control for what the whole map leaves out: the lanes that are context
+    and the cards nothing links to (`topology_lenses.kept_on_the_map`).
+    {% endcomment %}
+    {% if topology_left_out %}<a class="btn ghost compact" href="{% url 'control_plane:topology' %}?all=1#map">Show {{ topology_left_out }} more</a>{% elif topology_everything %}<a class="btn ghost compact" href="{% url 'control_plane:topology' %}#map">Show fewer</a>{% endif %}
   </div>
 
   <p class="topology-hint muted" aria-live="polite" data-topology-status>Pick anything to see what it is connected to.</p>

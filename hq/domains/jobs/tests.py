@@ -272,3 +272,42 @@ class RunOnTheCallingThreadTests(TestCase):
 
         self.assertEqual(job.state, "failed")
         self.assertIn("Traceback", job.error)
+
+
+class JobListOrderTests(TestCase):
+    """What failed on its last run leads the list and is named above it."""
+
+    def setUp(self):
+        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        now = timezone.now()
+
+        def ran(kind, label, state, hours_ago):
+            job = Job.objects.create(kind=kind, label=label, state=state)
+            # Dated after the insert: the column stamps itself on create.
+            Job.objects.filter(pk=job.pk).update(created_at=now - timedelta(hours=hours_ago))
+            return job
+
+        self.recovered = ran("example.sync", "Sync the example", Job.State.FAILED, 5)
+        ran("example.sync", "Sync the example", Job.State.SUCCEEDED, 1)
+        self.failed = ran("example.read", "Read the example", Job.State.FAILED, 3)
+        self.lost = ran("example.index", "Index the example", Job.State.LOST, 4)
+        self.newest = ran("example.other", "Do the other thing", Job.State.SUCCEEDED, 0)
+
+    def test_a_job_that_failed_last_leads_and_a_recovered_one_does_not(self):
+        page = self.client.get(reverse("jobs:list"))
+
+        order = [job.pk for job in page.context["object_list"]]
+        self.assertEqual(order[:3], [self.failed.pk, self.lost.pk, self.newest.pk])
+        self.assertGreater(order.index(self.recovered.pk), 2)
+        self.assertContains(page, "2 jobs failed on their last run")
+        self.assertContains(page, "Index the example, Read the example")
+
+    def test_newest_first_is_still_one_choice_away(self):
+        page = self.client.get(reverse("jobs:list"), {"sort": "-created_at"})
+
+        self.assertEqual(page.context["object_list"][0].pk, self.newest.pk)
+
+    def test_nothing_is_said_when_nothing_failed_last(self):
+        Job.objects.exclude(state=Job.State.SUCCEEDED).delete()
+
+        self.assertNotContains(self.client.get(reverse("jobs:list")), "on its last run")

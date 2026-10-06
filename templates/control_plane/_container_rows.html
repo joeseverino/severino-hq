@@ -17,7 +17,8 @@ cannot go missing from the other.
   </thead>
       <tbody>
         {% for container in containers %}
-          <tr>
+          {% comment %}Addressed by name, so a moment in the history links to its row (application.history).{% endcomment %}
+          <tr id="container-{{ container.name|slugify }}">
             <td>
               {% comment %}
               The name is the link. A container HQ watches leads to its own

@@ -149,7 +149,7 @@ class DocumentTests(SimpleTestCase):
                 self.assertEqual(tags[tag["parent"]]["kind"], "nav")
         projects = self.document["paths"]["/api/v2/resources/projects/"]["get"]
         self.assertEqual(projects["tags"], ["hq.projects", "api.v2"])
-        self.assertEqual(tags["hq.projects"]["parent"], "nav.build")
+        self.assertEqual(tags["hq.projects"]["parent"], "nav.projects")
 
     def test_tags_stand_in_the_order_of_the_bar(self):
         """A group where its first domain is, its domains after it, the rest in place."""

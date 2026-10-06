@@ -280,8 +280,10 @@ class EstateCardTests(TestCase):
         self.assertEqual(
             found["hq.estate.connections"]["detail"], "example-ssh not answering"
         )
+        # One connection with a problem leads to its own row.
         self.assertEqual(
-            found["hq.estate.connections"]["url"], reverse("control_plane:connections")
+            found["hq.estate.connections"]["url"],
+            reverse("control_plane:connections") + "#connection-example-ssh",
         )
 
     def test_the_nearest_expiries_link_to_their_subject(self):
@@ -841,3 +843,17 @@ class WatchedTests(TestCase):
         ))
 
         self.assertEqual(len(estate.watched), 3)
+
+
+class QuietEstateCardTests(TestCase):
+    """A figure of nought says nothing, so it is not drawn."""
+
+    def test_no_connection_figure_while_every_connection_answers(self):
+        ManagedResource.objects.create(key="example-box", kind="machine", spec={"name": "example-box"})
+
+        with projection_scope():
+            found = {card["id"]: card for card in cards()}
+
+        self.assertIn("hq.estate.machines", found)
+        self.assertNotIn("hq.estate.connections", found)
+        self.assertTrue(all(card["url"] for card in found.values()))

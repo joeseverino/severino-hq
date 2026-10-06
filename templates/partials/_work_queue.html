@@ -6,6 +6,7 @@ sentence and anything that can be pressed is a button. Under a domain's own
 heading (`grouped`) a card does not repeat the domain. Where the reader sorts
 their own queue (`triage`) a card ends with the one thing they can do to it:
 dismiss it, or restore it. Neither fixes it. A dismissed card is its title.
+On the page of the thing a card is about (`here`) its title is plain text.
 {% endcomment %}
 <ul class="attention-list">
   {% for entry in items %}
@@ -14,7 +15,7 @@ dismiss it, or restore it. Neither fixes it. A dismissed card is its title.
       <div class="attention-body">
         <div class="attention-head">
           <span class="pill pill-{% if item.notice %}idea{% else %}{{ item.status }}{% endif %}">{{ item.urgency }}</span>
-          {% if item.href %}<a class="attention-title" href="{{ item.href }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}
+          {% if item.href and not here %}<a class="attention-title" href="{{ item.href }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}
           {% if item.since or not grouped %}
           <span class="attention-meta">
             {% if not grouped %}<span>{{ item.source }}</span>{% endif %}

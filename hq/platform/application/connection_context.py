@@ -43,12 +43,14 @@ from .connection_catalog import (
 from .credential_mint import CredentialFix, credential_fixes
 from .credential_sight import ProviderSight, sight_by_connection
 from .derived_reads import NotFoundError, serialize_path, serialize_provider_sight
+from .entity_links import entity_link
 from .freshness import freshness
 from .hq_self import hq_hostnames
 from .paths import hq_path
+from .problems import problem_counts
 from .path_model import ServicePath
 from .request_path import joined
-from .projection import projection_scope
+from .projection import projection_scope, read_once
 from .security import Principal
 from .ui import counted
 from .workflow_contracts import ActionLink
@@ -66,6 +68,19 @@ class ConnectionRow:
     read_now: ActionLink | None
     read_requested_at: datetime | None
     reach: ConnectionReach | None = None
+    # The part of HQ that uses it, as its navigation names that part.
+    used_for: str = ""
+    # How many problems are open about it, and the queue showing only those.
+    problems: int = 0
+
+    @property
+    def problems_url(self) -> str:
+        from urllib.parse import urlencode
+
+        from hq.platform.application.routes import reverse
+
+        about = entity_link("connection", self.instance.label).url
+        return f"{reverse('action_items')}?{urlencode({'about': about})}" if self.problems else ""
 
     @property
     def more_scope(self) -> tuple[str, ...]:
@@ -118,6 +133,8 @@ class ConnectionRow:
             **serialize_connection(self.connection),
             "family": self.group.spec.name,
             "family_label": self.group.spec.label,
+            "used_for": self.used_for or None,
+            "open_problems": self.problems,
             "secret_store": self.group.spec.secret_store or None,
             "connection_ref": self.instance.connection_ref or None,
             "reach": self.reach.as_dict() if self.reach is not None else None,
@@ -205,6 +222,19 @@ class ConnectionsContext:
                 label = row.state_label.lower()
                 counts[label] = counts.get(label, 0) + 1
         return tuple((count, label) for label, count in counts.items())
+
+    @property
+    def purposes(self) -> tuple[tuple[str, tuple[ConnectionRow, ...]], ...]:
+        """The rows under what each is used for, in the rows' order."""
+
+        found: dict[str, list[ConnectionRow]] = {}
+        for row in self.rows:
+            found.setdefault(row.used_for, []).append(row)
+        return tuple((label, tuple(rows)) for label, rows in found.items())
+
+    @property
+    def problem_count(self) -> int:
+        return sum(row.problems for row in self.rows)
 
     @property
     def all_custodied(self) -> bool:
@@ -320,6 +350,8 @@ def _rows(
         for group in groups
         for view in group.connections
     )
+    used_for = _used_for()
+    open_problems = problem_counts()
     rows = []
     for group in groups:
         found = []
@@ -340,13 +372,43 @@ def _rows(
                     ),
                     read_requested_at=pending.get(ref),
                     reach=reach.get(ref),
+                    used_for=used_for.get(group.spec.name, ""),
+                    problems=open_problems.get(
+                        entity_link("connection", connection.instance.label).url, 0
+                    ),
                 )
             )
         # Within its group, a connection that needs a person comes first.
         rows.extend(
             sorted(found, key=lambda row: row.lifecycle not in ATTENTION_LIFECYCLES)
         )
-    return tuple(rows), unconnected
+    # Under what each is used for, in the order the first of each appears: the
+    # sort is stable, so the controller's connections still lead.
+    order = {name: place for place, name in enumerate(dict.fromkeys(row.used_for for row in rows))}
+    return tuple(sorted(rows, key=lambda row: order[row.used_for])), unconnected
+
+
+def _used_for() -> dict[str, str]:
+    """The part of HQ that declares each connection type, by the type's name.
+
+    A part is named as the navigation names it: the group its pages sit under,
+    else its own label. Derived from who declares the type, so an extension's
+    connections fall under the extension without the host naming it.
+    """
+
+    from .domains import all_domains
+
+    def load() -> dict[str, str]:
+        found: dict[str, str] = {}
+        for domain in all_domains():
+            if domain.integration.connections is None:
+                continue
+            named = next((item.group for item in domain.navigation if item.group), "") or domain.label
+            for spec in domain.integration.connections():
+                found[spec.name] = named
+        return found
+
+    return read_once("connections.used_for", load)
 
 
 def connections_context(*, principal: Principal, request: Any = None) -> ConnectionsContext:

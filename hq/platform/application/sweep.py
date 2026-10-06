@@ -15,6 +15,7 @@ declarations describing a world nothing recorded.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from django.db import transaction
@@ -27,6 +28,8 @@ from .inventory import (
 )
 from .adoption import adopt_discovered
 from .zones import adopt_discovered_records
+
+logger = logging.getLogger("severino.sweep")
 
 
 @transaction.atomic
@@ -61,7 +64,23 @@ def record_sweep(
     retired = retire_departed(payload)
     settle_read_requests()
     _ring_for_new_images(payload)
+    _note_open_problems()
     return {**result, "adopted": adopted, "confirmed": confirmed, "retired": retired}
+
+
+def _note_open_problems() -> None:
+    """Record what is open now that the report is stored, so a problem can
+    say since when. A report is stored whether or not this can be."""
+
+    from .first_seen import look_due
+    from .problems import note_open_problems
+
+    try:
+        if look_due():
+            with transaction.atomic():
+                note_open_problems()
+    except Exception:  # noqa: BLE001 - a look that fails must not lose the report
+        logger.exception("The open problems could not be recorded after a report.")
 
 
 def _ring_for_new_images(payload: dict[str, Any]) -> None:

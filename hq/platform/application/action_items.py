@@ -199,18 +199,28 @@ def restore_rows(user, keys) -> None:
 
 
 def filter_items(
-    items: list[dict[str, Any]], *, query: str = "", status: str = "", source: str = ""
+    items: list[dict[str, Any]],
+    *,
+    query: str = "",
+    status: str = "",
+    source: str = "",
+    about: str = "",
 ) -> list[dict[str, Any]]:
-    """The items matching an exact status and source, and words in their text."""
+    """The items matching an exact status and source, and words in their text.
+
+    ``about`` keeps the items whose subject is the page at that address.
+    """
 
     query = query.strip().casefold()
     status = status.strip()
     source = source.strip()
+    about = about.strip()
     return [
         item
         for item in items
         if (not status or item["status"] == status)
         and (not source or item["source_id"] == source)
+        and (not about or (item.get("subject") or {}).get("url") == about)
         and (
             not query
             or query

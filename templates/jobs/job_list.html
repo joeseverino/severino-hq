@@ -1,4 +1,15 @@
 {% extends "list_page.html" %}
+{% comment %}
+What failed on its last run, said once above the rows that lead the list.
+{% endcomment %}
+{% block summary %}
+{% if failed_last %}
+  <div class="notice notice-attention">
+    <strong>{{ failed_last|length|counted:"job failed on its last run,jobs failed on their last run" }}</strong>
+    <p>{{ failed_last|join:", " }}</p>
+  </div>
+{% endif %}
+{% endblock %}
 {% block row %}
   <td>{{ row.created_at|when }}</td>
   <td>{{ row.label }}</td>

@@ -15,6 +15,7 @@ from typing import Any
 from hq.domains.control_plane.names import normalized_hostname
 
 from .entity_links import EntityLink, entity_link
+from .facts import stored_snapshots
 from .reach import network_of
 
 NETWORK_LABELS = {
@@ -122,7 +123,8 @@ def connection_reach(connections: Iterable[tuple[str, str]]) -> dict[str, Connec
         for alias in item.aliases:
             known.setdefault(alias.lower(), item)
     index = machines_index()
-    answers = observed_answers()
+    # From the one read of every reading the connections page shares.
+    answers = observed_answers(row for rows in stored_snapshots().values() for row in rows)
     found: dict[str, ConnectionReach] = {}
     for ref, endpoint in connections:
         host = host_of(endpoint)

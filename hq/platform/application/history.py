@@ -23,6 +23,7 @@ from django.utils import timezone
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
 
+from .entity_links import container_link
 from .facts import inventory_records
 from .labels import lower_first
 from .timestamps import moment
@@ -52,6 +53,20 @@ SOURCES = (
 )
 # The sources that live in a connection's reading rather than in the audit log.
 EXTERNAL = frozenset({DEPLOYS, CONTAINERS})
+
+
+def read_request_type() -> str:
+    """What the log calls an ask for a fresh reading.
+
+    HQ records one each time a page asks the controller to read, and removes
+    it when the reading arrives. Neither is a change to anything he runs, so
+    the log leaves them out until asked.
+    """
+
+    from hq.domains.control_plane.models import ReadRequest
+    from hq.platform.core.audit import audited_labels
+
+    return audited_labels()[ReadRequest]
 
 
 def source_of_event():
@@ -262,6 +277,11 @@ def _starts(since: datetime | None, until: datetime | None) -> list[Moment]:
                     "Container",
                     f"{record.get('container')} started on {record.get('host')}",
                     detail="created, recreated or restarted",
+                    # Its row on its machine's page: a start is dated for every
+                    # container, tracked or not.
+                    url=container_link(
+                        str(record.get("host") or ""), str(record.get("container") or "")
+                    ).url,
                     actor="Docker",
                 )
             )

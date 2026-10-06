@@ -156,6 +156,15 @@ def _fault_status(resource, health: dict[str, str]) -> RecordStatus | None:
             held_since(resource.conditions, "Drifted"),
             read_at,
         )
+    if health["state"] == "deploying":
+        return RecordStatus(
+            "deploying",
+            "pending",
+            health["label"],
+            health["message"],
+            held_since(resource.conditions, "Degraded"),
+            read_at,
+        )
     if health["state"] == "degraded":
         return RecordStatus(
             "degraded",
@@ -300,6 +309,8 @@ class ResourceContext:
     resolved_spec: dict[str, Any] | None
     display_consumers: tuple[dict[str, Any], ...]
     resolution_error: str
+    # A certificate's services, and its names nothing is served under.
+    certificate_use: Any = None
 
     @property
     def in_sync(self) -> bool:
@@ -362,6 +373,8 @@ class ResourceContext:
                 for consumer in self.display_consumers
             ],
             "resolution_error": self.resolution_error,
+            "used_by": list(self.certificate_use.used_by) if self.certificate_use else [],
+            "unused_names": list(self.certificate_use.unused) if self.certificate_use else [],
         }
 
 
@@ -400,7 +413,19 @@ def resource_context(resource: ManagedResource) -> ResourceContext:
         resolved_spec=resolved,
         display_consumers=consumers,
         resolution_error=error,
+        certificate_use=_certificate_use(resource, resolved),
     )
+
+
+def _certificate_use(resource, resolved: dict[str, Any] | None):
+    """What a certificate serves; None for anything that is not one."""
+
+    provider = PROVIDERS.get(resource.kind)
+    if provider is None or not provider.covers:
+        return None
+    from .services import certificate_use
+
+    return certificate_use(resource.key, provider.hostnames(resolved or resource.spec) or ())
 
 
 @dataclass(frozen=True)
@@ -436,3 +461,86 @@ def controller_summary(actions, labels) -> ControllerSummary | None:
         lines,
         frozenset(off),
     )
+
+
+# The tones a row is drawn in when nothing about it needs looking at.
+SETTLED_TONES = frozenset({"healthy", "declared"})
+
+
+@dataclass(frozen=True)
+class RecordGroup:
+    """The records of one type, those needing a look first."""
+
+    kind: str
+    label: str
+    rows: tuple[Any, ...]
+    unsettled: int
+
+
+@dataclass(frozen=True)
+class RecordList:
+    """The infrastructure list under its types, and what the filter offers.
+
+    ``types`` is every type there is with how many records it has, whatever
+    the filter keeps, so a filtered page still offers the others.
+    """
+
+    groups: tuple[RecordGroup, ...]
+    types: tuple[RecordGroup, ...]
+    query: str = ""
+    kind: str = ""
+
+    @property
+    def total(self) -> int:
+        return sum(len(group.rows) for group in self.types)
+
+    @property
+    def shown(self) -> int:
+        return sum(len(group.rows) for group in self.groups)
+
+    @property
+    def unsettled(self) -> int:
+        return sum(group.unsettled for group in self.types)
+
+    @property
+    def filtered(self) -> bool:
+        return bool(self.query or self.kind)
+
+
+def _grouped(rows: list[Any]) -> tuple[RecordGroup, ...]:
+    found: dict[str, list[Any]] = {}
+    for row in rows:
+        found.setdefault(row.kind, []).append(row)
+    groups = []
+    for kind, members in found.items():
+        unsettled = [row for row in members if row.record_status.tone not in SETTLED_TONES]
+        settled = [row for row in members if row.record_status.tone in SETTLED_TONES]
+        groups.append(
+            RecordGroup(kind, members[0].kind_label, tuple(unsettled + settled), len(unsettled))
+        )
+    # A type with something to look at leads; the rest by name.
+    return tuple(sorted(groups, key=lambda group: (not group.unsettled, group.label.casefold())))
+
+
+def record_list(resources, *, query: str = "", kind: str = "") -> RecordList:
+    """``resources`` (each carrying the list row's ``record_status``,
+    ``shown_name`` and ``summary``) under their types, kept by the filter:
+    words in a row's own text, and one type."""
+
+    rows = list(resources)
+    types = _grouped(rows)
+    wanted = query.strip().casefold()
+    kind = kind if any(group.kind == kind for group in types) else ""
+    kept = [
+        row
+        for row in rows
+        if (not kind or row.kind == kind)
+        and (
+            not wanted
+            or wanted
+            in " ".join(
+                (row.key, row.shown_name, row.summary, row.kind_label, row.record_status.label)
+            ).casefold()
+        )
+    ]
+    return RecordList(_grouped(kept), types, query.strip(), kind)

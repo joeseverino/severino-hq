@@ -64,6 +64,9 @@ class Finding:
     # Why HQ can neither run a remedy nor name the exact command for this one.
     # Derivation fills it from the rule when the finding carries neither.
     no_help_reason: str = ""
+    # When this was first seen open, where a look recorded it
+    # (application.first_seen). Derivation leaves it unset.
+    since: datetime | None = None
 
 
 @dataclass(frozen=True)
