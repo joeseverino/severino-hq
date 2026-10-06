@@ -388,10 +388,12 @@ class SearchedListTests(TestCase):
         )
 
     def test_a_page_is_one_statement_whose_size_does_not_follow_the_matches(self):
+        # The first search in a process also asks whether the index exists.
+        tied, ledger = self._listed("tied"), self._listed("ledger")
         with CaptureQueriesContext(connection) as few:
-            list(self._listed("tied")[:25])
+            list(tied[:25])
         with CaptureQueriesContext(connection) as many:
-            list(self._listed("ledger")[:25])
+            list(ledger[:25])
 
         self.assertEqual(len(few), 1)
         self.assertEqual(len(many), 1)

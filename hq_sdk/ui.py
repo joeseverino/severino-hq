@@ -1,5 +1,11 @@
 """Stable view models and chart builders for host-rendered plugin UI."""
 
+from hq.platform.application.cadence_chart import (
+    Cadence,
+    CadenceMatrix,
+    CadenceRow,
+    CadenceWeek,
+)
 from hq.platform.application.drawings import Dot, Dots, Trend
 from hq.platform.application.moments import (
     ago,
@@ -11,10 +17,6 @@ from hq.platform.application.moments import (
 )
 from hq.platform.application.ui import (
     ActivityCalendar,
-    Cadence,
-    CadenceMatrix,
-    CadenceRow,
-    CadenceWeek,
     CalendarDay,
     ChartCategory,
     ChartSeries,

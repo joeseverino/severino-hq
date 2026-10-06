@@ -60,7 +60,9 @@ DNS_CONNECTIONS = tuple(
 # 21: adoption reads which connections manage.
 # 32: the Relationships section reads the relation graph: the machine
 # catalogue, the connection readings and the declarations, once each.
-DOMAIN_PAGE_QUERY_BUDGET = 32
+# 34: the records that name this domain, in one read, and the names of theirs.
+DOMAIN_PAGE_QUERY_BUDGET = 34
+PER_EXTENSION_QUERY_BUDGET = 2
 
 ZONE_KIND = "cloudflare.zone"
 RECORD_KIND = "cloudflare.dns_record"
@@ -1147,9 +1149,15 @@ class DomainPageCostTests(TestCase):
         for the switcher.
         """
 
+        from hq.platform.application.domains import extension_domains
+
+        # An installed extension's connections are read once each for the map.
+        allowed = DOMAIN_PAGE_QUERY_BUDGET + (
+            len(extension_domains()) * PER_EXTENSION_QUERY_BUDGET
+        )
         self.assertLessEqual(
             self._queries(10),
-            DOMAIN_PAGE_QUERY_BUDGET,
+            allowed,
             "the domain page exceeded its query budget",
         )
 
