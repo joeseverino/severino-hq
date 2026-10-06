@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import Field
 
+from ..connection_shapes import LOGIN
 from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, applies
 
 
@@ -76,4 +77,4 @@ DEFINITIONS = (DEFINITION,)
 
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.
-CONNECTIONS = {"adguard": ConnectionKind("AdGuard Home", "coarse")}
+CONNECTIONS = {"adguard": ConnectionKind("AdGuard Home", "coarse", LOGIN)}

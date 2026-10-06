@@ -1,8 +1,8 @@
 """The controller bridge honours its OpenAPI contract.
 
-controller/api/hq-controller.openapi.json is the one description of every
-bridge message; the Go controller's types and client are generated from it.
-Each test here runs a bridge action through the bridge application, as a
+The contract is the bridge's own messages joined to what the registry declares
+(``test_bridge_registry`` holds the join and the files written from it); the Go
+controller's types and client are generated from it. Each test here runs a bridge action through the bridge application, as a
 request on its socket, and validates its answer against that action's response
 schema, and every payload against its request schema. A field changed on
 either side without the contract fails here or in the Go build.
@@ -10,7 +10,6 @@ either side without the contract fails here or in the Go build.
 
 from __future__ import annotations
 
-from typing import get_args
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -26,20 +25,15 @@ from hq.platform.application.resource_operations import (
     request_reconcile,
 )
 from hq.platform.application.security import cli_principal
-from hq.domains.control_plane.bridge_contract import contract, keyword, limit
+from hq.domains.control_plane.bridge_contract import contract, limit
 from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.domains.control_plane.models import DashboardConfiguration, ManagedResource
-from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
-from hq.domains.control_plane.provider_adapters.tls import TLSConsumer
-from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS
 
 from . import bridge_client
 from .test_control_plane import certificate_spec, declare_targets
 
 CONTRACT_URI = "urn:hq:controller-bridge"
 CONTRACT = contract()
-SWEPT = set(CONTRACT["components"]["schemas"]["SweptKind"]["enum"])
 REGISTRY = Registry().with_resource(
     CONTRACT_URI, Resource.from_contents(CONTRACT, default_specification=DRAFT202012)
 )
@@ -93,76 +87,11 @@ class ControllerContractTests(TestCase):
             set(CONTRACT["paths"]),
         )
 
-    def test_the_contract_names_every_kind_the_registry_declares(self):
-        schemas = CONTRACT["components"]["schemas"]
-        self.assertEqual(
-            set(schemas["ResourceKind"]["enum"]),
-            set(PROVIDERS) | set(OBSERVATION_KINDS),
-        )
-
-    def test_every_controller_reading_is_swept(self):
-        controller_read = {
-            kind for kind, spec in OBSERVATIONS.items() if spec.read_by == "controller"
-        }
-        self.assertEqual(sorted(controller_read - SWEPT), [])
-        self.assertEqual(sorted(SWEPT - set(PROVIDERS) - controller_read), [])
-
-    def test_a_kind_nothing_sweeps_says_why(self):
-        for kind, provider in sorted(PROVIDERS.items()):
-            if kind in SWEPT:
-                continue
-            with self.subTest(kind=kind):
-                self.assertTrue(
-                    provider.unobserved_reason,
-                    f"nothing sweeps {kind!r} and its provider does not say why",
-                )
-
-    def test_a_swept_kind_does_not_claim_otherwise(self):
-        for kind in sorted(SWEPT & set(PROVIDERS)):
-            with self.subTest(kind=kind):
-                self.assertFalse(PROVIDERS[kind].unobserved_reason)
-
     def test_the_contract_names_every_analytics_dimension(self):
         from hq.domains.analytics.models import RumDaily
 
         dimension = CONTRACT["components"]["schemas"]["AnalyticsRow"]["properties"]["dimension"]
         self.assertEqual(sorted(dimension["enum"]), sorted(RumDaily.Dimension.values))
-
-    def test_the_contract_names_every_failure_class(self):
-        schemas = CONTRACT["components"]["schemas"]
-        self.assertEqual(set(schemas["FailureClass"]["enum"]), {"", *FAILURES})
-        self.assertEqual(set(schemas["Refusal"]["enum"]), {"", *REFUSALS})
-
-    def test_the_contract_names_every_connection_provider(self):
-        from hq.domains.control_plane.provider_adapters import CONNECTIONS
-
-        self.assertEqual(
-            set(CONTRACT["components"]["schemas"]["ConnectionProvider"]["enum"]),
-            set(CONNECTIONS),
-        )
-
-    def test_the_contract_names_every_reading_part(self):
-        from hq.domains.control_plane.reading_parts import parts_of
-
-        declared = {
-            part
-            for kind in set(PROVIDERS) | set(OBSERVATION_KINDS)
-            for part in parts_of(kind)
-        }
-        self.assertEqual(
-            set(CONTRACT["components"]["schemas"]["ReadingPartName"]["enum"]), declared
-        )
-
-    def test_the_contract_names_every_tls_consumer_kind(self):
-        union, _field = get_args(TLSConsumer)
-        kinds = {
-            literal
-            for model in get_args(union)
-            for literal in get_args(model.model_fields["kind"].annotation)
-        }
-        self.assertEqual(
-            set(CONTRACT["components"]["schemas"]["TLSConsumerKind"]["enum"]), kinds
-        )
 
     def test_the_contract_names_every_glance_panel(self):
         # The weather panel is declared only once a point is configured.
@@ -181,17 +110,14 @@ class ControllerContractTests(TestCase):
         validate_spec("caddy.route", {"connection_ref": "example-edge", **route})
         _validate(f"{CONTRACT_URI}#/components/schemas/CaddyRouteInFile", route)
 
-    def test_a_keyword_the_contract_does_not_state_is_an_error(self):
+    def test_a_limit_the_contract_does_not_state_is_an_error(self):
         for path in (
-            ("NoSuchSchema", "pattern"),
-            ("CaddyRouteInFile", "properties", "domain", "default"),
-            ("CaddyRouteInFile", "properties", "domain", "maxLength"),
-            ("GitHubDeliveryProduction", "enum", 1),
+            ("NoSuchSchema", "maxLength"),
+            ("CaddyRouteInFile", "properties", "domain", "minimum"),
+            ("CaddyRouteInFile", "properties", "domain", "pattern"),
         ):
             with self.subTest(path=path), self.assertRaises((LookupError, ValueError)):
-                keyword(*path)
-        with self.assertRaises(ValueError):
-            limit("CaddyRouteInFile", "properties", "domain", "pattern")
+                limit(*path)
 
     def test_an_empty_queue(self):
         self.assertIsNone(bridge("peek")["operation"])

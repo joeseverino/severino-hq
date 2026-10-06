@@ -10,7 +10,7 @@ the ``github.profile`` reading, which is what a page shows. GitHub rations
 calls by the hour, so the reading keeps a clock of its own
 (``observations.github.PROFILE_EVERY``): ``plan`` tells the controller whose
 profile to read and whether it is due, and ``request_read`` asks for one now.
-The bridge contract's ``GitHubProfileBounds`` states what a read costs.
+``observations.github.WATCHED_KEPT`` states what a read costs.
 """
 
 from __future__ import annotations

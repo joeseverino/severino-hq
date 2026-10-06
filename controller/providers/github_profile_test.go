@@ -33,14 +33,13 @@ func profileRoutes(remaining int) map[string]string {
 func profileHarness(t *testing.T, remaining int, plan runtime.GitHubProfilePlan) (*githubHarness, *Controller) {
 	t.Helper()
 	h, c := appProfileHarness(t, remaining, plan)
-	delete(h.r.Env, "GITHUB_APP_CONNECTION_REF")
-	delete(h.r.Env, "GITHUB_APP_APP_ID")
+	h.r.Supplied, h.r.Commands.Supplied = supplied(), supplied()
 	return h, c
 }
 
 func appProfileHarness(t *testing.T, remaining int, plan runtime.GitHubProfilePlan) (*githubHarness, *Controller) {
 	t.Helper()
-	h := newGitHubHarness(t, profileRoutes(remaining), nil)
+	h := newGitHubHarness(t, profileRoutes(remaining), runtime.Environment{})
 	// A repository with no release answers 404, which is an answer.
 	h.refuse(githubFakeAPI, "/repos/example/quiet/releases/latest", 404)
 	h.r.Picture = func(_ context.Context, address string, limit int) (string, []byte, error) {
@@ -144,7 +143,7 @@ func TestGitHubProfileFailsWholeAndKeepsThePictureApart(t *testing.T) {
 }
 
 func TestGitHubAvatarIsFetchedOnlyFromGitHubsPictureHost(t *testing.T) {
-	r := New(runtime.Environment{}, &fakeHTTP{})
+	r := New(runtime.Environment{}, supplied(), &fakeHTTP{})
 	r.Picture = func(context.Context, string, int) (string, []byte, error) {
 		t.Fatal("fetched")
 		return "", nil, nil
@@ -160,7 +159,7 @@ func TestGitHubAvatarIsFetchedOnlyFromGitHubsPictureHost(t *testing.T) {
 }
 
 func TestAProfileIsSweptOnlyWhereHQNamesAnAccount(t *testing.T) {
-	r := New(runtime.Environment{}, &fakeHTTP{})
+	r := New(runtime.Environment{}, supplied(), &fakeHTTP{})
 	kind := string(runtime.ResourceKindGitHubProfile)
 	if NewController(r, runtime.ControllerRegistry{}).hasSource(kind, nil) {
 		t.Error("no account, and the kind claims a source")

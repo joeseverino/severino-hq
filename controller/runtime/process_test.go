@@ -33,7 +33,10 @@ func TestBoundedBufferCapHoldsUnderIOCopy(t *testing.T) {
 }
 
 func TestChildEnvironmentCarriesNoCredential(t *testing.T) {
-	env := Environment{"PATH": "/bin", "NPM_PASSWORD": "synthetic", "CLOUDFLARE_DNS_API_TOKEN": "synthetic"}
+	env, err := ReadEnvironment([]string{"PATH=/bin", "NPM_PASSWORD=synthetic", "CLOUDFLARE_DNS_API_TOKEN=synthetic"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	got := env.ChildEnvironment(map[string]string{"OP_SERVICE_ACCOUNT_TOKEN": "t"})
 	slices.Sort(got)
 	if !slices.Equal(got, []string{"OP_SERVICE_ACCOUNT_TOKEN=t", "PATH=/bin"}) {

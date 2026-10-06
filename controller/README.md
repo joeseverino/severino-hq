@@ -7,7 +7,10 @@ controller owns provider transport and credentials; credentials do not enter
 HQ persistence or the web process.
 
 The bridge is HTTP on a Unix socket HQ's running process serves, described by
-`api/hq-controller.openapi.json`. `runtime/bridge.gen.go` is the client and the
+`api/hq-controller.openapi.json`. HQ emits that document (`manage.py
+bridge_contract`): the actions and the bridge's own messages are written by
+hand on HQ's side, and every schema HQ's registry owns is generated from its
+declarations. Never edit it here. `runtime/bridge.gen.go` is the client and the
 message types generated from it; `runtime/bridge.go` adds the deadline, the
 size bound and the strict decoding, and `runtime/bridge_socket.go` dials only a
 socket this account can trust: its own, mode 0600, in its own private
@@ -26,14 +29,23 @@ it loads no connection and links into no provider call.
 `cmd/hq-secrets` is a separate binary: the renderer root runs on the host to
 read the vault through 1Password Connect and install what the consumers read
 (`docs/SECRETS.md`). It links no provider code. Connections reach the
-controller in one document whose type both sides share (`connections/`),
+controller in one document whose types both sides share (`connections/`),
 mounted read-only and named by `HQ_CONTROLLER_CONNECTIONS`; none is an
-environment variable of the container.
+environment variable of the container. Those types are generated from
+`api/hq-connections.openapi.json`, which HQ emits from the connection shapes
+its registry declares. A connection holds its settings under the one shape it
+arrived in, the controller decodes the document once
+(`runtime.LoadConnections`), and a provider is handed its own connection
+(`runtime.Connections.For`). `runtime.Environment` is a struct of the facts
+that are not connections: the controller's name, the bridge socket and the
+files the launcher mounts.
 
 Provider wire payloads use generated vendor models or official client types.
 Malformed payloads fail explicitly. Typed errors become contract failure classes
 at the reporting boundary. Provider declarations and the emitted controller
-OpenAPI document supply the shared vocabulary.
+OpenAPI document supply the shared vocabulary. The document also carries the
+record of every reading a controller takes, from the model HQ validates it
+with; the readers still build their own record structs.
 
 Run `mise run controller` from the repository root (it runs
 `controller/scripts/check.sh`) and `go test -race ./...` from `controller/`.

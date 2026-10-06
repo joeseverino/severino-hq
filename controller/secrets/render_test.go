@@ -3,6 +3,7 @@ package secrets
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -147,6 +148,17 @@ func (h *host) credential(name, value string) {
 
 func (h *host) layout() install.Layout { return h.runner.Config.Layout }
 func (h *host) appEnv() string         { return filepath.Join(h.layout().WebDir, install.AppEnvName) }
+
+// connection is the document's connection held under ref, or one that holds nothing.
+func connection(document connections.Document, ref string) connections.Connection {
+	for _, found := range document.Connections {
+		if found.Ref == ref {
+			return found
+		}
+	}
+	return connections.Connection{}
+}
+
 func (h *host) document() string {
 	return filepath.Join(h.layout().RuntimeDir, install.ConnectionsName)
 }
@@ -263,9 +275,9 @@ func TestAFirstRenderInstallsEveryConsumersFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the controller would refuse the document: %v", err)
 	}
-	entries := document.Entries()
-	if entries["EXAMPLE_API_TOKEN"] != secretToken || entries["EDGE_HOST"] != "edge.example.com" ||
-		entries["EXAMPLE_STORE_VAULT"] != connecttest.VaultName || entries["EXAMPLE_STORE_ITEM"] != id(1) {
+	example, edge := connection(document, "example"), connection(document, "edge")
+	if example.APIToken == nil || example.APIToken.APIToken != secretToken || edge.SSHTransport == nil || edge.SSHTransport.Host != "edge.example.com" ||
+		example.Store.Vault != connecttest.VaultName || example.Store.Item != id(1) {
 		t.Fatal("the document does not hold the connections")
 	}
 	if read(t, h.ssh("known_hosts")) != "[edge.example.com]:2222 "+hostKey+"\n" || mode(t, h.ssh("edge")) != 0o400 ||
@@ -413,6 +425,39 @@ func TestAnUnchangedVaultIsNotReReadItemByItem(t *testing.T) {
 	// A clock set back does not make an old render look fresh forever.
 	h.now = h.now.Add(-48 * time.Hour)
 	rendered("a clock set back")
+}
+
+// A render left by a renderer that wrote another version of the connections
+// document is never current: the installed document is in a format the
+// controller of this release refuses, so it is written again.
+func TestARenderOfAnotherDocumentVersionIsNotCurrent(t *testing.T) {
+	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
+	h.ok()
+	if h.ok().Outcome != "current" {
+		t.Fatal("the second run was not current")
+	}
+	path := filepath.Join(h.layout().RuntimeDir, stateName)
+	var left state
+	if err := json.Unmarshal([]byte(read(t, path)), &left); err != nil {
+		t.Fatal(err)
+	}
+	// The inputs as a renderer that knew no document version digests them.
+	config := h.runner.Config
+	left.Inputs = digest(left.Salt, []byte("hq-secrets/1"), []byte(read(t, config.RegistryPath)), []byte(config.Vault), []byte(config.EnvItem),
+		[]byte(config.Layout.SecretDir), []byte(config.Layout.RuntimeDir), []byte(config.Layout.WebDir), []byte(strconv.Itoa(config.MinAppVariables)))
+	data, err := json.Marshal(left)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if result := h.ok(); result.Outcome != "rendered" {
+		t.Fatalf("a render of another document version was taken for current: %s", result.Outcome)
+	}
+	if h.ok().Outcome != "current" {
+		t.Fatal("the render after it was not current")
+	}
 }
 
 func TestTheRegistryAndConfigurationArePartOfWhatIsCurrent(t *testing.T) {
@@ -1100,7 +1145,7 @@ func TestTheVaultMustResolveUniquely(t *testing.T) {
 	// By identifier it is one vault again.
 	h.runner.Config.Vault = connecttest.VaultID
 	h.ok()
-	if document, _ := connections.ReadFile(h.document(), os.Getuid()); document.Entries()["EXAMPLE_STORE_VAULT"] != connecttest.VaultID {
+	if document, _ := connections.ReadFile(h.document(), os.Getuid()); connection(document, "example").Store.Vault != connecttest.VaultID {
 		t.Fatal("the store vault is not the vault as the host names it")
 	}
 	h.fake.ExtraVaults = []map[string]any{{"id": "not-an-identifier", "name": "Another"}}
@@ -1140,7 +1185,7 @@ func TestTheWritersTokenReachesTheDocumentByProjection(t *testing.T) {
 	h := newHost(t, apiToken(1, "example", "EXAMPLE"), writer)
 	h.ok()
 	document, _ := connections.ReadFile(h.document(), os.Getuid())
-	if document.Entries()["ONEPASSWORD_API_TOKEN"] != secretWriter || document.Entries()["ONEPASSWORD_PROVIDER"] != "onepassword" {
+	if publisher := connection(document, "publisher"); publisher.ServiceAccount == nil || publisher.ServiceAccount.APIToken != secretWriter || publisher.Provider != "onepassword" {
 		t.Fatal("the writer's token did not reach the connections document")
 	}
 	if h.ok().Outcome != "current" {

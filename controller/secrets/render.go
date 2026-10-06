@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/secrets/connect"
 	"github.com/joeseverino/severino-hq/controller/secrets/connectapi"
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
@@ -263,9 +264,11 @@ func (r *Runner) read(ctx context.Context, client *connect.Client, id string) (c
 
 func (r *Runner) inputs(salt string, registry []byte) string {
 	config := r.Config
+	// The document's version is an input: a renderer that writes another
+	// format never takes an older render for a current one.
 	return digest(salt, []byte("hq-secrets/1"), registry, []byte(config.Vault), []byte(config.EnvItem),
 		[]byte(config.Layout.SecretDir), []byte(config.Layout.RuntimeDir), []byte(config.Layout.WebDir),
-		[]byte(strconv.Itoa(config.MinAppVariables)))
+		[]byte(strconv.Itoa(config.MinAppVariables)), []byte(strconv.Itoa(connections.SchemaVersion)))
 }
 
 // Run renders once. It returns after the lock is released and the staging

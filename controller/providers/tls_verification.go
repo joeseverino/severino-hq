@@ -94,21 +94,21 @@ func (r *Registry) tlsConsumerDomains(ctx context.Context, consumer TLSConsumer,
 func (r *Registry) consumerTLSEndpoint(consumer TLSConsumer) (string, error) {
 	switch consumer.Kind {
 	case runtime.TLSConsumerKindNPM:
-		prefix, err := r.Env.Prefix(runtime.ConnectionProviderNPM, "")
+		connection, err := r.Supplied.For(runtime.ConnectionProviderNPM, "")
 		if err != nil {
 			return "", err
 		}
-		configured, err := r.Env.Required(prefix, "URL")
+		login, err := runtime.Need(connection.Login)
 		if err != nil {
 			return "", err
 		}
-		parsed, err := url.Parse(configured)
+		parsed, err := url.Parse(login.URL)
 		if err != nil || parsed.Hostname() == "" {
 			return "", &ProviderError{Message: "NPM origin verification endpoint is missing"}
 		}
 		return strings.ToLower(parsed.Hostname()), nil
 	case runtime.TLSConsumerKindCaddy, runtime.TLSConsumerKindCPanel:
-		target, err := r.Env.SSH(consumer.ConnectionRef)
+		target, err := r.Supplied.SSH(consumer.ConnectionRef)
 		if err != nil {
 			return "", err
 		}

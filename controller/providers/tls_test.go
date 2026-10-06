@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -32,14 +33,14 @@ type tlsHarness struct {
 	clock   time.Time
 }
 
-func newTLSHarness(t *testing.T, env runtime.Environment) *tlsHarness {
+func newTLSHarness(t *testing.T, env runtime.Environment, held ...connections.Connection) *tlsHarness {
 	t.Helper()
 	h := &fakeHTTP{routes: map[string]any{"/api/tokens": Object{"token": "synthetic"}}, fail: map[string]error{}, answers: map[string]any{}, writeFail: map[string]error{}}
-	r := New(env, h)
+	r := New(env, supplied(held...), h)
 	harness := &tlsHarness{r: r, http: h, clock: tlsNow}
 	harness.dialer = &fakeDialer{http: h, certs: map[string][]byte{}}
 	harness.command = &fakeCommander{http: h, outcomes: map[string]fakeOutcome{}}
-	r.TLS, r.Commands = harness.dialer, &Commands{Env: r.Env, Exec: harness.command.exec}
+	r.TLS, r.Commands = harness.dialer, &Commands{Env: r.Env, Supplied: r.Supplied, Exec: harness.command.exec}
 	r.Now = func() time.Time { return tlsNow }
 	r.Monotonic = func() time.Time { return harness.clock }
 	r.Sleep = func(_ context.Context, d time.Duration) error { harness.clock = harness.clock.Add(d); return nil }
@@ -48,11 +49,24 @@ func newTLSHarness(t *testing.T, env runtime.Environment) *tlsHarness {
 
 func tlsEnv(t *testing.T) runtime.Environment {
 	dir := t.TempDir()
-	return runtime.Environment{
-		"NPM_CONNECTION_REF": "npm", "NPM_URL": "https://example.invalid", "NPM_USERNAME": "user", "NPM_PASSWORD": "synthetic",
-		"CADDY_CONNECTION_REF": "caddy", "CADDY_HOST": "edge.example", "CADDY_USER": "deploy", "CADDY_PORT": "22", "CADDY_HOST_KEY": "ssh-ed25519 AAAA",
-		"HQ_CONTROLLER_SSH_DIR": filepath.Join(dir, "ssh"), "HQ_ACME_DIR": filepath.Join(dir, "acme"),
+	return runtime.Environment{SSHDir: filepath.Join(dir, "ssh"), ACMEDir: filepath.Join(dir, "acme")}
+}
+
+// tlsConsumers is the connections certificates are served through.
+func tlsConsumers() []connections.Connection {
+	return []connections.Connection{
+		loginConnection(runtime.ConnectionProviderNPM, "npm", "https://example.invalid", "user", "synthetic"),
+		sshConnection("caddy", connections.SSHTransport{Host: "edge.example", User: "deploy", Port: "22", HostKey: "ssh-ed25519 AAAA"}),
 	}
+}
+
+// tlsIssuing is tlsConsumers with what an order needs: the DNS token the
+// challenge is answered with, and the certificate authority account.
+func tlsIssuing() []connections.Connection {
+	return append(tlsConsumers(),
+		apiTokenConnection(runtime.ConnectionProviderCloudflareDNS, "cloudflare_dns", "https://example.invalid", "synthetic"),
+		acmeConnection("acme", "ops@example.test", "https://acme.example/directory"),
+	)
 }
 
 func verified(ctx context.Context) context.Context {
@@ -122,7 +136,7 @@ func TestDaysUntilAndCovers(t *testing.T) {
 }
 
 func TestReconcileTLSReadsEveryConsumer(t *testing.T) {
-	h := newTLSHarness(t, tlsEnv(t))
+	h := newTLSHarness(t, tlsEnv(t), tlsConsumers()...)
 	pki := newTestPKI(t)
 	_, _, current := pki.leaf(2, tlsNow.AddDate(0, 3, 0), "a.example")
 	_, _, stale := pki.leaf(3, tlsNow.AddDate(0, 0, 10), "a.example")
@@ -160,7 +174,7 @@ func TestReconcileTLSReadsEveryConsumer(t *testing.T) {
 
 func TestRenewalDeploysVerifiesAndRollsBack(t *testing.T) {
 	env := tlsEnv(t)
-	h := newTLSHarness(t, env)
+	h := newTLSHarness(t, env, tlsIssuing()...)
 	pki := newTestPKI(t)
 	oldChain, oldKey, oldDER := pki.leaf(2, tlsNow.AddDate(0, 0, 5), "a.example")
 	newChain, newKey, newDER := pki.leaf(3, tlsNow.AddDate(0, 3, 0), "a.example")
@@ -171,8 +185,7 @@ func TestRenewalDeploysVerifiesAndRollsBack(t *testing.T) {
 		"certbot certonly": {},
 	}
 	h.command.lineage = map[string]string{"fullchain.pem": string(newChain), "privkey.pem": string(newKey)}
-	env["CLOUDFLARE_DNS_API_TOKEN"], env["ACME_EMAIL"], env["ACME_DIRECTORY_URL"] = "synthetic", "ops@example.test", "https://acme.example/directory"
-	_ = os.MkdirAll(env["HQ_ACME_DIR"], 0o700)
+	_ = os.MkdirAll(env.ACMEDir, 0o700)
 	spec := Object{"certificate_name": "a", "domains": []any{"a.example"}, "renewal_window_days": 30, "consumers": []any{
 		Object{"kind": "caddy", "name": "edge", "connection_ref": "caddy", "verify_domains": []any{"a.example"}},
 	}}
@@ -188,9 +201,9 @@ func TestRenewalDeploysVerifiesAndRollsBack(t *testing.T) {
 	}
 
 	// The new certificate never activates: verification times out and the old one is restored.
-	h2 := newTLSHarness(t, env)
+	h2 := newTLSHarness(t, env, tlsIssuing()...)
 	h2.dialer.certs, h2.command.outcomes, h2.command.lineage = h.dialer.certs, h.command.outcomes, h.command.lineage
-	_ = os.RemoveAll(filepath.Join(env["HQ_ACME_DIR"], "config"))
+	_ = os.RemoveAll(filepath.Join(env.ACMEDir, "config"))
 	h2.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}}}
 	_, err = h2.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(t.Context()), spec, nil, true)
 	want := "certificate deployment failed, rollback succeeded: 1 of 1 TLS consumers did not activate the certificate within 30s: edge still serves the previous certificate at a.example"
@@ -203,9 +216,8 @@ func TestRenewalDeploysVerifiesAndRollsBack(t *testing.T) {
 }
 
 func TestCPanelPlanRefusesUnservedNames(t *testing.T) {
-	env := tlsEnv(t)
-	env["HOST_CONNECTION_REF"], env["HOST_HOST"], env["HOST_USER"], env["HOST_PORT"], env["HOST_HOST_KEY"] = "cpanel", "cp.example", "acct", "22", "ssh-ed25519 AAAA"
-	h := newTLSHarness(t, env)
+	host := sshConnection("cpanel", connections.SSHTransport{Host: "cp.example", User: "acct", Port: "22", HostKey: "ssh-ed25519 AAAA"})
+	h := newTLSHarness(t, tlsEnv(t), append(tlsConsumers(), host)...)
 	h.command.outcomes["ssh sites"] = fakeOutcome{Stdout: `{"sites":{"a.example":["www.a.example"],"b.example":null}}`}
 	consumer := TLSConsumer{Kind: "cpanel", Name: "host", ConnectionRef: "cpanel", VerifyDomains: []string{"WWW.a.example", "b.example"}, InstallDomains: []string{"a.example"}}
 	_, err := h.r.cpanelSitesFor(t.Context(), consumer)
@@ -250,7 +262,7 @@ func TestCertbotNamesAreCheckedBeforeTheyReachArgv(t *testing.T) {
 	if got, err := checkedDomains(TLSCertificateSpec{Domains: []string{"a.example", "*.a.example"}}); err != nil || len(got) != 2 {
 		t.Fatalf("%v %v", got, err)
 	}
-	r := New(runtime.Environment{"HQ_ACME_DIR": "/acme"}, &fakeHTTP{})
+	r := New(runtime.Environment{ACMEDir: "/acme"}, supplied(), &fakeHTTP{})
 	for _, name := range []string{"../escape", "-x", "A", ""} {
 		if _, err := r.lineagePath(TLSCertificateSpec{CertificateName: name}); err == nil {
 			t.Fatalf("accepted %q", name)
@@ -279,7 +291,7 @@ func TestRenewalNotVerifiedWhileAConsumerIsUnreadOrUnchecked(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			env := tlsEnv(t)
-			h := newTLSHarness(t, env)
+			h := newTLSHarness(t, env, tlsIssuing()...)
 			pki := newTestPKI(t)
 			oldChain, oldKey, oldDER := pki.leaf(2, tlsNow.AddDate(0, 0, 5), "a.example", "b.example")
 			newChain, newKey, newDER := pki.leaf(3, tlsNow.AddDate(0, 3, 0), "a.example", "b.example")
@@ -290,8 +302,7 @@ func TestRenewalNotVerifiedWhileAConsumerIsUnreadOrUnchecked(t *testing.T) {
 				"certbot certonly": {},
 			}
 			h.command.lineage = map[string]string{"fullchain.pem": string(newChain), "privkey.pem": string(newKey)}
-			env["CLOUDFLARE_DNS_API_TOKEN"], env["ACME_EMAIL"], env["ACME_DIRECTORY_URL"] = "synthetic", "ops@example.test", "https://acme.example/directory"
-			_ = os.MkdirAll(env["HQ_ACME_DIR"], 0o700)
+			_ = os.MkdirAll(env.ACMEDir, 0o700)
 			h.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}, "edge.example|b.example": {Cert: "old"}}, c.served}
 			spec := Object{"certificate_name": "a", "domains": []any{"a.example", "b.example"}, "renewal_window_days": 30, "consumers": []any{edge, c.second}}
 			_, err := h.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(t.Context()), spec, nil, true)

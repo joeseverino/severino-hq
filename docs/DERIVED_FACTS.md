@@ -43,9 +43,10 @@ and read by one Go reader in the controller's integration
 r.reader(runtime.ResourceKindCloudflarePagesProject, r.cloudflarePagesProjects)
 ```
 
-The contract's `SweptKind` names every kind read this way; a Go test holds it
-equal to the registered readers and Django's contract test holds it to the
-registry. A reader iterates the provider's connections (`r.Env.Refs`) and
+The contract's `SweptKind` names every kind read this way and is derived from
+the registry: every reading a controller takes, and every resource kind that
+does not say why nothing reads it. A Go test holds it equal to the registered
+readers. A reader iterates the provider's connections (`r.Supplied.Refs`) and
 stamps each record with its `connection_ref`, so a reading is attributed to the
 connection that took it.
 
@@ -191,7 +192,8 @@ it is installed. The launcher asks `systemctl show` for a fixed list of
 properties (`units_properties`, where each is explained) and mounts what it
 printed; the controller parses that text, keeps exactly those properties and
 refuses a value that is not a unit name, one of systemd's state words, a
-number or an instant. `HostUnitRecord` in the bridge contract is the record:
+number or an instant. `HostUnitRecord` in the bridge contract is the record,
+emitted from the model of the same name (`observations/host.py`):
 it holds no command line, environment or path, and a unit that is not
 installed is a record saying so. Each record carries when it was read, and a
 unit's state is judged as of then.

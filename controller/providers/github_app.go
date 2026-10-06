@@ -52,23 +52,18 @@ func (r *Registry) admitGitHub() {
 }
 
 func (r *Registry) githubConnection(ref string) (githubConnection, error) {
-	prefix, err := r.Env.Prefix(runtime.ConnectionProviderGitHubApp, ref)
+	connection, err := r.Supplied.For(runtime.ConnectionProviderGitHubApp, ref)
 	if err != nil {
 		return githubConnection{}, err
 	}
-	named, err := r.Env.Required(prefix, "CONNECTION_REF")
+	app, err := runtime.Need(connection.GitHubApp)
 	if err != nil {
 		return githubConnection{}, err
 	}
-	appID, err := r.Env.Required(prefix, "APP_ID")
-	if err != nil {
-		return githubConnection{}, err
-	}
-	appID = strings.TrimSpace(appID)
-	if _, err := strconv.ParseUint(appID, 10, 64); err != nil {
+	if _, err := strconv.ParseUint(app.AppID, 10, 64); err != nil {
 		return githubConnection{}, &ProviderError{Message: "GitHub App app_id is not a number"}
 	}
-	return githubConnection{ref: named, appID: appID}, nil
+	return githubConnection{ref: connection.Ref, appID: app.AppID}, nil
 }
 
 // signingKey is the path a connection's key is rendered at, reachable only
@@ -77,12 +72,12 @@ func (r *Registry) signingKey(ref string, public bool) (string, error) {
 	if ref == "" || strings.ContainsAny(ref, `/\`) || strings.HasPrefix(ref, ".") {
 		return "", &ProviderError{Message: "invalid signing connection"}
 	}
-	if _, ok := r.Env.Prefixes()[ref]; !ok {
+	if _, ok := r.Supplied.Get(ref); !ok {
 		return "", &ProviderError{Message: "signing connection " + ref, Err: runtime.ErrNoSuchConnection}
 	}
-	dir, err := r.Env.Required("HQ_CONTROLLER", "SSH_DIR")
-	if err != nil {
-		return "", err
+	dir := r.Env.SSHDir
+	if dir == "" {
+		return "", &ProviderError{Err: runtime.ErrSettingMissing}
 	}
 	name := ref + ".key"
 	if public {

@@ -370,7 +370,7 @@ func (l tailnetLockRef) MarshalJSON() ([]byte, error) {
 }
 
 func (r *Registry) tailnetLock() tailnetLockRef {
-	lockFile := r.Env["SEVERINO_TAILNET_LOCK"]
+	lockFile := r.Env.TailnetLock
 	if lockFile == "" {
 		return tailnetLockRef{}
 	}
@@ -654,8 +654,8 @@ func (r *Registry) portsWorthAsking(ctx context.Context) []int {
 	for _, port := range tailnetBasePorts {
 		seen[port] = true
 	}
-	for _, ref := range r.Env.SSHRefs() {
-		if target, err := r.Env.SSH(ref); err == nil {
+	for _, ref := range r.Supplied.SSHRefs() {
+		if target, err := r.Supplied.SSH(ref); err == nil {
 			seen[target.Port] = true
 		}
 	}

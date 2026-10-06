@@ -30,7 +30,7 @@ func writeRenderStatus(t *testing.T, body string) string {
 
 func renderStatus(t *testing.T, configured string) []any {
 	t.Helper()
-	records, err := New(runtime.Environment{renderStatusEnv: configured}, &fakeHTTP{}).hostRenderStatus(t.Context())
+	records, err := New(runtime.Environment{RenderStatus: configured}, supplied(), &fakeHTTP{}).hostRenderStatus(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestHostRenderStatusRefusesAListItCannotName(t *testing.T) {
 		"an empty entry":     "example=" + path + ",",
 	} {
 		t.Run(name, func(t *testing.T) {
-			records, err := New(runtime.Environment{renderStatusEnv: configured}, &fakeHTTP{}).hostRenderStatus(t.Context())
+			records, err := New(runtime.Environment{RenderStatus: configured}, supplied(), &fakeHTTP{}).hostRenderStatus(t.Context())
 			if err == nil || records != nil {
 				t.Fatalf("got %v %v", records, err)
 			}
@@ -133,7 +133,7 @@ func TestHostRenderStatusIsReadOnlyWhereTheLauncherNamesADocument(t *testing.T) 
 	declared := runtime.ControllerRegistry{Observations: map[string]string{string(kind): "host"}}
 	absent := filepath.Join(t.TempDir(), "absent.json")
 	for configured, want := range map[string]bool{"": false, "example=" + absent: true} {
-		controller := &Controller{Registry: New(runtime.Environment{renderStatusEnv: configured}, &fakeHTTP{}), Declared: declared}
+		controller := &Controller{Registry: New(runtime.Environment{RenderStatus: configured}, supplied(), &fakeHTTP{}), Declared: declared}
 		inventory, err := controller.Inventory(t.Context(), []runtime.ResourceKind{kind})
 		if err != nil {
 			t.Fatal(err)

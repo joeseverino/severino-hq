@@ -139,9 +139,9 @@ func (r *Registry) admitCaddy() {
 // to a machine to find out it is not an edge. A host that does not answer is
 // skipped, its failure recorded as a step, so one down edge is not a blackout.
 func (r *Registry) caddyRoutes(ctx context.Context) ([]any, error) {
-	refs := r.Env.RoleRefs(caddyRole)
+	refs := r.Supplied.RoleRefs(caddyRole)
 	if len(refs) == 0 {
-		refs = r.Env.SSHRefs()
+		refs = r.Supplied.SSHRefs()
 	}
 	found := []any{}
 	for _, ref := range refs {

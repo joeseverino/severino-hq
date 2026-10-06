@@ -6,20 +6,22 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"unicode/utf8"
 
+	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // dispatchController is a Controller over a bare registry, so these tests hold
 // the dispatch rules and none of any provider's behavior.
-func dispatchController(env runtime.Environment, declared runtime.ControllerRegistry) *Controller {
+func dispatchController(held runtime.Connections, declared runtime.ControllerRegistry) *Controller {
 	r := &Registry{
-		Env: env, actions: map[actionKey]Action{}, readers: map[string]Reader{}, probes: map[runtime.ConnectionProvider]Probe{},
+		Supplied: held, actions: map[actionKey]Action{}, readers: map[string]Reader{}, probes: map[runtime.ConnectionProvider]Probe{},
 		zoneIDs: map[string]string{},
 	}
 	return NewController(r, declared)
@@ -28,38 +30,31 @@ func dispatchController(env runtime.Environment, declared runtime.ControllerRegi
 const dispatchKind = runtime.ResourceKindAdGuardRewrite
 
 func TestExecuteRefusesWritesThatNoManagingConnectionApproves(t *testing.T) {
-	adguard := runtime.Environment{"ADGUARD_CONNECTION_REF": "dns", "ADGUARD_URL": "https://adguard.example.invalid"}
-	with := func(env runtime.Environment, extra map[string]string) runtime.Environment {
-		merged := runtime.Environment{}
-		for _, source := range []map[string]string{env, extra} {
-			maps.Copy(merged, source)
-		}
-		return merged
-	}
-	edge := map[string]string{"EDGE_CONNECTION_REF": "edge", "EDGE_HOST": "edge.example.invalid", "EDGE_USER": "deploy", "EDGE_MANAGES": "true"}
+	adguard := loginConnection(runtime.ConnectionProviderAdGuard, "dns", "https://adguard.example.invalid", "", "")
+	edge := managing(sshConnection("edge", connections.SSHTransport{Host: "edge.example.invalid", User: "deploy"}))
 	declared := runtime.ControllerRegistry{ConnectionProviders: map[string][]runtime.ConnectionProvider{string(dispatchKind): {"adguard"}}}
 	cases := []struct {
 		name     string
-		env      runtime.Environment
+		held     runtime.Connections
 		declared runtime.ControllerRegistry
 		spec     Object
 		apply    bool
 		want     error // nil means the handler ran
 	}{
-		{"plan skips the gate", adguard, declared, nil, false, nil},
-		{"observe-only connection", adguard, declared, nil, true, ErrObserveOnly},
-		{"managing connection", with(adguard, map[string]string{"ADGUARD_MANAGES": "true"}), declared, nil, true, nil},
-		{"undeclared kind fails closed", with(adguard, map[string]string{"ADGUARD_MANAGES": "true"}), runtime.ControllerRegistry{}, nil, true, ErrUndeclared},
-		{"undeclared kind still plans", adguard, runtime.ControllerRegistry{}, nil, false, nil},
+		{"plan skips the gate", supplied(adguard), declared, nil, false, nil},
+		{"observe-only connection", supplied(adguard), declared, nil, true, ErrObserveOnly},
+		{"managing connection", supplied(managing(adguard)), declared, nil, true, nil},
+		{"undeclared kind fails closed", supplied(managing(adguard)), runtime.ControllerRegistry{}, nil, true, ErrUndeclared},
+		{"undeclared kind still plans", supplied(adguard), runtime.ControllerRegistry{}, nil, false, nil},
 		// A named connection of another provider is refused, whatever it manages.
-		{"named connection of another provider", with(with(adguard, edge), map[string]string{"ADGUARD_MANAGES": "true"}), declared, Object{"connection_ref": "edge"}, true, ErrForeignConnection},
-		{"named connection nobody supplied", with(adguard, map[string]string{"ADGUARD_MANAGES": "true"}), declared, Object{"connection_ref": "nowhere"}, true, ErrForeignConnection},
-		{"two items sharing a ref name neither", with(adguard, map[string]string{"ADGUARD_MANAGES": "true", "DNS2_CONNECTION_REF": "dns", "DNS2_PROVIDER": "adguard", "DNS2_MANAGES": "true"}), declared, nil, true, ErrNoManager},
-		{"named own connection that manages", with(adguard, map[string]string{"ADGUARD_MANAGES": "true"}), declared, Object{"connection_ref": "dns"}, true, nil},
+		{"named connection of another provider", supplied(managing(adguard), edge), declared, Object{"connection_ref": "edge"}, true, ErrForeignConnection},
+		{"named connection nobody supplied", supplied(managing(adguard)), declared, Object{"connection_ref": "nowhere"}, true, ErrForeignConnection},
+		{"two items sharing a ref name neither", supplied(managing(adguard), managing(connections.Connection{Ref: "dns", Provider: string(runtime.ConnectionProviderAdGuard)})), declared, nil, true, ErrNoManager},
+		{"named own connection that manages", supplied(managing(adguard)), declared, Object{"connection_ref": "dns"}, true, nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			controller := dispatchController(c.env, c.declared)
+			controller := dispatchController(c.held, c.declared)
 			ran := false
 			controller.action(dispatchKind, "reconcile", func(context.Context, Object, Object, bool) (Result, error) {
 				ran = true
@@ -81,7 +76,7 @@ func TestExecuteRefusesWritesThatNoManagingConnectionApproves(t *testing.T) {
 
 func TestExecuteRefusesLockedAndUnsupportedActions(t *testing.T) {
 	declared := runtime.ControllerRegistry{Locked: []runtime.LockedAction{{Kind: runtime.ResourceKindMachine, Action: "reconcile", Reason: "Nothing to observe."}}}
-	controller := dispatchController(runtime.Environment{}, declared)
+	controller := dispatchController(supplied(), declared)
 	controller.action(runtime.ResourceKindMachine, "reconcile", func(context.Context, Object, Object, bool) (Result, error) {
 		t.Fatal("a locked action ran")
 		return Result{}, nil
@@ -98,7 +93,7 @@ func TestCapabilitiesAreTheDeclaredActionsWithAHandler(t *testing.T) {
 	declared := runtime.ControllerRegistry{Capabilities: []runtime.Capability{
 		{Kind: dispatchKind, Action: "reconcile"}, {Kind: runtime.ResourceKindPKIAuthority, Action: "reconcile"},
 	}}
-	controller := dispatchController(runtime.Environment{}, declared)
+	controller := dispatchController(supplied(), declared)
 	controller.action(dispatchKind, "reconcile", func(context.Context, Object, Object, bool) (Result, error) { return Result{}, nil })
 	if got := controller.Capabilities(); len(got) != 1 || got[0].Kind != dispatchKind {
 		t.Fatalf("capabilities %+v", got)
@@ -111,22 +106,22 @@ func TestCapabilitiesAreTheDeclaredActionsWithAHandler(t *testing.T) {
 // inventoryController reads kinds of a fake vendor whose connection is
 // supplied, so each kind has a source.
 func inventoryController(kinds ...string) *Controller {
-	env := runtime.Environment{}
+	// One connection per vendor: two kinds of a vendor share it.
+	held := map[string]connections.Connection{}
 	declared := runtime.ControllerRegistry{Observations: map[string]string{}}
 	for _, kind := range kinds {
 		vendor, _, _ := strings.Cut(kind, ".")
-		prefix := strings.ToUpper(vendor)
-		env[prefix+"_CONNECTION_REF"] = vendor
+		held[vendor] = connections.Connection{Ref: vendor, Provider: vendor}
 		declared.Observations[kind] = vendor
 		declared.ConnectionCredentials = append(declared.ConnectionCredentials, runtime.ConnectionProvider(vendor))
 	}
-	return dispatchController(env, declared)
+	return dispatchController(supplied(slices.Collect(maps.Values(held))...), declared)
 }
 
 // connected:false is always sent, so an unconnected kind never reads as a
 // successful empty read.
 func TestUnconnectedKindSaysConnectedFalseOnTheWire(t *testing.T) {
-	controller := dispatchController(runtime.Environment{}, runtime.ControllerRegistry{
+	controller := dispatchController(supplied(), runtime.ControllerRegistry{
 		Observations: map[string]string{"alpha.thing": "alpha"}, ConnectionCredentials: []runtime.ConnectionProvider{"alpha"},
 	})
 	controller.readers["alpha.thing"] = func(context.Context) ([]any, error) {

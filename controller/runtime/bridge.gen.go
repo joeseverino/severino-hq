@@ -185,6 +185,51 @@ func (e GlancePanelID) Valid() bool {
 	}
 }
 
+// Defines values for HostRenderStatusRecordReason.
+const (
+	HostRenderStatusRecordReasonEmpty      HostRenderStatusRecordReason = ""
+	HostRenderStatusRecordReasonInvalid    HostRenderStatusRecordReason = "invalid"
+	HostRenderStatusRecordReasonMissing    HostRenderStatusRecordReason = "missing"
+	HostRenderStatusRecordReasonOversized  HostRenderStatusRecordReason = "oversized"
+	HostRenderStatusRecordReasonUnreadable HostRenderStatusRecordReason = "unreadable"
+)
+
+// Valid indicates whether the value is a known member of the HostRenderStatusRecordReason enum.
+func (e HostRenderStatusRecordReason) Valid() bool {
+	switch e {
+	case HostRenderStatusRecordReasonEmpty:
+		return true
+	case HostRenderStatusRecordReasonInvalid:
+		return true
+	case HostRenderStatusRecordReasonMissing:
+		return true
+	case HostRenderStatusRecordReasonOversized:
+		return true
+	case HostRenderStatusRecordReasonUnreadable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for HostRenderStatusRecordState.
+const (
+	HostRenderStatusRecordStateRead       HostRenderStatusRecordState = "read"
+	HostRenderStatusRecordStateUnreadable HostRenderStatusRecordState = "unreadable"
+)
+
+// Valid indicates whether the value is a known member of the HostRenderStatusRecordState enum.
+func (e HostRenderStatusRecordState) Valid() bool {
+	switch e {
+	case HostRenderStatusRecordStateRead:
+		return true
+	case HostRenderStatusRecordStateUnreadable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for JobState.
 const (
 	JobStateFailed    JobState = "failed"
@@ -689,6 +734,62 @@ type Acknowledgement struct {
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
+// AdGuardClientRecord One adguard.client record: DNS client.
+type AdGuardClientRecord struct {
+	Addresses         []string `json:"addresses,omitempty"`
+	ConnectionRef     string   `json:"connection_ref,omitempty"`
+	FilteringEnabled  bool     `json:"filtering_enabled,omitempty"`
+	Ids               []string `json:"ids,omitempty"`
+	Name              string   `json:"name,omitempty"`
+	Source            string   `json:"source"`
+	UseGlobalSettings bool     `json:"use_global_settings,omitempty"`
+}
+
+// AdGuardDNSRecord One adguard.dns record: DNS server.
+type AdGuardDNSRecord struct {
+	AnonymizeClientIP      bool                       `json:"anonymize_client_ip,omitempty"`
+	ConnectionRef          string                     `json:"connection_ref,omitempty"`
+	DNSAddresses           []string                   `json:"dns_addresses,omitempty"`
+	DnssecEnabled          bool                       `json:"dnssec_enabled,omitempty"`
+	FilterLists            int                        `json:"filter_lists,omitempty"`
+	FilterRules            int                        `json:"filter_rules,omitempty"`
+	FilteringEnabled       bool                       `json:"filtering_enabled,omitempty"`
+	ProtectionEnabled      bool                       `json:"protection_enabled,omitempty"`
+	QuerylogEnabled        bool                       `json:"querylog_enabled,omitempty"`
+	QuerylogRetentionHours float32                    `json:"querylog_retention_hours,omitempty"`
+	RewritesEnabled        bool                       `json:"rewrites_enabled,omitempty"`
+	Running                bool                       `json:"running,omitempty"`
+	UpstreamMode           string                     `json:"upstream_mode,omitempty"`
+	Upstreams              []AdGuardDNSUpstreamRecord `json:"upstreams,omitempty"`
+	Version                string                     `json:"version,omitempty"`
+}
+
+// AdGuardDNSUpstreamRecord defines model for AdGuardDNSUpstreamRecord.
+type AdGuardDNSUpstreamRecord struct {
+	Domains   []string `json:"domains,omitempty"`
+	Host      string   `json:"host,omitempty"`
+	Transport string   `json:"transport,omitempty"`
+}
+
+// AdGuardQuerySummaryQueryClientRecord defines model for AdGuardQuerySummaryQueryClientRecord.
+type AdGuardQuerySummaryQueryClientRecord struct {
+	Address string `json:"address"`
+	Name    string `json:"name,omitempty"`
+	Queries int    `json:"queries,omitempty"`
+}
+
+// AdGuardQuerySummaryRecord One rewritten name over the window: counts, never the queries.
+type AdGuardQuerySummaryRecord struct {
+	Blocked       int                                    `json:"blocked,omitempty"`
+	ClientCount   int                                    `json:"client_count,omitempty"`
+	Clients       []AdGuardQuerySummaryQueryClientRecord `json:"clients,omitempty"`
+	ConnectionRef string                                 `json:"connection_ref,omitempty"`
+	Domain        string                                 `json:"domain"`
+	LastSeen      string                                 `json:"last_seen,omitempty"`
+	Queries       int                                    `json:"queries,omitempty"`
+	WindowHours   float32                                `json:"window_hours,omitempty"`
+}
+
 // AdmittedExtension One admitted extension's source, from the plugin lock the image carries.
 type AdmittedExtension struct {
 	Plugin string `json:"plugin"`
@@ -811,12 +912,127 @@ type CaddyRouteInFile struct {
 type Capability struct {
 	Action string `json:"action"`
 
-	// Kind Every kind of resource or reading HQ's provider registry declares. Django's contract test holds this list equal to the registry, so a kind added on either side fails the build.
+	// Kind Every kind of resource or reading HQ's provider registry declares.
 	Kind ResourceKind `json:"kind"`
+}
+
+// CloudflareAccessAppAccessPolicyRecord defines model for CloudflareAccessAppAccessPolicyRecord.
+type CloudflareAccessAppAccessPolicyRecord struct {
+	ID   string `json:"id,omitempty"`
+	Name string `json:"name,omitempty"`
+}
+
+// CloudflareAccessAppRecord One cloudflare.access_app record: Access application.
+type CloudflareAccessAppRecord struct {
+	AccountID       string                                  `json:"account_id,omitempty"`
+	ConnectionRef   string                                  `json:"connection_ref,omitempty"`
+	Destinations    []string                                `json:"destinations,omitempty"`
+	Domain          string                                  `json:"domain,omitempty"`
+	ID              string                                  `json:"id"`
+	Name            string                                  `json:"name,omitempty"`
+	Policies        []CloudflareAccessAppAccessPolicyRecord `json:"policies,omitempty"`
+	SessionDuration string                                  `json:"session_duration,omitempty"`
+	Type            string                                  `json:"type,omitempty"`
+}
+
+// CloudflareAccessServiceTokenAccessAppRef defines model for CloudflareAccessServiceTokenAccessAppRef.
+type CloudflareAccessServiceTokenAccessAppRef struct {
+	ID   string `json:"id,omitempty"`
+	Name string `json:"name,omitempty"`
+}
+
+// CloudflareAccessServiceTokenRecord One cloudflare.access_service_token record: Access service token.
+type CloudflareAccessServiceTokenRecord struct {
+	Apps          []CloudflareAccessServiceTokenAccessAppRef `json:"apps,omitempty"`
+	ConnectionRef string                                     `json:"connection_ref,omitempty"`
+	CreatedAt     string                                     `json:"created_at,omitempty"`
+	ExpiresAt     string                                     `json:"expires_at,omitempty"`
+	ID            string                                     `json:"id"`
+	Name          string                                     `json:"name,omitempty"`
 }
 
 // CloudflareCAAValue A CAA record's content as flags, tag and quoted value (the three groups). HQ validates a declared CAA record with it and both sides take the content apart with it.
 type CloudflareCAAValue = string
+
+// CloudflareD1DatabaseRecord One cloudflare.d1_database record: D1 database.
+type CloudflareD1DatabaseRecord struct {
+	AccountID     string `json:"account_id,omitempty"`
+	ConnectionRef string `json:"connection_ref,omitempty"`
+	CreatedAt     string `json:"created_at,omitempty"`
+	FileSize      int    `json:"file_size,omitempty"`
+	Name          string `json:"name"`
+	UUID          string `json:"uuid"`
+	Version       string `json:"version,omitempty"`
+}
+
+// CloudflareEdgeCertificateRecord One cloudflare.edge_certificate record: Edge certificate.
+type CloudflareEdgeCertificateRecord struct {
+	AccountID            string   `json:"account_id,omitempty"`
+	CertificateAuthority string   `json:"certificate_authority,omitempty"`
+	ConnectionRef        string   `json:"connection_ref,omitempty"`
+	ExpiresOn            string   `json:"expires_on,omitempty"`
+	Hosts                []string `json:"hosts,omitempty"`
+	ID                   string   `json:"id,omitempty"`
+	Status               string   `json:"status,omitempty"`
+	Type                 string   `json:"type,omitempty"`
+	Zone                 string   `json:"zone"`
+}
+
+// CloudflarePagesProjectRecord One cloudflare.pages_project record: Pages project.
+type CloudflarePagesProjectRecord struct {
+	AccountID           string   `json:"account_id,omitempty"`
+	ConnectionRef       string   `json:"connection_ref,omitempty"`
+	DeploymentCommit    string   `json:"deployment_commit,omitempty"`
+	DeploymentCreatedOn string   `json:"deployment_created_on,omitempty"`
+	DeploymentID        string   `json:"deployment_id,omitempty"`
+	Domains             []string `json:"domains,omitempty"`
+	Name                string   `json:"name"`
+	ProductionBranch    string   `json:"production_branch,omitempty"`
+	Subdomain           string   `json:"subdomain,omitempty"`
+}
+
+// CloudflareRedirectRecord One cloudflare.redirect record: Redirect.
+type CloudflareRedirectRecord struct {
+	AccountID           string   `json:"account_id,omitempty"`
+	ConnectionRef       string   `json:"connection_ref,omitempty"`
+	Description         string   `json:"description,omitempty"`
+	Enabled             bool     `json:"enabled,omitempty"`
+	Hostnames           []string `json:"hostnames,omitempty"`
+	ID                  string   `json:"id,omitempty"`
+	PreserveQueryString bool     `json:"preserve_query_string,omitempty"`
+	Source              string   `json:"source,omitempty"`
+	StatusCode          int      `json:"status_code,omitempty"`
+	Target              string   `json:"target,omitempty"`
+	TargetHost          string   `json:"target_host,omitempty"`
+	Zone                string   `json:"zone"`
+}
+
+// CloudflareTunnelRecord One cloudflare.tunnel record: Tunnel.
+type CloudflareTunnelRecord struct {
+	AccountID     string                                   `json:"account_id,omitempty"`
+	ConfigSource  string                                   `json:"config_source,omitempty"`
+	ConnectionRef string                                   `json:"connection_ref,omitempty"`
+	Connections   []CloudflareTunnelTunnelConnectionRecord `json:"connections,omitempty"`
+	ConnsActiveAt string                                   `json:"conns_active_at,omitempty"`
+	CreatedAt     string                                   `json:"created_at,omitempty"`
+	ID            string                                   `json:"id"`
+	Ingress       []CloudflareTunnelTunnelIngressRecord    `json:"ingress,omitempty"`
+	Name          string                                   `json:"name,omitempty"`
+	Status        string                                   `json:"status,omitempty"`
+}
+
+// CloudflareTunnelTunnelConnectionRecord defines model for CloudflareTunnelTunnelConnectionRecord.
+type CloudflareTunnelTunnelConnectionRecord struct {
+	Colo     string `json:"colo,omitempty"`
+	OriginIP string `json:"origin_ip,omitempty"`
+	Version  string `json:"version,omitempty"`
+}
+
+// CloudflareTunnelTunnelIngressRecord defines model for CloudflareTunnelTunnelIngressRecord.
+type CloudflareTunnelTunnelIngressRecord struct {
+	Hostname string `json:"hostname"`
+	Service  string `json:"service,omitempty"`
+}
 
 // Condition defines model for Condition.
 type Condition struct {
@@ -831,7 +1047,7 @@ type Condition struct {
 // ConditionType What a condition says of a resource: it is as declared, it differs from the declaration, or it needs attention.
 type ConditionType string
 
-// ConnectionProvider A connection provider HQ's registry declares: what a credential is for. Django's contract test holds this to the admitted connections.
+// ConnectionProvider A connection provider HQ's registry declares: what a credential is for.
 type ConnectionProvider string
 
 // ConnectionRecord One connection the controller carries and what its probe found.
@@ -906,7 +1122,7 @@ type FailureClass string
 type ForcedRead struct {
 	ConnectionRef string `json:"connection_ref"`
 
-	// Kind Every kind of resource or reading HQ's provider registry declares. Django's contract test holds this list equal to the registry, so a kind added on either side fails the build.
+	// Kind Every kind of resource or reading HQ's provider registry declares.
 	Kind        ResourceKind   `json:"kind"`
 	Kinds       []ResourceKind `json:"kinds"`
 	RequestedAt time.Time      `json:"requested_at"`
@@ -922,18 +1138,9 @@ type GitHubDeliverySpec struct {
 	// Production What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.
 	Production GitHubDeliveryProduction `json:"production"`
 
-	// Repository owner/name of the repository whose composition workflow deploys HQ.
+	// Repository The repository whose deploy workflow deploys HQ.
 	Repository string `json:"repository"`
 	Workflow   string `json:"workflow"`
-}
-
-// GitHubProfileBounds The bounds of a github.profile record, stated here for both sides. GitHub allows an address 60 anonymous calls an hour, and one account costs the profile, the stars and the picture, then a release call and an advisory call for each watched repository: 3 + 2 x watched.maxItems.
-type GitHubProfileBounds struct {
-	// Avatar The picture as a data: URI, so a page loads no image from another host.
-	Avatar string `json:"avatar,omitempty"`
-
-	// Watched The newest starred repositories, each with its latest release and published advisories.
-	Watched []any `json:"watched,omitempty"`
 }
 
 // GitHubProfilePlan Whose public GitHub profile the controller reads, and whether to read now. The accounts are the ones a person's sign-in names. The profile keeps a slower clock than the sweep, which HQ holds: due says the reading is old enough or somebody asked.
@@ -941,6 +1148,55 @@ type GitHubProfilePlan struct {
 	// Accounts GitHub logins.
 	Accounts []string `json:"accounts"`
 	Due      bool     `json:"due"`
+}
+
+// GitHubProfileRecord One github.profile record: GitHub profile.
+type GitHubProfileRecord struct {
+	Avatar      string                   `json:"avatar,omitempty"`
+	Bio         string                   `json:"bio,omitempty"`
+	Company     string                   `json:"company,omitempty"`
+	CreatedAt   string                   `json:"created_at,omitempty"`
+	Followers   int                      `json:"followers,omitempty"`
+	Following   int                      `json:"following,omitempty"`
+	Hireable    bool                     `json:"hireable,omitempty"`
+	Location    string                   `json:"location,omitempty"`
+	Login       string                   `json:"login"`
+	Name        string                   `json:"name,omitempty"`
+	PublicGists int                      `json:"public_gists,omitempty"`
+	PublicRepos int                      `json:"public_repos,omitempty"`
+	Social      string                   `json:"social,omitempty"`
+	Starred     int                      `json:"starred,omitempty"`
+	URL         string                   `json:"url,omitempty"`
+	Watched     []map[string]interface{} `json:"watched,omitempty"`
+	Website     string                   `json:"website,omitempty"`
+}
+
+// GitHubRepositoryRecord One github.repository record: GitHub repository.
+type GitHubRepositoryRecord struct {
+	Access            map[string]interface{}   `json:"access,omitempty"`
+	Alerts            map[string]interface{}   `json:"alerts,omitempty"`
+	Artifacts         []map[string]interface{} `json:"artifacts,omitempty"`
+	CalledWorkflows   []string                 `json:"called_workflows,omitempty"`
+	Checks            map[string]interface{}   `json:"checks,omitempty"`
+	ConnectionRef     string                   `json:"connection_ref"`
+	DefaultBranch     string                   `json:"default_branch,omitempty"`
+	Deployments       []map[string]interface{} `json:"deployments,omitempty"`
+	Environments      []map[string]interface{} `json:"environments,omitempty"`
+	Head              map[string]interface{}   `json:"head,omitempty"`
+	Images            []map[string]interface{} `json:"images,omitempty"`
+	Pins              []map[string]interface{} `json:"pins,omitempty"`
+	Private           bool                     `json:"private,omitempty"`
+	PullRequestChecks []string                 `json:"pull_request_checks,omitempty"`
+	PullRequests      []map[string]interface{} `json:"pull_requests,omitempty"`
+	PushedAt          string                   `json:"pushed_at,omitempty"`
+	Release           map[string]interface{}   `json:"release,omitempty"`
+	Repository        string                   `json:"repository"`
+	Rules             map[string]interface{}   `json:"rules,omitempty"`
+	Runners           []map[string]interface{} `json:"runners,omitempty"`
+	Runs              []map[string]interface{} `json:"runs,omitempty"`
+	URL               string                   `json:"url,omitempty"`
+	Variables         []string                 `json:"variables,omitempty"`
+	Waiting           []map[string]interface{} `json:"waiting,omitempty"`
 }
 
 // GlanceMachineTarget defines model for GlanceMachineTarget.
@@ -974,6 +1230,85 @@ type GlanceWeatherTarget struct {
 	// Endpoint The National Weather Service API the forecast is read from, as HQ's connection states it.
 	Endpoint string `json:"endpoint"`
 	Point    string `json:"point"`
+}
+
+// HostFirewallRecord One host.firewall record: Host firewall.
+type HostFirewallRecord struct {
+	AcceptRequiresInterface bool   `json:"accept_requires_interface,omitempty"`
+	ForeignInterfaceDropped bool   `json:"foreign_interface_dropped,omitempty"`
+	Interface               string `json:"interface,omitempty"`
+	ReadAt                  string `json:"read_at,omitempty"`
+	Record                  string `json:"record"`
+}
+
+// HostPerimeterRecord One host.perimeter record: Open-port test.
+type HostPerimeterRecord struct {
+	AnsweredPublicly []int    `json:"answered_publicly,omitempty"`
+	ConnectionRef    string   `json:"connection_ref"`
+	FirewallUnit     string   `json:"firewall_unit,omitempty"`
+	PortsChecked     []int    `json:"ports_checked,omitempty"`
+	PublicAddresses  []string `json:"public_addresses,omitempty"`
+	ReadAt           string   `json:"read_at,omitempty"`
+	Record           string   `json:"record"`
+}
+
+// HostRenderStatusRecord One secret renderer's account of its own runs, or why it has none. It holds no secret, no vault or item name and no connection ref: times, versions, counts and short words.
+type HostRenderStatusRecord struct {
+	Reason   HostRenderStatusRecordReason       `json:"reason,omitempty"`
+	Renderer string                             `json:"renderer"`
+	State    HostRenderStatusRecordState        `json:"state"`
+	Status   HostRenderStatusSecretRenderStatus `json:"status,omitempty"`
+}
+
+// HostRenderStatusRecordReason defines model for HostRenderStatusRecord.Reason.
+type HostRenderStatusRecordReason string
+
+// HostRenderStatusRecordState defines model for HostRenderStatusRecord.State.
+type HostRenderStatusRecordState string
+
+// HostRenderStatusSecretRenderAttempt defines model for HostRenderStatusSecretRenderAttempt.
+type HostRenderStatusSecretRenderAttempt struct {
+	At      string `json:"at,omitempty"`
+	Failure string `json:"failure,omitempty"`
+	Outcome string `json:"outcome,omitempty"`
+}
+
+// HostRenderStatusSecretRenderConnect defines model for HostRenderStatusSecretRenderConnect.
+type HostRenderStatusSecretRenderConnect struct {
+	Dependencies []HostRenderStatusSecretRenderDependency `json:"dependencies,omitempty"`
+	ReadAt       string                                   `json:"read_at,omitempty"`
+	Version      string                                   `json:"version,omitempty"`
+}
+
+// HostRenderStatusSecretRenderCounts defines model for HostRenderStatusSecretRenderCounts.
+type HostRenderStatusSecretRenderCounts struct {
+	AppVariables int `json:"app_variables,omitempty"`
+	Connections  int `json:"connections,omitempty"`
+	Identities   int `json:"identities,omitempty"`
+	ItemsRead    int `json:"items_read,omitempty"`
+	SigningKeys  int `json:"signing_keys,omitempty"`
+}
+
+// HostRenderStatusSecretRenderDependency defines model for HostRenderStatusSecretRenderDependency.
+type HostRenderStatusSecretRenderDependency struct {
+	Service string `json:"service"`
+	Status  string `json:"status"`
+}
+
+// HostRenderStatusSecretRenderStatus The renderer's status document, as “secretstatus.Status“ declares it.
+type HostRenderStatusSecretRenderStatus struct {
+	Connect     HostRenderStatusSecretRenderConnect `json:"connect,omitempty"`
+	LastAttempt HostRenderStatusSecretRenderAttempt `json:"last_attempt"`
+	LastSuccess HostRenderStatusSecretRenderSuccess `json:"last_success,omitempty"`
+}
+
+// HostRenderStatusSecretRenderSuccess defines model for HostRenderStatusSecretRenderSuccess.
+type HostRenderStatusSecretRenderSuccess struct {
+	At               string                             `json:"at,omitempty"`
+	AttributeVersion int                                `json:"attribute_version,omitempty"`
+	ContentVersion   int                                `json:"content_version,omitempty"`
+	Counts           HostRenderStatusSecretRenderCounts `json:"counts,omitempty"`
+	RenderedAt       string                             `json:"rendered_at,omitempty"`
 }
 
 // HostUnitRecord One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships, and the controller reports no other. Each string is a unit name, one of systemd's state words or an instant in UTC; none is a path, a command line or an environment.
@@ -1075,7 +1410,7 @@ type LeaseSeconds = int
 type LockedAction struct {
 	Action string `json:"action"`
 
-	// Kind Every kind of resource or reading HQ's provider registry declares. Django's contract test holds this list equal to the registry, so a kind added on either side fails the build.
+	// Kind Every kind of resource or reading HQ's provider registry declares.
 	Kind   ResourceKind `json:"kind"`
 	Reason string       `json:"reason"`
 }
@@ -1085,6 +1420,71 @@ type Material struct {
 	Domains    []string `json:"domains"`
 	Fullchain  string   `json:"fullchain"`
 	PrivateKey string   `json:"private_key"`
+}
+
+// NPMAccessListAccessRule defines model for NPMAccessListAccessRule.
+type NPMAccessListAccessRule struct {
+	Address   string `json:"address"`
+	Directive string `json:"directive"`
+}
+
+// NPMAccessListRecord One npm.access_list record: NPM access list.
+type NPMAccessListRecord struct {
+	Clients       []NPMAccessListAccessRule `json:"clients,omitempty"`
+	ConnectionRef string                    `json:"connection_ref,omitempty"`
+	ID            int                       `json:"id"`
+	Logins        []string                  `json:"logins,omitempty"`
+	Name          string                    `json:"name,omitempty"`
+	PassAuth      bool                      `json:"pass_auth,omitempty"`
+	Protects      []string                  `json:"protects,omitempty"`
+	SatisfyAny    bool                      `json:"satisfy_any,omitempty"`
+}
+
+// NPMCertificateRecord One npm.certificate record: NPM certificate.
+type NPMCertificateRecord struct {
+	ConnectionRef string   `json:"connection_ref,omitempty"`
+	Domains       []string `json:"domains,omitempty"`
+	ExpiresOn     string   `json:"expires_on,omitempty"`
+	ID            int      `json:"id"`
+	Name          string   `json:"name,omitempty"`
+	Provider      string   `json:"provider,omitempty"`
+	Serves        []string `json:"serves,omitempty"`
+}
+
+// NPMDeadHostRecord One npm.dead_host record: NPM dead host.
+type NPMDeadHostRecord struct {
+	Certificate   string   `json:"certificate,omitempty"`
+	ConnectionRef string   `json:"connection_ref,omitempty"`
+	Enabled       bool     `json:"enabled,omitempty"`
+	Hostnames     []string `json:"hostnames,omitempty"`
+	ID            int      `json:"id"`
+	SslForced     bool     `json:"ssl_forced,omitempty"`
+}
+
+// NPMRedirectRecord One npm.redirect record: NPM redirect.
+type NPMRedirectRecord struct {
+	Certificate   string   `json:"certificate,omitempty"`
+	ConnectionRef string   `json:"connection_ref,omitempty"`
+	Enabled       bool     `json:"enabled,omitempty"`
+	Hostnames     []string `json:"hostnames,omitempty"`
+	ID            int      `json:"id"`
+	PreservePath  bool     `json:"preserve_path,omitempty"`
+	SslForced     bool     `json:"ssl_forced,omitempty"`
+	StatusCode    int      `json:"status_code,omitempty"`
+	Target        string   `json:"target,omitempty"`
+	TargetHost    string   `json:"target_host,omitempty"`
+}
+
+// NPMStreamRecord One npm.stream record: NPM stream.
+type NPMStreamRecord struct {
+	ConnectionRef  string `json:"connection_ref,omitempty"`
+	Enabled        bool   `json:"enabled,omitempty"`
+	ForwardingHost string `json:"forwarding_host,omitempty"`
+	ForwardingPort int    `json:"forwarding_port,omitempty"`
+	ID             int    `json:"id"`
+	IncomingPort   int    `json:"incoming_port"`
+	TCP            bool   `json:"tcp,omitempty"`
+	UDP            bool   `json:"udp,omitempty"`
 }
 
 // Operation A queued or claimed operation, as serialize_operation emits it.
@@ -1142,6 +1542,144 @@ type PlannedOperation struct {
 	WouldChange bool   `json:"would_change"`
 }
 
+// PortainerComposeProjectRecord One portainer.compose_project record: Compose project.
+type PortainerComposeProjectRecord struct {
+	ConfigFiles   []string `json:"config_files,omitempty"`
+	ConnectionRef string   `json:"connection_ref"`
+	Containers    []string `json:"containers,omitempty"`
+	EntryPoint    string   `json:"entry_point,omitempty"`
+	EnvironmentID int      `json:"environment_id,omitempty"`
+	Host          string   `json:"host,omitempty"`
+	HostAddress   string   `json:"host_address,omitempty"`
+	Name          string   `json:"name,omitempty"`
+	Source        string   `json:"source,omitempty"`
+	Status        string   `json:"status,omitempty"`
+	WorkingDir    string   `json:"working_dir,omitempty"`
+}
+
+// PortainerEnvironmentRecord One portainer.environment record: Docker environment.
+type PortainerEnvironmentRecord struct {
+	Address           string `json:"address,omitempty"`
+	AgentVersion      string `json:"agent_version,omitempty"`
+	ConnectionRef     string `json:"connection_ref"`
+	ContainersRunning int    `json:"containers_running,omitempty"`
+	ContainersTotal   int    `json:"containers_total,omitempty"`
+	DockerVersion     string `json:"docker_version,omitempty"`
+	Host              string `json:"host,omitempty"`
+	ID                int    `json:"id"`
+	Local             bool   `json:"local,omitempty"`
+	Name              string `json:"name,omitempty"`
+	SnapshotAt        string `json:"snapshot_at,omitempty"`
+	Status            string `json:"status,omitempty"`
+	Type              string `json:"type,omitempty"`
+}
+
+// PortainerImageImageUser defines model for PortainerImageImageUser.
+type PortainerImageImageUser struct {
+	Container string `json:"container"`
+	Reference string `json:"reference,omitempty"`
+	Service   string `json:"service,omitempty"`
+}
+
+// PortainerImageRecord One portainer.image record: Docker image.
+type PortainerImageRecord struct {
+	ConnectionRef string                    `json:"connection_ref"`
+	Containers    []PortainerImageImageUser `json:"containers,omitempty"`
+	CreatedAt     string                    `json:"created_at,omitempty"`
+	Digests       []string                  `json:"digests,omitempty"`
+	EnvironmentID int                       `json:"environment_id,omitempty"`
+	Host          string                    `json:"host,omitempty"`
+	HostAddress   string                    `json:"host_address,omitempty"`
+	ID            string                    `json:"id,omitempty"`
+	Size          int                       `json:"size,omitempty"`
+	Tags          []string                  `json:"tags,omitempty"`
+}
+
+// PortainerNetworkRecord One portainer.network record: Docker network.
+type PortainerNetworkRecord struct {
+	ConnectionRef string   `json:"connection_ref"`
+	Containers    []string `json:"containers,omitempty"`
+	Driver        string   `json:"driver,omitempty"`
+	EnvironmentID int      `json:"environment_id,omitempty"`
+	Host          string   `json:"host,omitempty"`
+	HostAddress   string   `json:"host_address,omitempty"`
+	ID            string   `json:"id,omitempty"`
+	Internal      bool     `json:"internal,omitempty"`
+	Name          string   `json:"name,omitempty"`
+	Scope         string   `json:"scope,omitempty"`
+	Subnets       []string `json:"subnets,omitempty"`
+}
+
+// PortainerRuntimePortBinding defines model for PortainerRuntimePortBinding.
+type PortainerRuntimePortBinding struct {
+	ContainerPort string `json:"container_port,omitempty"`
+	HostIP        string `json:"host_ip,omitempty"`
+	HostPort      string `json:"host_port,omitempty"`
+}
+
+// PortainerRuntimeRecord How one container is run, from Docker's inspect of it. Only what decides what the container can reach or do on its machine. The inspect document also carries the environment, the command line and every label, where secrets live, and none of those is named here, so none can be stored.
+type PortainerRuntimeRecord struct {
+	CapAdd         []string                       `json:"cap_add,omitempty"`
+	CapDrop        []string                       `json:"cap_drop,omitempty"`
+	ConnectionRef  string                         `json:"connection_ref"`
+	Container      string                         `json:"container"`
+	CPULimit       float32                        `json:"cpu_limit,omitempty"`
+	Devices        []string                       `json:"devices,omitempty"`
+	EnvironmentID  int                            `json:"environment_id,omitempty"`
+	ExposedPorts   []int                          `json:"exposed_ports,omitempty"`
+	Health         string                         `json:"health,omitempty"`
+	Healthcheck    bool                           `json:"healthcheck,omitempty"`
+	Host           string                         `json:"host,omitempty"`
+	HostAddress    string                         `json:"host_address,omitempty"`
+	ImageID        string                         `json:"image_id,omitempty"`
+	IpcMode        string                         `json:"ipc_mode,omitempty"`
+	MemoryLimit    int                            `json:"memory_limit,omitempty"`
+	Mounts         []PortainerRuntimeRuntimeMount `json:"mounts,omitempty"`
+	NetworkMode    string                         `json:"network_mode,omitempty"`
+	PidMode        string                         `json:"pid_mode,omitempty"`
+	PidsLimit      int                            `json:"pids_limit,omitempty"`
+	PortBindings   []PortainerRuntimePortBinding  `json:"port_bindings,omitempty"`
+	Privileged     bool                           `json:"privileged,omitempty"`
+	ReadOnlyRootfs bool                           `json:"read_only_rootfs,omitempty"`
+	RestartCount   int                            `json:"restart_count,omitempty"`
+	RestartPolicy  string                         `json:"restart_policy,omitempty"`
+	SecurityOpt    []string                       `json:"security_opt,omitempty"`
+	Service        string                         `json:"service,omitempty"`
+	Stack          string                         `json:"stack,omitempty"`
+	StartedAt      string                         `json:"started_at,omitempty"`
+	User           string                         `json:"user,omitempty"`
+}
+
+// PortainerRuntimeRuntimeMount defines model for PortainerRuntimeRuntimeMount.
+type PortainerRuntimeRuntimeMount struct {
+	Destination string `json:"destination,omitempty"`
+	ReadOnly    bool   `json:"read_only,omitempty"`
+	Source      string `json:"source,omitempty"`
+	Type        string `json:"type,omitempty"`
+}
+
+// PortainerVolumeMountUser defines model for PortainerVolumeMountUser.
+type PortainerVolumeMountUser struct {
+	Container   string `json:"container"`
+	Destination string `json:"destination,omitempty"`
+	ReadOnly    bool   `json:"read_only,omitempty"`
+}
+
+// PortainerVolumeRecord One portainer.volume record: Volumes and mounts.
+type PortainerVolumeRecord struct {
+	ConnectionRef string                     `json:"connection_ref"`
+	CreatedAt     string                     `json:"created_at,omitempty"`
+	Driver        string                     `json:"driver,omitempty"`
+	EnvironmentID int                        `json:"environment_id,omitempty"`
+	Host          string                     `json:"host,omitempty"`
+	HostAddress   string                     `json:"host_address,omitempty"`
+	Name          string                     `json:"name,omitempty"`
+	Source        string                     `json:"source,omitempty"`
+	Stack         string                     `json:"stack,omitempty"`
+	Type          string                     `json:"type,omitempty"`
+	UsedBy        []PortainerVolumeMountUser `json:"used_by,omitempty"`
+}
+
 // Problem An RFC 9457 problem: why HQ refused or failed a bridge call.
 type Problem struct {
 	Detail string `json:"detail"`
@@ -1150,7 +1688,7 @@ type Problem struct {
 	Type   string `json:"type,omitempty"`
 }
 
-// ReadingPartName A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares, and Django's contract test holds this to the declared parts.
+// ReadingPartName A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares.
 type ReadingPartName string
 
 // Refusal Why a provider refused a read: the credential itself, or one permission it lacks. Empty when the reason is unclassified.
@@ -1169,7 +1707,7 @@ type RefusedPart struct {
 	Address       string `json:"address,omitempty"`
 	ConnectionRef string `json:"connection_ref"`
 
-	// Part A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares, and Django's contract test holds this to the declared parts.
+	// Part A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares.
 	Part   ReadingPartName `json:"part"`
 	Reason string          `json:"reason"`
 
@@ -1184,7 +1722,7 @@ type Resource struct {
 	Generation int64  `json:"generation"`
 	Key        string `json:"key"`
 
-	// Kind Every kind of resource or reading HQ's provider registry declares. Django's contract test holds this list equal to the registry, so a kind added on either side fails the build.
+	// Kind Every kind of resource or reading HQ's provider registry declares.
 	Kind ResourceKind `json:"kind"`
 
 	// Observed What the provider was last seen holding for this resource.
@@ -1194,7 +1732,7 @@ type Resource struct {
 	Spec map[string]interface{} `json:"spec"`
 }
 
-// ResourceKind Every kind of resource or reading HQ's provider registry declares. Django's contract test holds this list equal to the registry, so a kind added on either side fails the build.
+// ResourceKind Every kind of resource or reading HQ's provider registry declares.
 type ResourceKind string
 
 // StepFailure Work one pass could not finish; subject is the connection ref it used.
@@ -1228,6 +1766,40 @@ type TLSCertificateName = string
 
 // TLSConsumerKind Where a certificate is served from: the kinds of TLS consumer a certificate spec declares.
 type TLSConsumerKind string
+
+// TailscaleDNSRecord One tailscale.dns record: Tailnet DNS.
+type TailscaleDNSRecord struct {
+	MagicDNS         bool                `json:"magic_dns,omitempty"`
+	Nameservers      []string            `json:"nameservers,omitempty"`
+	OverrideLocalDNS bool                `json:"override_local_dns,omitempty"`
+	Record           string              `json:"record"`
+	SearchPaths      []string            `json:"search_paths,omitempty"`
+	SplitDNS         map[string][]string `json:"split_dns,omitempty"`
+}
+
+// TailscaleSettingsRecord One tailscale.settings record: Tailnet settings.
+type TailscaleSettingsRecord struct {
+	AclsExternallyManagedOn     bool   `json:"acls_externally_managed_on,omitempty"`
+	DevicesApprovalOn           bool   `json:"devices_approval_on,omitempty"`
+	DevicesAutoUpdatesOn        bool   `json:"devices_auto_updates_on,omitempty"`
+	DevicesKeyDurationDays      int    `json:"devices_key_duration_days,omitempty"`
+	HTTPSEnabled                bool   `json:"https_enabled,omitempty"`
+	PostureIdentityCollectionOn bool   `json:"posture_identity_collection_on,omitempty"`
+	Record                      string `json:"record"`
+	RegionalRoutingOn           bool   `json:"regional_routing_on,omitempty"`
+	UsersApprovalOn             bool   `json:"users_approval_on,omitempty"`
+}
+
+// TailscaleUserRecord One tailscale.user record: Tailnet user.
+type TailscaleUserRecord struct {
+	Created     string `json:"created,omitempty"`
+	DisplayName string `json:"display_name,omitempty"`
+	ID          string `json:"id"`
+	LastSeen    string `json:"last_seen,omitempty"`
+	LoginName   string `json:"login_name,omitempty"`
+	Role        string `json:"role,omitempty"`
+	Status      string `json:"status,omitempty"`
+}
 
 // Verification How long the controller keeps checking that an applied change is actually served, declared by the action it belongs to.
 type Verification struct {

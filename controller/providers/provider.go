@@ -91,7 +91,9 @@ type actionKey struct {
 }
 
 type Registry struct {
-	Env      runtime.Environment
+	Env runtime.Environment
+	// Supplied is every connection this run was given, each a typed value.
+	Supplied runtime.Connections
 	HTTP     Transport
 	Now      func() time.Time
 	Commands *Commands
@@ -108,6 +110,8 @@ type Registry struct {
 	PublishedContainers func(context.Context) ([]PublishedContainer, error)
 	// Portainer is the Portainer access the dashboard glance reads containers through.
 	Portainer PortainerSource
+	// TailnetURL is where the tailnet API lives; empty is the public one.
+	TailnetURL string
 	// ControllerID names this installation; empty uses HQ_CONTROLLER_ID or the host name.
 	ControllerID string
 	// Extensions is each admitted extension the running image composes, from HQ's registry.
@@ -137,9 +141,9 @@ type cachedRead struct {
 	err   error
 }
 
-func New(env runtime.Environment, transport Transport) *Registry {
+func New(env runtime.Environment, held runtime.Connections, transport Transport) *Registry {
 	r := &Registry{
-		Env: env, HTTP: transport, Commands: &Commands{Env: env}, TLS: NetTLSDialer{CAFile: env["HQ_CONTROLLER_CA_FILE"]},
+		Env: env, Supplied: held, HTTP: transport, Commands: &Commands{Env: env, Supplied: held}, TLS: NetTLSDialer{CAFile: env.CAFile},
 		Now: time.Now, Monotonic: time.Now, Sleep: sleepContext,
 		actions: map[actionKey]Action{}, readers: map[string]Reader{}, held: map[string]heldSource{}, probes: map[runtime.ConnectionProvider]Probe{}, zoneIDs: map[string]string{},
 	}
@@ -158,7 +162,7 @@ func New(env runtime.Environment, transport Transport) *Registry {
 
 func (r *Registry) commands() *Commands {
 	if r.Commands == nil {
-		r.Commands = &Commands{Env: r.Env}
+		r.Commands = &Commands{Env: r.Env, Supplied: r.Supplied}
 	}
 	return r.Commands
 }
@@ -341,7 +345,7 @@ func result(changed bool, status any, reason, detail, message string) Result {
 	return Result{Changed: changed, Status: status, Conditions: []Condition{condition(runtime.ConditionReady, reason, detail)}, Message: message}
 }
 func (r *Registry) refs(provider runtime.ConnectionProvider) []string {
-	refs := r.Env.Refs(provider)
+	refs := r.Supplied.Refs(provider)
 	if len(refs) == 0 {
 		return []string{""}
 	}

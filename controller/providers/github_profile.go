@@ -51,8 +51,8 @@ const (
 )
 
 var (
-	githubWatchedLimit = api.MustLimit("GitHubProfileBounds", "properties", "watched", "maxItems")
-	githubAvatarLimit  = api.MustLimit("GitHubProfileBounds", "properties", "avatar", "maxLength")
+	githubWatchedLimit = api.MustLimit("GitHubProfileRecord", "properties", "watched", "maxItems")
+	githubAvatarLimit  = api.MustLimit("GitHubProfileRecord", "properties", "avatar", "maxLength")
 	githubLogin        = api.MustPattern("GitHubProfilePlan", "properties", "accounts", "items")
 )
 
@@ -117,8 +117,7 @@ func (r *Registry) admitGitHubProfile() {
 func (r *Registry) githubPublicBearer(ctx context.Context) (string, error) {
 	// No connection of this provider is no app; one that is named and
 	// incomplete is an error, as it is to every other GitHub read.
-	prefix, err := r.Env.Prefix(runtime.ConnectionProviderGitHubApp, "")
-	if errors.Is(err, runtime.ErrNoSuchConnection) || (err == nil && strings.TrimSpace(r.Env[prefix+"_CONNECTION_REF"]) == "") {
+	if len(r.Supplied.Refs(runtime.ConnectionProviderGitHubApp)) == 0 {
 		return "", nil
 	}
 	c, err := r.githubConnection("")

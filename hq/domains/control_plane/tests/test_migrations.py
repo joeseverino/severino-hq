@@ -12,7 +12,9 @@ from __future__ import annotations
 
 from importlib import import_module
 
-from django.test import TestCase
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+from django.test import TestCase, TransactionTestCase
 
 from hq.domains.control_plane.models import ManagedResource
 
@@ -352,3 +354,52 @@ class TailnetKeyRenameTests(TestCase):
             ManagedResource.objects.get(kind="tailscale.device").key,
             "box-example-com-tailnet",
         )
+
+
+class DerivedReferencesMigrationTests(TransactionTestCase):
+    """Adding the derived links rebuilds the table over the rows it holds.
+
+    The database computes each link from every stored ``spec`` as it copies the
+    row, and the container migrates on boot, so a spec the expression could not
+    read would stop HQ from starting. These are the shapes a ``spec`` can hold.
+    """
+
+    before = ("control_plane", "0032_rules")
+    after = ("control_plane", "0033_derived_references")
+
+    def tearDown(self):
+        MigrationExecutor(connection).migrate(
+            MigrationExecutor(connection).loader.graph.leaf_nodes()
+        )
+
+    def test_every_stored_spec_survives_and_derives_its_links(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.before])
+        Resource = executor.loader.project_state([self.before]).apps.get_model(
+            "control_plane", "ManagedResource"
+        )
+        specs = {
+            "a-record": {"zone": "Example.COM.", "connection_ref": " example-dns ", "name": "app.example.com"},
+            "no-links": {"name": "example"},
+            "null-links": {"zone": None, "connection_ref": None},
+            "odd-links": {"zone": 7, "connection_ref": {"nested": True}},
+            "empty": {},
+            "a-list": ["zone", "example.com"],
+            "a-string": "zone",
+            "a-number": 3,
+        }
+        for key, spec in specs.items():
+            Resource.objects.create(key=key, kind="machine", spec=spec)
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.after])
+        Resource = executor.loader.project_state([self.after]).apps.get_model(
+            "control_plane", "ManagedResource"
+        )
+
+        found = {row.key: (row.spec, row.zone, row.connection_ref) for row in Resource.objects.all()}
+        self.assertEqual({key: spec for key, (spec, _, _) in found.items()}, specs)
+        self.assertEqual(found["a-record"][1:], ("example.com", "example-dns"))
+        self.assertEqual(found["odd-links"][1:], ("7", '{"nested":true}'))
+        for key in ("no-links", "null-links", "empty", "a-list", "a-string", "a-number"):
+            self.assertEqual(found[key][1:], ("", ""), key)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"os"
@@ -26,41 +27,17 @@ var f, b, id = connecttest.F, connecttest.B, connecttest.ID
 
 const secret = "sentinel-credential-value"
 
-// projections is a registry with projections only, the shape the repository
-// carries: it names no connection.
-const projections = `{"schema_version":1,"projections":{
-  "api_token":{
-    "CONNECTION_REF":{"source":"connection_ref"},
-    "URL":{"source":"field","label":"website"},
-    "API_TOKEN":{"source":"field","id":"credential"},
-    "PROVIDER":{"source":"field","label":"provider","optional":true}},
-  "example_app":{
-    "CONNECTION_REF":{"source":"connection_ref"},
-    "PROVIDER":{"source":"constant","value":"example_app"}},
-  "login":{
-    "CONNECTION_REF":{"source":"connection_ref"},
-    "URL":{"source":"url","index":0},
-    "PASSWORD":{"source":"field","id":"password"}},
-  "service_account":{
-    "CONNECTION_REF":{"source":"connection_ref"},
-    "API_TOKEN":{"source":"field","id":"credential"},
-    "PROVIDER":{"source":"field","label":"provider","optional":true}},
-  "ssh_transport":{
-    "CONNECTION_REF":{"source":"connection_ref"},
-    "HOST":{"source":"field","label":"host"},
-    "HOST_KEY":{"source":"field","label":"host_key"},
-    "IDENTITY":{"source":"field","label":"identity"},
-    "PORT":{"source":"field","label":"port"},
-    "USER":{"source":"field","label":"user"}},
-  "github_app":{
-    "CONNECTION_REF":{"source":"connection_ref"},
-    "APP_ID":{"source":"field","label":"app_id"},
-    "SIGNING_KEY":{"source":"field","label":"signing_key"}}
-}}`
+// shipped is the registry the repository carries: HQ's registry emits it, and
+// it names no connection.
+const shipped = "../../../hq/config/controller-connections.json"
 
 func registry(t testing.TB) Registry {
 	t.Helper()
-	parsed, err := ParseRegistry([]byte(projections))
+	data, err := os.ReadFile(shipped)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := ParseRegistry(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,19 +90,56 @@ func refused(t *testing.T, in Input, want string) {
 	}
 }
 
+// entries is a document as one name per fact, for assertions: each connection
+// under its ref in capitals, its settings by their registry names beside what
+// every connection states of itself.
+func entries(t testing.TB, document connections.Document) map[string]string {
+	t.Helper()
+	found := map[string]string{}
+	for _, connection := range document.Connections {
+		prefix := strings.ToUpper(strings.NewReplacer("-", "_", ".", "_").Replace(connection.Ref)) + "_"
+		found[prefix+RefVariable], found[prefix+ProviderVariable] = connection.Ref, connection.Provider
+		found[prefix+StoreVault], found[prefix+StoreItem] = connection.Store.Vault, connection.Store.Item
+		if connection.Manages {
+			found[prefix+ManagesVariable] = "true"
+		}
+		if connection.Store.Bootstrap != "" {
+			found[prefix+Bootstrap] = connection.Store.Bootstrap
+		}
+		encoded, err := json.Marshal(connection)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var members map[string]json.RawMessage
+		if err := json.Unmarshal(encoded, &members); err != nil {
+			t.Fatal(err)
+		}
+		var settings map[string]string
+		if err := json.Unmarshal(members[connection.Shape()], &settings); err != nil {
+			t.Fatalf("connection %s holds no one shape: %v", connection.Ref, err)
+		}
+		for name, value := range settings {
+			found[prefix+strings.ToUpper(name)] = value
+		}
+	}
+	return found
+}
+
 func rendered(t *testing.T, in Input) map[string]string {
 	t.Helper()
 	out, err := Project(in)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return out.Document.Entries()
+	return entries(t, out.Document)
 }
 
 func TestAnItemDeclaresItsOwnConnection(t *testing.T) {
 	values := rendered(t, input(t, apiToken(1, "example", "EXAMPLE")))
 	want := map[string]string{
 		"EXAMPLE_CONNECTION_REF": "example", "EXAMPLE_API_TOKEN": secret, "EXAMPLE_URL": "https://api.example.com",
+		// An item that names no provider is for the one its env_prefix spells.
+		"EXAMPLE_PROVIDER": "example",
 		// Where the credential is kept: the vault and item it was rendered from.
 		"EXAMPLE_STORE_VAULT": connecttest.VaultName, "EXAMPLE_STORE_ITEM": id(1),
 	}
@@ -144,28 +158,63 @@ func TestAnOptionalFieldRendersWhenPresentAndIsNotFatalWhenAbsent(t *testing.T) 
 	if values["EXAMPLE_PROVIDER"] != "portainer" {
 		t.Fatal("an optional field the item carries was not rendered")
 	}
-	values = rendered(t, input(t, apiToken(1, "example", "EXAMPLE")))
-	if _, present := values["EXAMPLE_PROVIDER"]; present || values["EXAMPLE_API_TOKEN"] != secret {
+	values = rendered(t, input(t, apiToken(1, "example", "EXAMPLE_API")))
+	if values["EXAMPLE_PROVIDER"] != "example_api" || values["EXAMPLE_API_TOKEN"] != secret {
 		t.Fatal("an absent optional field changed the render")
 	}
-	// Present but empty is absent, not an empty variable.
-	values = rendered(t, input(t, apiToken(1, "example", "EXAMPLE", f("provider", ""))))
-	if _, present := values["EXAMPLE_PROVIDER"]; present {
-		t.Fatal("an empty optional field rendered a variable")
+	// Present but empty is absent, not an empty provider.
+	values = rendered(t, input(t, apiToken(1, "example", "EXAMPLE_API", f("provider", ""))))
+	if values["EXAMPLE_PROVIDER"] != "example_api" {
+		t.Fatal("an empty optional field was rendered")
+	}
+}
+
+// Only an explicit yes lets HQ change things through a connection.
+func TestManagesIsAnExplicitDeclaration(t *testing.T) {
+	for value, want := range map[string]bool{"": false, "false": false, "0": false, "read": false, "no": false,
+		"TRUE": true, "yes": true, "1": true, " true ": true} {
+		values := rendered(t, input(t, apiToken(1, "example", "EXAMPLE", f("manages", value))))
+		if _, manages := values["EXAMPLE_MANAGES"]; manages != want {
+			t.Errorf("manages=%q rendered %v", value, manages)
+		}
+	}
+	if _, manages := rendered(t, input(t, apiToken(1, "example", "EXAMPLE")))["EXAMPLE_MANAGES"]; manages {
+		t.Fatal("an item that says nothing manages")
+	}
+}
+
+// A transport that names no provider is a way in to a machine, whatever its
+// env_prefix spells; one that names its provider keeps it.
+func TestATransportIsForSSHUnlessItSaysOtherwise(t *testing.T) {
+	key := connecttest.Ed25519Key(t)
+	keyItem := connecttest.KeyItem(id(2), "Edge deploy key", key.PKCS8, key.Public)
+	values := rendered(t, input(t, sshConnection(1, "edge", "EDGE", "Edge deploy key"), keyItem))
+	if values["EDGE_PROVIDER"] != "ssh" {
+		t.Fatalf("a transport that names no provider is for %q", values["EDGE_PROVIDER"])
+	}
+	values = rendered(t, input(t, sshConnection(1, "edge", "EDGE", "Edge deploy key", f("provider", "example")), keyItem))
+	if values["EDGE_PROVIDER"] != "example" {
+		t.Fatalf("a transport that names its provider is for %q", values["EDGE_PROVIDER"])
 	}
 }
 
 func TestAConstantIsRenderedFromTheProjection(t *testing.T) {
-	values := rendered(t, input(t, item{ID: id(1), Fields: []field{
-		f("connection_ref", "example"), f("projection", "example_app"), f("env_prefix", "EXAMPLE")}}))
-	if values["EXAMPLE_PROVIDER"] != "example_app" {
+	key := connecttest.RSAKey(t)
+	keyItem := connecttest.KeyItem(id(2), "Example app key", key.PKCS8, key.Public)
+	values := rendered(t, input(t, signingConnection(1, "example", "Example app key"), keyItem))
+	if values["EXAMPLE_PROVIDER"] != "github_app" {
 		t.Fatal("the constant was not rendered")
+	}
+	// The item cannot say otherwise: the shape fixes its provider.
+	values = rendered(t, input(t, signingConnection(1, "example", "Example app key", f("provider", "other")), keyItem))
+	if values["EXAMPLE_PROVIDER"] != "github_app" {
+		t.Fatal("an item overrode the provider its shape fixes")
 	}
 }
 
 func TestAURLIsRenderedByIndex(t *testing.T) {
 	login := item{ID: id(1), Fields: []field{
-		f("connection_ref", "example"), f("projection", "login"), f("env_prefix", "EXAMPLE"), b("password", secret)},
+		f("connection_ref", "example"), f("projection", "login"), f("env_prefix", "EXAMPLE"), b("username", "reader"), b("password", secret)},
 		URLs: []connecttest.URL{{Href: "https://login.example.com", Primary: true}}}
 	if rendered(t, input(t, login))["EXAMPLE_URL"] != "https://login.example.com" {
 		t.Fatal("the URL was not rendered")
@@ -240,14 +289,14 @@ func TestConnectionRefusals(t *testing.T) {
 		{"two items, one ref", input(t, apiToken(1, "example", "EXAMPLE"), apiToken(2, "example", "OTHER")), "More than one 1Password item declares connection_ref=example"},
 		{"two refs, one prefix", input(t, apiToken(1, "example", "EXAMPLE"), apiToken(2, "other", "EXAMPLE")), "same env_prefix"},
 		{"flattened collision", input(t, apiToken(1, "example", "A"),
-			item{ID: id(2), Fields: []field{f("connection_ref", "other"), f("projection", "example_app"), f("env_prefix", "A_API")}},
+			item{ID: id(2), Fields: []field{f("connection_ref", "other"), f("projection", "service_account"), f("env_prefix", "A_API"), b("credential", secret)}},
 			item{ID: id(3), Fields: []field{f("connection_ref", "third"), f("projection", "api_token"), f("env_prefix", "A_API_TOKEN_X"),
 				b("credential", secret), f("website", "https://api.example.com")}}), ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			if c.want == "" {
-				// Distinct prefixes whose variables cannot collide still render.
+				// Each connection holds its own settings, so no two can collide.
 				if _, err := Project(c.in); err != nil {
 					t.Fatal(err)
 				}
@@ -256,19 +305,16 @@ func TestConnectionRefusals(t *testing.T) {
 			refused(t, c.in, c.want)
 		})
 	}
-	// A_B + C and A + B_C name one variable; the document refuses it.
-	colliding := `{"schema_version":1,"projections":{
-	  "one":{"CONNECTION_REF":{"source":"connection_ref"},"B_CONNECTION_REF":{"source":"constant","value":"x"}},
-	  "two":{"CONNECTION_REF":{"source":"connection_ref"}}}}`
-	parsed, err := ParseRegistry([]byte(colliding))
-	if err != nil {
-		t.Fatal(err)
-	}
-	in := input(t,
-		item{ID: id(1), Fields: []field{f("connection_ref", "a"), f("projection", "one"), f("env_prefix", "A")}},
-		item{ID: id(2), Fields: []field{f("connection_ref", "b"), f("projection", "two"), f("env_prefix", "A_B")}})
-	in.Registry = parsed
-	refused(t, in, "the controller would not read")
+	// A projection that is no shape of the document cannot be written, even
+	// from a registry built past the parser.
+	in := input(t, item{ID: id(1), Fields: []field{f("connection_ref", "a"), f("projection", "one"), f("env_prefix", "A"), f("website", "https://api.example.com")}})
+	in.Registry = Registry{SchemaVersion: 1, Projections: map[string]map[string]Entry{"one": {
+		RefVariable: {Source: SourceRef}, "URL": {Source: SourceField, Label: "website"}}}}
+	refused(t, in, "names a projection the controller does not read")
+	in.Registry.Projections["api_token"] = in.Registry.Projections["one"]
+	in.Registry.Projections["api_token"]["EXAMPLE"] = Entry{Source: SourceConstant, Value: "x"}
+	in.Items[0] = item{ID: id(1), Fields: []field{f("connection_ref", "a"), f("projection", "api_token"), f("env_prefix", "A"), f("website", "https://api.example.com")}}.Full()
+	refused(t, in, "names a projection the controller does not read")
 }
 
 func TestItemsThatAreNotConnectionsAreSkipped(t *testing.T) {
@@ -280,7 +326,7 @@ func TestItemsThatAreNotConnectionsAreSkipped(t *testing.T) {
 		connecttest.KeyItem(id(3), "Unused key", key.PKCS8, key.Public),
 		item{ID: id(4), Title: "Empty ref", Fields: []field{f("connection_ref", ""), f("notes", "a\nb")}},
 		item{ID: id(5), Title: "No fields"}))
-	if len(values) != 5 {
+	if len(values) != 6 {
 		t.Fatalf("rendered %d variables from one connection", len(values))
 	}
 }
@@ -331,8 +377,8 @@ func TestAServiceAccountTokenIsProjectedFromItsItem(t *testing.T) {
 		f("connection_ref", "publisher"), f("projection", "service_account"), f("env_prefix", "ONEPASSWORD"),
 		f("provider", "onepassword"), b("credential", secret)}}
 	values := rendered(t, input(t, writer))
-	if values["ONEPASSWORD_API_TOKEN"] != secret || values["ONEPASSWORD_PROVIDER"] != "onepassword" ||
-		values["ONEPASSWORD_STORE_ITEM"] != id(1) {
+	if values["PUBLISHER_API_TOKEN"] != secret || values["PUBLISHER_PROVIDER"] != "onepassword" ||
+		values["PUBLISHER_STORE_ITEM"] != id(1) {
 		t.Fatal("the service account token was not projected from its item")
 	}
 	writer.Fields = writer.Fields[:4]
@@ -355,7 +401,7 @@ func TestHostileValuesRoundTripLiterally(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if decoded.Entries()["EXAMPLE_API_TOKEN"] != value {
+	if entries(t, decoded)["EXAMPLE_API_TOKEN"] != value {
 		t.Fatal("a value did not survive the document byte for byte")
 	}
 }
@@ -639,29 +685,11 @@ func TestSigningKeyRefusals(t *testing.T) {
 	refused(t, input(t, signingConnection(1, "github.key", "Example app key"), keyItem), "invalid name")
 	refused(t, input(t, signingConnection(1, "known_hosts", "Example app key"), keyItem), "invalid name")
 	refused(t, input(t, signingConnection(1, "github", "No such key"), keyItem), "the vault holds 0 of")
-
-	// One connection cannot be both: its files would share a name.
-	both := `{"schema_version":1,"projections":{"both":{
-	  "CONNECTION_REF":{"source":"connection_ref"},"HOST":{"source":"field","label":"host"},
-	  "HOST_KEY":{"source":"field","label":"host_key"},"IDENTITY":{"source":"field","label":"identity"},
-	  "PORT":{"source":"field","label":"port"},"USER":{"source":"field","label":"user"},
-	  "SIGNING_KEY":{"source":"field","label":"signing_key"}}}}`
-	parsed, err := ParseRegistry([]byte(both))
-	if err != nil {
-		t.Fatal(err)
-	}
-	identity := connecttest.Ed25519Key(t)
-	in := input(t, item{ID: id(1), Fields: []field{
-		f("connection_ref", "edge"), f("projection", "both"), f("env_prefix", "EDGE"), f("host", "edge.example.com"),
-		f("port", "22"), f("user", "deploy"), f("host_key", hostKey), f("identity", "Edge deploy key"), f("signing_key", "Example app key")}},
-		keyItem, connecttest.KeyItem(id(3), "Edge deploy key", identity.PKCS8, identity.Public))
-	in.Registry = parsed
-	refused(t, in, "declares both an SSH identity and a signing key")
 }
 
 func TestRegistryRefusals(t *testing.T) {
 	good := `{"schema_version":1,"projections":{"p":{"CONNECTION_REF":{"source":"connection_ref"},"URL":{"source":"field","label":"website"}}}}`
-	if _, err := ParseRegistry([]byte(good)); err != nil {
+	if _, err := parse([]byte(good)); err != nil {
 		t.Fatal(err)
 	}
 	entry := func(body string) string {
@@ -692,17 +720,89 @@ func TestRegistryRefusals(t *testing.T) {
 		"trailing data":             good + `{}`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := ParseRegistry([]byte(text)); !errors.Is(err, ErrRegistry) {
+			if _, err := parse([]byte(text)); !errors.Is(err, ErrRegistry) {
+				t.Fatalf("accepted: %v", err)
+			}
+		})
+	}
+	// Well formed, and still not the shapes a connection arrives in.
+	if _, err := ParseRegistry([]byte(good)); !errors.Is(err, ErrRegistry) {
+		t.Fatalf("a registry of other shapes was accepted: %v", err)
+	}
+}
+
+// The registry states where each setting comes from; which settings a shape
+// has is the generated type's to say. A registry that disagrees is refused
+// whole, so a renderer never writes a setting the controller does not read.
+func TestARegistryThatIsNotTheDocumentsShapesIsRefused(t *testing.T) {
+	data, err := os.ReadFile(shipped)
+	if err != nil {
+		t.Fatal(err)
+	}
+	change := func(edit func(projections map[string]map[string]Entry)) []byte {
+		t.Helper()
+		parsed, err := parse(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		edit(parsed.Projections)
+		encoded, err := json.Marshal(parsed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return encoded
+	}
+	if _, err := ParseRegistry(change(func(map[string]map[string]Entry) {})); err != nil {
+		t.Fatalf("the shipped registry does not survive a round trip: %v", err)
+	}
+	index := 0
+	for name, edit := range map[string]func(map[string]map[string]Entry){
+		"a shape with no projection": func(p map[string]map[string]Entry) { delete(p, "login") },
+		"a projection that is no shape": func(p map[string]map[string]Entry) {
+			p["example_shape"] = map[string]Entry{RefVariable: {Source: SourceRef}}
+		},
+		"a renamed projection": func(p map[string]map[string]Entry) { p["sign_in"] = p["login"]; delete(p, "login") },
+		"a setting left out":   func(p map[string]map[string]Entry) { delete(p["login"], "USERNAME") },
+		"a setting added": func(p map[string]map[string]Entry) {
+			p["service_account"]["URL"] = Entry{Source: SourceURL, Index: &index}
+		},
+		"a setting renamed": func(p map[string]map[string]Entry) {
+			p["login"]["USER"] = p["login"]["USERNAME"]
+			delete(p["login"], "USERNAME")
+		},
+		"a required setting made optional": func(p map[string]map[string]Entry) {
+			entry := p["login"]["PASSWORD"]
+			entry.Optional = true
+			p["login"]["PASSWORD"] = entry
+		},
+		"an optional setting made required": func(p map[string]map[string]Entry) {
+			entry := p["ssh_transport"]["ROLE"]
+			entry.Optional = false
+			p["ssh_transport"]["ROLE"] = entry
+		},
+		"a default for a required field": func(p map[string]map[string]Entry) {
+			entry := p["login"]["USERNAME"]
+			entry.Default = "reader"
+			p["login"]["USERNAME"] = entry
+		},
+		"a default for a constant": func(p map[string]map[string]Entry) {
+			entry := p["github_app"][ProviderVariable]
+			entry.Default = "other"
+			p["github_app"][ProviderVariable] = entry
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := ParseRegistry(change(edit)); !errors.Is(err, ErrRegistry) {
 				t.Fatalf("accepted: %v", err)
 			}
 		})
 	}
 }
 
-// The registry the repository ships is the one Python reads too
-// (hq/platform/application/credential_mint.py): one declaration.
+// The registry the repository ships is emitted from the connection shapes
+// HQ's registry declares, as the document's types are: one declaration.
 func TestTheShippedRegistryParses(t *testing.T) {
-	data, err := os.ReadFile("../../../hq/config/controller-connections.json")
+	data, err := os.ReadFile(shipped)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -761,7 +861,7 @@ func FuzzProject(f *testing.F) {
 		if err != nil {
 			t.Fatalf("rendered a document the controller refuses: %v", err)
 		}
-		for name, value := range decoded.Entries() {
+		for name, value := range entries(t, decoded) {
 			if strings.ContainsAny(value, "\x00\r\n\t") || value == "" {
 				t.Fatalf("%s rendered a control character or nothing", name)
 			}
@@ -769,7 +869,11 @@ func FuzzProject(f *testing.F) {
 				t.Fatalf("%s rendered an unresolved reference", name)
 			}
 		}
-		if reference := decoded.Entries()[prefix+"_"+Bootstrap]; reference != "" {
+		for _, rendered := range decoded.Connections {
+			reference := rendered.Store.Bootstrap
+			if reference == "" {
+				continue
+			}
 			rest := strings.TrimPrefix(reference, "op://")
 			if strings.HasPrefix(rest, connecttest.VaultName+"/") || strings.HasPrefix(rest, connecttest.VaultID+"/") || strings.Count(rest, "/") != 1 {
 				t.Fatalf("rendered a bootstrap in the vault being read, or a field reference")

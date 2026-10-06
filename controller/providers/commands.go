@@ -22,9 +22,10 @@ type Exec func(ctx context.Context, argv []string, stdin []byte, env []string) (
 // Commands runs local tools and SSH operations for one pass. A failure is
 // recorded as a step HQ can see; the tool's own output never reaches a result.
 type Commands struct {
-	Env  runtime.Environment
-	Exec Exec
-	Log  *slog.Logger
+	Env      runtime.Environment
+	Supplied runtime.Connections
+	Exec     Exec
+	Log      *slog.Logger
 
 	mu       sync.Mutex
 	failures []runtime.StepFailure
@@ -163,13 +164,13 @@ func (c *Commands) Run(ctx context.Context, argv []string, input []byte, step, s
 // SSH runs one forced operation on a connection's host, with host keys pinned
 // and nothing read from an SSH config.
 func (c *Commands) SSH(ctx context.Context, ref, operation string, payload []byte) ([]byte, error) {
-	target, err := c.Env.SSH(ref)
+	target, err := c.Supplied.SSH(ref)
 	if err != nil {
 		return nil, err
 	}
-	dir, err := c.Env.Required("HQ_CONTROLLER", "SSH_DIR")
-	if err != nil {
-		return nil, err
+	dir := c.Env.SSHDir
+	if dir == "" {
+		return nil, &ProviderError{Err: runtime.ErrSettingMissing}
 	}
 	argv := []string{
 		"ssh", "-F", "/dev/null",

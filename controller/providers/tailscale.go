@@ -30,12 +30,18 @@ type tailnetClient struct {
 	token string
 }
 
-// tailnetBase is where the connection's API lives: its URL, else the public one.
-func (r *Registry) tailnetBase(prefix string) string {
-	if base := strings.TrimRight(strings.TrimSpace(r.Env[prefix+"_URL"]), "/"); base != "" {
+// tailnetBase is where the tailnet API lives: TailnetURL, else the public one.
+func (r *Registry) tailnetBase() string {
+	if base := strings.TrimRight(strings.TrimSpace(r.TailnetURL), "/"); base != "" {
 		return base
 	}
 	return tailnetAPI
+}
+
+// defaultEndpoints is where each provider's API lives when its connection
+// states no address.
+func (r *Registry) defaultEndpoints() map[runtime.ConnectionProvider]string {
+	return map[runtime.ConnectionProvider]string{runtime.ConnectionProviderTailscale: r.tailnetBase()}
 }
 
 // tailnetClient exchanges the connection's credential and returns the client.
@@ -44,11 +50,7 @@ func (r *Registry) tailnetClient(ctx context.Context, connectionRef string) (tai
 	if err != nil {
 		return tailnetClient{}, err
 	}
-	prefix, err := r.Env.Prefix(runtime.ConnectionProviderTailscale, connectionRef)
-	if err != nil {
-		return tailnetClient{}, err
-	}
-	return tailnetClient{r: r, base: r.tailnetBase(prefix), token: token}, nil
+	return tailnetClient{r: r, base: r.tailnetBase(), token: token}, nil
 }
 
 // call sends one request to the tailnet API: base URL and bearer auth are set
@@ -240,7 +242,7 @@ func (r *Registry) admitTailscale() {
 	act(r, runtime.ResourceKindTailscaleDevice, "reconcile", r.tailscaleDeviceReconcile)
 	act(r, runtime.ResourceKindTailscaleDevice, "approve-routes", r.tailscaleApproveRoutes)
 	r.reader(runtime.ResourceKindTailscaleDevice, r.tailscaleDeviceInventory)
-	r.readsHeld(runtime.ResourceKindTailscaleDevice, func() bool { return r.Env["SEVERINO_TAILNET_STATUS"] != "" })
+	r.readsHeld(runtime.ResourceKindTailscaleDevice, func() bool { return r.Env.TailnetStatus != "" })
 
 	act(r, runtime.ResourceKindTailscalePolicy, "reconcile", r.tailnetPolicyReconcile)
 	r.reader(runtime.ResourceKindTailscalePolicy, r.tailnetPolicyInventory)
@@ -253,21 +255,17 @@ func (r *Registry) admitTailscale() {
 }
 
 func (r *Registry) tailnetToken(ctx context.Context, connectionRef string) (string, error) {
-	prefix, err := r.Env.Prefix(runtime.ConnectionProviderTailscale, connectionRef)
+	connection, err := r.Supplied.For(runtime.ConnectionProviderTailscale, connectionRef)
 	if err != nil {
 		return "", err
 	}
-	raw, err := r.cached(ctx, "tailscale-token:"+prefix, func() (json.RawMessage, error) {
-		clientID, err := r.Env.Required(prefix, "CLIENT_ID")
-		if err != nil {
-			return nil, err
-		}
-		clientSecret, err := r.Env.Required(prefix, "CLIENT_SECRET")
-		if err != nil {
-			return nil, err
-		}
-		data := url.Values{"client_id": {clientID}, "client_secret": {clientSecret}}
-		answer, err := r.HTTP.Request(ctx, r.tailnetBase(prefix)+"/oauth/token", "POST", map[string]string{
+	client, err := runtime.Need(connection.OAuthClient)
+	if err != nil {
+		return "", err
+	}
+	raw, err := r.cached(ctx, "tailscale-token:"+connection.Ref, func() (json.RawMessage, error) {
+		data := url.Values{"client_id": {client.ClientID}, "client_secret": {client.ClientSecret}}
+		answer, err := r.HTTP.Request(ctx, r.tailnetBase()+"/oauth/token", "POST", map[string]string{
 			"Content-Type": "application/x-www-form-urlencoded",
 		}, data)
 		if code := httpStatus(err); code != 0 {
@@ -380,7 +378,7 @@ var errNoTailnetReading = &ProviderError{Message: "this controller was not given
 // readTailnetNodes reads the tailnet status file: Self first, then each Peer
 // in the order the file lists them.
 func (r *Registry) readTailnetNodes() ([]tailnetNode, error) {
-	statusFile := r.Env["SEVERINO_TAILNET_STATUS"]
+	statusFile := r.Env.TailnetStatus
 	if statusFile == "" {
 		return nil, errNoTailnetReading
 	}
@@ -550,7 +548,7 @@ func (r *Registry) localTailnetDevices() ([]TailscaleDeviceRecord, error) {
 func (r *Registry) tailscaleDeviceInventory(ctx context.Context) ([]any, error) {
 	devices := []TailscaleDeviceRecord{}
 	identities := map[string]tsapi.Device{}
-	if r.Env["SEVERINO_TAILNET_STATUS"] != "" {
+	if r.Env.TailnetStatus != "" {
 		local, err := r.localTailnetDevices()
 		if err != nil {
 			return nil, err

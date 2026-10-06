@@ -121,11 +121,12 @@ func asWritten(field opField) writtenField {
 }
 
 func (r *Registry) onePasswordToken(ref string) (string, error) {
-	prefix, err := r.Env.Prefix(runtime.ConnectionProviderOnePassword, ref)
+	connection, err := r.Supplied.For(runtime.ConnectionProviderOnePassword, ref)
 	if err != nil {
 		return "", err
 	}
-	return r.Env.Required(prefix, "API_TOKEN")
+	account, err := runtime.Need(connection.ServiceAccount)
+	return account.APIToken, err
 }
 
 func (r *Registry) onePasswordCurrent(ctx context.Context, publication OnePasswordPublication, token string) (map[string]writtenField, []string, map[string]bool, error) {

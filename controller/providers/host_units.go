@@ -18,10 +18,6 @@ import (
 // scripts/lib/systemd-units.sh) and run-controller.sh mounts the answer; this
 // reads that text and never talks to systemd.
 
-// hostUnitsEnv names the file run-controller.sh mounts: what `systemctl show`
-// printed for the shipped units.
-const hostUnitsEnv = "SEVERINO_HOST_UNITS"
-
 // hostUnitsMaxBytes bounds the answer. A unit is about a dozen short lines.
 const hostUnitsMaxBytes = 1 << 20
 
@@ -106,7 +102,7 @@ func unitInstant(field *string, value string) bool {
 // hostUnits is one record per unit the launcher asked systemd about. The
 // refusal of a file that is not that answer names no line of it.
 func (r *Registry) hostUnits(context.Context) ([]any, error) {
-	path := r.Env[hostUnitsEnv]
+	path := r.Env.HostUnits
 	if path == "" {
 		return nil, &ProviderError{Message: "no unit state was mounted"}
 	}

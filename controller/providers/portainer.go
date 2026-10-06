@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -176,20 +177,24 @@ func (r *Registry) portainerPublished(ctx context.Context) ([]PublishedContainer
 // isThisRun matches the per-run nonce the launcher sets as a label and as
 // HQ_CONTROLLER_RUN; a fixed label would let any container hide from the sweep.
 func (r *Registry) isThisRun(labels map[string]string) bool {
-	nonce := strings.TrimSpace(r.Env["HQ_CONTROLLER_RUN"])
-	return nonce != "" && labels[portainerRunLabel] == nonce
+	return r.Env.Run != "" && labels[portainerRunLabel] == r.Env.Run
+}
+
+// portainerToken is a Portainer connection's address and API token.
+func (r *Registry) portainerToken(ref string) (connections.APIToken, error) {
+	connection, err := r.Supplied.For(runtime.ConnectionProviderPortainer, ref)
+	if err != nil {
+		return connections.APIToken{}, err
+	}
+	return runtime.Need(connection.APIToken)
 }
 
 func (r *Registry) portainerURL(ref string) (string, error) {
-	prefix, err := r.Env.Prefix(runtime.ConnectionProviderPortainer, ref)
+	token, err := r.portainerToken(ref)
 	if err != nil {
 		return "", err
 	}
-	base, err := r.Env.Required(prefix, "URL")
-	if err != nil {
-		return "", err
-	}
-	base = strings.TrimRight(base, "/")
+	base := strings.TrimRight(token.URL, "/")
 	if strings.HasSuffix(base, "/api") {
 		return base, nil
 	}
@@ -197,15 +202,11 @@ func (r *Registry) portainerURL(ref string) (string, error) {
 }
 
 func (r *Registry) portainerHeaders(ref string) (map[string]string, error) {
-	prefix, err := r.Env.Prefix(runtime.ConnectionProviderPortainer, ref)
+	token, err := r.portainerToken(ref)
 	if err != nil {
 		return nil, err
 	}
-	token, err := r.Env.Required(prefix, "API_TOKEN")
-	if err != nil {
-		return nil, err
-	}
-	return map[string]string{"X-API-Key": token}, nil
+	return map[string]string{"X-API-Key": token.APIToken}, nil
 }
 
 // portainerCall is one request to Portainer's API at path.
@@ -599,7 +600,7 @@ func (r *Registry) portainerDelete(ctx context.Context, spec PortainerStackSpec,
 func (r *Registry) portainerContainerRecords(ctx context.Context) ([]PortainerContainerRecord, error) {
 	local := r.controllerID()
 	records := []PortainerContainerRecord{}
-	for _, ref := range r.Env.Refs(runtime.ConnectionProviderPortainer) {
+	for _, ref := range r.Supplied.Refs(runtime.ConnectionProviderPortainer) {
 		environments, err := r.portainerEnvironments(ctx, ref)
 		if err != nil {
 			return nil, err

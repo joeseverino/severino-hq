@@ -132,9 +132,13 @@ module declares its kinds (`DEFINITIONS`) and its `CONNECTIONS`; its readings
 are a module in `hq/domains/control_plane/observations/`, found by discovery. Registries,
 connection labels, credential policy, the controller's registry and the
 topology edges its readings declare are all derived from those, and admission
-fails at import on a duplicate or undeclared name. The controller half (its
-readers, actions and probe) is Go, in `controller/providers/`, registered in
-`providers.New`; the contract's `SweptKind` names every kind it reads.
+fails at import on a duplicate or undeclared name. So is the bridge contract:
+`manage.py bridge_contract` writes the kinds, the connection providers, each
+reading's record and the values both sides check from the same declarations,
+then `go generate ./...` in `controller/` regenerates the Go types. The
+controller half (its readers, actions and probe) is Go, in
+`controller/providers/`, registered in `providers.New`; a provider is handed
+its own connection as a typed value (`r.Supplied.For`), never a setting by name.
 `hq/domains/control_plane/provider_adapters/tests/test_admission.py` shows the contract;
 `docs/APPLICATION_ARCHITECTURE.md` has the detail.
 
@@ -176,6 +180,13 @@ same review, and should fail when its path matches nothing rather than pass.
   The signed-in operator reads it rendered at `/api/docs/` (System > API), a
   vendored Scalar bundle: to upgrade it, replace
   `static/vendor/scalar/standalone.js` and update `UPSTREAM`.
+- The controller's contracts are derived too. `manage.py bridge_contract`
+  writes `controller/api/hq-controller.openapi.json` (the bridge's own
+  messages in `hq/domains/control_plane/bridge_base.json`, joined to what the
+  registry declares), `controller/api/hq-connections.openapi.json` and
+  `hq/config/controller-connections.json`; `--check` fails the gate when one
+  is behind. Never edit those three files, and regenerate the Go types after
+  (`go generate ./...` in `controller/`).
 - List views use `TableListMixin`; direct view mutations and MCP model access
   are rejected by architecture tests.
 - A link to a command's form is built by `hq.platform.application.action_links.command_url`

@@ -93,11 +93,11 @@ type analyticsAnswer struct {
 // cloudflareGraphQL answers 200 with an errors array rather than a status, so a
 // failed query must not read as a site nobody visited.
 func (r *Registry) cloudflareGraphQL(ctx context.Context, query string, variables any, ref string) (json.RawMessage, error) {
-	prefix, err := r.Env.Prefix(runtime.ConnectionProviderCloudflareAPI, ref)
+	held, _, err := r.cloudflareCredential(runtime.ConnectionProviderCloudflareAPI, ref)
 	if err != nil {
 		return nil, err
 	}
-	if err := r.cloudflareBreaker(prefix); err != nil {
+	if err := r.cloudflareBreaker(held); err != nil {
 		return nil, err
 	}
 	base, err := r.cloudflareURL(runtime.ConnectionProviderCloudflareAPI, ref)
@@ -116,7 +116,7 @@ func (r *Registry) cloudflareGraphQL(ctx context.Context, query string, variable
 	if err != nil {
 		var answered *ProviderError
 		if errors.As(err, &answered) && answered.HTTPStatus != 0 {
-			return nil, r.cloudflareRefused(prefix, fmt.Sprintf("cloudflare analytics refused the query (HTTP %d)", answered.HTTPStatus), cloudflareErrors(answered.Body), answered.HTTPStatus, func() bool {
+			return nil, r.cloudflareRefused(held, fmt.Sprintf("cloudflare analytics refused the query (HTTP %d)", answered.HTTPStatus), cloudflareErrors(answered.Body), answered.HTTPStatus, func() bool {
 				return r.cloudflareVerified(ctx, runtime.ConnectionProviderCloudflareAPI, ref)
 			})
 		}
@@ -134,7 +134,7 @@ func (r *Registry) cloudflareGraphQL(ctx context.Context, query string, variable
 	}
 	if len(payload.Errors) > 0 {
 		message := payload.Errors[0].Message
-		return nil, r.cloudflareRefused(prefix, "cloudflare analytics rejected the query", message, 0, nil)
+		return nil, r.cloudflareRefused(held, "cloudflare analytics rejected the query", message, 0, nil)
 	}
 	return payload.Data, nil
 }
@@ -308,7 +308,7 @@ func (r *Registry) analyticsSiteReading(ctx context.Context, site CloudflareAnal
 // missing windows. Unlike the account readings, no declared connection reads nothing.
 func (r *Registry) cloudflareAnalyticsSites(ctx context.Context) ([]CloudflareAnalyticsSite, error) {
 	found := []CloudflareAnalyticsSite{}
-	for _, ref := range r.Env.Refs(runtime.ConnectionProviderCloudflareAPI) {
+	for _, ref := range r.Supplied.Refs(runtime.ConnectionProviderCloudflareAPI) {
 		account, err := r.cloudflareAnalyticsAccount(ctx, ref)
 		if err != nil {
 			return nil, err

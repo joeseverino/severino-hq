@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -109,26 +109,17 @@ func (c *Controller) Execute(ctx context.Context, resource runtime.Resource, act
 
 func (c *Controller) sshRefs() map[string]bool {
 	refs := map[string]bool{}
-	for _, ref := range c.Env.SSHRefs() {
+	for _, ref := range c.Supplied.SSHRefs() {
 		refs[ref] = true
 	}
 	return refs
 }
 
-// effectiveProvider is the provider a connection acts as: its own when it has
-// a probe, else ssh (or its declared provider) for a transport.
-func (c *Controller) effectiveProvider(ref string, ssh map[string]bool) runtime.ConnectionProvider {
-	provider := c.Env.Provider(ref)
-	if _, ok := c.probes[provider]; ok {
-		return provider
-	}
-	if ssh[ref] {
-		if declared := strings.TrimSpace(c.Env[c.Env.Prefixes()[ref]+"_PROVIDER"]); declared != "" {
-			return runtime.ConnectionProvider(declared)
-		}
-		return runtime.ConnectionProviderSSH
-	}
-	return provider
+// providerOfConnection is the provider a connection is for, as its document
+// states it: the renderer has already settled what an item that names none is.
+func (c *Controller) providerOfConnection(ref string) runtime.ConnectionProvider {
+	connection, _ := c.Supplied.Get(ref)
+	return runtime.ConnectionProvider(connection.Provider)
 }
 
 // namedRef is the connection a spec names, or "" for the kind's default. The
@@ -145,19 +136,15 @@ func (c *Controller) refuseUnlessManaged(kind runtime.ResourceKind, spec Object)
 	}
 	named := namedRef(spec)
 	refs := []string{}
-	ssh := c.sshRefs()
 	if named != "" {
-		if !slices.Contains(providers, c.effectiveProvider(named, ssh)) {
+		if !slices.Contains(providers, c.providerOfConnection(named)) {
 			return &ProviderError{Message: named, Err: ErrForeignConnection}
 		}
 		refs = append(refs, named)
 	} else {
-		for _, ref := range slices.Sorted(maps.Keys(c.Env.Prefixes())) {
-			for _, provider := range providers {
-				if c.effectiveProvider(ref, ssh) == provider {
-					refs = append(refs, ref)
-					break
-				}
+		for _, connection := range c.Supplied.All() {
+			if slices.Contains(providers, runtime.ConnectionProvider(connection.Provider)) {
+				refs = append(refs, connection.Ref)
 			}
 		}
 	}
@@ -166,7 +153,7 @@ func (c *Controller) refuseUnlessManaged(kind runtime.ResourceKind, spec Object)
 	}
 	observing := []string{}
 	for _, ref := range refs {
-		if !c.Env.Manages(ref) {
+		if !c.Supplied.Manages(ref) {
 			observing = append(observing, ref)
 		}
 	}
@@ -176,30 +163,30 @@ func (c *Controller) refuseUnlessManaged(kind runtime.ResourceKind, spec Object)
 	return nil
 }
 
-var defaultEndpoints = map[runtime.ConnectionProvider]string{runtime.ConnectionProviderTailscale: tailnetAPI}
-
-// endpoint is where a connection points: a URL or a host, never a secret.
-func (c *Controller) endpoint(prefix string, provider runtime.ConnectionProvider) string {
-	for _, name := range []string{"URL", "DIRECTORY_URL"} {
-		if url := strings.TrimSpace(c.Env[prefix+"_"+name]); url != "" {
-			return url
+// endpoint is where a connection points: a URL or a host, never a secret. A
+// connection that states no address points where its provider's API lives.
+func (c *Controller) endpoint(connection connections.Connection) string {
+	switch {
+	case connection.Login != nil:
+		return connection.Login.URL
+	case connection.APIToken != nil:
+		return connection.APIToken.URL
+	case connection.ACME != nil:
+		return connection.ACME.DirectoryURL
+	case connection.SSHTransport != nil && connection.SSHTransport.Host != "":
+		if port := connection.SSHTransport.Port; port != "" {
+			return connection.SSHTransport.Host + ":" + port
 		}
+		return connection.SSHTransport.Host
 	}
-	host, port := strings.TrimSpace(c.Env[prefix+"_HOST"]), strings.TrimSpace(c.Env[prefix+"_PORT"])
-	if host != "" {
-		if port != "" {
-			return host + ":" + port
-		}
-		return host
-	}
-	return defaultEndpoints[provider]
+	return c.defaultEndpoints()[runtime.ConnectionProvider(connection.Provider)]
 }
 
 // store is where the connection's credential is kept: references only.
-func (c *Controller) store(prefix string) map[string]string {
+func store(kept connections.Store) map[string]string {
 	found := map[string]string{}
-	for key, name := range map[string]string{"vault": "STORE_VAULT", "item": "STORE_ITEM", "bootstrap": "BOOTSTRAP"} {
-		if value := strings.TrimSpace(c.Env[prefix+"_"+name]); value != "" {
+	for key, value := range map[string]string{"vault": kept.Vault, "item": kept.Item, "bootstrap": kept.Bootstrap} {
+		if value = strings.TrimSpace(value); value != "" {
 			found[key] = value
 		}
 	}
@@ -210,7 +197,7 @@ func (c *Controller) probeSSH(ctx context.Context, ref string) (ProbeResult, err
 	if _, err := c.commands().SSH(ctx, ref, "preflight", nil); err != nil {
 		return ProbeResult{}, err
 	}
-	target, err := c.Env.SSH(ref)
+	target, err := c.Supplied.SSH(ref)
 	if err != nil {
 		return ProbeResult{}, err
 	}
@@ -231,22 +218,20 @@ func (c *Controller) Connections(ctx context.Context, carry []string) ([]runtime
 		carried[ref] = true
 	}
 	ssh := c.sshRefs()
-	prefixes := c.Env.Prefixes()
 	reported := []runtime.ConnectionRecord{}
-	for _, ref := range slices.Sorted(maps.Keys(prefixes)) {
-		prefix := prefixes[ref]
-		provider := c.effectiveProvider(ref, ssh)
+	for _, supplied := range c.Supplied.All() {
+		ref, provider := supplied.Ref, runtime.ConnectionProvider(supplied.Provider)
 		probe := c.probes[provider]
 		viaSSH := false
 		if probe == nil && ssh[ref] {
 			probe, viaSSH = c.probeSSH, true
 		}
 		connection := runtime.ConnectionRecord{
-			ConnectionRef: ref, Provider: string(provider), Endpoint: c.endpoint(prefix, provider),
-			Manages: c.Env.Manages(ref), Probed: probe != nil, OK: true, Reaches: []string{},
+			ConnectionRef: ref, Provider: string(provider), Endpoint: c.endpoint(supplied),
+			Manages: supplied.Manages, Probed: probe != nil, OK: true, Reaches: []string{},
 		}
-		if store := c.store(prefix); len(store) > 0 {
-			connection.Store = store
+		if kept := store(supplied.Store); len(kept) > 0 {
+			connection.Store = kept
 		}
 		switch {
 		case viaSSH && carried[ref]:
@@ -340,10 +325,9 @@ func (c *Controller) Inventory(ctx context.Context, only []runtime.ResourceKind)
 	for _, kind := range only {
 		wantedOnly[string(kind)] = true
 	}
-	ssh := c.sshRefs()
 	connected := map[runtime.ConnectionProvider]bool{}
-	for ref := range c.Env.Prefixes() {
-		connected[c.effectiveProvider(ref, ssh)] = true
+	for _, connection := range c.Supplied.All() {
+		connected[runtime.ConnectionProvider(connection.Provider)] = true
 	}
 	found := runtime.Inventory{}
 	groups := map[string][]string{}

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/providers/cfapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -16,10 +17,6 @@ import (
 // Two credentials, each scoped to one surface. cloudflare_dns reads zones and
 // reads and writes their DNS records, nothing else; cloudflare_api carries the
 // account surface (analytics, zone settings, registration) and no DNS record.
-
-// cloudflareAPIURL is the server Cloudflare's API description names; a
-// connection's <PREFIX>_URL replaces it.
-const cloudflareAPIURL = cfapi.ServerURLClientAPI
 
 // List paging. The caps bound a loop a misbehaving endpoint could keep going.
 const (
@@ -82,39 +79,42 @@ func present(raw json.RawMessage) bool {
 	return len(raw) > 0 && string(raw) != "null"
 }
 
+// cloudflareCredential is a Cloudflare connection: the ref it is held under,
+// and its address and API token.
+func (r *Registry) cloudflareCredential(provider runtime.ConnectionProvider, ref string) (string, connections.APIToken, error) {
+	connection, err := r.Supplied.For(provider, ref)
+	if err != nil {
+		return "", connections.APIToken{}, err
+	}
+	token, err := runtime.Need(connection.APIToken)
+	return connection.Ref, token, err
+}
+
 func (r *Registry) cloudflareURL(provider runtime.ConnectionProvider, ref string) (string, error) {
-	prefix, err := r.Env.Prefix(provider, ref)
+	_, token, err := r.cloudflareCredential(provider, ref)
 	if err != nil {
 		return "", err
 	}
-	base := strings.TrimSpace(r.Env[prefix+"_URL"])
-	if base == "" {
-		base = cloudflareAPIURL
-	}
-	return strings.TrimRight(base, "/"), nil
+	return strings.TrimRight(token.URL, "/"), nil
 }
 
 func (r *Registry) cloudflareHeaders(provider runtime.ConnectionProvider, ref string) (map[string]string, error) {
-	prefix, err := r.Env.Prefix(provider, ref)
+	_, token, err := r.cloudflareCredential(provider, ref)
 	if err != nil {
 		return nil, err
 	}
-	token, err := r.Env.Required(prefix, "API_TOKEN")
-	if err != nil {
-		return nil, err
-	}
-	return map[string]string{"Authorization": "Bearer " + token, "Accept": "application/json"}, nil
+	return map[string]string{"Authorization": "Bearer " + token.APIToken, "Accept": "application/json"}, nil
 }
 
 // cloudflareEnvelope makes one call and returns the whole envelope. A 200 with
 // success false is a refusal too: a token missing one permission answers with no
 // result, and an account that refused to answer must not read as empty.
 func (r *Registry) cloudflareEnvelope(ctx context.Context, provider runtime.ConnectionProvider, ref, path, method string, payload any) (cfEnvelope, error) {
-	prefix, err := r.Env.Prefix(provider, ref)
+	held, _, err := r.cloudflareCredential(provider, ref)
 	if err != nil {
 		return cfEnvelope{}, err
 	}
-	if err := r.cloudflareBreaker(prefix); err != nil {
+	if err := r.cloudflareBreaker(held); err != nil {
 		return cfEnvelope{}, err
 	}
 	base, err := r.cloudflareURL(provider, ref)
@@ -129,7 +129,7 @@ func (r *Registry) cloudflareEnvelope(ctx context.Context, provider runtime.Conn
 	if err != nil {
 		var answered *ProviderError
 		if errors.As(err, &answered) && answered.HTTPStatus != 0 {
-			return cfEnvelope{}, r.cloudflareRefused(prefix, "cloudflare refused the request", cloudflareErrors(answered.Body), answered.HTTPStatus, func() bool {
+			return cfEnvelope{}, r.cloudflareRefused(held, "cloudflare refused the request", cloudflareErrors(answered.Body), answered.HTTPStatus, func() bool {
 				return r.cloudflareVerified(ctx, provider, ref)
 			})
 		}
@@ -143,7 +143,7 @@ func (r *Registry) cloudflareEnvelope(ctx context.Context, provider runtime.Conn
 		return cfEnvelope{}, err
 	}
 	if !envelope.Success {
-		return cfEnvelope{}, r.cloudflareRefused(prefix, "cloudflare refused the request", cloudflareErrors(raw), 0, nil)
+		return cfEnvelope{}, r.cloudflareRefused(held, "cloudflare refused the request", cloudflareErrors(raw), 0, nil)
 	}
 	return envelope, nil
 }
@@ -151,9 +151,9 @@ func (r *Registry) cloudflareEnvelope(ctx context.Context, provider runtime.Conn
 // cloudflareBreaker refuses without a call when this sweep already saw the
 // credential refused: every further call is refused too, and repeated failures
 // lock the token out.
-func (r *Registry) cloudflareBreaker(prefix string) error {
+func (r *Registry) cloudflareBreaker(held string) error {
 	r.snapshotMu.Lock()
-	reason, refused := r.refusedCredentials[prefix]
+	reason, refused := r.refusedCredentials[held]
 	r.snapshotMu.Unlock()
 	if !refused {
 		return nil
@@ -163,14 +163,14 @@ func (r *Registry) cloudflareBreaker(prefix string) error {
 
 // cloudflareRefused is the error for a refusal, recording a refused credential
 // so the rest of the sweep does not call with it again.
-func (r *Registry) cloudflareRefused(prefix, message, detail string, status int, verified func() bool) error {
+func (r *Registry) cloudflareRefused(held, message, detail string, status int, verified func() bool) error {
 	failure := cloudflareRefusal(detail, status, verified)
 	refused := &ProviderError{Message: message + ": " + detail, Failure: failure, HTTPStatus: status}
 	if failure == runtime.FailureClassCredential {
 		refused.Reason = detail
 		r.snapshotMu.Lock()
 		if r.refusedCredentials != nil {
-			r.refusedCredentials[prefix] = detail
+			r.refusedCredentials[held] = detail
 		}
 		r.snapshotMu.Unlock()
 	}
@@ -203,11 +203,11 @@ func cloudflareRefusal(detail string, status int, verified func() bool) runtime.
 // once per sweep; empty when it does not verify.
 func (r *Registry) cloudflareVerification(ctx context.Context, provider runtime.ConnectionProvider, ref string) cfapi.IamTokenVerifyResponseSingleSegment {
 	var empty cfapi.IamTokenVerifyResponseSingleSegment
-	prefix, err := r.Env.Prefix(provider, ref)
+	held, _, err := r.cloudflareCredential(provider, ref)
 	if err != nil {
 		return empty
 	}
-	raw, err := r.cached(ctx, "cloudflare-verification:"+prefix, func() (json.RawMessage, error) {
+	raw, err := r.cached(ctx, "cloudflare-verification:"+held, func() (json.RawMessage, error) {
 		base, err := r.cloudflareURL(provider, ref)
 		if err != nil {
 			return nil, err

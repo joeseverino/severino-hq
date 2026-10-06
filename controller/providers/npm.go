@@ -56,15 +56,15 @@ func npmEachConnection[T any](r *Registry, read func(context.Context, string) ([
 }
 
 func (r *Registry) npmSession(ctx context.Context, ref string) (string, map[string]string, error) {
-	prefix, err := r.Env.Prefix(runtime.ConnectionProviderNPM, ref)
+	connection, err := r.Supplied.For(runtime.ConnectionProviderNPM, ref)
 	if err != nil {
 		return "", nil, err
 	}
-	configured, err := r.Env.Required(prefix, "URL")
+	login, err := runtime.Need(connection.Login)
 	if err != nil {
 		return "", nil, err
 	}
-	base, err := url.Parse(strings.TrimRight(configured, "/"))
+	base, err := url.Parse(strings.TrimRight(login.URL, "/"))
 	if err != nil {
 		return "", nil, &ProviderError{Message: "npm API address is not a URL", Failure: runtime.FailureClassAddress}
 	}
@@ -72,16 +72,8 @@ func (r *Registry) npmSession(ctx context.Context, ref string) (string, map[stri
 	if !strings.HasSuffix(base.Path, "/api") {
 		base.Path += "/api"
 	}
-	raw, err := r.cached(ctx, "npm-token:"+base.String()+":"+prefix, func() (json.RawMessage, error) {
-		user, err := r.Env.Required(prefix, "USERNAME")
-		if err != nil {
-			return nil, err
-		}
-		password, err := r.Env.Required(prefix, "PASSWORD")
-		if err != nil {
-			return nil, err
-		}
-		answer, err := r.HTTP.Request(ctx, base.String()+"/tokens", "POST", nil, npmapi.RequestTokenJSONBody{Identity: user, Secret: password})
+	raw, err := r.cached(ctx, "npm-token:"+base.String()+":"+connection.Ref, func() (json.RawMessage, error) {
+		answer, err := r.HTTP.Request(ctx, base.String()+"/tokens", "POST", nil, npmapi.RequestTokenJSONBody{Identity: login.Username, Secret: login.Password})
 		if err != nil {
 			return nil, fmt.Errorf("npm sign-in: %w", err)
 		}
@@ -161,11 +153,11 @@ func (e npmSessionFailed) Unwrap() error { return e.error }
 // npmFetched is one NPM list endpoint's answer, read once per sweep whichever
 // kinds need it. A sign-in failure comes back as npmSessionFailed.
 func (r *Registry) npmFetched(ctx context.Context, ref, path string) (json.RawMessage, error) {
-	prefix, err := r.Env.Prefix(runtime.ConnectionProviderNPM, ref)
+	connection, err := r.Supplied.For(runtime.ConnectionProviderNPM, ref)
 	if err != nil {
 		return nil, npmSessionFailed{err}
 	}
-	return r.cached(ctx, "npm-list:"+prefix+":"+path, func() (json.RawMessage, error) {
+	return r.cached(ctx, "npm-list:"+connection.Ref+":"+path, func() (json.RawMessage, error) {
 		base, headers, err := r.npmSession(ctx, ref)
 		if err != nil {
 			return nil, npmSessionFailed{err}

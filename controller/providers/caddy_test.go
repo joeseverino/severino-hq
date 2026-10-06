@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -52,26 +53,18 @@ func (f sshFleet) exec(_ context.Context, argv []string, stdin []byte, _ []strin
 
 // sshEnv declares SSH connections by ref; host is ref.example.com and role is
 // the connection's role, if any.
-func sshEnv(roles map[string]string) runtime.Environment {
-	env := runtime.Environment{"HQ_CONTROLLER_SSH_DIR": "/run/secrets/controller-ssh"}
+func sshEnv(roles map[string]string) (runtime.Environment, runtime.Connections) {
+	held := []connections.Connection{}
 	for ref, role := range roles {
-		prefix := strings.ToUpper(strings.ReplaceAll(ref, "-", "_"))
-		env[prefix+"_CONNECTION_REF"] = ref
-		env[prefix+"_HOST"] = ref + ".example.com"
-		env[prefix+"_USER"] = "hq"
-		env[prefix+"_PORT"] = "22"
-		env[prefix+"_HOST_KEY"] = "ssh-ed25519 AAAA"
-		if role != "" {
-			env[prefix+"_ROLE"] = role
-		}
+		held = append(held, sshConnection(ref, connections.SSHTransport{Host: ref + ".example.com", User: "hq", Port: "22", HostKey: "ssh-ed25519 AAAA", Role: role}))
 	}
-	return env
+	return runtime.Environment{SSHDir: "/run/secrets/controller-ssh"}, supplied(held...)
 }
 
 func caddyRegistry(roles map[string]string, fleet sshFleet) *Registry {
-	env := sshEnv(roles)
-	r := New(env, &fakeHTTP{})
-	r.Commands = &Commands{Env: env, Exec: fleet.exec}
+	env, held := sshEnv(roles)
+	r := New(env, held, &fakeHTTP{})
+	r.Commands = &Commands{Env: env, Supplied: held, Exec: fleet.exec}
 	return r
 }
 
