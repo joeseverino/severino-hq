@@ -4857,8 +4857,10 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
 .dash-readings { position: relative; z-index: 2; display: flex; flex-wrap: wrap; align-items: flex-start; flex: 1 1 22rem; min-width: 0; container-type: inline-size; }
 /* Two to a row while each half can hold a reading's lead, and one to a row
    below that: a half narrower than a lead would push the lead past the page. */
-.dash-readings :is(.dash-reading, .glance-panel) { flex: 1 1 max(50%, 11rem); min-width: 0; }
-.dash-readings .glance-panel-head { padding-inline: var(--space-3); }
+/* Two to a row where both fit. A reading whose lead is wider than half the
+   row takes a row of its own, so its lead is never drawn over its neighbour. */
+.dash-readings :is(.dash-reading, .glance-panel) { flex: 1 1 max(50%, 11rem); min-width: min-content; max-width: 100%; }
+.dash-readings .glance-panel-head { padding-inline: var(--space-3); grid-template-columns: 22px minmax(max-content, 1fr); }
 /* One shape for all of them, so they line up: the lead on a line of one
    height, in one size and one colour, with the mark beside that line rather
    than centred on however many lines the reading happens to have (it keeps
