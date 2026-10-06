@@ -654,7 +654,7 @@ class ServiceSurfaceTests(TestCase):
         card = next(card for card in estate_cards() if card["id"] == "hq.estate.services")
 
         self.assertEqual(card["value"], "1")
-        self.assertEqual(card["detail"], "1 incompletely wired")
+        self.assertEqual(card["detail"], "1 not fully set up")
         self.assertEqual(card["url"], reverse("control_plane:services"))
 
     def test_no_estate_means_no_card(self):

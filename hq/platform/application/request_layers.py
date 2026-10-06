@@ -473,8 +473,8 @@ def _identity_agreement_layer(identity: Identity) -> Layer:
             "identity-agreement",
             "The device's owner is the person signed in",
             False,
-            "The device's tailnet owner and the HQ account are different kinds "
-            "of name, and single sign-on did not link them.",
+            "The device's tailnet owner and the HQ account are two separate "
+            "names, and single sign-on did not link them.",
             evidence=f"{identity.tailnet_user} ↔ {session_principal or 'unnamed session'}",
             boundary="Identity correlation",
             mechanism="The session and the tailnet device owner",

@@ -503,7 +503,7 @@ class ObservedNameTests(TestCase):
         self.assertEqual(summary["Health"].detail, "Behind Access · No DNS record")
         self.assertEqual(
             summary["What it is"].value,
-            "Observed through Access application Admin; nothing declares it",
+            "Read through Access application Admin. Not in HQ's settings.",
         )
         section = page[page.index('id="path"'):page.index('id="parts"')]
         self.assertLess(section.index("No public DNS record"), section.index("Not read: Internal"))

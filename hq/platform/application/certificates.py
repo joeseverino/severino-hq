@@ -119,7 +119,7 @@ def store_certificate(
     try:
         resource = ManagedResource.objects.get(key=command.key)
     except ManagedResource.DoesNotExist as exc:
-        raise CertificateError(f"No resource named {command.key!r}.") from exc
+        raise CertificateError(f"No record named {command.key!r}.") from exc
 
     CertificateMaterial.objects.update_or_create(
         resource=resource,

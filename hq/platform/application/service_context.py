@@ -261,7 +261,7 @@ def _what(service) -> str:
                 for hop in service.path.observed
             )
         )
-        return f"Observed through {seen}; nothing declares it" if seen else "Observed"
+        return f"Read through {seen}. Not in HQ's settings." if seen else "Read"
     # Declared or not is what Health already says ("Nothing declared"), so
     # repeating it here would be the same fact twice.
     return ""

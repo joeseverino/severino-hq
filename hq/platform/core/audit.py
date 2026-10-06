@@ -61,7 +61,7 @@ SECURITY_ACTIONS: frozenset[str] = frozenset(
     }
 )
 if {action for action, _ in ROUTINE_EVENTS} & SECURITY_ACTIONS:
-    raise ValueError("A security action is declared routine.")
+    raise ValueError("A security action is listed as routine.")
 
 
 

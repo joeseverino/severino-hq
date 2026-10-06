@@ -631,7 +631,7 @@ class ZoneInsightTests(TestCase):
         card = self._insight("example.com", "Email")
 
         self.assertEqual(card.value, "Not configured")
-        self.assertIn("claims to come from it", card.detail)
+        self.assertIn("says it comes from it", card.detail)
 
     def test_iodef_is_not_counted_as_an_issuing_authority(self):
         """It names where to report a violation, not who may issue.

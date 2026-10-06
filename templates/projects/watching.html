@@ -8,7 +8,7 @@ would be a page about anybody.
 {% block page %}
 <div data-watching>
 {% if not login %}
-  {% include "partials/_empty_state.html" with message="Your sign-in names no GitHub account. Add a github claim with your login to your Pocket ID user, then sign in again." %}
+  {% include "partials/_empty_state.html" with message="Your sign-in names no GitHub account. In Pocket ID, add a custom field named github holding your GitHub login to your user, then sign in again." %}
 {% elif not profile %}
   {% include "partials/_empty_state.html" with message="Not read from GitHub yet. Press Read now to read it." %}
 {% else %}

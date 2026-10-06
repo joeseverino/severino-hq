@@ -496,12 +496,15 @@ def _weakly_verified(estate: FindingEstate) -> tuple[Finding, ...]:
         Finding(
             rule="weakly-verified",
             subject=node.id,
-            title=f"{node_name(node)}: could not check {_settings(node)}",
+            title=(
+                f"HQ could not confirm {counted(len(node.unconfirmed_fields), 'setting')} "
+                f"of {node_name(node)}"
+            ),
             severity="attention",
             explanation=(
-                f"HQ set {_settings(node)} and the last reading did not include it, so HQ "
-                "cannot say it is in place. Apply again to set it and read it back. If "
-                "this stays after applying, HQ cannot read this setting from the service."
+                f"HQ set these and the last reading did not include them: {_settings(node)}. "
+                "Apply again to set them and read them back. If this stays after applying, "
+                "HQ cannot read them from the service."
             ),
             evidence=(
                 ("Could not check", _settings(node)),

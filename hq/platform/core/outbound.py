@@ -38,9 +38,9 @@ logger = logging.getLogger("severino.request")
 ALLOWED = MappingProxyType(
     {
         "oidc": (
-            "Signing in is an exchange with the identity provider: the token, "
+            "Signing in is an exchange with the sign-in service: the token, "
             "its signing keys and the person's picture are asked for while the "
-            "browser waits, with the provider's own short-lived token, and "
+            "browser waits, with the service's own short-lived token, and "
             "each call is bounded by OIDC_TIMEOUT or the picture's timeout."
         ),
         "lookup": (
@@ -121,7 +121,7 @@ def allowed(name: str) -> Iterator[None]:
     """Enter one of the exceptions ``ALLOWED`` names."""
 
     if name not in ALLOWED:
-        raise ValueError(f"{name!r} is not an outbound exception HQ declares.")
+        raise ValueError(f"{name!r} is not an outbound exception HQ allows.")
     # A page fetched on a guess asks nothing outside the process.
     from . import speculation
 

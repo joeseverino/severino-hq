@@ -296,7 +296,7 @@ def calendar_sources() -> tuple[tuple[str, CalendarSource], ...]:
         if not isinstance(source, CalendarSource):
             raise TypeError(f"A calendar provider returned {type(source).__name__}, not CalendarSource.")
         if source.id in seen:
-            raise ValueError(f"Two calendar sources claim the id {source.id!r}.")
+            raise ValueError(f"Two calendar sources use the id {source.id!r}.")
         seen.add(source.id)
     return tuple(found)
 

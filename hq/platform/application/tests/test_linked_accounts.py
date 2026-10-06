@@ -28,7 +28,7 @@ class RecordTests(TestCase):
 
         self.assertEqual(linked_login(self.user, GITHUB), "example-user")
         # Unchanged on the second sign-in, so audited once.
-        self.assertEqual(AuditLog.objects.filter(message="Sign-in claims github account example-user").count(), 1)
+        self.assertEqual(AuditLog.objects.filter(message="Your sign-in names the github account example-user").count(), 1)
 
     def test_a_changed_claim_replaces_the_login(self):
         record_claimed_accounts(self.user, {"github": "old-name"})
@@ -42,7 +42,7 @@ class RecordTests(TestCase):
         record_claimed_accounts(self.user, {})
 
         self.assertEqual(linked_login(self.user, GITHUB), "")
-        self.assertTrue(AuditLog.objects.filter(message__contains="no longer claims").exists())
+        self.assertTrue(AuditLog.objects.filter(message__contains="no longer names").exists())
 
     def test_an_unsaved_user_records_nothing(self):
         record_claimed_accounts(get_user_model()(username="ghost"), {"github": "example-user"})

@@ -403,7 +403,8 @@ class FindingsTests(TestCase):
         # `field(s)` is what a claim looks like when it does not know how
         # many there are. This one does.
         # It names the field, so the reader knows what is unknown.
-        self.assertTrue(found[0].title.endswith(": could not check points at"))
+        self.assertTrue(found[0].title.startswith("HQ could not confirm 1 setting of "))
+        self.assertIn("points at", found[0].explanation)
 
     def test_a_field_carrying_no_value_is_not_an_unconfirmed_assertion(self):
         """A spec is a full model dump, so an optional field nobody set is
