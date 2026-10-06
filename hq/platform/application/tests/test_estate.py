@@ -373,7 +373,7 @@ class EdgeCertificateExpiryTests(TestCase):
         figure = self.figure()
 
         self.assertEqual(
-            figure["detail"], "example.com · Edge · not renewed by its provider"
+            figure["detail"], "example.com · Edge · not renewed by its issuer"
         )
         self.assertEqual(figure["status"], "attention")
         self.assertEqual(figure["url"], reverse("zones:detail", args=["example.com"]))

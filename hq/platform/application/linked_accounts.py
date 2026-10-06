@@ -58,7 +58,7 @@ def _record(user, provider: str, login: str) -> None:
                     action=AuditLog.Action.DELETED,
                     obj=found,
                     type_label=AUDIT_LABEL,
-                    message=f"Sign-in no longer claims {provider} account {found.login}",
+                    message=f"Your sign-in no longer names the {provider} account {found.login}",
                     user=user,
                     required=True,
                 )
@@ -71,7 +71,7 @@ def _record(user, provider: str, login: str) -> None:
             action=AuditLog.Action.CREATED if created else AuditLog.Action.UPDATED,
             obj=account,
             type_label=AUDIT_LABEL,
-            message=f"Sign-in claims {provider} account {login}",
+            message=f"Your sign-in names the {provider} account {login}",
             user=user,
             required=True,
         )

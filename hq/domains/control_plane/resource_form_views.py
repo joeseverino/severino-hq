@@ -491,8 +491,8 @@ class CertificateUploadView(View):
     def _page(resource) -> dict:
         return page_context(
             f"Certificate for {resource.key}",
-            "A certificate and key issued by your offline CA. HQ installs it on "
-            "this resource's consumers and keeps it for reuse.",
+            "A certificate and key issued by your offline CA. HQ installs it "
+            "wherever this certificate is used and keeps it for reuse.",
         )
 
     def get(self, request, key):

@@ -239,7 +239,7 @@ def _resource_for_operation(key: str) -> ManagedResource:
     try:
         return ManagedResource.objects.select_for_update().get(key=key)
     except ManagedResource.DoesNotExist as exc:
-        raise NotFoundError(f"Managed resource {key!r} was not found.") from exc
+        raise NotFoundError(f"No record named {key!r}.") from exc
 
 
 def _queue_operation(

@@ -296,7 +296,7 @@ def cards() -> tuple[dict[str, Any], ...]:
             "value": str(services["total"]),
             "url": reverse("control_plane:services"),
             **(
-                {"detail": f"{services['incomplete']} incompletely wired"}
+                {"detail": f"{services['incomplete']} not fully set up"}
                 if services["incomplete"]
                 else {}
             ),
@@ -321,7 +321,7 @@ def cards() -> tuple[dict[str, Any], ...]:
                     "value": counted(max(first.days, 0), "day"),
                     "url": first.url,
                     "detail": f"{first.subject} · {first.source}"
-                    + (" · not renewed by its provider" if first.overdue else ""),
+                    + (" · not renewed by its issuer" if first.overdue else ""),
                     **({"status": "attention"} if first.overdue else {}),
                 }
             )
@@ -515,7 +515,7 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
         else:
             key = f"estate-certificate:{expiry.source}:{expiry.subject}"
             body = (
-                f"Expires {expiry.phrase}. Its provider renews it automatically and "
+                f"Expires {expiry.phrase}. Its issuer renews it automatically and "
                 f"should have by now; check the {expiry.source.lower()} certificate "
                 "settings."
             )
@@ -523,8 +523,8 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
             offered = {
                 "workflow": cannot_help(
                     key,
-                    f"The {expiry.source} provider holds and renews it; HQ only reads it and "
-                    "cannot change its settings.",
+                    f"{expiry.source} holds and renews it. HQ only reads it and cannot change "
+                    "its settings.",
                 )
             }
         items.append(

@@ -371,7 +371,7 @@ def get_managed_resource(key: str) -> dict[str, Any]:
     try:
         resource = ManagedResource.objects.get(key=key)
     except ManagedResource.DoesNotExist as exc:
-        raise NotFoundError(f"Managed resource {key!r} was not found.") from exc
+        raise NotFoundError(f"No record named {key!r}.") from exc
     return {
         "resource": serialize_resource(resource),
         "derived": resource_context(resource).as_dict(),

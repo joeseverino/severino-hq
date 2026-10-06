@@ -142,7 +142,7 @@ def remember_avatar(
                 action=AuditLog.Action.CREATED if created else AuditLog.Action.UPDATED,
                 obj=avatar,
                 type_label=AUDIT_LABEL,
-                message="Picture taken from the identity provider at sign-in",
+                message="Picture taken from your sign-in service when you signed in",
                 user=user,
             )
     return digest
@@ -157,7 +157,7 @@ def _forget(user: Any) -> None:
             action=AuditLog.Action.DELETED,
             obj=avatar,
             type_label=AUDIT_LABEL,
-            message="The identity provider no longer gives a picture",
+            message="Your sign-in service no longer gives a picture",
             user=user,
         )
         avatar.delete()

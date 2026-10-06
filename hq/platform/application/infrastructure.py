@@ -435,14 +435,14 @@ def save_managed_resource(
                 )
             except ManagedResource.DoesNotExist as exc:
                 raise NotFoundError(
-                    f"Managed resource {current_key!r} was not found."
+                    f"No record named {current_key!r}."
                 ) from exc
             if (
                 expected_updated_at
                 and resource.updated_at.isoformat() != expected_updated_at
             ):
                 raise PolicyError(
-                    f"Managed resource {current_key!r} changed after it was read."
+                    f"The record {current_key!r} changed after it was read."
                 )
             created = False
 

@@ -157,7 +157,7 @@ STANDARD: tuple[Check, ...] = (
     Check("no-new-privileges", "Cannot gain privileges", _on(lambda runtime: any(
               option.startswith("no-new-privileges") and not option.endswith("false")
               for option in runtime.get("security_opt") or ())),
-          "Without it, a setuid program inside the container can raise its own privileges.",
+          "Without it, a setuid program inside the container can gain more privileges.",
           "Add no-new-privileges:true to its security options."),
     Check("no-devices", "No host devices", _on(lambda runtime: not runtime.get("devices")),
           "A passed-through device is direct access to that hardware.",

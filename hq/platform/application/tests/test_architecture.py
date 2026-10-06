@@ -1301,85 +1301,38 @@ class InterfaceTextTests(SimpleTestCase):
         self.assertGreater(checked, 0, "No HQ system check was examined")
 
 
-# What the plain-words rule reads, relative to the checkout: a file, or a
-# directory read whole. The platform pages and the modules that write their
-# text. To hold the whole interface to it, replace this with ("templates", "hq").
-PLAIN_WORDS_PATHS = (
-    "templates/403.html",
-    "templates/404.html",
-    "templates/500.html",
-    "templates/action_items.html",
-    "templates/base.html",
-    "templates/command.html",
-    "templates/confirm_page.html",
-    "templates/dashboard.html",
-    "templates/list_page.html",
-    "templates/page.html",
-    "templates/search.html",
-    "templates/analytics",
-    "templates/auth",
-    "templates/contacts",
-    "templates/core",
-    "templates/jobs",
-    "templates/control_plane/_zone_records.html",
-    "templates/control_plane/zone_detail.html",
-    "templates/control_plane/zone_index.html",
-    "templates/control_plane/zone_mail.html",
-    "templates/partials/_action_links.html",
-    "templates/partials/_ask.html",
-    "templates/partials/_attention_list.html",
-    "templates/partials/_command_field.html",
-    "templates/partials/_discovery_catalog.html",
-    "templates/partials/_empty_state.html",
-    "templates/partials/_form_field.html",
-    "templates/partials/_insight_grid.html",
-    "templates/partials/_modal.html",
-    "templates/partials/_page_action.html",
-    "templates/partials/_page_head.html",
-    "templates/partials/_pagination.html",
-    "templates/partials/_queue_groups.html",
-    "templates/partials/_resolution_workflow.html",
-    "templates/partials/_sweep_freshness.html",
-    "templates/partials/_table_toolbar.html",
-    "templates/partials/_work_queue.html",
-    "templates/partials/approval_card.html",
-    "hq/domains/analytics",
-    "hq/domains/contacts",
-    "hq/domains/jobs",
-    "hq/domains/control_plane/zone_views.py",
-    "hq/platform/application/action_items.py",
-    "hq/platform/application/analytics.py",
-    "hq/platform/application/approvals.py",
-    "hq/platform/application/attention.py",
-    "hq/platform/application/capability_policy.py",
-    "hq/platform/application/command_center.py",
-    "hq/platform/application/command_forms.py",
-    "hq/platform/application/command_targets.py",
-    "hq/platform/application/core_capabilities.py",
-    "hq/platform/application/dashboard.py",
-    "hq/platform/application/decisions.py",
-    "hq/platform/application/findings.py",
-    "hq/platform/application/glance.py",
-    "hq/platform/application/history.py",
-    "hq/platform/application/item_help.py",
-    "hq/platform/application/labels.py",
-    "hq/platform/application/mail_policy.py",
-    "hq/platform/application/outward_links.py",
-    "hq/platform/application/records.py",
-    "hq/platform/application/resources.py",
-    "hq/platform/application/scheduled_work.py",
-    "hq/platform/application/search.py",
-    "hq/platform/application/sections.py",
-    "hq/platform/application/workflows.py",
-    "hq/platform/application/zones.py",
-    "hq/platform/core/action_item_views.py",
-    "hq/platform/core/audit_views.py",
-    "hq/platform/core/command_views.py",
-    "hq/platform/core/dashboard_views.py",
-    "hq/platform/core/error_views.py",
-    "hq/platform/core/templatetags",
-    "hq/platform/core/views.py",
+# What the plain-words rule reads, relative to the checkout: every template
+# and every module, each read whole.
+PLAIN_WORDS_PATHS = ("templates", "hq")
+# Text under these is written for a program or the person writing one, in
+# HQ's own vocabulary, and is never a sentence on a page: as (prefix, why).
+PLAIN_WORDS_NOT_FOR_THE_OWNER = (
+    ("hq/platform/api/", "The machine API: its errors and descriptions are read by a client's author."),
+    ("hq/platform/mcp/", "Tool descriptions and errors an agent reads."),
+    ("hq/domains/control_plane/bridge_", "The controller bridge: refusals the controller logs."),
+    ("hq/domains/control_plane/provider_adapters/", "Declaration errors raised while HQ starts."),
+    ("hq/domains/control_plane/provider_spec.py", "Declaration errors raised while HQ starts."),
+    ("hq/domains/control_plane/providers.py", "Declaration errors raised while HQ starts."),
+    ("hq/domains/control_plane/observations/contract.py", "Declaration errors raised while HQ starts."),
+    ("hq/domains/control_plane/models.py", "Model validation messages no page shows."),
+    ("hq/platform/application/integrations.py", "Errors an extension's author reads when it loads."),
+    ("hq/platform/application/controller.py", "Refusals answered to the controller over the bridge."),
+    ("hq/config/", "Settings and start-up errors."),
 )
+
+
+def _for_the_owner(path: str) -> bool:
+    name = path.rsplit("/", 1)[-1]
+    return not (
+        "/tests/" in path
+        or "/management/commands/" in path
+        or name.startswith("test")
+        or name in {"testing.py", "bench.py"}
+        or name.endswith("_testing.py")
+        or any(path.startswith(prefix) for prefix, _why in PLAIN_WORDS_NOT_FOR_THE_OWNER)
+    )
+
+
 # A place the rule lets a word stand, as (path, word, why). Each is a string
 # that is kept as data or read by a client's author, never a sentence the
 # owner is told. One that no longer matches fails the test.
@@ -1389,6 +1342,44 @@ PLAIN_WORDS_EXEMPT = (
         "Capability",
         "The type name stored on every past audit row for an agent rule; a new "
         "name would split that history in two.",
+    ),
+    *(
+        (path, word, "Linux's own word for a privilege a container can be given, as Docker's cap_add spells it.")
+        for path, word in (
+            ("hq/platform/application/container_hardening.py", "capability"),
+            ("hq/platform/application/container_standard.py", "capability"),
+            ("hq/platform/application/container_standard.py", "capabilities"),
+        )
+    ),
+    (
+        "hq/platform/application/dns_findings.py",
+        "provider",
+        "'Your internet provider' is the everyday name for the company that sells the connection.",
+    ),
+    (
+        "hq/platform/application/render_status_findings.py",
+        "render",
+        "Part of a literal log token the owner is told to search the journal for.",
+    ),
+    (
+        "hq/domains/control_plane/apps.py",
+        "Managed resource",
+        "The type name stored on every past audit row for a record; a new name would split that history.",
+    ),
+    (
+        "hq/platform/application/capabilities.py",
+        "capability",
+        "An error for a command name that does not exist, read by whoever wrote the caller.",
+    ),
+    (
+        "hq/platform/application/cadence.py",
+        "kind",
+        "A validation message that lists the request's own field names for whoever wrote the caller.",
+    ),
+    (
+        "hq/platform/application/infrastructure.py",
+        "kind",
+        "A validation message that lists the request's own field names for whoever wrote the caller.",
     ),
     (
         "hq/platform/application/resources.py",
@@ -1416,7 +1407,8 @@ class PlainWordsTests(SimpleTestCase):
         super().setUpClass()
         cls.words = plain_words
         root = Path(settings.BASE_DIR).resolve()
-        cls.found, cls.files = plain_words.read((root / path for path in PLAIN_WORDS_PATHS), root=root)
+        found, cls.files = plain_words.read((root / path for path in PLAIN_WORDS_PATHS), root=root)
+        cls.found = [item for item in found if _for_the_owner(str(item.path))]
 
     def test_the_rule_read_the_pages(self):
         self.assertGreater(self.files, 100, "The plain-words rule read almost nothing")

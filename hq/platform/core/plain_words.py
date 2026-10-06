@@ -70,6 +70,8 @@ _SHOWN_ATTRIBUTES = frozenset(
 )
 # An identifier, a route, a path or a class list: lower case, no sentence in it.
 _IDENTIFIER = re.compile(r"[a-z0-9_.:/#?&=%\- ]*\Z")
+# A type written as a string, "Name | None": not a sentence.
+_ANNOTATION = re.compile(r"[A-Z]\w*(?: \| [A-Za-z]\w*)+")
 _UNSEEN_ELEMENTS = frozenset({"script", "style", "code", "pre", "kbd"})
 
 
@@ -103,6 +105,8 @@ def _is_prose(text: str) -> bool:
 
     stripped = text.strip()
     if not stripped or stripped.endswith((".html", ".py", ".js", ".css")):
+        return False
+    if _ANNOTATION.fullmatch(stripped):
         return False
     return not _IDENTIFIER.match(stripped)
 

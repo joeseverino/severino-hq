@@ -176,9 +176,9 @@ def _certificate_expiry(resource: ManagedResource):
 def _automatic_reconcile(resource: ManagedResource) -> tuple[bool, str, str]:
     not_after = resource.status.get("not_after")
     if resource.kind == CERTIFICATE_KIND and not_after and _certificate_expiry(resource) is None:
-        return True, "Automatic repair of invalid certificate observation.", "invalid-expiry"
+        return True, "Automatic: the certificate's expiry could not be read.", "invalid-expiry"
     if resource.generation != resource.observed_generation:
-        return True, "Automatic reconciliation of a new desired generation.", "generation"
+        return True, "Automatic: HQ's settings for it changed.", "generation"
     drifted = any(
         item.get("status") is True
         and item.get("type") in {"Drifted", "Degraded"}
@@ -193,7 +193,7 @@ def _automatic_reconcile(resource: ManagedResource) -> tuple[bool, str, str]:
             if item.get("type") in {"Drifted", "Degraded"}
         )
         digest = hashlib.sha256(said.encode()).hexdigest()[:16]
-        return True, "Automatic reconciliation of provider drift.", f"drift-{digest}"
+        return True, "Automatic: it was changed outside HQ.", f"drift-{digest}"
     return False, "", ""
 
 

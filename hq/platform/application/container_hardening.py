@@ -170,7 +170,7 @@ def _security_options(container, runtime, unmet):
         kept.append("no-new-privileges:true")
     cautions = []
     if "no-new-privileges" in wanted:
-        cautions.append("A program that needs setuid to work (sudo, su) can no longer raise itself.")
+        cautions.append("A program that needs setuid to work (sudo, su) can no longer gain root.")
     if "confined" in wanted:
         cautions.append("A system call the default profile refuses now fails, which is what the profile is for.")
     yield Change(tuple(sorted(wanted)), "security_opt", _listed("security_opt", kept), " ".join(cautions))
@@ -259,7 +259,7 @@ def _memory(container, runtime, unmet):
     else:
         limit = DEFAULT_MEMORY
         caution = (f"HQ has no reading of what it uses, so {DEFAULT_MEMORY} is a starting point: if it is killed "
-                   "for running out of memory, raise it.")
+                   "for running out of memory, increase it.")
     yield Change(("memory-limited",), "mem_limit", f"mem_limit: {limit}", caution)
 
 

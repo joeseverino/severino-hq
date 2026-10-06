@@ -91,7 +91,7 @@ def services(zone) -> ZoneInsight | None:
         return ZoneInsight(
             label="Services",
             value="None",
-            detail="Nothing in this domain has anything declared behind it.",
+            detail="HQ has nothing set up behind any name in this domain.",
             links=(("Served by", serving),) if serving else (),
             note=overlays,
         )
@@ -370,7 +370,7 @@ def email(zone) -> ZoneInsight | None:
             value="Not configured",
             detail=(
                 "No MX, SPF or DMARC record. This domain receives no mail, and "
-                "nothing stops anyone sending mail that claims to come from it."
+                "nothing stops anyone sending mail that says it comes from it."
             ),
             note="Next: publish v=spf1 -all and a DMARC p=reject record.",
         )

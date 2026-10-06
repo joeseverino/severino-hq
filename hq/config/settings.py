@@ -910,9 +910,7 @@ CF_ACCESS_CLIENT_SECRET = env_secret("CF_ACCESS_CLIENT_SECRET")
 # See config/devtools.py. Installed from the dev dependency group, which the image
 # never installs; enabled only with DEBUG on and the flag set, outside the suite.
 SEVERINO_DEBUG_TOOLBAR = debug_toolbar_enabled(
-    debug=DEBUG,
-    requested=env_bool("SEVERINO_DEBUG_TOOLBAR"),
-    testing=RUNNING_TESTS,
+    debug=DEBUG, requested=env_bool("SEVERINO_DEBUG_TOOLBAR"), testing=RUNNING_TESTS
 )
 if SEVERINO_DEBUG_TOOLBAR:
     INSTALLED_APPS.append(DEBUG_TOOLBAR_APP)
