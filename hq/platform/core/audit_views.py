@@ -47,16 +47,17 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
         waiting = len(awaiting_ids())
         # The way to what waits is offered while something does, and on its
         # own view so there is a way back.
-        if not waiting and not awaiting:
-            return ()
-        return (
-            PageAction("All events", listing, primary=not awaiting),
-            PageAction(
-                f"Waiting for your approval · {waiting}",
-                f"{listing}?awaiting=1",
-                primary=awaiting,
-            ),
-        )
+        actions: list[PageAction] = []
+        if waiting or awaiting:
+            actions.append(PageAction("All events", listing, primary=not awaiting))
+            actions.append(
+                PageAction(
+                    f"Waiting for your approval · {waiting}",
+                    f"{listing}?awaiting=1",
+                    primary=awaiting,
+                )
+            )
+        return tuple(actions)
 
     def get_queryset(self):
         qs = AuditLog.objects.select_related("user").annotate(source=history.source_of_event())

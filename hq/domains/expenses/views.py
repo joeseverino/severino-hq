@@ -44,9 +44,11 @@ class ExpenseListView(PageMixin, TableListMixin, ListView):
 
     def get_table_filters(self):
         years = [(year, str(year)) for year in years_of(Expense, "date")]
-        by_category = TableFilter("category", "Category", "category", EXPENSE_CATEGORY_CHOICES)
+        filters = [TableFilter("category", "Category", "category", EXPENSE_CATEGORY_CHOICES)]
         # A year to choose once an expense has one.
-        return (by_category, TableFilter("year", "Year", "date__year", years)) if years else (by_category,)
+        if years:
+            filters.append(TableFilter("year", "Year", "date__year", years))
+        return tuple(filters)
 
     def get_queryset(self):
         qs = Expense.objects.all()
