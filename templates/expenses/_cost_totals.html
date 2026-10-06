@@ -1,0 +1,6 @@
+{% comment %}
+What a list of costs adds up to, between its toolbar and its table. `totals`
+is application.expenses.CostTotals; a list with nothing to add up says nothing.
+{% endcomment %}
+{% load humanize %}
+{% if totals %}<p class="muted">{% if totals.narrowed %}Matching: {% else %}Total {% endif %}<strong>${{ totals.total|floatformat:2|intcomma }}</strong>{% if totals.narrowed %} total{% endif %} · deductible (est.) <strong>${{ totals.deductible|floatformat:2|intcomma }}</strong></p>{% endif %}

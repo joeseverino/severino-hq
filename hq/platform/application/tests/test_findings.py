@@ -306,9 +306,9 @@ class FindingsTests(TestCase):
         found = [f for f in self.raised() if f.rule == "reconciled-but-still-wrong"]
 
         self.assertEqual([f.subject for f in found], ["resource:wont-converge"])
-        evidence = dict(found[0].evidence)
-        self.assertEqual(evidence["Declared revision"], "4")
-        self.assertEqual(evidence["Observed revision"], "4")
+        # What the resource itself says is the finding, in its own words.
+        self.assertEqual(found[0].title, "The provider refused it")
+        self.assertEqual(found[0].explanation, "The provider refused it.")
 
     def test_never_observed_needs_something_that_could_have_looked(self):
         """Uncovered and skipped are different findings with different answers."""

@@ -203,7 +203,7 @@ class DomainCardTests(TestCase):
         page = response.content.decode()
 
         # In Relationships, after the records; not among the cards.
-        self.assertLess(page.index("<h2>Records "), page.index("Behind Access</th>"))
+        self.assertLess(page.index("<h2>Records "), page.index("<dt>Behind Access</dt>"))
         self.assertNotIn('aria-label="Access application"', page)
 
     def test_issuers_are_named_by_the_authority_registry(self):
@@ -408,7 +408,7 @@ class ServiceColumnTests(TestCase):
 
         # In Relationships, each record through the link builder, and no
         # sentence under the cards repeating them.
-        self.assertContains(response, '<th scope="rowgroup" rowspan="1">Behind Access</th>')
+        self.assertContains(response, "<dt>Behind Access</dt>")
         self.assertContains(response, '<span data-entity="Access application">Admin</span>')
         # The edge certificate is on the path, as the edge's mark, and so not
         # said again under Relationships.

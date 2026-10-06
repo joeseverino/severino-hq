@@ -22,6 +22,26 @@ from .security import Principal
 
 
 
+@dataclass(frozen=True)
+class CostTotals:
+    """What a list of costs adds up to, over every row its filters leave."""
+
+    total: Decimal
+    deductible: Decimal
+    # A search or a filter is on, so the sums are of what matches.
+    narrowed: bool = False
+
+    def __bool__(self) -> bool:
+        return bool(self.total or self.deductible)
+
+
+def cost_totals(sums: dict[str, Any], *, narrowed: bool) -> CostTotals:
+    """``sums`` is an aggregate's ``total`` and ``deductible``, either None over no rows."""
+
+    zero = Decimal("0.00")
+    return CostTotals(sums.get("total") or zero, sums.get("deductible") or zero, narrowed)
+
+
 class NotFoundError(ValueError):
     pass
 

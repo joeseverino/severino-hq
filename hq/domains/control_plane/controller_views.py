@@ -19,8 +19,8 @@ class ControllerView(PageMixin, TemplateView):
     template_name = "control_plane/controller.html"
     page_title = "Controller"
     page_lede = (
-        "The process on the host that reads every provider and applies queued work. "
-        "HQ holds no provider credential: everything it shows, the controller read."
+        "The controller runs on your server. It reads what HQ shows from each connected "
+        "service and applies the changes you queue. HQ itself holds no service credentials."
     )
 
     def get_page_actions(self):

@@ -5,7 +5,7 @@
   {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
   {% for field in form %}{% include "partials/_form_field.html" %}{% endfor %}
   <div class="form-actions">
-    <button type="submit" class="primary">{% if form.instance.pk %}Save changes{% else %}Create{% endif %}</button>
+    <button type="submit" class="primary">{% if form.instance.pk %}Save changes{% else %}Save document{% endif %}</button>
     <a class="btn" href="{% url 'docs_index:list' %}">Cancel</a>
   </div>
 </form>

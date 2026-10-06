@@ -238,7 +238,7 @@ class VerificationTests(TestCase):
     def test_a_kind_level_finding_reads_that_kind_now(self):
         action = self.verify(self.finding(scope="tailscale.device"))
 
-        self.assertEqual(action.label, "Read now and check again")
+        self.assertEqual(action.label, "Check again")
         self.assertEqual(action.method, "POST")
         self.assertIn("kind=tailscale.device", action.url)
         self.assertIn("next=%2Finfrastructure%2Ffindings%2F%3Frule%3Dexample-rule", action.url)

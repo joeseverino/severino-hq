@@ -28,8 +28,8 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     table_columns = (
         TableColumn("When", "created_at", "Oldest event", "Newest event"),
         TableColumn("Who", "user__username", "User A–Z", "User Z–A"),
-        TableColumn("Action", "action", "Action", "Action reverse", css="key-col"),
-        TableColumn("Object", "object_type", "Object type", "Object type reverse"),
+        TableColumn("Action", "action", css="key-col"),
+        TableColumn("Object", "object_type", "Object type A–Z", "Object type Z–A"),
         TableColumn("Message", "message", "Message A–Z", "Message Z–A"),
     )
     table_default_sort = "-created_at"

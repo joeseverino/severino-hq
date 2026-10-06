@@ -5,23 +5,25 @@
   {% if record.obsidian_path %}<dt>Obsidian path</dt><dd><code>{{ record.obsidian_path }}</code></dd>{% endif %}
   {% if record.github_path %}<dt>GitHub path</dt><dd><code>{{ record.github_path }}</code></dd>{% endif %}
   {% if record.external_url %}<dt>External URL</dt><dd>{% if record.external_url|web_url %}<a href="{{ record.external_url|web_url }}" rel="noopener noreferrer">{{ record.external_url }}</a>{% else %}{{ record.external_url }}{% endif %}</dd>{% endif %}
-  <dt>Last reviewed</dt><dd>{{ record.last_reviewed|default:"never" }}</dd>
-  <dt>Safe for AI export</dt><dd>{% if record.is_safe_for_ai_export %}Yes (public / internal){% else %}<strong>No</strong> (sensitive or restricted){% endif %}</dd>
+  <dt>Last reviewed</dt><dd>{% if record.last_reviewed %}{{ record.last_reviewed|when:"day" }}{% else %}Never{% endif %}</dd>
+  <dt>Safe for AI export</dt><dd>{% if record.is_safe_for_ai_export %}Yes (public or internal){% else %}<strong>No</strong> (sensitive or restricted){% endif %}</dd>
 </dl>
 
 {% if record.notes %}<h2>Index notes</h2><p>{{ record.notes|linebreaksbr }}</p>{% endif %}
 
+{% with projects=record.related_projects.all assets=record.related_assets.all expenses=record.related_expenses.all content=record.content_items.all %}
 <section>
   <h2>Related</h2>
-  {% if record.related_projects.all or record.related_assets.all or record.related_expenses.all or record.content_items.all %}
+  {% if projects or assets or expenses or content %}
     <div class="two-col">
-      {% if record.related_projects.all %}<div><h3>Projects</h3><ul>{% for p in record.related_projects.all %}<li><a href="{{ p.get_absolute_url }}">{{ p.name }}</a></li>{% endfor %}</ul></div>{% endif %}
-      {% if record.related_assets.all %}<div><h3>Assets</h3><ul>{% for a in record.related_assets.all %}<li><a href="{{ a.get_absolute_url }}">{{ a.item_name }}</a></li>{% endfor %}</ul></div>{% endif %}
-      {% if record.related_expenses.all %}<div><h3>Expenses</h3><ul>{% for e in record.related_expenses.all %}<li><a href="{{ e.get_absolute_url }}">{{ e.date|when }} {{ e.vendor }} · {{ e.item }}</a></li>{% endfor %}</ul></div>{% endif %}
-      {% if record.content_items.all %}<div><h3>Content items</h3><ul>{% for c in record.content_items.all %}<li><a href="{{ c.get_absolute_url }}">{{ c.title }}</a></li>{% endfor %}</ul></div>{% endif %}
+      {% if projects %}<div><h3>Projects</h3><ul>{% for p in projects %}<li>{% entity "project"|entity_of:p.slug label=p.name %}</li>{% endfor %}</ul></div>{% endif %}
+      {% if assets %}<div><h3>Assets</h3><ul>{% for a in assets %}<li>{% entity "asset"|entity_of:a.slug label=a.item_name %}</li>{% endfor %}</ul></div>{% endif %}
+      {% if expenses %}<div><h3>Expenses</h3><ul>{% for e in expenses %}<li>{% entity "expense"|entity_of:e.pk label=e.label %} <span class="muted">{{ e.date|when:"day" }}</span></li>{% endfor %}</ul></div>{% endif %}
+      {% if content %}<div><h3>Writeups and pages</h3><ul>{% for c in content %}<li>{% entity "writeup"|entity_of:c.slug label=c.title %}</li>{% endfor %}</ul></div>{% endif %}
     </div>
   {% else %}
-    <p class="muted">Nothing related yet: no projects, assets, expenses or content items name this document.</p>
+    <p class="muted">Nothing is linked to this document yet.</p>
   {% endif %}
 </section>
+{% endwith %}
 {% endblock %}

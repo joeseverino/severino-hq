@@ -1,4 +1,4 @@
 {% extends "confirm_page.html" %}
 {% block consequences %}
-<p>{{ expense.date|when }} · {{ expense.vendor }} · {{ expense.item }} (${{ expense.total_cost }})</p>
+<p>Deletes <strong>{{ expense.label }}</strong> ({{ expense.date|when:"day" }}, ${{ expense.total_cost }}) for good. Its receipts stay, without the link.</p>
 {% endblock %}

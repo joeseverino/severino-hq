@@ -1,14 +1,11 @@
 {% extends "list_page.html" %}
 {% load humanize %}
 {% block row %}
-  <td><a href="{{ row.get_absolute_url }}">{{ row.uploaded_at|when }}</a></td>
-  <td>{{ row.vendor|or_empty }}</td>
+  <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.label }}</strong></a></td>
   <td>{{ row.date|when }}</td>
   <td>${{ row.amount|floatformat:2|intcomma }}</td>
+  <td>{% if row.related_expense or row.related_asset %}{% include "receipts/_linked_to.html" with receipt=row %}{% else %}{% empty_value %}{% endif %}</td>
   <td class="muted">{{ row.original_filename|or_empty }}</td>
-  <td class="muted">
-    {% if row.related_expense %}<a href="{{ row.related_expense.get_absolute_url }}">expense</a>{% endif %}
-    {% if row.related_asset %}<a href="{{ row.related_asset.get_absolute_url }}">asset</a>{% endif %}
-  </td>
+  <td class="muted">{{ row.uploaded_at|when:"ago" }}</td>
 {% endblock %}
-{% block empty %}No receipts yet.{% endblock %}
+{% block empty %}No receipts yet. <a href="{% url 'receipts:create' %}">Upload receipt</a>{% endblock %}

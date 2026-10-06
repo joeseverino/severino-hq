@@ -9,7 +9,7 @@ The page reads a stored reading; nothing here calls GitHub.
     <div class="band-fact">
       <span class="band-icon">{% include "partials/_icon.html" with name="commit" %}</span>
       <div>
-        <span class="band-label">Head of {{ repo.default_branch }}</span>
+        <span class="band-label">Latest commit on {{ repo.default_branch }}</span>
         <strong><a class="external-link" href="{{ repo.head.url }}" rel="noopener"><code>{{ repo.head.sha|slice:":7" }}</code></a></strong>
         <small class="one-line" title="{{ repo.head.message }}">{{ repo.head.message }}</small>
         <small>{% if repo.head.author %}{{ repo.head.author }}{% endif %}{% if repo.head.date %} · {{ repo.head.date|ago_short }}{% endif %}</small>
@@ -28,8 +28,11 @@ The page reads a stored reading; nothing here calls GitHub.
       <div>
         <span class="band-label">Production</span>
         {% if repo.production %}
-          <strong>{% if repo.production.url %}<a class="external-link" href="{{ repo.production.url }}" rel="noopener">{{ repo.production.state|capfirst|default:"Deployed" }}</a>{% else %}{{ repo.production.state|capfirst|default:"Deployed" }}{% endif %}</strong>
-          <small><code>{{ repo.production.sha|slice:":7" }}</code> · {{ repo.production.created_at|ago_short }}{% if repo.production.sha != repo.head.sha %} · behind the head{% endif %}</small>
+          {% with state=repo.production.state %}
+          {% comment %}GitHub's deployment states, as what happened.{% endcomment %}
+          <strong>{% if repo.production.url %}<a class="external-link" href="{{ repo.production.url }}" rel="noopener">{% endif %}{% if state == "failure" or state == "error" %}Deploy failed{% elif state == "in_progress" or state == "queued" or state == "pending" %}Deploying{% elif state == "inactive" %}Replaced{% else %}Deployed{% endif %}{% if repo.production.url %}</a>{% endif %}</strong>
+          {% endwith %}
+          <small><code>{{ repo.production.sha|slice:":7" }}</code> · {{ repo.production.created_at|ago_short }}{% if repo.production.sha != repo.head.sha %} · {{ repo.default_branch }} has newer commits{% endif %}</small>
           {% if repo.production.verified %}<small class="github-verified{% if repo.production_verified %} is-verified{% endif %}" tabindex="0" data-tip="{% for step in repo.production.verified %}{{ step.name }}: {{ step.conclusion|default:'not run' }}{% if not forloop.last %}&#10;{% endif %}{% endfor %}">{% include "partials/_icon.html" with name="check-circle" %}{% if repo.production_verified %}Verified before deploying{% else %}Verification failed{% endif %}</small>{% endif %}
         {% else %}
           <strong>None</strong><small>No deployments on GitHub.</small>
@@ -41,10 +44,10 @@ The page reads a stored reading; nothing here calls GitHub.
       <div>
         <span class="band-label">Security</span>
         {% if repo.alerts %}
-          <strong><a class="external-link" href="{{ repo.url }}/security" rel="noopener">{% if repo.open_alerts %}{{ repo.open_alerts }} open{% else %}Clear{% endif %}</a></strong>
+          <strong><a class="external-link" href="{{ repo.url }}/security" rel="noopener">{% if repo.open_alerts %}{{ repo.open_alerts|counted:"open alert,open alerts" }}{% else %}Clear{% endif %}</a></strong>
           <small>{% for n, level in repo.severities %}{{ n }} {{ level }}{% if not forloop.last %}, {% endif %}{% empty %}No open alerts.{% endfor %}</small>
         {% else %}
-          <strong>Not available</strong><small>GitHub offers no alerts for this repository on its plan.</small>
+          <strong>Not available</strong><small>GitHub does not offer security alerts for this repository's plan.</small>
         {% endif %}
       </div>
     </div>
@@ -52,19 +55,19 @@ The page reads a stored reading; nothing here calls GitHub.
     {% if rules or environment or repo.runners or posture %}
       <dl class="github-facts">
         {% if posture.measured %}
-          <div><dt>Posture</dt><dd><a href="{% url 'posture' %}">{{ posture.met }} of {{ posture.measured }} met</a> against your {% if repo.private %}private{% else %}public{% endif %} standard{% if posture.unmet %}<br><span class="github-gap">Not met: {% for result in posture.unmet %}{{ result.check.label|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</dd></div>
+          <div><dt>Repository settings</dt><dd><a href="{% url 'posture' %}">{{ posture.met }} of {{ posture.measured|counted:"check passes,checks pass" }}</a> ({% if repo.private %}private{% else %}public{% endif %} repo rules){% if posture.unmet %}<br><span class="github-gap">Failing: {% for result in posture.unmet %}{{ result.check.label|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</dd></div>
         {% endif %}
         {% if rules %}
-          <div><dt>Rules on {{ repo.default_branch }}</dt><dd>
-            {% if rules.pull_request %}A pull request{% if rules.reviews %} with {{ rules.reviews|counted:"approval" }}{% endif %}{% else %}No pull request{% endif %}
-            and {{ rules.required_checks|length|counted:"required check,required checks" }}{% if rules.required_checks %} ({{ rules.required_checks|join:", " }}){% endif %}{% if rules.blocks_force_push %} · force-push blocked{% endif %}
+          <div><dt>Changes to {{ repo.default_branch }}</dt><dd>
+            {% if rules.pull_request %}Need a pull request{% if rules.reviews %} with {{ rules.reviews|counted:"approval" }}{% endif %}{% else %}Need no pull request{% endif %}
+            and {{ rules.required_checks|length|counted:"passing check,passing checks" }}{% if rules.required_checks %} ({{ rules.required_checks|join:", " }}){% endif %}.{% if rules.blocks_force_push %} Force-push is blocked.{% endif %}
             {% if repo.unrequired_checks %}<br><span class="github-gap">Run on pull requests but not required: {{ repo.unrequired_checks|join:", " }}</span>{% endif %}
           </dd></div>
         {% elif "branch_rules" in repo.refused %}
-          <div><dt>Rules on {{ repo.default_branch }}</dt><dd class="muted">Not available on this repository's plan.</dd></div>
+          <div><dt>Changes to {{ repo.default_branch }}</dt><dd class="muted">GitHub does not offer branch rules for this repository's plan.</dd></div>
         {% endif %}
         {% if environment %}
-          <div><dt>Production</dt><dd>{% if environment.reviewers %}Deploys wait for approval from {{ environment.reviewers|join:", " }}{% else %}Deploys without approval{% endif %}{% if environment.wait_minutes %} after {{ environment.wait_minutes }} minutes{% endif %} · from {% if environment.branches == "any" %}any branch{% elif environment.branches == "protected" %}protected branches{% else %}chosen branches{% endif %}</dd></div>
+          <div><dt>Deploy rules</dt><dd>{% if environment.reviewers %}Deploys need approval from {{ environment.reviewers|join:", " }}{% else %}Deploys need no approval{% endif %}{% if environment.wait_minutes %} and wait {{ environment.wait_minutes|counted:"minute" }}{% endif %}. {% if environment.branches == "any" %}From any branch.{% elif environment.branches == "protected" %}Only from protected branches.{% else %}Only from chosen branches.{% endif %}</dd></div>
         {% endif %}
         {% for runner in repo.runners %}
           <div><dt>Runner</dt><dd>{% entity "machine"|entity_of:runner.name %} · {{ runner.status }}{% if runner.busy %}, running a job{% else %}, idle{% endif %}</dd></div>
@@ -80,7 +83,7 @@ The page reads a stored reading; nothing here calls GitHub.
   table leaves the middle of every row empty.
   {% endcomment %}
   {% if repo.pull_requests %}
-    <h3 class="section-heading">Open pull requests</h3>
+    <h3 class="section-heading">Open pull requests <span class="heading-aside">{{ repo.pull_requests|length }}</span></h3>
     <ul class="github-list">
       {% for pull in repo.pull_requests %}
         <li>

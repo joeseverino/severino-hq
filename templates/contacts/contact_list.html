@@ -23,12 +23,12 @@
   {% if q %}<a class="btn" href="{% url 'contacts:list' %}{% if selected_status %}?status={{ selected_status }}{% endif %}">Clear</a>{% endif %}
 </form>
 
-<p class="muted">{{ submissions|length|counted:"submission" }}{% if selected_status or q %} · filtered{% endif %}.</p>
+{% if submissions %}<p class="muted">{{ submissions|length|counted:"message" }}{% if selected_status or q %} matching{% endif %}.</p>{% endif %}
 
 <div class="table-scroll">
 <table class="data-table">
   <thead>
-    <tr><th>#</th><th>Received</th><th>From</th><th>Message</th><th>Status</th><th>Country</th><th class="actions-col">Actions</th></tr>
+    <tr><th>#</th><th>Received</th><th>From</th><th>Message</th><th>Status</th><th>Country</th><th class="actions-col"><span class="visually-hidden">Actions</span></th></tr>
   </thead>
   <tbody>
     {% for s in submissions %}
@@ -44,13 +44,13 @@
         <td class="muted">{{ s.country|or_empty }}</td>
         <td class="actions-col row-actions">
           {% url 'contacts:set_status' s.id as status_url %}
-          {% if s.status == "unread" %}{% post_button "✓" status_url name="status" value="read" css="icon-link" title="Mark read" %}{% endif %}
-          {% if s.status != "spam" %}{% post_button "🚫" status_url name="status" value="spam" css="icon-link" title="Mark spam" %}{% endif %}
-          <a class="icon-link danger-link" href="{% url 'contacts:delete' s.id %}" title="Delete" aria-label="Delete">✕</a>
+          {% if s.status == "unread" %}{% post_button "Mark read" status_url name="status" value="read" css="btn compact ghost" %}{% endif %}
+          {% if s.status != "spam" %}{% post_button "Spam" status_url name="status" value="spam" css="btn compact ghost" %}{% endif %}
+          <a class="btn compact ghost danger" href="{% url 'contacts:delete' s.id %}">Delete</a>
         </td>
       </tr>
     {% empty %}
-      <tr><td colspan="7" class="muted">{% if selected_status or q %}No matching submissions.{% else %}No submissions yet.{% endif %}</td></tr>
+      <tr><td colspan="7" class="muted">{% if selected_status or q %}No messages match.{% else %}No messages yet.{% endif %}</td></tr>
     {% endfor %}
   </tbody>
 </table>

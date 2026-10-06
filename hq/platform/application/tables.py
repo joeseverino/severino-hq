@@ -33,6 +33,9 @@ class TableColumn:
     Declared once on the view. The list page draws the header from these, and
     when a view declares no ``table_sorts`` the sort menu comes from them too,
     so a column cannot sort one way in its header and another in the menu.
+
+    A column of words names its two orders itself ("Status A–Z", "Status
+    Z–A"). A date or a number says its own: "Oldest purchase", "Highest cost".
     """
 
     label: str
@@ -48,10 +51,10 @@ class TableColumn:
         if not self.sort:
             return ()
         return (
-            TableSort(self.sort, self.ascending_label or f"{self.label}, ascending", self.sort),
+            TableSort(self.sort, self.ascending_label or f"{self.label} A–Z", self.sort),
             TableSort(
                 f"-{self.sort}",
-                self.descending_label or f"{self.label}, descending",
+                self.descending_label or f"{self.label} Z–A",
                 f"-{self.sort}",
             ),
         )

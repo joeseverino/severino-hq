@@ -12,7 +12,7 @@
   {% include "partials/_dropzone.html" with field=form.file title="Drop a receipt here, or choose a file" %}
   {% for field in form %}{% if field.name != "file" %}{% include "partials/_form_field.html" %}{% endif %}{% endfor %}
   <div class="form-actions">
-    <button type="submit" class="primary">{% if form.instance.pk %}Save changes{% else %}Upload{% endif %}</button>
+    <button type="submit" class="primary">{% if form.instance.pk %}Save changes{% else %}Upload receipt{% endif %}</button>
     <a class="btn" href="{% url 'receipts:list' %}">Cancel</a>
   </div>
 </form>

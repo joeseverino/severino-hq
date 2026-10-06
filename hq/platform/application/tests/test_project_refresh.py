@@ -187,7 +187,7 @@ class RefreshButtonTests(TestCase):
 
         self.assertRedirects(response, reverse("projects:detail", args=["alpha"]))
         shown = [str(message) for message in response.context["messages"]]
-        self.assertTrue(any("Refresh Alpha started" in message for message in shown), shown)
+        self.assertTrue(any("Reading GitHub." in message for message in shown), shown)
         self.assertContains(response, 'aria-disabled="true"')
 
     def test_a_second_refresh_while_one_runs_is_refused_and_says_why(self):
@@ -201,4 +201,4 @@ class RefreshButtonTests(TestCase):
 
         self.assertEqual(again.status_code, 200)
         self.assertEqual(again.json()["state"], "failed")
-        self.assertIn("already running", again.json()["note"])
+        self.assertIn("already being read", again.json()["note"])

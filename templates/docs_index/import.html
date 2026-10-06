@@ -3,7 +3,7 @@
 <form method="post" enctype="multipart/form-data" class="form">
   {% csrf_token %}
   {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
-  {% include "partials/_dropzone.html" with field=form.manifest_file title="Drop the manifest here" hint="JSON array of doc records" %}
+  {% include "partials/_dropzone.html" with field=form.manifest_file title="Drop the manifest here" hint="A JSON list of vault documents" %}
   {% for field in form %}{% if field.name != "manifest_file" %}{% include "partials/_form_field.html" %}{% endif %}{% endfor %}
   <div class="form-actions">
     <button type="submit" class="primary">Import</button>

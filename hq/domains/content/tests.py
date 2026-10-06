@@ -110,7 +110,7 @@ class ContentSyncTests(TestCase):
         item = ContentItem.objects.get()
         self.assertEqual(item.slug, "bare")
         self.assertEqual(item.title, "bare")
-        self.assertEqual(item.topic, "d" * 160)
+        self.assertEqual(item.topic, "d" * 200)
         self.assertEqual(item.tags, "a, b")
         self.assertEqual(item.published_url, "")
         self.assertIsNone(item.published_at)
@@ -213,3 +213,82 @@ class ContentSyncTests(TestCase):
         self.assertEqual(request.get_header("Cf-access-client-id"), "client-id")
         self.assertEqual(request.get_header("Cf-access-client-secret"), "client-secret")
         self.assertEqual(payload["count"], 2)
+
+
+class ContentPageTests(TestCase):
+    """What a writeup's or page's own page calls things, and where it leads."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        self.client.force_login(get_user_model().objects.create_superuser("content-reader"))
+
+    def test_a_draft_with_a_date_calls_it_planned(self):
+        draft = ContentItem.objects.create(
+            title="Example draft", slug="example-draft", published_at=datetime.date(2030, 1, 2)
+        )
+        live = ContentItem.objects.create(
+            title="Example writeup",
+            slug="example-writeup",
+            status=ContentItem.Status.PUBLISHED,
+            published_at=datetime.date(2030, 1, 2),
+            published_url="https://example.com/portfolio/example-writeup/",
+        )
+
+        drafted = self.client.get(draft.get_absolute_url())
+        published = self.client.get(live.get_absolute_url())
+
+        self.assertContains(drafted, "<dt>Planned date</dt>")
+        self.assertNotContains(drafted, "<dt>Published</dt>")
+        self.assertContains(published, "<dt>Published</dt>")
+        self.assertContains(published, "Open live page")
+        self.assertNotContains(published, "<dt>Slug</dt>")
+        self.assertContains(published, "<dt>Added to HQ</dt>")
+
+    def test_its_own_vault_note_is_its_source_document(self):
+        from hq.domains.docs_index.models import DocumentationRecord
+
+        item = ContentItem.objects.create(title="Example writeup", slug="example-writeup")
+        note = DocumentationRecord.objects.create(
+            doc_id="writeup-example",
+            title="Example writeup",
+            doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
+            obsidian_path="05 Writeups/example-writeup/index.md",
+        )
+        runbook = DocumentationRecord.objects.create(doc_id="rb-example-publish", title="Publish an example")
+        item.related_documentation.add(note, runbook)
+
+        response = self.client.get(item.get_absolute_url())
+
+        self.assertContains(response, "<h3>Source document</h3>")
+        self.assertContains(response, 'title="writeup-example">05 Writeups/example-writeup/index.md</a>')
+        self.assertContains(response, 'title="rb-example-publish">Publish an example</a>')
+        self.assertNotContains(response, "writeup-example ·")
+
+    def test_each_list_names_what_it_adds(self):
+        from django.urls import reverse
+
+        ContentItem.objects.create(title="Example writeup", slug="example-writeup")
+
+        writeups = self.client.get(reverse("content:writeups"))
+        pages = self.client.get(reverse("content:pages"))
+        everything = self.client.get(reverse("content:list"))
+
+        self.assertContains(writeups, "New writeup")
+        # One type on the list: the column and its filter say nothing.
+        self.assertNotIn("Type", [column.label for column in writeups.context["table"]["columns"]])
+        self.assertContains(pages, 'No pages yet. <a href="/content/new/?content_type=page">New page</a>')
+        self.assertContains(everything, "<h1>Content</h1>")
+        self.assertContains(everything, "New writeup or page")
+        self.assertContains(everything, "No source document")
+        for gone in ("Content pipeline", "New content item", "Missing documentation", "reverse"):
+            self.assertNotContains(everything, gone)
+
+    def test_the_form_opened_from_a_list_is_about_that_lists_kind(self):
+        from django.urls import reverse
+
+        response = self.client.get(reverse("content:create"), {"content_type": "page"})
+
+        self.assertContains(response, "<h1>New page</h1>")
+        self.assertContains(response, "Save page")
+        self.assertEqual(response.context["form"].initial["content_type"], "page")

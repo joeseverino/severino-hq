@@ -1,0 +1,12 @@
+{% comment %}
+A record's documents, one group per type, each a column of its page's Related
+section. `documents` is application.documentation.RelatedDocuments. A document
+is named by its title; closed tasks fold behind their count.
+{% endcomment %}
+{% for group in documents.groups %}
+  <div>
+    {% if group.folded %}<details class="section-fold"><summary><h3>{{ group.label }} <span class="heading-aside">{{ group.links|length }}</span></h3></summary>{% else %}<h3>{{ group.label }} <span class="heading-aside">{{ group.links|length }}</span></h3>{% endif %}
+    <ul>{% for link in group.links %}<li>{% entity link %}</li>{% endfor %}</ul>
+    {% if group.folded %}</details>{% endif %}
+  </div>
+{% endfor %}

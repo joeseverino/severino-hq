@@ -508,7 +508,7 @@ def infrastructure() -> tuple[Insight, ...]:
             title=finding.title,
             value="",
             body=finding.explanation,
-            action="Review evidence",
+            action="",
             url=f"{findings_url}?rule={finding.rule}",
             subject=_node_link(nodes.get(finding.subject)),
             workflow=finding_plan(

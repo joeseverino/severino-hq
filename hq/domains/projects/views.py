@@ -1,6 +1,7 @@
 from django.http import Http404
 from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.urls import reverse, reverse_lazy
+from django.utils.functional import cached_property
 from django.views.generic import (
     TemplateView,
     CreateView,
@@ -11,9 +12,9 @@ from django.views.generic import (
     View,
 )
 
-from hq.platform.application.projects import (
-    NotFoundError,
-)
+from hq.platform.application.documentation import related_documents
+from hq.platform.application.entity_links import web_url
+from hq.platform.application.projects import NotFoundError, hq_sections
 from hq.domains.projects.github import github_repository
 from hq.platform.application.security import web_principal
 from hq.platform.application.timestamps import moment
@@ -43,10 +44,9 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
     table_selectable = True
     table_columns = (
         TableColumn("Name", "name"),
-        TableColumn("Category", "category"),
         TableColumn("Status", "status", css="key-col"),
-        TableColumn("Tech", "technologies_used"),
-        TableColumn("Updated", "updated_at"),
+        TableColumn("Technologies", "technologies_used"),
+        TableColumn("Last push"),
         TableColumn("", css="row-actions"),
     )
     table_filters = (
@@ -54,16 +54,16 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
         TableFilter("category", "Category", "category", PROJECT_CATEGORY_CHOICES),
     )
     table_sorts = (
-        TableSort("-updated_at", "Recently updated", ("archive_rank", "-updated_at")),
+        TableSort("-updated_at", "Recently edited", ("archive_rank", "-updated_at")),
         TableSort(
-            "updated_at", "Least recently updated", ("archive_rank", "updated_at")
+            "updated_at", "Least recently edited", ("archive_rank", "updated_at")
         ),
         TableSort("name", "Name A–Z", ("archive_rank", "name")),
         TableSort("-name", "Name Z–A", ("archive_rank", "-name")),
-        TableSort("status", "Status", ("archive_rank", "status")),
-        TableSort("-status", "Status reverse", ("archive_rank", "-status")),
-        TableSort("category", "Category", ("archive_rank", "category")),
-        TableSort("-category", "Category reverse", ("archive_rank", "-category")),
+        TableSort("status", "Status A–Z", ("archive_rank", "status")),
+        TableSort("-status", "Status Z–A", ("archive_rank", "-status")),
+        TableSort("category", "Category A–Z", ("archive_rank", "category")),
+        TableSort("-category", "Category Z–A", ("archive_rank", "-category")),
         TableSort(
             "technologies_used", "Technology A–Z", ("archive_rank", "technologies_used")
         ),
@@ -74,9 +74,9 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
         ),
     )
     table_toggles = (
-        TableToggle("needs_output", "Needs output"),
-        TableToggle("no_content", "Missing content"),
-        TableToggle("no_docs", "Missing docs"),
+        TableToggle("needs_output", "Active, nothing written yet"),
+        TableToggle("no_content", "No writeup"),
+        TableToggle("no_docs", "No documents"),
     )
     table_default_sort = "-updated_at"
     table_search_placeholder = "Search projects, technology, and notes…"
@@ -111,6 +111,18 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
         )
         return self.apply_table_query(qs)
 
+    def get_context_data(self, **kwargs):
+        from hq.platform.application.github_estate import repository_for
+
+        context = super().get_context_data(**kwargs)
+        # GitHub's reading for the rows on this page: one stored reading,
+        # whatever the page size.
+        for project in context["object_list"]:
+            repository = repository_for(project.repository_url)
+            project.repository = repository
+            project.pushed_at = moment(str(repository.pushed_at or "")) if repository is not None else None
+        return context
+
 
 class ProjectRefreshView(View):
     """Start a refresh of the project's outside metadata. The request answers
@@ -129,18 +141,18 @@ class ProjectRefreshView(View):
         except NotFoundError as exc:
             raise Http404(str(exc)) from exc
         except JobConflict:
-            return answer(request, Standing(FAILED, "A project refresh is already running."), fallback=back)
+            return answer(request, Standing(FAILED, "GitHub is already being read for a project."), fallback=back)
         return answer(
             request,
             job_standing(job),
             fallback=back,
             status_url=reverse("jobs:status", args=[job.pk]),
-            message=f"{job.label} started. This page shows what it found when it ends.",
+            message="Reading GitHub. This page updates when it finishes.",
         )
 
 
 def refresh_ask(project):
-    """The project's Refresh control, standing as its last refresh does."""
+    """The project's Read now control, standing as its last read does."""
 
     from hq.domains.jobs.models import Job
     from hq.platform.application.asks import Ask, Standing, job_standing
@@ -149,7 +161,7 @@ def refresh_ask(project):
     job = Job.objects.filter(kind=REFRESH_JOB, state__in=("queued", "running")).first()
     mine = job is not None and job.request.get("project") == project.slug
     return Ask(
-        "Refresh",
+        "Read now",
         reverse("projects:refresh", args=[project.slug]),
         standing=job_standing(job) if mine else Standing(),
         status_url=reverse("jobs:status", args=[job.pk]) if mine else "",
@@ -173,15 +185,24 @@ class ProjectDetailView(PageMixin, DetailView):
         "content_items", "assets", "documentation_records", "expenses"
     )
 
+    @cached_property
+    def repository(self):
+        """GitHub's stored reading of the project's repository, when there is one."""
+
+        from hq.platform.application.github_estate import repository_for
+
+        return repository_for(self.object.repository_url)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         # The reverse of the tie the service page makes. A project says where it
         # is published and HQ manages that name, so the two are one thing seen
         # from either side, and only one side led anywhere.
         context["service_url"] = service_url_for(self.object.public_url)
-        from hq.platform.application.github_estate import repository_for
-
-        context["github"] = repository_for(self.object.repository_url)
+        context["github"] = self.repository
+        context["documents"] = related_documents(
+            self.object.documentation_records.all(), about=self.object
+        )
         if context["github"] is not None:
             from hq.platform.application.github_posture import posture_of
 
@@ -201,17 +222,18 @@ class ProjectDetailView(PageMixin, DetailView):
 
         from django.template.loader import render_to_string
 
-        from hq.platform.application.github_estate import repository_for
-
         # The work moves where the code does: a push says when it last
         # changed better than the last edit of this record does.
-        repository = repository_for(self.object.repository_url)
+        repository = self.repository
         return render_to_string(
             "projects/_project_meta.html",
             {
                 "project": self.object,
                 "service_url": service_url_for(self.object.public_url),
                 "pushed_at": moment(str(repository.pushed_at or "")) if repository is not None else None,
+                # The GitHub panel names the repository when it is read.
+                "repository_url": "" if repository is not None else web_url(self.object.repository_url),
+                "sections": hq_sections(self.object),
             },
         )
 
@@ -278,7 +300,7 @@ class WatchingView(PageMixin, TemplateView):
         found = standing()
         return [
             Ask(
-                "Refresh",
+                "Read now",
                 reverse("watching_refresh"),
                 standing=found,
                 status_url=_profile_status(found.since),
@@ -356,7 +378,7 @@ class WatchingRefreshView(View):
             read_standing((KIND,), asked),
             fallback=back,
             status_url=_profile_status(asked),
-            message=f"Asked the controller to read @{login} from GitHub. This page shows it when it reports.",
+            message=f"Reading @{login} from GitHub. This page updates when it finishes.",
         )
 
 
@@ -372,7 +394,7 @@ class PostureView(PageMixin, TemplateView):
     page_title = "Posture"
 
     def get_page_lede(self) -> str:
-        return "Every repository against your standard: the private one, and the public one on top of it."
+        return "Each repository checked against your repository rules. Public ones have extra checks."
 
     def get_context_data(self, **kwargs):
         from hq.platform.application.github_posture import STANDARD, postures

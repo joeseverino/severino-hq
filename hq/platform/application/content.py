@@ -114,12 +114,12 @@ def save_content(
                 item = ContentItem.objects.select_for_update().get(slug=current_slug)
             except ContentItem.DoesNotExist as exc:
                 raise NotFoundError(
-                    f"Content item {current_slug!r} was not found."
+                    f"The writeup or page {current_slug!r} was not found."
                 ) from exc
             created = False
             if expected_updated_at and item.updated_at.isoformat() != expected_updated_at:
                 raise ConflictError(
-                    f"Content item {current_slug!r} changed after it was read."
+                    f"The writeup or page {current_slug!r} changed after it was read."
                 )
 
         values = asdict(command)

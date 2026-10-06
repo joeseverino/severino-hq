@@ -17,9 +17,9 @@
     {% include "partials/_kpi_grid.html" with label="Traffic" items=kpis %}
 
     <p class="muted reading-note">
-      {{ totals.start|when:"day" }} – {{ totals.end|when:"day" }}{% if totals.sample_interval > 1 %} · sampled 1:{{ totals.sample_interval }}{% endif %}{% if observed_at %} · read {{ observed_at|ago }}{% endif %}
+      {{ totals.start|when:"day" }}{% if totals.start != totals.end %} – {{ totals.end|when:"day" }}{% endif %}{% if totals.sample_interval > 1 %} · sampled 1:{{ totals.sample_interval }}{% endif %}{% if observed_at %} · read {{ observed_at|ago }}{% endif %}
       {% if coverage.expected_days and not coverage.complete %}
-        · {{ coverage.covered_days }} of {{ coverage.expected_days }} site-days read, {{ coverage.missing_days }} queued for backfill
+        · {{ coverage.missing_days|counted:"day" }} still loading
       {% endif %}
     </p>
 
@@ -45,11 +45,14 @@
     </div>
 
     <section class="card" aria-labelledby="vitals">
-      <h2 id="vitals">Core Web Vitals</h2>
+      <h2 id="vitals">Page speed</h2>
+      {% if not vitals_measured %}
+        <p class="muted">Not enough visits to measure.</p>
+      {% else %}
       <dl class="vitals-strip">
         {% for key, metric in vitals.items %}
           <div class="vital">
-            <dt>{{ key|upper }}</dt>
+            <dt>{% if key == "lcp" %}Loading (LCP){% elif key == "inp" %}Responsiveness (INP){% elif key == "cls" %}Layout shift (CLS){% else %}{{ key|upper }}{% endif %}</dt>
             <dd>
               {% if metric.percent is None %}
                 <span class="muted">no samples</span>
@@ -61,9 +64,10 @@
           </div>
         {% endfor %}
       </dl>
+      {% endif %}
     </section>
   {% else %}
     {% url 'control_plane:connections' as connections_url %}
-    {% include "partials/_empty_state.html" with message="No traffic readings yet." why="They arrive once a connection that can read site analytics has been read." action_url=connections_url action_label="Connections" only %}
+    {% include "partials/_empty_state.html" with message="No visits recorded yet." why="HQ reads them from Cloudflare once a connection that can read site analytics is set up." action_url=connections_url action_label="Connections" only %}
   {% endif %}
 {% endblock %}

@@ -2,7 +2,7 @@
 {% load humanize %}
 {% block page %}
 {% if already_linked %}
-  <div class="msg msg-info">Already linked to an expense or asset.</div>
+  <div class="msg msg-info">Already linked to {% include "receipts/_linked_to.html" %}.</div>
 {% else %}
   {% if matches %}
     <p class="page-lede">Expenses without a receipt that match this vendor or amount:</p>
@@ -14,7 +14,7 @@
             <th>Vendor</th>
             <th>Item</th>
             <th>Cost</th>
-            <th>Action</th>
+            <th><span class="visually-hidden">Link</span></th>
           </tr>
         </thead>
         <tbody>
@@ -32,7 +32,7 @@
     </div>
   {% else %}
     <div class="empty">
-      <p>No unreceipted expenses match this vendor or amount.</p>
+      <p>No expense without a receipt matches this vendor or amount.</p>
       <p><a class="empty-cta" href="{% url 'expenses:create' %}?vendor={{ receipt.vendor|urlencode }}&cost={{ receipt.amount }}">New expense &rarr;</a></p>
     </div>
   {% endif %}

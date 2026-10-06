@@ -13,7 +13,7 @@
     {% endif %}
   {% endfor %}
   <div class="form-actions">
-    <button type="submit" class="primary">{% if form.instance.pk %}Save changes{% else %}Add to calendar{% endif %}</button>
+    <button type="submit" class="primary">{% if form.instance.pk %}Save changes{% else %}Add event{% endif %}</button>
     <a class="btn" href="{% if form.instance.pk %}{{ form.instance.get_absolute_url }}{% else %}{% url 'calendar:month' %}{% endif %}">Cancel</a>
   </div>
 </form>

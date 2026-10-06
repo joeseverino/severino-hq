@@ -100,6 +100,12 @@ class Expense(TimestampedModel):
     def __str__(self) -> str:
         return f"{self.date} {self.vendor} · {self.item}"
 
+    @property
+    def label(self) -> str:
+        """What the expense is called wherever it is named: who was paid, and for what."""
+
+        return f"{self.vendor} · {self.item}"
+
     def save(self, *args, **kwargs):
         cost = self.total_cost or Decimal("0.00")
         self.estimated_deductible_amount = quantize_money(

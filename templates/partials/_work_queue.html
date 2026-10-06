@@ -22,7 +22,7 @@ one thing they can do to it: dismiss it, or restore it. Neither closes it.
         </div>
         {% if item.detail or item.workflow %}
           <details class="attention-evidence">
-            <summary>{% if item.action %}<span class="insight-action-label">Next</span> {{ item.action }}{% elif item.workflow %}Evidence &amp; steps{% else %}Evidence{% endif %}<span class="visually-hidden"> for {{ item.label }}</span></summary>
+            <summary>{% if item.action %}<span class="insight-action-label">Next</span> {{ item.action }}{% elif item.workflow %}What to do{% else %}Details{% endif %}<span class="visually-hidden"> for {{ item.label }}</span></summary>
             {% if item.detail %}<p class="attention-detail">{{ item.detail }}</p>{% endif %}
             {% if item.workflow %}{% include "partials/_resolution_workflow.html" with workflow=item.workflow compact=True %}{% endif %}
           </details>

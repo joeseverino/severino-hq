@@ -1,0 +1,2 @@
+{% comment %}What a receipt is for: the expense it proves, the asset it bought, or both. `receipt` is the Receipt.{% endcomment %}
+{% if receipt.related_expense %}{% entity "expense"|entity_of:receipt.related_expense.pk label=receipt.related_expense.label %}{% endif %}{% if receipt.related_expense and receipt.related_asset %}, {% endif %}{% if receipt.related_asset %}{% entity "asset"|entity_of:receipt.related_asset.slug label=receipt.related_asset.item_name %}{% endif %}

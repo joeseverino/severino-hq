@@ -50,8 +50,8 @@ def claim_resolution_plan(
         steps.append(
             WorkflowStep(
                 "verify",
-                "Confirm the fix",
-                "It is resolved when this finding is gone.",
+                "Check that it worked" if act_actions else "Check again",
+                "",
                 "after_action" if act_actions else "available",
                 (verification,),
             )
@@ -60,12 +60,12 @@ def claim_resolution_plan(
     identity = claim_identity(namespace, rule, subject, scope)
     return WorkflowPlan(
         id=f"resolve:{identity}",
-        label="Steps to resolve",
+        label="What to do",
         steps=tuple(steps),
         outcome=WorkflowOutcome(
             "claim_absent",
             identity,
-            "Done when a fresh check no longer finds this.",
+            "This goes away once it is fixed.",
         ),
     )
 

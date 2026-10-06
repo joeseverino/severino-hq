@@ -36,6 +36,7 @@ class ReceiptUploadForm(forms.ModelForm):
         # already says above the form. What the operator cannot find out
         # anywhere else is what will be refused, so the field says that.
         help_texts = {"file": RECEIPT_SIZE_HINT}
+        labels = {"related_expense": "Expense", "related_asset": "Asset"}
 
     def clean_file(self):
         f = self.cleaned_data["file"]

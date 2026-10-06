@@ -1,4 +1,4 @@
-"""The calendar: a month of every source, a day of everything, and My Calendar's entries."""
+"""The calendar: a month of every source, a day of everything, and the operator's own events."""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ class CalendarView(PageMixin, TemplateView):
         day = self._selected() or timezone.localdate()
         return (
             PageAction(
-                "New entry", f"{reverse('calendar:entry_new')}?on={day.isoformat()}", primary=True
+                "Add event", f"{reverse('calendar:entry_new')}?on={day.isoformat()}", primary=True
             ),
         )
 
@@ -174,7 +174,7 @@ class EntryPage(PageMixin):
 
 class EntryWrite:
     model = Entry
-    noun = "Entry"
+    noun = "Event"
     result_key = "entry"
     identity_attr = "uid"
     identity_kwarg = "current_key"
@@ -188,7 +188,7 @@ class EntryDetailView(RedirectView):
 
 
 class EntryCreateView(EntryWrite, EntryPage, ServiceCreateMixin, CreateView):
-    page_title = "New entry"
+    page_title = "Add event"
     form_class = EntryForm
     template_name = "calendars/entry_form.html"
     service = staticmethod(save_entry)
@@ -200,7 +200,7 @@ class EntryCreateView(EntryWrite, EntryPage, ServiceCreateMixin, CreateView):
 
 
 class EntryUpdateView(EntryWrite, EntryPage, ServiceUpdateMixin, UpdateView):
-    page_title = "Edit entry"
+    page_title = "Edit event"
     form_class = EntryForm
     template_name = "calendars/entry_form.html"
     service = staticmethod(save_entry)
@@ -208,7 +208,7 @@ class EntryUpdateView(EntryWrite, EntryPage, ServiceUpdateMixin, UpdateView):
 
 
 class EntryDeleteView(EntryWrite, EntryPage, ServiceDeleteMixin, DeleteView):
-    page_title = "Delete entry?"
+    page_title = "Delete event?"
     template_name = "calendars/entry_confirm_delete.html"
     success_url = reverse_lazy("calendar:month")
     context_object_name = "entry"

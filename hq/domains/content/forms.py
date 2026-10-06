@@ -33,7 +33,7 @@ class ContentItemForm(forms.ModelForm):
             "notes": forms.Textarea(attrs={"rows": 4}),
             "published_at": forms.DateInput(attrs={"type": "date"}),
             "slug": forms.TextInput(
-                attrs={"placeholder": "leave blank to auto-generate"}
+                attrs={"placeholder": "Leave blank to use the title"}
             ),
             "related_projects": forms.SelectMultiple(attrs={"size": 6}),
             "related_assets": forms.SelectMultiple(attrs={"size": 6}),

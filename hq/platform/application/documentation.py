@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass, replace
 from datetime import date
 from typing import Any
 
@@ -16,6 +17,7 @@ from hq.domains.docs_index.importer import (
     validate_manifest_data,
 )
 from hq.domains.docs_index.models import DocumentationRecord
+from .entity_links import EntityLink, entity_link
 from .labels import plural
 from .domains import records_of
 from .security import Capability, Principal
@@ -25,6 +27,108 @@ from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 
 MAX_MANIFEST_ITEMS = 2000
+
+# A project's own note in the vault is ``project-<slug>``: the document that
+# stands for the project, so a page links the project and not the note.
+PROJECT_NOTE_PREFIX = "project-"
+CLOSED_TASK_STATUSES = frozenset(
+    {DocumentationRecord.TaskStatus.DONE, DocumentationRecord.TaskStatus.WONTFIX}
+)
+
+
+def document_link(record: DocumentationRecord, *, label: str = "") -> EntityLink:
+    """A document by its title, its id on hover."""
+
+    return replace(entity_link("document", record.doc_id, label=label or record.title), title=record.doc_id)
+
+
+@dataclass(frozen=True)
+class DocumentGroup:
+    """Documents of one type, under the heading a page gives them."""
+
+    label: str
+    links: tuple[EntityLink, ...]
+    # Closed tasks: counted in the heading, listed when it is opened.
+    folded: bool = False
+
+
+@dataclass(frozen=True)
+class RelatedDocuments:
+    """A record's documents as its page lists them."""
+
+    groups: tuple[DocumentGroup, ...] = ()
+    # Projects whose own note is among the documents.
+    projects: tuple[EntityLink, ...] = ()
+    # A writeup's or page's own vault note, apart from what it is related to.
+    sources: tuple[EntityLink, ...] = ()
+
+    def __bool__(self) -> bool:
+        return bool(self.groups or self.projects or self.sources)
+
+
+def _noted_projects(records: list[DocumentationRecord]) -> dict[int, Project]:
+    """The project each project note stands for, by the note's key."""
+
+    noted = {
+        record.doc_id.removeprefix(PROJECT_NOTE_PREFIX): record
+        for record in records
+        if record.doc_id.startswith(PROJECT_NOTE_PREFIX)
+    }
+    if not noted:
+        return {}
+    return {noted[project.slug].pk: project for project in Project.objects.filter(slug__in=noted)}
+
+
+def _task_groups(tasks: list[DocumentationRecord]) -> list[DocumentGroup]:
+    groups = []
+    for label, closed in (("Open tasks", False), ("Done tasks", True)):
+        found = tuple(
+            document_link(record) for record in tasks if (record.status in CLOSED_TASK_STATUSES) == closed
+        )
+        if found:
+            groups.append(DocumentGroup(label, found, folded=closed))
+    return groups
+
+
+def related_documents(
+    records: Iterable[DocumentationRecord],
+    *,
+    about: Project | None = None,
+    listed: Iterable[Project] = (),
+    sources: bool = False,
+) -> RelatedDocuments:
+    """``records`` grouped by type, in the order ``DocType`` declares.
+
+    A project's own note becomes a link to that project. The note of the
+    project the page is ``about`` is left out, and so is a project the page has
+    already ``listed``. With ``sources`` an article draft is the page's own
+    source document, named by where it is in the vault. Tasks come last, open
+    ones before closed ones, and closed ones fold.
+    """
+
+    records = sorted(records, key=lambda record: record.title.lower())
+    projects = _noted_projects(records)
+    said = {project.slug for project in listed} | ({about.slug} if about else set())
+    draft = DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT
+    task = DocumentationRecord.DocType.TASK
+    own = [record for record in records if sources and record.doc_type == draft]
+    rest = [record for record in records if record.pk not in projects and record not in own]
+    groups = [
+        DocumentGroup(plural(str(label)), found)
+        for value, label in DocumentationRecord.DocType.choices
+        if value != task
+        and (found := tuple(document_link(record) for record in rest if record.doc_type == value))
+    ]
+    groups += _task_groups([record for record in rest if record.doc_type == task])
+    return RelatedDocuments(
+        groups=tuple(groups),
+        projects=tuple(
+            entity_link("project", project.slug, label=project.name)
+            for project in sorted(projects.values(), key=lambda project: project.name.lower())
+            if project.slug not in said
+        ),
+        sources=tuple(document_link(record, label=record.obsidian_path) for record in own),
+    )
 
 
 @dataclass(frozen=True)

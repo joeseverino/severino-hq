@@ -1,11 +1,11 @@
 {% extends "list_page.html" %}
 {% block row %}
-  <td><a href="{{ row.get_absolute_url }}"><code>{{ row.doc_id }}</code></a></td>
-  <td>{{ row.title }}</td>
+  <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.title }}</strong></a></td>
+  <td><code>{{ row.doc_id }}</code></td>
   <td>{{ row.get_doc_type_display }}</td>
   <td>{{ row.get_environment_display }}</td>
   <td><span class="pill pill-{{ row.status }}">{{ row.get_status_display }}</span></td>
   <td><span class="pill pill-{{ row.sensitivity }}">{{ row.get_sensitivity_display }}</span></td>
-  <td class="muted">{{ row.last_reviewed|default:"never" }}</td>
+  <td class="muted">{% if row.last_reviewed %}{{ row.last_reviewed|when:"day" }}{% else %}Never{% endif %}</td>
 {% endblock %}
-{% block empty %}No doc records yet.{% endblock %}
+{% block empty %}No documents yet. <a href="{% url 'docs_index:import' %}">Import manifest</a>{% endblock %}

@@ -60,5 +60,19 @@ class Receipt(TimestampedModel):
         label = self.original_filename or (self.file.name if self.file else "receipt")
         return f"{self.vendor or 'Receipt'} · {label}"
 
+    @property
+    def label(self) -> str:
+        """What the receipt is called wherever it is named: who it is from, else its file."""
+
+        return self.vendor or self.original_filename or "Receipt"
+
+    @property
+    def file_type(self) -> str:
+        """The stored file type as a person says it; blank for one HQ does not accept."""
+
+        from .validation import FILE_TYPE_LABELS
+
+        return FILE_TYPE_LABELS.get((self.content_type or "").strip().lower(), "")
+
     def get_absolute_url(self) -> str:
         return reverse("receipts:detail", args=[self.pk])

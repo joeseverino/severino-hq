@@ -566,7 +566,7 @@ class OverviewPageTests(TestCase):
         response = self.client.get("/analytics/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "No traffic readings yet")
+        self.assertContains(response, "No visits recorded yet.")
 
     def test_every_breakdown_the_reader_collects_reaches_the_page(self):
         service.record_analytics(
@@ -609,8 +609,10 @@ class OverviewPageTests(TestCase):
 
         response = self.client.get("/analytics/?days=7")
 
-        self.assertContains(response, "1 of 7 site-days read")
-        self.assertContains(response, "6 queued for backfill")
+        self.assertContains(response, "6 days still loading")
+        # No visit was measured for speed: one sentence, not three empty rates.
+        self.assertContains(response, "Not enough visits to measure.")
+        self.assertNotContains(response, "no samples")
 
     def test_signing_in_is_required(self):
         self.client.logout()

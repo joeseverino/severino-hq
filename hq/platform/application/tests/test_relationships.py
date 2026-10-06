@@ -467,8 +467,8 @@ class NoUnlinkedNamesTests(TestCase):
 
         # What reaches it is the band's to say; Relationships leaves it there.
         self.assertContains(machine, "Reached through")
-        self.assertNotContains(machine, "Reached through</th>")
-        self.assertContains(service, "Behind Access</th>")
+        self.assertNotContains(machine, "<dt>Reached through</dt>")
+        self.assertContains(service, "<dt>Behind Access</dt>")
         self.assertContains(
             domain,
             f'href="https://dash.cloudflare.com/{ACCOUNT}/pages/view/example-site"',
@@ -659,8 +659,8 @@ class UnreadableScopeTests(TestCase):
         self.assertIn(label, unreadable_labels())
 
 
-class BareGroupTests(TestCase):
-    """Ends that are only names read across one line; ends with a source keep a row each."""
+class RelationListTests(TestCase):
+    """Each relation is named once; who read its ends is said once where one source read them all."""
 
     def render(self, *items):
         from django.template.loader import render_to_string
@@ -670,23 +670,40 @@ class BareGroupTests(TestCase):
         panel = Relationships(node_id="machine:example", groups=(RelationGroup("Carries", 10, items),))
         return render_to_string("partials/_relationships.html", {"relationships": panel})
 
-    def test_names_alone_share_one_row(self):
+    def test_a_relation_is_named_once_with_every_end(self):
         from ..relationships import Relationship
 
         html = self.render(*(Relationship(EntityLink(name)) for name in ("alpha", "beta", "gamma")))
 
-        self.assertEqual(html.count("<tr>"), 1)
-        self.assertIn("alpha", html)
-        self.assertIn("gamma", html)
+        self.assertEqual(html.count("<dt>"), 1)
+        self.assertEqual(html.count("<li>"), 3)
+        self.assertNotIn("relation-source", html)
+        self.assertNotIn("<table", html)
 
-    def test_an_end_somebody_read_keeps_its_own_row(self):
+    def test_one_source_for_every_end_is_said_once(self):
+        from django.utils import timezone
+
+        from ..relationships import Relationship
+
+        source = EntityLink("example-reader")
+        html = self.render(
+            Relationship(EntityLink("alpha"), source, timezone.now()),
+            Relationship(EntityLink("beta"), source, timezone.now()),
+        )
+
+        self.assertEqual(html.count("example-reader"), 1)
+        self.assertEqual(html.count("relation-source"), 1)
+
+    def test_ends_read_by_different_sources_each_say_theirs(self):
         from django.utils import timezone
 
         from ..relationships import Relationship
 
         html = self.render(
-            Relationship(EntityLink("alpha"), observed_at=timezone.now()),
-            Relationship(EntityLink("beta")),
+            Relationship(EntityLink("alpha"), EntityLink("example-reader"), timezone.now()),
+            Relationship(EntityLink("beta"), EntityLink("example-other"), timezone.now()),
         )
 
-        self.assertEqual(html.count("<tr>"), 2)
+        self.assertIn("example-reader", html)
+        self.assertIn("example-other", html)
+        self.assertNotIn("relation-source", html)
