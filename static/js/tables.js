@@ -86,6 +86,19 @@
       (el) => getComputedStyle(el).display === "none",
     );
 
+  // A cell that runs the width of the table (a section's heading, an open
+  // row) spans the columns that are showing. Left spanning the ones that were
+  // dropped, it keeps them in the table, and a table held to its box shares
+  // its width with columns nobody sees.
+  const spanShown = (table, headings) => {
+    const shown = headings.filter((heading) => getComputedStyle(heading).display !== "none").length;
+    if (!shown) return;
+    table.querySelectorAll(":scope > tbody > tr > [colspan]").forEach((cell) => {
+      if (!("span" in cell.dataset)) cell.dataset.span = cell.colSpan;
+      if (Number(cell.dataset.span) >= headings.length) cell.colSpan = shown;
+    });
+  };
+
   // Every table sorts. A list whose server sorts it already has links in its
   // headings and is left to them; any other table with headings gets the same
   // control here, working on the rows that are on the page. A press sorts
@@ -140,6 +153,8 @@
   // Below this a table's box is narrow, whatever the screen: a phone, or half
   // a page beside a chart.
   const NARROW_BOX = 640;
+  // What each heading's column takes with every value on one line.
+  const oneLine = new WeakMap();
   const fitTable = (table) => {
     const wrapper = table.parentElement;
     if (!wrapper?.classList.contains("table-scroll")) return;
@@ -154,9 +169,16 @@
     delete table.dataset.drop;
     delete table.dataset.snug;
     delete table.dataset.wrap;
+    table.querySelectorAll(":scope > tbody > tr > [data-span]").forEach((cell) => {
+      cell.colSpan = Number(cell.dataset.span);
+    });
     const overflows = () => table.getBoundingClientRect().width > wrapper.clientWidth + 1;
     const all = [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
-    all.forEach((heading) => heading.style.removeProperty("--column-floor"));
+    all.forEach((heading) => {
+      heading.style.removeProperty("--column-floor");
+      if ("held" in heading.dataset) heading.style.removeProperty("width");
+      delete heading.dataset.held;
+    });
     const headings = all.filter((heading) => getComputedStyle(heading).display !== "none");
     // Only the headings showing: a table whose own rule has already dropped
     // columns in a narrow box (a matrix of periods) is fitted from what is left.
@@ -164,6 +186,7 @@
       // What each column would take with every value on one line.
       table.dataset.measure = "";
       const wanted = headings.map((heading) => heading.getBoundingClientRect().width);
+      headings.forEach((heading, index) => oneLine.set(heading, wanted[index]));
       delete table.dataset.measure;
       const named = headings[0].classList.contains("select-column") ? 1 : 0;
       headings.forEach((heading, index) => {
@@ -197,8 +220,24 @@
         }
       }
     }
-    // Still wider than its box with nothing left to give up.
-    if (overflows()) table.dataset.wrap = "tight";
+    // Still wider than its box with nothing left to give up: the columns are
+    // held to the box. Each takes what its own values need on one line, up to
+    // a readable width, and the column that names the row takes the rest.
+    if (overflows()) {
+      table.dataset.wrap = "tight";
+      const named = headings[0]?.classList.contains("select-column") ? 1 : 0;
+      const beside = headings.filter((heading, index) =>
+        index !== named && getComputedStyle(heading).display !== "none");
+      const whole = beside.reduce((sum, heading) => sum + oneLine.get(heading), 0);
+      // Whole, while the name keeps a readable width beside them.
+      const roomy = wrapper.clientWidth - whole >= READABLE_NAME;
+      beside.forEach((heading) => {
+        const width = roomy ? oneLine.get(heading) : Math.min(oneLine.get(heading), READABLE);
+        heading.style.width = `${Math.ceil(width)}px`;
+        heading.dataset.held = "";
+      });
+    }
+    spanShown(table, all);
   };
   const fitTables = () => {
     document.querySelectorAll(".table-scroll > .data-table").forEach(fitTable);

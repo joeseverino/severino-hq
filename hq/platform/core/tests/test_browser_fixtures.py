@@ -405,6 +405,31 @@ def _calendar_day() -> str:
 
 # name -> (url, context manager for what no view reads from the database[,
 # the request's own fields])
+_MESSAGE = {
+    "id": 1,
+    "created_at": "2026-07-18 12:00:00",
+    "updated_at": "2026-07-18 12:00:00",
+    "name": "Example Person",
+    "email": "person@example.com",
+    "message": "Hello from the contact form.",
+    "message_preview": "Hello from the contact form.",
+    "status": "unread",
+    "country": "US",
+    "turnstile": "verified",
+}
+
+
+@contextmanager
+def _messages():
+    """The inbox with a message in it: its row carries every control a row can."""
+
+    with (
+        mock.patch("hq.domains.contacts.views.status_counts", return_value={"unread": 1}),
+        mock.patch("hq.domains.contacts.views.list_submissions", return_value=[_MESSAGE]),
+    ):
+        yield
+
+
 PAGES = {
     "dashboard": (lambda: reverse("dashboard"), lambda: _dashboard(True)),
     "dashboard-bare": (lambda: reverse("dashboard"), lambda: _dashboard(False)),
@@ -437,6 +462,7 @@ PAGES = {
     # A form laid out as a grid of fields, with a textarea taking the row.
     "project-form": (lambda: reverse("projects:create"), ExitStack),
     "calendar": (lambda: reverse("calendar:month"), ExitStack),
+    "messages": (lambda: reverse("contacts:list"), _messages),
     # A day open beside the month, with an entry open in it.
     "calendar-day": (_calendar_day, ExitStack),
     # Records that name each other, and the form that picks what one names.

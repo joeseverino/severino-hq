@@ -405,22 +405,22 @@ env -u DJANGO_DEBUG SEVERINO_HQ_PLUGINS="$HQ_LOCAL_PLUGINS" PYTHONPATH="${HQ_LOC
 
 # ---------------------------------------------------------------- browser
 
-[tasks."setup:chromium"]
-description = "Install the Chromium the locked Playwright pins"
+[tasks."setup:webkit"]
+description = "Install the WebKit the locked Playwright pins: HQ is read in Safari"
 hide = true
 run = '''
 set -eu
 # On a runner the system libraries come with it.
 if [ -n "${CI:-}" ]; then
-    uv run --locked --group browser python -m playwright install --with-deps --only-shell chromium
+    uv run --locked --group browser python -m playwright install --with-deps webkit
 else
-    uv run --locked --group browser python -m playwright install --only-shell chromium
+    uv run --locked --group browser python -m playwright install webkit
 fi
 '''
 
 [tasks."browser:layout"]
 description = "Real-browser layout invariants over synthetic pages"
-depends = ["setup:chromium"]
+depends = ["setup:webkit"]
 env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
 run = "uv run --locked --group browser python manage.py test hq.platform.core.browser_tests --noinput --parallel 1"
 

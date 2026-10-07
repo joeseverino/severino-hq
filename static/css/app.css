@@ -631,7 +631,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 /* Never squeezed by the lede beside it. A flex item defaults to shrinking at
    its content, which would wrap a control's label onto two lines and leave the
    controls beside it different heights. */
-.page-head .page-actions { margin-left: auto; display: flex; gap: var(--space-4); flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+.page-head .page-actions { position: relative; margin-left: auto; display: flex; gap: var(--space-4); flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
 .page-head .page-actions > * { white-space: nowrap; }
 /* Ambient readings beside the greeting: no frame of their own, each panel a
    number worth reading at a distance and one quiet line under it. A panel
@@ -1616,12 +1616,15 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    percentage, because a percentage counts for nothing while the columns are
    sized, and one long URL would then take the width every other column needs. */
 .data-table td code { white-space: nowrap; overflow-wrap: normal; display: inline-block; max-width: var(--identifier-max); overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+/* A square for a glyph, and as wide as its word when it holds one. */
 .icon-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
+  min-width: 28px;
   height: 28px;
+  padding-inline: var(--space-3);
+  white-space: nowrap;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -1713,9 +1716,6 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 /* A column held to a width that suits a wide table gives it back here, so
    the room goes to the column that names the row. */
 .data-table[data-narrow] .tight-col > * { min-width: 0; }
-/* A status that is a sentence wraps between its words here, never inside
-   one, before its column is given up for it. */
-.data-table[data-narrow] .pill { white-space: normal; overflow-wrap: normal; }
 /* What a page says about a table's columns, for tables.js to read: which stay
    whatever happens, and which leave first. Named here because this sheet is
    the list of classes a template may use (an extension's templates are held
@@ -2161,7 +2161,8 @@ ol.resolution-workflow { padding-left: var(--space-8); list-style: decimal; }
 .dash-row > *,
 .search-results > * { margin-bottom: 0; }
 
-.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-6); margin-bottom: var(--space-6); }
+/* What sits beside the heading takes the next line when the two do not fit. */
+.section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); margin-bottom: var(--space-6); }
 .section-head h2 { margin: 0; flex: 1; }
 .section-head .count { font-size: var(--text-2xs); color: var(--muted-2); font-weight: 500; }
 
@@ -3160,13 +3161,15 @@ a.discovery-link:hover strong { color: var(--accent); }
   grid-column: 1 / -1;
   min-width: 0;
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 .request-path li > strong { display: flex; align-items: baseline; font-size: var(--text-sm); font-weight: 650; line-height: 1.3; }
-/* The name gives way at the hop's edge and its certificate mark stays: a
-   name longer than the hop is cut inside the link, never past the card. */
-.request-path li > strong > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* A name takes a second line before it is cut, and breaks where it must; its
+   certificate mark stays beside it. Cut, it is cut inside the hop. */
+.request-path li > strong > :not(.cert-mark),
+.request-path li > small {
+  display: -webkit-box; min-width: 0; overflow: hidden; overflow-wrap: anywhere;
+  -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+}
 .request-path li > strong > .cert-mark { flex-shrink: 0; overflow: visible; }
 .request-path li > small { margin: 0; color: var(--muted); font-size: var(--text-2xs); line-height: 1.35; }
 /* A hop's certificate: a check in a circle after its name, in the name's colour
@@ -4415,7 +4418,7 @@ textarea.code {
 /* A hostname is one token: it is never broken, and past --identifier-max it is
    cut on the link itself, so nothing runs under the next column. */
 .service-name strong { display: flex; min-width: 0; max-width: var(--identifier-max); }
-.service-name strong > [data-entity] { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.data-table td .service-name strong > [data-entity] { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .service-name > form { display: inline-flex; }
 .pin-toggle {
   background: none; border: 0; box-shadow: none; padding: 0 var(--space-1); cursor: pointer;
@@ -4839,14 +4842,33 @@ form[data-clean] .save-bar { display: none; }
 .dash-status strong { color: var(--accent); font-variant-numeric: tabular-nums; }
 /* What a page says while its own readings are being read, and once they are
    in: one quiet line, never a banner. */
-.visit-status { margin: 0 0 var(--space-5); color: var(--muted); font-size: var(--text-xs); }
+.visit-status {
+  position: absolute; inset-block-start: var(--content-pad); inset-inline-end: var(--content-pad); margin: 0;
+  color: var(--muted); font-size: var(--text-xs); white-space: nowrap;
+}
+.content:has(.ask-quiet) { position: relative; }
 /* An ask: a button and how the work it asked for stands (partials/_ask.html).
-   Inline, so it sits wherever a button does; the note wraps under the button
-   in a narrow box rather than pushing the row wide. The note is empty until
-   something was asked, and an empty one takes no room. */
-.ask { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); min-inline-size: 0; }
-.ask-quiet { display: block; }
-.ask-said { display: inline-flex; flex-wrap: wrap; gap: var(--space-3); min-inline-size: 0; color: var(--muted); font-size: var(--text-xs); }
+   Inline, so it sits wherever a button does, and exactly as large as its
+   button: what it says is drawn under the button, over the page, so pressing
+   it moves nothing. Nothing is drawn until something was asked. */
+.ask { position: relative; display: inline-flex; align-items: center; min-inline-size: 0; }
+/* One nobody presses: its line sits on the trail's line, at the far edge, so
+   it comes and goes without moving anything. */
+.ask-quiet { position: static; display: block; block-size: 0; }
+.ask-said {
+  position: absolute; inset-block-start: calc(100% + var(--space-2)); inset-inline-start: 0; z-index: 3;
+  display: flex; flex-wrap: wrap; gap: var(--space-3);
+  inline-size: max-content; max-inline-size: min(36ch, 100vw - 28px);
+  padding: var(--space-2) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); box-shadow: var(--shadow-sm);
+  color: var(--muted); font-size: var(--text-xs); white-space: normal;
+  --ask-shift: 0px; translate: var(--ask-shift) 0;
+}
+/* A head's controls end at the page's edge, so what one says ends there too.
+   Anywhere else app.js sets --ask-shift to keep it on the screen. */
+.page-head .page-actions .ask { position: static; }
+.page-head .page-actions .ask-said { inset-inline: auto 0; }
+.ask-said:has(.ask-note:empty):has(.ask-elapsed:empty) { display: none; }
 .ask-note { overflow-wrap: anywhere; }
 .ask-note:empty, .ask-elapsed:empty { display: none; }
 .ask-elapsed { font-variant-numeric: tabular-nums; }

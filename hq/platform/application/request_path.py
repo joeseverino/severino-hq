@@ -327,9 +327,11 @@ def _with_leg(hop: Hop, found: Connection) -> Hop:
     presence = found.presence
     if hop.step != "network" or presence is None or network_of(hop.detail) != "tailnet":
         return hop
+    # The request this hop is judged by arrived, whatever the last reading of
+    # the link said: an idle link is not "no path" to the one using it.
     return replace(
         hop,
-        name=found.leg_label,
+        name="Connected" if found.path == "idle" else found.leg_label,
         detail=f"{hop.detail} · handshake {presence.handshake}",
         source=Source(TAILNET_KIND, presence.connection_ref, presence.observed_at),
     )

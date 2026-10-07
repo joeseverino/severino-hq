@@ -121,7 +121,7 @@ class PathTests(TestCase):
 
         self.assertEqual(
             steps(path),
-            [("dns", "A 198.51.100.20"), ("edge", "Cloudflare DNS"), ("network", ""),
+            [("dns", "198.51.100.20"), ("edge", "Cloudflare DNS"), ("network", ""),
              ("machine", "edge-1"), ("ingress", "example-edge"), ("upstream", "shop:8080"),
              ("machine", "edge-1"), ("container", "shop")],
         )
@@ -142,13 +142,13 @@ class PathTests(TestCase):
              ("ingress", "example-npm"), ("upstream", "127.0.0.1:8000"),
              ("machine", "lab-1"), ("container", "app")],
         )
-        self.assertEqual(path.primary.via, "Internal DNS record")
+        self.assertEqual(path.primary.via, "Internal DNS")
         self.assertEqual(path.primary.hops[1].label, "Tailnet")
         certificate = path.certificate
         self.assertEqual((certificate.role, certificate.name), ("Served", "example wildcard"))
         self.assertEqual(certificate.issuer, "Let's Encrypt")
         self.assertEqual(path.primary.line,
-                         "Internal DNS record → Tailnet → lab-1 → Proxy host → app")
+                         "Internal DNS → Tailnet → lab-1 → Proxy host → app")
 
     def test_a_declared_certificate_is_shown_as_hq_knows_it_and_attested(self):
         # NPM names HQ's upload by its own label with no authority; HQ knows better.
@@ -215,7 +215,7 @@ class PathTests(TestCase):
 
         self.assertEqual(
             steps(path),
-            [("dns", "CNAME example-site.pages.dev"), ("edge", "Cloudflare DNS"),
+            [("dns", "example-site.pages.dev"), ("edge", "Cloudflare DNS"),
              ("served", "example-site")],
         )
         self.assertEqual(path.certificate.role, "Edge")
@@ -289,7 +289,7 @@ class ReadTests(TestCase):
         found = get_resource("paths", "app.example.com", principal=READ)
 
         route = found["routes"][0]
-        self.assertEqual(route["via"], "Internal DNS record")
+        self.assertEqual(route["via"], "Internal DNS")
         self.assertEqual([hop["step"] for hop in route["hops"]][:3], ["dns", "network", "machine"])
         self.assertEqual(route["hops"][3]["certificate"]["name"], "example wildcard")
 

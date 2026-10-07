@@ -157,7 +157,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/toolchain
-      # Keyed on the hashed lock: Playwright pins its Chromium build, so a new
+      # Keyed on the hashed lock: Playwright pins its browser build, so a new
       # pin is a new browser and a new cache entry.
       - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:

@@ -38,7 +38,7 @@ from .labels import lower_first
 from .locate import host_of, split_endpoint
 from .projection import read_once
 from .reach import is_documentation, network_of
-from .path_model import Certificate, Hop, NETWORK_LABELS, Route, ServicePath, Source
+from .path_model import Certificate, Hop, NETWORK_LABELS, Route, ServicePath, Source, dns_label, pointing_at
 
 # How deep an alias chain is followed before the path stops saying more.
 MAX_ALIASES = 3
@@ -259,7 +259,7 @@ def _routes(name: str, *, depth: int) -> list[Route]:
     found = []
     for kind in _kinds("dns"):
         for row in _rows(kind).get(name, ()):
-            route = Route(Source(kind).label, tuple(_from_dns(name, row, depth)))
+            route = Route(dns_label(kind), tuple(_from_dns(name, row, depth)))
             found.append(route)
             found.extend(_forwards(route))
     return found
@@ -339,10 +339,10 @@ def _from_dns(name: str, row: _Row, depth: int) -> list[Hop]:
     hops = [
         Hop(
             "dns",
-            row.source.label,
-            f"{record_type} {answer}".strip(),
-            row.link,
-            detail="Proxied" if fronted else "",
+            dns_label(row.kind),
+            answer,
+            pointing_at(row.link, answer),
+            detail=" · ".join(part for part in (record_type, "Proxied" if fronted else "") if part),
             source=row.source,
         )
     ]
@@ -676,7 +676,7 @@ def _ingress(name: str, *, behind_edge: bool, on: str = "") -> list[Hop]:
                 "ingress",
                 row.source.label,
                 row.declaration or row.source.declared or row.source.connection or row.source.label,
-                row.link,
+                pointing_at(row.link, _answer(row)),
                 detail=_answer(row),
                 source=row.source,
                 certificate=_served_certificate(name, row, "Origin" if behind_edge else "Served"),
