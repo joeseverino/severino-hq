@@ -6,11 +6,12 @@ and where each fact came from.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 
 from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.domains.control_plane.providers import PROVIDERS
 
 from .entity_links import EntityLink, entity_link, kind_label
 from .labels import lower_first
@@ -294,3 +295,17 @@ class ServicePath:
         for route in self.routes:
             found.extend(route.unread)
         return tuple(dict.fromkeys(found))
+
+
+def dns_label(kind: str) -> str:
+    """A DNS step by who can resolve it: anyone, or only the networks HQ is on."""
+
+    provider = PROVIDERS.get(kind)
+    return "External DNS" if provider is not None and provider.public_effect else "Internal DNS"
+
+
+def pointing_at(link: EntityLink | None, answer: str) -> EntityLink | None:
+    """A record's link worded as what it points at: the page it is on already
+    names what it answers for."""
+
+    return replace(link, label=answer) if link is not None and answer else link

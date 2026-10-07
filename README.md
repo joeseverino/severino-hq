@@ -440,7 +440,8 @@ the image:
 mise run browser
 ```
 
-The task installs the Chromium the locked Playwright pins, then runs
+The task installs the WebKit the locked Playwright pins, since HQ is read in
+Safari, then runs
 `hq.platform.core.browser_tests` on one process.
 
 The suite renders the dashboard, service, connections, machine, topology and
@@ -456,9 +457,9 @@ server-rendered baseline. Failures save a synthetic screenshot to an OS
 temporary directory. `hq/platform/core/tests/test_browser_selectors.py`, in the normal suite, fails when a selector the gate or the audit uses names
 nothing a template renders, so a redesign cannot leave the gate waiting for an
 element that no longer exists.
-Set `HQ_BROWSER_ENGINE=webkit` or `firefox` after installing that engine to run
-the same assertions there. An existing Edge installation can be selected with
-`HQ_BROWSER_CHANNEL=msedge` instead of downloading Chromium. See the
+Set `HQ_BROWSER_ENGINE=chromium` or `firefox` after installing that engine to run
+the same assertions there. With Chromium, an existing Edge installation can be
+selected with `HQ_BROWSER_CHANNEL=msedge` instead of downloading one. See the
 [Playwright browser documentation](https://playwright.dev/python/docs/browsers).
 
 ### Django Debug Toolbar

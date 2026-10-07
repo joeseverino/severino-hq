@@ -305,7 +305,7 @@ exits 2, never 0.
 - `mise run check` passes, including the composed pass when a change
   touches `hq_sdk`, because the host and its extensions first meet there.
 - A change to templates or CSS passes the browser layout gate:
-  `mise run browser` (it installs the Chromium the locked Playwright pins).
+  `mise run browser` (it installs the WebKit the locked Playwright pins: HQ is read in Safari).
   A UI change is also walked in a real browser
   through the workflow it serves, not checked page by page.
 - `mise run ci` passes before a push, including its code scanning gates (no

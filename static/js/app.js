@@ -694,6 +694,25 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   };
   hqEvery(() => document.querySelectorAll("[data-ask][data-ask-since]").forEach(tick), { ms: 1000 });
 
+  // What a control says is drawn under it, over the page. Near an edge it is
+  // moved back onto the screen, by however much of it would be off.
+  const EDGE = 14;
+  const keepOnScreen = (said) => {
+    said.style.removeProperty("--ask-shift");
+    const box = said.getBoundingClientRect();
+    if (!box.width) return;
+    const width = document.documentElement.clientWidth;
+    const shift = Math.min(0, width - EDGE - box.right) || Math.max(0, EDGE - box.left);
+    if (shift) said.style.setProperty("--ask-shift", `${Math.round(shift)}px`);
+  };
+  const placeSaid = () => document.querySelectorAll(".ask-said").forEach(keepOnScreen);
+  new MutationObserver((changes) => {
+    new Set(changes.map((change) => change.target.parentElement?.closest(".ask-said") || change.target.closest?.(".ask-said")))
+      .forEach((said) => said && keepOnScreen(said));
+  }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  window.addEventListener("resize", placeSaid);
+  placeSaid();
+
   const say = (control, text) => {
     const note = control.querySelector("[data-ask-note]");
     if (!note) return;

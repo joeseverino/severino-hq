@@ -23,6 +23,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
 from hq.platform.application import readings
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import cli_principal
@@ -103,6 +104,16 @@ def _machines():
             "name": EDGE_MACHINE,
             "role": "Reverse proxy",
             "addresses": [EDGE_ADDRESS, EDGE_TAILNET_ADDRESS],
+        },
+    )
+    # Declared and on no network HQ reads: its state is two words.
+    ManagedResource.objects.create(
+        key="example-printer",
+        kind="machine",
+        spec={
+            "name": "example-printer-with-a-long-name",
+            "role": "Network printer",
+            "addresses": ["192.0.2.77"],
         },
     )
     now = timezone.now()
@@ -333,6 +344,9 @@ def build_dense_estate():
         )
     _machines()
     _routes()
+    # Some services are favorites and some are not, so the list has sections.
+    for hostname in (SERVICE, _hostname(0)):
+        toggle(user, PINNED_SERVICE, hostname)
     _findings()
     _containers()
     _glance()

@@ -141,6 +141,17 @@ class RequestPathTests(TestCase):
         self.assertEqual(network.name, "Direct")
         self.assertIn("handshake", network.detail)
 
+    def test_an_idle_link_is_not_called_no_path_on_the_request_that_used_it(self):
+        devices = ProviderInventory.objects.get(kind="tailscale.device")
+        for record in devices.records:
+            record.pop("direct_endpoint", None)
+        devices.save()
+
+        network = next(hop for hop in self.walk(a_request(**NPM_HEADERS)).hops if hop.step == "network")
+
+        self.assertEqual(network.check.state, PROVEN)
+        self.assertEqual(network.name, "Connected")
+
     def test_a_request_that_skipped_the_proxy_is_a_finding(self):
         found = self.walk(a_request(peer=LAPTOP, forwarded=""))
 

@@ -33,9 +33,11 @@ from django.urls import reverse
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES, build_dense_estate, render_dense_pages
 from hq.platform.core.tests.test_browser_fixtures import PAGES, build_estate, render_pages
 
-WIDTHS = (320, 390, 768, 1280)
+# The phone HQ is read on: its viewport in CSS pixels.
+PHONE_SCREEN = (402, 874)
+WIDTHS = (320, PHONE_SCREEN[0], 768, 1280)
 # A phone, a tablet held upright, a laptop: where only a table may scroll sideways.
-OVERFLOW_WIDTHS = (375, 820, 1360)
+OVERFLOW_WIDTHS = (PHONE_SCREEN[0], 820, 1360)
 # Every page, from the sparse estate and the dense one. The overflow and
 # density checks run all of them at OVERFLOW_WIDTHS.
 ALL_PAGES = (*PAGES, *DENSE_PAGES)
@@ -74,6 +76,13 @@ SELECTORS = {
     "readings": ".dash-readings .glance-panel-head",
     "patterns": ".dashboard-patterns > .card",
     "pill": ".pill",
+    # Everything pressed: a button, a link drawn as one, a disclosure's handle.
+    "control": "button, .btn, .icon-link, summary",
+    # Anything in a table cell: its words stay inside its own box, or they are
+    # drawn across the next column while every box measures as in place.
+    "cell_content": "main td *, main th *",
+    # What a control says about the work it asked for, drawn under it.
+    "spoken": ".ask-said",
     # The one box allowed to scroll sideways.
     "table_scroll": ".table-scroll",
     # Frames by design: a control, a chip, a path's steps, a diagram's nodes.
@@ -630,6 +639,84 @@ _NAME_EDGES = """(scroll) => [...document.querySelectorAll('main ' + scroll + ' 
     return new Set(edges).size;
   })"""
 # Press a heading's sort control and read its column back, top to bottom.
+_SPILLED_LABELS = "(selector) => {" + _DESCRIBE + """
+  // A control is at least as wide as what it says. One sized for a glyph and
+  // given a word draws the word over whatever stands beside it.
+  const found = [];
+  for (const el of document.querySelectorAll(selector)) {
+    if (!el.checkVisibility()) continue;
+    const style = getComputedStyle(el);
+    if (style.overflowX !== 'visible' || style.display === 'inline') continue;
+    if (el.scrollWidth > el.clientWidth + 1) {
+      found.push(`${describe(el)} holds ${el.scrollWidth}px of label in ${el.clientWidth}px`);
+    }
+  }
+  return found.slice(0, 10);
+}"""
+
+_SETTLED = "() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
+
+_UNSEEN_COLUMNS = "(scroll) => {" + _DESCRIBE + """
+  // A table's width belongs to the columns that are showing. A cell left
+  // spanning columns that were dropped keeps them in the table, and a table
+  // held to its box then shares its width with columns nobody sees.
+  const found = [];
+  for (const table of document.querySelectorAll('main ' + scroll + ' > table')) {
+    if (!table.checkVisibility()) continue;
+    const shown = [...table.querySelectorAll(':scope > thead > tr:last-child > th')]
+      .filter((heading) => getComputedStyle(heading).display !== 'none');
+    if (!shown.length) continue;
+    const used = shown.reduce((sum, heading) => sum + box(heading).width, 0);
+    const width = box(table).width;
+    if (used < width - 2) {
+      found.push(`${describe(table)} shows ${shown.length} columns in ${Math.round(used)}px of ${Math.round(width)}px`);
+    }
+  }
+  return found;
+}"""
+
+_MOVED_BY_SPEAKING = "async ([said, spoken]) => {" + _DESCRIBE + """
+  // Pressing a control moves nothing. What it says about the work it asked
+  // for is drawn over the page, so every other box is where it was, the page
+  // is the size it was, and the words themselves are on the screen.
+  const asks = [...document.querySelectorAll('[data-ask]:has([data-ask-note])')].filter((ask) => ask.checkVisibility());
+  if (!asks.length) return null;
+  const others = [...document.querySelectorAll('body *')]
+    .filter((el) => el.checkVisibility() && !el.closest(spoken));
+  const page = document.documentElement;
+  const size = () => [page.scrollWidth, page.scrollHeight];
+  const place = (el) => { const r = box(el); return [r.left, r.top, r.width, r.height].map(Math.round).join(' '); };
+  const before = others.map(place);
+  const was = size();
+  for (const ask of asks) {
+    ask.dataset.askState = 'running';
+    ask.querySelector('[data-ask-note]').textContent = said;
+    ask.querySelector('[data-ask-note]').hidden = false;
+    const elapsed = ask.querySelector('[data-ask-elapsed]');
+    if (elapsed) elapsed.textContent = '7 s';
+  }
+  await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  const found = [];
+  others.forEach((el, index) => {
+    if (place(el) !== before[index]) found.push(`${describe(el)} moved from ${before[index]} to ${place(el)}`);
+  });
+  if (String(size()) !== String(was)) found.push(`the page went from ${was} to ${size()}`);
+  for (const ask of asks) {
+    const note = ask.querySelector(spoken) || ask.querySelector('[data-ask-note]');
+    const r = box(note);
+    // Inside a box that scrolls, it goes where its button goes.
+    let held = false;
+    for (let up = ask.parentElement; up && up !== document.body; up = up.parentElement) {
+      if (scrolls(up)) { held = true; break; }
+    }
+    if (r.width < 2) found.push(`${describe(ask)} says nothing that shows`);
+    else if (!held && (r.left < -1 || r.right > page.clientWidth + 1)) {
+      found.push(`${describe(note)} spans ${Math.round(r.left)}..${Math.round(r.right)}px`);
+    }
+  }
+  return found.slice(0, 10);
+}"""
+
 _SORT_BY = """([scroll, column]) => {
   const table = document.querySelector('main ' + scroll + ' > table');
   const heading = table.querySelectorAll('thead th')[column];
@@ -716,7 +803,7 @@ class BrowserGate(SimpleTestCase):
             ) from exc
         cls.playwright = sync_playwright().start()
         cls.addClassCleanup(cls.playwright.stop)
-        engine = os.environ.get("HQ_BROWSER_ENGINE", "chromium")
+        engine = os.environ.get("HQ_BROWSER_ENGINE", "webkit")
         if engine not in {"chromium", "firefox", "webkit"}:
             raise ValueError("HQ_BROWSER_ENGINE must be chromium, firefox, or webkit.")
         options = {"headless": True}
@@ -776,8 +863,65 @@ class BrowserGate(SimpleTestCase):
             print(f"Browser failure screenshot: {folder / 'page.png'}")
 
     def open(self, name, width):
-        self.page.set_viewport_size({"width": width, "height": 900})
+        height = PHONE_SCREEN[1] if width <= PHONE else 900
+        self.page.set_viewport_size({"width": width, "height": height})
         self.page.goto(f"{ORIGIN}/{name}/", wait_until="load")
+
+
+# Heads whose lead control is one that says what it is doing beside itself,
+# drawn by the head's own partial: a one-word title, two words, and a name.
+SPEAKING_HEADS = {
+    "head/word": "Reports",
+    "head/words": "Two words",
+    "head/name": "example-host.example.com",
+}
+
+
+# A shared component filled the way an extension's page fills it, which no host
+# page does: a section's heading with a long name and states beside it.
+SHARED_PARTS = {
+    "part/section-head": (
+        '<section class="card"><div class="section-head">'
+        "<h2>An example heading long enough to need the row</h2>"
+        '<span class="pill pill-good">Example state</span>'
+        '<span class="pill pill-neutral">Another example state</span>'
+        "</div><p>Example.</p></section>"
+    ),
+}
+
+
+def shared_parts():
+    return {
+        name: (
+            '<!doctype html><html><head><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            f'<link rel="stylesheet" href="{settings.STATIC_URL}css/app.css"></head>'
+            f'<body><main class="content">{markup}</main></body></html>'
+        )
+        for name, markup in SHARED_PARTS.items()
+    }
+
+
+def speaking_heads():
+    from django.template.loader import render_to_string
+
+    from hq.platform.application.asks import Ask
+    from hq.platform.application.pages import Page, PageAction
+
+    actions = (
+        Ask("Read everything", "/probe/", primary=True),
+        PageAction("First other", "/probe/first/"),
+        PageAction("Second other", "/probe/second/"),
+    )
+    return {
+        name: (
+            f'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+            f'<link rel="stylesheet" href="{settings.STATIC_URL}css/app.css"></head><body><main>'
+            + render_to_string("partials/_page_head.html", {"page": Page(title=title, actions=actions)})
+            + "</main></body></html>"
+        )
+        for name, title in SPEAKING_HEADS.items()
+    }
 
 
 class LayoutBrowserTests(BrowserGate):
@@ -789,7 +933,7 @@ class LayoutBrowserTests(BrowserGate):
         with transaction.atomic():
             pages |= render_dense_pages(build_dense_estate())
             transaction.set_rollback(True)
-        return pages
+        return pages | speaking_heads() | shared_parts()
 
     def each(self, check):
         """Run ``check(name)`` on every page at every width, one subtest each."""
@@ -869,6 +1013,11 @@ class LayoutBrowserTests(BrowserGate):
             self.assertEqual(self.page.evaluate(_ESCAPES), [])
 
         self.each(check)
+        for name in SHARED_PARTS:
+            for width in WIDTHS:
+                with self.subTest(page=name, width=width):
+                    self.open(name, width)
+                    check(name)
 
     def test_nothing_is_framed_inside_a_frame(self):
         def check(_name):
@@ -884,13 +1033,61 @@ class LayoutBrowserTests(BrowserGate):
     def test_a_narrow_head_keeps_its_lead_control_beside_the_title(self):
         for name in ALL_PAGES:
             with self.subTest(page=name):
-                self.open(name, 390)
+                self.open(name, PHONE_SCREEN[0])
                 self.assertIn(
                     self.page.evaluate(
                         _HEAD_ON_ONE_LINE, [SELECTORS["head_lead"], SELECTORS["head_title"]]
                     ),
                     (None, True),
                 )
+
+    def scripted(self, check, pages=ALL_PAGES, widths=(PHONE_SCREEN[0], 820)):
+        """Run ``check(name)`` with the page's script on: the page as it is read."""
+
+        self.start(java_script_enabled=True)
+        for name in pages:
+            for width in widths:
+                with self.subTest(page=name, width=width):
+                    self.open(name, width)
+                    self.page.evaluate(_SETTLED)
+                    check(name)
+
+    def test_the_rules_hold_once_the_script_has_laid_the_page_out(self):
+        """The page a person reads is the one its script has fitted: the rules
+        that hold without script hold there too."""
+
+        def check(_name):
+            self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
+            self.assertEqual(self.page.evaluate(_CELLS), [])
+            self.assertEqual(self.page.evaluate(_BROKEN_WORDS), [])
+            self.assertEqual(self.page.evaluate(_WRAPPED_PILLS, SELECTORS["pill"]), [])
+            self.assertEqual(self.page.evaluate(_UNSEEN_COLUMNS, SELECTORS["table_scroll"]), [])
+            self.assertEqual(self.page.evaluate(_SPILLED_LABELS, SELECTORS["control"]), [])
+            self.assertEqual(self.page.evaluate(_SPILLED_LABELS, SELECTORS["cell_content"]), [])
+
+        self.scripted(check, widths=(PHONE_SCREEN[0], 820, 1360))
+
+    def test_words_stay_inside_the_box_that_holds_them(self):
+        def check(_name):
+            self.assertEqual(self.page.evaluate(_SPILLED_LABELS, SELECTORS["control"]), [])
+            self.assertEqual(self.page.evaluate(_SPILLED_LABELS, SELECTORS["cell_content"]), [])
+
+        self.across(check)
+
+    def test_pressing_a_control_moves_nothing(self):
+        seen = 0
+        self.start(java_script_enabled=True)
+        for name in (*ALL_PAGES, *SPEAKING_HEADS):
+            for said in ("Reading", "Reading example-host", "That could not be done. Try again in a minute."):
+                for width in (320, PHONE_SCREEN[0], 1360):
+                    with self.subTest(page=name, said=said, width=width):
+                        self.open(name, width)
+                        found = self.page.evaluate(_MOVED_BY_SPEAKING, [said, SELECTORS["spoken"]])
+                        if found is None:
+                            continue
+                        seen += 1
+                        self.assertEqual(found, [])
+        self.assertGreater(seen, len(SPEAKING_HEADS), "no page in the fixture has a control that speaks")
 
     def test_only_a_table_scrolls_sideways(self):
         """At a phone, tablet and laptop width, with every disclosure open."""
@@ -994,7 +1191,7 @@ class LayoutBrowserTests(BrowserGate):
                 self.assertAlmostEqual(first["bottom"], second["bottom"], delta=1)
 
     def test_the_dashboard_stacks_its_cards_on_a_phone(self):
-        for width in (320, 390):
+        for width in (320, PHONE_SCREEN[0]):
             self.open("dashboard", width)
             for key in ("highlights", "patterns"):
                 with self.subTest(cards=key, width=width):
@@ -1038,7 +1235,7 @@ class LayoutBrowserTests(BrowserGate):
         self.start(java_script_enabled=True)
         for name in ("connections", "services", "containers", "projects"):
             with self.subTest(page=name):
-                self.open(name, 390)
+                self.open(name, PHONE_SCREEN[0])
                 closed = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
                 self.assertGreaterEqual(closed["headings"], 4)
                 self.assertLess(len(closed["columns"]), closed["headings"])
@@ -1137,7 +1334,7 @@ class LayoutBrowserTests(BrowserGate):
         "Via h" and "Has", and nothing else in the gate would have said so.
         """
 
-        for width in (390, 820, 1280, 1440):
+        for width in (PHONE_SCREEN[0], 820, 1280, 1440):
             with self.subTest(width=width):
                 self.open("dashboard", width)
                 readings = self.page.locator(SELECTORS["readings"]).evaluate_all(_READINGS)
@@ -1181,7 +1378,7 @@ REFERENCE = "api/docs"
 REFERENCE_DARK = "api/docs/dark"
 # Where the viewer keeps its sidebar open beside the content.
 REFERENCE_DESKTOP = (1024, 1360)
-REFERENCE_PHONE = 375
+REFERENCE_PHONE = PHONE_SCREEN[0]
 # The viewer is one large script: parsing it takes longer than a page's load.
 REFERENCE_READY = 30_000
 _REFERENCE_MOUNTED = "() => document.querySelector('main main h1') !== null"
