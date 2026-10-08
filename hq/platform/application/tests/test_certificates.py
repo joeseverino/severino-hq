@@ -35,7 +35,7 @@ def a_certificate(name: str = "newhost.example.test", *, before=-1, after=825):
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, name)])
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     certificate = (
         x509.CertificateBuilder()
         .subject_name(subject)
@@ -66,7 +66,7 @@ class InspectionTests(TestCase):
         details = inspect(fullchain, private_key)
 
         self.assertEqual(details["domains"], ["newhost.example.test"])
-        self.assertGreater(details["not_after"], datetime.datetime.now(datetime.timezone.utc))
+        self.assertGreater(details["not_after"], datetime.datetime.now(datetime.UTC))
 
     def test_a_key_that_belongs_to_a_different_certificate_is_refused(self):
         """The failure this exists to catch.
@@ -216,9 +216,11 @@ class FailClosedTests(TestCase):
     def test_a_rotated_key_reports_rather_than_returning_an_empty_secret(self):
         sealed = secrets.seal("material")
 
-        with override_settings(SEVERINO_SECRET_STORE_KEY="a-different-key-of-full-length"):
-            with self.assertRaises(secrets.SecretsUnavailable):
-                secrets.unseal(sealed)
+        with (
+            override_settings(SEVERINO_SECRET_STORE_KEY="a-different-key-of-full-length"),
+            self.assertRaises(secrets.SecretsUnavailable),
+        ):
+            secrets.unseal(sealed)
 
 
 @override_settings(SEVERINO_SECRET_STORE_KEY=A_KEY)

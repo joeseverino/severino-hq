@@ -98,7 +98,7 @@ class _Keeper:
             close_old_connections()
             try:
                 derivations.derive_ahead(self._woken_again)
-            except Exception:  # noqa: BLE001 - the next pass tries again
+            except Exception:  # the next pass tries again
                 logger.exception("ahead.pass_failed")
             finally:
                 close_old_connections()

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+
 from django.conf import settings
 
 from . import tailnet

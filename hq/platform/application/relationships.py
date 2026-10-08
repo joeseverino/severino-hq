@@ -125,7 +125,7 @@ def _rows(edge: TopologyEdge, node_id: str, nodes: dict[str, Any]):
             yield edge.label, Relationship(entity, source, observed, stale)
         return
     relation = RELATIONS.get(edge.kind)
-    if relation is None:
+    if relation is None:  # noqa: SIM108 - a nested conditional expression reads worse
         phrase = edge.label
     else:
         phrase = relation.phrase if outbound else relation.inverse

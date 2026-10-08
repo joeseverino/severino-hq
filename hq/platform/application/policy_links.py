@@ -8,8 +8,9 @@ title. A tag lists the devices carrying it. Users and unresolved names stay as
 the policy writes them.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from typing import Any, Iterable
+from typing import Any
 
 from .entity_links import EntityLink, entity_link
 from .locate import host_of

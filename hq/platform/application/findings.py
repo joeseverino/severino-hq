@@ -35,10 +35,8 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
 
-
 from hq.domains.control_plane.providers import PROVIDERS
 
-from .derivations import present
 from . import (
     certificate_expiry,
     connection_findings,
@@ -60,21 +58,21 @@ from .action_links import (
     read_now_link,
     topology_investigation_links,
 )
-from .integrations import IntegrationGraph, integration_graph
 from .contracts import route_url
+from .derivations import derivation, present
+from .derived_inputs import ESTATE_READS, estate_variant
 from .finding_model import (
-    OperatorStep,
     Finding,
-    FindingRule,
-    Remedy,
     FindingEstate,
+    FindingRule,
+    OperatorStep,
+    Remedy,
     is_observable,
     parse_stamp,
 )
-from .security import Capability, Principal
-from .derivations import derivation
-from .derived_inputs import ESTATE_READS, estate_variant
 from .first_seen import recorded
+from .integrations import IntegrationGraph, integration_graph
+from .security import Capability, Principal
 from .topology import derive_topology
 from .topology_model import (
     JOINED_KINDS,
@@ -88,6 +86,7 @@ from .workflows import (
     serialize_workflow,
     workflow_layout,
 )
+
 _CLAIM_NAMESPACE = "infrastructure.finding"
 
 
@@ -620,8 +619,8 @@ def auto_remediable(*, principal: Principal, limit: int = 10) -> tuple[Repair, .
     web process, which is the one property the cadence design exists to protect.
     """
 
-    from hq.domains.control_plane.providers import enabled_controller_actions
     from hq.domains.control_plane.models import OperationRequest
+    from hq.domains.control_plane.providers import enabled_controller_actions
 
     automatic_kinds = {
         kind

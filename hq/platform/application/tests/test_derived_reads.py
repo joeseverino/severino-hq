@@ -2,6 +2,7 @@
 
 import json
 import re
+from functools import partial
 from io import StringIO
 from unittest import mock
 
@@ -43,7 +44,7 @@ DETAILS = {
     "readings": "cloudflare.pages_project",
     "credentials": "cloudflare_api",
 }
-SECRET_KEY_NAME = re.compile(r"secret|token|password|private|credential_value", re.I)
+SECRET_KEY_NAME = re.compile(r"secret|token|password|private|credential_value", re.IGNORECASE)
 PLANTED = "planted-value-not-for-output"
 
 
@@ -285,14 +286,12 @@ class QueryBudgetTests(TestCase):
     def test_lists(self):
         for name, query in LISTS.items():
             with self.subTest(name):
-                self.assert_flat(name, lambda: list_resource(name, query, principal=READER))
+                self.assert_flat(name, partial(list_resource, name, query, principal=READER))
 
     def test_details(self):
         for name, identifier in DETAILS.items():
             with self.subTest(name):
-                self.assert_flat(
-                    name, lambda: get_resource(name, identifier, principal=READER)
-                )
+                self.assert_flat(name, partial(get_resource, name, identifier, principal=READER))
 
 
 class ServedMachineReadTests(TestCase):

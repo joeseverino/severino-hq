@@ -1,24 +1,24 @@
-from django.http import Http404
 from django.db.models import Case, Count, IntegerField, Q, Value, When
+from django.http import Http404
 from django.urls import reverse, reverse_lazy
 from django.utils.functional import cached_property
 from django.views.generic import (
-    TemplateView,
     CreateView,
     DeleteView,
     DetailView,
     ListView,
+    TemplateView,
     UpdateView,
     View,
 )
 
+from hq.domains.projects.github import github_repository
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import web_url
-from hq.platform.application.projects import NotFoundError, hq_sections
-from hq.domains.projects.github import github_repository
-from hq.platform.application.security import web_principal
-from hq.platform.application.timestamps import moment
 from hq.platform.application.pages import PageAction, PageMixin, record_trail
+from hq.platform.application.projects import NotFoundError, hq_sections
+from hq.platform.application.security import web_principal
+from hq.platform.application.services import service_url_for
 from hq.platform.application.tables import (
     TableColumn,
     TableFilter,
@@ -26,11 +26,11 @@ from hq.platform.application.tables import (
     TableSort,
     TableToggle,
 )
-from hq.platform.application.services import service_url_for
+from hq.platform.application.timestamps import moment
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
+
 from .forms import ProjectForm
 from .models import PROJECT_CATEGORY_CHOICES, Project
-
 
 PROJECTS_TRAIL = ("Projects", reverse_lazy("projects:list"))
 
@@ -326,7 +326,6 @@ class WatchingView(PageMixin, TemplateView):
 
         owner = self.login.lower()
         from hq.domains.projects.models import Project
-
         from hq.platform.application.github_public import github_repository
 
         # The HQ project each repository is, when one names it, so a row links there.

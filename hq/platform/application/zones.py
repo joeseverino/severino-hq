@@ -29,7 +29,6 @@ from functools import cached_property
 from typing import Any
 
 from django.db import transaction
-from hq.platform.application.routes import reverse
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.names import normalized_hostname
@@ -38,10 +37,11 @@ from hq.domains.control_plane.provider_adapters.cloudflare import (
     DNS_RECORD_TYPES_BY_ID,
     ZONE_KIND,
 )
+from hq.platform.application.routes import reverse
 
+from .adoption import unmanaged
 from .entity_links import entity_link
 from .infrastructure import resource_health
-from .adoption import unmanaged
 from .ui import ListRow
 
 RECORD_KIND = DNS_RECORD_KIND
@@ -611,8 +611,8 @@ def adopt_zone_records(zone: str, *, principal) -> dict[str, Any]:
     first reconciliation changes nothing.
     """
 
-    from .infrastructure import NotFoundError
     from .adoption import AdoptCommand, adopt
+    from .infrastructure import NotFoundError
 
     found = find_zone(zone)
     if found is None:

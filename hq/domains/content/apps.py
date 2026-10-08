@@ -9,6 +9,7 @@ class ContentConfig(AppConfig):
 
     def ready(self):
         from hq.platform.core.audit import register_audit
+
         from .models import ContentItem
 
         register_audit(ContentItem, "ContentItem")

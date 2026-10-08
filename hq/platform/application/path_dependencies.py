@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from .entity_links import EntityLink
 from .path_model import Hop, ServicePath, Source
 
-
 # What changing or losing a hop does to the name, by step.
 _CONSEQUENCES = {
     "dns": "The name stops resolving, or resolves somewhere else.",

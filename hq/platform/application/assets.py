@@ -8,16 +8,16 @@ from typing import Any
 from django.db import transaction
 
 from hq.domains.assets.models import Asset
-from hq.platform.core.audit import operation_context
 from hq.domains.projects.models import Project
-from .sensitivity import safe_doc_ids
+from hq.platform.core.audit import operation_context
+
 from .domains import records_of
 from .entity_links import EntityLink, entity_link
-from .security import Principal
-from .upserts import upsert_by_slug
 from .projection import addressable, iso, listing
+from .security import Principal
+from .sensitivity import safe_doc_ids
 from .ui import counted
-
+from .upserts import upsert_by_slug
 
 
 def managed_domain(asset: Asset) -> EntityLink | None:

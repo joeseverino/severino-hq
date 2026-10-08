@@ -1,40 +1,40 @@
 """Root URL configuration for Severino HQ."""
 
+from django.conf import settings
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_not_required
 from django.urls import URLPattern, include, path
 
-from django.conf import settings
-
 from hq.domains.projects.views import PostureView, WatchingRefreshView, WatchingView
+from hq.platform.application.domains import host_urlpatterns
+from hq.platform.application.plugins import plugin_urlpatterns
+from hq.platform.core.action_item_views import (
+    ActionItemAsideView,
+    ActionItemCountView,
+    ActionItemsView,
+)
+from hq.platform.core.command_views import CommandView
+from hq.platform.core.csp_views import csp_report
+from hq.platform.core.dashboard_views import (
+    DashboardGlanceSettingsView,
+    DashboardGlanceView,
+    DashboardLinkChoiceView,
+    DashboardView,
+)
+from hq.platform.core.health_views import health_live, health_ready
+from hq.platform.core.speculation import rules_document
 from hq.platform.core.views import (
+    AgentAccessView,
+    AgentPolicyView,
     AvatarView,
     ConnectionView,
-    AgentAccessView,
-    ThemeView,
-    AgentPolicyView,
     DemoModeView,
     PublicAddressView,
     SearchView,
+    ThemeView,
     ThrottledLoginView,
 )
-from hq.platform.core.csp_views import csp_report
-from hq.platform.core.health_views import health_live, health_ready
-from hq.platform.core.speculation import rules_document
-from hq.platform.core.action_item_views import (
-    ActionItemCountView,
-    ActionItemAsideView,
-    ActionItemsView,
-)
-from hq.platform.core.dashboard_views import (
-    DashboardLinkChoiceView,
-    DashboardGlanceView,
-    DashboardGlanceSettingsView,
-    DashboardView,
-)
-from hq.platform.core.command_views import CommandView
-from hq.platform.application.domains import host_urlpatterns
-from hq.platform.application.plugins import plugin_urlpatterns
+
 
 def public(urlconf: str):
     """``include(urlconf)`` with every route in it answering without a session.

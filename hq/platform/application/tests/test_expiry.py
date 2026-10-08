@@ -1,7 +1,7 @@
 """One days-left rule, and one derivation of a resource for every adapter."""
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from django.test import SimpleTestCase, TestCase
@@ -16,7 +16,7 @@ from ..resource_context import resource_context
 from ..resources import get_resource
 from ..security import Capability, Principal
 
-NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
+NOW = datetime(2026, 1, 1, tzinfo=UTC)
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
 
 

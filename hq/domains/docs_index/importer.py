@@ -21,8 +21,9 @@ and upserts DocumentationRecord rows. The Obsidian vault stays the source of
 truth: HQ tracks only metadata and relationships.
 """
 
+from collections.abc import Iterable
 from datetime import date, datetime
-from typing import Any, Iterable
+from typing import Any
 
 from django.db import transaction
 from django.db.models import Count, F, Q
@@ -315,11 +316,10 @@ def _upsert_content_item(
     item, created = ContentItem.objects.get_or_create(
         slug=article_slug, defaults=content_defaults
     )
-    if not created:
-        if any(getattr(item, k) != v for k, v in content_defaults.items()):
-            for k, v in content_defaults.items():
-                setattr(item, k, v)
-            item.save()
+    if not created and any(getattr(item, k) != v for k, v in content_defaults.items()):
+        for k, v in content_defaults.items():
+            setattr(item, k, v)
+        item.save()
 
     if not item.related_documentation.filter(pk=record.pk).exists():
         item.related_documentation.add(record)

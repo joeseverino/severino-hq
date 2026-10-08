@@ -17,7 +17,7 @@ def _column_rules() -> tuple[tuple[int, str, int], ...]:
     """(minimum container width, cell selector, columns), in source order."""
 
     css = (Path(settings.BASE_DIR) / "static" / "css" / "app.css").read_text(encoding="utf-8")
-    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
     found, width = [], 0
     for match in _RULE.finditer(css):
         if match.group(1):

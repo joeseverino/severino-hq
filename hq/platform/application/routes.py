@@ -19,8 +19,7 @@ from functools import lru_cache
 from typing import Any
 
 from django.core.signals import setting_changed
-from django.urls import get_script_prefix, get_urlconf
-from django.urls import reverse as _reverse
+from django.urls import get_script_prefix, get_urlconf, reverse as _reverse
 
 from .projection import read_once
 

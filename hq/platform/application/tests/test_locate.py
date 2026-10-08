@@ -16,8 +16,8 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 
-from ..locate import index_of, machines_index, split_endpoint
 from ..infrastructure import declared_machines
+from ..locate import index_of, machines_index, split_endpoint
 from ..whereabouts import Origin, locate
 
 
@@ -292,8 +292,8 @@ class ProxyPageTests(TestCase):
         to the page.
         """
 
-        from django.test.utils import CaptureQueriesContext
         from django.db import connection
+        from django.test.utils import CaptureQueriesContext
 
         a_proxy("example-proxy-0", "a0.example.com", "10.0.0.5")
         with CaptureQueriesContext(connection) as one_row:

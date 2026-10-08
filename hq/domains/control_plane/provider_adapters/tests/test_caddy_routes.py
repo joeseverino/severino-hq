@@ -4,7 +4,6 @@ from django.test import SimpleTestCase
 
 from hq.domains.control_plane.providers import validate_spec
 
-
 # Each would close the route's block and open another: a second site serving
 # the edge's filesystem, or an import of a file on the edge.
 INJECTED_UPSTREAMS = (

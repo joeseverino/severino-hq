@@ -1,10 +1,10 @@
 """Durable replay semantics shared by machine and human command transports."""
 
-from collections.abc import Callable
-from datetime import timedelta
 import hashlib
 import json
 import re
+from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 
 from django.conf import settings
@@ -12,7 +12,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from hq.platform.api.models import IdempotencyRecord
-
 
 KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 

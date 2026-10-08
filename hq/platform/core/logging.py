@@ -1,10 +1,9 @@
 """Structured, dependency-free production logging primitives."""
 
-from contextvars import ContextVar
-from datetime import datetime, timezone
 import json
 import logging
-
+from contextvars import ContextVar
+from datetime import UTC, datetime
 
 _request_id = ContextVar("severino_request_id", default="-")
 
@@ -32,7 +31,7 @@ class JsonFormatter(logging.Formatter):
         if request_id == "-" and request is not None:
             request_id = getattr(request, "request_id", "-")
         payload = {
-            "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+            "timestamp": datetime.now(UTC).isoformat(timespec="milliseconds"),
             "level": record.levelname.lower(),
             "logger": record.name,
             "message": record.getMessage(),

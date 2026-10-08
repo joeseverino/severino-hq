@@ -5,9 +5,9 @@ the kinds that connection's credential reads. The request goes through the one
 gated capability, POST only.
 """
 
+import tempfile
 from datetime import timedelta
 from pathlib import Path
-import tempfile
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings

@@ -2,7 +2,6 @@ import sqlite3
 
 from django.db import migrations, models
 
-
 DEFINITIONS = (
     ("projects", "Project", "projects", "slug", ("name", "slug", "description", "technologies_used", "notes")),
     ("assets", "Asset", "assets", "slug", ("item_name", "slug", "vendor", "serial_number", "category", "notes")),

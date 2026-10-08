@@ -10,10 +10,10 @@ identical (same provider, same health, same green tick) and differ only in
 who is able to reach the thing on the other side.
 """
 
+import socket
 from dataclasses import dataclass
 from ipaddress import IPv6Network, ip_address, ip_network
 from pathlib import Path
-import socket
 
 # Tailscale hands out addresses from the carrier-grade NAT range and one IPv6
 # ULA prefix. Nothing else on a normal network uses either, so an address in

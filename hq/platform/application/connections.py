@@ -17,10 +17,12 @@ Portainer rather than of editing anything here.
 from dataclasses import dataclass
 from datetime import datetime
 
+from hq.domains.control_plane.connection_kinds import connection_credential
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS, observer_abilities, registry_label
-from hq.domains.control_plane.connection_kinds import connection_credential
+
+from .connection_catalog import CONTROLLER_CONNECTIONS, connection_catalog, serialize_connection
 
 # Declared next to the domains that emit them, so a gateway can import the
 # record without importing this reader. Re-exported here as the one name
@@ -33,12 +35,10 @@ from .connection_contracts import (
     ConnectionSpec,
 )
 from .entity_links import entity_link
-from .integrations import integration_graph
 from .integration_validation import required_capability_names
-from .security import Capability, Principal
+from .integrations import integration_graph
 from .moments import ago
-from .connection_catalog import CONTROLLER_CONNECTIONS, connection_catalog, serialize_connection
-
+from .security import Capability, Principal
 
 # A reading's status in words. The age shown beside it is when the controller
 # reported, which is not when anything was probed.

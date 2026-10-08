@@ -1,9 +1,6 @@
 """Versioned, explicitly allowlisted extension contract for trusted HQ plugins."""
 
-from dataclasses import asdict, dataclass, is_dataclass, replace
-from functools import cache, lru_cache, partial
 import hashlib
-from importlib import import_module
 import inspect
 import itertools
 import marshal
@@ -11,12 +8,17 @@ import os
 import pickle
 import re
 import time
-from types import CodeType
 import weakref
-from typing import Any, Callable, Iterable
+from collections.abc import Callable, Iterable
+from dataclasses import asdict, dataclass, is_dataclass, replace
+from functools import cache, lru_cache, partial
+from importlib import import_module
+from types import CodeType
+from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 from django.urls import URLResolver, include, path
+
 from hq.platform.application.routes import reverse
 
 from .demo import showing_demo
@@ -707,7 +709,7 @@ def plugin_overviews() -> tuple[dict[str, Any], ...]:
 
 def _validate_dashboard_cards(cards: Iterable[object]) -> None:
     for card in cards:
-        if not isinstance(card, dict) or not CARD_REQUIRED_KEYS <= card.keys():
+        if not isinstance(card, dict) or not card.keys() >= CARD_REQUIRED_KEYS:
             raise ImproperlyConfigured(
                 "Plugin dashboard cards require id, label, value, and url."
             )

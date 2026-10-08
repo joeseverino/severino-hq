@@ -1,18 +1,18 @@
 """Canonical, non-mutating HQ projections shared by delivery adapters."""
 
-from .sensitivity import SAFE_SENSITIVITIES
-from .projection import iso, page_size
-from . import records
-
 from typing import Any
 
 from django.db.models import FETCH_RAISE, Count
 from django.utils import timezone
 
-from hq.platform.core.models import AuditLog
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
+from hq.platform.core.models import AuditLog
+
+from . import records
+from .projection import iso, page_size
+from .sensitivity import SAFE_SENSITIVITIES
 
 
 def list_expenses(

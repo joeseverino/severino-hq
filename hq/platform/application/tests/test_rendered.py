@@ -12,9 +12,9 @@ twice, and no em dash or count that disagrees with its noun ("1 resources",
 """
 
 import re
-from io import StringIO
 from collections import deque
 from html.parser import HTMLParser
+from io import StringIO
 from urllib.parse import urlsplit
 
 from django.contrib.auth import get_user_model
@@ -169,10 +169,12 @@ class RenderedPageTests(TestCase):
             if "—" in text:
                 at = text.index("—")
                 problems.append(f"{path}: em dash in {text[max(at - 30, 0):at + 30]!r}")
-            for noun in ONE_PLURAL.findall(text):
-                # "-ous" words are adjectives ("1 serious"), not plurals.
-                if noun not in NOT_PLURAL and not noun.endswith("ous"):
-                    problems.append(f"{path}: \"1 {noun}\"")
+            # "-ous" words are adjectives ("1 serious"), not plurals.
+            problems.extend(
+                f"{path}: \"1 {noun}\""
+                for noun in ONE_PLURAL.findall(text)
+                if noun not in NOT_PLURAL and not noun.endswith("ous")
+            )
             if BRACKETED.search(text):
                 problems.append(f"{path}: plural in brackets: {BRACKETED.search(text).group()!r}")
         self.assertGreater(crawled, 20, "The crawl reached too few pages to mean anything.")

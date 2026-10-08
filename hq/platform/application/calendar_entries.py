@@ -6,24 +6,24 @@ is the same audited write as one added on the page.
 
 import calendar as month_lengths
 from collections.abc import Iterator
-from itertools import count
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timedelta
+from itertools import count
 from typing import Any, Literal
 
 from django.db import transaction
 from django.db.models import Q
 from django.db.models.functions import Coalesce
-from hq.platform.application.routes import reverse
 from django.utils import timezone
 
 from hq.domains.calendars.models import Entry, Preference
+from hq.platform.application.routes import reverse
 from hq.platform.core.audit import operation_context
 
 from .calendar import CalendarEvent, CalendarSource
 from .derivations import derivation
-from .security import Capability, Principal
 from .moments import when_day
+from .security import Capability, Principal
 from .ui import counted
 
 OWN_SOURCE = "calendar.mine"

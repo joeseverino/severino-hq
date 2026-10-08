@@ -3,31 +3,36 @@
 from functools import cached_property
 
 from django.contrib import messages
-
 from django.http import Http404
 from django.shortcuts import redirect, render
-from hq.platform.application.routes import reverse
 from django.views import View
 from django.views.generic import TemplateView
 
 from hq.platform.application.adoption import unmanaged_services
-from hq.platform.application.inventory import inventory_state
 from hq.platform.application.connections import machines_once
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.exposure import OPEN
 from hq.platform.application.exposure_fixes import gate_links
 from hq.platform.application.hq_self import LABEL as HQ_LABEL, hq_service
-from hq.platform.application.service_list import listed_service, listed_services
-from hq.platform.application.services import alias_target
-from hq.platform.application.service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET
-from hq.platform.application.security import safe_next, web_principal
-from hq.platform.application.service_context import missing_facets, page_parts, sections_for, service_badges, service_summary
+from hq.platform.application.inventory import inventory_state
 from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.resource_capabilities import (
     LIFECYCLE_VERBS,
     VERB_LABELS,
     resource_capabilities,
 )
+from hq.platform.application.routes import reverse
+from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.service_context import (
+    missing_facets,
+    page_parts,
+    sections_for,
+    service_badges,
+    service_summary,
+)
+from hq.platform.application.service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET
+from hq.platform.application.service_list import listed_service, listed_services
+from hq.platform.application.services import alias_target
 from hq.platform.application.ui import PageNavigation, PageSection
 
 from .models import ManagedResource

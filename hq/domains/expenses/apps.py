@@ -9,6 +9,7 @@ class ExpensesConfig(AppConfig):
 
     def ready(self):
         from hq.platform.core.audit import register_audit
+
         from .models import Expense
 
         register_audit(Expense, "Expense")

@@ -19,14 +19,15 @@ shape are doing real work:
 import re
 
 from django.db.models import BooleanField, Count, ExpressionWrapper, Q
-from hq.platform.application.routes import reverse
 
 from hq.domains.assets.models import Asset
 from hq.domains.contacts import inbox
 from hq.domains.content.models import ContentItem
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
+from hq.platform.application.routes import reverse
 
+from . import sections
 from .conditions import held_since
 from .delivery_progress import STALLED_AFTER, WAITING, delivery_progress
 from .entity_links import EntityLink, entity_link, kind_label
@@ -40,9 +41,8 @@ from .projection import read_once
 from .references import dangling
 from .security import cli_principal
 from .services import service_catalog
-from . import sections
-from .topology import derive_topology
 from .timestamps import moment
+from .topology import derive_topology
 from .ui import Insight, counted, ended
 from .workflow_contracts import ActionLink, WorkflowPlan
 
@@ -366,24 +366,24 @@ def tailnet() -> tuple[Insight, ...]:
     # loop below walks, so asking each machine would never find one.
     from .tailnet import policy as tailnet_policy
 
-    for name in tailnet_policy().locked_out:
-        items.append(
-            Insight(
-                status="serious",
-                eyebrow="Tailnet",
-                family="Tailnet lock",
-                key=f"tailnet-locked-out:{name}",
-                title=f"{name} is locked out of the tailnet",
-                value="1",
-                body=(
-                    f"Other machines ignore {name} because its key is not signed. "
-                    "Its own status still shows healthy."
-                ),
-                url=reverse("control_plane:tailnet"),
-                subject=subject_link("machine", name),
-                workflow=_sign_key(f"tailnet-locked-out:{name}", name),
-            )
+    items.extend(
+        Insight(
+            status="serious",
+            eyebrow="Tailnet",
+            family="Tailnet lock",
+            key=f"tailnet-locked-out:{name}",
+            title=f"{name} is locked out of the tailnet",
+            value="1",
+            body=(
+                f"Other machines ignore {name} because its key is not signed. "
+                "Its own status still shows healthy."
+            ),
+            url=reverse("control_plane:tailnet"),
+            subject=subject_link("machine", name),
+            workflow=_sign_key(f"tailnet-locked-out:{name}", name),
         )
+        for name in tailnet_policy().locked_out
+    )
     for name, presence in presences:
         if not presence.authorized:
             items.append(

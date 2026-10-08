@@ -1,7 +1,6 @@
 """Lease and report protocol for the privileged homelab controller."""
 
 import hashlib
-
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
@@ -10,19 +9,19 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS
+from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.providers import (
     PROVIDERS,
     controller_capability_registry,
     enabled_controller_actions,
 )
-from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 
+from .adoption import manages_through, observes_only
 from .agent_access import agents_paused
 from .approvals import AGENT_SURFACES
-from .adoption import manages_through, observes_only
 from .conditions import stamped
 from .infrastructure import controller_contract, serialize_resource
 from .plugin_admission import admitted_sources
@@ -58,7 +57,6 @@ def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any])
     """
 
     from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
-
     from hq.domains.control_plane.provider_adapters.tls import UPLOADED_CERTIFICATE_KIND
 
     if resource.kind not in (CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND):

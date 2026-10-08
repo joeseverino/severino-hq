@@ -17,9 +17,9 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.utils.text import Truncator
 
-from hq.platform.application.timestamps import moment
 from hq.domains.content.models import ContentItem
 from hq.domains.projects.models import Project
+from hq.platform.application.timestamps import moment
 
 
 class ContentSyncError(RuntimeError):

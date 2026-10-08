@@ -14,7 +14,7 @@ class ChangeEffectTests(SimpleTestCase):
             properties = provider.schema().get("properties", {})
             for name, effect in provider.change_effects:
                 description = properties.get(name, {}).get("description", "")
-                if effect in description or description and description in effect:
+                if effect in description or (description and description in effect):
                     repeated.append(f"{kind}.{name}")
         self.assertEqual(repeated, [])
 

@@ -5,14 +5,15 @@ again happens where waiting costs nobody: a request the browser makes after the
 page, or the write that changed the value.
 """
 
-from datetime import datetime, timedelta, timezone as dt_timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from django.utils import timezone
 
 from hq.platform.core.models import UpstreamReading
 
-_LONG_AGO = datetime(2000, 1, 1, tzinfo=dt_timezone.utc)
+_LONG_AGO = datetime(2000, 1, 1, tzinfo=UTC)
 
 
 def stored(key: str) -> UpstreamReading | None:

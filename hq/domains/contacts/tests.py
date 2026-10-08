@@ -322,9 +322,11 @@ class D1DerivationTests(TestCase):
     def test_a_name_that_matches_nothing_is_an_error(self):
         _databases(_db("contacts", "uuid-1"))
 
-        with override_settings(CLOUDFLARE_D1_DATABASE_NAME="missing"):
-            with self.assertRaisesMessage(d1.D1Error, "'missing'"):
-                d1.database()
+        with (
+            override_settings(CLOUDFLARE_D1_DATABASE_NAME="missing"),
+            self.assertRaisesMessage(d1.D1Error, "'missing'"),
+        ):
+            d1.database()
 
     def test_an_underivable_database_shows_on_the_connection(self):
         _databases(_db("contacts", "uuid-1"), _db("other", "uuid-2"))

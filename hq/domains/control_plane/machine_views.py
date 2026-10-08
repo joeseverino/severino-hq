@@ -4,17 +4,17 @@ from urllib.parse import urlencode
 
 from django.http import Http404
 from django.shortcuts import redirect
-from hq.platform.application.routes import reverse
 from django.views.generic import TemplateView
 
 from hq.platform.application.connections import machines_once
-from hq.platform.application.machine_context import machine_links, sections_for as machine_sections
-from hq.platform.application.tailnet_context import tailnet_context
 from hq.platform.application.hq_self import LABEL as HQ_LABEL
+from hq.platform.application.machine_context import machine_links, sections_for as machine_sections
 from hq.platform.application.machines import declaration_seed, machine
-from hq.platform.application.security import web_principal
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.resource_capabilities import resource_capabilities
+from hq.platform.application.routes import reverse
+from hq.platform.application.security import web_principal
+from hq.platform.application.tailnet_context import tailnet_context
 
 from .models import ManagedResource
 from .provider_adapters.declarations import MACHINE_KIND
@@ -163,13 +163,9 @@ class MachineDetailView(PageMixin, TemplateView):
         # The machine's declaration is edited from its own page.
         if self.found.declaration:
             key = self.found.declaration
-            return tuple(
-                [
-                    PageAction("Edit machine", reverse("control_plane:edit", args=[key])),
-                    PageAction(
-                        "Remove", reverse("control_plane:remove", args=[key]), danger=True
-                    ),
-                ]
+            return (
+                PageAction("Edit machine", reverse("control_plane:edit", args=[key])),
+                PageAction("Remove", reverse("control_plane:remove", args=[key]), danger=True),
             )
         # Seeded with what HQ knows, and back here after saving. A machine the
         # tailnet device declaration already names gets its details added; one

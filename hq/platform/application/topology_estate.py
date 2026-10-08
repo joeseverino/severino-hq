@@ -16,29 +16,25 @@ from datetime import datetime
 from itertools import combinations
 from typing import Any
 
-
+from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.adguard import QUERY_KIND
 from hq.domains.control_plane.providers import PROVIDERS
 
-
-from hq.domains.control_plane.names import normalized_hostname
-
 from .action_links import ActionLink as TopologyAction
+from .connections import machines_once
 from .entity_links import entity_link
 from .facts import Joined, Subject, inventory_records, readings
 from .inventory import record_identity
 from .locate import Machines, index_of
 from .paths import path_to
-from .connections import machines_once
 from .topology_model import (
+    TopologyEdge,
+    TopologyNode,
     derived_id,
     edge_between,
     newest_stamp,
-    TopologyEdge,
-    TopologyNode,
 )
-
 
 # Derived node kinds that only stand for a machine something mentioned: a
 # controller is the machine it runs on, a target is the machine it reaches.
@@ -207,8 +203,8 @@ _SERVICE_SUBTITLES = {"observed": "Service not in HQ"}
 
 def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
     from .hq_self import hq_service
-    from .service_list import listed_services
     from .service_facets import zone_holding
+    from .service_list import listed_services
 
     own = hq_service(catalog=machines_once())
     for service in listed_services():

@@ -1,10 +1,10 @@
 """Fail-closed runtime enforcement for Cordon-verified plugin compositions."""
 
-from importlib.metadata import PackageNotFoundError, version as package_version
 import json
 import os
-from pathlib import Path
 import re
+from importlib.metadata import PackageNotFoundError, version as package_version
+from pathlib import Path
 from typing import Any, NoReturn, Protocol
 
 from django.core.exceptions import ImproperlyConfigured

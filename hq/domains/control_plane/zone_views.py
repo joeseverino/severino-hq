@@ -13,47 +13,47 @@ from django.contrib import messages
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from django.shortcuts import redirect, render
-from hq.platform.application.routes import reverse
 from django.utils.html import format_html
 from django.views import View
 
+from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.names import normalized_hostname
+from hq.platform.application.adoption import AdoptCommand, adopt
+from hq.platform.application.entity_links import entity_link
 from hq.platform.application.infrastructure import (
+    ManagedResourceCommand,
     NotFoundError,
     PolicyError,
-    ManagedResourceCommand,
     save_managed_resource,
 )
-from hq.platform.application.pages import PageAction, page_context
-from hq.platform.application.entity_links import entity_link
-from hq.platform.application.relationships import relationships_for
-from hq.platform.application.resource_capabilities import public_dns_enabled, resource_capabilities
 from hq.platform.application.inventory import inventory_state
-from hq.platform.application.adoption import AdoptCommand, adopt
-from hq.platform.application.security import web_principal, safe_next
-
-from .resource_form_views import _readable_error
-from hq.platform.application.pins import DOMAIN, pinned, toggle
 from hq.platform.application.mail_policy import (
     DMARC_TAGS,
-    SPF_LOOKUP_LIMIT,
     SPF_DEFAULTS,
+    SPF_LOOKUP_LIMIT,
     SpfTerm,
     compose_dmarc,
     compose_spf,
     mail_overview,
     parse_spf,
 )
-from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.pages import PageAction, page_context
+from hq.platform.application.pins import DOMAIN, pinned, toggle
+from hq.platform.application.relationships import relationships_for
+from hq.platform.application.resource_capabilities import public_dns_enabled, resource_capabilities
+from hq.platform.application.routes import reverse
+from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.ui import counted
 from hq.platform.application.zones import (
-    find_zone,
     RECORD_KIND,
     ZONE_KIND,
     adopt_zone_records,
     domain_context,
+    find_zone,
     zone_catalog,
 )
-from hq.platform.application.ui import counted
-from hq.domains.control_plane.names import normalized_hostname
+
+from .resource_form_views import _readable_error
 
 
 def _records_lede(zone) -> str:

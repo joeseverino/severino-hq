@@ -266,9 +266,12 @@ class ContractBindingTests(SimpleTestCase):
     def test_actions_and_paths_that_differ_stop_the_import(self):
         extra = (*ACTIONS, Action("undeclared", lambda parameters, payload: None))
         for actions in (extra, ACTIONS[1:], (*ACTIONS, ACTIONS[0])):
-            with self.subTest(count=len(actions)), patch.object(bridge_application, "ACTIONS", actions):
-                with self.assertRaisesMessage(RuntimeError, "differ"):
-                    bridge_application._routes()
+            with (
+                self.subTest(count=len(actions)),
+                patch.object(bridge_application, "ACTIONS", actions),
+                self.assertRaisesMessage(RuntimeError, "differ"),
+            ):
+                bridge_application._routes()
 
     def test_every_parameter_is_a_kind_the_application_parses(self):
         for operation in operations().values():

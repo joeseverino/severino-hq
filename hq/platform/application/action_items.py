@@ -36,10 +36,7 @@ def item_revision(item: Any) -> str:
     notice has nothing to get worse: it returns when it reports something else.
     """
 
-    if getattr(item, "notice", False):
-        seen = ["notice", item.body]
-    else:
-        seen = [item.status, item.magnitude or 1]
+    seen = ["notice", item.body] if getattr(item, "notice", False) else [item.status, item.magnitude or 1]
     return hashlib.sha256(json.dumps(seen).encode()).hexdigest()[:16]
 
 

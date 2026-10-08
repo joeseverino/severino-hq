@@ -38,7 +38,7 @@ def add(nodes, edges, resources, machine: Callable[[Any], str]) -> None:
 def _add_fact(nodes, node_id: str, fact: tuple[str, str]) -> None:
     node = nodes[node_id]
     if fact not in node.facts:
-        nodes[node_id] = replace(node, facts=node.facts + (fact,))
+        nodes[node_id] = replace(node, facts=(*node.facts, fact))
 
 
 def _unrecognised(nodes, machine) -> None:
@@ -166,22 +166,22 @@ def unrecognised_containers(estate: Any) -> tuple[dict[str, Any], ...]:
             except NoReverseMatch:
                 adopt_url = ""
             found.append(
-                dict(
-                    rule="unrecognised-container",
-                    subject=node.id,
-                    title=f"Unrecognised container {name} on {node.label}",
-                    severity="serious",
-                    explanation=(
+                {
+                    "rule": "unrecognised-container",
+                    "subject": node.id,
+                    "title": f"Unrecognised container {name} on {node.label}",
+                    "severity": "serious",
+                    "explanation": (
                         "No compose project started it, so HQ is not tracking it. "
                         "Adopt it if you started it. Otherwise find what did and remove it."
                     ),
-                    steps=machine_step(
+                    "steps": machine_step(
                         f"If nothing needs it, remove it from {host or node.label}",
                         host or node.label,
                         f"docker rm -f {shlex.quote(name)}",
                     ),
-                    evidence=(("Container", name), ("Machine", node.label)),
-                    remedies=(
+                    "evidence": (("Container", name), ("Machine", node.label)),
+                    "remedies": (
                         Remedy(
                             capability="infrastructure.resource.create",
                             target=name,
@@ -191,7 +191,7 @@ def unrecognised_containers(estate: Any) -> tuple[dict[str, Any], ...]:
                             method="POST",
                         ),
                     ),
-                )
+                }
             )
     return tuple(sorted(found, key=lambda finding: finding["title"]))
 
@@ -206,24 +206,24 @@ def images_behind(estate: Any) -> tuple[dict[str, Any], ...]:
                 continue
             container, host, reference, running, tagged, service = _parts(value)
             found.append(
-                dict(
-                    rule="container-image-behind",
-                    subject=node.id,
-                    title=f"{container} on {node.label} runs an older {reference}",
-                    severity="attention",
-                    explanation=(
+                {
+                    "rule": "container-image-behind",
+                    "subject": node.id,
+                    "title": f"{container} on {node.label} runs an older {reference}",
+                    "severity": "attention",
+                    "explanation": (
                         f"{reference} on this machine is now image {tagged}, and the "
                         f"container still runs {running}. Recreate it to run what "
                         "was pulled."
                     ),
-                    evidence=(
+                    "evidence": (
                         ("Container", container),
                         ("Image reference", reference),
                         ("Running", running),
                         ("Tagged now", tagged),
                     ),
-                    steps=_recreate(container, service, host or node.label),
-                )
+                    "steps": _recreate(container, service, host or node.label),
+                }
             )
     return tuple(sorted(found, key=lambda item: item["title"]))
 
@@ -238,23 +238,23 @@ def images_untagged(estate: Any) -> tuple[dict[str, Any], ...]:
                 continue
             container, host, reference, running, _tagged, service = _parts(value)
             found.append(
-                dict(
-                    rule="container-image-untagged",
-                    subject=node.id,
-                    title=f"{container} on {node.label} runs an untagged image",
-                    severity="attention",
-                    explanation=(
+                {
+                    "rule": "container-image-untagged",
+                    "subject": node.id,
+                    "title": f"{container} on {node.label} runs an untagged image",
+                    "severity": "attention",
+                    "explanation": (
                         "No tag on this machine names the image it runs, so its "
                         "version cannot be told or reproduced. Pin a tag in its "
                         "compose file and recreate it."
                     ),
-                    evidence=(
+                    "evidence": (
                         ("Container", container),
                         ("Image", running),
                         *((("Started from", reference),) if reference else ()),
                     ),
-                    steps=_recreate(container, service, host or node.label),
-                )
+                    "steps": _recreate(container, service, host or node.label),
+                }
             )
     return tuple(sorted(found, key=lambda item: item["title"]))
 

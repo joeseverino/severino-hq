@@ -2,30 +2,28 @@
 
 from typing import Any
 
-from hq.platform.application.dashboard import operating_snapshot
-from hq.platform.application.connections import (
-    describe_connections as describe_application_connections,
-)
-from hq.platform.application.connections import list_connections as list_application_connections
+from hq.platform.application import read_models
 from hq.platform.application.capabilities import (
     describe_capabilities as describe_application_capabilities,
-)
-from hq.platform.application.capabilities import (
     execute_capability as execute_application_capability,
 )
-from hq.platform.mcp.identity import current_principal
-from hq.platform.application.security import Capability
+from hq.platform.application.connections import (
+    describe_connections as describe_application_connections,
+    list_connections as list_application_connections,
+)
+from hq.platform.application.dashboard import operating_snapshot
 from hq.platform.application.findings import findings as application_findings
-from hq.platform.application.topology import topology as application_topology
 from hq.platform.application.registry import audit_registry as audit_application_registry
+from hq.platform.application.reports import export_year_summary as export_application_year_summary
 from hq.platform.application.resources import (
     ResourceNotFound,
     describe_resources as describe_application_resources,
     get_resource as get_application_resource,
     list_resource as list_application_resource,
 )
-from hq.platform.application import read_models
-from hq.platform.application.reports import export_year_summary as export_application_year_summary
+from hq.platform.application.security import Capability
+from hq.platform.application.topology import topology as application_topology
+from hq.platform.mcp.identity import current_principal
 
 
 class NotFoundError(ValueError):

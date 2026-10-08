@@ -507,6 +507,7 @@ class ReceiptUploadHardeningTests(TestCase):
 
         from django.core.exceptions import ValidationError
         from django.core.files.uploadedfile import SimpleUploadedFile
+
         from hq.domains.receipts.validation import validate_receipt_file
 
         sneaky = SimpleUploadedFile("note.html", b"markup", content_type="")
@@ -516,6 +517,7 @@ class ReceiptUploadHardeningTests(TestCase):
     def test_a_declared_html_type_is_refused(self):
         from django.core.exceptions import ValidationError
         from django.core.files.uploadedfile import SimpleUploadedFile
+
         from hq.domains.receipts.validation import validate_receipt_file
 
         with self.assertRaises(ValidationError):
@@ -527,6 +529,7 @@ class ReceiptUploadHardeningTests(TestCase):
         """The gate has to stay usable, or it gets removed instead of fixed."""
 
         from django.core.files.uploadedfile import SimpleUploadedFile
+
         from hq.domains.receipts.validation import validate_receipt_file
 
         validate_receipt_file(
@@ -538,6 +541,7 @@ class ReceiptUploadHardeningTests(TestCase):
 
         from django.contrib.auth import get_user_model
         from django.core.files.base import ContentFile
+
         from hq.domains.receipts.models import Receipt
 
         user = get_user_model().objects.create_user("op", password="x")
@@ -557,6 +561,7 @@ class ReceiptUploadHardeningTests(TestCase):
     def test_a_pdf_is_still_shown_in_place(self):
         from django.contrib.auth import get_user_model
         from django.core.files.base import ContentFile
+
         from hq.domains.receipts.models import Receipt
 
         user = get_user_model().objects.create_user("op2", password="x")
@@ -845,6 +850,7 @@ class ResponseHeaderTests(TestCase):
     )
     def test_only_a_trusted_proxy_can_assert_https(self):
         from django.http import HttpResponse
+
         from hq.platform.core.network import TrustedNetworkMiddleware
 
         observed = []

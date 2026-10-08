@@ -207,7 +207,7 @@ def _work(job_id, work: Callable[[Progress], dict[str, Any]], *, own_connection=
         except Failed as said:
             # A stated outcome, not a fault: the sentence is the whole record.
             _fail(job, str(said) or "The job did not finish.", Failure(message=str(said)[:400], kind="Failed"))
-        except Exception:
+        except Exception:  # noqa: BLE001 - a failed job is recorded, never raised
             # The whole traceback, not just the message: nobody can reproduce
             # a background failure by running it again from a terminal.
             detail = traceback.format_exc()

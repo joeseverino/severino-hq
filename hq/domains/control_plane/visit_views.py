@@ -1,5 +1,7 @@
 """An open page asking for its own readings."""
 
+from typing import ClassVar
+
 from django.http import Http404, JsonResponse
 from django.views import View
 
@@ -20,7 +22,7 @@ class VisitRefreshView(View):
     GET, so opening or prefetching a link reads nothing.
     """
 
-    http_method_names = ["post"]
+    http_method_names: ClassVar[list[str]] = ["post"]
 
     def post(self, request):
         subject = str(request.POST.get("subject", ""))

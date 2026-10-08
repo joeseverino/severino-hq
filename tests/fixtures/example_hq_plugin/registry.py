@@ -14,6 +14,6 @@ TIMEOUT_SECONDS = 10
 def read(slug: str) -> list[str] | None:
     """What the registry lists for one note, or None when it lists nothing."""
 
-    with urlopen(f"{REGISTRY}/{slug}", timeout=TIMEOUT_SECONDS) as response:  # noqa: S310
+    with urlopen(f"{REGISTRY}/{slug}", timeout=TIMEOUT_SECONDS) as response:
         listed = json.load(response)
     return listed or None

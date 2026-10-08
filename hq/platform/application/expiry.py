@@ -5,8 +5,9 @@ a domain page never disagree about the same certificate by a day.
 """
 
 import math
-from datetime import datetime, timedelta, timezone
-from typing import Any, Mapping
+from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from .derivations import holds_until, present
 from .timestamps import moment
@@ -22,7 +23,7 @@ def days_until(when: datetime, now: datetime | None = None) -> int:
     """
 
     if when.tzinfo is None:
-        when = when.replace(tzinfo=timezone.utc)
+        when = when.replace(tzinfo=UTC)
     left = (when - (now or present())).total_seconds() / 86400
     if left > 0:
         days = max(1, math.floor(left + 0.5))

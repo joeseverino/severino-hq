@@ -43,7 +43,7 @@ class Command(BaseCommand):
         bound = set_principal(cli_principal())
         try:
             result = async_to_sync(tool.run)(arguments)
-        except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+        except Exception as exc:  # reported, never swallowed
             raise CommandError(str(exc)) from exc
         finally:
             reset_principal(bound)

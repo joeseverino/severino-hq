@@ -101,14 +101,6 @@ class TimestampedModel(models.Model):
 class AuditLog(models.Model):
     """A single record of something a user (or the system) did."""
 
-    @property
-    def type_label(self) -> str:
-        return object_type_label(self.object_type)
-
-    @property
-    def type_plural(self) -> str:
-        return object_type_plural(self.object_type)
-
     class Action(models.TextChoices):
         CREATED = "created", "Created"
         UPDATED = "updated", "Updated"
@@ -156,6 +148,25 @@ class AuditLog(models.Model):
             models.Index(fields=("connection", "-created_at")),
         ]
 
+    def __str__(self) -> str:
+        who = self.actor_label
+        subject = self.object_repr or self.type_label
+        target = f" {subject}" if subject else ""
+        return f"[{self.created_at:%Y-%m-%d %H:%M}] {who} {self.action}{target}"
+
+    def get_absolute_url(self) -> str:
+        from django.urls import reverse
+
+        return reverse("core:audit_detail", kwargs={"pk": self.pk})
+
+    @property
+    def type_label(self) -> str:
+        return object_type_label(self.object_type)
+
+    @property
+    def type_plural(self) -> str:
+        return object_type_plural(self.object_type)
+
     @property
     def actor_label(self) -> str:
         """The operator, else the recorded machine actor, else an unauthenticated source."""
@@ -192,17 +203,6 @@ class AuditLog(models.Model):
         first = next(iter((self.message or "").strip().splitlines()), "")
         message = " ".join(_IDENTIFIER.sub("", first).split())[:160]
         return " · ".join(part for part in (self.type_label, message) if part)
-
-    def get_absolute_url(self) -> str:
-        from django.urls import reverse
-
-        return reverse("core:audit_detail", kwargs={"pk": self.pk})
-
-    def __str__(self) -> str:
-        who = self.actor_label
-        subject = self.object_repr or self.type_label
-        target = f" {subject}" if subject else ""
-        return f"[{self.created_at:%Y-%m-%d %H:%M}] {who} {self.action}{target}"
 
 
 class Pin(models.Model):
@@ -283,7 +283,7 @@ class AgentIdentity(models.Model):
         return self.client_id
 
 
-class ActionItemRead(models.Model):
+class ActionItemRead(models.Model):  # noqa: DJ008 - stored state, never shown by name
     """An action item a person has seen: which item, and which revision of it."""
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
@@ -317,7 +317,7 @@ class LinkedAccount(models.Model):
         return f"{self.provider}:{self.login}"
 
 
-class UpstreamReading(models.Model):
+class UpstreamReading(models.Model):  # noqa: DJ008 - stored state, never shown by name
     """The last value read from a service outside HQ, and when it was read."""
 
     key = models.CharField(max_length=100, primary_key=True)

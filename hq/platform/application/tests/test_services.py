@@ -9,8 +9,8 @@ from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.provider_spec import SERVICE_FACET_IDS, SERVICE_FACETS
 from hq.domains.control_plane.providers import PROVIDERS
-from hq.domains.control_plane.provider_spec import SERVICE_FACETS, SERVICE_FACET_IDS
 from hq.domains.projects.models import Project
 
 from ..attention import services as service_attention
@@ -792,8 +792,8 @@ class OriginNoteTests(TestCase):
         from hq.domains.control_plane.provider_spec import NameContext
 
         from ..containers import Running
-        from ..services import Service
         from ..service_facets import Facet
+        from ..services import Service
         from ..whereabouts import Origin
 
         running = Running(
@@ -833,7 +833,6 @@ class OriginNoteTests(TestCase):
         cannot describe, reconcile or reach."""
 
         from ..services import Service
-
         from ..whereabouts import Origin
 
         service = Service(
@@ -847,10 +846,8 @@ class OriginNoteTests(TestCase):
     def test_it_speaks_up_when_nothing_identified_what_is_running(self):
         from hq.domains.control_plane.provider_spec import NameContext
 
-        from ..services import Service
-
         from ..service_facets import Facet
-
+        from ..services import Service
         from ..whereabouts import Origin
 
         service = Service(
@@ -905,8 +902,9 @@ class ConnectedMachineTests(TestCase):
     """
 
     def test_an_address_a_connection_points_at_is_named(self):
-        from hq.domains.control_plane.models import ProviderConnection
         from django.utils import timezone
+
+        from hq.domains.control_plane.models import ProviderConnection
 
         from ..whereabouts import locate
 
@@ -930,8 +928,9 @@ class ConnectedMachineTests(TestCase):
         self.assertEqual(origin.qualifier, "unknown host")
 
     def test_a_url_endpoint_matches_by_its_hostname(self):
-        from hq.domains.control_plane.models import ProviderConnection
         from django.utils import timezone
+
+        from hq.domains.control_plane.models import ProviderConnection
 
         from ..whereabouts import locate
 
@@ -964,8 +963,9 @@ class PortlessOriginTests(TestCase):
         self.assertFalse(origin.external)
 
     def test_a_bare_address_matches_a_connection_too(self):
-        from hq.domains.control_plane.models import ProviderConnection
         from django.utils import timezone
+
+        from hq.domains.control_plane.models import ProviderConnection
 
         from ..whereabouts import locate
 
@@ -1038,6 +1038,7 @@ class LoopbackOriginTests(TestCase):
         from django.utils import timezone
 
         from hq.domains.control_plane.models import ProviderInventory
+
         from ..services import CONTAINER_KIND
 
         ProviderInventory.objects.update_or_create(
@@ -1073,6 +1074,7 @@ class LoopbackOriginTests(TestCase):
         from django.utils import timezone
 
         from hq.domains.control_plane.models import ProviderInventory
+
         from ..services import CONTAINER_KIND
         from ..whereabouts import locate
 

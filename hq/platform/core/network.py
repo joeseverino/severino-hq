@@ -32,14 +32,14 @@ closest thing to the caller that HQ can prove, and anything further left is
 attacker-controlled text.
 """
 
-from functools import lru_cache
+from functools import cache
 from ipaddress import ip_address, ip_network
 
 from django.conf import settings
 from django.http import HttpResponseForbidden
 
 
-@lru_cache(maxsize=None)
+@cache
 def _networks(cidrs: tuple[str, ...]) -> tuple:
     parsed = []
     for cidr in cidrs:

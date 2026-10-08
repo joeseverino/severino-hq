@@ -29,7 +29,7 @@ _ATTRIBUTE = re.compile(r"\[\s*([A-Za-z_][\w-]*)")
 PLAYWRIGHT_QUERIES = {"locator", "query_selector", "query_selector_all", "wait_for_selector"}
 # A literal handed to a DOM query, and a class handed to classList.
 _QUERY = re.compile(
-    r"\b(?:querySelector|querySelectorAll|closest|matches)\(\s*(['\"`])(.*?)\1", re.S
+    r"\b(?:querySelector|querySelectorAll|closest|matches)\(\s*(['\"`])(.*?)\1", re.DOTALL
 )
 _CLASS_LIST = re.compile(
     r"classList\.(?:contains|add|remove|toggle)\(\s*(['\"`])([\w-]+)\1"
@@ -66,7 +66,7 @@ def markup() -> tuple[set[str], set[str], str]:
 @cache
 def stylesheet_classes() -> set[str]:
     css = (ROOT / "static" / "css" / "app.css").read_text(encoding="utf-8")
-    css = re.sub(r"/\*.*?\*/", " ", css, flags=re.S)
+    css = re.sub(r"/\*.*?\*/", " ", css, flags=re.DOTALL)
     css = re.sub(r"\{[^{}]*\}", " ", css)
     return set(_CLASS.findall(css))
 

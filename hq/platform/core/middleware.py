@@ -7,23 +7,21 @@ Middleware for Severino HQ.
   ORM signals can attribute audit events without leaking across requests.
 """
 
-from contextvars import ContextVar
 import logging
+from contextvars import ContextVar
 from time import monotonic
 from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.auth import middleware as auth_middleware
 
+import hq.platform.core.logging as request_logging
+from hq.platform.application import request_context
 from hq.platform.application.arrivals import note as note_arrival
 from hq.platform.application.cadence import note_activity
 from hq.platform.application.demo import demo_scope
-
-import hq.platform.core.logging as request_logging
 from hq.platform.core import speculation
 from hq.platform.core.outbound import serving
-from hq.platform.application import request_context
-
 
 # Where the browser's own answer to "show me stand-ins" is kept. Named here
 # because the middleware that reads it and the view that writes it are the only
@@ -177,7 +175,7 @@ class CurrentUserMiddleware:
             # session-backed object on the event-loop thread (Django 6.1 then
             # correctly raises SynchronousOnlyOperation). Resolve it while
             # this synchronous middleware is still running in its worker.
-            user.is_authenticated
+            _ = user.is_authenticated
             user = getattr(request, "_cached_user", user)
         token = _current_user.set(user)
         try:

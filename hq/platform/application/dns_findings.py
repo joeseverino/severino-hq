@@ -10,9 +10,9 @@ from typing import Any
 from hq.domains.control_plane.observations.adguard import (
     FILTERING_OFF,
     NAME_UNUSED,
-    UNUSED_AFTER_HOURS,
     PLAIN_UPSTREAM,
     PROTECTION_OFF,
+    UNUSED_AFTER_HOURS,
 )
 
 from .finding_model import FindingRule, built_findings
@@ -29,17 +29,17 @@ def _connections(estate: Any):
 
 def protection_off(estate: Any) -> tuple[dict[str, Any], ...]:
     return tuple(
-        dict(
-            rule="dns-protection-off",
-            subject=node.id,
-            title=f"AdGuard protection is off on {node.label}",
-            severity="attention",
-            explanation=(
+        {
+            "rule": "dns-protection-off",
+            "subject": node.id,
+            "title": f"AdGuard protection is off on {node.label}",
+            "severity": "attention",
+            "explanation": (
                 "AdGuard is answering every lookup without blocklists, "
                 "safe browsing or client rules."
             ),
-            evidence=(("Protection", "Off"),),
-        )
+            "evidence": (("Protection", "Off"),),
+        }
         for node in _connections(estate)
         if _values(node, PROTECTION_OFF)
     )
@@ -47,14 +47,14 @@ def protection_off(estate: Any) -> tuple[dict[str, Any], ...]:
 
 def filtering_off(estate: Any) -> tuple[dict[str, Any], ...]:
     return tuple(
-        dict(
-            rule="dns-filtering-off",
-            subject=node.id,
-            title=f"AdGuard filtering is off on {node.label}",
-            severity="attention",
-            explanation="No blocklist applies to any lookup.",
-            evidence=(("Filtering", "Off"),),
-        )
+        {
+            "rule": "dns-filtering-off",
+            "subject": node.id,
+            "title": f"AdGuard filtering is off on {node.label}",
+            "severity": "attention",
+            "explanation": "No blocklist applies to any lookup.",
+            "evidence": (("Filtering", "Off"),),
+        }
         for node in _connections(estate)
         if _values(node, FILTERING_OFF)
     )
@@ -67,21 +67,21 @@ def plain_upstream(estate: Any) -> tuple[dict[str, Any], ...]:
         if not hosts:
             continue
         found.append(
-            dict(
-                rule="dns-plain-upstream",
-                subject=node.id,
-                title=(
+            {
+                "rule": "dns-plain-upstream",
+                "subject": node.id,
+                "title": (
                     f"AdGuard on {node.label} sends lookups to "
                     f"{', '.join(hosts) if len(hosts) <= 2 else counted(len(hosts), 'server')} "
                     "unencrypted"
                 ),
-                severity="neutral",
-                explanation=(
+                "severity": "neutral",
+                "explanation": (
                     "Your internet provider, and anyone else on the way, can see "
                     "every name your devices look up."
                 ),
-                evidence=tuple(("Unencrypted server", host) for host in hosts),
-            )
+                "evidence": tuple(("Unencrypted server", host) for host in hosts),
+            }
         )
     return tuple(sorted(found, key=lambda finding: finding["title"]))
 
@@ -96,20 +96,20 @@ def unused_names(estate: Any) -> tuple[dict[str, Any], ...]:
     services = {node.label: node.id for node in estate.nodes() if node.kind == "service"}
     found = []
     for node in _connections(estate):
-        for name in _values(node, NAME_UNUSED):
-            found.append(
-                dict(
-                    rule="dns-name-unused",
-                    subject=services.get(name, node.id),
-                    title=f"No device looked up {name}",
-                    severity="neutral",
-                    explanation=(
-                        "AdGuard has a record for it, and no device asked for it in "
-                        f"the time AdGuard's query log covers, {UNUSED_AFTER_HOURS} hours or more."
-                    ),
-                    evidence=(("Name", name), ("Read from", node.label)),
-                )
-            )
+        found.extend(
+            {
+                "rule": "dns-name-unused",
+                "subject": services.get(name, node.id),
+                "title": f"No device looked up {name}",
+                "severity": "neutral",
+                "explanation": (
+                    "AdGuard has a record for it, and no device asked for it in "
+                    f"the time AdGuard's query log covers, {UNUSED_AFTER_HOURS} hours or more."
+                ),
+                "evidence": (("Name", name), ("Read from", node.label)),
+            }
+            for name in _values(node, NAME_UNUSED)
+        )
     return tuple(sorted(found, key=lambda finding: finding["title"]))
 
 

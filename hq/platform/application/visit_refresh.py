@@ -44,6 +44,7 @@ from .cadence import controller_standing, forced_reads, request_reads
 from .freshness import PAGE_VISIT, freshness
 from .security import Capability, Principal
 
+
 @dataclass(frozen=True)
 class Reads:
     """The kinds one page is assembled from."""

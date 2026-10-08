@@ -3,7 +3,8 @@
 import pickle
 import sys
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta, timezone as utc
+from datetime import UTC, date, datetime, timedelta
+from functools import partial
 from unittest import mock
 
 from django.core.cache import caches
@@ -29,7 +30,7 @@ from hq.platform.core.models import ActionItemRead, Revision, UpstreamReading
 READING = UpstreamReading._meta.db_table
 # A window the seeded estate has events in.
 WINDOW = (date(2026, 1, 1), date(2027, 12, 31))
-MOMENT = datetime(2026, 1, 1, 12, 0, tzinfo=utc.utc)
+MOMENT = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 
 
 def _revision(table: str) -> int:
@@ -402,14 +403,14 @@ class ClockTests(SimpleTestCase):
     def test_days_left_agrees_with_itself_until_the_day_it_names_ends(self):
         for hours in (-60.2, -24.1, -1, 0.5, 11, 13, 35, 36.1, 37, 24 * 30 + 3):
             when = MOMENT + timedelta(hours=hours)
-            days, until = self._held(lambda: days_until(when))
+            days, until = self._held(partial(days_until, when))
             with self.subTest(hours=hours):
                 self.assertGreater(until, MOMENT)
                 just_before = until - timedelta(seconds=1)
-                self.assertEqual(self._held(lambda: days_until(when), just_before)[0], days)
+                self.assertEqual(self._held(partial(days_until, when), just_before)[0], days)
                 just_after = until + timedelta(seconds=1)
                 self.assertNotEqual(
-                    self._held(lambda: days_until(when), just_after)[0], days
+                    self._held(partial(days_until, when), just_after)[0], days
                 )
 
     def test_outside_a_derivation_the_clock_only_answers(self):

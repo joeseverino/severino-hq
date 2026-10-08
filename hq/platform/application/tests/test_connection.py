@@ -16,13 +16,13 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 
-from ..moments import when
-from ..ui import MISSING
 from ..connection import connection
+from ..moments import when
 from ..request_addresses import addresses_of, addresses_of_hq
 from ..request_channel import channel_for_request, channel_of
 from ..request_headers import headers_of
 from ..request_path import address_chain
+from ..ui import MISSING
 
 A_TAILNET_ADDRESS = "100.64.0.5"
 A_LAN_ADDRESS = "10.0.0.50"
@@ -928,9 +928,9 @@ class ServingDeviceTests(TestCase):
         return self.resolution(own, served).device
 
     def resolution(self, own, served=()):
+        from .. import tailnet
         from ..connection import _serving_device_resolution
         from ..infrastructure import declared_machines
-        from .. import tailnet
 
         with mock.patch(
             "hq.platform.application.hq_self.host_addresses", return_value=frozenset(own)

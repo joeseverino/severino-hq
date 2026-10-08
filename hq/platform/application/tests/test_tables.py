@@ -12,7 +12,7 @@ QUERY_WORDS = re.compile(r"\b(reverse|ascending|descending)\b", re.IGNORECASE)
 
 
 def _list_views() -> list[type]:
-    get_resolver().url_patterns  # every view module is imported once the URLs are
+    _ = get_resolver().url_patterns  # every view module is imported once the URLs are
     found, waiting = [], list(TableListMixin.__subclasses__())
     while waiting:
         view = waiting.pop()

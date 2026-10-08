@@ -405,9 +405,9 @@ class ContainerHopTests(TestCase):
 
         container = "0123456789ab" + "c" * 52
         mountinfo = f"612 598 0:52 /var/lib/docker/containers/{container}/hostname /etc/hostname rw\n"
-        with mock.patch("builtins.open", mock.mock_open(read_data=mountinfo)):
+        with mock.patch("pathlib.Path.open", mock.mock_open(read_data=mountinfo)):
             self.assertEqual(module.own_container_id(), "0123456789ab")
-        with mock.patch("builtins.open", mock.mock_open(read_data="22 1 8:1 / / rw\n")):
+        with mock.patch("pathlib.Path.open", mock.mock_open(read_data="22 1 8:1 / / rw\n")):
             self.assertEqual(module.own_container_id(), "")
 
     def test_a_sweep_that_read_no_id_says_it_cannot_show(self):

@@ -7,22 +7,23 @@ from typing import Any
 
 from django.db import transaction
 
-from hq.platform.core.audit import operation_context, record_event
-from hq.platform.core.models import AuditLog
+from hq.domains.assets.models import Asset
 from hq.domains.docs_index.importer import (
     ManifestImportError,
     import_manifest_data,
     validate_manifest_data,
 )
 from hq.domains.docs_index.models import DocumentationRecord
-from .entity_links import EntityLink, entity_link
-from .labels import plural
-from .domains import records_of
-from .security import Capability, Principal
-from .ui import counted
-from hq.domains.assets.models import Asset
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.core.audit import operation_context, record_event
+from hq.platform.core.models import AuditLog
+
+from .domains import records_of
+from .entity_links import EntityLink, entity_link
+from .labels import plural
+from .security import Capability, Principal
+from .ui import counted
 
 MAX_MANIFEST_ITEMS = 2000
 

@@ -12,10 +12,10 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
-from hq.domains.control_plane.names import normalized_hostname
-from hq.domains.control_plane.models import ProviderInventory
-from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+from hq.domains.control_plane.models import ProviderInventory
+from hq.domains.control_plane.names import normalized_hostname
+from hq.domains.control_plane.observations import OBSERVATIONS
 
 from .labels import human_label
 from .own_addresses import tailnet_sightings
@@ -183,11 +183,11 @@ def get_machine(name: str) -> dict[str, Any]:
 
 
 def _domains() -> list[dict[str, Any]]:
+    from .entity_links import entity_link
     from .estate import estate_reading
     from .infrastructure import enabled_resources
     from .service_list import services_by_zone
     from .zones import ZONE_KIND
-    from .entity_links import entity_link
 
     estate = estate_reading()
     declared = {

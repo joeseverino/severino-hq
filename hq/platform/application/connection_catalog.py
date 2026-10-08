@@ -10,9 +10,14 @@ from datetime import datetime, timedelta
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 
-from .derivations import passed, present
-from .moments import ago
-from .contracts import SCOPE_NAME, endpoint_has_private_parts
+from .action_links import (
+    ActionLink,
+    capability_action_link,
+    connection_action_links,
+    connection_relationship_link,
+    recommend_connection_action,
+)
+
 # Declared next to the domains that emit them, so a gateway can import the
 # record without importing this reader. Re-exported here as the one name
 # callers already use.
@@ -24,18 +29,13 @@ from .connection_contracts import (
     ConnectionLink,
     ConnectionSpec,
 )
-from .integrations import integration_graph
-from .projection import read_once
+from .contracts import SCOPE_NAME, endpoint_has_private_parts
+from .derivations import passed, present
 from .integration_validation import safe_connection_url
-from .action_links import (
-    ActionLink,
-    capability_action_link,
-    connection_action_links,
-    connection_relationship_link,
-    recommend_connection_action,
-)
+from .integrations import integration_graph
+from .moments import ago
+from .projection import read_once
 from .security import Principal
-
 
 # The family the controller observes on HQ's behalf. It leads every inventory
 # because it is the one the page is about; the gateways beside it are the

@@ -16,18 +16,18 @@ A kind stored as unreachable is one unreadable fact carrying its error and
 nothing: it is not a failed read.
 """
 
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from types import MappingProxyType, SimpleNamespace
-from typing import Any, Callable, Iterable, Iterator, Mapping
+from typing import Any
 
-
-from hq.domains.control_plane.names import in_zone, certificate_covers, normalized_hostname
+from hq.domains.control_plane.names import certificate_covers, in_zone, normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS, ObservationSpec
-from hq.domains.control_plane.reading_parts import PartRefusal, refused_parts
-from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_spec import expiry_phrase
+from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.reading_parts import PartRefusal, refused_parts
 
 from .derivations import passed
 from .entity_links import kind_label
@@ -375,35 +375,35 @@ def readings() -> Readings:
                     unread.append(Unread(spec, snapshot.error, snapshot.observed_at))
                     continue
                 # Stored records are already schema-filtered at ingest.
-                for record in snapshot.records:
-                    entries.append(
-                        _Entry(
-                            spec=spec,
-                            snapshot=snapshot,
-                            record=_frozen(record),
-                            connection_ref=str(record.get("connection_ref", "") or ""),
-                            hostnames=tuple(
-                                dict.fromkeys(
-                                    name
-                                    for name in (
-                                        normalized_hostname(str(item))
-                                        for item in spec.hostnames(record)
-                                    )
-                                    if name
+                entries.extend(
+                    _Entry(
+                        spec=spec,
+                        snapshot=snapshot,
+                        record=_frozen(record),
+                        connection_ref=str(record.get("connection_ref", "") or ""),
+                        hostnames=tuple(
+                            dict.fromkeys(
+                                name
+                                for name in (
+                                    normalized_hostname(str(item))
+                                    for item in spec.hostnames(record)
                                 )
-                            ),
-                            addresses=tuple(
-                                dict.fromkeys(
-                                    address
-                                    for address in (
-                                        host_of(item) for item in spec.addresses(record)
-                                    )
-                                    if address
+                                if name
+                            )
+                        ),
+                        addresses=tuple(
+                            dict.fromkeys(
+                                address
+                                for address in (
+                                    host_of(item) for item in spec.addresses(record)
                                 )
-                            ),
-                            containers=tuple(dict.fromkeys(spec.containers(record))),
-                        )
+                                if address
+                            )
+                        ),
+                        containers=tuple(dict.fromkeys(spec.containers(record))),
                     )
+                    for record in snapshot.records
+                )
         return Readings(entries, unread, fronted_names)
 
     return read_once(_READINGS_KEY, build)

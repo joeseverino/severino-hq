@@ -1,27 +1,29 @@
 """Dashboard + audit-log views."""
 
+from typing import ClassVar
 from urllib.parse import quote
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.views import LoginView
-from django.conf import settings
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import TemplateView, View
 
+from hq.domains.contacts import inbox
 from hq.platform.application import fragments
 from hq.platform.application.agent_access import set_agents_paused
 from hq.platform.application.appearance import set_theme
 from hq.platform.application.avatars import avatar_of
 from hq.platform.application.command_center import command_center
+from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.search import global_search
 from hq.platform.application.security import AuthorizationError, safe_next, web_principal
-from hq.platform.application.pages import PageMixin
 from hq.platform.application.ui import counted
-from hq.domains.contacts import inbox
+
 from .audit import record_event
 from .middleware import DEMO_SESSION_KEY
 from .models import AuditLog
@@ -195,7 +197,6 @@ class AgentPolicyView(PageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         from datetime import timedelta
 
-
         from hq.platform.application import capability_policy
         from hq.platform.application.approvals import awaiting_ids
 
@@ -265,7 +266,7 @@ class SearchView(PageMixin, TemplateView):
     palette_search_total_limit = 12
     palette_result_limit = 25
     palette_group_limit = 5
-    palette_scope_priority = {
+    palette_scope_priority: ClassVar[dict[str, int]] = {
         "infrastructure.resources": 0,
         "projects": 1,
         "content": 2,
@@ -342,7 +343,7 @@ class SearchView(PageMixin, TemplateView):
             discovery = (
                 command_center(q, principal=principal, include_live_connections=True)
                 if q or palette_request
-                else {key: () for key in DISCOVERY_GROUPS}
+                else dict.fromkeys(DISCOVERY_GROUPS, ())
             )
         # A page to go to: a resource with no page of its own is the API's.
         discovery = {

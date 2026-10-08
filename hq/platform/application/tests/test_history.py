@@ -3,8 +3,8 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
 from django.db import connection
+from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
@@ -13,9 +13,9 @@ from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.platform.core.models import AuditLog
 
 from ..conditions import held_since, stamped
+from ..history import moments, near
 from ..inventory import READING_AUDIT_TYPE, record_inventory
 from ..security import cli_principal
-from ..history import moments, near
 from ..topology_facts import add_observed_facts
 
 

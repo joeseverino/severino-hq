@@ -9,7 +9,6 @@ the finding, so this module does not import it.
 
 from typing import Any
 
-
 from hq.domains.control_plane.provider_adapters.contracts import (
     ADDRESS_FAILURE,
     NETWORK_FAILURE,
@@ -17,9 +16,9 @@ from hq.domains.control_plane.provider_adapters.contracts import (
 )
 
 from .derivations import reached
+from .finding_model import THEN_READ_NOW, FindingRule, OperatorStep, built_findings, fact_values
 from .timestamps import moment
 from .ui import counted
-from .finding_model import THEN_READ_NOW, FindingRule, OperatorStep, built_findings, fact_values
 
 # Fact keys a connection node carries; ``topology`` writes them.
 FAILURE = "connection-failure"
@@ -168,22 +167,22 @@ def missing_permissions(estate: Any) -> tuple[dict[str, Any], ...]:
             continue
         unseen = fact_values(node, UNSEEN)
         found.append(
-            dict(
-                rule="credential-missing-permissions",
-                subject=node.id,
-                title=f"{node.label}'s token is missing {counted(len(missing), 'permission')}",
-                severity="attention",
-                explanation=(
+            {
+                "rule": "credential-missing-permissions",
+                "subject": node.id,
+                "title": f"{node.label}'s token is missing {counted(len(missing), 'permission')}",
+                "severity": "attention",
+                "explanation": (
                     f"The token works, but {_service(node)} will not let it read "
                     f"{', '.join(unseen) or 'everything HQ asks for'}. "
                     "Make a new token that includes them."
                 ),
-                evidence=(
+                "evidence": (
                     *(("Missing", name) for name in missing),
                     *(("Cannot read", label) for label in unseen),
                 ),
-                steps=mint_steps(node),
-            )
+                "steps": mint_steps(node),
+            }
         )
     return tuple(sorted(found, key=lambda finding: finding["title"]))
 
@@ -207,16 +206,16 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
         expired = reached(when)
         left = days_until(when)
         found.append(
-            dict(
-                rule="credential-expiring",
-                subject=node.id,
-                title=(
+            {
+                "rule": "credential-expiring",
+                "subject": node.id,
+                "title": (
                     f"{node.label}'s token has expired"
                     if expired
                     else f"{node.label}'s token expires in {span(left)}"
                 ),
-                severity="serious" if expired else "attention",
-                explanation=(
+                "severity": "serious" if expired else "attention",
+                "explanation": (
                     (
                         f"HQ cannot read anything through {node.label} until it is replaced."
                         if expired
@@ -224,9 +223,9 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
                     )
                     + " Make a new one now."
                 ),
-                evidence=(("Expires", expiry_phrase(stamp)),),
-                steps=mint_steps(node),
-            )
+                "evidence": (("Expires", expiry_phrase(stamp)),),
+                "steps": mint_steps(node),
+            }
         )
     return tuple(sorted(found, key=lambda finding: finding["title"]))
 

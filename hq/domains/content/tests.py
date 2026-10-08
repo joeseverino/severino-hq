@@ -174,9 +174,11 @@ class ContentSyncTests(TestCase):
                 Response.requested = limit
                 return b" " * (limit if limit > 0 else 64 * 1024 * 1024)
 
-        with patch("hq.domains.content.content_sync._OPENER.open", return_value=Response()):
-            with self.assertRaisesMessage(ContentSyncError, "larger than an index"):
-                fetch_content_index("https://example.test/content-index.json")
+        with (
+            patch("hq.domains.content.content_sync._OPENER.open", return_value=Response()),
+            self.assertRaisesMessage(ContentSyncError, "larger than an index"),
+        ):
+            fetch_content_index("https://example.test/content-index.json")
 
         self.assertGreater(Response.requested, 0)
 

@@ -11,17 +11,18 @@ handlers are registered as ``read`` capabilities, so the browser form, the
 machine API, the CLI and MCP all reach this one implementation.
 """
 
-from dataclasses import dataclass
-from ipaddress import ip_address
 import json
 import re
-from typing import Any, Callable
-
-from hq.domains.control_plane.dns_lookup import LookupUnavailable, registry, resolve
-from hq.platform.core.outbound import allowed
-from hq.domains.control_plane.names import normalized_hostname
+from collections.abc import Callable
+from dataclasses import dataclass
+from ipaddress import ip_address
+from typing import Any
 
 from django.utils.timezone import now
+
+from hq.domains.control_plane.dns_lookup import LookupUnavailable, registry, resolve
+from hq.domains.control_plane.names import normalized_hostname
+from hq.platform.core.outbound import allowed
 
 from .projection import iso
 from .reach import is_public

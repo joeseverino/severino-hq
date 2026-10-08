@@ -5,10 +5,12 @@ from unittest import mock
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, TestCase
 
-from hq.domains.projects.models import Project
 from hq.domains.control_plane.models import ManagedResource
+from hq.domains.projects.models import Project
 
 from ..command_center import command_center
+from ..integrations import integration_graph
+from ..plugins import plugin_resource_specs
 from ..resources import (
     EmptyQuery,
     InvalidResourceInput,
@@ -17,10 +19,7 @@ from ..resources import (
     get_resource,
     list_resource,
 )
-from ..integrations import integration_graph
-from ..plugins import plugin_resource_specs
 from ..security import AuthorizationError, Capability, Principal
-
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
 NONE = Principal("nobody", "test", frozenset())

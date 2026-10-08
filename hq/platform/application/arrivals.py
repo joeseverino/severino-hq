@@ -28,6 +28,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
+
 from .derivations import passed, present
 
 logger = logging.getLogger(__name__)

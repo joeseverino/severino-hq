@@ -76,8 +76,9 @@ class SourceTests(TestCase):
         self.assertEqual(item("app").standing.source_from, REGISTRY)
 
     def test_the_declared_source_must_be_a_github_repository(self):
-        from hq.domains.control_plane.provider_adapters.portainer import PortainerContainerSpec
         from pydantic import ValidationError
+
+        from hq.domains.control_plane.provider_adapters.portainer import PortainerContainerSpec
 
         base = {"connection_ref": "p", "host": "h", "name": "n"}
         self.assertEqual(PortainerContainerSpec(**base, source="https://github.com/example/app/").source, "https://github.com/example/app")

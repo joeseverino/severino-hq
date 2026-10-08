@@ -46,9 +46,8 @@ class RefusalTests(SimpleTestCase):
             time.sleep(0)
 
     def test_an_exception_nobody_declared_is_not_one(self):
-        with self.assertRaises(ValueError):
-            with allowed("because-i-say-so"):
-                pass
+        with self.assertRaises(ValueError), allowed("because-i-say-so"):
+            pass
 
     def test_a_job_is_not_the_request_that_started_it(self):
         ran = []

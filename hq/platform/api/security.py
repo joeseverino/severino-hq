@@ -12,7 +12,6 @@ stale the next time a plugin adds a capability.
 """
 
 import logging
-
 from functools import cache
 from typing import Any
 

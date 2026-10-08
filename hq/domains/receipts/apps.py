@@ -9,6 +9,7 @@ class ReceiptsConfig(AppConfig):
 
     def ready(self):
         from hq.platform.core.audit import register_audit
+
         from .models import Receipt
 
         register_audit(Receipt, "Receipt")

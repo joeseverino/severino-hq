@@ -30,11 +30,11 @@ since the finalizer runs wherever collection happened to.
 
 import atexit
 import os
-from pathlib import Path
 import sys
 import tempfile
 import tracemalloc
 import warnings
+from pathlib import Path
 
 _LEDGER = "SEVERINO_TEST_LEAK_LEDGER"
 
@@ -66,7 +66,7 @@ def _record_leak(unraisable) -> None:
         return
     if sys.is_finalizing():
         _exit_failed(f"{unraisable.exc_value}\n")
-    with open(os.environ[_LEDGER], "a", encoding="utf-8") as ledger:
+    with Path(os.environ[_LEDGER]).open("a", encoding="utf-8") as ledger:
         ledger.write(f"{unraisable.exc_value}\n")
 
 

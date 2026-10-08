@@ -17,7 +17,7 @@ class MoneyTests(SimpleTestCase):
         self.assertEqual(money(0), "$0.00")
 
     def test_a_negative_amount_takes_one_true_minus_sign_before_the_dollar(self):
-        self.assertEqual(money(Decimal("-5")), f"{MINUS}$5.00")
+        self.assertEqual(money(Decimal(-5)), f"{MINUS}$5.00")
 
     def test_an_amount_that_rounds_to_nothing_is_not_negative(self):
         self.assertEqual(money(Decimal("-0.004")), "$0.00")

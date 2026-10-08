@@ -109,9 +109,11 @@ class RegistryTests(SimpleTestCase):
         self.assertIn("HEAD", seen)
 
     def test_a_private_image_says_so(self):
-        with reads(FakeRegistry(refuse_token=True)):
-            with self.assertRaisesMessage(RegistryReadError, "may be private"):
-                tags(self.image)
+        with (
+            reads(FakeRegistry(refuse_token=True)),
+            self.assertRaisesMessage(RegistryReadError, "may be private"),
+        ):
+            tags(self.image)
 
 
 class BoundaryTests(SimpleTestCase):
@@ -137,9 +139,8 @@ class BoundaryTests(SimpleTestCase):
             "hq.platform.application.oci_registry",
             _public_host=mock.Mock(side_effect=public),
             _opener=mock.Mock(open=challenge_to_internal),
-        ):
-            with self.assertRaisesMessage(RegistryReadError, "internal.example is not a public address"):
-                tags(ImageRef.parse("registry.example/team/app:1"))
+        ), self.assertRaisesMessage(RegistryReadError, "internal.example is not a public address"):
+            tags(ImageRef.parse("registry.example/team/app:1"))
 
     def test_a_redirect_is_checked_and_leaves_the_token_behind(self):
         from urllib.request import Request
@@ -149,9 +150,11 @@ class BoundaryTests(SimpleTestCase):
         with mock.patch("hq.platform.application.oci_registry._public_host", return_value=True):
             followed = handler.redirect_request(request, None, 307, "Temporary Redirect", Message(), "https://cdn.example/blob")
         self.assertIsNone(followed.get_header("Authorization"))
-        with mock.patch("hq.platform.application.oci_registry._public_host", return_value=False):
-            with self.assertRaises(RegistryReadError):
-                handler.redirect_request(request, None, 307, "Temporary Redirect", Message(), "https://10.0.0.5/blob")
+        with (
+            mock.patch("hq.platform.application.oci_registry._public_host", return_value=False),
+            self.assertRaises(RegistryReadError),
+        ):
+            handler.redirect_request(request, None, 307, "Temporary Redirect", Message(), "https://10.0.0.5/blob")
         with self.assertRaises(RegistryReadError):
             handler.redirect_request(request, None, 307, "Temporary Redirect", Message(), "http://cdn.example/blob")
 
@@ -160,9 +163,11 @@ class BoundaryTests(SimpleTestCase):
             def read(self, size=-1):
                 return b"x" * (MAX_RESPONSE_BYTES + 1)
 
-        with reads(lambda request, timeout=None: Huge({})):
-            with self.assertRaisesMessage(RegistryReadError, "more than"):
-                tags(ImageRef.parse("registry.example/team/app:1"))
+        with (
+            reads(lambda request, timeout=None: Huge({})),
+            self.assertRaisesMessage(RegistryReadError, "more than"),
+        ):
+            tags(ImageRef.parse("registry.example/team/app:1"))
 
 
 class AttestationTests(SimpleTestCase):
@@ -211,9 +216,11 @@ class AttestationTests(SimpleTestCase):
     def test_an_attestation_too_large_to_be_one_is_refused_before_it_is_fetched(self):
         from ..oci_registry import MAX_STATEMENT_BYTES, attestations
 
-        with self.registry({"sbom": ("https://spdx.dev/Document", MAX_STATEMENT_BYTES + 1, {})}):
-            with self.assertRaisesMessage(RegistryReadError, "larger than HQ reads"):
-                attestations(self.image, "sha256:index")
+        with (
+            self.registry({"sbom": ("https://spdx.dev/Document", MAX_STATEMENT_BYTES + 1, {})}),
+            self.assertRaisesMessage(RegistryReadError, "larger than HQ reads"),
+        ):
+            attestations(self.image, "sha256:index")
 
     def test_an_image_with_nothing_attached_has_no_statements(self):
         from ..oci_registry import attestations

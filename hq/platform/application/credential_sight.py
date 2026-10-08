@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters.contracts import (
@@ -22,7 +23,6 @@ from hq.domains.control_plane.provider_adapters.contracts import (
     PERMISSION_REFUSAL,
 )
 from hq.domains.control_plane.providers import PROVIDERS
-from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
 from hq.domains.control_plane.reading_parts import PartRefusal, parts_of, refused_parts
 
 from .labels import human_label

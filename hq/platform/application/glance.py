@@ -1,7 +1,6 @@
 """Typed, cached dashboard observations and their explicit refresh queue."""
 
 import re
-
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -9,7 +8,6 @@ from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
 
-from hq.platform.core.audit import operation_context
 from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
@@ -18,11 +16,12 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
     WeatherObservation,
 )
+from hq.platform.core.audit import operation_context
 
 from . import readings
 from .cadence import ring_doorbell
-from .freshness import DASHBOARD_GLANCE, freshness
 from .connections import machines_once
+from .freshness import DASHBOARD_GLANCE, freshness
 from .security import Capability, Principal
 
 # The National Weather Service API. The connection shows it and the glance plan
@@ -504,9 +503,8 @@ def request_dashboard_refresh(*, principal: Principal) -> dict[str, Any]:
     machines = _dashboard_machines()
     routes = _machine_routes(machines) if machines else {}
     ids = [f"machine-{machine.pk}" for machine in machines if machine.pk in routes]
-    if ids:
-        if configuration.weather_point:
-            ids.append("weather")
+    if ids and configuration.weather_point:
+        ids.append("weather")
     with operation_context(
         interface=principal.interface,
         actor=principal.actor,

@@ -185,8 +185,10 @@ def _names_nothing(estate: FindingEstate) -> tuple[Finding, ...]:
     for node in estate.nodes():
         if node.kind != "resource" or not node.managed:
             continue
-        for ref in fact_values(node, NO_CONNECTION):
-            found.append(_no_connection(node, ref, reported))
+        found.extend(
+            _no_connection(node, ref, reported)
+            for ref in fact_values(node, NO_CONNECTION)
+        )
         for fact in fact_values(node, NO_PARENT):
             kind, _, missing = fact.partition(_SEPARATOR)
             if kind in PROVIDERS and missing:

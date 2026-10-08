@@ -23,7 +23,6 @@ from .integration_specs import (
 from .search_contracts import SearchDefinition
 from .security import Capability
 
-
 IntegrationSpec = CapabilitySpec | ResourceSpec | ConnectionSpec
 
 

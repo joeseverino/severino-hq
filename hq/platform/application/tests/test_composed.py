@@ -136,7 +136,7 @@ class ComposedTests(ComposedPluginTestCase, TestCase):
         self.assertNotIn("extension.example.alpha.dashboard", ran)
 
     def test_the_composition_is_part_of_what_a_composed_answer_varies_by(self):
-        named = dict((domain, field) for domain, field, _who in composition())
+        named = {domain: field for domain, field, _who in composition()}
 
         self.assertIn("example.alpha", named)
         self.assertEqual(

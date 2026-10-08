@@ -36,21 +36,21 @@ matches and the request is superseded rather than silently applied to content
 nobody read.
 """
 
+import hashlib
+import json
 from dataclasses import dataclass
 from datetime import timedelta
 from difflib import unified_diff
-import hashlib
-import json
 from typing import Any
 
-from django.core.exceptions import ValidationError as DjangoValidationError
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from hq.platform.application.routes import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.routes import reverse
 from hq.platform.core.audit import operation_context
 
 from .derivations import reached

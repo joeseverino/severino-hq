@@ -3,13 +3,12 @@
 from django.urls import reverse
 from django.views.generic import DetailView, ListView
 
-from hq.platform.application.projection import day_span
 from hq.platform.application import history
 from hq.platform.application.pages import PageAction, PageMixin
-from hq.platform.application.projection import projection_scope
+from hq.platform.application.projection import day_span, projection_scope
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
-from .models import AuditLog
 
+from .models import AuditLog
 
 # The toggle that brings the asks for a fresh reading back into the log.
 READS = "reads"

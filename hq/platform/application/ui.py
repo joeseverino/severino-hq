@@ -728,7 +728,7 @@ def _trend_path(points, place_x, place_y) -> str:
     variation = sum((x - x_mean) ** 2 for x in xs)
     if variation == 0:
         return ""
-    slope = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys)) / variation
+    slope = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys, strict=True)) / variation
     intercept = y_mean - slope * x_mean
     first, last = points[0][0], points[-1][0]
     return (

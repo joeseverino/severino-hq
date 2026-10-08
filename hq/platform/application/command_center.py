@@ -8,20 +8,19 @@ from hq.domains.control_plane.names import normalized_hostname
 
 from .action_links import command_url
 from .capabilities import CapabilitySpec
-from .connections import ConnectionAbility, ConnectionSpec
 from .connection_catalog import connection_catalog
+from .connections import ConnectionAbility, ConnectionSpec
 from .contracts import route_url
 from .decisions import urgency
-from .labels import effect_label
 from .entity_links import entity_link
-from .integrations import integration_graph
-from .resources import ResourceSpec
-from .security import Capability, Principal
 from .facts import in_zone
 from .findings import finding_rules
+from .integrations import integration_graph
+from .labels import effect_label
+from .resources import ResourceSpec
+from .security import Capability, Principal
 from .topology_lenses import topology_lenses
 from .ui import counted
-
 
 _MATCHING_ABILITY_BADGE_LIMIT = 3
 _SEARCH_WORD = re.compile(r"[a-z0-9]+")

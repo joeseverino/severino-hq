@@ -31,7 +31,7 @@ def diagnoses() -> list[dict[str, Any]]:
 
 # GitHub echoes each step's script and environment between these markers, so
 # every message a step can print is in its log whether or not it ran.
-ECHOED = re.compile(r"^[^\n]*##\[group\]Run .*?^[^\n]*##\[endgroup\][^\n]*$", re.M | re.S)
+ECHOED = re.compile(r"^[^\n]*##\[group\]Run .*?^[^\n]*##\[endgroup\][^\n]*$", re.MULTILINE | re.DOTALL)
 
 
 def diagnose(log: str) -> dict[str, str]:

@@ -1,24 +1,23 @@
 """Certificates HQ issues or is handed, and how each reaches its targets."""
 
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from types import MappingProxyType
-from typing import Annotated, Any, Callable, Literal, get_args
+from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field, field_validator, model_validator
 
 from ..names import certificate_covers, normalized_hostname
 from ..provider_spec import (
-    SharedValue,
     ControllerVerification,
     NameContext,
     ProviderModel,
     ProviderResolutionContext,
     ProviderSpec,
+    SharedValue,
     applies,
     expiry_phrase,
 )
-
 
 CERTIFICATE_KIND = "tls.certificate"
 UPLOADED_CERTIFICATE_KIND = "tls.uploaded_certificate"

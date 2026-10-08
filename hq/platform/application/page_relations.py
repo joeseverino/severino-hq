@@ -7,7 +7,8 @@ page renders is its layout, so each page's rule is here once, derived from the
 relation and reading registries rather than typed as phrases.
 """
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.portainer import IMAGE_KIND, RUNTIME_KIND, STACK_KIND, VOLUME_KIND

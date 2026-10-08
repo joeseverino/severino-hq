@@ -4,30 +4,29 @@ import re
 from dataclasses import replace
 
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
-
 from hq.domains.control_plane.providers import PROVIDERS
 
+from .cadence import slowest_sweep_interval as _slowest_sweep_interval, sweep_interval
 from .derivations import passed, since
 from .entity_links import kind_label, node_name
-from .labels import lower_first, plural
-from .cadence import slowest_sweep_interval as _slowest_sweep_interval, sweep_interval
-from .topology_lenses import _STALE_AFTER
-from .infrastructure import DRIFT_LABEL
-from .topology_model import TopologyNode
-from .moments import ago, duration
-from .ui import counted
 from .finding_model import (
     Finding,
-    Remedy,
     FindingEstate,
+    FindingRule,
+    Remedy,
     cannot_run_commands,
     fact_values,
     is_observable,
     journal_step,
     machine_step,
     reconcile_remedy,
-    FindingRule,
 )
+from .infrastructure import DRIFT_LABEL
+from .labels import lower_first, plural
+from .moments import ago, duration
+from .topology_lenses import _STALE_AFTER
+from .topology_model import TopologyNode
+from .ui import counted
 
 # The background job that runs the controller on its machine (deploy/systemd).
 CONTROLLER_UNIT = "severino-hq-controller.service"

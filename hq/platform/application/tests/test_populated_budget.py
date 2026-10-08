@@ -5,8 +5,6 @@ from unittest import mock
 
 from django.db import connection as database
 from django.test import TestCase
-
-from hq.platform.application.security import cli_principal
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
@@ -18,8 +16,9 @@ from hq.domains.control_plane.models import (
     WeatherObservation,
 )
 from hq.domains.projects.models import Project
-
 from hq.platform.application.derivations import uncached
+from hq.platform.application.security import cli_principal
+
 from ..dashboard import dashboard_highlights, operating_snapshot
 from ..projection import projection_scope
 

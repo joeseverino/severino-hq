@@ -22,30 +22,29 @@ from django.views.generic import (
     View,
 )
 
-from hq.platform.core.audit import record_event
-from hq.platform.core.models import AuditLog
+from hq.domains.expenses.models import Expense
+from hq.platform.application.deletion import DeleteCommand
+from hq.platform.application.moments import when
 from hq.platform.application.money import money
+from hq.platform.application.pages import PageAction, PageMixin, record_trail
 from hq.platform.application.receipts import (
     ReceiptMetadataCommand,
     receipt_command_from_cleaned_data,
     update_receipt,
     upload_receipt,
 )
-from hq.platform.application.deletion import DeleteCommand
 from hq.platform.application.records import deleter
 from hq.platform.application.security import web_principal
-from hq.platform.application.pages import PageAction, PageMixin, record_trail
 from hq.platform.application.tables import TableColumn, TableListMixin, TableToggle
-from hq.platform.application.moments import when
+from hq.platform.core.audit import record_event
+from hq.platform.core.models import AuditLog
 
-from hq.domains.expenses.models import Expense
 from .forms import ReceiptUploadForm
+from .models import Receipt
 from .validation import (
     ALLOWED_RECEIPT_CONTENT_TYPES,
     INLINE_SAFE_CONTENT_TYPES,
 )
-from .models import Receipt
-
 
 RECEIPTS_TRAIL = ("Receipts", reverse_lazy("receipts:list"))
 

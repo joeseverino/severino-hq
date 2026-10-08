@@ -1,6 +1,8 @@
 """The dashboard: its glance panels, their settings, the contacts panel and the links an operator pins."""
 
+from collections.abc import Callable
 from datetime import date, timedelta
+from typing import Any, ClassVar
 
 from django.contrib import messages
 from django.shortcuts import redirect, render
@@ -8,12 +10,11 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import TemplateView, View
 
-from hq.platform.application import action_items as queue_state
-from hq.platform.application import fragments
+from hq.domains.contacts import inbox
+from hq.platform.application import action_items as queue_state, fragments
 from hq.platform.application.cadence import controller_standing
 from hq.platform.application.calendar import calendar_month, month_of
 from hq.platform.application.calendar_entries import calendar_choices
-from hq.platform.application.outward_links import link_choices, outward_links
 from hq.platform.application.dashboard import dashboard_highlights, operating_snapshot
 from hq.platform.application.derivations import every_revision
 from hq.platform.application.glance import (
@@ -24,13 +25,13 @@ from hq.platform.application.glance import (
     request_stale_panel_refresh,
     save_dashboard_settings,
 )
+from hq.platform.application.moments import when_day
+from hq.platform.application.outward_links import link_choices, outward_links
+from hq.platform.application.pages import page_context
 from hq.platform.application.request_path import request_path
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.timestamps import moment
-from hq.platform.application.pages import page_context
-from hq.platform.application.moments import when_day
 from hq.platform.application.ui import ListRow
-from hq.domains.contacts import inbox
 
 # A queue of this many or fewer is read on the dashboard itself, each card
 # with its button; a longer one is a count and a link to its page.
@@ -107,7 +108,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             "external_choices": link_choices(self.request.user),
         }
 
-    PARTS = {"calendar": _calendar, "links": _links}
+    PARTS: ClassVar[dict[str, Callable[..., Any]]] = {"calendar": _calendar, "links": _links}
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)

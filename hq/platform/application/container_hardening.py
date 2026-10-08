@@ -12,8 +12,9 @@ What HQ cannot write, because the answer is not in anything it read, is said
 as a reason instead, naming what is missing.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 from .container_standard import POWERFUL_CAPABILITIES, holds_socket, writable_system_binds
 from .standards import UNMET

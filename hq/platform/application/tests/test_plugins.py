@@ -1,16 +1,18 @@
 """Contract tests for the explicitly allowlisted plugin SDK."""
 
-from dataclasses import MISSING, fields, replace
 import json
 import os
-from pathlib import Path
 import re
 import tempfile
+from dataclasses import MISSING, fields, replace
+from pathlib import Path
 from unittest import TestCase, mock
 
 from django.core.exceptions import ImproperlyConfigured
 from django.template.loader import render_to_string
 
+from ..domains import domain_navigation
+from ..pages import page_context
 from ..plugins import (
     PLUGIN_API_VERSION,
     NavigationItem,
@@ -25,10 +27,7 @@ from ..plugins import (
     plugin_health,
     plugin_token_authenticated_prefixes,
 )
-from ..domains import domain_navigation
-from ..pages import page_context
 from ..ui import Insight, Kpi, PageNavigation, PageSection
-
 
 # What the coupling scan walks past. Generated trees, virtualenvs and vendored
 # assets are not host source, and the runtime image has neither `.git` nor git
@@ -430,17 +429,16 @@ class PluginContractTests(TestCase):
                 PluginManifest(**{**current, field: "example_notes.legacy:hook"})
                 raise AssertionError(f"the manifest accepted {field}")
 
-            with self.subTest(field=field):
-                with (
-                    mock.patch.object(
-                        plugins, "import_module", side_effect=import_legacy_module
-                    ),
-                    self.assertRaisesRegex(
-                        ImproperlyConfigured,
-                        f"plugin API 1 provider fields.*{field}.*supports {PLUGIN_API_VERSION}",
-                    ),
-                ):
-                    plugins._load_manifest("example.legacy:plugin")
+            with (
+                self.subTest(field=field), mock.patch.object(
+                    plugins, "import_module", side_effect=import_legacy_module
+                ),
+                self.assertRaisesRegex(
+                    ImproperlyConfigured,
+                    f"plugin API 1 provider fields.*{field}.*supports {PLUGIN_API_VERSION}",
+                ),
+            ):
+                plugins._load_manifest("example.legacy:plugin")
 
     def test_a_provider_type_error_is_not_misattributed_to_the_plugin_api(self):
         from hq.platform.application import plugins
@@ -715,16 +713,16 @@ class AttentionContractTests(TestCase):
     def _manifest(**overrides):
         from hq.platform.application.plugins import PluginManifest
 
-        base = dict(
-            id="example.demo",
-            name="Demo",
-            version="1.0.0",
-            distribution="demo",
-            source_repository="owner/demo",
-            source_workflow=".github/workflows/admit-plugin.yml",
-            api_version=PLUGIN_API_VERSION,
-            integration_provider="demo:integration",
-        )
+        base = {
+            "id": "example.demo",
+            "name": "Demo",
+            "version": "1.0.0",
+            "distribution": "demo",
+            "source_repository": "owner/demo",
+            "source_workflow": ".github/workflows/admit-plugin.yml",
+            "api_version": PLUGIN_API_VERSION,
+            "integration_provider": "demo:integration",
+        }
         return PluginManifest(**{**base, **overrides})
 
     def _gather(self, manifests, items_by_ref):

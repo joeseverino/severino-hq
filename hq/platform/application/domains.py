@@ -17,25 +17,26 @@ labels arrive from installed manifests at runtime, and ``test_domains``
 enforces that nothing here hardcodes one.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache
-from typing import Any, Callable, NamedTuple
+from typing import Any, NamedTuple
 
 from django.urls import URLResolver, include, path
 from django.utils.module_loading import import_string
 
+from .derivations import derivation
+from .derived_inputs import DASHBOARD_READS, QUEUE_READS, composed_variant, estate_variant
 from .plugins import (
     DERIVED_PROVIDERS,
     NavigationItem,
     PluginIntegration,
     answered_by,
     gather_attention,
-    ordered_attention,
     gather_cards,
     installed_integrations,
+    ordered_attention,
 )
-from .derivations import derivation
-from .derived_inputs import DASHBOARD_READS, QUEUE_READS, composed_variant, estate_variant
 
 # Order bands. Below HOST_ORDER_FLOOR is reserved for extension-supplied
 # domains, so an installed extension leads the bar ahead of the host's own

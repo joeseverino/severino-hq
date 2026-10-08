@@ -10,16 +10,16 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import TemplateView, View
 
-from hq.platform.application.pages import PageMixin
-from hq.platform.application.projection import years_of
-from hq.platform.application.documentation import document_link
 from hq.domains.assets.models import ASSET_CATEGORY_CHOICES, Asset
 from hq.domains.content.models import ContentItem
-from hq.platform.core.audit import record_event
-from hq.platform.core.models import AuditLog
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import EXPENSE_CATEGORY_CHOICES, Expense
 from hq.domains.projects.models import Project
+from hq.platform.application.documentation import document_link
+from hq.platform.application.pages import PageMixin
+from hq.platform.application.projection import years_of
+from hq.platform.core.audit import record_event
+from hq.platform.core.models import AuditLog
 
 from . import exports as exporters
 
@@ -193,7 +193,7 @@ class ExportView(View):
                 # (or this year) for a request that named neither hands back a
                 # document that is not the one asked for, and nothing says so.
                 return HttpResponseBadRequest("year must be a four-digit year.")
-            if raw:
+            if raw:  # noqa: SIM108 - a nested conditional expression reads worse
                 year = int(raw)
             else:
                 year = timezone.localdate().year if spec.year == "required" else None

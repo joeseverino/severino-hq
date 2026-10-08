@@ -10,13 +10,14 @@ from django.views.generic import (
 
 from hq.platform.application.documentation import document_link
 from hq.platform.application.expenses import costs_by_category
+from hq.platform.application.moments import when_day
 from hq.platform.application.pages import PageAction, PageMixin, record_trail
 from hq.platform.application.projection import years_of
 from hq.platform.application.references import ReferencePickerMixin, referenced_by_row, resolve_many
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
-from hq.platform.application.moments import when_day
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
+
 from .forms import ExpenseForm
 from .models import EXPENSE_CATEGORY_CHOICES, Expense
 

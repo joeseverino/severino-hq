@@ -88,7 +88,7 @@ class ReferenceFieldTests(TestCase):
 
     @isolate_apps("hq.domains.assets")
     def test_a_reference_without_its_name_column_fails_the_system_check(self):
-        class Lonely(models.Model):
+        class Lonely(models.Model):  # noqa: DJ008 - stored state, never shown by name
             about = ReferenceField()
 
             class Meta:

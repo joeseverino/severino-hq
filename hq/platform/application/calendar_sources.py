@@ -11,8 +11,9 @@ from collections import Counter
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
-from hq.platform.application.routes import reverse
 from django.utils import timezone
+
+from hq.platform.application.routes import reverse
 
 from .calendar import CalendarEvent, CalendarSource
 from .derivations import derivation

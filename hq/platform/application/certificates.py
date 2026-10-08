@@ -24,8 +24,8 @@ from hq.domains.control_plane.models import CertificateMaterial, ManagedResource
 from hq.platform.core import secrets
 
 from .infrastructure import delivery_targets
-from .security import Capability, Principal
 from .moments import when_day
+from .security import Capability, Principal
 
 
 class CertificateError(ValueError):

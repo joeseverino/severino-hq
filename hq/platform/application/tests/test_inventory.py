@@ -6,18 +6,17 @@ the first reconciliation is a no-op. Otherwise adopting a proxy host would
 reset it to HQ's defaults (HSTS off, for one).
 """
 
+from unittest import mock
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.core.models import AuditLog
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
+from hq.platform.core.models import AuditLog
 
-from unittest import mock
-
-from ..inventory import inventory_state, confirm_observed, record_inventory
 from ..adoption import (
     AdoptCommand,
     AdoptServiceCommand,
@@ -27,11 +26,12 @@ from ..adoption import (
     unmanaged,
     unmanaged_services,
 )
-from ..sweep import record_sweep
 from ..adoption_testing import managing_everything
-from ..report_testing import refused_part
 from ..infrastructure import NotFoundError
+from ..inventory import confirm_observed, inventory_state, record_inventory
+from ..report_testing import refused_part
 from ..security import cli_principal
+from ..sweep import record_sweep
 
 A_REWRITE = {"domain": "app.example.com", "answer": "10.0.0.10", "enabled": True}
 ANOTHER = {"domain": "tool.example.com", "answer": "10.0.0.11", "enabled": True}
@@ -472,12 +472,12 @@ class AdoptServiceTests(TestCase):
         )
         # A facet nothing supplies for *this* service renders empty rather than
         # being dropped, so the columns still line up.
-        empty = dict((facet_id, value) for facet_id, _, value in facets)
+        empty = {facet_id: value for facet_id, _, value in facets}
         self.assertEqual(empty["certificate"], "")
 
     def test_a_column_carries_the_value_and_not_its_label(self):
         """The heading already says DNS; "Answers with" in the cell is noise."""
-        facets = dict((facet_id, value) for facet_id, _, value in unmanaged_services()[0].facets)
+        facets = {facet_id: value for facet_id, _, value in unmanaged_services()[0].facets}
 
         self.assertEqual(facets["dns"], "10.0.0.20")
         self.assertEqual(facets["proxy"], "http://10.0.0.20:3000")
@@ -508,12 +508,11 @@ class AdoptServiceTests(TestCase):
         with mock.patch(
             "hq.platform.application.adoption.adopt",
             side_effect=[{"resource": {"key": "one"}}, RuntimeError("boom")],
-        ):
-            with self.assertRaises(RuntimeError):
-                adopt_service(
-                    AdoptServiceCommand(hostname="shop.example.com"),
-                    principal=cli_principal(),
-                )
+        ), self.assertRaises(RuntimeError):
+            adopt_service(
+                AdoptServiceCommand(hostname="shop.example.com"),
+                principal=cli_principal(),
+            )
 
         self.assertEqual(ManagedResource.objects.count(), 1)
 
@@ -1202,7 +1201,7 @@ class NothingIsJudgedAgainstAReadingThatDoesNotExistTests(TestCase):
         from ..topology import _unconfirmed
 
         provider = PROVIDERS[kind]
-        spec = {field: "declared" for field in provider.spec_type.model_fields}
+        spec = dict.fromkeys(provider.spec_type.model_fields, "declared")
         return _unconfirmed(self._Resource(spec, status), provider)
 
     def test_a_provider_with_no_reading_reports_nothing_unconfirmed(self):

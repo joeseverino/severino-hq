@@ -26,10 +26,10 @@ from . import (
     tailnet_context,
 )
 from .contracts import DOTTED_NAME
-from .integration_specs import ResourceSpec
-from .integrations import integration_graph
 from .input_errors import pydantic_refusal
+from .integration_specs import ResourceSpec
 from .integration_validation import required_capability_names
+from .integrations import integration_graph
 from .search_contracts import SearchDefinition
 from .security import Capability, Principal, require_all
 
@@ -371,15 +371,10 @@ class SearchOperation(TypedDict):
     scope: str
 
 
-# Functional form: ``list`` is a key here, not the builtin.
-ResourceOperations = TypedDict(
-    "ResourceOperations",
-    {
-        "list": ListOperation | None,
-        "get": GetOperation | None,
-        "search": SearchOperation | None,
-    },
-)
+class ResourceOperations(TypedDict):
+    list: ListOperation | None
+    get: GetOperation | None
+    search: SearchOperation | None
 
 
 class ResourceDescription(TypedDict):

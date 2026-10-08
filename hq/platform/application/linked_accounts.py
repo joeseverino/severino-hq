@@ -7,7 +7,8 @@ behind it (a sweep of what they star) knows whose account to read.
 
 import hashlib
 import re
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from django.db import transaction
 from django.utils import timezone

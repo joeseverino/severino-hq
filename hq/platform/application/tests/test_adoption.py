@@ -7,11 +7,11 @@ from django.urls import reverse
 from hq.domains.control_plane.models import ManagedResource, NotManaged, ProviderConnection
 from hq.platform.core.models import AuditLog
 
+from ..adoption import AdoptCommand, adopt, unmanaged
 from ..adoption_testing import connection
 from ..infrastructure import PolicyError
-from ..resource_operations import OperationCommand, request_removal
 from ..report_testing import report_connections
-from ..adoption import AdoptCommand, adopt, unmanaged
+from ..resource_operations import OperationCommand, request_removal
 from ..security import cli_principal
 from ..sweep import record_sweep
 from ..zones import find_zone

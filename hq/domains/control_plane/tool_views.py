@@ -3,10 +3,10 @@
 
 
 from django.shortcuts import redirect
-from hq.platform.application.routes import reverse
 from django.views.generic import TemplateView
 
 from hq.platform.application.pages import PageMixin
+from hq.platform.application.routes import reverse
 from hq.platform.application.timestamps import moment
 
 

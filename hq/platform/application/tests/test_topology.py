@@ -1,6 +1,6 @@
-from datetime import datetime, timedelta
 import json
 import re
+from datetime import datetime, timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -8,14 +8,14 @@ from django.db import connection as database_connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
-from django.utils.html import escape
 from django.utils import timezone
+from django.utils.html import escape
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.control_plane.topology_views import TopologyView
-
 from hq.platform.application.derivations import uncached
+
 from ..action_links import topology_investigation_links, topology_url
 from ..command_center import command_center
 from ..connections import (
@@ -42,7 +42,6 @@ from ..topology_model import (
     TopologyEdge,
     TopologyNode,
 )
-
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
 MANAGE = Principal(
@@ -666,11 +665,11 @@ class FocusedPageTests(TestCase):
 
         self.assertIn('<ul class="topology-relation-values">', body)
         values = re.findall(
-            r'<ul class="topology-relation-values">(.*?)</ul>', body, flags=re.S
+            r'<ul class="topology-relation-values">(.*?)</ul>', body, flags=re.DOTALL
         )
         self.assertTrue(values)
         for block in values:
-            for line in re.findall(r"<li>(.*?)</li>", block, flags=re.S):
+            for line in re.findall(r"<li>(.*?)</li>", block, flags=re.DOTALL):
                 self.assertEqual(line.count('class="topology-relation-value"'), 1)
                 self.assertIn('class="topology-relation-source muted"', line)
                 self.assertRegex(line, r'read <time datetime="[^"]+" title="[^"]+">[^<]+</time>')

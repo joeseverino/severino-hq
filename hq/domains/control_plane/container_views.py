@@ -2,10 +2,10 @@
 
 from typing import Any
 
-from hq.platform.application.routes import reverse
 from django.views.generic import TemplateView
 
 from hq.platform.application.pages import PageMixin
+from hq.platform.application.routes import reverse
 
 
 def container_detail(resource: Any, request: Any) -> dict[str, Any]:

@@ -27,7 +27,6 @@ from hq.domains.projects.models import Project
 from hq.platform.application.money import money
 from hq.platform.application.ui import MISSING
 
-
 # ---------- CSV ----------------------------------------------------------------
 
 def _csv_response(headers: list[str], rows: Iterable[Iterable]) -> str:

@@ -37,9 +37,11 @@ import re
 import statistics
 import time
 from collections import Counter
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
-from typing import Any, Callable, Iterator
+from pathlib import Path
+from typing import Any
 from unittest import mock
 
 from django.conf import settings
@@ -452,7 +454,7 @@ class Command(BaseCommand):
             teardown_databases(databases, verbosity=0)
         self._report(results, left, unexercised)
         if options["json"]:
-            with open(options["json"], "w", encoding="utf-8") as out:
+            with Path(options["json"]).open("w", encoding="utf-8") as out:
                 json.dump([asdict(result) for result in results], out, indent=2)
 
     def _run(self, options) -> tuple[list[Result], list[tuple[str, str]], list[tuple[str, str]]]:
@@ -477,7 +479,7 @@ class Command(BaseCommand):
                 # The first sweep of the seeded estate adopts what it finds.
                 with _held_outside():
                     unchanged_sweep()
-                for result, (_page, url, headers) in zip(results, wanted + asked):
+                for result, (_page, url, headers) in zip(results, wanted + asked, strict=False):
                     held = client.get(url)
                     if headers and "If-None-Match" in headers and "ETag" in held:
                         # The validator a browser holds now, after that sweep.

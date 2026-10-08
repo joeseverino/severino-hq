@@ -7,12 +7,13 @@ to the current request user (via CurrentUserMiddleware).
 """
 
 import logging
+from collections.abc import Callable, Iterable
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from typing import Any, Callable, Iterable
+from typing import Any
 from uuid import UUID
 
 from django.db.models.signals import post_delete, post_init, post_save
@@ -22,7 +23,6 @@ from . import speculation
 from .facets import as_metadata as facet_metadata
 from .middleware import get_current_user
 from .models import AuditLog
-
 
 logger = logging.getLogger("severino.audit")
 
@@ -298,7 +298,7 @@ def _connection_of(extract: Callable[[Any], str] | None, instance) -> str:
         return ""
     try:
         return str(extract(instance) or "")
-    except Exception:  # noqa: BLE001 - attribution never blocks the event
+    except Exception:  # attribution never blocks the event
         logger.exception("Could not name the connection of an audited %s", type(instance))
         return ""
 
@@ -344,7 +344,7 @@ def record_event(
     if obj is not None:
         try:
             object_repr = str(obj)[:200]
-        except Exception:  # noqa: BLE001 - defensive
+        except Exception:  # noqa: BLE001 - an object's own __str__ may raise
             object_repr = ""
 
     context = _operation_context.get()
@@ -370,7 +370,7 @@ def record_event(
             message=message,
             metadata=event_metadata,
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("Failed to write AuditLog entry")
         if required:
             raise

@@ -1,9 +1,9 @@
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.db import connection
 from django.template.loader import render_to_string
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
@@ -17,7 +17,9 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
     WeatherObservation,
 )
+from hq.platform.core.models import AuditLog
 
+from .. import readings
 from ..glance import (
     _glance_reading,
     dashboard_panels,
@@ -28,9 +30,6 @@ from ..glance import (
     save_dashboard_settings,
     select_dashboard_machine,
 )
-from hq.platform.core.models import AuditLog
-
-from .. import readings
 from ..security import cli_principal
 
 
@@ -617,10 +616,12 @@ class GlanceRenderingTests(TestCase):
     def test_machine_routes_read_the_catalogue_once_per_projection(self):
         from ..projection import projection_scope
 
-        with patch("hq.platform.application.machines.machine_catalog", return_value=()) as catalog:
-            with projection_scope():
-                dashboard_panels()
-                dashboard_panels()
+        with (
+            patch("hq.platform.application.machines.machine_catalog", return_value=()) as catalog,
+            projection_scope(),
+        ):
+            dashboard_panels()
+            dashboard_panels()
 
         self.assertEqual(catalog.call_count, 1)
 
@@ -686,11 +687,13 @@ class GlanceEndpointTests(TestCase):
     def test_a_stale_post_requests_the_stale_panels_and_shows_them_refreshing(self):
         from django.urls import reverse
 
-        with self.captureOnCommitCallbacks(execute=True):
-            with patch("hq.platform.application.glance.ring_doorbell") as doorbell:
-                response = self.client.post(
-                    reverse("dashboard_glance"), {"scope": "stale"}
-                )
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            patch("hq.platform.application.glance.ring_doorbell") as doorbell,
+        ):
+            response = self.client.post(
+                reverse("dashboard_glance"), {"scope": "stale"}
+            )
 
         self.assertEqual(response.status_code, 202)
         self.assertEqual(

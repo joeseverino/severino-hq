@@ -4,8 +4,8 @@ Each takes an optional ``idempotency_key``, declared once from its effect; a
 repeat carrying the same key returns the first result. A ``read`` takes none.
 """
 
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 from django.test import TestCase, override_settings
 

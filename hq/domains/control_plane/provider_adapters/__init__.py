@@ -8,6 +8,7 @@ contributes nothing, and adding a provider is writing its module and naming it
 here.
 """
 
+from ..provider_spec import ConnectionKind
 from . import (
     adguard,
     caddy,
@@ -19,7 +20,6 @@ from . import (
     tailscale,
     tls,
 )
-from ..provider_spec import ConnectionKind
 
 ADMITTED = (tls, npm, github, portainer, tailscale, declarations, caddy, adguard, cloudflare)
 

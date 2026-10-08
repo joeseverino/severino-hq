@@ -5,9 +5,9 @@ from datetime import date
 
 from django.core.management.base import BaseCommand, CommandError
 
+from hq.domains.content.models import ContentItem
 from hq.platform.application.content import ContentCommand, save_content
 from hq.platform.application.security import cli_principal
-from hq.domains.content.models import ContentItem
 
 
 class Command(BaseCommand):

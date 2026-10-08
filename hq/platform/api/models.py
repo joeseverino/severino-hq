@@ -3,7 +3,7 @@
 from django.db import models
 
 
-class IdempotencyRecord(models.Model):
+class IdempotencyRecord(models.Model):  # noqa: DJ008 - stored state, never shown by name
     actor = models.CharField(max_length=255)
     actor_sha256 = models.CharField(max_length=64)
     key = models.CharField(max_length=128)

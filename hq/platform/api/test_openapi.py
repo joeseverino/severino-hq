@@ -24,8 +24,8 @@ from hq.platform.application.domains import all_domains
 from hq.platform.application.resources import resource_registry
 
 from . import openapi, views
-from .tests import _OTHER_KEY as OTHER_KEY, ISSUER, RESOURCE, _serving, _token
 from .testing import Contract, ContractClient
+from .tests import _OTHER_KEY as OTHER_KEY, ISSUER, RESOURCE, _serving, _token
 
 VALIDATOR = importlib.util.find_spec("openapi_spec_validator") is not None
 
@@ -204,9 +204,8 @@ class DocumentTests(SimpleTestCase):
         self.assertIn("OwnerRecord", components.schemas)
 
     def test_a_parameterised_route_without_an_expansion_fails_the_build(self):
-        with patch.dict(openapi.EXPANSIONS, clear=True):
-            with self.assertRaises(openapi.OpenAPIError):
-                openapi.document()
+        with patch.dict(openapi.EXPANSIONS, clear=True), self.assertRaises(openapi.OpenAPIError):
+            openapi.document()
 
     def test_recorded_examples_conform_to_their_operations(self):
         contract = Contract(self.document)

@@ -7,6 +7,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
 from hq.platform.api.openapi import document
+
 from .binding import register_tools
 from .declarations import HANDLERS, argument_metadata
 

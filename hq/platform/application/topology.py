@@ -10,16 +10,13 @@ mutation that could drift from the thing it claims to represent.
 import re
 from dataclasses import asdict, dataclass, replace
 from typing import Any
+
+from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.names import normalized_hostname
+from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.routes import reverse
 
-from hq.domains.control_plane.names import normalized_hostname
-from hq.domains.control_plane.models import ManagedResource
-from hq.domains.control_plane.providers import PROVIDERS
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
-
-from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
-from .connections import ConnectionLink, ConnectionSpec
-from .connection_catalog import ConnectionGroup, connection_catalog
 from .action_links import (
     ActionLink as TopologyAction,
     capability_action_link,
@@ -27,12 +24,18 @@ from .action_links import (
     connection_action_links,
     topology_url,
 )
+from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
+from .connection_catalog import ConnectionGroup, connection_catalog
+from .connections import ConnectionLink, ConnectionSpec
+from .contradiction_findings import add_contradiction_facts
+from .derivations import derivation
+from .derived_inputs import ESTATE_READS, estate_variant
 from .entity_links import entity_link, kind_label, record_name
 from .infrastructure import is_drifted, resource_health
 from .resource_capabilities import removals_pending, resource_capabilities
-from .derivations import derivation
-from .derived_inputs import ESTATE_READS, estate_variant
 from .security import Capability, Principal
+from .topology_facts import add_connection_facts, add_observed_facts
+from .topology_lenses import TOPOLOGY_LENSES, TopologyLens, apply_lens, apply_trace, lens_for
 from .topology_model import (
     Topology,
     TopologyEdge,
@@ -42,10 +45,6 @@ from .topology_model import (
     edge_between,
     newest_stamp,
 )
-from .topology_lenses import TOPOLOGY_LENSES, TopologyLens, apply_lens, apply_trace, lens_for
-from .contradiction_findings import add_contradiction_facts
-from .topology_facts import add_connection_facts, add_observed_facts
-
 
 _KIND_ORDER = {
     "controller": 0,

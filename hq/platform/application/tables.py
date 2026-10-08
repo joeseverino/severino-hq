@@ -1,8 +1,9 @@
 """Declarative query engine for searchable, filterable list views."""
 
-from dataclasses import dataclass
 import shlex
-from typing import Any, Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import Any
 
 from django.db.models import Q, QuerySet, Sum
 

@@ -2,7 +2,7 @@
 
 import threading
 import time
-from datetime import datetime, timedelta, timezone as utc
+from datetime import UTC, datetime, timedelta
 from unittest import mock
 
 from django.core.exceptions import ImproperlyConfigured
@@ -22,7 +22,7 @@ from hq.platform.core.models import UpstreamReading
 from .test_derivations import declared
 
 READING = "core.UpstreamReading"
-MOMENT = datetime(2026, 1, 1, 18, 0, tzinfo=utc.utc)
+MOMENT = datetime(2026, 1, 1, 18, 0, tzinfo=UTC)
 
 
 def _readings() -> int:
@@ -134,7 +134,7 @@ class AskedAgainTests(Remembering):
 
             derive_ahead()
 
-        self.assertEqual([args for args in calls[3:]], [("february",), ("march",)])
+        self.assertEqual(list(calls[3:]), [("february",), ("march",)])
 
     def test_a_derivation_that_keeps_none_is_never_asked_ahead(self):
         with declared("test.ahead.none", reads=(READING,), ahead=0) as (register, calls):
@@ -187,7 +187,7 @@ class AskedAgainTests(Remembering):
 
     def test_an_answer_that_cannot_be_kept_is_not_derived_in_a_loop(self):
         with declared("test.ahead.unkept", reads=(READING,)) as (register, calls):
-            read = register(lambda: (lambda: None, _readings())[1:] + (lambda: None,))
+            read = register(lambda: (*(lambda: None, _readings())[1:], lambda: None))
             with projection_scope(), self.assertLogs("severino.derivations", level="ERROR"):
                 read()
             _write()

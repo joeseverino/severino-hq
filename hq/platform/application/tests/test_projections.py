@@ -4,23 +4,22 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.db import connection
-from django.test import TestCase, override_settings
-
-from hq.platform.application.security import cli_principal
-from django.test.utils import CaptureQueriesContext
 from django.template.loader import render_to_string
+from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
-
 from hq.platform.application.derivations import uncached
-from ..dashboard import operating_snapshot
-from ..resource_operations import operation_summary
-from ..resource_context import get_managed_resource
-from ..projection import projection_scope, read_once
+from hq.platform.application.security import cli_principal
+
 from ..cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
+from ..dashboard import operating_snapshot
+from ..projection import projection_scope, read_once
+from ..resource_context import get_managed_resource
+from ..resource_operations import operation_summary
 from ..ui import (
     MISSING,
     PLOT_LEFT,
@@ -359,7 +358,7 @@ class ChartDataTableTests(TestCase):
         self.assertIn('<td class="num-col">1,250</td>', table)
         self.assertNotIn("52.25", table)
         self.assertIn("Resting heart rate (bpm)", table)
-        for point, row in zip(chart.series[0].points, chart.table_rows):
+        for point, row in zip(chart.series[0].points, chart.table_rows, strict=False):
             self.assertIn(f": {row.cells[0]} bpm", point.tooltip)
 
     def test_a_bar_charts_table_shows_no_raw_float(self):
@@ -465,8 +464,9 @@ class CadenceTests(TestCase):
         self.assertEqual(week.said, "No data for the week of Sep 22")
 
     def test_the_no_data_mark_is_styled(self):
-        from django.conf import settings
         from pathlib import Path
+
+        from django.conf import settings
 
         css = (Path(settings.BASE_DIR) / "static" / "css" / "app.css").read_text(encoding="utf-8")
 
@@ -616,8 +616,8 @@ class DashboardProjectionTests(TestCase):
             status=Project.Status.ACTIVE,
         )
 
-        from hq.platform.application import readings
         from hq.domains.contacts.d1 import UNREAD
+        from hq.platform.application import readings
 
         readings.record(UNREAD, {"count": 2, "status": "ok"})
         with patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")):

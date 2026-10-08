@@ -12,25 +12,25 @@ attached to the hop they decide.
 and MCP read.
 """
 
-from dataclasses import dataclass, replace
 import re
+from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any
 
-from hq.domains.control_plane.names import is_hostname, normalized_hostname
-from hq.domains.control_plane.providers import PROVIDERS
-from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
 from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+from hq.domains.control_plane.names import is_hostname, normalized_hostname
+from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
+from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.core.network import is_trusted_proxy, split_host_port
 
 from .connection import Connection
 from .entity_links import entity_link
-from .paths import why_unread
 from .path_model import NETWORK_LABELS, Hop, Route, ServicePath, Source, last_machine
+from .paths import why_unread
 from .reach import network_of
 from .request_addresses import Address
 from .request_channel import forwarded_chain, socket_peer
 from .request_headers import Header
-
 
 PROVEN = "proven"
 CONTRADICTED = "contradicted"
@@ -615,7 +615,7 @@ def own_container_id() -> str:
     """
 
     try:
-        with open("/proc/self/mountinfo", encoding="utf-8") as mounts:
+        with Path("/proc/self/mountinfo").open(encoding="utf-8") as mounts:
             found = _CONTAINER_ID.search(mounts.read())
     except OSError:
         return ""
@@ -726,10 +726,10 @@ def request_path(request) -> RequestPath:
     """How ``request`` reached HQ, read once per projection."""
 
     from .connection import connection
-    from .request_addresses import addresses_of, addresses_of_hq
-    from .request_headers import headers_of
     from .connection_security import observed_request_controls
     from .paths import hq_path
+    from .request_addresses import addresses_of, addresses_of_hq
+    from .request_headers import headers_of
 
     edge, firewall = observed_request_controls(request.get_host())
     found = connection(request, edge=edge, firewall=firewall)

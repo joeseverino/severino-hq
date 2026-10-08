@@ -7,9 +7,9 @@ import json
 
 from django.core.management.base import BaseCommand
 
+from hq.domains.projects.models import PROJECT_CATEGORY_CHOICES, Project
 from hq.platform.application.projects import ProjectCommand, save_project
 from hq.platform.application.security import cli_principal
-from hq.domains.projects.models import PROJECT_CATEGORY_CHOICES, Project
 
 
 class Command(BaseCommand):

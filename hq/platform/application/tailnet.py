@@ -12,9 +12,8 @@ Tailscale did, and a question the sweep cannot answer says so rather than
 guessing.
 """
 
-import re
-
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from ipaddress import ip_address

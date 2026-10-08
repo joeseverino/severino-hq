@@ -14,7 +14,6 @@ from hq.domains.control_plane.providers import PROVIDERS
 from .entity_links import EntityLink, entity_link, kind_label
 from .labels import lower_first
 
-
 NETWORK_LABELS = {
     "tailnet": "Tailnet",
     "network": "Local network",

@@ -48,9 +48,11 @@ class PrivateListenerTests(SimpleTestCase):
                 self.assertFalse(self.path.exists())
 
     def test_a_directory_that_is_another_accounts_is_refused(self):
-        with patch.object(unix_server.os, "geteuid", return_value=os.geteuid() + 1):
-            with self.assertRaisesMessage(SocketRefused, "belongs to another account"):
-                self.bound()
+        with (
+            patch.object(unix_server.os, "geteuid", return_value=os.geteuid() + 1),
+            self.assertRaisesMessage(SocketRefused, "belongs to another account"),
+        ):
+            self.bound()
 
     def test_a_linked_directory_is_refused(self):
         link = self.directory / "link"
@@ -128,13 +130,15 @@ class ServingTests(SimpleTestCase):
     def test_another_accounts_connection_is_dropped_unheard(self):
         for answered in (os.geteuid() + 1, 0, None):
             with self.subTest(peer=answered), patch.object(unix_server, "peer_uid", return_value=answered):
-                with served(hello, self.path), self.assertLogs("severino.unix_server", "WARNING") as logs:
-                    with self.assertRaises((OSError, http.client.HTTPException)):
-                        post(self.path, "/")
+                with (
+                    served(hello, self.path),
+                    self.assertLogs("severino.unix_server", "WARNING") as logs,
+                    self.assertRaises((OSError, http.client.HTTPException)),
+                ):
+                    post(self.path, "/")
                 self.assertIn("peer_refused", logs.output[0])
 
     def test_a_path_that_cannot_be_served_safely_stops_the_server_from_starting(self):
         self.directory.chmod(0o755)
-        with self.assertRaises(SocketRefused):
-            with served(hello, self.path):
-                self.fail("served on a directory another account can enter")
+        with self.assertRaises(SocketRefused), served(hello, self.path):
+            self.fail("served on a directory another account can enter")

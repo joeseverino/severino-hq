@@ -15,13 +15,13 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from hq.platform.application.documentation import sync_documentation
-from hq.platform.application.security import cli_principal
-from hq.platform.application.ui import counted
 from hq.domains.docs_index.importer import (
     ManifestImportError,
     validate_manifest_data,
 )
+from hq.platform.application.documentation import sync_documentation
+from hq.platform.application.security import cli_principal
+from hq.platform.application.ui import counted
 
 
 class Command(BaseCommand):

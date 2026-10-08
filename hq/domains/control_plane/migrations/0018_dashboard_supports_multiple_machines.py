@@ -1,6 +1,6 @@
-from django.db import migrations, models
 import django.db.models.deletion
 import django.utils.timezone
+from django.db import migrations, models
 
 
 def carry_selected_machine(apps, schema_editor):

@@ -8,12 +8,11 @@ quietly acquire different validation or audit behavior in each adapter.
 from dataclasses import dataclass
 from typing import Any
 
+from hq.domains.contacts import d1
 from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.models import AuditLog
-from hq.domains.contacts import d1
 
 from .security import Capability, Principal
-
 
 CONTACT_STATUSES = frozenset({"unread", "read", "replied", "archived", "spam"})
 

@@ -8,7 +8,6 @@ from django.db import connection
 from django.db.models import Func, IntegerField
 from django.db.models.expressions import Expression
 
-
 SnippetParts = list[tuple[str, bool]]
 
 

@@ -13,16 +13,14 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ProviderConnection
+from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
 
-from ..connections import connection_readings, connections_for, reachable_through
 from ..connection_catalog import CONTROLLER_CONNECTIONS, connection_catalog
-from ..report_testing import report_connections
-from hq.domains.control_plane.provider_spec import NameContext
-
+from ..connections import connection_readings, connections_for, reachable_through
 from ..provider_choices import container_stack, zone
+from ..report_testing import report_connections
 from ..security import cli_principal
-
 
 A_PORTAINER = {
     "connection_ref": "a-portainer",
@@ -201,9 +199,8 @@ class DerivationTests(TestCase):
         from dataclasses import replace
         from unittest import mock
 
-        from hq.domains.control_plane.providers import PROVIDERS
-
         from hq.domains.control_plane.provider_adapters.cloudflare import ZONE_KIND
+        from hq.domains.control_plane.providers import PROVIDERS
 
         sweep(A_DNS_TOKEN, {**A_PORTAINER, "connection_ref": "another-dns"})
         widened = replace(PROVIDERS[ZONE_KIND], connection_providers=("cloudflare_dns", "portainer"))
@@ -517,8 +514,9 @@ class AdoptionSafetyTests(TestCase):
         self.client.force_login(self.user)
 
     def _service_page(self, portainer_managed):
-        from hq.domains.control_plane.models import ManagedResource, ProviderInventory
         from django.utils import timezone
+
+        from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 
         ProviderInventory.objects.update_or_create(
             kind="portainer.container",

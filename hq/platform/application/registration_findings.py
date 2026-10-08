@@ -1,9 +1,9 @@
 """Findings about domain registrations that are about to lapse."""
 
-from datetime import timezone as dt_timezone
+from datetime import UTC
 
 from .expiry import days_until
-from .finding_model import Finding, FindingEstate, OperatorStep, parse_stamp, FindingRule
+from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, parse_stamp
 from .moments import span, when_day
 
 
@@ -36,7 +36,7 @@ def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
         # an aware now that raises rather than answering, so the assumption is
         # made explicit here: a renewal date is a UTC day.
         if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=dt_timezone.utc)
+            expires = expires.replace(tzinfo=UTC)
         days = days_until(expires, estate.now)
         if days > 90:
             continue

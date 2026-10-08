@@ -17,6 +17,7 @@ import sqlite3
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from django.apps import apps
 from django.core.management.base import BaseCommand, CommandError
@@ -98,7 +99,7 @@ def _informational() -> Iterator[tuple[str, str]]:
 
 class Command(BaseCommand):
     help = "Count, reading only, the rows each added check constraint would refuse."
-    requires_system_checks: list[str] = []
+    requires_system_checks: ClassVar[list[str]] = []
 
     def add_arguments(self, parser):
         parser.add_argument(

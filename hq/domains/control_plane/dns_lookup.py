@@ -16,9 +16,9 @@ which is what makes the call acceptable here rather than controller work.
 """
 
 import json
+import urllib.request
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
-import urllib.request
 
 from django.conf import settings
 

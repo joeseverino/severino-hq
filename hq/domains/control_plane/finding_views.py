@@ -1,11 +1,11 @@
 """Infrastructure findings."""
 
-from hq.platform.application.routes import reverse
 from django.views.generic import TemplateView
 
 from hq.platform.application.findings import estate_findings, finding_layout, finding_rules, rule_for
-from hq.platform.application.security import web_principal
 from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.routes import reverse
+from hq.platform.application.security import web_principal
 
 
 class FindingsView(PageMixin, TemplateView):
@@ -28,15 +28,14 @@ class FindingsView(PageMixin, TemplateView):
         raised = estate_findings(
             principal=principal, rule=active_rule.name if active_rule else ""
         )
-        entries = []
-        for finding in raised:
-            entries.append(
-                {
-                    "finding": finding,
-                    "workflow": finding.workflow,
-                    "layout": finding_layout(finding),
-                }
-            )
+        entries = [
+            {
+                "finding": finding,
+                "workflow": finding.workflow,
+                "layout": finding_layout(finding),
+            }
+            for finding in raised
+        ]
 
         counts: dict[str, int] = {}
         for finding in raised:

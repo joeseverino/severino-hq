@@ -9,14 +9,12 @@ without email or message); everything else is read from D1 when asked for.
 Uses only the standard library so HQ gains no new dependency.
 """
 
-from dataclasses import dataclass
 import json
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 
 from django.conf import settings
-
-from hq.platform.application.ui import counted
 from django.urls import reverse
 
 from hq.platform.application.connection_contracts import (
@@ -27,6 +25,7 @@ from hq.platform.application.connection_contracts import (
     ConnectionSpec,
 )
 from hq.platform.application.security import Capability
+from hq.platform.application.ui import counted
 from hq.platform.core.errors import UpstreamUnavailable
 from hq.platform.core.outbound import allowed
 

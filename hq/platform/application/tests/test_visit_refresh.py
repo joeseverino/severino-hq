@@ -1,9 +1,9 @@
 """An open page asks for its own readings: only those, only when due, only by POST."""
 
-from datetime import timedelta
-from pathlib import Path
 import re
 import tempfile
+from datetime import timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -15,9 +15,9 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory, ReadRequest
 
 from .. import visit_refresh
+from ..asks import Standing, read_standing, watched
 from ..freshness import VISIT_EVERY
 from ..security import Capability, Principal, cli_principal
-from ..asks import Standing, read_standing, watched
 from ..visit_refresh import Reads, askable, request_visit_refresh
 
 DIRECTORY = Path(tempfile.mkdtemp())

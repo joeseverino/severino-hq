@@ -19,38 +19,35 @@ from urllib.parse import parse_qs, urlsplit
 
 from asgiref.sync import async_to_sync
 from django.conf import settings
-from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.auth import get_user_model
+from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import Client, TestCase, override_settings
-
-from hq.platform.application.security import cli_principal
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.application import readings
-from hq.platform.application.dashboard import operating_snapshot
 from hq.domains.assets.models import Asset
 from hq.domains.content.models import ContentItem
-from hq.platform.core.middleware import CurrentUserMiddleware, get_current_user, set_current_user
-from hq.platform.core.logging import JsonFormatter, reset_request_id, set_request_id
-from hq.platform.core.audit import operation_context
-from hq.platform.core.models import AuditLog
-from hq.platform.core.oidc import HQOIDCAuthenticationBackend
-from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY
-from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.docs_index.importer import (
     ManifestImportError,
     import_manifest_data,
     validate_manifest_data,
 )
+from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
-
+from hq.platform.application import readings
+from hq.platform.application.dashboard import operating_snapshot
+from hq.platform.application.security import cli_principal
+from hq.platform.core.audit import operation_context
+from hq.platform.core.logging import JsonFormatter, reset_request_id, set_request_id
+from hq.platform.core.middleware import CurrentUserMiddleware, get_current_user, set_current_user
+from hq.platform.core.models import AuditLog
+from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY, HQOIDCAuthenticationBackend
 
 User = get_user_model()
 
@@ -472,15 +469,14 @@ class OIDCBackendTests(TestCase):
         with override_settings(
             SEVERINO_OIDC_ALLOWED_EMAILS=set(),
             SEVERINO_OIDC_ALLOWED_GROUPS=set(),
-        ):
-            with self.assertRaises(PermissionDenied):
-                backend.verify_claims(
-                    {
-                        "sub": "subject-1",
-                        "preferred_username": "joe",
-                        "groups": ["admins"],
-                    }
-                )
+        ), self.assertRaises(PermissionDenied):
+            backend.verify_claims(
+                {
+                    "sub": "subject-1",
+                    "preferred_username": "joe",
+                    "groups": ["admins"],
+                }
+            )
 
 
 class _AuthedTestCase(TestCase):
@@ -844,8 +840,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertContains(silent, "Last read")
 
     def test_the_dashboard_draws_its_contacts_without_waiting_on_d1(self):
-        from hq.platform.application import readings
         from hq.domains.contacts import d1
+        from hq.platform.application import readings
 
         row = {"id": 7, "name": "One call", "status": "unread", "created_at": "2026-08-23"}
         readings.record(d1.UNREAD, {"count": 3, "rows": [row], "status": "ok"})

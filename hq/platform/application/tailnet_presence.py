@@ -7,7 +7,6 @@ to.
 from dataclasses import dataclass
 from typing import Any
 
-
 from .tailnet import TAILNET_KIND
 
 

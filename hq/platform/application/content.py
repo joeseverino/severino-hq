@@ -8,18 +8,18 @@ from django.db import transaction
 
 from hq.domains.assets.models import Asset
 from hq.domains.content.models import ContentItem
-from hq.platform.core.audit import operation_context
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.core.audit import operation_context
+
+from .domains import records_of
 from .entity_links import EntityLink, entity_link
 from .labels import plural
-from .sensitivity import safe_doc_ids
-from .domains import records_of
-from .security import Principal
 from .projection import iso
+from .security import Principal
+from .sensitivity import safe_doc_ids
 from .ui import counted
-
 
 
 def published_on(urls) -> EntityLink | None:

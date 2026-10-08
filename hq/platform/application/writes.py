@@ -27,12 +27,12 @@ already owns. One query at the boundary is the cheaper trade.
 from django.contrib import messages
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.shortcuts import redirect
+
 from hq.platform.application.routes import reverse
 
 from .deletion import DeleteCommand
 from .records import delete_instance, display_noun, records_for, save_form
 from .security import web_principal
-
 
 # What a write says when the view does not say it differently. Constants rather
 # than attributes on the mixins: a default on one base and an override on

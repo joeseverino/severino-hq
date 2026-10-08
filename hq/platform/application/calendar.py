@@ -279,8 +279,8 @@ def calendar_sources() -> tuple[tuple[str, CalendarSource], ...]:
     make an operator's unchecked choice ambiguous.
     """
 
-    from .domains import all_domains
     from .calendar_entries import own_sources
+    from .domains import all_domains
 
     # The operator's own events lead under no heading: they are one line.
     found: list[tuple[str, CalendarSource]] = [("", source) for source in own_sources()]

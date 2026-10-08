@@ -4,39 +4,28 @@ from functools import cached_property
 from typing import Any
 
 from django.contrib import messages
-
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from hq.platform.application.routes import reverse
 from django.views import View
 from django.views.generic import DetailView, ListView
 
 from hq.platform.application.action_links import command_url
-from hq.platform.application.inventory import service_hostnames
+from hq.platform.application.entity_links import kind_label, record_name, web_url
 from hq.platform.application.infrastructure import (
     PolicyError,
     declared_machines,
     delivery_targets,
     is_drifted,
-    serialize_resource,
     serialize_public_status,
+    serialize_resource,
 )
-
-from hq.platform.application.resource_operations import (
-    ACTION_LABELS,
-    HISTORY_WINDOW,
-    OperationCommand,
-    changes,
-    operation_summary,
-    requested_by,
-    resource_history,
-    request_certificate_renewal,
-    request_lifecycle,
-    request_reconcile,
-    request_removal,
-)
-from hq.platform.application.entity_links import kind_label, record_name, web_url
+from hq.platform.application.inventory import service_hostnames
+from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.relationships import relationships_for
+from hq.platform.application.resource_capabilities import (
+    VERB_LABELS,
+    resource_capabilities,
+)
 from hq.platform.application.resource_context import (
     controller_summary,
     newest_reading,
@@ -46,24 +35,31 @@ from hq.platform.application.resource_context import (
     record_status,
     resource_context,
 )
+from hq.platform.application.resource_operations import (
+    ACTION_LABELS,
+    HISTORY_WINDOW,
+    OperationCommand,
+    changes,
+    operation_summary,
+    request_certificate_renewal,
+    request_lifecycle,
+    request_reconcile,
+    request_removal,
+    requested_by,
+    resource_history,
+)
+from hq.platform.application.routes import reverse
+from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.timestamps import moment
 from hq.platform.application.topology_model import RELATIONS
-from hq.platform.application.whereabouts import whereabouts
-from hq.platform.application.security import safe_next, web_principal
-from hq.platform.application.pages import PageAction, PageMixin, page_context
-from hq.platform.application.resource_capabilities import (
-    VERB_LABELS,
-    resource_capabilities,
-)
 from hq.platform.application.ui import counted
-
+from hq.platform.application.whereabouts import whereabouts
 from hq.platform.core.templatetags.nav_tags import returning_to
 
 from .models import ManagedResource, OperationRequest
 from .provider_adapters.portainer import CONTAINER_KIND
 from .provider_adapters.tls import CERTIFICATE_KIND
 from .providers import PROVIDERS, describe_providers
-
 
 # Which use case serves which verb. A table rather than a fall-through, so a
 # lifecycle verb such as Restart never reaches reconciliation, which is locked

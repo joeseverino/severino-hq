@@ -9,7 +9,6 @@ from ..names import normalized_hostname
 from ..provider_spec import ProviderModel, ProviderSpec, SharedValue, applies
 from .contracts import ServedCertificate
 
-
 CADDY_ROUTE_KIND = "caddy.route"
 
 

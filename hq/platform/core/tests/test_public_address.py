@@ -7,8 +7,8 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.application.tests.test_lookup import GLOBAL as ADDRESS
 from hq.domains.control_plane.models import AddressReading
+from hq.platform.application.tests.test_lookup import GLOBAL as ADDRESS
 
 STORED = {
     "ok": True,

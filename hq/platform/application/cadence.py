@@ -23,13 +23,13 @@ replayed, the worst it can cause is a controller run that finds nothing to do.
 """
 
 
-from collections.abc import Iterable
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone as dt_timezone
-from pathlib import Path
 import os
 import tempfile
 import time
+from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -108,7 +108,7 @@ def recently_used(now: float | None = None) -> bool:
         return False
     if (time.time() if now is None else now) - touched > window:
         return False
-    holds_until(datetime.fromtimestamp(touched + window, tz=dt_timezone.utc))
+    holds_until(datetime.fromtimestamp(touched + window, tz=UTC))
     return True
 
 
@@ -465,7 +465,7 @@ def _read_subject(command: ControllerSweepCommand) -> tuple[str, str] | None:
         named.append("every_connection")
     if len(named) > 1:
         raise ValidationError(
-            {field: "Name one of connection_ref, kind or every_connection." for field in named}
+            dict.fromkeys(named, "Name one of connection_ref, kind or every_connection.")
         )
     if ref and not connection_providers(ref):
         raise ValidationError(
@@ -618,4 +618,4 @@ def _touch(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     handle, temporary = tempfile.mkstemp(dir=str(path.parent), prefix=".marker-")
     os.close(handle)
-    os.replace(temporary, path)
+    Path(temporary).replace(path)

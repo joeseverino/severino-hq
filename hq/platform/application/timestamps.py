@@ -23,7 +23,7 @@ A trailing ``Z`` needs no rewriting: ``datetime.fromisoformat`` accepts it on
 every Python HQ supports.
 """
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Literal
 
 Naive = Literal["utc", "keep", "refuse"]
@@ -44,7 +44,7 @@ def moment(
         return found
     if naive == "refuse":
         return None
-    return found.replace(tzinfo=timezone.utc)
+    return found.replace(tzinfo=UTC)
 
 
 def _parsed(stamp: object) -> datetime | None:

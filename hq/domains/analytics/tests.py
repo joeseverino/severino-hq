@@ -12,9 +12,9 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.analytics.models import AnalyticsCoverage, AnalyticsSite, RumDaily, VitalsDaily
+from hq.domains.content.models import ContentItem
 from hq.platform.application import analytics as service
 from hq.platform.application.security import AuthorizationError, Capability, Principal
-from hq.domains.content.models import ContentItem
 
 SITE_TAG = "0" * 32
 HOST = "example.test"

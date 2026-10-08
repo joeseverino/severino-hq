@@ -6,6 +6,7 @@ from functools import wraps
 from typing import Any
 
 from asgiref.sync import sync_to_async
+
 # MCP's existing jsonschema dependency ships without inline type information.
 from jsonschema import Draft202012Validator, ValidationError  # type: ignore[import-untyped]
 from mcp.server.fastmcp import FastMCP

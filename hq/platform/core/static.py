@@ -1,6 +1,6 @@
 """Static assets: collected and compressed once at image build, served natively over ASGI."""
 
-import os
+from pathlib import Path
 
 from django.conf import settings
 from django.contrib.staticfiles import finders
@@ -77,7 +77,7 @@ class CachedStaticFiles(StaticFiles):
         if settings.STATIC_LIVE and not path.startswith(("/", "\\")):
             found = finders.find(path)
             if found:
-                return found, os.stat(found)
+                return found, Path(found).stat()
         return super().lookup_path(path)
 
     async def precompressed(self, path, scope):

@@ -57,7 +57,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from functools import wraps
 from types import MappingProxyType
-from typing import Any, TypeVar
+from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
@@ -74,7 +74,6 @@ def _read_only(mapping: dict[Any, Any]) -> MappingProxyType[Any, Any]:
 
 copyreg.pickle(MappingProxyType, lambda mapping: (_read_only, (dict(mapping),)))
 
-_T = TypeVar("_T")
 # The clock, as the module holds it. Derivations reach it only through the
 # functions below, which is what lets a test forbid every other way in.
 _clock = timezone.now
@@ -272,14 +271,14 @@ class Derivation:
         return bool(new)
 
 
-def derivation(
+def derivation[T](
     name: str,
     *,
     reads: tuple[str, ...],
     vary: Callable[..., Any] | None = None,
     unseen: bool = False,
     ahead: int = REMEMBERED,
-) -> Callable[[Callable[..., _T]], Callable[..., _T]]:
+) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """Declare a function as a derived fact of the tables in ``reads``.
 
     ``reads`` names every model the function queries, directly or through
@@ -295,14 +294,14 @@ def derivation(
     first, and 0 keeps none.
     """
 
-    def declare(function: Callable[..., _T]) -> Callable[..., _T]:
+    def declare(function: Callable[..., T]) -> Callable[..., T]:
         if name in DERIVATIONS:
             raise ImproperlyConfigured(f"Derivation {name!r} is declared twice.")
         declared = Derivation(name, tuple(sorted(set(reads))), function, vary, unseen, ahead)
         DERIVATIONS[name] = declared
 
         @wraps(function)
-        def answer(*args: Any, **kwargs: Any) -> _T:
+        def answer(*args: Any, **kwargs: Any) -> T:
             variant = repr(vary(*args, **kwargs) if vary else (args, sorted(kwargs.items())))
             _may_ask(declared)
             value, until = read_once(
@@ -536,7 +535,7 @@ def _stored(key: str | None) -> tuple[Any, datetime | None, bool]:
         return None, None, False
     try:
         entry = _store().get(key)
-    except Exception:  # noqa: BLE001 - an unreadable cache is a miss, never an error page
+    except Exception:  # an unreadable cache is a miss, never an error page
         logger.exception("The derived cache could not be read; deriving instead.")
         return None, None, False
     if entry is None:
@@ -599,7 +598,7 @@ def _keep(key: str | None, value: Any, until: datetime | None) -> bool:
             return False
     try:
         _store().set(key, (value, until), timeout=lifetime)
-    except Exception:  # noqa: BLE001 - a value that cannot be stored is still the answer
+    except Exception:  # a value that cannot be stored is still the answer
         logger.exception("A derived value could not be stored.")
         return False
     return True
@@ -765,7 +764,7 @@ def _pass() -> list[str]:
         name, variant, ask = pending.pop(_next_asked(pending))
         try:
             derived, key = ask.context.copy().run(_again, ask)
-        except Exception:  # noqa: BLE001 - one question failing must not stop the rest
+        except Exception:  # one question failing must not stop the rest
             logger.exception("Derivation %s could not be asked again ahead.", name)
             with _ASKS_LOCK:
                 _ASKS.get(name, {}).pop(variant, None)

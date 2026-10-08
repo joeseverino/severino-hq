@@ -7,14 +7,12 @@ registry that collects it.
 """
 
 import re
-from functools import lru_cache
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Callable, Literal
+from functools import cache
+from typing import Any, Literal
 
 from django.urls import NoReverseMatch
-
-from hq.platform.application.routes import reverse
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -25,12 +23,13 @@ from pydantic import (
 )
 
 from hq.platform.application.moments import span, when_day
+from hq.platform.application.routes import reverse
 
 from .names import in_zone
 from .observations.contract import ReadingPart
 
 
-@lru_cache(maxsize=None)
+@cache
 def adapter(spec_type: Any) -> TypeAdapter[Any]:
     """The validator for one spec type, built once: a type's schema never changes."""
 

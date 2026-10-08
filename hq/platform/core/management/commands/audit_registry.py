@@ -12,6 +12,7 @@ Read-only.
 import json
 
 from django.core.management.base import BaseCommand
+
 from hq.platform.application.registry import audit_registry
 
 
@@ -35,14 +36,12 @@ class Command(BaseCommand):
             return
 
         self.stdout.write(
-            "Projects  %d total, %d with zero docs"
-            % (stats["projects_total"], len(orphan_projects))
+            f"Projects  {stats['projects_total']} total, {len(orphan_projects)} with zero docs"
         )
         for slug in orphan_projects:
             self.stdout.write(f"          orphan: {slug}")
         self.stdout.write(
-            "Assets    %d total, %d with zero docs"
-            % (stats["assets_total"], len(orphan_assets))
+            f"Assets    {stats['assets_total']} total, {len(orphan_assets)} with zero docs"
         )
         for slug in orphan_assets:
             self.stdout.write(f"          orphan: {slug}")

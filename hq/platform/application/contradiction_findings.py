@@ -206,9 +206,8 @@ def _routed_to_stopped() -> tuple[Finding, ...]:
 
 
 def _gates_guarding_nothing() -> tuple[Finding, ...]:
-    from hq.domains.control_plane.observations import OBSERVATIONS
-
     from hq.domains.control_plane.names import in_zone
+    from hq.domains.control_plane.observations import OBSERVATIONS
 
     from .facts import inventory_records
     from .paths import routed_names
@@ -430,7 +429,7 @@ def add_contradiction_facts(nodes) -> None:
         for finding in detect():
             anchor = finding.subject if finding.subject in nodes else fallback
             node = nodes[anchor]
-            nodes[anchor] = replace(node, facts=node.facts + ((FACT, _encoded(finding)),))
+            nodes[anchor] = replace(node, facts=(*node.facts, (FACT, _encoded(finding))))
 
 
 def _encoded(finding: Finding) -> str:

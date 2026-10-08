@@ -6,15 +6,14 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import httpx
 from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, override_settings
-import httpx
 from starlette.middleware.gzip import GZipMiddleware
-from hq.platform.core.network import TrustedNetworkASGI
 from starlette.staticfiles import StaticFiles
 
+from hq.platform.core.network import TrustedNetworkASGI
 from hq.platform.core.static import CachedStaticFiles
-
 
 # Installed or generated trees inside a checkout. With hidden directories
 # (.git, a virtualenv under any name) they are not this project's source.
@@ -269,7 +268,7 @@ class StyleContractTests(SimpleTestCase):
 
     def test_a_long_word_breaks_rather_than_widening_the_page(self):
 
-        body = re.search(r"@layer base \{.*?\nbody \{([^}]*)\}", self._stylesheet(), re.S)
+        body = re.search(r"@layer base \{.*?\nbody \{([^}]*)\}", self._stylesheet(), re.DOTALL)
         self.assertIsNotNone(body)
         self.assertIn("overflow-wrap: break-word", body.group(1))
 
@@ -320,7 +319,7 @@ class StyleContractTests(SimpleTestCase):
         offences = []
         # Comments first: one sitting above a rule is otherwise read as part of
         # that rule's selector.
-        source = re.sub(r"/\*.*?\*/", " ", self._stylesheet(), flags=re.S)
+        source = re.sub(r"/\*.*?\*/", " ", self._stylesheet(), flags=re.DOTALL)
         for selector, block in re.findall(r"([^{}]+)\{([^{}]*)\}", source):
             declared = re.search(r"(?<![\w-])display\s*:\s*([a-z-]+)", block)
             if not declared or declared.group(1) not in boxes:
@@ -376,7 +375,7 @@ class StyleContractTests(SimpleTestCase):
 
     def test_viewport_breakpoints_only_go_down(self):
 
-        css = re.sub(r"/\*.*?\*/", " ", self._stylesheet(), flags=re.S)
+        css = re.sub(r"/\*.*?\*/", " ", self._stylesheet(), flags=re.DOTALL)
         found = [q for q in re.findall(r"@media[^{]*\{", css) if "width" in q]
         self.assertLessEqual(
             len(found),
@@ -397,7 +396,7 @@ class StyleContractTests(SimpleTestCase):
 
         import collections
 
-        css = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group().count("\n"), self._stylesheet(), flags=re.S)
+        css = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group().count("\n"), self._stylesheet(), flags=re.DOTALL)
         seen: dict[str, list[int]] = collections.defaultdict(list)
         stack: list[str] = []
         start = 0
@@ -528,32 +527,7 @@ class StyleContractTests(SimpleTestCase):
     # Every CSS named colour and system colour, so `color: tomato` is caught as
     # surely as a hex.
     _NAMED_COLOURS = frozenset(
-        """aliceblue antiquewhite aqua aquamarine azure beige bisque black
-        blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse
-        chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan
-        darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta
-        darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen
-        darkslateblue darkslategray darkslategrey darkturquoise darkviolet
-        deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite
-        forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green
-        greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender
-        lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan
-        lightgoldenrodyellow lightgray lightgreen lightgrey lightpink
-        lightsalmon lightseagreen lightskyblue lightslategray lightslategrey
-        lightsteelblue lightyellow lime limegreen linen magenta maroon
-        mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen
-        mediumslateblue mediumspringgreen mediumturquoise mediumvioletred
-        midnightblue mintcream mistyrose moccasin navajowhite navy oldlace
-        olive olivedrab orange orangered orchid palegoldenrod palegreen
-        paleturquoise palevioletred papayawhip peachpuff peru pink plum
-        powderblue purple rebeccapurple red rosybrown royalblue saddlebrown
-        salmon sandybrown seagreen seashell sienna silver skyblue slateblue
-        slategray slategrey snow springgreen steelblue tan teal thistle tomato
-        turquoise violet wheat white whitesmoke yellow yellowgreen
-        canvas canvastext linktext visitedtext activetext buttonface
-        buttontext buttonborder field fieldtext highlight highlighttext
-        selecteditem selecteditemtext mark marktext graytext accentcolor
-        accentcolortext""".split()
+        ["aliceblue", "antiquewhite", "aqua", "aquamarine", "azure", "beige", "bisque", "black", "blanchedalmond", "blue", "blueviolet", "brown", "burlywood", "cadetblue", "chartreuse", "chocolate", "coral", "cornflowerblue", "cornsilk", "crimson", "cyan", "darkblue", "darkcyan", "darkgoldenrod", "darkgray", "darkgreen", "darkgrey", "darkkhaki", "darkmagenta", "darkolivegreen", "darkorange", "darkorchid", "darkred", "darksalmon", "darkseagreen", "darkslateblue", "darkslategray", "darkslategrey", "darkturquoise", "darkviolet", "deeppink", "deepskyblue", "dimgray", "dimgrey", "dodgerblue", "firebrick", "floralwhite", "forestgreen", "fuchsia", "gainsboro", "ghostwhite", "gold", "goldenrod", "gray", "green", "greenyellow", "grey", "honeydew", "hotpink", "indianred", "indigo", "ivory", "khaki", "lavender", "lavenderblush", "lawngreen", "lemonchiffon", "lightblue", "lightcoral", "lightcyan", "lightgoldenrodyellow", "lightgray", "lightgreen", "lightgrey", "lightpink", "lightsalmon", "lightseagreen", "lightskyblue", "lightslategray", "lightslategrey", "lightsteelblue", "lightyellow", "lime", "limegreen", "linen", "magenta", "maroon", "mediumaquamarine", "mediumblue", "mediumorchid", "mediumpurple", "mediumseagreen", "mediumslateblue", "mediumspringgreen", "mediumturquoise", "mediumvioletred", "midnightblue", "mintcream", "mistyrose", "moccasin", "navajowhite", "navy", "oldlace", "olive", "olivedrab", "orange", "orangered", "orchid", "palegoldenrod", "palegreen", "paleturquoise", "palevioletred", "papayawhip", "peachpuff", "peru", "pink", "plum", "powderblue", "purple", "rebeccapurple", "red", "rosybrown", "royalblue", "saddlebrown", "salmon", "sandybrown", "seagreen", "seashell", "sienna", "silver", "skyblue", "slateblue", "slategray", "slategrey", "snow", "springgreen", "steelblue", "tan", "teal", "thistle", "tomato", "turquoise", "violet", "wheat", "white", "whitesmoke", "yellow", "yellowgreen", "canvas", "canvastext", "linktext", "visitedtext", "activetext", "buttonface", "buttontext", "buttonborder", "field", "fieldtext", "highlight", "highlighttext", "selecteditem", "selecteditemtext", "mark", "marktext", "graytext", "accentcolor", "accentcolortext"]
     )
 
     @classmethod
@@ -570,7 +544,7 @@ class StyleContractTests(SimpleTestCase):
         def blank(text: str) -> str:
             return re.sub(r"[^\n]", " ", text)
 
-        css = re.sub(r"/\*.*?\*/", lambda match: blank(match.group()), cls._stylesheet(), flags=re.S)
+        css = re.sub(r"/\*.*?\*/", lambda match: blank(match.group()), cls._stylesheet(), flags=re.DOTALL)
         for opening in reversed([match.start() for match in re.finditer(r"@layer\s+tokens\s*\{", css)]):
             depth, end = 0, len(css)
             for index in range(css.index("{", opening), len(css)):
@@ -728,13 +702,17 @@ class StyleContractTests(SimpleTestCase):
                 text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
-            for found in address.finditer(text):
-                if _is_address(text, found) and not reserved.match(found.group()):
-                    findings.append(f"{name}: {found.group()}")
+            findings.extend(
+                f"{name}: {found.group()}"
+                for found in address.finditer(text)
+                if _is_address(text, found) and not reserved.match(found.group())
+            )
             if host_key.search(text):
                 findings.append(f"{name}: ssh host key")
-            for candidate in sorted(set(private_host.findall(text))):
-                findings.append(f"{name}: {candidate}")
+            findings.extend(
+                f"{name}: {candidate}"
+                for candidate in sorted(set(private_host.findall(text)))
+            )
             lowered = text.lower()
             for index, term in enumerate(terms):
                 if term in lowered:
@@ -935,9 +913,11 @@ class SharedPrimitiveStyleTests(SimpleTestCase):
                 # that make them up are checked where they are defined instead.
                 if "{{" in attribute or "{%" in attribute:
                     continue
-                for name in attribute.split():
-                    if name not in defined:
-                        offenders.append(f"{template.name}: .{name}")
+                offenders.extend(
+                    f"{template.name}: .{name}"
+                    for name in attribute.split()
+                    if name not in defined
+                )
         self.assertEqual(sorted(set(offenders)), [])
 
 
@@ -1201,10 +1181,10 @@ class CommentHistoryTests(SimpleTestCase):
 
     def _comments(self, path: Path, text: str):
         if path.suffix in (".css", ".js"):
-            return re.finditer(r"/\*.*?\*/|//[^\n]*", text, re.S)
+            return re.finditer(r"/\*.*?\*/|//[^\n]*", text, re.DOTALL)
         if path.suffix in (".py", ".sh"):
-            return re.finditer(r"#[^\n]*|\"\"\".*?\"\"\"", text, re.S)
-        return re.finditer(r"\{% comment %\}.*?\{% endcomment %\}|\{#.*?#\}", text, re.S)
+            return re.finditer(r"#[^\n]*|\"\"\".*?\"\"\"", text, re.DOTALL)
+        return re.finditer(r"\{% comment %\}.*?\{% endcomment %\}|\{#.*?#\}", text, re.DOTALL)
 
     SUFFIXES = {".py", ".js", ".css", ".html", ".sh"}
     # Generated or installed trees, and anything hidden (.git, .venv). The suite
@@ -1483,7 +1463,7 @@ class PlainWordsTests(SimpleTestCase):
         from pathlib import Path
 
         with self.assertRaises(FileNotFoundError):
-            self.words.read([Path("templates/no-such-page.html")], root=Path("."))
+            self.words.read([Path("templates/no-such-page.html")], root=Path())
 
 
 class PostButtonTests(SimpleTestCase):
@@ -1604,7 +1584,7 @@ class OnePrimitiveTests(SimpleTestCase):
             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
                 if not isinstance(node, ast.JoinedStr):
                     continue
-                for before, after in zip(node.values, node.values[1:]):
+                for before, after in zip(node.values, node.values[1:], strict=False):
                     if (
                         isinstance(before, ast.Constant)
                         and str(before.value).endswith("$")

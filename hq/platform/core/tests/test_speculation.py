@@ -122,9 +122,8 @@ class SpeculativeRequestTests(TestCase):
 
         token = speculation._refused.set([])
         try:
-            with self.assertRaises(speculation.Speculative):
-                with allowed("lookup"):
-                    self.fail("a speculative request reached outside")
+            with self.assertRaises(speculation.Speculative), allowed("lookup"):
+                self.fail("a speculative request reached outside")
         finally:
             speculation._refused.reset(token)
 

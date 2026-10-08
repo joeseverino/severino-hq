@@ -5,13 +5,13 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource
-from hq.platform.core.models import AgentIdentity, AuditLog
 from hq.domains.projects.models import Project
+from hq.platform.core.models import AgentIdentity, AuditLog
 
 from ..approvals import approve
 from ..capabilities import capability_registry, execute_capability
-from ..labels import human_label
 from ..capability_policy import Rule, Scope, decide, field_name, matrix, set_rule
+from ..labels import human_label
 from ..security import AuthorizationError, Capability, Principal, cli_principal, web_principal
 from .test_approvals import POLICY_KEY, declare_policy, policy_document, update_payload
 
@@ -347,7 +347,7 @@ class PageTests(PolicyTestCase):
         self.assertNotIn(f'name="{field_name(Scope.AGENT, "example-agent", "project.delete")}"', page)
 
     def test_a_read_offers_no_approval(self):
-        columns, groups = matrix()
+        _columns, groups = matrix()
         read = next(row for group in groups for row in group.rows if row.effect == "read")
         options = {value for cell in read.cells for value, _ in cell.options}
 
@@ -464,8 +464,8 @@ class CommandTitleTests(TestCase):
             validate_capability_spec(replace(spec("project.create"), label=" Create project"))
 
     def test_a_connection_offers_the_command_by_its_title_and_marks_destruction(self):
-        from ..connection_contracts import ConnectionAbility, ConnectionInstance
         from ..connection_catalog import _ability_state
+        from ..connection_contracts import ConnectionAbility, ConnectionInstance
         from ..security import Capability, Principal
 
         ability = ConnectionAbility(

@@ -27,8 +27,7 @@ from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import serving
 from hq_sdk.outbound import Failed, ask, run_now
 from hq_sdk.testing import OutboundInRequest, held_jobs, reaches_out
-from tests.fixtures.example_hq_plugin import outbound as example
-from tests.fixtures.example_hq_plugin import registry
+from tests.fixtures.example_hq_plugin import outbound as example, registry
 
 EXAMPLE = "tests.fixtures.example_hq_plugin"
 SCRIPT = {"X-Requested-With": "XMLHttpRequest"}

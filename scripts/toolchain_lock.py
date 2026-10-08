@@ -20,9 +20,11 @@ def missing(config: dict, lock: dict) -> list[str]:
             continue
         version = declared["version"] if isinstance(declared, dict) else declared
         entries = [entry for entry in lock.get("tools", {}).get(name, []) if entry.get("version") == version]
-        for platform in PLATFORMS:
-            if not any(entry.get(f"platforms.{platform}", {}).get("checksum") for entry in entries):
-                found.append(f"{name}@{version} has no checksum for {platform}")
+        found.extend(
+            f"{name}@{version} has no checksum for {platform}"
+            for platform in PLATFORMS
+            if not any(entry.get(f"platforms.{platform}", {}).get("checksum") for entry in entries)
+        )
     return found
 
 

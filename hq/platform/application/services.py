@@ -35,29 +35,28 @@ from functools import cached_property
 from typing import Any
 from urllib.parse import urlparse
 
+from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.names import certificate_covers, in_zone, normalized_hostname
-from .labels import lower_first, plural
-from hq.domains.control_plane.providers import PROVIDERS, registry_label, service_facets, resource_home
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+from hq.domains.control_plane.providers import PROVIDERS, registry_label, resource_home, service_facets
 
 from .containers import Running, container_watchers
+from .derivations import derivation
+from .derived_inputs import ESTATE_READS, estate_variant
 from .entity_links import EntityLink, entity_link
 from .facts import Joined, Readings, Subject, readings as stored_readings
 from .infrastructure import enabled_resources
+from .labels import lower_first, plural
 from .locate import host_of, split_endpoint
 from .naming import name_context
-from .derivations import derivation
-from .derived_inputs import ESTATE_READS, estate_variant
 from .projection import read_once
+from .published_sites import published_projects
 from .reach import UNKNOWN, Reach, reach_of
 from .service_declarations import Claim, declarations, runtime_claim
+from .service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET, Facet
 from .ui import ListRow
 from .whereabouts import Origin, Whereabouts, locate, machine_for, whereabouts
-from .service_facets import CERTIFICATE_FACET, DNS_FACET, Facet, RUNTIME_FACET
-from .published_sites import published_projects
-
 
 HQ_MARK = "hq"
 OBSERVED_MARK = "observed"
@@ -755,10 +754,10 @@ def _faults(
         # internal answer and a public one are both DNS and legitimately differ.
         # Two of the same kind is a contradiction: only one can win, and which
         # one is decided by whichever reconciled last.
-        for kind in sorted({kind for kind in kinds if kinds.count(kind) > 1}):
-            faults.append(
-                f"Two {plural(lower_first(registry_label(kind)))} are set up for this name. Remove one."
-            )
+        faults.extend(
+            f"Two {plural(lower_first(registry_label(kind)))} are set up for this name. Remove one."
+            for kind in sorted({kind for kind in kinds if kinds.count(kind) > 1})
+        )
 
     # These two rules are statements about particular facets, so they name them.
     # A facet no provider supplies is not assembled, so a rule about it simply

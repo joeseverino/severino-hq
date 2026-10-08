@@ -22,15 +22,15 @@ from typing import Any
 
 from django.conf import settings
 from django.db.models import Count, Q, Sum
-from hq.platform.application.routes import reverse
 
 from hq.domains.content.models import ContentItem
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.application.routes import reverse
 
-from .money import money
 from .derivations import passed, today as local_today
+from .money import money
 from .projection import read_once
 from .ui import counted
 

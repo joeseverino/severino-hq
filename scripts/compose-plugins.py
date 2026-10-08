@@ -24,10 +24,10 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 CORDON_LOCK = os.environ.get("CORDON_LOCK", "cordon-admission-lock")
 HOST = "severino-hq"
@@ -79,7 +79,7 @@ def compose_admitted(entries: list[Path], wheels: list[Path], out: Path) -> int:
     command = [CORDON_LOCK, "--host", HOST]
     for entry in entries:
         command += ["--entry", str(entry)]
-    merged = subprocess.run(command, capture_output=True, text=True)  # noqa: S603
+    merged = subprocess.run(command, capture_output=True, text=True)
     if merged.returncode != 0:
         print(merged.stderr.strip() or "cordon refused the composition", file=sys.stderr)
         return 1

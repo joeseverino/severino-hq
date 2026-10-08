@@ -5,7 +5,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-
 # Why a provider refused a read: the credential itself (invalid, expired,
 # locked out, used from a refused location), or one permission it lacks.
 CREDENTIAL_REFUSAL = "credential"

@@ -9,13 +9,13 @@ from decimal import Decimal, InvalidOperation
 
 from django.core.management.base import BaseCommand, CommandError
 
-from hq.platform.application.assets import AssetCommand, save_asset
-from hq.platform.application.security import cli_principal
 from hq.domains.assets.models import (
     ASSET_CATEGORY_CHOICES,
     PAYMENT_METHOD_CHOICES,
     Asset,
 )
+from hq.platform.application.assets import AssetCommand, save_asset
+from hq.platform.application.security import cli_principal
 
 
 def _parse_date(value: str) -> date:

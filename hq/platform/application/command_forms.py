@@ -2,17 +2,16 @@
 
 import re
 import secrets
-from typing import Any
+from typing import Any, ClassVar
 
 from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 
 from .capabilities import CapabilitySpec
-from .integration_specs import command_schema
 from .command_targets import CommandTargetOption
 from .forms import LinesField
-
+from .integration_specs import command_schema
 
 _EXECUTION_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
@@ -131,7 +130,7 @@ class CapabilityCommandForm(forms.Form):
     """Presentation from JSON Schema; execution still validates canonically."""
 
     payload_names: tuple[str, ...] = ()
-    payload_schema: dict[str, Any] = {}
+    payload_schema: ClassVar[dict[str, Any]] = {}
     effect = "read"
 
     @property
@@ -166,8 +165,8 @@ class CapabilityCommandForm(forms.Form):
             and len(self.data.getlist(name)) > 1
         )
         self.submission_errors = (
-            *((f"Unknown field: {name}." for name in unknown)),
-            *((f"Repeated field: {name}." for name in repeated)),
+            *(f"Unknown field: {name}." for name in unknown),
+            *(f"Repeated field: {name}." for name in repeated),
         )
 
     def clean(self):

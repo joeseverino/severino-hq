@@ -6,9 +6,10 @@ vocabulary without importing the pipeline that collects it."""
 
 import re
 import shlex
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
 from hq.domains.control_plane.providers import PROVIDERS
 

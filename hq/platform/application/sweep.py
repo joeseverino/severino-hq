@@ -18,13 +18,13 @@ from typing import Any
 
 from django.db import transaction
 
+from .adoption import adopt_discovered
 from .cadence import settle_read_requests
 from .inventory import (
     confirm_observed,
     record_inventory,
     retire_departed,
 )
-from .adoption import adopt_discovered
 from .zones import adopt_discovered_records
 
 logger = logging.getLogger("severino.sweep")
@@ -77,7 +77,7 @@ def _note_open_problems() -> None:
         if look_due():
             with transaction.atomic():
                 note_open_problems()
-    except Exception:  # noqa: BLE001 - a look that fails must not lose the report
+    except Exception:  # a look that fails must not lose the report
         logger.exception("The open problems could not be recorded after a report.")
 
 
@@ -103,7 +103,6 @@ def _adoptable_kinds() -> tuple[str, ...]:
     """
 
     from .adoption import unmanaged
-
     from .zones import RECORD_KIND
 
     # Everything except records, which `zones` adopts by domain rather than one

@@ -1,12 +1,11 @@
 """The standing questions asked of a topology, and the traces that follow one node's relationships."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Callable
 
 from .timestamps import moment
 from .topology_model import JOINED_KINDS, Topology, TopologyTrace
-
 
 TRACE_DIRECTIONS = ("inbound", "outbound", "both")
 MAX_TRACE_DEPTH = 5
@@ -218,7 +217,7 @@ def apply_trace(
         }
         if not frontier:
             break
-        hops.update({node_id: hop for node_id in frontier})
+        hops.update(dict.fromkeys(frontier, hop))
 
     narrowed = Topology(
         tuple(node for node in topology.nodes if node.id in hops),

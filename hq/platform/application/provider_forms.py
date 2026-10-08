@@ -21,15 +21,14 @@ Two rules keep this honest:
 
 import types
 import typing
-from typing import Any
+from typing import Any, ClassVar
 
 from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 
-from hq.domains.control_plane.providers import PROVIDERS, validate_spec
-
 from hq.domains.control_plane.provider_spec import NameContext
+from hq.domains.control_plane.providers import PROVIDERS, validate_spec
 
 from .forms import LinesField
 from .plugins import _import
@@ -71,7 +70,7 @@ class NameListWidget(forms.Widget):
     # (nothing reports a printer's address) and half repeat a reading from the
     # tailnet. Presented identically, the field invites somebody to correct HQ
     # about something HQ is watching, and gives no way to tell which is which.
-    notes: dict[str, str] = {}
+    notes: ClassVar[dict[str, str]] = {}
 
     def _row(self, name: str, item: str):
         """One value, editable unless HQ is the one that found it.
@@ -200,7 +199,7 @@ class ProviderSpecForm(forms.Form):
     advanced_names: tuple[str, ...] = ()
 
     # The model's own fields, so the form can tell a default from an answer.
-    provider_fields: dict = {}
+    provider_fields: ClassVar[dict] = {}
 
     def _is_routine(self, field) -> bool:
         """Whether this field is still just a default nobody chose.

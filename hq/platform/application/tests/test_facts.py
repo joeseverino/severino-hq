@@ -1,7 +1,5 @@
 """Facts about a subject: joined through declared keys, sourced, and never silent."""
 
-from hq.domains.control_plane.providers import PROVIDERS
-
 from datetime import timedelta
 from unittest import mock
 
@@ -15,6 +13,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS, ObservationRecord, ObservationSpec, registry
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.domains.control_plane.providers import PROVIDERS
 
 from ..facts import OBSERVED, STALE, UNREADABLE, facts_about
 from ..projection import projection_scope

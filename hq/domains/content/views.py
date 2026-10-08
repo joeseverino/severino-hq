@@ -16,6 +16,7 @@ from hq.platform.application.documentation import related_documents
 from hq.platform.application.pages import PageAction, PageMixin, record_trail
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
+
 from .forms import ContentItemForm
 from .models import PAGE_TYPES, WRITEUP_TYPES, ContentItem
 

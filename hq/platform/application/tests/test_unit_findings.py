@@ -1,7 +1,7 @@
 """The unit state reading, and what HQ says when a unit fails, is absent or stalls."""
 
 import re
-from datetime import timedelta, timezone as utc
+from datetime import UTC, timedelta
 from pathlib import Path
 
 from django.test import SimpleTestCase, TestCase
@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.bridge_contract import contract
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.observations.host import HostUnitRecord, RENDER_STATUS_KIND, UNIT_KIND
+from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND, HostUnitRecord
 
 from .. import unit_findings as rules
 from ..dashboard import work_queue
@@ -30,7 +30,7 @@ TIMER = "severino-hq-example.timer"
 def stamp(age: timedelta = timedelta(0)) -> str:
     """An instant ``age`` ago, as the controller writes one."""
 
-    return (timezone.now() - age).astimezone(utc.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return (timezone.now() - age).astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def service(unit: str = SERVICE, **said) -> dict:
@@ -262,7 +262,7 @@ class AbsentTests(TestCase):
         (finding,) = raised("unit-not-installed")
         self.assertEqual(finding["severity"], "serious")
         values = [item["value"] for item in finding["evidence"]]
-        return dict(zip(values[::2], values[1::2]))
+        return dict(zip(values[::2], values[1::2], strict=False))
 
     def test_each_way_a_shipped_unit_is_not_running_is_said(self):
         sweep(

@@ -18,18 +18,19 @@ uptime history) is one function and one entry, and the page renders it without
 learning anything.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urlparse
 
-from hq.platform.application.routes import reverse
-
-from hq.platform.core.models import AuditLog
 from hq.domains.control_plane.names import normalized_hostname
+from hq.platform.application.routes import reverse
+from hq.platform.core.models import AuditLog
+
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import EntityLink, entity_link, kind_label
-from .published_sites import projects_by_hostname
 from .moments import ago
+from .published_sites import projects_by_hostname
 from .ui import MISSING, PAGE_SECTION_ID, counted
 
 
@@ -512,8 +513,8 @@ def routes_for(service, request) -> tuple:
     nothing about this one. The evidence itself is the connection page's.
     """
 
-    from hq.platform.core.network import split_host_port
     from hq.domains.control_plane.names import normalized_hostname
+    from hq.platform.core.network import split_host_port
 
     from .paths import hq_path
 

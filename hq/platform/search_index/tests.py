@@ -7,11 +7,11 @@ from django.db import connection, transaction
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
+from hq.domains.control_plane.models import ManagedResource
+from hq.domains.projects.models import Project
 from hq.platform.application.search import apply_search, global_search, search_ids, search_records
 from hq.platform.application.security import AuthorizationError, cli_principal, mcp_principal
-from hq.domains.control_plane.models import ManagedResource
 from hq.platform.core.models import AuditLog
-from hq.domains.projects.models import Project
 
 from .backends import _fts_query, search_backend, snippet_parts
 from .models import SearchDocument

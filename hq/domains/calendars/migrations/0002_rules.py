@@ -2,8 +2,9 @@
 
 import django.db.models.functions.text
 import django.db.models.lookups
-import hq.platform.core.rules
 from django.db import migrations, models
+
+import hq.platform.core.rules
 
 
 class Migration(migrations.Migration):

@@ -1,12 +1,13 @@
 """Compile HQ's independently emitted contracts into one immutable graph."""
 
 from collections import Counter
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import cache
 from types import MappingProxyType
-from typing import Any, Callable, Iterable, Iterator, Mapping, TypeVar
+from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 from pydantic import ValidationError
@@ -20,9 +21,6 @@ from .integration_validation import (
     validate_resource_spec,
 )
 from .search_contracts import SearchDefinition
-
-
-Spec = TypeVar("Spec")
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +60,7 @@ class IntegrationGraph:
         object.__setattr__(self, "search", MappingProxyType(dict(self.search)))
 
 
-def _index(
+def _index[Spec](
     label: str,
     specs: Iterable[Spec],
     violations: list[IntegrationViolation],
@@ -83,7 +81,7 @@ def _index(
     return indexed
 
 
-def _validated_index(
+def _validated_index[Spec](
     label: str,
     specs: Iterable[Any],
     expected_type: type[Spec],
@@ -323,13 +321,13 @@ def compile_integration_graph(
 def _compiled_integration_graph() -> IntegrationGraph:
     from .core_capabilities import CORE_CAPABILITY_SPECS
     from .domains import host_specs
-    from .records import capability_specs as record_capability_specs
     from .plugins import (
         plugin_capability_specs,
         plugin_connection_specs,
         plugin_resource_specs,
         plugin_search_definitions,
     )
+    from .records import capability_specs as record_capability_specs
     from .resources import CORE_RESOURCE_SPECS
 
     return compile_integration_graph(

@@ -10,7 +10,8 @@ nothing here touches the image.
 import json
 import urllib.error
 import urllib.request
-from typing import Any, Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from typing import Any
 from urllib.parse import parse_qs, quote, unquote
 
 API = "https://api.osv.dev/v1"
@@ -88,7 +89,7 @@ def _get(path: str) -> Any:
 
 def _read(request: urllib.request.Request) -> Any:
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # nosec B310: fixed https host
+        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # fixed https host
             body = response.read(MAX_RESPONSE_BYTES + 1)
     except urllib.error.HTTPError as exc:
         exc.close()
@@ -111,7 +112,7 @@ def matches(purls: Iterable[str]) -> tuple[int, dict[str, list[tuple[str, str]]]
     for start in range(0, len(asked), BATCH):
         chunk = asked[start:start + BATCH]
         answer = _post("/querybatch", {"queries": [query for _purl, query in chunk]})
-        for (purl, _query), result in zip(chunk, answer.get("results") or ()):
+        for (purl, _query), result in zip(chunk, answer.get("results") or (), strict=False):
             ids = [
                 (str(item.get("id", "")), str(item.get("modified", "")))
                 for item in (result or {}).get("vulns") or ()
@@ -130,7 +131,7 @@ def finding(vulnerability: Mapping[str, Any], purl: str, modified: str = "") -> 
     """One vulnerability as it bears on one package: what fixes it, how bad."""
 
     parsed = _parsed(purl)
-    kind, _namespace, name, installed, qualifiers = parsed if parsed else ("", "", purl, "", {})
+    kind, _namespace, name, installed, qualifiers = parsed or ("", "", purl, "", {})
     _namespace = unquote(_namespace)
     names = {name, qualifiers.get("upstream", "").partition("@")[0]} - {""}
     fixed: list[str] = []

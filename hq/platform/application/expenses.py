@@ -13,12 +13,11 @@ from hq.domains.content.models import ContentItem
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
-
 from hq.platform.core.audit import operation_context
-from .sensitivity import SAFE_SENSITIVITIES
+
 from .domains import records_of
 from .security import Principal
-
+from .sensitivity import SAFE_SENSITIVITIES
 
 
 @dataclass(frozen=True)

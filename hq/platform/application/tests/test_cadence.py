@@ -4,15 +4,14 @@ Two properties. Applying queued work must not wait for a polling interval, and
 sweeping must not cost a provider call a minute for records that change monthly.
 """
 
+import tempfile
 from datetime import timedelta
 from pathlib import Path
-import tempfile
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse
-from django.test import RequestFactory
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -20,14 +19,14 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest, P
 
 from .. import cadence
 from ..cadence import (
-    carried_connections,
-    sweep_interval,
     ControllerSweepCommand,
+    carried_connections,
     note_activity,
     recently_used,
     request_controller_sweep,
     ring_doorbell,
     sweep_due,
+    sweep_interval,
 )
 from ..resource_operations import OperationCommand, request_reconcile
 from ..security import cli_principal

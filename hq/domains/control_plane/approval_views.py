@@ -1,11 +1,10 @@
 """Held changes and the decision on each."""
 
 from django.contrib import messages
-
 from django.shortcuts import redirect
-from hq.platform.application.routes import reverse
 from django.views import View
 
+from hq.platform.application.routes import reverse
 from hq.platform.application.security import AuthorizationError, safe_next, web_principal
 
 

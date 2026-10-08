@@ -1,7 +1,7 @@
 """Shared transaction boundary for command-slug upserts."""
 
 from collections.abc import Callable
-from typing import Any, Protocol, TypeVar
+from typing import Any, Protocol
 
 from django.db import models, transaction
 
@@ -12,11 +12,8 @@ class SlugCommand(Protocol):
     slug: str
 
 
-Command = TypeVar("Command", bound=SlugCommand)
-
-
 @transaction.atomic
-def upsert_by_slug(
+def upsert_by_slug[Command: SlugCommand](
     model: type[models.Model],
     command: Command,
     save: Callable[..., dict[str, Any]],

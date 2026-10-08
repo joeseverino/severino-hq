@@ -2,11 +2,11 @@
 
 from .finding_model import (
     THEN_CHECK_AGAIN,
-    cannot_run_commands,
     Finding,
     FindingEstate,
-    fact_values,
     FindingRule,
+    cannot_run_commands,
+    fact_values,
 )
 
 

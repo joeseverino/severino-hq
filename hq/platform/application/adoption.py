@@ -26,7 +26,6 @@ from .conditions import stamped
 from .inventory import record_identity, record_token, service_hostnames
 from .security import Principal
 
-
 OBSERVES_ONLY = "HQ only reads through this connection. Allow it to manage on the connection to change things."
 
 

@@ -2,8 +2,8 @@
 
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS
+from hq.domains.control_plane.models import ProviderConnection
 
 
 def connection(

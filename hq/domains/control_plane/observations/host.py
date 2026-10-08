@@ -7,6 +7,7 @@ from pydantic import BeforeValidator, ConfigDict, Field
 
 from .contract import ObservationRecord, ObservationSpec
 
+
 class HostFirewallRecord(ObservationRecord):
     record: str
     interface: str = ""

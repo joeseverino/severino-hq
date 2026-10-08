@@ -3,10 +3,9 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
 
+from ..upgrades import HIGH as HIGH_RISK, LOW, MAJOR, PATCH, change_between, plans
 from .test_container_standard import runtime
 from .test_containers import HIGH, estate, inventory
-from ..upgrades import HIGH as HIGH_RISK
-from ..upgrades import LOW, MAJOR, PATCH, change_between, plans
 
 TARGET = "sha256:" + "9" * 64
 

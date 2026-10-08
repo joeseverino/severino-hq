@@ -6,7 +6,6 @@ The simpler model mirrors the vault's `published` boolean directly.
 
 from django.db import migrations, models
 
-
 COLLAPSE_MAP = {
     "idea": "draft",
     "researching": "draft",

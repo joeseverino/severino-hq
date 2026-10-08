@@ -12,6 +12,7 @@ from hq.domains.control_plane.names import normalized_hostname
 
 from .infrastructure import NotFoundError
 from .projection import read_once
+from .service_facets import zone_holding
 from .services import (
     HQ_MARK,
     OBSERVED_MARK,
@@ -20,7 +21,6 @@ from .services import (
     prospects,
     service_catalog,
 )
-from .service_facets import zone_holding
 
 
 def listed_services(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:

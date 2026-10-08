@@ -6,8 +6,8 @@ from pydantic import Field
 
 from hq.platform.core.network import split_host_port
 
-from ..names import normalized_hostname
 from ..connection_shapes import LOGIN
+from ..names import normalized_hostname
 from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, applies
 from .contracts import IngressPolicy, ServedCertificate
 

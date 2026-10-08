@@ -2,8 +2,8 @@
 
 import re
 import unittest
+from datetime import UTC, datetime, timedelta
 from html import unescape
-from datetime import datetime, timedelta, timezone as utc
 from pathlib import Path
 
 from django.test import SimpleTestCase, TestCase
@@ -14,8 +14,8 @@ from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.host import (
     RENDER_REASONS,
-    RENDERER_NAME,
     RENDER_STATUS_KIND,
+    RENDERER_NAME,
     STATUS_WORD,
     UNREADABLE_WORD,
 )
@@ -39,7 +39,7 @@ RULES = tuple(rule.name for rule in rules.RULES)
 def stamp(age: timedelta) -> str:
     """An instant ``age`` ago, as the renderer writes one."""
 
-    return (timezone.now() - age).astimezone(utc.utc).isoformat().replace("+00:00", "Z")
+    return (timezone.now() - age).astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 def document(
@@ -576,7 +576,7 @@ class FactTests(SimpleTestCase):
         self.assertEqual(rules.Rendering.of(value), rendering)
 
     def test_the_threshold_is_asked_of_the_estates_now(self):
-        at = datetime(2026, 1, 1, tzinfo=utc.utc)
+        at = datetime(2026, 1, 1, tzinfo=UTC)
         rendering = rules.Rendering("hq", "read", confirmed_at=at.isoformat(), rendered_at=at.isoformat())
 
         self.assertFalse(rendering.unconfirmed(at + rules.CONFIRMED_WITHIN))

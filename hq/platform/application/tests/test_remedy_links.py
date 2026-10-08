@@ -27,11 +27,11 @@ from ..findings import derive_findings
 from ..paths import routed_names
 from ..projection import MAX_PAGE_SIZE, projection_scope
 from ..security import web_principal
+from ..topology import derive_topology
 from .test_approvals import POLICY_KEY, declare_policy
 from .test_finding_fixes import document
 from .test_paths import PUBLIC_RANGE, estate, record, store
 from .test_tailnet_posture import policy as tailnet_policy, tailnet_connection
-from ..topology import derive_topology
 
 TRAP = "This replaces the whole record"
 UNOFFERED = "cannot be used here"
@@ -173,7 +173,7 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
         found = []
         for page in pages:
             body = self.client.get(page).content.decode()
-            for label_url in re.finditer(r'<a [^>]*href="(/commands/[^"]+)"[^>]*>(.*?)</a>', body, re.S):
+            for label_url in re.finditer(r'<a [^>]*href="(/commands/[^"]+)"[^>]*>(.*?)</a>', body, re.DOTALL):
                 url, label = unescape(label_url.group(1)), re.sub(r"<[^>]+>|\s+", " ", label_url.group(2)).strip()
                 found.append((label, url, "GET"))
         return found

@@ -12,17 +12,16 @@ here asks GitHub anything, and a check HQ cannot read says so.
 
 import json
 import shlex
+from collections.abc import Callable
 from datetime import timedelta
-from typing import Any, Callable
+from typing import Any
 
 from hq.platform.application.routes import reverse
 
 from .derivations import passed
-from .github_estate import Repository, repositories
-from .github_estate import attention as repository_attention
+from .github_estate import Repository, attention as repository_attention, repositories
 from .item_help import cannot_help, do_step, run_step, steps
-from .standards import UNMET, Posture, measure
-from .standards import Check as _Check
+from .standards import UNMET, Check as _Check, Posture, measure
 from .timestamps import moment
 from .ui import Insight, counted
 

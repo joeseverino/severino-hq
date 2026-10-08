@@ -7,7 +7,6 @@ from django.utils.text import slugify
 from hq.platform.application.references import Referable
 from hq.platform.core.models import TimestampedModel
 
-
 PROJECT_CATEGORY_CHOICES = [
     ("wordpress_security", "WordPress security"),
     ("cloudflare", "Cloudflare"),

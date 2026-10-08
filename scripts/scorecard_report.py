@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
 # The checks local mode can answer from files alone. The rest (Branch-Protection,
 # Code-Review, CII-Best-Practices, Fuzzing, Maintained and the like) describe
@@ -37,7 +38,7 @@ STRICT = {
 }
 
 def main(path: str) -> int:
-    with open(path) as handle:
+    with Path(path).open() as handle:
         report = json.load(handle)
 
     failed = 0

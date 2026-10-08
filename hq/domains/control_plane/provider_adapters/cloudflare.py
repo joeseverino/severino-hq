@@ -22,7 +22,6 @@ from ..provider_spec import (
     named_page,
 )
 
-
 DNS_RECORD_KIND = "cloudflare.dns_record"
 ZONE_KIND = "cloudflare.zone"
 

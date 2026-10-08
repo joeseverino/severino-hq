@@ -1,7 +1,7 @@
 import json
-from io import StringIO
+from datetime import UTC, date, datetime
 from decimal import Decimal
-from datetime import date, datetime, timezone
+from io import StringIO
 from unittest import mock
 
 from asgiref.sync import async_to_sync
@@ -13,35 +13,34 @@ from django.urls import reverse
 
 from hq.domains.assets.models import Asset
 from hq.domains.content.models import ContentItem
+from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
+from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
+from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
 from hq.platform.core.models import AuditLog
 from hq.platform.mcp.identity import reset_principal, set_principal
 from hq.platform.mcp.server import mcp
 from hq_sdk.capabilities import StrictCommand
-from hq.domains.projects.models import Project
-from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
-from hq.domains.docs_index.models import DocumentationRecord
 
-from ..documentation import sync_documentation
 from ..assets import AssetCommand, NotFoundError as AssetNotFoundError, save_asset
-from ..content import ContentCommand, NotFoundError as ContentNotFoundError, save_content
 from ..capabilities import (
     CapabilitySpec,
     describe_capabilities,
     execute_capability,
 )
+from ..content import ContentCommand, NotFoundError as ContentNotFoundError, save_content
+from ..documentation import sync_documentation
 from ..expenses import ExpenseCommand, NotFoundError as ExpenseNotFoundError, save_expense
 from ..projects import ConflictError, ProjectCommand, refresh_project, save_project
 from ..security import (
     OPERATOR_CAPABILITIES,
-    Capability,
     AuthorizationError,
+    Capability,
     Principal,
     cli_principal,
     mcp_principal,
 )
-
 
 
 def as_mcp_caller(call):
@@ -467,10 +466,12 @@ class CapabilityTests(TestCase):
 
         for raw in ("not json", "[]", '{"tool": 3}', '{"tool": "no_such_tool"}',
                     '{"tool": "audit_registry", "arguments": []}'):
-            with self.subTest(raw=raw):
-                with mock.patch("sys.stdin", StringIO(raw)):
-                    with self.assertRaises(CommandError):
-                        call_command("hq_call", stdout=StringIO())
+            with (
+                self.subTest(raw=raw),
+                mock.patch("sys.stdin", StringIO(raw)),
+                self.assertRaises(CommandError),
+            ):
+                call_command("hq_call", stdout=StringIO())
 
     def test_receipt_json_capability_updates_metadata_without_file_access(self):
         receipt = Receipt.objects.create(
@@ -562,7 +563,7 @@ class ProjectApplicationServiceTests(TestCase):
             slug="hq",
             repository_url="https://github.com/joeseverino/severino-hq",
         )
-        pushed_at = datetime(2026, 7, 31, 20, 0, tzinfo=timezone.utc)
+        pushed_at = datetime(2026, 7, 31, 20, 0, tzinfo=UTC)
 
         result = refresh_project(
             project.slug,
@@ -592,7 +593,7 @@ class ProjectApplicationServiceTests(TestCase):
             repository_url="https://github.com/joeseverino/severino-hq",
         )
         before = project.updated_at
-        pushed_at = datetime(2026, 7, 31, 20, 0, tzinfo=timezone.utc)
+        pushed_at = datetime(2026, 7, 31, 20, 0, tzinfo=UTC)
 
         refresh_project(
             project.slug,
@@ -1073,9 +1074,8 @@ class DocumentationSyncCapabilityTests(SimpleTestCase):
 
         with self.settings(
             SEVERINO_MCP_ENABLE_WRITES=False, SEVERINO_MCP_ENABLE_DOC_SYNC=False
-        ):
-            with self.assertRaises(AuthorizationError):
-                mcp_principal().require(Capability.SYNC_DOCUMENTATION)
+        ), self.assertRaises(AuthorizationError):
+            mcp_principal().require(Capability.SYNC_DOCUMENTATION)
 
 
 class InfrastructureCapabilityTests(SimpleTestCase):
@@ -1191,8 +1191,8 @@ class TableTotalsTests(TestCase):
             )
 
     def _view(self, **attrs):
-        from hq.platform.application.tables import TableListMixin, TableTotal
         from hq.domains.assets.models import Asset
+        from hq.platform.application.tables import TableListMixin, TableTotal
 
         class View(TableListMixin):
             table_totals = (TableTotal("total_cost", "Total cost"),)

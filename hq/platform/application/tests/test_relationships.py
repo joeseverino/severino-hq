@@ -21,9 +21,9 @@ from ..relationships import relationships_for
 from ..security import Capability, Principal
 from ..services import service_or_prospect
 from ..tailnet import TAILNET_KIND
-from .test_hq_self import SITE, declare, own
 from ..topology import relation_graph
-from ..topology_model import RELATIONS, READING_RANKS
+from ..topology_model import READING_RANKS, RELATIONS
+from .test_hq_self import SITE, declare, own
 
 READER = Principal("reader", "test", frozenset({Capability.READ}))
 CONTROLLER = "example-controller"
@@ -427,9 +427,11 @@ class NoUnlinkedNamesTests(TestCase):
         parser.feed(main)
         found = []
         for text, linked in parser.runs:
-            for name in self.NAMES:
-                if re.search(rf"(?<![\w.-]){re.escape(name)}(?![\w.-])", text) and not linked:
-                    found.append((name, text.strip()[:80]))
+            found.extend(
+                (name, text.strip()[:80])
+                for name in self.NAMES
+                if re.search(rf"(?<![\w.-]){re.escape(name)}(?![\w.-])", text) and not linked
+            )
         return found
 
     def test_no_end_is_the_page_itself(self):
@@ -486,7 +488,7 @@ class NoRawKindsTests(TestCase):
         declaration = self.client.get(reverse("control_plane:detail", args=["example-host-0-tailnet"]))
 
         for response in (page, declaration):
-            shown = re.sub(r"<pre>.*?</pre>", "", response.content.decode(), flags=re.S)
+            shown = re.sub(r"<pre>.*?</pre>", "", response.content.decode(), flags=re.DOTALL)
             self.assertNotIn(TAILNET_KIND, shown)
             self.assertNotIn("cloudflare.dns_record", shown)
         self.assertContains(declaration, "Tailnet device")
@@ -522,7 +524,8 @@ class DomainCardTests(TestCase):
                 {"zone": "example.net", "connection_ref": "cf-example",
                  "posture": {"ssl": "full", "min_tls_version": "1.0"}},
             ],
-            records=APEX + [
+            records=[
+                *APEX,
                 record("example.net", "A", "192.0.2.1", zone="example.net", rid="n1",
                        proxied=True),
                 record("www.example.net", "CNAME", "example.net", zone="example.net",

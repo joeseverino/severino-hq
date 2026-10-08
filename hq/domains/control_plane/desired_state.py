@@ -18,8 +18,8 @@ from collections.abc import Callable
 from typing import Any
 
 from .models import ManagedResource
-from .providers import resolve_provider_spec
 from .provider_spec import ProviderResolutionContext
+from .providers import resolve_provider_spec
 
 
 def _canonical(payload: dict[str, Any]) -> bytes:

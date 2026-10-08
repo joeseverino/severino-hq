@@ -15,11 +15,11 @@ from .. import first_seen
 from ..attention import infrastructure
 from ..delivery_progress import STALLED_AFTER
 from ..entity_links import entity_link
-from ..infrastructure import resource_health
-from ..resource_context import record_status
 from ..first_seen import KNOWN_WITHIN, LOOK_EVERY, note_open, recorded
+from ..infrastructure import resource_health
 from ..problems import note_open_problems, problem_counts, problems_about
 from ..projection import projection_scope
+from ..resource_context import record_status
 from ..security import cli_principal
 from ..sweep import record_sweep
 

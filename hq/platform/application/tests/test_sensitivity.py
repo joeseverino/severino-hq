@@ -9,7 +9,6 @@ from hq.domains.docs_index.models import DocumentationRecord
 
 from ..sensitivity import SAFE_SENSITIVITIES
 
-
 ROOT = Path(__file__).resolve().parents[4]
 
 

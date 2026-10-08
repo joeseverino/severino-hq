@@ -1,7 +1,7 @@
 """The claims HQ makes about itself, and the silence each one breaks."""
 
-from datetime import timedelta
 import json
+from datetime import timedelta
 from unittest import mock
 
 from django.test import TestCase, override_settings
@@ -15,7 +15,6 @@ from ..reach import TAILNET
 from ..security import Capability, Principal
 from ..topology import derive_topology
 from ..topology_model import Topology, TopologyEdge, TopologyNode
-
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
 MANAGE = Principal(
@@ -820,17 +819,17 @@ class AutoRepairTests(TestCase):
     def test_scheduling_is_off_unless_the_deployment_turns_it_on(self):
         from django.test import override_settings
 
-        from ..controller import schedule_automatic_operations
         from hq.domains.control_plane.models import OperationRequest
+
+        from ..controller import schedule_automatic_operations
 
         observed(self.rewrite("skipped"), self.now - timedelta(hours=6))
         observed(self.rewrite("swept"), self.now)
 
-        with override_settings(SEVERINO_FINDINGS_AUTO_REMEDY=False):
-            with mock.patch(
-                "hq.platform.application.plugins.plugin_connection_specs", return_value=()
-            ):
-                answer = schedule_automatic_operations("example-controller")
+        with override_settings(SEVERINO_FINDINGS_AUTO_REMEDY=False), mock.patch(
+            "hq.platform.application.plugins.plugin_connection_specs", return_value=()
+        ):
+            answer = schedule_automatic_operations("example-controller")
 
         self.assertEqual(answer["repaired"], [])
         self.assertFalse(
@@ -842,18 +841,18 @@ class AutoRepairTests(TestCase):
     def test_turned_on_it_queues_once_and_only_once(self):
         from django.test import override_settings
 
-        from ..controller import schedule_automatic_operations
         from hq.domains.control_plane.models import OperationRequest
+
+        from ..controller import schedule_automatic_operations
 
         observed(self.rewrite("skipped"), self.now - timedelta(hours=6))
         observed(self.rewrite("swept"), self.now)
 
-        with override_settings(SEVERINO_FINDINGS_AUTO_REMEDY=True):
-            with mock.patch(
-                "hq.platform.application.plugins.plugin_connection_specs", return_value=()
-            ):
-                first = schedule_automatic_operations("example-controller")
-                second = schedule_automatic_operations("example-controller")
+        with override_settings(SEVERINO_FINDINGS_AUTO_REMEDY=True), mock.patch(
+            "hq.platform.application.plugins.plugin_connection_specs", return_value=()
+        ):
+            first = schedule_automatic_operations("example-controller")
+            second = schedule_automatic_operations("example-controller")
 
         self.assertEqual(first["repaired"], ["skipped"])
         # Keyed on the evidence rather than the attempt, so a second pass over
@@ -871,17 +870,17 @@ class AutoRepairTests(TestCase):
 
         from django.test import override_settings
 
-        from ..controller import schedule_automatic_operations
         from hq.domains.control_plane.models import OperationRequest
+
+        from ..controller import schedule_automatic_operations
 
         observed(self.rewrite("skipped"), self.now - timedelta(hours=6))
         observed(self.rewrite("swept"), self.now)
 
-        with override_settings(SEVERINO_FINDINGS_AUTO_REMEDY=True):
-            with mock.patch(
-                "hq.platform.application.plugins.plugin_connection_specs", return_value=()
-            ):
-                schedule_automatic_operations("example-controller")
+        with override_settings(SEVERINO_FINDINGS_AUTO_REMEDY=True), mock.patch(
+            "hq.platform.application.plugins.plugin_connection_specs", return_value=()
+        ):
+            schedule_automatic_operations("example-controller")
 
         operation = OperationRequest.objects.get(
             idempotency_key__startswith="finding:"
@@ -981,7 +980,6 @@ class RegistrationLapsingTests(TestCase):
         from django.utils import timezone
 
         from hq.platform.application.findings import _estate
-
         from hq.platform.application.registration_findings import _registration_lapsing
         from hq.platform.application.topology_model import Topology, TopologyNode
 
@@ -1195,8 +1193,9 @@ class StalenessIsMeasuredOnlyWhereASweepGoesTests(TestCase):
     """
 
     def test_a_kind_no_collector_sweeps_is_not_judged_on_sweep_cadence(self):
-        from ..finding_model import is_observable
         from hq.domains.control_plane.providers import PROVIDERS
+
+        from ..finding_model import is_observable
 
         for kind in ("tls.certificate", "machine", "tls.delivery_target"):
             with self.subTest(kind=kind):
@@ -1262,8 +1261,8 @@ class UnreachableConsumerTests(TestCase):
     """
 
     def _findings(self, *names):
-        from hq.platform.application.findings import _estate
         from hq.platform.application.connection_findings import _unreachable_consumer
+        from hq.platform.application.findings import _estate
         from hq.platform.application.topology_model import Topology, TopologyNode
 
         node = TopologyNode(
@@ -1319,8 +1318,8 @@ class PathRefusedByTheTailnetTests(TestCase):
     """
 
     def _finding(self, *, refused):
-        from hq.platform.application.findings import _estate
         from hq.platform.application.connection_findings import _unreachable_consumer
+        from hq.platform.application.findings import _estate
         from hq.platform.application.topology_model import Topology, TopologyNode
 
         facts = [("unreachable", "health.example")]
@@ -1375,8 +1374,8 @@ class WorkThatKeepsFailingTests(TestCase):
     """A connection that answers every probe and finishes none of its work."""
 
     def _findings(self, *facts):
-        from hq.platform.application.findings import _estate
         from hq.platform.application.controller_findings import _work_that_keeps_failing
+        from hq.platform.application.findings import _estate
         from hq.platform.application.topology_model import Topology, TopologyNode
 
         node = TopologyNode(
@@ -1777,8 +1776,8 @@ class UnrecognisedContainerTests(TestCase):
     def test_the_remedy_adopts_exactly_that_record(self):
         from django.urls import reverse
 
-        from ..inventory import record_token
         from ..adoption import unmanaged
+        from ..inventory import record_token
 
         (finding,) = self.found()
         (remedy,) = finding.remedies

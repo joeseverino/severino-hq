@@ -17,6 +17,7 @@ from hq.platform.application.references import ReferencePickerMixin, reference_o
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
+
 from .forms import AssetForm
 from .models import ASSET_CATEGORY_CHOICES, Asset
 

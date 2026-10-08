@@ -17,19 +17,18 @@ one is an entry rather than an edit to a page.
 """
 
 import re
-from hq.platform.application.routes import reverse
 
 from hq.domains.control_plane.credential_reads import REGISTRAR_READ
-from hq.domains.control_plane.provider_adapters.contracts import PERMISSION_REFUSAL
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.names import in_zone, normalized_hostname
 from hq.domains.control_plane.provider_adapters.cloudflare import caa_parts
+from hq.domains.control_plane.provider_adapters.contracts import PERMISSION_REFUSAL
 from hq.domains.control_plane.provider_adapters.tls import (
     CERTIFICATE_KIND,
     UPLOADED_CERTIFICATE_KIND,
 )
 from hq.domains.control_plane.provider_spec import expiry_phrase
-
-from hq.domains.control_plane.names import in_zone, normalized_hostname
+from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.routes import reverse
 
 from .entity_links import entity_link
 from .expiry import days_until
@@ -41,8 +40,6 @@ from .facts import (
 )
 from .infrastructure import delivery_targets, enabled_resources, resolved_spec
 from .known_hosts import operator, registrable
-
-
 from .timestamps import moment
 from .ui import ListRow, counted, ended
 from .zones import ZONE_KIND, ZoneInsight
@@ -184,7 +181,7 @@ def certificates(zone) -> ZoneInsight | None:
             detail="No CAA record either, so any authority may issue for it.",
         )
 
-    resource, names = covering[0]
+    resource, _names = covering[0]
     expires = expiry_phrase(str((resource.status or {}).get("not_after", "")))
     extra = f" and {len(covering) - 1} more" if len(covering) > 1 else ""
 

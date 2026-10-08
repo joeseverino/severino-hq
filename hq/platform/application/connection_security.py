@@ -13,19 +13,18 @@ from typing import Any
 
 from django.conf import settings
 
+from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.observations.host import FIREWALL_KIND
 from hq.domains.control_plane.provider_adapters.contracts import IngressPolicy
-from hq.domains.control_plane.providers import PROVIDERS
-from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.core.network import split_host_port
 
-from .request_channel import channel_for_request
 from .connection_catalog import ConnectionGroup
 from .reach import TAILNET
+from .request_channel import channel_for_request
 from .ui import counted
-
 
 # Each check is a statement that is true or not. The page answers it Yes, No,
 # Check or Unknown from the state beside it.

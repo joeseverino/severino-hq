@@ -86,9 +86,8 @@ class ServiceFavoriteTests(TestCase):
         self.assertEqual(ordered(AnonymousUser(), SERVICE), ())
 
     def test_membership_is_derived_from_the_ordered_read(self):
-        from hq.platform.core.models import Pin
-
         from hq.platform.application.pins import SERVICE, pinned
+        from hq.platform.core.models import Pin
 
         Pin.objects.create(
             user=self.user,

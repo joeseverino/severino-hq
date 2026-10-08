@@ -1,10 +1,10 @@
 """The controller's own page."""
 
-from hq.platform.application.routes import reverse
 from django.views.generic import TemplateView
 
 from hq.platform.application.controller_page import controller_page
 from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.routes import reverse
 
 
 class ControllerView(PageMixin, TemplateView):

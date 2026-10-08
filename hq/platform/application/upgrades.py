@@ -12,10 +12,11 @@ HQ's own image is never planned here: it is deployed by its own signed
 pipeline, and only by that.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
-from .containers import SERIOUS, BEHIND, VULNERABLE, Container, containers, ranked
+from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
 from .images import affected, version
 
 PATCH = "patch"
@@ -124,7 +125,7 @@ def change_between(running: str, target: str) -> str:
         return UNKNOWN_CHANGE
     width = max(len(old), len(new))
     old, new = old + (0,) * (width - len(old)), new + (0,) * (width - len(new))
-    for index, (was, becomes) in enumerate(zip(old, new)):
+    for index, (was, becomes) in enumerate(zip(old, new, strict=True)):
         if was != becomes:
             return (MAJOR, MINOR)[index] if index < 2 else PATCH
     return UNKNOWN_CHANGE

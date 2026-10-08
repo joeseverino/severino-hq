@@ -9,6 +9,7 @@ class ProjectsConfig(AppConfig):
 
     def ready(self):
         from hq.platform.core.audit import register_audit
+
         from .models import Project
 
         register_audit(Project, "Project")

@@ -16,8 +16,8 @@ from django.views.generic import (
 from hq.platform.application.documentation import (
     sync_documentation,
 )
-from hq.platform.application.security import web_principal
 from hq.platform.application.pages import PageAction, PageMixin, page_context, record_trail
+from hq.platform.application.security import web_principal
 from hq.platform.application.tables import (
     TableColumn,
     TableFilter,
@@ -30,7 +30,6 @@ from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from .forms import DocumentationRecordForm, ManifestImportForm
 from .importer import ManifestImportError
 from .models import DocumentationRecord
-
 
 DOCS_TRAIL = ("Docs", reverse_lazy("docs_index:list"))
 

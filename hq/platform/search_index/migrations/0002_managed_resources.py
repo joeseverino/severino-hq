@@ -1,6 +1,5 @@
 from django.db import migrations
 
-
 SCOPE = "infrastructure.resources"
 FIELDS = ("key", "kind", "spec", "status", "conditions")
 

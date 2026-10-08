@@ -3,22 +3,11 @@
 from typing import get_origin
 
 from django.contrib import messages
-
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
-from hq.platform.application.routes import reverse
 from django.views import View
 
-from hq.platform.application.infrastructure import (
-    ManagedResourceCommand,
-    NotFoundError,
-    PolicyError,
-    resolved_spec,
-    save_managed_resource,
-    suggest_key,
-)
-from hq.platform.application.glance import dashboard_machine_selected, select_dashboard_machine
 from hq.platform.application.adoption import (
     AdoptCommand,
     AdoptServiceCommand,
@@ -31,17 +20,26 @@ from hq.platform.application.certificates import (
     store_certificate,
 )
 from hq.platform.application.entity_links import kind_label
-from hq.platform.application.resource_context import readout_rows
+from hq.platform.application.glance import dashboard_machine_selected, select_dashboard_machine
+from hq.platform.application.infrastructure import (
+    ManagedResourceCommand,
+    NotFoundError,
+    PolicyError,
+    resolved_spec,
+    save_managed_resource,
+    suggest_key,
+)
 from hq.platform.application.naming import name_context
+from hq.platform.application.pages import page_context
 from hq.platform.application.plugins import _import
 from hq.platform.application.provider_forms import (
     CertificateUploadForm,
     ResourceIdentityForm,
     spec_form_class,
 )
+from hq.platform.application.resource_context import readout_rows
+from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
-from hq.platform.application.pages import page_context
-
 from hq.platform.core import secrets
 
 from .models import ManagedResource, OperationRequest
@@ -278,10 +276,9 @@ def _form_facts(resource, form) -> tuple[tuple[str, str, str], ...]:
     """
 
     asked = {str(field.label).strip().casefold() for field in form}
-    return (("Identifier", "", resource.key),) + tuple(
-        row
-        for row in readout_rows(resource)
-        if str(row[0]).strip().casefold() not in asked
+    return (
+        ("Identifier", "", resource.key),
+        *(row for row in readout_rows(resource) if str(row[0]).strip().casefold() not in asked),
     )
 
 

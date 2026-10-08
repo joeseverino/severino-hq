@@ -10,8 +10,8 @@ from hq.domains.content.models import ContentItem
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
-from hq.platform.application.plugins import NavigationItem
 from hq.platform.application.plugin_testing import ComposedPluginTestCase, sibling
+from hq.platform.application.plugins import NavigationItem
 from hq.platform.application.projects import hq_sections, refresh_summary
 
 

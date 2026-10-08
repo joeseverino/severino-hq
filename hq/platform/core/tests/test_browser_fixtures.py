@@ -16,6 +16,8 @@ from django.test import Client, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.projects.models import Project
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import cli_principal
 from hq.platform.application.services import CONTAINER_KIND
@@ -27,8 +29,6 @@ from hq.platform.application.ui import (
     Kpi,
     stacked_bar_chart,
 )
-from hq.domains.control_plane.models import ManagedResource, ProviderInventory
-from hq.domains.projects.models import Project
 
 SERVICE = "app.example.com"
 MACHINE = "app-host"

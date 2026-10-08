@@ -345,7 +345,7 @@ def _rows(
 
 def _hydrate(model: type[models.Model], columns: tuple[str, ...], values: Sequence[Any]) -> models.Model:
     held = {}
-    for column, value in zip(columns, values):
+    for column, value in zip(columns, values, strict=False):
         field = model._meta.pk if column == "pk" else model._meta.get_field(column)
         held[column] = field.to_python(value) if value is not None else None
     return model(**held)
@@ -377,7 +377,7 @@ def _found(
         )
         for kind in kinds
     ]
-    for kind, rows in zip(kinds, _rows(parts)):
+    for kind, rows in zip(kinds, _rows(parts), strict=True):
         target = known[kind]
         for row in rows:
             identity = str(getattr(row, target.declared.key))
@@ -440,7 +440,7 @@ def resolve_many(
     found = _found([reference for reference in parsed if reference], principal=principal)
     known = targets()
     links: list[EntityLink | None] = []
-    for reference, (value, name) in zip(parsed, stored):
+    for reference, (value, name) in zip(parsed, stored, strict=True):
         if reference is None:
             links.append(EntityLink(label=name or str(value), kind_label="Not in HQ") if value else None)
         elif reference.kind in known and not _may_name(known[reference.kind], principal):
@@ -607,7 +607,7 @@ def choices(
             groups.append((plural.capitalize(), options))
             seen.update(value for value, _name in options)
     rows = _rows([(target.model, target.columns, Q()) for target in picked])
-    for target, found in zip(picked, rows):
+    for target, found in zip(picked, rows, strict=True):
         options = sorted(
             (
                 (str(Reference(target.kind, str(getattr(row, target.declared.key)))), target.name_of(row))
@@ -662,7 +662,7 @@ def referenced_by(kind: str, identity: str, *, principal: Principal) -> tuple[Me
         [(field.model, _unique(("pk", *field.shows)), Q(**{field.attname: value})) for field in fields]
     )
     groups: dict[str, list[Mention]] = defaultdict(list)
-    for field, found in zip(fields, rows):
+    for field, found in zip(fields, rows, strict=True):
         for row in found:
             groups[field.heading].append(
                 Mention(
@@ -724,12 +724,12 @@ def dangling(
     gone = [{value for value in values if names_nothing(value)} for values in held]
     parts = [
         (field.model, _unique(("pk", field.attname, field.name_attname, *field.shows)), Q(**{f"{field.attname}__in": values}))
-        for field, values in zip(fields, gone)
+        for field, values in zip(fields, gone, strict=False)
         if values
     ]
-    live = [field for field, values in zip(fields, gone) if values]
+    live = [field for field, values in zip(fields, gone, strict=False) if values]
     found: list[Insight] = []
-    for field, rows in zip(live, _rows(parts)):
+    for field, rows in zip(live, _rows(parts), strict=True):
         for row in rows:
             name = getattr(row, field.name_attname) or getattr(row, field.attname)
             found.append(

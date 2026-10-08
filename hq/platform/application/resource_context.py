@@ -11,9 +11,9 @@ from datetime import datetime
 from typing import Any
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
+from hq.domains.control_plane.providers import PROVIDERS
 
 from .entity_links import entity_link
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
@@ -24,8 +24,8 @@ from .infrastructure import (
     resource_health,
     serialize_resource,
 )
-from .resource_operations import resource_history
 from .resource_capabilities import ResourceCapabilities, resource_capabilities
+from .resource_operations import resource_history
 
 
 def origin_machine(resource, machines=None, at=None, targets=None):

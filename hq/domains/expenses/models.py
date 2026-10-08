@@ -4,11 +4,10 @@ from decimal import Decimal
 
 from django.db import models
 
-from hq.platform.application import business_use
 from hq.domains.assets.models import PAYMENT_METHOD_CHOICES, quantize_money
+from hq.platform.application import business_use
 from hq.platform.application.references import Referable, ReferenceField
 from hq.platform.core.models import TimestampedModel
-
 
 EXPENSE_CATEGORY_CHOICES = [
     ("hosting", "Hosting"),

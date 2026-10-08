@@ -3,13 +3,14 @@
 from dataclasses import dataclass
 from typing import Any
 
+from hq.platform.core.errors import UpstreamUnavailable
+
 from .capabilities import CapabilitySpec
 from .entity_links import kind_label
 from .integrations import integration_graph
 from .projection import MAX_PAGE_SIZE
 from .resources import ResourceError, get_resource, list_resource
 from .security import Principal
-from hq.platform.core.errors import UpstreamUnavailable
 
 
 @dataclass(frozen=True)

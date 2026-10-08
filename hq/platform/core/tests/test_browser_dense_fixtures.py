@@ -21,12 +21,6 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
-from hq.platform.application import readings
-from hq.platform.application.report_testing import report_connections
-from hq.platform.application.security import cli_principal
-from hq.platform.application.services import CONTAINER_KIND
-from hq.platform.core.models import AuditLog
 from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
@@ -34,16 +28,22 @@ from hq.domains.control_plane.models import (
     ProviderInventory,
     WeatherObservation,
 )
+from hq.domains.projects.models import Project
+from hq.platform.application import readings
+from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
+from hq.platform.application.report_testing import report_connections
+from hq.platform.application.security import cli_principal
+from hq.platform.application.services import CONTAINER_KIND
+from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.test_browser_fixtures import (
+    _THROUGH_THE_PROXY,
     CALLER,
     HQ,
     _asked_through_the_proxy,
     _dashboard,
     _healthy,
-    _THROUGH_THE_PROXY,
     render_pages,
 )
-from hq.domains.projects.models import Project
 
 # Hyphenated on purpose: a browser breaks a name at a hyphen, and a name that
 # wraps there mid-word is the failure this estate exists to show.

@@ -23,9 +23,9 @@ import dataclasses
 import enum
 import importlib
 import inspect
-from annotationlib import Format
 import json
 import pkgutil
+from annotationlib import Format
 from pathlib import Path
 from types import ModuleType
 from typing import Any

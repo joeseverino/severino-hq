@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 from django.test import SimpleTestCase
 
-from hq.platform.application.approvals import _warnings
 from hq.domains.control_plane.provider_adapters.portainer import STACK, _stack_warnings
+from hq.platform.application.approvals import _warnings
 
 DANGEROUS = """services:
   agent:

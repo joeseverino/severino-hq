@@ -103,9 +103,15 @@ def imports(path: Path, modules: set[str]) -> set[str]:
                 head = node.module or ""
             names.add(head)
             names.update(f"{head}.{alias.name}" for alias in node.names)
-        elif test and isinstance(node, ast.Constant) and isinstance(node.value, str):
-            if "." in node.value and " " not in node.value and len(node.value) < 200:
-                names.add(node.value)
+        elif (
+            test
+            and isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and "." in node.value
+            and " " not in node.value
+            and len(node.value) < 200
+        ):
+            names.add(node.value)
     reached: set[str] = set()
     for name in names:
         pieces = name.split(".")

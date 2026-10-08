@@ -26,8 +26,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, get_args
 
-from django.core.exceptions import NON_FIELD_ERRORS
-from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError as DjangoValidationError
 from pydantic_core.core_schema import ErrorType
 
 # How many problems the sentence names before pointing at ``details``.
@@ -87,10 +86,7 @@ def pydantic_refusal(subject: str, errors: Iterable[Mapping[str, Any]]) -> Refus
 def django_refusal(subject: str, exc: DjangoValidationError) -> Refusal:
     """A refusal from a Django error, described by field and code, never text."""
 
-    if hasattr(exc, "error_dict"):
-        grouped = exc.error_dict.items()
-    else:
-        grouped = [(NON_FIELD_ERRORS, exc.error_list)]
+    grouped = exc.error_dict.items() if hasattr(exc, "error_dict") else [(NON_FIELD_ERRORS, exc.error_list)]
     details: dict[str, list[str]] = {}
     problems = []
     for field, errors in grouped:

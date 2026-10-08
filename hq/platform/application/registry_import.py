@@ -20,15 +20,14 @@ from django.db import transaction
 from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
 from hq.domains.assets.models import Asset
+from hq.domains.projects.models import Project
 from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.models import AuditLog
-from hq.domains.projects.models import Project
 
-from . import assets as asset_use_cases
-from . import projects as project_use_cases
+from . import assets as asset_use_cases, projects as project_use_cases
 from .assets import AssetCommand, upsert_asset
-from .projects import ProjectCommand, upsert_project
 from .domains import records_of
+from .projects import ProjectCommand, upsert_project
 from .security import Principal, require_all
 from .ui import counted
 

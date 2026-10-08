@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta, timezone as datetime_timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import jwt
@@ -19,7 +19,7 @@ _OTHER_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
 
 def _token(key=_KEY, **overrides) -> str:
-    now = datetime.now(tz=datetime_timezone.utc)
+    now = datetime.now(tz=UTC)
     claims = {
         "iss": ISSUER,
         "aud": RESOURCE,
@@ -39,7 +39,7 @@ class _FakeJWKS:
     def __init__(self, key):
         self._key = key
 
-    def get_signing_key_from_jwt(self, token):  # noqa: ARG002 - signature parity
+    def get_signing_key_from_jwt(self, token):
         return type("Key", (), {"key": self._key.public_key()})()
 
 
@@ -60,9 +60,8 @@ class TokenVerificationTests(SimpleTestCase):
         self.assertEqual(claims["client_id"], "example-automation")
 
     def test_a_token_signed_by_another_key_is_rejected(self):
-        with _serving():
-            with self.assertRaises(security.TokenError):
-                security.verify(_token(key=_OTHER_KEY))
+        with _serving(), self.assertRaises(security.TokenError):
+            security.verify(_token(key=_OTHER_KEY))
 
     def test_a_token_for_another_api_resource_is_rejected(self):
         """The case signature-checking alone would wave through.
@@ -72,40 +71,35 @@ class TokenVerificationTests(SimpleTestCase):
         between that credential and this one.
         """
 
-        with _serving():
-            with self.assertRaises(security.TokenError):
-                security.verify(_token(aud="https://elsewhere.example.test"))
+        with _serving(), self.assertRaises(security.TokenError):
+            security.verify(_token(aud="https://elsewhere.example.test"))
 
     def test_a_token_from_another_issuer_is_rejected(self):
-        with _serving():
-            with self.assertRaises(security.TokenError):
-                security.verify(_token(iss="https://evil.example.test"))
+        with _serving(), self.assertRaises(security.TokenError):
+            security.verify(_token(iss="https://evil.example.test"))
 
     def test_an_expired_token_is_rejected(self):
-        past = datetime.now(tz=datetime_timezone.utc) - timedelta(hours=1)
-        with _serving():
-            with self.assertRaises(security.TokenError):
-                security.verify(_token(exp=past))
+        past = datetime.now(tz=UTC) - timedelta(hours=1)
+        with _serving(), self.assertRaises(security.TokenError):
+            security.verify(_token(exp=past))
 
     def test_a_token_without_an_expiry_is_rejected(self):
         """A token that never expires is a password, and is refused as one."""
 
-        now = datetime.now(tz=datetime_timezone.utc)
+        now = datetime.now(tz=UTC)
         forever = jwt.encode(
             {"iss": ISSUER, "aud": RESOURCE, "sub": "x", "iat": now},
             _KEY,
             algorithm="RS256",
         )
-        with _serving():
-            with self.assertRaises(security.TokenError):
-                security.verify(forever)
+        with _serving(), self.assertRaises(security.TokenError):
+            security.verify(forever)
 
     @override_settings(SEVERINO_API_RESOURCE="")
     def test_an_unconfigured_resource_fails_closed(self):
         self.assertFalse(security.is_configured())
-        with _serving():
-            with self.assertRaises(security.TokenError):
-                security.verify(_token())
+        with _serving(), self.assertRaises(security.TokenError):
+            security.verify(_token())
 
 
 class GrantTests(SimpleTestCase):
@@ -156,6 +150,7 @@ class CompositionCheckTests(SimpleTestCase):
             IntegrationGraphError,
             IntegrationViolation,
         )
+
         from .checks import capability_contract_check
 
         failure = IntegrationGraphError(
@@ -182,6 +177,7 @@ class CompositionCheckTests(SimpleTestCase):
             override_integration_graph,
         )
         from hq.platform.application.resources import EmptyQuery, ResourceSpec
+
         from .checks import capability_contract_check
 
         resource = ResourceSpec(
@@ -208,6 +204,7 @@ class CompositionCheckTests(SimpleTestCase):
             compile_integration_graph,
             override_integration_graph,
         )
+
         from .checks import capability_contract_check
 
         connection = ConnectionSpec(
@@ -283,8 +280,8 @@ class TransportTests(TestCase):
         alone would leave every capability one URL away.
         """
 
-        from hq.platform.core.models import AgentAccess
         from hq.domains.projects.models import Project
+        from hq.platform.core.models import AgentAccess
 
         AgentAccess.objects.update_or_create(pk=1, defaults={"paused": True})
         body = {"payload": {"name": "Paused", "slug": "paused", "status": "active"}}
@@ -325,8 +322,8 @@ class TransportTests(TestCase):
     def test_a_resumed_agent_runs_again(self):
         """The positive control: without it a brake that refused everything would pass."""
 
-        from hq.platform.core.models import AgentAccess
         from hq.domains.projects.models import Project
+        from hq.platform.core.models import AgentAccess
 
         AgentAccess.objects.update_or_create(pk=1, defaults={"paused": False})
         with _serving():
@@ -651,6 +648,7 @@ class TransportTests(TestCase):
 
     def test_connections_expose_abilities_and_safe_cached_state(self):
         from django.utils import timezone
+
         from hq.domains.control_plane.models import ProviderConnection
 
         ProviderConnection.objects.create(
@@ -710,6 +708,7 @@ class TransportTests(TestCase):
 
     def test_topology_exposes_safe_nodes_edges_and_canonical_actions(self):
         from django.utils import timezone
+
         from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 
         ManagedResource.objects.create(

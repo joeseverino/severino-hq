@@ -20,7 +20,6 @@ from ..provider_spec import (
     named_page,
 )
 
-
 NETWORK_KIND = "network"
 AUTHORITY_KIND = "pki.authority"
 MACHINE_KIND = "machine"

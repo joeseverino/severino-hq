@@ -14,10 +14,10 @@ and a page says when they were taken.
 """
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Mapping
-
+from typing import Any
 
 from hq.domains.control_plane.observations.portainer import (
     IMAGE_KIND as PULLED_KIND,
@@ -33,8 +33,8 @@ from hq.domains.control_plane.observations.public_registry import (
 )
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
-from .github_public import github_repository
 from .container_words import UP_TO_DATE, UPDATE_AVAILABLE, StandingWords
+from .github_public import github_repository
 from .images import ImageRef, affected, compare, newer, version
 from .projection import projection_scope, read_once
 from .timestamps import moment
@@ -534,16 +534,16 @@ def _containers() -> list[Container]:
     serves = served_by()
     found = []
     for machine in machines_once():
-        for running in machine.containers:
-            found.append(
-                Container(
-                    running=running,
-                    machine=machine,
-                    standing=_standing(running.image, machine.name, running.name),
-                    serves=tuple(sorted(serves.get((machine.name, running.name), ()))),
-                    runtime=_runtimes().get((machine.name, running.name)),
-                )
+        found.extend(
+            Container(
+                running=running,
+                machine=machine,
+                standing=_standing(running.image, machine.name, running.name),
+                serves=tuple(sorted(serves.get((machine.name, running.name), ()))),
+                runtime=_runtimes().get((machine.name, running.name)),
             )
+            for running in machine.containers
+        )
     order = (VULNERABLE, BEHIND, UNKNOWN, CURRENT)
     return sorted(
         found,

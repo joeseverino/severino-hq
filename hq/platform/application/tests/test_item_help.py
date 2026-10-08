@@ -177,7 +177,7 @@ class ComposedQueueTests(TestCase):
         Expense.objects.create(date=timezone.localdate(), vendor="Vendor", item="Hosting",
                                category="hosting", total_cost=Decimal("12.00"))
         Receipt.objects.create(file="receipts/example.pdf", original_filename="example.pdf")
-        Asset.objects.create(item_name="Unpriced", slug="unpriced", total_cost=Decimal("0"), category="tools")
+        Asset.objects.create(item_name="Unpriced", slug="unpriced", total_cost=Decimal(0), category="tools")
         ContentItem.objects.create(title="Draft", slug="draft", status=ContentItem.Status.DRAFT)
         soon = (timezone.now() + timedelta(days=5)).isoformat()
         store(

@@ -6,15 +6,15 @@ from unittest import mock
 from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, TestCase
 
-from hq.platform.application import projection
-from hq.platform.application.security import Capability, Principal, is_interactive
 from hq.domains.assets.models import Asset
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
+from hq.platform.application import projection
+from hq.platform.application.security import Capability, Principal, is_interactive
 
 from . import services
-from .server import mcp
 from .security import MCPBoundary
+from .server import mcp
 
 TOKEN = "a" * 48
 
@@ -36,8 +36,9 @@ class SecretSettingsTests(SimpleTestCase):
                 self.assertEqual(env_secret("TEST_MCP_TOKEN"), TOKEN)
 
     def test_secret_rejects_file_and_environment_value_together(self):
-        from hq.config.settings import env_secret
         from unittest.mock import patch
+
+        from hq.config.settings import env_secret
 
         with patch.dict(
             "os.environ",
@@ -46,9 +47,8 @@ class SecretSettingsTests(SimpleTestCase):
                 "TEST_MCP_TOKEN_FILE": "/unused",
             },
             clear=False,
-        ):
-            with self.assertRaisesRegex(RuntimeError, "Set only one"):
-                env_secret("TEST_MCP_TOKEN")
+        ), self.assertRaisesRegex(RuntimeError, "Set only one"):
+            env_secret("TEST_MCP_TOKEN")
 
 
 class ServiceTests(TestCase):

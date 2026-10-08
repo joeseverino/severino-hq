@@ -96,11 +96,10 @@ class NameLookupTests(SimpleTestCase):
 
     def test_a_name_that_is_not_one_never_reaches_the_resolver(self):
         for value in ("", "not a hostname", "-nope.test", "a" * 300):
-            with self.subTest(value=value):
-                with self.assertRaises(ValueError):
-                    look_up_name(
-                        NameCommand(name=value), principal=OPERATOR, resolver=_fails
-                    )
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                look_up_name(
+                    NameCommand(name=value), principal=OPERATOR, resolver=_fails
+                )
 
     def test_it_is_refused_without_the_capability(self):
         from ..security import AuthorizationError

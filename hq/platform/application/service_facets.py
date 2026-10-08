@@ -5,8 +5,8 @@ from typing import Any
 
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.names import in_zone
-from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.control_plane.provider_spec import NameContext
+from hq.domains.control_plane.providers import PROVIDERS
 
 from .containers import Running
 from .entity_links import EntityLink, entity_link, kind_label
@@ -104,8 +104,8 @@ class Facet:
         or the connected ones whose credential does not read it.
         """
 
-        from hq.domains.control_plane.observations import OBSERVATIONS
         from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+        from hq.domains.control_plane.observations import OBSERVATIONS
 
         from .connections import connection_rows
 

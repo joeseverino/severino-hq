@@ -1,7 +1,7 @@
 from django.db import models
 
 
-class SearchDocument(models.Model):
+class SearchDocument(models.Model):  # noqa: DJ008 - stored state, never shown by name
     """Portable search projection; FTS5 is an index over this stable contract."""
 
     scope = models.CharField(max_length=40)

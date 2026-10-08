@@ -14,13 +14,13 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from hq.platform.application.pages import PageAction, page_context
 from hq.platform.application.contact_submissions import (
     ContactDeleteCommand,
     ContactReviewCommand,
     execute_contact_delete,
     execute_contact_review,
 )
+from hq.platform.application.pages import PageAction, page_context
 from hq.platform.application.security import safe_next, web_principal
 
 from .d1 import (

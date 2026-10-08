@@ -17,8 +17,8 @@ import atexit
 import json
 import os
 import re
-from functools import cached_property
 from collections.abc import Mapping
+from functools import cached_property
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 

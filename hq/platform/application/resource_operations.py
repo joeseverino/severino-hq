@@ -6,23 +6,21 @@ before the controller runs it.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from django.db import transaction
 
-from hq.domains.control_plane.models import ManagedResource, OperationRequest
-from hq.domains.control_plane.providers import PROVIDERS, controller_action_policy
-from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.desired_state import advance_dependents
+from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
+from hq.domains.control_plane.providers import PROVIDERS, controller_action_policy
 from hq.platform.core.audit import operation_context
 
 from .adoption import OBSERVES_ONLY, observes_only
 from .approvals import consent_gap
 from .cadence import ring_doorbell
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
-from .security import Capability, Principal
-from .ui import counted
 from .infrastructure import (
     ManagedResourceCommand,
     NotFoundError,
@@ -31,6 +29,8 @@ from .infrastructure import (
     is_drifted,
     save_managed_resource,
 )
+from .security import Capability, Principal
+from .ui import counted
 
 
 @dataclass(frozen=True)
@@ -552,7 +552,7 @@ def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, str]:
         return True, "The expiry HQ read is not a date."
     window = renewal_window(resource.spec)
     left = max(0, days_until(expiry))
-    if datetime.now(timezone.utc) >= renewal_opens_at(expiry, window):
+    if datetime.now(UTC) >= renewal_opens_at(expiry, window):
         return True, f"{counted(left, 'day')} remaining."
     from .moments import when_day
 

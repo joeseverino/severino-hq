@@ -77,11 +77,11 @@ class RecordsLedeTests(SimpleTestCase):
 
 class RecordTableTests(SimpleTestCase):
     def record(self, **fields):
-        base = dict(
-            name="app.example.com", record_type="A", value="192.0.2.10", proxied=False, ttl=1,
-            service_url="", manageable=True, managed=True, edit_url="/edit/", remove_url="/remove/",
-            health={"state": "healthy", "label": "Healthy"},
-        )
+        base = {
+            "name": "app.example.com", "record_type": "A", "value": "192.0.2.10", "proxied": False, "ttl": 1,
+            "service_url": "", "manageable": True, "managed": True, "edit_url": "/edit/", "remove_url": "/remove/",
+            "health": {"state": "healthy", "label": "Healthy"},
+        }
         return SimpleNamespace(**{**base, **fields})
 
     def table(self, *rows, **context):

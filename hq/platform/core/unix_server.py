@@ -22,6 +22,7 @@ import struct
 import sys
 import threading
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 import uvicorn
@@ -74,9 +75,9 @@ def private_listener(path: str, *, backlog: int = 64) -> socket.socket:
     socket, left by a previous run; it is replaced. Anything else is refused.
     """
 
-    if not os.path.isabs(path) or os.path.normpath(path) != path:
+    if not Path(path).is_absolute() or os.path.normpath(path) != path:
         raise SocketRefused("The socket path is not an absolute, normal path.")
-    directory = os.path.dirname(path)
+    directory = str(Path(path).parent)
     owner = os.geteuid()
     try:
         held = os.lstat(directory)
@@ -95,13 +96,13 @@ def private_listener(path: str, *, backlog: int = 64) -> socket.socket:
     if existing is not None:
         if not stat.S_ISSOCK(existing.st_mode) or existing.st_uid != owner:
             raise SocketRefused("The socket path holds something that is not this account's socket.")
-        os.unlink(path)
+        Path(path).unlink()
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
         # bind refuses a path that exists, so nothing placed here in between is adopted.
         listener.bind(path)
         # Before listen: nothing can connect until the mode is the one served.
-        os.chmod(path, SOCKET_MODE)
+        Path(path).chmod(SOCKET_MODE)
         listener.listen(backlog)
     except OSError as exc:
         listener.close()
@@ -124,7 +125,7 @@ class PeerCheckedProtocol(H11Protocol):
 def _remove_socket(path: str) -> None:
     with contextlib.suppress(OSError):
         if stat.S_ISSOCK(os.lstat(path).st_mode):
-            os.unlink(path)
+            Path(path).unlink()
 
 
 @contextlib.asynccontextmanager

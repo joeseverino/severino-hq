@@ -16,8 +16,8 @@ from hq.platform.application.infrastructure import (
     ManagedResourceCommand,
     PolicyError,
     controller_contract,
-    save_managed_resource,
     delivery_targets as delivery_targets_for_test,
+    save_managed_resource,
 )
 from hq.platform.application.resource_operations import (
     OperationCommand,
@@ -26,7 +26,7 @@ from hq.platform.application.resource_operations import (
 )
 from hq.platform.application.security import cli_principal, mcp_principal
 
-from . import bridge_client
+from ..desired_state import advance_dependents
 from ..models import (
     ManagedResource,
     OperationRequest,
@@ -34,7 +34,7 @@ from ..models import (
     ProviderInventory,
 )
 from ..providers import PROVIDERS, describe_providers
-from ..desired_state import advance_dependents
+from . import bridge_client
 
 
 def validate_resolved_certificate(payload):
@@ -1313,7 +1313,7 @@ class DnsRecordReadoutTests(TestCase):
             "ttl": 1,
         }
         status = {**spec, "record_id": "abc"}
-        label, desired, observed = _dns_record_readout(spec, status)[0]
+        _label, desired, observed = _dns_record_readout(spec, status)[0]
         self.assertEqual(desired, observed)
 
     def test_a_changed_record_still_reports_drift(self):
@@ -1526,8 +1526,8 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     }
 
     def _resolve(self, *targets, install_on=None):
-        from ..providers import resolve_provider_spec
         from ..provider_spec import ProviderResolutionContext
+        from ..providers import resolve_provider_spec
 
         return resolve_provider_spec(
             "tls.certificate",
@@ -1662,8 +1662,8 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     def test_a_certificate_hq_did_not_issue_cannot_be_recorded(self):
         """There are no observed facts to publish, only the declaration."""
 
-        from ..providers import resolve_provider_spec
         from ..provider_spec import ProviderResolutionContext
+        from ..providers import resolve_provider_spec
 
         with self.assertRaisesRegex(ValueError, "cannot be recorded in 1Password"):
             resolve_provider_spec(

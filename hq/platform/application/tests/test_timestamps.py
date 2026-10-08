@@ -1,7 +1,7 @@
 """The one timestamp parser, edge by edge, and the call sites it corrected."""
 
 import ast
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -9,7 +9,7 @@ from django.test import SimpleTestCase
 
 from ..timestamps import moment
 
-UTC = timezone.utc
+UTC = UTC
 PLUS_TWO = timezone(timedelta(hours=2))
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -109,9 +109,11 @@ class CorrectedCallSiteTests(SimpleTestCase):
     def test_a_non_text_pushed_at_is_a_metadata_error_not_a_crash(self):
         from hq.domains.projects import github
 
-        with mock.patch.object(github, "get", return_value={"pushed_at": 12345}):
-            with self.assertRaises(github.GitHubMetadataError):
-                github.fetch_last_push("https://github.com/example/example")
+        with (
+            mock.patch.object(github, "get", return_value={"pushed_at": 12345}),
+            self.assertRaises(github.GitHubMetadataError),
+        ):
+            github.fetch_last_push("https://github.com/example/example")
         with mock.patch.object(
             github, "get", return_value={"pushed_at": "2026-07-25T10:00:00Z"}
         ):
@@ -170,12 +172,12 @@ class OneParserTests(SimpleTestCase):
                 or "/migrations/" in relative
             ):
                 continue
-            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-                if (
-                    isinstance(node, ast.Attribute)
-                    and node.attr == "fromisoformat"
-                    and isinstance(node.value, ast.Name)
-                    and node.value.id == "datetime"
-                ):
-                    offenders.append(f"{relative}:{node.lineno}")
+            offenders.extend(
+                f"{relative}:{node.lineno}"
+                for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+                if isinstance(node, ast.Attribute)
+                and node.attr == "fromisoformat"
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "datetime"
+            )
         self.assertEqual(offenders, [])

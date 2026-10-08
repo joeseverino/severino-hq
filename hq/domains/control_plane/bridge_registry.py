@@ -17,7 +17,7 @@ from typing import Any
 from pydantic import TypeAdapter
 
 from .connection_shapes import SHAPES
-from .observations import OBSERVATIONS, _SPEC_MODULES
+from .observations import _SPEC_MODULES, OBSERVATIONS
 from .provider_adapters import ADMITTED, CONNECTIONS
 from .provider_adapters.contracts import FAILURES, REFUSALS
 from .provider_spec import ConnectionShape, SharedValue

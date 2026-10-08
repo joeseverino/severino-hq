@@ -7,15 +7,14 @@ from urllib.parse import parse_qs, urlsplit
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from hq.domains.control_plane.models import ManagedResource
+from hq.domains.projects.models import Project
+from hq.platform.api.models import IdempotencyRecord
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.command_targets import capability_target_options
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.ui import MISSING
-from hq.domains.control_plane.models import ManagedResource
 from hq.platform.core.models import AuditLog
-from hq.platform.api.models import IdempotencyRecord
-from hq.domains.projects.models import Project
-
 
 User = get_user_model()
 

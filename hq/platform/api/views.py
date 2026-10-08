@@ -15,18 +15,15 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Concatenate, Literal, NotRequired, TypedDict, cast
 
-from pydantic import ConfigDict, with_config
-
 from django.conf import settings
 from django.core.exceptions import RequestDataTooBig
 from django.http import HttpRequest, HttpResponse
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
+from pydantic import ConfigDict, with_config
 
 from hq.platform.application.agent_access import agents_paused
 from hq.platform.application.agent_registry import observe
-from hq.platform.application.denials import record_denial
-from hq.platform.core.network import client_ip
 from hq.platform.application.capabilities import (
     CapabilityDescription,
     authorize_capability,
@@ -35,9 +32,15 @@ from hq.platform.application.capabilities import (
     execute_capability,
 )
 from hq.platform.application.connections import describe_connections, list_connections
+from hq.platform.application.denials import record_denial
 from hq.platform.application.findings import findings as application_findings
-from hq.platform.application.topology import topology as application_topology
-from hq.platform.application.security import AuthorizationError, Capability, Principal, web_principal
+from hq.platform.application.idempotency import (
+    IdempotencyConflict,
+    InvalidIdempotencyKey,
+    execute_once,
+    request_fingerprint,
+    validate_key,
+)
 from hq.platform.application.resources import (
     InvalidResourceInput,
     ResourceDescription,
@@ -48,14 +51,10 @@ from hq.platform.application.resources import (
     get_resource as get_application_resource,
     list_resource as list_application_resource,
 )
+from hq.platform.application.security import AuthorizationError, Capability, Principal, web_principal
+from hq.platform.application.topology import topology as application_topology
+from hq.platform.core.network import client_ip
 
-from hq.platform.application.idempotency import (
-    IdempotencyConflict,
-    InvalidIdempotencyKey,
-    execute_once,
-    request_fingerprint,
-    validate_key,
-)
 from .security import TokenError, api_principal, granted, is_configured, verify
 
 CURRENT_API_VERSION = 2
@@ -366,12 +365,14 @@ def _endpoint(
         # without this decorator is not merely unprotected by convention: it
         # is served to anyone who asks. `core.tests.test_security` walks these routes
         # and fails if one lacks the mark.
-        setattr(wrapper, "__hq_authenticated__", True)
-        setattr(wrapper, "__hq_methods__", methods)
-        setattr(wrapper, "__hq_title__", title)
-        setattr(wrapper, "__hq_data__", data)
-        setattr(wrapper, "__hq_errors__", tuple(sorted({*ENDPOINT_ERRORS, *errors})))
-        setattr(wrapper, "__hq_operator_session__", operator_session)
+        wrapper.__dict__.update(
+            __hq_authenticated__=True,
+            __hq_methods__=methods,
+            __hq_title__=title,
+            __hq_data__=data,
+            __hq_errors__=tuple(sorted({*ENDPOINT_ERRORS, *errors})),
+            __hq_operator_session__=operator_session,
+        )
         return wrapper
 
     return decorate
@@ -491,7 +492,7 @@ def _projection(
     view.__doc__ = doc
     served = _endpoint(("GET",), title=title, data=Projection)(view)
     # The narrowing inputs, for the OpenAPI document's query parameters.
-    setattr(served, "__hq_query_fields__", query_fields)
+    served.__dict__.update(__hq_query_fields__=query_fields)
     return served
 
 

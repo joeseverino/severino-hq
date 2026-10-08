@@ -16,6 +16,7 @@ from hq.platform.application.moments import (
     when_range,
 )
 from hq.platform.application.ui import (
+    MISSING,
     ActivityCalendar,
     CalendarDay,
     ChartCategory,
@@ -25,11 +26,10 @@ from hq.platform.application.ui import (
     Kpi,
     LinePoint,
     ListRow,
-    MISSING,
     PageNavigation,
     PageSection,
-    PlanNote,
     PlannedDay,
+    PlanNote,
     StackedBarChart,
     Timeline,
     TimelineItem,
@@ -40,6 +40,7 @@ from hq.platform.application.ui import (
 )
 
 __all__ = [
+    "MISSING",
     "ActivityCalendar",
     "Cadence",
     "CadenceMatrix",
@@ -55,7 +56,6 @@ __all__ = [
     "Kpi",
     "LinePoint",
     "ListRow",
-    "MISSING",
     "PageNavigation",
     "PageSection",
     "PlanNote",
@@ -66,9 +66,9 @@ __all__ = [
     "Trend",
     "WeekPlan",
     "ago",
-    "span",
     "counted",
     "line_chart",
+    "span",
     "stacked_bar_chart",
     "when",
     "when_day",

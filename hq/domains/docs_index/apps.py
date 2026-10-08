@@ -9,6 +9,7 @@ class DocsIndexConfig(AppConfig):
 
     def ready(self):
         from hq.platform.core.audit import register_audit
+
         from .models import DocumentationRecord
 
         register_audit(DocumentationRecord, "DocumentationRecord")

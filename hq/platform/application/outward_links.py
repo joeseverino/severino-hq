@@ -8,7 +8,6 @@ from hq.domains.control_plane.models import ProviderConnection
 
 from .derivations import derivation
 
-
 # Declared next to the domains that emit them, so a gateway can import the
 # record without importing this reader. Re-exported here as the one name
 # callers already use.

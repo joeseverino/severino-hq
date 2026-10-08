@@ -31,7 +31,7 @@ def get(path: str, *, accept: str = JSON, missing_ok: bool = False, token: str =
         headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(f"{API}{path}", headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # nosec B310: fixed https host
+        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # fixed https host
             return json.load(response)
     except urllib.error.HTTPError as exc:
         # An HTTPError is the error response itself, socket included. Chained

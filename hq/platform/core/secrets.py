@@ -22,6 +22,7 @@ import hashlib
 
 from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
+
 from .errors import UpstreamUnavailable
 
 

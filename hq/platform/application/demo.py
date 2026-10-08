@@ -27,14 +27,14 @@ reaches them through ``hq_sdk.demo``.
 """
 
 import hashlib
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any, Iterator
+from typing import Any
 
 from .money import quantize_money, to_money
-
 
 _SHOWING: ContextVar[bool] = ContextVar("hq_demo_showing", default=False)
 
@@ -103,7 +103,7 @@ def amount(value: Any, *, key: str) -> Decimal:
         return real
     size = abs(real)
     if size < 1:
-        return quantize_money(Decimal("0"))
+        return quantize_money(Decimal(0))
     digits = min(len(str(int(size))), DEMO_MAX_DIGITS)
     floor = Decimal(10) ** (digits - 1)
     span = floor * 9

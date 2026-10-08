@@ -39,9 +39,11 @@ class MatchTests(SimpleTestCase):
         self.assertEqual(len(post.call_args.args[1]["queries"]), 2)
 
     def test_an_unreachable_osv_says_so(self):
-        with mock.patch("hq.platform.application.osv._read", side_effect=OSVReadError("Could not reach OSV")):
-            with self.assertRaises(OSVReadError):
-                matches(["pkg:npm/a@1"])
+        with (
+            mock.patch("hq.platform.application.osv._read", side_effect=OSVReadError("Could not reach OSV")),
+            self.assertRaises(OSVReadError),
+        ):
+            matches(["pkg:npm/a@1"])
 
 
 class FindingTests(SimpleTestCase):

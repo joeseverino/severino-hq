@@ -4,9 +4,9 @@ from types import MappingProxyType
 
 from django.test import TestCase
 
-from hq_sdk.capabilities import StrictCommand
 from hq.domains.projects.models import Project
 from hq.domains.projects.specs import ProjectQuery
+from hq_sdk.capabilities import StrictCommand
 
 from ..capabilities import CapabilitySpec, describe_capabilities
 from ..command_center import command_center
@@ -18,22 +18,22 @@ from ..integrations import (
     integration_graph,
     override_integration_graph,
 )
+from ..plugins import clear_plugin_composition_cache
 from ..resources import EmptyQuery, ResourceSpec, describe_resources
 from ..search_contracts import SearchDefinition
 from ..security import Capability, Principal
-from ..plugins import clear_plugin_composition_cache
 
 
 class SyntheticCommand(StrictCommand):
     pass
 
 
-def execute_synthetic(command, *, principal, expected_updated_at):  # noqa: ARG001
+def execute_synthetic(command, *, principal, expected_updated_at):
     return {"ok": True}
 
 
 def execute_targeted(
-    command, *, principal, current_slug, expected_updated_at  # noqa: ARG001
+    command, *, principal, current_slug, expected_updated_at
 ):
     return {"ok": True}
 

@@ -21,6 +21,14 @@ from hq.platform.core.models import AuditLog
 
 from .action_links import read_now_link
 from .cadence import forced_reads
+from .connection_catalog import (
+    CONTROLLER_CONNECTIONS,
+    LIFECYCLE_LABELS,
+    ConnectionGroup,
+    ConnectionView,
+    connection_catalog,
+    serialize_connection,
+)
 from .connection_contracts import ConnectionInstance
 from .connection_reach import ConnectionReach, connection_reach
 from .connection_security import (
@@ -30,25 +38,17 @@ from .connection_security import (
     connection_security_posture,
     observed_connection_controls,
 )
-from .connection_catalog import (
-    CONTROLLER_CONNECTIONS,
-    LIFECYCLE_LABELS,
-    ConnectionGroup,
-    ConnectionView,
-    connection_catalog,
-    serialize_connection,
-)
 from .credential_mint import CredentialFix, credential_fixes
 from .credential_sight import ProviderSight, sight_by_connection
 from .derived_reads import NotFoundError, serialize_path, serialize_provider_sight
 from .entity_links import entity_link
 from .freshness import freshness
 from .hq_self import hq_hostnames
+from .path_model import ServicePath
 from .paths import hq_path
 from .problems import problem_counts
-from .path_model import ServicePath
-from .request_path import joined
 from .projection import projection_scope, read_once
+from .request_path import joined
 from .security import Principal
 from .ui import counted
 from .workflow_contracts import ActionLink

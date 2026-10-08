@@ -1,7 +1,7 @@
 """The endpoint browsers report Content Security Policy violations to."""
 
-from datetime import timedelta
 import json
+from datetime import timedelta
 
 from django.contrib.auth.decorators import login_not_required
 from django.http import HttpResponse
@@ -12,7 +12,6 @@ from django.views.decorators.http import require_POST
 from .audit import record_event
 from .models import AuditLog
 from .network import client_ip
-
 
 # The browser's own account of a policy it refused to follow. Bounded on every
 # axis a stranger controls: how much it may send, how much of that is kept, and

@@ -6,7 +6,8 @@ answer: what runs where, whether it is current and safe, how it is run, and
 what it would take to change it. Nothing here derives a fact.
 """
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from .projection import page_size, projection_scope
 

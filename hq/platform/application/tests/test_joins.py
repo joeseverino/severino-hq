@@ -20,10 +20,10 @@ from ..facts import Subject, readings
 from ..inventory import inventory_state
 from ..inventory_testing import store
 from ..projection import projection_scope
+from ..relationships import relationships_for
 from ..security import Capability, Principal, cli_principal
 from ..services import service_catalog
 from ..topology import derive_topology
-from ..relationships import relationships_for
 from ..zone_insights import certificates, registration
 from ..zones import ZONE_KIND, find_zone
 
@@ -389,7 +389,7 @@ class ServiceColumnTests(TestCase):
 
         self.assertContains(response, "Let&#x27;s Encrypt")
         # Only the raw readout, which is the record as read, holds the id.
-        shown = re.sub(r"<pre>.*?</pre>", "", response.content.decode(), flags=re.S)
+        shown = re.sub(r"<pre>.*?</pre>", "", response.content.decode(), flags=re.DOTALL)
         self.assertNotIn("lets_encrypt", shown)
 
     def test_the_list_shows_them(self):

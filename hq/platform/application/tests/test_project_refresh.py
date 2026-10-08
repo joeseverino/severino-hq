@@ -6,9 +6,9 @@ requests, checks and workflows on the project page follow on the controller's
 next pass. Where it does not, the anonymous public read is the fallback.
 """
 
-from datetime import datetime, timezone as dt_timezone
-from pathlib import Path
 import tempfile
+from datetime import UTC, datetime
+from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -16,8 +16,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
-from hq.platform.core.models import AuditLog
 from hq.domains.projects.models import Project
+from hq.platform.core.models import AuditLog
 
 from ..projects import refresh_project
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal
@@ -52,7 +52,7 @@ def read_by_app(repository: str = "example/alpha") -> None:
 class Fetcher:
     """The anonymous public read, counted."""
 
-    def __init__(self, pushed_at=datetime(2026, 7, 31, 20, 0, tzinfo=dt_timezone.utc)):
+    def __init__(self, pushed_at=datetime(2026, 7, 31, 20, 0, tzinfo=UTC)):
         self.asked: list[str] = []
         self.pushed_at = pushed_at
 
@@ -87,7 +87,7 @@ class RefreshAsksTheAppTests(TestCase):
         # The App's own read is the source, so the public one is not asked.
         self.assertEqual(fetcher.asked, [])
         self.project.refresh_from_db()
-        self.assertEqual(self.project.last_push_at, datetime(2026, 9, 27, 12, 0, tzinfo=dt_timezone.utc))
+        self.assertEqual(self.project.last_push_at, datetime(2026, 9, 27, 12, 0, tzinfo=UTC))
         self.assertEqual(result["github"], {"ok": True, "last_push_at": "2026-09-27T12:00:00+00:00"})
 
     def test_a_principal_that_may_not_wake_the_controller_falls_back_to_the_public_read(self):

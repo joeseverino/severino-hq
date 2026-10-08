@@ -8,8 +8,8 @@ from django.urls import reverse
 from hq.domains.control_plane.models import ManagedResource
 
 from ..containers import attention, containers
-from .test_container_standard import KEPT, runtime
 from ..exposure import OPEN, PRIVATE
+from .test_container_standard import KEPT, runtime
 from .test_containers import HIGH, estate, exposed, inventory
 
 SOCKET = {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True}

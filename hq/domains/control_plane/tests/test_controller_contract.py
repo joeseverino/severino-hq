@@ -15,6 +15,9 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
+from hq.domains.control_plane.bridge_actions import ACTIONS
+from hq.domains.control_plane.bridge_contract import contract, limit
+from hq.domains.control_plane.models import DashboardConfiguration, ManagedResource
 from hq.platform.application.glance import panel_specs
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.resource_operations import (
@@ -23,9 +26,6 @@ from hq.platform.application.resource_operations import (
     request_reconcile,
 )
 from hq.platform.application.security import cli_principal
-from hq.domains.control_plane.bridge_contract import contract, limit
-from hq.domains.control_plane.bridge_actions import ACTIONS
-from hq.domains.control_plane.models import DashboardConfiguration, ManagedResource
 
 from . import bridge_client
 from .test_control_plane import certificate_spec, declare_targets

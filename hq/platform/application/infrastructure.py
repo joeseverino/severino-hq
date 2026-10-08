@@ -6,19 +6,19 @@ from typing import Any
 from django.conf import settings
 from django.db import transaction
 
+from hq.domains.control_plane.desired_state import advance_dependents, desired_fingerprint
 from hq.domains.control_plane.models import ManagedResource
-from hq.domains.control_plane.providers import (
-    PROVIDERS,
-    resolve_provider_spec,
-    enabled_controller_actions,
-    validate_spec,
-)
 from hq.domains.control_plane.provider_adapters.caddy import CADDY_ROUTE_KIND
 from hq.domains.control_plane.provider_adapters.declarations import (
     DELIVERY_TARGET_KIND,
     MACHINE_KIND,
 )
-from hq.domains.control_plane.desired_state import advance_dependents, desired_fingerprint
+from hq.domains.control_plane.providers import (
+    PROVIDERS,
+    enabled_controller_actions,
+    resolve_provider_spec,
+    validate_spec,
+)
 from hq.platform.core.audit import operation_context
 
 from .adoption import OBSERVES_ONLY, observes_only
@@ -317,8 +317,8 @@ def resource_health(resource: ManagedResource) -> dict[str, str]:
 
 def controller_contract(resource: ManagedResource) -> dict[str, Any]:
     """Return the minimal desired-only contract consumed by a controller."""
-    from hq.domains.control_plane.providers import resolve_provider_spec
     from hq.domains.control_plane.provider_spec import ProviderResolutionContext
+    from hq.domains.control_plane.providers import resolve_provider_spec
 
     def resource_status(key: str, kinds: tuple[str, ...]) -> dict[str, Any] | None:
         return (

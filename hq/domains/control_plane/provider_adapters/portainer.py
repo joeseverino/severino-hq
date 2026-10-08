@@ -22,7 +22,6 @@ from ..provider_spec import (
     locked,
 )
 
-
 CONTAINER_KIND = "portainer.container"
 CONTAINER_STACK_KIND = "portainer.stack"
 
@@ -278,13 +277,13 @@ def _container_removal_note(spec: dict[str, Any]) -> str:
 # machine in all but name. A scan of lines rather than a parse, because it only
 # tells the person approving where to look; the hold is the control.
 _ROOT_EQUIVALENT = (
-    (re.compile(r"^\s*privileged:\s*true\b", re.M), "runs a container privileged"),
+    (re.compile(r"^\s*privileged:\s*true\b", re.MULTILINE), "runs a container privileged"),
     (re.compile(r"/var/run/docker\.sock|/run/docker\.sock"), "mounts the Docker socket"),
-    (re.compile(r"^\s*network_mode:\s*[\"']?host\b", re.M), "uses the host's network"),
-    (re.compile(r"^\s*pid:\s*[\"']?host\b", re.M), "sees every process on the host"),
-    (re.compile(r"^\s*cap_add:", re.M), "adds kernel capabilities"),
-    (re.compile(r"^\s*devices:", re.M), "passes host devices through"),
-    (re.compile(r"^\s*-\s*[\"']?/(?::|\s|[\"']|$)", re.M), "mounts the host's root filesystem"),
+    (re.compile(r"^\s*network_mode:\s*[\"']?host\b", re.MULTILINE), "uses the host's network"),
+    (re.compile(r"^\s*pid:\s*[\"']?host\b", re.MULTILINE), "sees every process on the host"),
+    (re.compile(r"^\s*cap_add:", re.MULTILINE), "adds kernel capabilities"),
+    (re.compile(r"^\s*devices:", re.MULTILINE), "passes host devices through"),
+    (re.compile(r"^\s*-\s*[\"']?/(?::|\s|[\"']|$)", re.MULTILINE), "mounts the host's root filesystem"),
 )
 
 

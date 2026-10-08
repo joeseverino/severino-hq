@@ -12,6 +12,7 @@ from django.test import SimpleTestCase
 
 from hq.domains.control_plane import observations
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
+from hq.domains.control_plane.connection_shapes import API_TOKEN, LOGIN
 from hq.domains.control_plane.observations.contract import ObservationRecord, ObservationSpec, registry
 from hq.domains.control_plane.provider_adapters import (
     ADMITTED,
@@ -20,7 +21,6 @@ from hq.domains.control_plane.provider_adapters import (
     admitted_connections,
     undeclared_connections,
 )
-from hq.domains.control_plane.connection_shapes import API_TOKEN, LOGIN
 from hq.domains.control_plane.provider_spec import ConnectionKind
 
 EXAMPLE = ConnectionKind("Example", "scoped", API_TOKEN)

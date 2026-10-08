@@ -17,21 +17,20 @@ Which means a layer can report that it does *not* hold, and say so plainly.
 That is the property that makes the rest worth reading.
 """
 
-from ipaddress import ip_address
-
 from dataclasses import dataclass
 from datetime import datetime
+from ipaddress import ip_address
 from typing import Any
 
 from hq.platform.core.network import client_ip, is_trusted_proxy, split_host_port
 
-from .labels import human_bytes
 from . import tailnet
+from .labels import human_bytes
 from .reach import network_of, on_link_networks
-from .ui import MISSING
 from .request_channel import Channel, channel_for_request, displayed_client_ip, forwarded_chain, socket_peer
 from .request_identity import Identity, identity_of
 from .request_layers import Layer, ServingDeviceResolution, admission_layers
+from .ui import MISSING
 
 
 @dataclass(frozen=True)

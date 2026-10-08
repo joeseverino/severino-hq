@@ -7,8 +7,6 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
 from django.test import TestCase
-
-from hq.platform.application.security import cli_principal
 from django.urls import reverse
 from django.utils import timezone
 
@@ -18,20 +16,21 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
     WeatherObservation,
 )
+from hq.platform.application.derivations import uncached
+from hq.platform.application.security import cli_principal
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
-from hq.platform.application.derivations import uncached
 from ..attention import infrastructure, tailnet
 from ..command_center import command_center
 from ..estate import Estate, attention as estate_attention, cards, estate_reading
 from ..glance import dashboard_panels
 from ..inventory_testing import store
 from ..machines import machine, machine_catalog
-from ..tailnet_presence import tailnet_presence
 from ..projection import projection_scope
 from ..public_registry import wanted_addresses
 from ..security import Capability, Principal
+from ..tailnet_presence import tailnet_presence
 
 READ = Principal("test", "read", frozenset({Capability.READ}))
 # 203.0.113.0/24 stands in for a public range here.

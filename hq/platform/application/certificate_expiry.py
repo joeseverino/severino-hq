@@ -18,9 +18,9 @@ from hq.domains.control_plane.providers import PROVIDERS
 
 from .expiry import days_until
 from .facts import Joined, inventory_records
-from .timestamps import moment
 from .finding_model import THEN_CHECK_AGAIN, FindingRule, built_findings
 from .moments import span
+from .timestamps import moment
 
 CERTIFICATE_EXPIRES = "certificate-expires"
 # A provider that renews on its own does so with thirty days left; a
@@ -46,7 +46,7 @@ def add(
             node = nodes.get(node_id)
             # A proxy that also lists its certificates has already said this one.
             if node is not None and not _stated(node, name, expires):
-                nodes[node_id] = replace(node, facts=node.facts + (fact,))
+                nodes[node_id] = replace(node, facts=(*node.facts, fact))
 
 
 Found = Iterator[tuple[tuple[str, str], tuple[str, ...]]]
@@ -137,18 +137,18 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
             # A served certificate is known only as what a proxy answers with.
             label = spec.label if spec is not None else "Certificate"
             found.append(
-                dict(
-                    rule="certificate-expiring",
-                    subject=node.id,
-                    title=(
+                {
+                    "rule": "certificate-expiring",
+                    "subject": node.id,
+                    "title": (
                         f"{label} {title} has expired"
                         if days < 0
                         else f"{label} {title} expires in {span(days)}"
                     ),
                     # One that serves no name breaks nothing when it lapses: it
                     # is left over, and the advice is to remove it, not renew it.
-                    severity="serious" if names and days <= SERIOUS_DAYS else "attention",
-                    explanation=(
+                    "severity": "serious" if names and days <= SERIOUS_DAYS else "attention",
+                    "explanation": (
                         "Visitors get a certificate error on every name it serves "
                         "once it expires. Renew it where it is held, or find why "
                         "the automatic renewal failed."
@@ -156,13 +156,13 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
                         else "It serves no name, so nothing breaks when it expires. "
                         "Delete it where it is held."
                     ),
-                    evidence=(
+                    "evidence": (
                         ("Certificate", title),
                         ("Held in", node.label),
                         ("Expires", expiry_phrase(stamp)),
                         *((("Serves", names.replace(",", ", ")),) if names else ()),
                     ),
-                )
+                }
             )
     return tuple(sorted(found, key=lambda item: item["title"]))
 

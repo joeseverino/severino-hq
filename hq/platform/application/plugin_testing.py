@@ -21,13 +21,14 @@ Siblings are synthetic: no import, no database, no second repository checked
 out. They exist to make "something else is installed" true.
 """
 
+import os
+import re
+from collections.abc import Iterable
 from contextlib import ExitStack
 from datetime import date, timedelta
 from functools import partial
-import os
 from pathlib import Path
-import re
-from typing import Any, Iterable
+from typing import Any
 from unittest import mock
 
 from .plugins import (
@@ -182,7 +183,7 @@ class ComposedPluginTestCase:
 
     siblings: tuple = ()
 
-    def setUp(self):  # noqa: N802 - unittest's own name
+    def setUp(self):
         super().setUp()
         self._composition = ExitStack()
         self.addCleanup(self._composition.close)

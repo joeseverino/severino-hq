@@ -17,8 +17,8 @@ from typing import Any
 
 from hq.domains.control_plane.observations.host import (
     RENDER_READ,
-    RENDER_UNREADABLE,
     RENDER_STATUS_KIND,
+    RENDER_UNREADABLE,
 )
 
 from .cadence import slowest_sweep_interval

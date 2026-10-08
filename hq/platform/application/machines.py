@@ -15,20 +15,18 @@ will ever sweep and which are still part of the place.
 from dataclasses import dataclass, field
 from typing import Any
 
-
 from hq.domains.control_plane.models import ProviderConnection
-
-from .hq_self import hq_hostnames, hq_machine, scoped_served_at
-from .locate import Machines, index_of, observed_answers, points_at_host
-from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 from hq.domains.control_plane.provider_spec import origin_is_authoritative
+from hq.domains.control_plane.providers import PROVIDERS
 
 from .containers import Running, container_watchers
+from .hq_self import hq_hostnames, hq_machine, scoped_served_at
+from .locate import Machines, index_of, observed_answers, points_at_host
+from .machine_aliases import same_machine
 from .services import CONTAINER_KIND
 from .tailnet import TAILNET_KIND
-from .machine_aliases import same_machine
 from .tailnet_presence import Presence, tailnet_presence
 
 

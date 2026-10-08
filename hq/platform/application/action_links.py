@@ -18,8 +18,8 @@ from hq.platform.application.routes import reverse
 
 from .contracts import route_url
 from .security import AuthorizationError, Principal
-from .workflow_contracts import ActionLink
 from .ui import counted
+from .workflow_contracts import ActionLink
 
 
 class ConnectionLinkSpec(Protocol):

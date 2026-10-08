@@ -8,12 +8,6 @@ from django.core.wsgi import get_wsgi_application
 from django.db import close_old_connections, transaction
 from django.test import TestCase, override_settings
 from hypothesis import HealthCheck, given, settings
-
-from hq.platform.application.capabilities import CapabilitySpec
-from hq.platform.application.integrations import (
-    compile_integration_graph,
-    override_integration_graph,
-)
 from schemathesis.checks import not_a_server_error
 from schemathesis.generation import GenerationMode
 from schemathesis.specs.openapi.checks import (
@@ -21,9 +15,13 @@ from schemathesis.specs.openapi.checks import (
     response_schema_conformance,
     status_code_conformance,
 )
-
 from werkzeug.test import Client
 
+from hq.platform.application.capabilities import CapabilitySpec
+from hq.platform.application.integrations import (
+    compile_integration_graph,
+    override_integration_graph,
+)
 from hq_sdk.capabilities import StrictCommand
 
 
@@ -184,7 +182,7 @@ class APIPropertyTests(TestCase):
                                 response_schema_conformance,
                             ],
                         )
-                        if mode == GenerationMode.POSITIVE:
+                        if mode == GenerationMode.POSITIVE:  # noqa: B023 - exercise runs before the loop advances
                             self.assertEqual(first.status_code, 200)
                             second = case.call(
                                 headers=headers,

@@ -9,6 +9,7 @@ class AssetsConfig(AppConfig):
 
     def ready(self):
         from hq.platform.core.audit import register_audit
+
         from .models import Asset
 
         register_audit(Asset, "Asset")

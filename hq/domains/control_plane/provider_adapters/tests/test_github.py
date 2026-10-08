@@ -38,7 +38,7 @@ class PipelineReportTests(SimpleTestCase):
         import re
 
         deploy = self.read(".github", "workflows", "deploy.yml")
-        job = re.search(r"\n  deploy:\n(.*?)(?=\n  [a-z]+:\n|\Z)", deploy, re.S).group(1)
+        job = re.search(r"\n  deploy:\n(.*?)(?=\n  [a-z]+:\n|\Z)", deploy, re.DOTALL).group(1)
 
         self.assertIn("self-hosted", job)
         self.assertNotIn("HQ_APP_KEY", job)
@@ -50,7 +50,7 @@ class PipelineReportTests(SimpleTestCase):
         workflows = Path(__file__).resolve().parents[5] / ".github" / "workflows"
         hosting = sorted(
             path.name for path in workflows.glob("*.yml")
-            if re.search(r"^\s*runs-on:.*self-hosted", path.read_text(), re.M)
+            if re.search(r"^\s*runs-on:.*self-hosted", path.read_text(), re.MULTILINE)
         )
         deploy = self.read(".github", "workflows", "deploy.yml")
         triggers = deploy.split("\non:\n", 1)[1].split("\n\n", 1)[0]

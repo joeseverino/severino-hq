@@ -17,8 +17,7 @@ from hq.platform.application.workflows import WorkflowPlan
 from hq.platform.core.models import AuditLog
 from hq_sdk.audit import audit_operation, record_operation
 from hq_sdk.capabilities import StrictCommand
-from hq_sdk.plugin import NavigationItem as SdkNavigationItem
-from hq_sdk.plugin import PluginManifest as SdkPluginManifest
+from hq_sdk.plugin import NavigationItem as SdkNavigationItem, PluginManifest as SdkPluginManifest
 from hq_sdk.validation import unsupported_hq_imports
 from hq_sdk.web import CapabilityRequiredMixin
 
@@ -124,11 +123,11 @@ class SdkContractTests(SimpleTestCase):
         self.assertIs(SdkCapabilitySpec, CapabilitySpec)
 
     def test_connection_spec_is_available_from_the_sdk(self):
+        from hq.platform.application.connections import describe_connections
         from hq_sdk.connections import (
             ConnectionSpec as SdkConnectionSpec,
             describe_connections as sdk_describe_connections,
         )
-        from hq.platform.application.connections import describe_connections
 
         self.assertIs(SdkConnectionSpec, ConnectionSpec)
         self.assertIs(sdk_describe_connections, describe_connections)
@@ -168,9 +167,8 @@ class WebSdkTests(SimpleTestCase):
         request = self.factory.get("/example/")
         request.user = self.user
         principal = Principal("operator", "web", frozenset())
-        with patch("hq_sdk.web.web_principal", return_value=principal):
-            with self.assertRaises(PermissionDenied):
-                _AllowedView.as_view()(request)
+        with patch("hq_sdk.web.web_principal", return_value=principal), self.assertRaises(PermissionDenied):
+            _AllowedView.as_view()(request)
 
     def test_capability_mixin_requires_an_explicit_capability(self):
         request = self.factory.get("/example/")
@@ -204,9 +202,11 @@ class AuditSdkTests(TestCase):
         )
 
     def test_required_audit_event_fails_closed(self):
-        with patch.object(AuditLog.objects, "create", side_effect=RuntimeError("db")):
-            with self.assertRaises(RuntimeError):
-                record_operation("example.import", "Imported.", required=True)
+        with (
+            patch.object(AuditLog.objects, "create", side_effect=RuntimeError("db")),
+            self.assertRaises(RuntimeError),
+        ):
+            record_operation("example.import", "Imported.", required=True)
 
     def test_best_effort_audit_event_preserves_signal_safety(self):
         with patch.object(AuditLog.objects, "create", side_effect=RuntimeError("db")):

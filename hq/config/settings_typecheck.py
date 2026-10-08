@@ -13,4 +13,4 @@ os.environ.setdefault(
 )
 os.environ["SEVERINO_HQ_PLUGINS"] = ""
 
-from hq.config.settings import *  # noqa: E402,F403
+from hq.config.settings import *  # noqa: F403

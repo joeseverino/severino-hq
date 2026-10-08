@@ -1,15 +1,14 @@
 """Tailnet devices and the tailnet policy: settings HQ keeps, not things it made."""
 
 import json
-
 from collections.abc import Mapping
 from typing import Any
 
 from pydantic import Field
 
+from ..connection_shapes import OAUTH_CLIENT
 from ..consoles import tailscale_machine
 from ..observations.contract import ReadingPart
-from ..connection_shapes import OAUTH_CLIENT
 from ..provider_spec import (
     ConnectionKind,
     ControllerVerification,
@@ -18,7 +17,6 @@ from ..provider_spec import (
     applies,
     expiry_phrase,
 )
-
 
 TAILNET_KIND = "tailscale.device"
 TAILNET_POLICY_KIND = "tailscale.policy"

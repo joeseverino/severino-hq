@@ -5,12 +5,15 @@ from typing import Any
 from urllib.parse import urlencode
 
 from django.http import Http404
-from hq.platform.application.routes import reverse
 from django.views.generic import TemplateView
 
-from hq.platform.application.entity_links import NODE_KINDS, node_link
-from hq.platform.application.analytics import HOST_TRAFFIC_DAYS
 from hq.platform.application.action_links import topology_url
+from hq.platform.application.analytics import HOST_TRAFFIC_DAYS
+from hq.platform.application.entity_links import NODE_KINDS, node_link
+from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.routes import reverse
+from hq.platform.application.security import web_principal
+from hq.platform.application.timestamps import moment
 from hq.platform.application.topology import derive_topology
 from hq.platform.application.topology_lenses import (
     apply_lens,
@@ -19,12 +22,8 @@ from hq.platform.application.topology_lenses import (
     lens_for,
     topology_lenses,
 )
-from hq.platform.application.topology_model import RELATIONS, relation_rank, observable
-from hq.platform.application.security import web_principal
-from hq.platform.application.pages import PageAction, PageMixin
-from hq.platform.application.timestamps import moment
+from hq.platform.application.topology_model import RELATIONS, observable, relation_rank
 from hq.platform.application.ui import counted
-
 
 # What a lane of the map is called, and what one card in it is counted as. A
 # node kind with no entry here takes its noun from the node kind registry.

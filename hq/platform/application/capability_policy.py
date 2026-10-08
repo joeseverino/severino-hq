@@ -24,8 +24,8 @@ from hq.platform.core.models import AgentIdentity, AuditLog
 from .approvals import (
     AGENT_SURFACES,
     DESTRUCTIVE_EFFECT,
-    deletes,
     READ_EFFECT,
+    deletes,
     held_by_default,
     may_be_held_by_default,
 )

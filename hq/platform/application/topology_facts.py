@@ -1,7 +1,6 @@
 """What the connections themselves report, attached to the nodes they read: the perimeter, the tailnet, and the policy each observation is judged against."""
 
 import re
-
 from dataclasses import replace
 from typing import Any
 
@@ -118,7 +117,7 @@ def _policy_verdicts(
     to change an access policy that was never the problem.
     """
 
-    from .tailnet import devices, device_at, may_reach, observer
+    from .tailnet import device_at, devices, may_reach, observer
 
     known = devices()
     watcher = observer(known)
@@ -137,7 +136,8 @@ def _policy_verdicts(
         verdict = may_reach(watcher.name, target.name, port, known)
         if verdict.allowed or not verdict.known:
             continue
-        found[node_id] = found.get(node_id, ()) + (
+        found[node_id] = (
+            *found.get(node_id, ()),
             ("path-denied", f"{watcher.name} to {target.name} on {port}"),
         )
     return found
@@ -222,9 +222,8 @@ def add_observed_facts(
         if not registration or registration.get("unread"):
             continue
         # Added to, never over: the unreachable consumers above are kept.
-        found[f"resource:{resource.key}"] = found.get(
-            f"resource:{resource.key}", ()
-        ) + (
+        found[f"resource:{resource.key}"] = (
+            *found.get(f"resource:{resource.key}", ()),
             ("domain", name),
             ("expires_at", str(registration.get("expires_at", ""))),
             ("auto_renew", "yes" if registration.get("auto_renew") else "no"),
@@ -271,9 +270,9 @@ def add_connection_facts(nodes: dict[str, TopologyNode]) -> None:
 
     from .connections import unfinished_work
     from .credential_findings import credential_facts
-    from .facts import connection_facts
     from .credential_mint import credential_fixes
     from .estate import refused_connections
+    from .facts import connection_facts
     from .tailnet import TAILNET_KIND, posture_facts
 
     perimeter = _perimeter_facts()

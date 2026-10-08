@@ -17,19 +17,18 @@ The section and cell primitives are shared with the service page rather than
 copied, so a band gained on one renders identically on the other.
 """
 
-from typing import Callable
-
-from hq.platform.application.routes import reverse
-
-from hq.platform.core.models import AuditLog
+from collections.abc import Callable
 
 from hq.domains.control_plane.names import normalized_hostname
+from hq.platform.application.routes import reverse
+from hq.platform.core.models import AuditLog
+
 from . import docker_sections
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import entity_link, kind_label
+from .moments import ago
 from .projection import projection_scope
 from .service_context import Cell, ServiceSection
-from .moments import ago
 from .ui import MISSING
 
 

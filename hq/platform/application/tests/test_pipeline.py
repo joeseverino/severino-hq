@@ -1,12 +1,12 @@
 """The release pipeline's structure: what runs where, and what may publish."""
 
-from contextlib import redirect_stderr, redirect_stdout
 import importlib.util
 import io
 import json
-from pathlib import Path
 import re
 import tempfile
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 from unittest.mock import patch
 
 from django.test import SimpleTestCase

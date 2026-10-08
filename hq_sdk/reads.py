@@ -49,7 +49,7 @@ HQ starts on a new release.
 """
 
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any
 
 from hq.platform.application import derivations as _derivations
 from hq.platform.application.derivations import (
@@ -62,12 +62,10 @@ from hq.platform.application.derivations import (
 )
 from hq.platform.application.projection import day_span, read_once
 
-_T = TypeVar("_T")
 
-
-def derivation(
+def derivation[T](
     name: str, *, reads: tuple[str, ...], vary: Callable[..., Any] | None = None
-) -> Callable[[Callable[..., _T]], Callable[..., _T]]:
+) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """Declare an extension's function as a derived fact of the tables it reads.
 
     The host's own, declared as one whose reads of the clock it cannot see.

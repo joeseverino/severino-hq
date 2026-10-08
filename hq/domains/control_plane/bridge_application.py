@@ -156,7 +156,7 @@ def endpoint(action: Action, operation: Operation) -> Callable[[Request], Awaita
             # What an action raises for input it will not take; pydantic's
             # validation error is one.
             return problem(HTTPStatus.BAD_REQUEST, str(exc))
-        except Exception as exc:  # noqa: BLE001 - the caller is told, the log keeps the trace
+        except Exception as exc:  # the caller is told, the log keeps the trace
             logger.exception("bridge.action_failed action=%s", action.name)
             return problem(HTTPStatus.INTERNAL_SERVER_ERROR, f"{type(exc).__name__}: {exc}")
         if len(answer) > max_body_bytes():

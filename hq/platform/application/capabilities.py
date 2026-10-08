@@ -6,8 +6,7 @@ from dataclasses import replace
 from typing import Any, TypedDict
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from pydantic import TypeAdapter
-from pydantic import ValidationError as PydanticValidationError
+from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
 from hq.platform.core.audit import audit_connection
 

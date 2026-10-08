@@ -9,9 +9,9 @@ from pathlib import Path
 from django.conf import settings
 from django.test import SimpleTestCase
 
+from ..connection_kinds import CONNECTION_CREDENTIALS
 from ..credential_reads import UNREGISTERED_READS, observer_permissions
 from ..observations import OBSERVATIONS
-from ..connection_kinds import CONNECTION_CREDENTIALS
 
 SCRIPTS = Path(settings.BASE_DIR) / "scripts"
 

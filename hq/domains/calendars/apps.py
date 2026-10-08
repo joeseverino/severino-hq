@@ -9,6 +9,7 @@ class CalendarsConfig(AppConfig):
 
     def ready(self):
         from hq.platform.core.audit import register_audit
+
         from .models import Entry
 
         register_audit(Entry, "Calendar entry")

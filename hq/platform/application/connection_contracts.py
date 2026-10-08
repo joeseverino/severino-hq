@@ -6,9 +6,10 @@ registry: sharing the reading module would close an import cycle. These are
 plain records, so a declaration costs the declaring module nothing.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .security import Capability

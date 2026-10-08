@@ -7,8 +7,8 @@ from hq.domains.control_plane.names import names_a_host, normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.projects.models import Project
 
-from .projection import read_once
 from .entity_links import entity_link
+from .projection import read_once
 
 
 def published_projects() -> dict[str, dict[str, str]]:

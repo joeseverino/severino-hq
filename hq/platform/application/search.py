@@ -4,8 +4,8 @@ from django.db import connection
 from django.db.models import CharField, F, IntegerField, Q, QuerySet, Value
 from django.db.models.functions import Cast
 
-from hq.platform.search_index.backends import SnippetParts, search_backend
 from hq.platform.application.search_contracts import SearchDefinition
+from hq.platform.search_index.backends import SnippetParts, search_backend
 from hq.platform.search_index.registry import BY_SCOPE
 
 from .projection import page_size
@@ -17,9 +17,7 @@ MAX_SEARCH_RESULTS = 5000
 # Every scope is readable with the baseline READ capability except the audit
 # trail: it is a security log, and free-text search over it is strictly more
 # revealing than the bounded recent_activity projection MCP already gets.
-SCOPE_CAPABILITIES = {
-    scope: Capability.READ for scope in BY_SCOPE
-} | resource_search_capabilities()
+SCOPE_CAPABILITIES = dict.fromkeys(BY_SCOPE, Capability.READ) | resource_search_capabilities()
 
 
 class UnknownSearchScope(ValueError):

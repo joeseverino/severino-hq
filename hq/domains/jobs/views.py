@@ -14,7 +14,6 @@ from hq.platform.application.tables import TableColumn, TableFilter, TableListMi
 from .models import Job
 from .runner import reap
 
-
 FAILED_FIRST = "failed"
 ENDED_BADLY = (Job.State.FAILED, Job.State.LOST)
 

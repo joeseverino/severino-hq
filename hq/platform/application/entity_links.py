@@ -8,16 +8,15 @@ Every entity name a page renders comes through here, so a name either links
 the same way everywhere or nowhere.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urlsplit
 
-from hq.platform.application.routes import reverse
-
-from hq.domains.control_plane.names import normalized_hostname, names_a_host
+from hq.domains.control_plane.names import names_a_host, normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS, registry_label
+from hq.platform.application.routes import reverse
 
 
 @dataclass(frozen=True)

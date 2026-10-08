@@ -7,12 +7,11 @@ and whether a provider fronts them. Read once per projection.
 from dataclasses import dataclass, field, replace
 from typing import Any, NamedTuple
 
-from hq.platform.application.routes import reverse
-
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import names_a_host, normalized_hostname
-from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.control_plane.provider_spec import origin_is_authoritative
+from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.routes import reverse
 
 from .entity_links import EntityLink, entity_link
 from .infrastructure import (

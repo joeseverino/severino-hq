@@ -16,10 +16,10 @@ from ..projection import projection_scope
 from ..public_registry import public_endpoints
 from ..relationships import relationships_for
 from ..security import Capability, Principal
-from .test_hq_self import SITE, declare, own
 from ..topology_model import RELATIONS
 from ..zone_insights import services as services_card
 from ..zones import find_zone
+from .test_hq_self import SITE, declare, own
 
 READER = Principal("test", "reader", frozenset({Capability.READ}))
 

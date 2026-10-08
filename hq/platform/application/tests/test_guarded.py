@@ -47,12 +47,12 @@ class GuardedTests(TestCase):
 
     def test_every_table_and_every_listing_is_guarded(self):
         class View(TableListMixin):
-            class request:  # noqa: N801 - stands in for a request with no query
+            class request:
                 GET = __import__("django.http").http.QueryDict("")
 
         rows = View().apply_table_query(Expense.objects.all())
         with self.assertRaises(FieldFetchBlocked):
-            rows[0].related_project
+            _ = rows[0].related_project
 
         modes = listing(Project, lambda row: row._state.fetch_mode, search=())["items"]
         self.assertEqual(modes, [FETCH_RAISE] * 3)

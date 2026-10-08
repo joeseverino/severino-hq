@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
 
+from ..connection_catalog import ConnectionAbilityState, ConnectionGroup, ConnectionView
 from ..connection_security import (
     connection_security_posture,
     observed_connection_controls,
@@ -16,7 +17,6 @@ from ..connections import (
     ConnectionLink,
     ConnectionSpec,
 )
-from ..connection_catalog import ConnectionAbilityState, ConnectionGroup, ConnectionView
 from ..security import Capability
 
 

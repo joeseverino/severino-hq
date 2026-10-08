@@ -3,13 +3,15 @@
 from dataclasses import replace
 from unittest import mock
 
-from django.core.exceptions import ImproperlyConfigured
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ProviderConnection
 
+from ..command_center import command_center
+from ..connection_catalog import connection_catalog
 from ..connections import (
     ConnectionAbility,
     ConnectionFact,
@@ -19,11 +21,8 @@ from ..connections import (
     describe_connections,
     list_connections,
 )
-from ..connection_catalog import connection_catalog
 from ..integrations import integration_graph
-from ..command_center import command_center
 from ..security import Capability, Principal
-
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
 NONE = Principal("nobody", "test", frozenset())
@@ -641,13 +640,13 @@ class GrantEvidenceTests(TestCase):
     """Permission is an evidence-backed relationship, derived from two declarations."""
 
     def ability(self, **overrides):
-        base = dict(
-            name="example.read", label="Read", summary="Read one example."
-        )
+        base = {
+            "name": "example.read", "label": "Read", "summary": "Read one example."
+        }
         return ConnectionAbility(**{**base, **overrides})
 
     def instance(self, **overrides):
-        base = dict(id="one", label="One", kind="example", status="good", status_label="ok")
+        base = {"id": "one", "label": "One", "kind": "example", "status": "good", "status_label": "ok"}
         return ConnectionInstance(**{**base, **overrides})
 
     def evidence(self, ability, instance):
@@ -779,7 +778,7 @@ class GrantEvidenceTests(TestCase):
     def test_controller_connections_carry_their_providers_credential_model(self):
         from django.utils import timezone
 
-        for provider, expected in (("ssh", "coarse"), ("cloudflare_dns", "scoped")):
+        for provider in ("ssh", "cloudflare_dns"):
             ProviderConnection.objects.create(
                 connection_ref=f"a-{provider}",
                 controller_id="controller",
@@ -807,8 +806,8 @@ class GrantEvidenceTests(TestCase):
         self.assertNotIn("token", by_ref["a-ssh"])
 
     def test_every_connection_provider_declares_a_credential_model(self):
-        from hq.domains.control_plane.providers import PROVIDERS, observer_abilities
         from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS
+        from hq.domains.control_plane.providers import PROVIDERS, observer_abilities
 
         named = {p for spec in PROVIDERS.values() for p in spec.connection_providers}
         named |= {ability.provider for ability in observer_abilities()}

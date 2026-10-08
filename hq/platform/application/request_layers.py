@@ -1,16 +1,17 @@
 """The admission layers: each independent control a request passed, read from what enforces it."""
 
 from dataclasses import dataclass
+
 from django.conf import settings
 from django.utils.csp import CSP
 
 from hq.platform.core.network import split_host_port
 
 from . import tailnet
-from .timestamps import moment
-from .ui import counted
 from .request_channel import Channel
 from .request_identity import Identity
+from .timestamps import moment
+from .ui import counted
 
 
 @dataclass(frozen=True)
@@ -554,8 +555,8 @@ def _proxy_headers_layer(request, *, trusted: bool, address: str) -> Layer | Non
 
     if not trusted:
         return None
-    from hq.domains.control_plane.providers import PROVIDERS
     from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+    from hq.domains.control_plane.providers import PROVIDERS
 
     declared = next(
         (spec for spec in PROVIDERS.values() if spec.forwarding_headers), None

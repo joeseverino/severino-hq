@@ -4,6 +4,7 @@ from datetime import date, datetime, time, timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -22,8 +23,8 @@ from ..calendar import (
 from ..calendar_entries import (
     EntryCommand,
     NotFoundError,
-    choose_source,
     calendar_choices,
+    choose_source,
     list_agenda,
     occurrences,
     save_entry,
@@ -179,9 +180,11 @@ class MonthTests(TestCase):
         self.assertEqual(next(view.slot for view in views if view.id == "example.asks"), 1)
 
     def test_two_domains_cannot_claim_one_source(self):
-        with _with(_domain([_source("example.same", [])]), _domain([_source("example.same", [])], id="other")):
-            with self.assertRaises(ValueError):
-                calendar_sources()
+        with (
+            _with(_domain([_source("example.same", [])]), _domain([_source("example.same", [])], id="other")),
+            self.assertRaises(ValueError),
+        ):
+            calendar_sources()
 
     def test_a_source_keeps_the_colour_it_asks_for_and_the_rest_are_dealt(self):
         with _with(_domain([_source("example.a", [], slot=3), _source("example.b", []), _source("example.c", [])])):
@@ -246,7 +249,7 @@ class RepeatTests(TestCase):
             {"repeat_until": date(2026, 12, 1)},
             {"repeat": "daily", "interval": 0},
         ):
-            with self.subTest(fields=fields), self.assertRaises(Exception):
+            with self.subTest(fields=fields), self.assertRaises(ValidationError):
                 _entry(**fields)
 
 

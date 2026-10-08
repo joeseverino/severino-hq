@@ -1,8 +1,8 @@
-from datetime import timedelta
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from datetime import timedelta
+from pathlib import Path
 from unittest import skipUnless
 
 from django.contrib.auth import get_user_model

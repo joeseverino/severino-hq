@@ -11,9 +11,9 @@ declares. Providers say what they would do with each fact; this is the half that
 goes and gets them.
 """
 
-from hq.domains.control_plane.names import normalized_hostname, certificate_covers
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.names import certificate_covers, normalized_hostname
 from hq.domains.control_plane.provider_spec import NameContext
+from hq.domains.control_plane.providers import PROVIDERS
 
 from .infrastructure import (
     declared_machines,

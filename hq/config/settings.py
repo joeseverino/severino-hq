@@ -9,18 +9,16 @@ Production guidance:
 - Uploaded media live OUTSIDE the application code (set SEVERINO_MEDIA_ROOT).
 """
 
+import contextlib
 import os
 import secrets
 import shlex
 import sys
 import tempfile
+from importlib import import_module
 from pathlib import Path
 
-from .paths import database_path
-
 from django.utils.csp import CSP
-
-from importlib import import_module
 
 from hq.config.devtools import (
     DEBUG_TOOLBAR_APP,
@@ -28,6 +26,8 @@ from hq.config.devtools import (
     debug_toolbar_enabled,
     without_trusted_types,
 )
+
+from .paths import database_path
 
 # The plugin registry is loaded by name: settings is imported by everything, and
 # a static import here would put it inside the application's own import cycle.
@@ -366,7 +366,8 @@ INSTALLED_APPS = [
     *host_apps(),
     "hq.platform.search_index",
     "hq.platform.api",
-] + installed_plugin_apps()
+    *installed_plugin_apps(),
+]
 
 MIDDLEWARE = [
     # Before everything. An address that may not talk to HQ should not reach
@@ -884,12 +885,10 @@ for _d in (
     EXPORTS_ROOT,
     STATIC_ROOT,
 ):
-    try:
+    # Don't crash at import time on a read-only filesystem; the user will see
+    # a clear error from Django when the resource is actually accessed.
+    with contextlib.suppress(OSError):
         _d.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        # Don't crash at import time on a read-only filesystem; the user will see
-        # a clear error from Django when the resource is actually accessed.
-        pass
 
 # ----- Content index (the public site's published-writeups pull) --------------
 # HQ reflects what is live on the public site, mirroring the GitHub refresh:

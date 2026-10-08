@@ -7,10 +7,10 @@ from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 
 from ..findings import derive_findings
 from ..projection import projection_scope
-from ..tailnet import unworn_tags
-from .test_paths import CLOUDFLARE, PUBLIC_RANGE, estate, record, store
-from ..topology import derive_topology
 from ..security import Capability, Principal
+from ..tailnet import unworn_tags
+from ..topology import derive_topology
+from .test_paths import CLOUDFLARE, PUBLIC_RANGE, estate, record, store
 
 OPERATOR = Principal(
     "operator", "test", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE})

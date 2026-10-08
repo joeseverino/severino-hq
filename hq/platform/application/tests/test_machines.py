@@ -244,8 +244,9 @@ class DeclaredMachineTests(TestCase):
         self.assertEqual(found.telemetry_observed_at, observed)
 
     def test_a_machine_nobody_declared_links_nothing(self):
-        from hq.domains.control_plane.models import ProviderInventory
         from django.utils import timezone
+
+        from hq.domains.control_plane.models import ProviderInventory
 
         ProviderInventory.objects.create(
             kind="portainer.container",
@@ -699,8 +700,9 @@ class ReadingThisOnTheMachineTests(TestCase):
     def test_knowing_costs_no_query(self):
         """It is arithmetic on one address, and the header is on every page."""
 
-        from hq.platform.core.network import client_ip
         from django.test import RequestFactory
+
+        from hq.platform.core.network import client_ip
 
         request = RequestFactory().get("/", REMOTE_ADDR="100.64.0.5")
         with self.assertNumQueries(0):

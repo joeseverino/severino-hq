@@ -4,8 +4,8 @@ A credential on its own must not be able to change a gated kind. Each test is
 one property that has to hold for that, and would fail quietly if it did not.
 """
 
-from dataclasses import replace
 import json
+from dataclasses import replace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -17,8 +17,8 @@ from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, Op
 from hq.domains.control_plane.providers import PROVIDERS
 
 from ..approvals import (
-    ApprovalError,
     MAX_PENDING_PER_ACTOR,
+    ApprovalError,
     approve,
     compare,
     pending,
@@ -36,7 +36,6 @@ from ..security import (
     mcp_principal,
     web_principal,
 )
-
 
 POLICY_KEY = "access-policy"
 GATED_KIND = "tailscale.policy"

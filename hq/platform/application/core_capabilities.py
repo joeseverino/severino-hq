@@ -14,6 +14,7 @@ from .documentation import (
     DocumentationSyncCommand,
     execute_documentation_sync,
 )
+from .domains import records_of
 from .infrastructure import ManagedResourceCommand, save_managed_resource
 from .integration_specs import CapabilitySpec
 from .lookup import (
@@ -27,8 +28,7 @@ from .projects import (
     ProjectRefreshCommand,
     execute_project_refresh,
 )
-from .registry_import import REQUIRED_CAPABILITIES as IMPORT_CAPABILITIES
-from .registry_import import HQImportCommand, execute_hq_import
+from .registry_import import REQUIRED_CAPABILITIES as IMPORT_CAPABILITIES, HQImportCommand, execute_hq_import
 from .resource_operations import (
     OperationCommand,
     accept_observed,
@@ -38,11 +38,9 @@ from .resource_operations import (
     request_removal,
     request_route_approval,
 )
-from .domains import records_of
 from .security import Capability
 from .sync import HQSyncCommand, execute_hq_sync
-from .tailnet import POLICY_KIND as TAILNET_POLICY_KIND
-from .tailnet import TAILNET_KIND
+from .tailnet import POLICY_KIND as TAILNET_POLICY_KIND, TAILNET_KIND
 
 CORE_CAPABILITY_SPECS = (
     CapabilitySpec(

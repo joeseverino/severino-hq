@@ -242,7 +242,7 @@ def _request(
         headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(_checked(url), headers=headers, method=method)
     try:
-        with _opener.open(request, timeout=TIMEOUT_SECONDS) as response:  # nosec B310: checked https, public host
+        with _opener.open(request, timeout=TIMEOUT_SECONDS) as response:  # checked https, public host
             if method == "HEAD":
                 return {}, response.headers
             body = response.read(limit + 1)

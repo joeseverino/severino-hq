@@ -44,9 +44,11 @@ class EmittedFilesTests(SimpleTestCase):
     def test_the_command_reports_drift_and_writes_nothing_when_checking(self):
         derived = bridge_contract.emitted()
         stale = {path: text + " " for path, text in derived.items()}
-        with patch.object(bridge_contract, "emitted", return_value=stale):
-            with self.assertRaises(CommandError) as raised:
-                call_command("bridge_contract", "--check", stdout=StringIO(), stderr=StringIO())
+        with (
+            patch.object(bridge_contract, "emitted", return_value=stale),
+            self.assertRaises(CommandError) as raised,
+        ):
+            call_command("bridge_contract", "--check", stdout=StringIO(), stderr=StringIO())
         self.assertIn("behind the registry", str(raised.exception))
         for path, text in derived.items():
             self.assertEqual(path.read_text(encoding="utf-8"), text)
@@ -72,9 +74,11 @@ class JoinTests(SimpleTestCase):
 
     def test_two_declarations_under_one_name_are_refused(self):
         twice = [{"Example": {"type": "string"}}, {"Example": {"type": "integer"}}]
-        with patch.object(bridge_registry, "_declared", return_value=twice):
-            with self.assertRaisesMessage(ValueError, "Two declarations"):
-                bridge_registry.schemas()
+        with (
+            patch.object(bridge_registry, "_declared", return_value=twice),
+            self.assertRaisesMessage(ValueError, "Two declarations"),
+        ):
+            bridge_registry.schemas()
 
     def test_python_reads_no_fact_back_from_a_file_it_writes(self):
         """Only ``bridge_contract`` names the written files, and only to write them."""

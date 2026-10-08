@@ -7,15 +7,15 @@ few things on GitHub that wait on a person: a deploy held for approval, a
 default branch failing, a serious alert, an admission about to lapse.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Mapping
-
+from typing import Any
 
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 
-from .derivations import reached, whole
 from .containers import SERIOUS
+from .derivations import reached, whole
 from .expiry import days_until
 from .github_public import github_repository
 from .item_help import cannot_help, commands
@@ -217,25 +217,25 @@ def attention() -> tuple[Insight, ...]:
                     ),
                 )
             )
-        for artifact in repo.expiring():
-            items.append(
-                Insight(
-                    status="serious" if artifact["days"] <= ARTIFACT_SERIOUS_DAYS else "attention",
-                    eyebrow="GitHub",
-                    family="Workflow artifacts",
-                    key=f"github-artifact:{repo.name}:{artifact['name']}",
-                    title=f"{repo.short}'s admission lapses in {artifact['days']} days",
-                    value=str(artifact["days"]),
-                    body="Composition stops admitting it when it does. A new admission run renews it.",
-                    action="Open actions",
-                    url=f"{repo.url}/actions",
-                    workflow=cannot_help(
-                        f"github-artifact:{repo.name}:{artifact['name']}",
-                        "The reading names the artifact but not the workflow that makes it, so HQ "
-                        "cannot name the run to repeat.",
-                    ),
-                )
+        items.extend(
+            Insight(
+                status="serious" if artifact["days"] <= ARTIFACT_SERIOUS_DAYS else "attention",
+                eyebrow="GitHub",
+                family="Workflow artifacts",
+                key=f"github-artifact:{repo.name}:{artifact['name']}",
+                title=f"{repo.short}'s admission lapses in {artifact['days']} days",
+                value=str(artifact["days"]),
+                body="Composition stops admitting it when it does. A new admission run renews it.",
+                action="Open actions",
+                url=f"{repo.url}/actions",
+                workflow=cannot_help(
+                    f"github-artifact:{repo.name}:{artifact['name']}",
+                    "The reading names the artifact but not the workflow that makes it, so HQ "
+                    "cannot name the run to repeat.",
+                ),
             )
+            for artifact in repo.expiring()
+        )
     return tuple(items)
 
 

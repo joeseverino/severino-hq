@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+
 # jsonschema ships without inline type information.
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 from jsonschema.exceptions import ValidationError, best_match  # type: ignore[import-untyped]

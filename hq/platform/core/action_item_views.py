@@ -11,10 +11,9 @@ from django.views.generic import TemplateView, View
 
 from hq.platform.application import action_items as queue_state
 from hq.platform.application.dashboard import waiting, work_queue
+from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import safe_next
-from hq.platform.application.pages import PageMixin
-
 
 ACTION_ITEM_FILTERS = ("q", "status", "source", "about")
 

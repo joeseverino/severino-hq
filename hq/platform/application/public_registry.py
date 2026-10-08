@@ -14,9 +14,10 @@ Each reading stands as long as what it reads is slow to change
 (``READ_EVERY``); a digest's attestations never change, so each is read once.
 """
 
+from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timedelta
 from ipaddress import ip_address
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -94,8 +95,8 @@ def wanted_addresses() -> tuple[str, ...]:
     machine's tailnet client reports."""
 
     from .infrastructure import declared_machines
-    from .tailnet_presence import tailnet_presence
     from .services import service_catalog
+    from .tailnet_presence import tailnet_presence
 
     found = {
         public_address(service.origin.address)
@@ -184,12 +185,11 @@ def read_domain(domain: str, registrations: Callable[..., dict] = domain_registr
 def wanted_images() -> dict[str, tuple[str, ...]]:
     """``{registry/repository: the references running}`` for every image a container runs."""
 
+    from hq.domains.control_plane.observations.portainer import IMAGE_KIND as PULLED_KIND
     from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
     from .facts import inventory_records
     from .images import ImageRef
-
-    from hq.domains.control_plane.observations.portainer import IMAGE_KIND as PULLED_KIND
 
     # A reference pinned by digest alone names no tag; the machine's copy says
     # which tag it was pulled as, so that tag's digest can be read too.
@@ -552,7 +552,7 @@ def _images(now: datetime, force: bool, principal: Principal) -> list[Any]:
         ),
     )
     recorded: list[Any] = []
-    for kind, stage in zip((IMAGE_KIND, DIGEST_KIND, UPSTREAM_KIND, VULNERABILITY_KIND), stages):
+    for kind, stage in zip((IMAGE_KIND, DIGEST_KIND, UPSTREAM_KIND, VULNERABILITY_KIND), stages, strict=False):
         report = stage()
         if report is not None:
             recorded.extend(record_inventory({kind: report}, principal=principal).get("recorded") or ())

@@ -14,9 +14,9 @@ must be the project's: any mismatch fails here, before a build or a signature.
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 import sys
 import tomllib
+from pathlib import Path
 
 MANIFEST = "PluginManifest"
 

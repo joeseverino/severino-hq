@@ -27,7 +27,6 @@ from hq.platform.core.network import is_address
 from .locate import Machines, host_of
 
 
-
 def site_label() -> str:
     """What HQ calls itself: the configured site name."""
 

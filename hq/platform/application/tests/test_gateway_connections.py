@@ -17,7 +17,6 @@ from ..connections import list_connections
 from ..integrations import integration_graph
 from ..security import Capability, Principal
 
-
 OPERATOR = Principal(
     "operator",
     "test",

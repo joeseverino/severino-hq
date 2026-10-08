@@ -5,18 +5,18 @@ itself, with the same functions the operations enforce. Pages, the topology and
 the resource list read this instead of testing kinds.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Mapping
 
 from hq.domains.control_plane.models import ManagedResource
-
-from .adoption import OBSERVES_ONLY
 from hq.domains.control_plane.providers import (
     PROVIDERS,
     controller_capability_registry,
     resource_home,
 )
+
+from .adoption import OBSERVES_ONLY
 
 # Actions a person starts from a resource's page, in the order they lead.
 PAGE_VERBS = ("start", "stop", "restart", "reconcile", "renew")

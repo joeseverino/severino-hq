@@ -9,8 +9,8 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 
 from hq.domains.assets.models import Asset
-from hq.platform.core.models import AuditLog
 from hq.domains.projects.models import Project
+from hq.platform.core.models import AuditLog
 
 from ..capabilities import capability_registry, execute_capability
 from ..registry_import import MAX_IMPORT_RECORDS, HQImportCommand, import_registry
@@ -259,9 +259,8 @@ class ManagementCommandTests(TestCase):
     def write(self, document):
         import tempfile
 
-        handle = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
-        json.dump(document, handle)
-        handle.close()
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+            json.dump(document, handle)
         self.addCleanup(lambda: __import__("os").unlink(handle.name))
         return handle.name
 

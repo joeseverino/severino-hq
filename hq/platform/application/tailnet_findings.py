@@ -5,13 +5,13 @@ from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_
 from . import trusted_networks
 from .action_links import command_url
 from .finding_model import (
-    OperatorStep,
     Finding,
-    Remedy,
     FindingEstate,
+    FindingRule,
+    OperatorStep,
+    Remedy,
     built_findings,
     fact_values,
-    FindingRule,
 )
 from .ui import counted
 
@@ -97,13 +97,11 @@ def _tag_granted_to_nobody(estate: FindingEstate) -> tuple[Finding, ...]:
                 ),
                 severity="neutral",
                 explanation=(
-                    (
-                        f"No device has {tags[0]}, so this rule lets nothing in now. "
-                        "Any device given the tag later gets this access."
-                        if len(tags) == 1
-                        else "No device has these tags, so their rules let nothing in now. "
-                        "Any device given one of them later gets that access."
-                    )
+                    f"No device has {tags[0]}, so this rule lets nothing in now. "
+                    "Any device given the tag later gets this access."
+                    if len(tags) == 1
+                    else "No device has these tags, so their rules let nothing in now. "
+                    "Any device given one of them later gets that access."
                 ),
                 evidence=tuple(("Tag", tag) for tag in tags),
                 remedies=_policy_remedy(estate, "infrastructure.resource.update", "Change what HQ expects"),

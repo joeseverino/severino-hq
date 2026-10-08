@@ -3,9 +3,9 @@
 import importlib.util
 import shutil
 import tempfile
+from pathlib import Path
 from unittest import skipUnless
 from unittest.mock import patch
-from pathlib import Path
 
 from django.test import SimpleTestCase
 

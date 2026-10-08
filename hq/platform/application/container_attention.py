@@ -12,9 +12,8 @@ declaration that says holding it is the container's job.
 import shlex
 from typing import Any
 
-from hq.platform.application.routes import reverse
-
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.platform.application.routes import reverse
 
 from .action_links import command_url
 from .containers import VULNERABLE, Container, Standing, containers

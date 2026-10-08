@@ -6,14 +6,14 @@ from django.db import models
 from django.urls import reverse
 from django.utils.text import slugify
 
+from hq.platform.application import business_use
+
 # Re-exported: expenses imports it from here, and moving the rule should not
 # make every caller move with it. The rule itself lives in application.money,
 # which extensions can reach through hq_sdk and a domain app cannot.
 from hq.platform.application.money import quantize_money
-from hq.platform.application import business_use
 from hq.platform.application.references import CERTIFICATE, Referable, ReferenceField
 from hq.platform.core.models import TimestampedModel
-
 
 PAYMENT_METHOD_CHOICES = [
     ("cash", "Cash"),

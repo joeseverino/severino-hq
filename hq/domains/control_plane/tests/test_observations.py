@@ -2,8 +2,6 @@
 
 from django.test import SimpleTestCase, TestCase
 
-from hq.platform.application.inventory import record_inventory
-from hq.platform.application.security import cli_principal
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import (
     OBSERVATIONS,
@@ -12,6 +10,8 @@ from hq.domains.control_plane.observations import (
     ReadingPart,
     registry,
 )
+from hq.platform.application.inventory import record_inventory
+from hq.platform.application.security import cli_principal
 
 
 class Named(ObservationRecord):

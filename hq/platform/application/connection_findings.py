@@ -8,10 +8,10 @@ from .finding_model import (
     THEN_CHECK_AGAIN,
     Finding,
     FindingEstate,
+    FindingRule,
     fact_values,
     open_the_path,
     reconcile_remedy,
-    FindingRule,
 )
 from .moments import elapsed
 

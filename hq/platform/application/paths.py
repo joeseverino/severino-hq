@@ -22,21 +22,21 @@ from dataclasses import dataclass
 from typing import Any
 
 from hq.domains.control_plane.certificate_authorities import authority_name
+from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
 from hq.domains.control_plane.provider_spec import expiry_phrase
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+from hq.domains.control_plane.providers import PROVIDERS
 
 from .entity_links import EntityLink, entity_link, kind_label
 from .facts import Joined, Subject, readings, snapshots_of
 from .infrastructure import enabled_resources
 from .labels import lower_first
 from .locate import host_of, split_endpoint
+from .path_model import NETWORK_LABELS, Certificate, Hop, Route, ServicePath, Source, dns_label, pointing_at
 from .projection import read_once
 from .reach import is_documentation, network_of
-from .path_model import Certificate, Hop, NETWORK_LABELS, Route, ServicePath, Source, dns_label, pointing_at
 
 # How deep an alias chain is followed before the path stops saying more.
 MAX_ALIASES = 3

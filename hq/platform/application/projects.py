@@ -5,25 +5,26 @@ transaction, validation, persistence, audit attribution, and canonical result
 shape; adapters only parse input and render output.
 """
 
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
 from django.db import transaction
 
+from hq.domains.content.content_sync import ContentSyncError, sync_content_index
+from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
+from hq.domains.projects.models import Project
 from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.models import AuditLog
-from hq.domains.projects.models import Project
-from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
-from .ui import counted
-from hq.domains.content.content_sync import ContentSyncError, sync_content_index
-from .sensitivity import safe_doc_ids
-from .domains import records_of
-from .security import Principal
-from .upserts import upsert_by_slug
-from .projection import addressable, iso, listing
 
+from .domains import records_of
+from .projection import addressable, iso, listing
+from .security import Principal
+from .sensitivity import safe_doc_ids
+from .ui import counted
+from .upserts import upsert_by_slug
 
 if TYPE_CHECKING:
     from .entity_links import EntityLink

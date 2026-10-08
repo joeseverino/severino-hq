@@ -2,9 +2,9 @@
 
 from django.db import transaction
 
-from .models import SearchDocument
 from hq.platform.application.search_contracts import SearchDefinition
 
+from .models import SearchDocument
 from .registry import DEFINITIONS
 
 

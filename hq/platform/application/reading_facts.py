@@ -40,7 +40,7 @@ class FactRow:
     def of(cls, value: str) -> Self:
         names = [field.name for field in fields(cls)]
         parts = (value.split("|") + [""] * len(names))[: len(names)]
-        return cls(**dict(zip(names, parts)))
+        return cls(**dict(zip(names, parts, strict=True)))
 
 
 def rows_of(snapshot: Any, row: Callable[[dict[str, Any]], FactRow], unread: Callable[[str], FactRow]) -> Iterator[FactRow]:

@@ -25,13 +25,12 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
     ProviderInventory,
 )
+from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.reading_parts import clean_refused_parts, refused_parts
 from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS, registry_label
+from hq.domains.control_plane.reading_parts import clean_refused_parts, refused_parts
 from hq.platform.core.audit import CONNECTION_AUDIT_TYPE, record_event
 from hq.platform.core.models import AuditLog
-
-from hq.domains.control_plane.names import normalized_hostname
 
 from .conditions import stamped
 from .contracts import endpoint_has_private_parts

@@ -1,12 +1,11 @@
 """Pocket ID / OIDC authentication integration."""
 
-from django.conf import settings
-from django.contrib.auth import BACKEND_SESSION_KEY, get_user_model
-from django.core.exceptions import PermissionDenied, SuspiciousOperation
-
 import logging
 
 import requests
+from django.conf import settings
+from django.contrib.auth import BACKEND_SESSION_KEY, get_user_model
+from django.core.exceptions import PermissionDenied, SuspiciousOperation
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 from mozilla_django_oidc.middleware import SessionRefresh
 

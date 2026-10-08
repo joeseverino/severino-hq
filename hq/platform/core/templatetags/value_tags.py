@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 
 from hq.platform.application.entity_links import web_url as _web_url
-from hq.platform.application.timestamps import moment
+from hq.platform.application.labels import human_bytes
 from hq.platform.application.moments import (
     ago as _ago,
     elapsed as _elapsed,
@@ -15,8 +15,8 @@ from hq.platform.application.moments import (
     when_day as _when_day,
     when_exact as _when_exact,
 )
-from hq.platform.application.labels import human_bytes
 from hq.platform.application.money import money as _money
+from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import MISSING, counted as _counted
 
 register = template.Library()

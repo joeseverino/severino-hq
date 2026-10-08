@@ -16,8 +16,8 @@ from ..derived_reads import get_reading, serialize_path
 from ..findings import findings
 from ..inventory import record_inventory
 from ..inventory_testing import store
-from ..paths import path_to
 from ..path_dependencies import depends_on
+from ..paths import path_to
 from ..projection import projection_scope
 from ..relationships import relationships_for
 from ..security import Capability, Principal, cli_principal

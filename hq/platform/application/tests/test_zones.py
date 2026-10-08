@@ -14,33 +14,34 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from pydantic import ValidationError
 
 from hq.domains.control_plane.models import (
     ManagedResource,
     OperationRequest,
     ProviderInventory,
 )
-from hq.domains.control_plane.providers import (
-    PROVIDERS,
-    validate_spec,
-)
 from hq.domains.control_plane.provider_adapters.cloudflare import (
     DNS_RECORD_TYPES,
     DNS_RECORD_TYPES_BY_ID,
 )
-
+from hq.domains.control_plane.providers import (
+    PROVIDERS,
+    validate_spec,
+)
 from hq.platform.application.derivations import uncached
-from ..adoption_testing import managing_everything
-from ..infrastructure import PolicyError, save_managed_resource, suggest_key
+
 from ..adoption import (
     AdoptCommand,
     adopt,
     unmanaged,
     unmanaged_services,
 )
-from ..sweep import record_sweep
+from ..adoption_testing import managing_everything
+from ..infrastructure import PolicyError, save_managed_resource, suggest_key
 from ..security import cli_principal
 from ..services import service_catalog, service_or_prospect
+from ..sweep import record_sweep
 from ..zones import (
     adopt_zone_records,
     find_zone,
@@ -153,14 +154,14 @@ class SpecShapeTests(TestCase):
         self.assertIn("priority", str(caught.exception))
 
     def test_priority_is_refused_on_types_that_have_none(self):
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValidationError):
             validate_spec(RECORD_KIND, {
                 "zone": "example.com", "name": "app.example.com",
                 "record_type": "A", "content": "203.0.113.1", "priority": 10,
             })
 
     def test_cloudflare_will_not_proxy_a_txt_record(self):
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValidationError):
             validate_spec(RECORD_KIND, {
                 "zone": "example.com", "name": "example.com",
                 "record_type": "TXT", "content": '"hello"', "proxied": True,
@@ -170,7 +171,7 @@ class SpecShapeTests(TestCase):
         # Cloudflare drives the TTL of a proxied record itself and reports 1 for
         # it regardless. Storing anything else reports drift forever against a
         # value the provider will never agree to.
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValidationError):
             validate_spec(RECORD_KIND, {
                 "zone": "example.com", "name": "app.example.com",
                 "record_type": "A", "content": "203.0.113.1",
@@ -178,7 +179,7 @@ class SpecShapeTests(TestCase):
             })
 
     def test_caa_value_must_be_well_formed(self):
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValidationError):
             validate_spec(RECORD_KIND, {
                 "zone": "example.com", "name": "example.com",
                 "record_type": "CAA", "content": "letsencrypt.org",
@@ -285,14 +286,15 @@ class ZoneViewTests(TestCase):
     def setUp(self):
         managing_everything(*DNS_CONNECTIONS)
         sweep(
-            records=APEX + [
+            records=[
+                *APEX,
                 record("_acme-challenge.example.net", "TXT", '"leftover-one"',
                        zone="example.net", rid="s1"),
                 record("_acme-challenge.example.net", "TXT", '"leftover-two"',
                        zone="example.net", rid="s2"),
                 record("example.net", "A", "203.0.113.9", zone="example.net", rid="s3"),
             ],
-            zones=ZONES + [{"zone": "example.net", "connection_ref": "cf-example"}],
+            zones=[*ZONES, {"zone": "example.net", "connection_ref": "cf-example"}],
         )
 
     def test_a_zone_is_derived_not_stored(self):
@@ -600,7 +602,8 @@ class ZoneInsightTests(TestCase):
         already say: both point at example.net.
         """
 
-        sweep(records=APEX + [
+        sweep(records=[
+            *APEX,
             record("_dmarc.example.com", "TXT", '"v=DMARC1; p=reject"', rid="d1"),
         ])
         card = self._insight("example.com", "Email")
@@ -817,7 +820,7 @@ class SelfClosingAdoptionTests(TestCase):
             {RECORD_KIND: {"ok": True, "records": APEX}}, principal=cli_principal()
         )
 
-        later = APEX + [record("new.example.com", "A", "203.0.113.9", rid="n1")]
+        later = [*APEX, record("new.example.com", "A", "203.0.113.9", rid="n1")]
         result = record_sweep(
             {RECORD_KIND: {"ok": True, "records": later}}, principal=cli_principal()
         )
@@ -2066,7 +2069,9 @@ class TLSPostureInsightTests(TestCase):
 
     def _zone(self, posture=None, refused_parts=()):
         from django.utils import timezone
+
         from hq.domains.control_plane.models import ProviderInventory
+
         from ..zones import Zone
 
         record = {"zone": "example.com", "connection_ref": "a-dns"}
@@ -2153,8 +2158,9 @@ class TLSPostureInsightTests(TestCase):
         self.assertEqual(found.value, "Full (strict)")
 
     def test_a_refused_registration_read_says_so(self):
-        from hq.domains.control_plane.models import ProviderInventory
         from django.utils import timezone
+
+        from hq.domains.control_plane.models import ProviderInventory
 
         from ..zone_insights import registration
         from ..zones import Zone
@@ -2188,7 +2194,9 @@ class DomainRegistrationInsightTests(TestCase):
 
     def _zone(self, registration=None):
         from django.utils import timezone
+
         from hq.domains.control_plane.models import ProviderInventory
+
         from ..zones import Zone
 
         record = {"zone": "example.com", "connection_ref": "a-dns"}
@@ -2202,6 +2210,7 @@ class DomainRegistrationInsightTests(TestCase):
 
     def _soon(self, days):
         from datetime import timedelta
+
         from django.utils import timezone
 
         return (timezone.now() + timedelta(days=days)).date().isoformat()

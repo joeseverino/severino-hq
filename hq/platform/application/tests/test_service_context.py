@@ -12,8 +12,8 @@ from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.platform.core.models import AuditLog
 from hq.domains.projects.models import Project
+from hq.platform.core.models import AuditLog
 
 from ..service_context import Cell, ServiceSection, sections_for
 from ..services import service_or_prospect
