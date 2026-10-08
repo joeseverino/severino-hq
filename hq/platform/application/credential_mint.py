@@ -12,8 +12,6 @@ readings name, and ``op://`` references to the connection item and its
 bootstrap item. No value HQ holds is a secret, so no secret can reach it.
 """
 
-from __future__ import annotations
-
 import re
 import shlex
 from collections.abc import Mapping

@@ -6,8 +6,6 @@ register its resource, derive its create, update and delete commands and their
 permissions, delete through them and count it on the health reading.
 """
 
-from __future__ import annotations
-
 import importlib
 from unittest.mock import patch
 

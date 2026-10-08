@@ -1,8 +1,6 @@
 """What a provider's declarations share with HQ: why a read failed, and the
 facts an observed record states about its names."""
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any

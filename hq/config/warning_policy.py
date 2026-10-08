@@ -28,8 +28,6 @@ error, the warning loses that site, and it is the one fact that finds the leak,
 since the finalizer runs wherever collection happened to.
 """
 
-from __future__ import annotations
-
 import atexit
 import os
 from pathlib import Path

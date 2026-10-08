@@ -1,7 +1,5 @@
 """Password hashers HQ uses, where Django's defaults need a stricter edge."""
 
-from __future__ import annotations
-
 from argon2.exceptions import InvalidHashError
 from django.contrib.auth import hashers
 

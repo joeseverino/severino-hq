@@ -10,8 +10,6 @@ Class-based views mix in ``PageMixin``; function views pass ``page_context``
 to ``render``.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 
 from .fragments import FragmentMixin

@@ -1,7 +1,5 @@
 """A container stack waits for a person, who is told what it reaches."""
 
-from __future__ import annotations
-
 from types import SimpleNamespace
 
 from django.test import SimpleTestCase

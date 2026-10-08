@@ -4,8 +4,6 @@ A first sighting and any change to an identity's grant are audited. Observation
 never blocks a request.
 """
 
-from __future__ import annotations
-
 import logging
 from datetime import timedelta
 

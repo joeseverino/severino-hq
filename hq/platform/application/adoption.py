@@ -12,8 +12,6 @@ skips that record until an operator manages it again, which clears the row.
 Both are audited through the model's registration.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -469,7 +467,7 @@ def adopt(
     return result
 
 
-def _record_as_observed(key: str, found: "Unmanaged") -> None:
+def _record_as_observed(key: str, found: Unmanaged) -> None:
     """Mark an adopted resource as seen, because it just was.
 
     Everything else here is born unobserved and waits for a controller to go

@@ -1,7 +1,5 @@
 """Transport-neutral contracts for records projected into global search."""
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any

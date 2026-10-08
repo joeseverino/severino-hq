@@ -7,8 +7,6 @@ their own tags are written, so ``1.31.3-alpine`` is compared only with other
 ``N.N.N-alpine`` tags, never with ``1.33.0`` or ``mainline``.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass
 

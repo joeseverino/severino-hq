@@ -1,7 +1,5 @@
 """Which action items a person has set aside, and the queue under its domains."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from unittest import mock
 

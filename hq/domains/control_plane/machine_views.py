@@ -1,7 +1,5 @@
 """Machines and the tailnet: the list, one machine's page, and what a change to either would reach."""
 
-from __future__ import annotations
-
 from urllib.parse import urlencode
 
 from django.http import Http404

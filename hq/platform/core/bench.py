@@ -8,8 +8,6 @@ and the query-budget tests pin counts against it at a smaller ``scale``.
 Everything is synthetic: ``example.*`` names and documentation addresses.
 """
 
-from __future__ import annotations
-
 import random
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta

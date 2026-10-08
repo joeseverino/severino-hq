@@ -1,7 +1,5 @@
 """Versioned, explicitly allowlisted extension contract for trusted HQ plugins."""
 
-from __future__ import annotations
-
 from dataclasses import asdict, dataclass, is_dataclass, replace
 from functools import cache, lru_cache, partial
 import hashlib

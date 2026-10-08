@@ -17,8 +17,6 @@ plaintext is worse than not having one, because the operator believes the first
 sentence of this docstring.
 """
 
-from __future__ import annotations
-
 import base64
 import hashlib
 

@@ -5,8 +5,6 @@ a long TXT arrives in, the tags nobody models) because the one thing an editor
 must never do is publish something other than what the operator chose.
 """
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse

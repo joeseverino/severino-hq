@@ -17,8 +17,6 @@ JSON Pointer of the member that departs. A refusal is an RFC 9457 problem.
 Sizes are bounded in both directions by the contract's ``BridgeBody``.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from collections.abc import Awaitable, Callable

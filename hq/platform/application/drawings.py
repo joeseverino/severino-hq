@@ -4,8 +4,6 @@ A ``Kpi`` takes one drawing or none: dots for a part of a whole, a trend for
 recent readings. ``hq_sdk.ui`` hands these to extensions.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -39,7 +37,7 @@ class Dots:
     LIMIT: ClassVar[int] = 12
 
     @classmethod
-    def of(cls, filled: int, whole: int) -> "Dots":
+    def of(cls, filled: int, whole: int) -> Dots:
         """``filled`` of ``whole``, when the parts are a count and nothing more."""
 
         if not 0 <= filled <= whole:

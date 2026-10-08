@@ -1,7 +1,5 @@
 """What HQ offers to do with a resource follows whether its connection manages."""
 
-from __future__ import annotations
-
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource

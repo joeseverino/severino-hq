@@ -1,7 +1,5 @@
 """Which network an address belongs to."""
 
-from __future__ import annotations
-
 from unittest import mock
 
 from django.test import SimpleTestCase

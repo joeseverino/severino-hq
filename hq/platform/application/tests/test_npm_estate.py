@@ -1,7 +1,5 @@
 """NPM readings on the request path, the service page, the API and as findings."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from ipaddress import ip_network
 from unittest import mock

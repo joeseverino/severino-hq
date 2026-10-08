@@ -3,8 +3,6 @@
 Everything else on the calendar is derived by the domain that holds it.
 """
 
-from __future__ import annotations
-
 import uuid
 
 from django.conf import settings

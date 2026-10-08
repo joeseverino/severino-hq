@@ -13,8 +13,6 @@ those belong to the device is read off the whole tailnet, not configured:
   roamed through (a phone's carrier).
 """
 
-from __future__ import annotations
-
 from collections import Counter
 from dataclasses import dataclass, field
 from ipaddress import ip_address, ip_network

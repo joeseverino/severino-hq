@@ -6,8 +6,6 @@ answers. The query log leaves the controller only as the aggregate
 ``AdGuardQuerySummaryRecord`` names: per rewritten name, never a query.
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from ipaddress import ip_address
 from typing import Any

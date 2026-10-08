@@ -7,8 +7,6 @@ contributors and its outward links, which come from installed extensions and
 controller sweeps.
 """
 
-from __future__ import annotations
-
 from contextlib import ExitStack, contextmanager
 from datetime import date, time, timedelta
 from unittest import mock

@@ -9,8 +9,6 @@ names it serves are evidence. Days left come from ``application.expiry``, the on
 uses.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import replace
 from typing import Any

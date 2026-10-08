@@ -1,7 +1,5 @@
 """The calendar: its contract, its month, My Calendar and where it is listed."""
 
-from __future__ import annotations
-
 from datetime import date, datetime, time, timedelta
 from unittest import mock
 

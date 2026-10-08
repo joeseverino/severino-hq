@@ -1,7 +1,5 @@
 """Scheduled work: declared once, done as a job, asked for by the shipped units."""
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 from unittest import mock

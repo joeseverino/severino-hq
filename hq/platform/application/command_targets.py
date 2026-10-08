@@ -1,7 +1,5 @@
 """Authorized target choices derived from the canonical resource registry."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 

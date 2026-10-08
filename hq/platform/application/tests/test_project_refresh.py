@@ -6,8 +6,6 @@ requests, checks and workflows on the project page follow on the controller's
 next pass. Where it does not, the anonymous public read is the fallback.
 """
 
-from __future__ import annotations
-
 from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 import tempfile

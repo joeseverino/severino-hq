@@ -42,8 +42,6 @@ triggers, the cache cannot be read or a stored value does not load, the
 function runs and its answer is used.
 """
 
-from __future__ import annotations
-
 import copyreg
 import hashlib
 import logging
@@ -92,7 +90,7 @@ REMEMBERED = 8
 ASKED_WITHIN = 24 * 60 * 60
 
 # Every declared derivation, by name.
-DERIVATIONS: dict[str, "Derivation"] = {}
+DERIVATIONS: dict[str, Derivation] = {}
 # How many times each derivation ran its function, and was answered from the
 # cache, in this process. Read by the budgets and the bench.
 COMPUTED: Counter[str] = Counter()
@@ -478,7 +476,7 @@ def _awaited_pass(declared: Derivation, key: str | None) -> bool:
     return True
 
 
-def _next_asked(pending: list[tuple[str, str, "_Ask"]]) -> int:
+def _next_asked(pending: list[tuple[str, str, _Ask]]) -> int:
     """Which pending question the pass asks next: one a request waits on, else the first."""
 
     with _TURN:

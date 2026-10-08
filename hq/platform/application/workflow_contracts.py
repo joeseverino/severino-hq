@@ -1,7 +1,5 @@
 """Dependency-free contracts shared by workflow and presentation projections."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 

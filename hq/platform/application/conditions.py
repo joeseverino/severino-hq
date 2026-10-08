@@ -6,8 +6,6 @@ outside HQ" is only half an answer without the moment it was first seen, which
 is what lets a finding name what happened near then.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Any

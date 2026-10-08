@@ -1,7 +1,5 @@
 """Deterministic JSON capability registry for every HQ adapter."""
 
-from __future__ import annotations
-
 import secrets
 from collections.abc import Callable
 from dataclasses import replace

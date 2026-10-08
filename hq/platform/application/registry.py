@@ -1,7 +1,5 @@
 """Read-only registry diagnostics shared by every delivery adapter."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from django.db.models import Count

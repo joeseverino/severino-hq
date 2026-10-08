@@ -7,8 +7,6 @@ kind, so a person consents before anything reaches the tailnet, and the
 controller applies it only through a connection that manages.
 """
 
-from __future__ import annotations
-
 import json
 from typing import Any
 

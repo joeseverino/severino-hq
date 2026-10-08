@@ -1,7 +1,5 @@
 """A perimeter reading proves something only when it tried something."""
 
-from __future__ import annotations
-
 from django.test import TestCase
 
 from ..inventory_testing import store

@@ -13,8 +13,6 @@ What a page may watch is handed to it signed (``watch_token``), so a status
 resource reports only on what HQ itself said to watch.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime

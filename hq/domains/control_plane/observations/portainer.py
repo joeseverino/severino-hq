@@ -9,8 +9,6 @@ Environment variables, labels other than compose's own, and registry
 credentials are never named, so the schema drops them.
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from typing import Any
 

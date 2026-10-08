@@ -9,8 +9,6 @@ A reader that cannot read raises; the sweep stores the kind as unreachable with
 the reason, and ``ObservationSpec.requires`` says what the credential needs.
 """
 
-from __future__ import annotations
-
 from importlib import import_module
 from pkgutil import iter_modules
 

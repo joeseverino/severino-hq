@@ -1,7 +1,5 @@
 """Audit events name their connection; routine ones expire and nothing else does."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from io import StringIO
 

@@ -10,8 +10,6 @@ A record that names its ``connection_ref`` belongs to that connection alone, so
 two connections of one provider never show each other's readings.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime

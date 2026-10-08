@@ -18,8 +18,6 @@ contract test (``application/tests/test_item_help.py``) holds every host provide
 to it.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from typing import Any
 

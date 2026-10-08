@@ -12,8 +12,6 @@ so the first reconciliation after adopting changes nothing. Anything else would
 mean adopting a host quietly reset it to HQ's defaults.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 from datetime import datetime

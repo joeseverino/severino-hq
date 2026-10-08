@@ -5,8 +5,6 @@ of Django, not of any one domain. A surface that accepts several files at once
 should not have to rediscover that ``FileField`` binds exactly one upload.
 """
 
-from __future__ import annotations
-
 from django import forms
 
 

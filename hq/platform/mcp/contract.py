@@ -1,7 +1,5 @@
 """Resource tool catalogs derived from the deployment's OpenAPI document."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 

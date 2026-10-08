@@ -10,8 +10,6 @@ identical (same provider, same health, same green tick) and differ only in
 who is able to reach the thing on the other side.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from ipaddress import IPv6Network, ip_address, ip_network
 from pathlib import Path

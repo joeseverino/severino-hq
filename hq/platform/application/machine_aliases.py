@@ -4,8 +4,6 @@ Connections, located origins and tailnet devices, folded onto the one declared
 name they belong to.
 """
 
-from __future__ import annotations
-
 from hq.domains.control_plane.models import ProviderConnection
 
 from .locate import Machines, points_at_host

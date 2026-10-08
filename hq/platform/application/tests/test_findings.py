@@ -1,7 +1,5 @@
 """The claims HQ makes about itself, and the silence each one breaks."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 import json
 from unittest import mock

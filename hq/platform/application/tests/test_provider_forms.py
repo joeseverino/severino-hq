@@ -8,8 +8,6 @@ Hostnames here are under example.com. This repository is public, and a fixture
 is documentation whether or not it was meant to be.
 """
 
-from __future__ import annotations
-
 from dataclasses import replace
 
 from django.contrib.auth import get_user_model

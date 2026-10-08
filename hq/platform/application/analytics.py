@@ -11,8 +11,6 @@ path was requested 412 times" into "that writeup was read 412 times", and it is
 the only reason this is more useful than the dashboard it reads from.
 """
 
-from __future__ import annotations
-
 from datetime import date, timedelta
 from typing import Any
 from urllib.parse import urlparse

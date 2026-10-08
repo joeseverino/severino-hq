@@ -4,8 +4,6 @@ The controller (controller/providers) reads and acts on them; what is declared
 about them is here.
 """
 
-from __future__ import annotations
-
 import re
 from typing import Any
 

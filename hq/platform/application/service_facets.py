@@ -1,7 +1,5 @@
 """One facet of a service: what each kind of declaration says about a name, and the zone that holds it."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -50,7 +48,7 @@ class Facet:
     # has three states, not two: declared, found, and absent. Collapsing the
     # middle one into absent reports a running service as missing, and offers to
     # build a second of what is already there.
-    observed: "Running | None" = None
+    observed: Running | None = None
     # The machine whatever supplies this facet runs on. Held here so the card
     # links it once, whether the container is declared or merely observed.
     machine: Any = None
@@ -67,7 +65,7 @@ class Facet:
         return bool(self.claims)
 
     @property
-    def reading_lines(self) -> tuple["ReadingLine", ...]:
+    def reading_lines(self) -> tuple[ReadingLine, ...]:
         """One line per reading kind: its short label, issuers or titles, earliest expiry."""
 
         by_kind: dict[str, list[Joined]] = {}

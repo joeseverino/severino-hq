@@ -1,7 +1,5 @@
 """The operator's switch that pauses every agent, on /mcp/ and on the machine API."""
 
-from __future__ import annotations
-
 import logging
 
 from django.db import DatabaseError, transaction

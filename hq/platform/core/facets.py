@@ -14,8 +14,6 @@ render one facet can render all of them. Unset fields are absent from the row
 rather than stored as null.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, fields
 from typing import ClassVar
 

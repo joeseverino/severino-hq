@@ -31,8 +31,6 @@ not run, so the time is the request's own. A route with no entry is reported
 as not exercised, with ``UNSAFE``'s reason where there is one.
 """
 
-from __future__ import annotations
-
 import functools
 import json
 import re

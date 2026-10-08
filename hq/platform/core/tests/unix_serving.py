@@ -1,7 +1,5 @@
 """Serve an ASGI application on a private Unix socket for a synchronous test, and call it."""
 
-from __future__ import annotations
-
 import asyncio
 import contextlib
 import http.client

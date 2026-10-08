@@ -1,7 +1,5 @@
 """Where an address is served: the machine it belongs to and, when certain, the container answering on it."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 
@@ -156,9 +154,9 @@ class MachineLink:
 
 def machine_link(
     address: str,
-    machines: "tuple[dict[str, Any], ...] | None" = None,
-    at: "Whereabouts | None" = None,
-) -> "MachineLink | None":
+    machines: tuple[dict[str, Any], ...] | None = None,
+    at: Whereabouts | None = None,
+) -> MachineLink | None:
     """The machine an address belongs to, resolved the way a service resolves it.
 
     One resolution, so a page naming where something runs and a page naming what
@@ -175,7 +173,7 @@ def machine_link(
     return machine_for(origin, machines)
 
 
-def machine_for(origin: "Origin | None", machines: "tuple[dict[str, Any], ...]"):
+def machine_for(origin: Origin | None, machines: tuple[dict[str, Any], ...]):
     """The machine whatever supplies this facet runs on."""
 
     if origin is None or not origin.host:
@@ -203,29 +201,29 @@ class Whereabouts:
     a query nobody needs is one every page pays for.
     """
 
-    def __init__(self, machines: "tuple[dict[str, Any], ...]"):
+    def __init__(self, machines: tuple[dict[str, Any], ...]):
         self._machines = machines
-        self._index: "Machines | None" = None
-        self._answering: "dict[tuple[str, Any], list[str]] | None" = None
-        self._hosting: "dict[str, list[str]] | None" = None
+        self._index: Machines | None = None
+        self._answering: dict[tuple[str, Any], list[str]] | None = None
+        self._hosting: dict[str, list[str]] | None = None
 
-    def machine_index(self) -> "Machines":
+    def machine_index(self) -> Machines:
         if self._index is None:
             self._index = machines_index(self._machines)
         return self._index
 
-    def answering(self) -> "dict[tuple[str, Any], list[str]]":
+    def answering(self) -> dict[tuple[str, Any], list[str]]:
         if self._answering is None:
             self._answering = _answering()
         return self._answering
 
-    def hosting(self) -> "dict[str, list[str]]":
+    def hosting(self) -> dict[str, list[str]]:
         if self._hosting is None:
             self._hosting = _containers_by_name()
         return self._hosting
 
 
-def whereabouts(machines: "tuple[dict[str, Any], ...] | None" = None) -> Whereabouts:
+def whereabouts(machines: tuple[dict[str, Any], ...] | None = None) -> Whereabouts:
     """The placements a page resolving more than one address should read once.
 
     Passed to ``locate`` and to ``machine_link``. Left out, each of them reads
@@ -238,8 +236,8 @@ def whereabouts(machines: "tuple[dict[str, Any], ...] | None" = None) -> Whereab
 
 def locate(
     address: str,
-    machines: "tuple[dict[str, Any], ...] | None" = None,
-    at: "Whereabouts | None" = None,
+    machines: tuple[dict[str, Any], ...] | None = None,
+    at: Whereabouts | None = None,
     near: str = "",
 ) -> Origin:
     """Match a forwarding address to a machine, and if certain, a container.
@@ -318,7 +316,7 @@ def _is_loopback(address: str) -> bool:
     return network_of(address) == "loopback"
 
 
-def _listening(host: str, port: str, at: "Whereabouts | None" = None) -> list[str]:
+def _listening(host: str, port: str, at: Whereabouts | None = None) -> list[str]:
     """Containers answering on one port of one machine, seen or declared.
 
     A container sharing the machine's network publishes nothing for Docker to
@@ -343,7 +341,7 @@ def reads_containers_on(host: str) -> bool:
     )
 
 
-def _hosting(container: str, at: "Whereabouts | None" = None) -> list[str]:
+def _hosting(container: str, at: Whereabouts | None = None) -> list[str]:
     """Machines running a container of this name, seen or declared."""
 
     if not container:

@@ -5,8 +5,6 @@ compares the running image's lock with each extension's latest admission on
 GitHub and reports each stage there; HQ starts nothing.
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from typing import Any, Literal
 

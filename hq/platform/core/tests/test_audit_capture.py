@@ -7,8 +7,6 @@ under both over the same real models, and the audit rows must match field by
 field, with the same number of queries.
 """
 
-from __future__ import annotations
-
 import copy
 import pickle
 import uuid

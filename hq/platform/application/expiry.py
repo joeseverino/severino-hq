@@ -4,8 +4,6 @@ Every surface that says "N days" reads ``days_until``, so a dashboard card and
 a domain page never disagree about the same certificate by a day.
 """
 
-from __future__ import annotations
-
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping

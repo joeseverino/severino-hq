@@ -1,7 +1,5 @@
 """The agents page marks a column off by the column, not by its label."""
 
-from __future__ import annotations
-
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model

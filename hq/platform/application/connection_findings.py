@@ -1,7 +1,5 @@
 """Findings about reach: a connection that does not answer, and a certificate consumer HQ cannot get to."""
 
-from __future__ import annotations
-
 from hq.domains.control_plane.provider_adapters.contracts import ADDRESS_FAILURE
 
 from . import credential_findings

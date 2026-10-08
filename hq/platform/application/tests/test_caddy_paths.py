@@ -1,7 +1,5 @@
 """Caddy routes on the request path: the certificate each serves, the container behind it."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from ipaddress import ip_network
 from unittest import mock

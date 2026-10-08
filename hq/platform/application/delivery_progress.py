@@ -12,8 +12,6 @@ A reading without it carries only the controller's sentence, whose closing
 words are fixed (controller/providers/github_delivery.go).
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta

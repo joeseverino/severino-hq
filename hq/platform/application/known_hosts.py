@@ -18,8 +18,6 @@ one operator's own records, and being wrong here shows a slightly plainer label
 on one card rather than breaking anything.
 """
 
-from __future__ import annotations
-
 from hq.domains.control_plane.names import in_zone, normalized_hostname
 
 # Suffix -> what a person calls it. Longest match wins, so a more specific

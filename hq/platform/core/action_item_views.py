@@ -1,7 +1,5 @@
 """Action items: the queue under its domains, and setting items aside."""
 
-from __future__ import annotations
-
 import hashlib
 
 from django.http import HttpResponse, JsonResponse

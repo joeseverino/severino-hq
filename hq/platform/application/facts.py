@@ -16,8 +16,6 @@ A kind stored as unreachable is one unreadable fact carrying its error and
 nothing: it is not a failed read.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from types import MappingProxyType, SimpleNamespace
@@ -90,7 +88,7 @@ class Subject:
         addresses: Iterable[str] = (),
         zones: Iterable[str] = (),
         containers: Iterable[str] = (),
-    ) -> "Subject":
+    ) -> Subject:
         return cls(
             containers=frozenset(key for key in containers if key),
             hostnames=frozenset(

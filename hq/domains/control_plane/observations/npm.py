@@ -8,8 +8,6 @@ named, so the schema drops them.
 ``requires`` names NPM's own permission areas at the ``view`` level.
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from typing import Any
 

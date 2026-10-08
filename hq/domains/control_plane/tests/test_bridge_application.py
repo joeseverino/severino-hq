@@ -1,7 +1,5 @@
 """The bridge application: what it serves, what it refuses, and where it can be reached from."""
 
-from __future__ import annotations
-
 import json
 import re
 from pathlib import Path

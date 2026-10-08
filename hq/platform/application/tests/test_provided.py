@@ -1,7 +1,5 @@
 """An extension's part of a shared composition, derived once per change by the host."""
 
-from __future__ import annotations
-
 from datetime import date
 from functools import partial
 from unittest import mock

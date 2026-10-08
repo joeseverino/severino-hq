@@ -1,7 +1,5 @@
 """Structured, dependency-free production logging primitives."""
 
-from __future__ import annotations
-
 from contextvars import ContextVar
 from datetime import datetime, timezone
 import json

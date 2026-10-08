@@ -7,8 +7,6 @@ grow with the estate and the only revisions it moves are those of the two
 tables whose rows it changed.
 """
 
-from __future__ import annotations
-
 from collections import Counter
 
 from django.apps import apps

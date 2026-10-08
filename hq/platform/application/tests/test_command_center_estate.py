@@ -1,7 +1,5 @@
 """A domain in the palette holds every hostname under it, by the one zone rule."""
 
-from __future__ import annotations
-
 from django.test import SimpleTestCase
 
 from ..command_center import DiscoveryItem, _matching_estate

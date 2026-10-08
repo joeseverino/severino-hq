@@ -1,7 +1,5 @@
 """A card's stats stay in even rows at every card width."""
 
-from __future__ import annotations
-
 import re
 from functools import cache
 from math import ceil

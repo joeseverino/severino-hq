@@ -9,8 +9,6 @@ Production guidance:
 - Uploaded media live OUTSIDE the application code (set SEVERINO_MEDIA_ROOT).
 """
 
-from __future__ import annotations
-
 import os
 import secrets
 import shlex

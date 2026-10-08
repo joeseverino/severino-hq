@@ -1,7 +1,5 @@
 """Operator tools: lookups HQ runs on request."""
 
-from __future__ import annotations
-
 
 
 from django.shortcuts import redirect

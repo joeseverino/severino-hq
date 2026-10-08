@@ -12,8 +12,6 @@ fingerprint would report itself in sync against a world that moved underneath
 it.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 from collections.abc import Callable

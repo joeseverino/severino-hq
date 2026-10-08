@@ -6,8 +6,6 @@ and are NOT served by the web server's static handler. They are reachable only
 through the auth-protected ``receipts:file`` view, which streams the file.
 """
 
-from __future__ import annotations
-
 import uuid
 from pathlib import Path
 

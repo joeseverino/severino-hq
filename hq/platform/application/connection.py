@@ -17,8 +17,6 @@ Which means a layer can report that it does *not* hold, and say so plainly.
 That is the property that makes the rest worth reading.
 """
 
-from __future__ import annotations
-
 from ipaddress import ip_address
 
 from dataclasses import dataclass

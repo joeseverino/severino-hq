@@ -4,8 +4,6 @@ The hops a request takes, the routes that carry it, the certificates it meets,
 and where each fact came from.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any

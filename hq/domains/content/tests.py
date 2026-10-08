@@ -1,7 +1,5 @@
 """Tests for the content-index sync."""
 
-from __future__ import annotations
-
 import datetime
 import json
 from unittest.mock import patch

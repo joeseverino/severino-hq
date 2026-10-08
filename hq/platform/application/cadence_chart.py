@@ -5,8 +5,6 @@ rule of a period with no data (drawn as its own mark, counted in no total) is
 in one short module.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 

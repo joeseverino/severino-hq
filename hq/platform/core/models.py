@@ -1,7 +1,5 @@
 """Core models: AuditLog and shared mixins."""
 
-from __future__ import annotations
-
 import functools
 import re
 

@@ -1,7 +1,5 @@
 """A credential's missing permissions, expiry and mint command, derived."""
 
-from __future__ import annotations
-
 import shlex
 from datetime import timedelta
 from pathlib import Path

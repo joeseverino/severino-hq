@@ -5,8 +5,6 @@ the kinds that connection's credential reads. The request goes through the one
 gated capability, POST only.
 """
 
-from __future__ import annotations
-
 from datetime import timedelta
 from pathlib import Path
 import tempfile

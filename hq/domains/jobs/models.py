@@ -14,8 +14,6 @@ stops the same job starting twice.
 extension owns the work while the host owns the running of it.
 """
 
-from __future__ import annotations
-
 import uuid
 from datetime import timedelta
 

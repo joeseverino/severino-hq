@@ -8,8 +8,6 @@ title. A tag lists the devices carrying it. Users and unresolved names stay as
 the policy writes them.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, replace
 from typing import Any, Iterable
 

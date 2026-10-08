@@ -9,8 +9,6 @@ Idempotent, keyed by slug. Content type is set on create only, so a manual
 classification in HQ is never clobbered by a sync.
 """
 
-from __future__ import annotations
-
 import json
 import urllib.error
 import urllib.request

@@ -1,7 +1,5 @@
 """The public-address fragment: a GET reads what HQ holds, a POST looks up."""
 
-from __future__ import annotations
-
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model

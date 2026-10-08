@@ -10,8 +10,6 @@ The whole kind on one scope is the part ``WHOLE``: a zone whose certificate
 packs are refused while other zones read.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from ipaddress import ip_address

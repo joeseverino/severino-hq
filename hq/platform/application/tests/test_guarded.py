@@ -1,7 +1,5 @@
 """A list read does not fetch a relation once per row."""
 
-from __future__ import annotations
-
 from datetime import date
 
 from django.core.exceptions import FieldFetchBlocked

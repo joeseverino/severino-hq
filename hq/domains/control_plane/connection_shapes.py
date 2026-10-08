@@ -7,8 +7,6 @@ these (``bridge_registry``), so a setting's name, whether it is required and
 whether it is secret are stated here and nowhere else.
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Any

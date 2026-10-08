@@ -1,7 +1,5 @@
 """Expenses and assets: what their lists add up to, and what their pages lead to."""
 
-from __future__ import annotations
-
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model

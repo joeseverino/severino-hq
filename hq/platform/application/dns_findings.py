@@ -5,8 +5,6 @@ Read off the facts ``topology`` puts on each AdGuard connection node from
 declares each rule beside the detector that decides it.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from hq.domains.control_plane.observations.adguard import (

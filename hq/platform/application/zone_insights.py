@@ -16,8 +16,6 @@ nothing to say. They are registered by name in ``zones.ZONE_INSIGHTS`` so a new
 one is an entry rather than an edit to a page.
 """
 
-from __future__ import annotations
-
 import re
 from hq.platform.application.routes import reverse
 

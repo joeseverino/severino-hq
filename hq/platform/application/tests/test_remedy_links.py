@@ -9,8 +9,6 @@ it acts on, however far down the catalogue, and every link the findings, the
 action queue and the service pages emit is followed and checked.
 """
 
-from __future__ import annotations
-
 import re
 from html import unescape
 from urllib.parse import parse_qs, urlsplit

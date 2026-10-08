@@ -14,8 +14,6 @@ hostnames it serves. Every name is example.*; every address is a documentation
 or shared-address range (192.0.2.0/24, 198.51.100.0/24, 100.64.0.0/10).
 """
 
-from __future__ import annotations
-
 from contextlib import ExitStack
 from datetime import timedelta
 

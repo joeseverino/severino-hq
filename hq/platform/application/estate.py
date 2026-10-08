@@ -6,8 +6,6 @@ joined readings. The dashboard card, the estate's action items and the command
 center read ``estate_reading``; none keeps a list of its own.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any

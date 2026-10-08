@@ -5,8 +5,6 @@ call on a thread with a database connection of its own, against a WAL SQLite
 file with one writer at a time.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import shutil

@@ -7,8 +7,6 @@ entry says which object it changed. These prove the page reads those rather than
 asking for a column that points at infrastructure.
 """
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse

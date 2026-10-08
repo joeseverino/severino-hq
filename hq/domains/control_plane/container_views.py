@@ -1,7 +1,5 @@
 """Every running container, and whether what it runs is current and safe."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from hq.platform.application.routes import reverse

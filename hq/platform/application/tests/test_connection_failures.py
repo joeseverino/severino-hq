@@ -1,8 +1,6 @@
 """A connection that does not answer: its cause is stored at the source and its
 fix follows the cause."""
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse

@@ -18,8 +18,6 @@ uptime history) is one function and one entry, and the page renders it without
 learning anything.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, replace
 from typing import Any, Callable
 from urllib.parse import urlparse
@@ -46,10 +44,10 @@ class Cell:
     external: bool = False
     muted: bool = False
     # An entity mention, rendered through the link builder's answer.
-    link: "EntityLink | None" = None
+    link: EntityLink | None = None
 
     @classmethod
-    def of(cls, link: "EntityLink", *, muted: bool = False) -> "Cell":
+    def of(cls, link: EntityLink, *, muted: bool = False) -> Cell:
         """A cell naming one entity, from ``entity_link``."""
 
         return cls(link.label, link.url, external=link.external, muted=muted, link=link)
@@ -160,7 +158,7 @@ def _activity(service, project) -> ServiceSection | None:
     )
 
 
-def _traffic(service) -> "SummaryItem | None":
+def _traffic(service) -> SummaryItem | None:
     """What this host actually served, for the hosts something measures.
 
     The join is the name, like every other fact here: analytics stores a
@@ -199,7 +197,7 @@ class SummaryItem:
 
     label: str
     value: str
-    link: "EntityLink | None" = None
+    link: EntityLink | None = None
     detail: str = ""
     tone: str = ""
     # Shown as a pill in ``tone``: a state never carried by colour alone.

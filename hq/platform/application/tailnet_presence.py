@@ -4,8 +4,6 @@ Its devices, addresses and state, joined to the declared machine they belong
 to.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 

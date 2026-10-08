@@ -1,6 +1,5 @@
 """Canonical, non-mutating HQ projections shared by delivery adapters."""
 
-from __future__ import annotations
 from .sensitivity import SAFE_SENSITIVITIES
 from .projection import iso, page_size
 from . import records

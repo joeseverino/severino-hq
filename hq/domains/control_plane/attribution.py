@@ -1,7 +1,5 @@
 """Which connection a reading belongs to."""
 
-from __future__ import annotations
-
 # Providers HQ holds many connections of, each reaching a different machine. A
 # record read through one names that connection, so no two connections can
 # share a reading. Refused here when a kind of one does not.

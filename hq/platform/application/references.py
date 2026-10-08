@@ -16,8 +16,6 @@ an extension's records refer to the host's, and the host's to an extension's,
 with neither naming the other.
 """
 
-from __future__ import annotations
-
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass

@@ -12,8 +12,6 @@ HQ starts the same work itself when it learns something is due sooner than the
 timer would find it (``start``).
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any

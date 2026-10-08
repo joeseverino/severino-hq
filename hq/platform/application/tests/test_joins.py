@@ -1,7 +1,5 @@
 """One join engine: the domain page, the services and the topology read readings through it."""
 
-from __future__ import annotations
-
 import re
 from datetime import timedelta
 from ipaddress import ip_network

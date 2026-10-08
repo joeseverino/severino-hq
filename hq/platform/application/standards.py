@@ -8,8 +8,6 @@ A subject may declare a check its job requires it to fail, with the reason:
 that check is "by design", shown with the reason and never a gap.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from collections.abc import Mapping
 from typing import Any, Callable

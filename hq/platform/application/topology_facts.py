@@ -1,7 +1,5 @@
 """What the connections themselves report, attached to the nodes they read: the perimeter, the tailnet, and the policy each observation is judged against."""
 
-from __future__ import annotations
-
 import re
 
 from dataclasses import replace

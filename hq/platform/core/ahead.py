@@ -26,8 +26,6 @@ Nothing here decides what is true. A request that arrives before the thread
 has finished derives for itself, exactly as it did before.
 """
 
-from __future__ import annotations
-
 import logging
 import re
 import threading

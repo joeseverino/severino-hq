@@ -12,8 +12,6 @@ HQ's own image is never planned here: it is deployed by its own signed
 pipeline, and only by that.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 

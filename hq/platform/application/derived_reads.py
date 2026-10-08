@@ -8,8 +8,6 @@ action queue do. Readings leave only through their schema
 so none can be returned.
 """
 
-from __future__ import annotations
-
 from dataclasses import asdict
 from datetime import datetime
 from typing import Any

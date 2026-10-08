@@ -12,8 +12,6 @@ it only where the stored value is blank or equal; a different stored value is
 kept and reported, never overwritten. See docs/DERIVED_FACTS.md.
 """
 
-from __future__ import annotations
-
 from dataclasses import asdict, dataclass, field, fields
 from typing import Any
 

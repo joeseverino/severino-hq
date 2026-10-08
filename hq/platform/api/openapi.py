@@ -20,8 +20,6 @@ Examples are responses the suite really received, recorded into
 this document on every run.
 """
 
-from __future__ import annotations
-
 import json
 import re
 from collections.abc import Callable, Iterator

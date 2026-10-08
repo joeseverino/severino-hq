@@ -12,8 +12,6 @@ not this account's socket, or a platform that cannot name a peer stops the
 listener; it never serves with less.
 """
 
-from __future__ import annotations
-
 import asyncio
 import contextlib
 import logging

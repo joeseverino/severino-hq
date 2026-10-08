@@ -13,8 +13,6 @@ Nothing here reads anything. The answers are only as fresh as those readings,
 and a page says when they were taken.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -120,7 +118,7 @@ class Running:
         record: dict[str, Any],
         observed_at: Any,
         watchers: dict[tuple[str, str], tuple[str, bool]] | None = None,
-    ) -> "Running":
+    ) -> Running:
         host = str(record.get("host", ""))
         name = str(record.get("name", ""))
         return cls(
@@ -476,7 +474,7 @@ class Container:
         return _mounts_from_volumes().get((self.machine.name, self.running.name))
 
     @property
-    def shared_mounts(self) -> dict[str, tuple["Container", ...]]:
+    def shared_mounts(self) -> dict[str, tuple[Container, ...]]:
         """The other containers on its machine that mount each of its sources."""
 
         mounts = self.mounts or ()

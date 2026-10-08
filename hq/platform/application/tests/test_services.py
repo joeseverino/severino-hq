@@ -4,8 +4,6 @@ Every hostname here is under ``example.com`` or ``example.test``. This repositor
 is public, and a fixture is documentation whether or not it was meant to be.
 """
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse

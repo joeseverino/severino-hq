@@ -1,7 +1,5 @@
 """An amount is written one way on every page."""
 
-from __future__ import annotations
-
 from decimal import Decimal
 
 from django.template import Context, Template, TemplateSyntaxError

@@ -1,7 +1,5 @@
 """Domain-neutral resolution plans derived from claims and registered actions."""
 
-from __future__ import annotations
-
 from dataclasses import asdict, dataclass
 from hashlib import sha256
 

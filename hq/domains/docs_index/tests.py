@@ -12,8 +12,6 @@ and validates the manifest against it. These tests make divergence fail loudly:
   schema changes are actually authored.
 """
 
-from __future__ import annotations
-
 import json
 import shutil
 import subprocess

@@ -5,8 +5,6 @@ sends when it has nothing to say. Each report is held to the contract's schema
 before it is recorded, so a test cannot exercise a shape the bridge refuses.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from hq.domains.control_plane.bridge_contract import departs

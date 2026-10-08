@@ -8,8 +8,6 @@ keeps one record of nine, and a reconciliation edits whichever the provider
 happened to return first.
 """
 
-from __future__ import annotations
-
 from unittest import mock
 
 from django.contrib.auth import get_user_model

@@ -1,7 +1,5 @@
 """Docker readings in the relation graph, on the machine page, and as findings."""
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse

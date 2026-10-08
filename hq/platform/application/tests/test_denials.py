@@ -1,7 +1,5 @@
 """Refusals, recorded: attributed when the caller is known, counted when not."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from unittest import mock
 

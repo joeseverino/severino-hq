@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import difflib
 from argparse import ArgumentParser
 from typing import Any

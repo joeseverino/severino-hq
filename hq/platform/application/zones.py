@@ -24,8 +24,6 @@ definition: a challenge record that outlived its issuance, and a CAA record that
 forbids the authority HQ renews with.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Any

@@ -13,8 +13,6 @@ profile to read and whether it is due, and ``request_read`` asks for one now.
 ``observations.github.WATCHED_KEPT`` states what a read costs.
 """
 
-from __future__ import annotations
-
 from datetime import datetime, timedelta
 from typing import Any
 

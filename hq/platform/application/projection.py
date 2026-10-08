@@ -10,8 +10,6 @@ the page-size ceiling and the timestamp rendering. Each is defined once so a
 change to it reaches every surface.
 """
 
-from __future__ import annotations
-
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Callable, Iterator, Mapping, TypeVar

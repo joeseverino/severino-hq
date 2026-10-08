@@ -1,7 +1,5 @@
 """Certificates HQ issues or is handed, and how each reaches its targets."""
 
-from __future__ import annotations
-
 import re
 from collections.abc import Mapping
 from types import MappingProxyType

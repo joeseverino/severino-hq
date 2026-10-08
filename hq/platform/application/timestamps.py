@@ -23,8 +23,6 @@ A trailing ``Z`` needs no rewriting: ``datetime.fromisoformat`` accepts it on
 every Python HQ supports.
 """
 
-from __future__ import annotations
-
 from datetime import date, datetime, timezone
 from typing import Literal
 

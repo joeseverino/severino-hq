@@ -1,7 +1,5 @@
 """Wire up login/logout audit events, and database upkeep after a migration."""
 
-from __future__ import annotations
-
 from django.contrib.auth.signals import (
     user_logged_in,
     user_logged_out,

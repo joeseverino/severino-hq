@@ -17,8 +17,6 @@ on the page checked every day, and lights up on its own the moment it has
 something to say. No flag, no configuration, no decision to revisit.
 """
 
-from __future__ import annotations
-
 from decimal import Decimal
 from typing import Any
 

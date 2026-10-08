@@ -1,7 +1,5 @@
 """Dependency bootstrap and config-reader contracts."""
 
-from __future__ import annotations
-
 import importlib.util
 import json
 import tempfile

@@ -6,8 +6,6 @@ only when all four hold: DEBUG is on, `SEVERINO_DEBUG_TOOLBAR` is set, the
 suite is not running, and the package is importable.
 """
 
-from __future__ import annotations
-
 import importlib.util
 
 DEBUG_TOOLBAR_APP = "debug_toolbar"

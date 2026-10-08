@@ -16,8 +16,6 @@ shape are doing real work:
   the number of areas needing attention.
 """
 
-from __future__ import annotations
-
 import re
 
 from django.db.models import BooleanField, Count, ExpressionWrapper, Q

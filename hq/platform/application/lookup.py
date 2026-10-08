@@ -11,8 +11,6 @@ handlers are registered as ``read`` capabilities, so the browser form, the
 machine API, the CLI and MCP all reach this one implementation.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from ipaddress import ip_address
 import json

@@ -1,7 +1,5 @@
 """What the estate pages derive reaches the API, MCP, CLI and SDK from one registration."""
 
-from __future__ import annotations
-
 import json
 import re
 from io import StringIO

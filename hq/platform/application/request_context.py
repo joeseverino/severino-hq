@@ -5,8 +5,6 @@ else sets it. Outside a request it is None, and a read that needs it refuses
 rather than describing some other request.
 """
 
-from __future__ import annotations
-
 from collections.abc import MutableMapping
 from contextvars import ContextVar, Token
 from typing import Any

@@ -8,8 +8,6 @@ fields of ``project.upsert`` or ``asset.upsert`` and needs a slug. Runs the
 ``hq.import`` capability.
 """
 
-from __future__ import annotations
-
 import json
 import sys
 from pathlib import Path

@@ -8,8 +8,6 @@ schema, and every payload against its request schema. A field changed on
 either side without the contract fails here or in the Go build.
 """
 
-from __future__ import annotations
-
 from unittest.mock import patch
 
 from django.test import TestCase

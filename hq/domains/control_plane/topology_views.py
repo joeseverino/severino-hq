@@ -1,7 +1,5 @@
 """The topology workspace and the drill-in for one node."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode

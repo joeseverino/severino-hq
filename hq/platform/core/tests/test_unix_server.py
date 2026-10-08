@@ -1,7 +1,5 @@
 """The private Unix listener: who may bind it, who may call it, and what it leaves behind."""
 
-from __future__ import annotations
-
 import http.client
 import os
 import socket

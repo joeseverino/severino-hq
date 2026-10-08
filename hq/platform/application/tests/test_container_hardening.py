@@ -1,8 +1,6 @@
 """The compose change HQ writes for a container's unmet checks, and the help on
 every container action item: a button, the exact config, or a stated reason."""
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse

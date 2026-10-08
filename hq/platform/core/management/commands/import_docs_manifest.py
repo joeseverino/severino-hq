@@ -9,8 +9,6 @@ The manifest is the same JSON shape the web import accepts. See
 ``docs_index/importer.py`` for the schema.
 """
 
-from __future__ import annotations
-
 import json
 import sys
 from pathlib import Path

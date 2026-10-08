@@ -1,7 +1,5 @@
 """An open page asking for its own readings."""
 
-from __future__ import annotations
-
 from django.http import Http404, JsonResponse
 from django.views import View
 

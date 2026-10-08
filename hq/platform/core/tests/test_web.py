@@ -5,8 +5,6 @@ and every page in the main nav (including reports + exports) renders without a
 500. Add module-specific tests inside each app as it grows.
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 import logging

@@ -10,8 +10,6 @@ began at a time nobody recorded, and so did one that appears after a gap with
 no look: both are kept with no date, and a card then says none.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import datetime, timedelta

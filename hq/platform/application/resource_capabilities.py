@@ -5,8 +5,6 @@ itself, with the same functions the operations enforce. Pages, the topology and
 the resource list read this instead of testing kinds.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Mapping

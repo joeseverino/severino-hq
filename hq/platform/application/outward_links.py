@@ -4,8 +4,6 @@ Each provider's own console and the operator's declared links, as the
 navigation offers them.
 """
 
-from __future__ import annotations
-
 from hq.domains.control_plane.models import ProviderConnection
 
 from .derivations import derivation

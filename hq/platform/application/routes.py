@@ -15,8 +15,6 @@ Those two are fixed for one request, and asking Django for them costs more than
 the remembered lookup they key, so a projection asks once.
 """
 
-from __future__ import annotations
-
 from functools import lru_cache
 from typing import Any
 

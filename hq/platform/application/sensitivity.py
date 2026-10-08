@@ -11,8 +11,6 @@ is how every other surface asks: it imports the model, never the reverse, so
 persistence does not depend on the application layer.
 """
 
-from __future__ import annotations
-
 from django.db.models import QuerySet
 
 from hq.domains.docs_index.models import SAFE_SENSITIVITIES, DocumentationRecord

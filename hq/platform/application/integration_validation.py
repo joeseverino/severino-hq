@@ -5,9 +5,8 @@ assemble a registry while accidentally bypassing the same contract checks the
 runtime composition receives.
 """
 
-from __future__ import annotations
-
 import inspect
+from annotationlib import Format
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
@@ -141,7 +140,7 @@ def _validate_capability_handler(spec: CapabilitySpec) -> None:
     if kind:
         kwargs[kind.keyword] = None
     try:
-        inspect.signature(spec.handler).bind(None, **kwargs)
+        inspect.signature(spec.handler, annotation_format=Format.STRING).bind(None, **kwargs)
     except TypeError as exc:
         raise ImproperlyConfigured(
             f"Capability {spec.name!r} handler does not implement the host call contract."
@@ -186,7 +185,7 @@ def _validate_list_contract(spec: ResourceSpec) -> None:
     if spec.list_handler and spec.list_query_type:
         try:
             values = spec.list_query_type().model_dump()
-            inspect.signature(spec.list_handler).bind(**values, **_principal_argument(spec))
+            inspect.signature(spec.list_handler, annotation_format=Format.STRING).bind(**values, **_principal_argument(spec))
         except (TypeError, ValidationError) as exc:
             raise ImproperlyConfigured(
                 f"Resource {spec.name!r} list handler does not implement its query contract."
@@ -201,7 +200,7 @@ def _validate_detail_contract(spec: ResourceSpec) -> None:
     if not spec.detail_handler:
         return
     try:
-        inspect.signature(spec.detail_handler).bind(None, **_principal_argument(spec))
+        inspect.signature(spec.detail_handler, annotation_format=Format.STRING).bind(None, **_principal_argument(spec))
     except TypeError as exc:
         raise ImproperlyConfigured(
             f"Resource {spec.name!r} detail handler does not accept one identifier."
@@ -314,7 +313,7 @@ def validate_connection_spec(spec: ConnectionSpec) -> None:
             f"Connection {spec.name!r} must declare unique valid capabilities."
         )
     try:
-        inspect.signature(spec.instance_provider).bind()
+        inspect.signature(spec.instance_provider, annotation_format=Format.STRING).bind()
     except (TypeError, ValueError) as exc:
         raise ImproperlyConfigured(
             f"Connection {spec.name!r} instance provider must take no arguments."

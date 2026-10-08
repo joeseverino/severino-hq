@@ -15,8 +15,6 @@ may keep the internal vocabulary. Like ``interface_text``, a gate reads this
 and a running HQ never does.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from collections.abc import Iterable, Iterator

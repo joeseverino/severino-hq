@@ -17,8 +17,6 @@ labels arrive from installed manifests at runtime, and ``test_domains``
 enforces that nothing here hardcodes one.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from functools import cache
 from typing import Any, Callable, NamedTuple

@@ -5,8 +5,6 @@ delivery; its tests hold the check name, the comment marker and the app's
 registered permissions.
 """
 
-from __future__ import annotations
-
 from django.test import SimpleTestCase
 
 from hq.domains.control_plane.providers import PROVIDERS

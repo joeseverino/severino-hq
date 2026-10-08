@@ -1,7 +1,5 @@
 """Fail-closed runtime enforcement for Cordon-verified plugin compositions."""
 
-from __future__ import annotations
-
 from importlib.metadata import PackageNotFoundError, version as package_version
 import json
 import os

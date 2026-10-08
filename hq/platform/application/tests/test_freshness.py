@@ -1,7 +1,5 @@
 """One freshness rule per reading kind, used by every surface."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model

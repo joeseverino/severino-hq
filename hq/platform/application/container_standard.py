@@ -11,8 +11,6 @@ Nothing here is a verdict on intent: a socket proxy exists to hold the Docker
 socket, and the page says so as plainly as for anything else.
 """
 
-from __future__ import annotations
-
 from typing import Any, Mapping
 
 from .standards import Check, Posture, measure

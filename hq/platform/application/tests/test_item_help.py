@@ -2,8 +2,6 @@
 to run, the page the work is done on, what to do in words, or the reason none
 of those can be offered. Never a problem alone."""
 
-from __future__ import annotations
-
 import ast
 from datetime import timedelta
 from decimal import Decimal

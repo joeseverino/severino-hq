@@ -12,8 +12,6 @@ validator or constraint declared on the model holds on every path and no
 adapter restates it.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from typing import Any
 

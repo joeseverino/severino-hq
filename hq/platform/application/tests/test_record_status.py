@@ -1,7 +1,5 @@
 """A record has one name, one status line, and a history of what changed."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model

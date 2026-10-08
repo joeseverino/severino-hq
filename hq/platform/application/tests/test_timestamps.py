@@ -1,7 +1,5 @@
 """The one timestamp parser, edge by edge, and the call sites it corrected."""
 
-from __future__ import annotations
-
 import ast
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path

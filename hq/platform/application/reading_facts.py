@@ -7,8 +7,6 @@ the rules read the rows back. A reading that could not be taken is a row too,
 so what went quiet is said and not dropped.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import fields, replace
 from datetime import datetime

@@ -9,8 +9,6 @@ offering per container the compose change HQ wrote for it
 declaration that says holding it is the container's job.
 """
 
-from __future__ import annotations
-
 import shlex
 from typing import Any
 

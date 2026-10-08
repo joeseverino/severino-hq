@@ -16,8 +16,6 @@ back into one; publishing it is the DNS record's own use case, which already
 knows how to reconcile a change and say what it will cost.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any
 

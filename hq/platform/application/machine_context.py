@@ -17,8 +17,6 @@ The section and cell primitives are shared with the service page rather than
 copied, so a band gained on one renders identically on the other.
 """
 
-from __future__ import annotations
-
 from typing import Callable
 
 from hq.platform.application.routes import reverse

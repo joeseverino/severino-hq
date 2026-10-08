@@ -5,8 +5,6 @@ reading holds in a known domain that nothing declares, marked observed. The
 list page, the topology, the domain cards and the API read this one list.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -158,7 +156,7 @@ class ZoneMember:
     url: str
     status: str = "neutral"
     status_label: str = ""
-    service: "Service | None" = None
+    service: Service | None = None
 
 
 def services_by_zone(zones) -> dict[str, tuple[ZoneMember, ...]]:

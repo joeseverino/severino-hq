@@ -5,8 +5,6 @@ the registered read serializes the same projection, so a fact on the page that
 the API, MCP, CLI or SDK cannot return fails here.
 """
 
-from __future__ import annotations
-
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model

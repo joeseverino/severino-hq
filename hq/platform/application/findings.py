@@ -30,8 +30,6 @@ Absence of a remedy is a fact, not an omission. A principal who cannot run the
 capability sees the finding and the evidence and no remedy at all.
 """
 
-from __future__ import annotations
-
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from typing import Any

@@ -7,8 +7,6 @@ not here: ``application.records`` derives them from its declaration.
 extension declares; ``application.capabilities`` runs them.
 """
 
-from __future__ import annotations
-
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 
 from .cadence import ControllerSweepCommand, request_controller_sweep

@@ -5,8 +5,6 @@ Shared by everything HQ reads about public GitHub data from the web process
 controller's (``control_plane.provider_adapters.github_app``), never this.
 """
 
-from __future__ import annotations
-
 import json
 import urllib.error
 import urllib.request

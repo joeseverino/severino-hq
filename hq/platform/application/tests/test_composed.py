@@ -1,7 +1,5 @@
 """Every installed extension's part of a shared page is derived once per change."""
 
-from __future__ import annotations
-
 from datetime import date
 from unittest import mock
 

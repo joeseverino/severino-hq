@@ -1,7 +1,5 @@
 """A record names a thing in HQ one way, and the thing lists what names it."""
 
-from __future__ import annotations
-
 from datetime import date
 from decimal import Decimal
 from unittest import mock

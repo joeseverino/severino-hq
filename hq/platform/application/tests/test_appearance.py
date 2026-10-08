@@ -1,7 +1,5 @@
 """The theme switch: system, light or dark, drawn server-side on `<html>`."""
 
-from __future__ import annotations
-
 from unittest import mock
 
 from django.contrib.auth import get_user_model

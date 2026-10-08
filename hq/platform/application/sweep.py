@@ -13,8 +13,6 @@ partway through must take the stored sweep with it rather than leave
 declarations describing a world nothing recorded.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import Any
 

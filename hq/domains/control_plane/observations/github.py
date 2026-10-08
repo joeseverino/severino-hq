@@ -11,8 +11,6 @@ is the configuration. Secrets, variables' values and log contents are never
 read, so the schema has nowhere to put them.
 """
 
-from __future__ import annotations
-
 from datetime import timedelta
 from typing import Any
 

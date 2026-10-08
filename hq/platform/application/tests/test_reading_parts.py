@@ -4,8 +4,6 @@ stored marker record per zone must not count as a record, read as "Readable",
 or let the apex's path say the edge answers with nothing unread.
 """
 
-from __future__ import annotations
-
 from ipaddress import ip_network
 from unittest import mock
 

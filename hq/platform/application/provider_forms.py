@@ -19,8 +19,6 @@ Two rules keep this honest:
   rendered rather than dropped.
 """
 
-from __future__ import annotations
-
 import types
 import typing
 from typing import Any

@@ -12,8 +12,6 @@ request half (how the request being answered reached HQ) exists only where
 there is a request, and is returned under ``request``.
 """
 
-from __future__ import annotations
-
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any

@@ -4,8 +4,6 @@ Settings are loaded in a fresh process per case, because the switch is read
 once at import and the suite's own settings always have it off.
 """
 
-from __future__ import annotations
-
 import importlib.util
 import json
 import subprocess

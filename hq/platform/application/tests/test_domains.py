@@ -1,7 +1,5 @@
 """Invariants the domain registry has to hold for the composition to be safe."""
 
-from __future__ import annotations
-
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch

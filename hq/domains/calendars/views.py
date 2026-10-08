@@ -1,7 +1,5 @@
 """The calendar: a month of every source, a day of everything, and the operator's own events."""
 
-from __future__ import annotations
-
 from datetime import date
 from uuid import UUID
 

@@ -1,7 +1,5 @@
 """Tailnet devices and the tailnet policy: settings HQ keeps, not things it made."""
 
-from __future__ import annotations
-
 import json
 
 from collections.abc import Mapping

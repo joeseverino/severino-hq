@@ -10,8 +10,6 @@ first seen.
 Read only from what is already stored; nothing here polls.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta

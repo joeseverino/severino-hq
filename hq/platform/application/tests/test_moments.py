@@ -1,7 +1,5 @@
 """One way to write a moment, a date and an age, and one filter that shows them."""
 
-from __future__ import annotations
-
 import re
 from datetime import date, datetime, timedelta
 from pathlib import Path

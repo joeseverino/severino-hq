@@ -4,8 +4,6 @@ Read from the access list reading joined to the service's names, so the band
 and the relation graph say the same thing.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from hq.domains.control_plane.observations.npm import ACCESS_LIST_KIND

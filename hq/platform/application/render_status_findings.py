@@ -10,8 +10,6 @@ revoked one keeps working. The reading is one fact per renderer on the node of
 the controller that read it, and the rules here read those facts.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta

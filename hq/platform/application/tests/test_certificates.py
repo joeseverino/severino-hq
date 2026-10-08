@@ -6,8 +6,6 @@ assuming: encrypted at rest, refused outright when there is nowhere safe to put
 it, never in a serializer, and checked before it is trusted.
 """
 
-from __future__ import annotations
-
 import datetime
 
 from cryptography import x509

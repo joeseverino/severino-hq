@@ -1,7 +1,5 @@
 """Machine, service and domain pages: endpoints, self-links, visibility, counts."""
 
-from __future__ import annotations
-
 from ipaddress import ip_network
 from unittest import mock
 

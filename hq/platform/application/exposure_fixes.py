@@ -1,7 +1,5 @@
 """What HQ can put in front of a name the internet reaches without asking."""
 
-from __future__ import annotations
-
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import command_url

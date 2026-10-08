@@ -1,7 +1,5 @@
 """Swappable indexed-search backend used by the table query engine."""
 
-from __future__ import annotations
-
 import shlex
 from collections.abc import Sequence
 from typing import Protocol

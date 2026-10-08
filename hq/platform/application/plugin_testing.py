@@ -21,8 +21,6 @@ Siblings are synthetic: no import, no database, no second repository checked
 out. They exist to make "something else is installed" true.
 """
 
-from __future__ import annotations
-
 from contextlib import ExitStack
 from datetime import date, timedelta
 from functools import partial

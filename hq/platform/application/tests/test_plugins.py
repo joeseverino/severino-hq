@@ -1,7 +1,5 @@
 """Contract tests for the explicitly allowlisted plugin SDK."""
 
-from __future__ import annotations
-
 from dataclasses import MISSING, fields, replace
 import json
 import os

@@ -1,7 +1,5 @@
 """One answer to which documentation an AI-facing surface may name."""
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

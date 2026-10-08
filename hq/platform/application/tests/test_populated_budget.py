@@ -1,7 +1,5 @@
 """What the dashboard costs once the estate holds something."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from unittest import mock
 

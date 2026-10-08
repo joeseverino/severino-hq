@@ -1,7 +1,5 @@
 """What a job has to get right for anything to be trusted to it."""
 
-from __future__ import annotations
-
 import threading
 from datetime import timedelta
 

@@ -1,7 +1,5 @@
 """The connections page and asking the controller to read now."""
 
-from __future__ import annotations
-
 
 from hq.platform.application.routes import reverse
 from django.views import View

@@ -4,8 +4,6 @@ Each takes an optional ``idempotency_key``, declared once from its effect; a
 repeat carrying the same key returns the first result. A ``read`` takes none.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 import tempfile
 

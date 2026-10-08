@@ -5,8 +5,6 @@ latest one per provider against the user, so work that runs with no session
 behind it (a sweep of what they star) knows whose account to read.
 """
 
-from __future__ import annotations
-
 import hashlib
 import re
 from typing import Any, Mapping

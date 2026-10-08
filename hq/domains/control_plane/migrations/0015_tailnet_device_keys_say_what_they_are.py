@@ -15,8 +15,6 @@ by foreign key and need no help.
 Reversible: the down migration restores the bare name where it is free.
 """
 
-from __future__ import annotations
-
 from django.db import migrations
 from django.utils.text import slugify
 

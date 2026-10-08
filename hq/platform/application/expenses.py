@@ -1,7 +1,5 @@
 """Expense commands shared by web, MCP, and CLI."""
 
-from __future__ import annotations
-
 from dataclasses import asdict, dataclass
 from datetime import date
 from decimal import Decimal

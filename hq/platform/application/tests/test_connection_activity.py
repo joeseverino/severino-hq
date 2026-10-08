@@ -1,7 +1,5 @@
 """Each connection's last activity: stored on the event, read in bounded queries."""
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.db import connection as db_connection
 from django.test import TestCase

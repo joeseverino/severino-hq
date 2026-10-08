@@ -8,8 +8,6 @@ future severino-knowledge-router MCP can point an assistant at the right place.
 No secrets should be stored here.
 """
 
-from __future__ import annotations
-
 from datetime import timedelta
 
 from django.conf import settings

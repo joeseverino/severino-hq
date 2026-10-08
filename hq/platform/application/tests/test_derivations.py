@@ -1,7 +1,5 @@
 """Derived facts: computed once per change of their inputs, and never served stale."""
 
-from __future__ import annotations
-
 import pickle
 import sys
 from contextlib import contextmanager

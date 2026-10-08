@@ -1,7 +1,5 @@
 """Renewing a session returns the operator to the page they were on."""
 
-from __future__ import annotations
-
 from unittest import mock
 
 from django.contrib.auth.models import AnonymousUser

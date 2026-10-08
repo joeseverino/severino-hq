@@ -1,7 +1,5 @@
 """The dashboard: its glance panels, their settings, the contacts panel and the links an operator pins."""
 
-from __future__ import annotations
-
 from datetime import date, timedelta
 
 from django.contrib import messages

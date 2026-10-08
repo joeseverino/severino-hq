@@ -1,7 +1,5 @@
 """The inner-loop gate maps a change to the tests that reach it."""
 
-from __future__ import annotations
-
 import importlib.util
 import shutil
 import tempfile

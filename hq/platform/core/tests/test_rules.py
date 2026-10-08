@@ -1,8 +1,6 @@
 """A row-level rule is declared once and held twice: by ``full_clean`` beside
 its field, and by the database against every writer."""
 
-from __future__ import annotations
-
 import hashlib
 import sqlite3
 import tempfile

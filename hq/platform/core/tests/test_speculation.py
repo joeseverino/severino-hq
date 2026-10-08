@@ -1,7 +1,5 @@
 """A page fetched on a guess: where pages point the browser, and what the guess may not do."""
 
-from __future__ import annotations
-
 import json
 
 from django.contrib.auth import get_user_model

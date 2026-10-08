@@ -18,8 +18,6 @@ What an action is handed has the types, the required members and the bounds
 the contract states, so an action reads a member and never coerces one.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Iterator
 from dataclasses import dataclass

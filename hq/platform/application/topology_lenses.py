@@ -1,7 +1,5 @@
 """The standing questions asked of a topology, and the traces that follow one node's relationships."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Callable

@@ -1,7 +1,5 @@
 """Pure analytics boundaries shared by HQ and its provider adapter."""
 
-from __future__ import annotations
-
 from datetime import date, datetime, timedelta, timezone
 
 

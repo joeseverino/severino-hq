@@ -1,7 +1,5 @@
 """Caddy: the routes an edge serves, as declared. The controller reads and writes them."""
 
-from __future__ import annotations
-
 import re
 from typing import Annotated, Any
 

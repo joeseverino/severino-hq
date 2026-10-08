@@ -12,8 +12,6 @@ Tailscale did, and a question the sweep cannot answer says so rather than
 guessing.
 """
 
-from __future__ import annotations
-
 import re
 
 import json

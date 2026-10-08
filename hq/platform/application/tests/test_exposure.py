@@ -1,7 +1,5 @@
 """What the internet reaches, derived from the service paths HQ already walks."""
 
-from __future__ import annotations
-
 from django.test import TestCase
 
 from ..exposure import GATED, OPEN, PRIVATE, UNKNOWN, UNROUTED, exposure_of_name, status_at

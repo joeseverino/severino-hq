@@ -1,7 +1,5 @@
 """An open page asks for its own readings: only those, only when due, only by POST."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from pathlib import Path
 import re

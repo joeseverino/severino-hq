@@ -6,8 +6,6 @@ machine, its service or a controller. A name nothing declares reads as what
 the readings observing it say, and whether a DNS record names it.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 

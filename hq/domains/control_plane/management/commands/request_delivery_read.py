@@ -1,7 +1,5 @@
 """Ask the controller to read delivery now: run by the entrypoint as HQ boots."""
 
-from __future__ import annotations
-
 from django.core.management.base import BaseCommand
 
 from hq.platform.application.cadence import request_delivery_read

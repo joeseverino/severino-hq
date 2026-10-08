@@ -1,7 +1,5 @@
 """The reading contract: one registration per kind, and only its fields kept."""
 
-from __future__ import annotations
-
 from django.test import SimpleTestCase, TestCase
 
 from hq.platform.application.inventory import record_inventory

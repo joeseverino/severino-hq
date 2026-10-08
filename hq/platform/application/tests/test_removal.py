@@ -6,8 +6,6 @@ that orphan cannot be found again through HQ, which is the failure this whole
 verb exists to prevent.
 """
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse

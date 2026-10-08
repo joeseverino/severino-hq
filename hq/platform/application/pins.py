@@ -5,8 +5,6 @@ where things are listed. It never reaches a spec, a generation or the
 controller: the world does not change because somebody starred a domain.
 """
 
-from __future__ import annotations
-
 from hq.platform.core.models import Pin
 
 DOMAIN = "domain"

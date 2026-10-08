@@ -23,8 +23,6 @@ replayed, the worst it can cause is a controller run that finds nothing to do.
 """
 
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone as dt_timezone

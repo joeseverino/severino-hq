@@ -1,7 +1,5 @@
 """Shared transaction boundary for command-slug upserts."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from typing import Any, Protocol, TypeVar
 

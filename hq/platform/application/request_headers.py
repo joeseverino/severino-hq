@@ -1,7 +1,5 @@
 """The request headers HQ reads, the ones it declines to, and how each is shown."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 

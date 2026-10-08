@@ -19,12 +19,11 @@ review answers.
     python manage.py sdk_contract --check  # exit 1 on drift
 """
 
-from __future__ import annotations
-
 import dataclasses
 import enum
 import importlib
 import inspect
+from annotationlib import Format
 import json
 import pkgutil
 from pathlib import Path
@@ -70,7 +69,7 @@ def _parameters(target: Any) -> list[str] | None:
     ``*args``/``**kwargs``, and the bare ``*`` and ``/`` markers Python uses."""
 
     try:
-        signature = inspect.signature(target)
+        signature = inspect.signature(target, annotation_format=Format.STRING)
     except (TypeError, ValueError):
         return None
     parameters = list(signature.parameters.values())

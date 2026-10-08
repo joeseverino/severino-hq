@@ -1,7 +1,5 @@
 """The projects list and a project's page: what they call things and where they lead."""
 
-from __future__ import annotations
-
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model

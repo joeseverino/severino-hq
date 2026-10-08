@@ -23,8 +23,6 @@ serious, the same advisory behind a gate or on the tailnet is attention, and
 one nothing routes to is information.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import dataclass
 

@@ -36,8 +36,6 @@ matches and the request is superseded rather than silently applied to content
 nobody read.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import timedelta
 from difflib import unified_diff

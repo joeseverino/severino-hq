@@ -7,8 +7,6 @@ extension's tables cannot be named here: a derivation learns those the first
 time it reads them and keys its answers on them from then on (``derivations``).
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 # The estate: what is declared, what the controller observed, and the readings

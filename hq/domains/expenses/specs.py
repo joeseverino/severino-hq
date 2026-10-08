@@ -1,7 +1,5 @@
 """The expenses resource, declared on its domain in application/domains.py."""
 
-from __future__ import annotations
-
 from pydantic import Field
 
 from hq.platform.application import read_models

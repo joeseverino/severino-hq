@@ -7,8 +7,6 @@ answer. Both read the same declarations: there is no second store and no
 second truth, only a second way of slicing the first.
 """
 
-from __future__ import annotations
-
 from dataclasses import replace
 
 from django.contrib import messages

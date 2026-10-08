@@ -4,8 +4,6 @@ Most of these take a fact away from the request, or put a wrong one in, and
 assert the hop says so: a check that can only come back proven is decoration.
 """
 
-from __future__ import annotations
-
 from unittest import mock
 
 from django.contrib.auth import get_user_model

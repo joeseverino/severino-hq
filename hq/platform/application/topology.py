@@ -7,8 +7,6 @@ link to an existing application capability or web use case, never a graph-only
 mutation that could drift from the thing it claims to represent.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import asdict, dataclass, replace
 from typing import Any

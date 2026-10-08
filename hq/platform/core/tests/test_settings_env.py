@@ -6,8 +6,6 @@ exec'd management command) succeeds with no secrets in its inherited
 environment.
 """
 
-from __future__ import annotations
-
 import os
 import subprocess
 import sys

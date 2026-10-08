@@ -12,8 +12,6 @@ Loopback and link-local addresses name no machine.
 Read-only. HQ's own service is not a declaration and nothing reconciles it.
 """
 
-from __future__ import annotations
-
 import ipaddress
 import socket
 from collections.abc import Iterable, Mapping

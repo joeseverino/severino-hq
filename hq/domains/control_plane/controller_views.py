@@ -1,7 +1,5 @@
 """The controller's own page."""
 
-from __future__ import annotations
-
 from hq.platform.application.routes import reverse
 from django.views.generic import TemplateView
 

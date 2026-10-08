@@ -5,8 +5,6 @@ page reads it to render `data-theme` on `<html>` server-side, which is what
 lets a chosen theme paint on the first frame with no script.
 """
 
-from __future__ import annotations
-
 from django.db import transaction
 from django.utils import timezone
 

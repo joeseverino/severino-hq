@@ -1,7 +1,5 @@
 """The unit state reading, and what HQ says when a unit fails, is absent or stalls."""
 
-from __future__ import annotations
-
 import re
 from datetime import timedelta, timezone as utc
 from pathlib import Path

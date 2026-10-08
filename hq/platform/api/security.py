@@ -11,8 +11,6 @@ be a third place for the authorization model to live, and the first thing to go
 stale the next time a plugin adds a capability.
 """
 
-from __future__ import annotations
-
 import logging
 
 from functools import cache

@@ -1,8 +1,6 @@
 """Relations a page reads from the other end: a certificate's services, a
 connection's problems and purpose, a backlog's own things, a list under its types."""
 
-from __future__ import annotations
-
 from types import SimpleNamespace
 from unittest import mock
 

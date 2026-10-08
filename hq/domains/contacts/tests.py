@@ -1,7 +1,5 @@
 """Contact review screens, with the D1 bridge mocked out."""
 
-from __future__ import annotations
-
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model

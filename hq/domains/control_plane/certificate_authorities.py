@@ -4,8 +4,6 @@ One registry, so every page that shows who issued a certificate names the
 authority the same way. A code not listed is shown as reported.
 """
 
-from __future__ import annotations
-
 from types import MappingProxyType
 
 AUTHORITIES = MappingProxyType(

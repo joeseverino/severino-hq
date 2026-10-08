@@ -13,8 +13,6 @@ on: some controller reports its connections, or a reachable read listed the
 domains. Without that list HQ does not know, and says nothing.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from typing import Any

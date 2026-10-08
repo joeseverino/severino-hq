@@ -1,7 +1,5 @@
 """Infrastructure desired state and policy-gated operation requests."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 

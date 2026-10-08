@@ -1,7 +1,5 @@
 """Maintain and rebuild the relational search projection."""
 
-from __future__ import annotations
-
 from django.db import transaction
 
 from .models import SearchDocument

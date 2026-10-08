@@ -1,7 +1,5 @@
 """Declaring a resource: the generated create-and-edit form, adoption, and uploaded certificate material."""
 
-from __future__ import annotations
-
 from typing import get_origin
 
 from django.contrib import messages

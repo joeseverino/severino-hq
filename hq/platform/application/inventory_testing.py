@@ -1,7 +1,5 @@
 """A stored sweep for tests that read what the controller reported."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from typing import Any
 

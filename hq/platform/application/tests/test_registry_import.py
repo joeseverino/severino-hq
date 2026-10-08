@@ -1,7 +1,5 @@
 """The one-time import: validated whole, applied whole, audited per record."""
 
-from __future__ import annotations
-
 import io
 import json
 from decimal import Decimal

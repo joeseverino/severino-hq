@@ -4,8 +4,6 @@ Every test here substitutes the gateways. That is the point of injecting them:
 the suite must never depend on a third party being up.
 """
 
-from __future__ import annotations
-
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from hq.domains.control_plane.dns_lookup import LookupUnavailable

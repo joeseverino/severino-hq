@@ -1,7 +1,5 @@
 """Durable replay semantics shared by machine and human command transports."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from datetime import timedelta
 import hashlib

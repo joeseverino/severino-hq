@@ -1,7 +1,5 @@
 """Derived answers asked again as their inputs change, ahead of the next request."""
 
-from __future__ import annotations
-
 import threading
 import time
 from datetime import datetime, timedelta, timezone as utc

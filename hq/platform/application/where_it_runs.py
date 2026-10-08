@@ -9,8 +9,6 @@ Notes are free text. A machine or a document a note names is a link wherever
 the name is one HQ knows, and plain text everywhere else.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass, replace
 from urllib.parse import urlparse

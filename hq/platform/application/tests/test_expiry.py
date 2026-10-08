@@ -1,7 +1,5 @@
 """One days-left rule, and one derivation of a resource for every adapter."""
 
-from __future__ import annotations
-
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path

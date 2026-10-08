@@ -1,7 +1,5 @@
 """A plain record's web form and its command are held to the one model rule."""
 
-from __future__ import annotations
-
 from datetime import date
 from unittest import mock
 

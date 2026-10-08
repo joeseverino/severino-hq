@@ -1,7 +1,5 @@
 """Nginx Proxy Manager: the proxy hosts HQ declares. The controller reads and writes them."""
 
-from __future__ import annotations
-
 from typing import Any, Literal
 
 from pydantic import Field

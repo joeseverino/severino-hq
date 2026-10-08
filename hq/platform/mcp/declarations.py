@@ -1,7 +1,5 @@
 """The MCP handler set and signature metadata, without a server dependency."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from typing import Any
 

@@ -5,8 +5,6 @@ on. Not a connection of its own: it holds no credential and reads only what
 GitHub publishes to anyone.
 """
 
-from __future__ import annotations
-
 from datetime import datetime
 
 from hq.platform.application.github_public import GitHubReadError, get, github_repository

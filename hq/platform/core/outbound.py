@@ -18,8 +18,6 @@ enters one by name with ``allowed``; an architecture test holds the uses to
 this table.
 """
 
-from __future__ import annotations
-
 import functools
 import logging
 import socket

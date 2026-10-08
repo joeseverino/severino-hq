@@ -1,7 +1,5 @@
 """The one pass that reads what HQ and its extensions show people."""
 
-from __future__ import annotations
-
 import ast
 import sys
 import tempfile

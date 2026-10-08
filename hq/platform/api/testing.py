@@ -13,8 +13,6 @@ operation, are written to ``openapi-examples.json`` when the run ends:
     python manage.py api_openapi
 """
 
-from __future__ import annotations
-
 import atexit
 import json
 import os

@@ -7,8 +7,6 @@ internal IDs/slugs so a future MCP can reason about relationships.
 No secrets, no sensitive doc bodies, no receipt file contents: by design.
 """
 
-from __future__ import annotations
-
 import csv
 import json
 from collections.abc import Callable, Iterable

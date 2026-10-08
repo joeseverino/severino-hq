@@ -6,8 +6,6 @@ security surface is worse than nothing: it is read as a measurement. So most of
 what follows takes a fact away and asserts the page notices.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from unittest import mock
 

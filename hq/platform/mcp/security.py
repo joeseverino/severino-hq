@@ -1,7 +1,5 @@
 """Fail-closed ASGI boundary for the tailnet-only MCP endpoint."""
 
-from __future__ import annotations
-
 import ipaddress
 import logging
 from collections.abc import Awaitable, Callable, Iterable

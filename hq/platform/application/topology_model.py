@@ -4,8 +4,6 @@ Also how each relation ranks on a page, and the one way an edge is emitted, so
 every module that adds edges gives them the same stable id and phrase.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from hashlib import sha256
 
@@ -152,7 +150,7 @@ READING_RANKS: dict[str, int] = {
 }
 
 
-def relation_rank(edge: "TopologyEdge") -> int:
+def relation_rank(edge: TopologyEdge) -> int:
     """Where an edge's relation is shown among a node's relationships."""
 
     if edge.kind == "reading":

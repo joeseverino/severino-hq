@@ -5,8 +5,6 @@ answer, asked once and named here for transport: this module imports no
 model and decides no number.
 """
 
-from __future__ import annotations
-
 from dataclasses import asdict
 from typing import Any
 

@@ -11,8 +11,6 @@ recorded. An exception on a thread otherwise goes to stderr and the row sits
 at `running` forever.
 """
 
-from __future__ import annotations
-
 import threading
 import traceback
 from collections.abc import Callable

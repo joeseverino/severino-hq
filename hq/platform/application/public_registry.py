@@ -14,8 +14,6 @@ Each reading stands as long as what it reads is slow to change
 (``READ_EVERY``); a digest's attestations never change, so each is read once.
 """
 
-from __future__ import annotations
-
 from datetime import datetime, timedelta
 from ipaddress import ip_address
 from typing import Any, Callable, Iterable, Mapping

@@ -6,8 +6,6 @@ per minute. The credential itself is never recorded, and recording never blocks
 the refusal.
 """
 
-from __future__ import annotations
-
 import logging
 from datetime import timedelta
 

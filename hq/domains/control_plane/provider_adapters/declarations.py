@@ -5,8 +5,6 @@ nothing inventories a printer, and how a place takes a certificate is a fact
 about the place that no provider reports.
 """
 
-from __future__ import annotations
-
 from typing import Any, Literal
 
 from django.urls.converters import StringConverter

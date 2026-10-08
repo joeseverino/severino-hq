@@ -1,7 +1,5 @@
 """Deployment checks judge settings, and run only when a deployment is checked."""
 
-from __future__ import annotations
-
 from django.test import SimpleTestCase, override_settings
 
 from hq.platform.core import checks

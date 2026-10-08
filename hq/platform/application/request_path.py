@@ -12,8 +12,6 @@ attached to the hop they decide.
 and MCP read.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, replace
 import re
 from typing import Any

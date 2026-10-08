@@ -1,7 +1,5 @@
 """Content commands shared by the web, MCP, and CLI adapters."""
 
-from __future__ import annotations
-
 from dataclasses import asdict, dataclass
 from datetime import date
 from typing import Any

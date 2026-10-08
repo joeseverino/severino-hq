@@ -1,7 +1,5 @@
 """Canonical search use case shared by web, CLI, TUI, and MCP adapters."""
 
-from __future__ import annotations
-
 from django.db import connection
 from django.db.models import CharField, F, IntegerField, Q, QuerySet, Value
 from django.db.models.functions import Cast

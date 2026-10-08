@@ -1,7 +1,5 @@
 """Only a connection that manages adopts, and an operator's "not managed" sticks."""
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse

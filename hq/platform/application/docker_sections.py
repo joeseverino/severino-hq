@@ -5,8 +5,6 @@ record reaches the page by the same keys it reaches the relation graph.
 A record that only says why a part was unreadable is left to the facts.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Mapping
 from typing import Any, Callable
 

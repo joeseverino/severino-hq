@@ -8,8 +8,6 @@ The fixture is the shape, not the deployment: names, roles and addresses are
 made up, and the ranges are the ones reserved for writing about addresses.
 """
 
-from __future__ import annotations
-
 from importlib import import_module
 
 from django.db import connection

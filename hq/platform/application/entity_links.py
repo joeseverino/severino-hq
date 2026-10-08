@@ -8,8 +8,6 @@ Every entity name a page renders comes through here, so a name either links
 the same way everywhere or nowhere.
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable

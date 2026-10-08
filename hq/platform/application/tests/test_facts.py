@@ -1,7 +1,5 @@
 """Facts about a subject: joined through declared keys, sourced, and never silent."""
 
-from __future__ import annotations
-
 from hq.domains.control_plane.providers import PROVIDERS
 
 from datetime import timedelta

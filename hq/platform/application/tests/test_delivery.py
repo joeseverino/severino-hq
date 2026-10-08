@@ -1,7 +1,5 @@
 """Continuous delivery is scheduled once per stage, and only through a connection that manages it."""
 
-from __future__ import annotations
-
 from django.test import TestCase
 from django.utils import timezone
 

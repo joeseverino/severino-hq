@@ -4,8 +4,6 @@ Argon2 is a native extension. The container gate runs this file inside the
 built image, which is where a missing or unbuildable wheel would show.
 """
 
-from __future__ import annotations
-
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import (

@@ -1,7 +1,5 @@
 """Human execution adapter for the canonical capability registry."""
 
-from __future__ import annotations
-
 import json
 import secrets
 

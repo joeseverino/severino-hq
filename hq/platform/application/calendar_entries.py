@@ -4,8 +4,6 @@ Web, API and MCP all write through these commands, so an entry an agent adds
 is the same audited write as one added on the page.
 """
 
-from __future__ import annotations
-
 import calendar as month_lengths
 from collections.abc import Iterator
 from itertools import count

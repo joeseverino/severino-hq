@@ -10,8 +10,6 @@ schemas. ``bridge_contract`` joins them to the bridge's own messages, and
 Nothing here is read back: a schema is built from the declaration every time.
 """
 
-from __future__ import annotations
-
 import re
 from collections.abc import Iterable, Mapping
 from typing import Any

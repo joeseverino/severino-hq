@@ -9,8 +9,6 @@ offline CA, a phone. It carries what the machine is for and the addresses that
 reach it, and it puts the machine on the board by itself.
 """
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse

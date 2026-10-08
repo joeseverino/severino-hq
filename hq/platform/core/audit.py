@@ -6,8 +6,6 @@ post_save / post_delete signals then write to AuditLog, attributing the change
 to the current request user (via CurrentUserMiddleware).
 """
 
-from __future__ import annotations
-
 import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -29,7 +27,7 @@ from .models import AuditLog
 logger = logging.getLogger("severino.audit")
 
 _AUDITED_MODELS: dict[type, str] = {}
-_operation_context: ContextVar["OperationContext | None"] = ContextVar(
+_operation_context: ContextVar[OperationContext | None] = ContextVar(
     "hq_operation_context", default=None
 )
 _connection_context: ContextVar[str] = ContextVar("hq_audit_connection", default="")

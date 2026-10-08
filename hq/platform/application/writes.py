@@ -24,8 +24,6 @@ the view to rebuild the URL itself, which duplicates knowledge the model
 already owns. One query at the boundary is the cheaper trade.
 """
 
-from __future__ import annotations
-
 from django.contrib import messages
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.shortcuts import redirect

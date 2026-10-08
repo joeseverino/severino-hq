@@ -1,7 +1,5 @@
 """Compile HQ's independently emitted contracts into one immutable graph."""
 
-from __future__ import annotations
-
 from collections import Counter
 from contextlib import contextmanager
 from contextvars import ContextVar

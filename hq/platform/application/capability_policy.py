@@ -11,8 +11,6 @@ look. An operator lifts it for one agent, or a whole surface, with an explicit
 Allow.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from django.db import transaction

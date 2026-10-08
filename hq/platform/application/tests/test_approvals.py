@@ -4,8 +4,6 @@ A credential on its own must not be able to change a gated kind. Each test is
 one property that has to hold for that, and would fail quietly if it did not.
 """
 
-from __future__ import annotations
-
 from dataclasses import replace
 import json
 from unittest.mock import patch

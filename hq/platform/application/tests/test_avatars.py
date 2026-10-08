@@ -1,7 +1,5 @@
 """A person's picture: fetched from the provider's own origin, kept, and served only to them."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from unittest import mock
 

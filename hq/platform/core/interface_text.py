@@ -25,8 +25,6 @@ never does: ``read`` walks each tree once and parses each file once, and
 ``InterfaceTextTests`` (the architecture tests) fails on anything it finds.
 """
 
-from __future__ import annotations
-
 import ast
 import importlib.util
 import os

@@ -7,8 +7,6 @@ findings raised about the tailnet, and each tailnet reading HQ could not read
 with the reason. None of them derives a fact the others cannot return.
 """
 
-from __future__ import annotations
-
 from dataclasses import asdict, dataclass, replace
 from typing import Any
 from urllib.parse import urlencode

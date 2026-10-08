@@ -1,7 +1,5 @@
 """Where a job says what it is doing, and where they are all listed."""
 
-from __future__ import annotations
-
 from functools import cached_property
 
 from django.core.exceptions import PermissionDenied

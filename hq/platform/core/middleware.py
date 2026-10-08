@@ -7,8 +7,6 @@ Middleware for Severino HQ.
   ORM signals can attribute audit events without leaking across requests.
 """
 
-from __future__ import annotations
-
 from contextvars import ContextVar
 import logging
 from time import monotonic

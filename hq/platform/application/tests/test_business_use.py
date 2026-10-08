@@ -1,7 +1,5 @@
 """The business-use range is one rule, declared on the model and held on every path."""
 
-from __future__ import annotations
-
 import json
 from datetime import date
 

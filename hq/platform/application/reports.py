@@ -1,7 +1,5 @@
 """Canonical report exports shared by web and MCP adapters."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from hq.platform.core.audit import operation_context, record_event

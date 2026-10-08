@@ -4,8 +4,6 @@ Two properties. Applying queued work must not wait for a polling interval, and
 sweeping must not cost a provider call a minute for records that change monthly.
 """
 
-from __future__ import annotations
-
 from datetime import timedelta
 from pathlib import Path
 import tempfile

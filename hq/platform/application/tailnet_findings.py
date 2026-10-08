@@ -1,7 +1,5 @@
 """Findings about the tailnet's policy and settings."""
 
-from __future__ import annotations
-
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
 
 from . import trusted_networks

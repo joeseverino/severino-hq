@@ -7,8 +7,6 @@ local model. Review edits (status / assignee / notes) are written back to D1
 and recorded in the HQ audit log.
 """
 
-from __future__ import annotations
-
 from urllib.parse import quote
 
 from django.contrib import messages

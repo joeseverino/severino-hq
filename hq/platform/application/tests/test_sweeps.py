@@ -1,7 +1,5 @@
 """A page a person loads is answered from what is stored, sweeps or not."""
 
-from __future__ import annotations
-
 from unittest import mock
 
 from django.test import TestCase

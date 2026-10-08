@@ -1,7 +1,5 @@
 """The authenticated MCP caller, carried per request in a context variable."""
 
-from __future__ import annotations
-
 import contextvars
 import logging
 from typing import Any

@@ -1,7 +1,5 @@
 """Held changes and the decision on each."""
 
-from __future__ import annotations
-
 from django.contrib import messages
 
 from django.shortcuts import redirect

@@ -7,8 +7,6 @@ few things on GitHub that wait on a person: a deploy held for approval, a
 default branch failing, a serious alert, an admission about to lapse.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Mapping

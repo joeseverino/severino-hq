@@ -7,8 +7,6 @@ against that and calls the function with the result, so an action never reads
 a request itself.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any

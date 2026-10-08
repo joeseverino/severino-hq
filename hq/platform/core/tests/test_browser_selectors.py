@@ -6,8 +6,6 @@ browser gate and the layout audit use and fails when no template renders it,
 without starting a browser.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from functools import cache

@@ -1,7 +1,5 @@
 """The API reference page: the operator's, under HQ's policy, from a pinned bundle."""
 
-from __future__ import annotations
-
 import hashlib
 import re
 from functools import cache

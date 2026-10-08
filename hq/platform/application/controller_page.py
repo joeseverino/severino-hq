@@ -7,8 +7,6 @@ readings it stored and when each was last attempted, the sweep policy, and
 the work queued for it. Nothing here asks the controller anything.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any

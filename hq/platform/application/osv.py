@@ -7,8 +7,6 @@ packages come from the SBOM its publisher attached (``application.attestations``
 nothing here touches the image.
 """
 
-from __future__ import annotations
-
 import json
 import urllib.error
 import urllib.request

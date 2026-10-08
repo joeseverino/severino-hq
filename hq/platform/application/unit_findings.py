@@ -14,8 +14,6 @@ A unit's state is judged as of when it was read. The age of the reading itself
 is the sweep's to say.
 """
 
-from __future__ import annotations
-
 import shlex
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass

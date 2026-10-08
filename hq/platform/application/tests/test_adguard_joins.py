@@ -1,7 +1,5 @@
 """AdGuard readings joined into the graph: devices, services and findings."""
 
-from __future__ import annotations
-
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase

@@ -5,8 +5,6 @@ tailnet policy. Each rule is declared once, below; the machine list, the
 machine page and search all read ``roles_of``.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Callable
 

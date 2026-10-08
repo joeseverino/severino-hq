@@ -1,8 +1,6 @@
 """Every finding carries its fix: an operation through the gated queue, or the
 exact thing a person does."""
 
-from __future__ import annotations
-
 import json
 
 from django.test import TestCase, override_settings

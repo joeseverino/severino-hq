@@ -6,8 +6,6 @@ tailnet peering the machine page shows (``Presence.peer_path``). Nothing is
 probed and nothing is resolved live.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any

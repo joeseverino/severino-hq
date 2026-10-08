@@ -5,8 +5,6 @@ only while the tailnet policy leaves HQ's machine open to anyone; the rule
 returns a ``Finding``'s fields; ``findings`` builds the finding.
 """
 
-from __future__ import annotations
-
 from ipaddress import ip_network
 from typing import Any
 

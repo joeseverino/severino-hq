@@ -5,8 +5,6 @@ transaction, validation, persistence, audit attribution, and canonical result
 shape; adapters only parse input and render output.
 """
 
-from __future__ import annotations
-
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Callable

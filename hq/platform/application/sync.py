@@ -4,8 +4,6 @@ Documentation only. HQ derives its picture of the infrastructure from what its
 credentials reach, so no document describes it.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 

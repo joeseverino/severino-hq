@@ -1,7 +1,5 @@
 """A navigation entry is called what its page is called."""
 
-from __future__ import annotations
-
 from unittest import mock
 
 from django.test import TestCase

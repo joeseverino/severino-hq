@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from unittest.mock import patch

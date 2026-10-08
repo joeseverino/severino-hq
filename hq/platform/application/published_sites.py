@@ -1,7 +1,5 @@
 """The names HQ publishes to the internet, and the projects each one serves."""
 
-from __future__ import annotations
-
 from urllib.parse import urlparse
 
 from hq.domains.control_plane.models import ManagedResource

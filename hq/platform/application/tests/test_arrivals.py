@@ -1,7 +1,5 @@
 """HQ's record of which devices reached it: private, throttled, bounded."""
 
-from __future__ import annotations
-
 import json
 from datetime import timedelta
 from unittest import mock

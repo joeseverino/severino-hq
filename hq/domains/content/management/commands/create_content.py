@@ -1,7 +1,5 @@
 """Idempotently create or update content through the application service."""
 
-from __future__ import annotations
-
 import json
 from datetime import date
 

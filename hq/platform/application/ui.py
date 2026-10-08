@@ -558,10 +558,10 @@ LABEL_GAP = 52.0
 def line_chart(
     title: str,
     description: str,
-    series: "tuple[tuple[str, tuple[tuple[date, float], ...], int], ...]",
+    series: tuple[tuple[str, tuple[tuple[date, float], ...], int], ...],
     *,
     unit: str,
-    marks: "tuple[tuple[date, str], ...]" = (),
+    marks: tuple[tuple[date, str], ...] = (),
     trend: bool = False,
     minimum: float | None = None,
     maximum: float | None = None,

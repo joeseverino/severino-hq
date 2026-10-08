@@ -13,8 +13,6 @@ name that resolves only to public addresses, never to the machines HQ sits
 among. A token never follows a redirect to another host.
 """
 
-from __future__ import annotations
-
 import json
 import re
 import urllib.error

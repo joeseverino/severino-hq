@@ -6,8 +6,6 @@ eligible. Prints counts only. The daily run is the ``audit.prune`` job
 to count what it would delete.
 """
 
-from __future__ import annotations
-
 from django.conf import settings
 from django.core.management.base import BaseCommand
 

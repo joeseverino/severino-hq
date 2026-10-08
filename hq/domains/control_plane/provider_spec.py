@@ -6,8 +6,6 @@ apart from both so a provider can import its vocabulary without importing the
 registry that collects it.
 """
 
-from __future__ import annotations
-
 import re
 from functools import lru_cache
 from collections.abc import Mapping
@@ -211,7 +209,7 @@ def locked(reason: str) -> ControllerActionPolicy:
 
     return ControllerActionPolicy(mode="locked", reason=reason)
 
-def origin_is_authoritative(provider: "ProviderSpec") -> bool:
+def origin_is_authoritative(provider: ProviderSpec) -> bool:
     """Whether this provider's origin says where a request is *finally* served.
 
     Two kinds of provider answer "and then what serves it", and they mean
@@ -301,7 +299,7 @@ class ProviderSpec:
     spec_type: type
     resolved_type: type | None = None
     resolver: (
-        Callable[[dict[str, Any], "ProviderResolutionContext"], dict[str, Any]] | None
+        Callable[[dict[str, Any], ProviderResolutionContext], dict[str, Any]] | None
     ) = None
     destructive: bool = False
     public_effect: bool = False
@@ -336,7 +334,7 @@ class ProviderSpec:
     # provider that declares a facet for it, so the operator types it once
     # rather than once per resource, and a provider added later joins that
     # flow by saying which of its fields the name fills in.
-    seed: Callable[["NameContext"], dict[str, Any]] | None = None
+    seed: Callable[[NameContext], dict[str, Any]] | None = None
     # Some resources are not complete without material the operator has to
     # supply: an uploaded certificate is only a name and a list of targets
     # until the certificate itself arrives. Declared as a form and a handler so
@@ -447,7 +445,7 @@ class ProviderSpec:
     # `.home.arpa` name cannot get a Let's Encrypt certificate, whose DNS-01
     # challenge needs a zone a credential holds. A sentence rather than a
     # boolean, because the page says why.
-    applies: Callable[["NameContext"], str] | None = None
+    applies: Callable[[NameContext], str] | None = None
     # ``module:attribute`` returning ``{field: ((value, label), ...)}`` for the
     # fields whose valid answers are a matter of live data rather than of type.
     # A topology reference is the case that forced it: rendered from the

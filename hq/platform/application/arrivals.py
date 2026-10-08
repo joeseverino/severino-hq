@@ -17,8 +17,6 @@ The record schema (``control_plane.observations.hq.ArrivalRecord``) admits
 nothing else: no path, query, header value, body or user agent.
 """
 
-from __future__ import annotations
-
 import logging
 import threading
 from dataclasses import dataclass

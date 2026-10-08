@@ -1,7 +1,5 @@
 """Typed, cached dashboard observations and their explicit refresh queue."""
 
-from __future__ import annotations
-
 import re
 
 from dataclasses import dataclass, replace

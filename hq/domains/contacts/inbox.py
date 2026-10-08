@@ -7,8 +7,6 @@ the header count and the search page read that stored copy. D1 is read by
 a write to D1 runs after it changes a submission; no GET reads D1 for these.
 """
 
-from __future__ import annotations
-
 from datetime import timedelta
 
 from hq.platform.application import readings

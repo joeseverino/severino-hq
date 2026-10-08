@@ -1,7 +1,5 @@
 """A request cannot wait on anything outside the process, whatever it calls."""
 
-from __future__ import annotations
-
 import socket
 import subprocess
 import threading

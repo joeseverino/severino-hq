@@ -13,8 +13,6 @@ each is counted with the SQL the migration would put in the ``CHECK``.
 Exit status 1 when a migration not yet applied would be refused by a row.
 """
 
-from __future__ import annotations
-
 import sqlite3
 from collections.abc import Iterator
 from dataclasses import dataclass

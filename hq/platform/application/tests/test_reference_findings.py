@@ -1,8 +1,6 @@
 """The links the database derives from a declaration, and what HQ says of one
 that names nothing."""
 
-from __future__ import annotations
-
 from django.db import connection
 from django.test import TestCase
 

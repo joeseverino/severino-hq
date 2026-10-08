@@ -6,8 +6,6 @@ registry: sharing the reading module would close an import cycle. These are
 plain records, so a declaration costs the declaring module nothing.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Callable

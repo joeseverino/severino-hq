@@ -11,8 +11,6 @@ zone inventory: never a match on labels alone. What an extension reaches that
 is none of these stays a target.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from itertools import combinations

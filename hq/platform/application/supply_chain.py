@@ -9,8 +9,6 @@ Every one is read anonymously and none of it touches the image itself, so a
 check HQ could not read says so rather than failing.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from .standards import Check, Posture, measure

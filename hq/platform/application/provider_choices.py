@@ -10,8 +10,6 @@ module declares rather than queries. Providers point at these by name, the same
 late-bound way a domain points at its attention provider.
 """
 
-from __future__ import annotations
-
 from collections.abc import Set as AbstractSet
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory

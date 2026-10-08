@@ -7,8 +7,6 @@ it and never runs it. Rules return a ``Finding``'s fields; ``findings`` builds
 the finding, so this module does not import it.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 

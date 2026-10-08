@@ -11,8 +11,6 @@ do is three different things and each is shown as what it is:
 Each action renders once; the transport keeps the owner's complete workflow.
 """
 
-from __future__ import annotations
-
 from dataclasses import asdict, is_dataclass
 from typing import Any
 

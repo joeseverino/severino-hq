@@ -1,7 +1,5 @@
 """Entity pages read one relation graph, and every name links one way."""
 
-from __future__ import annotations
-
 import re
 from html.parser import HTMLParser
 

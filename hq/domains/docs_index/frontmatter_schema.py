@@ -15,8 +15,6 @@ committed JSON still matches the installed MCP, the other asserts the
 ``DocumentationRecord`` choice members still cover these sets.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

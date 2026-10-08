@@ -1,7 +1,5 @@
 """A field's effect is said once."""
 
-from __future__ import annotations
-
 from django.test import SimpleTestCase
 
 from hq.domains.control_plane.providers import PROVIDERS

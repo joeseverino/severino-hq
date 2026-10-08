@@ -20,8 +20,6 @@ and neither survives into this table. Timings are milliseconds, absence is
 NULL, and no template has to know that Cloudflare ever said otherwise.
 """
 
-from __future__ import annotations
-
 from django.db import models
 
 from hq.platform.core.rules import Rule

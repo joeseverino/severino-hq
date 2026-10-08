@@ -1,7 +1,5 @@
 """Capability policy: what an operator decided must happen before a credential acts."""
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse

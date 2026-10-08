@@ -6,8 +6,6 @@ order is the substance of it: alphabetical among favorites is an ordering
 nobody chose, which is the whole reason the list needed one.
 """
 
-from __future__ import annotations
-
 from django.test import TestCase
 
 

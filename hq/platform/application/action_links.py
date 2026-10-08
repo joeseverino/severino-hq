@@ -7,8 +7,6 @@ authorization and mutation; capability links are additionally filtered here so
 a projection never advertises authority its principal does not hold.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import replace
 from typing import Protocol

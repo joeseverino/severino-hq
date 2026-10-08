@@ -14,8 +14,6 @@ from it, which is what makes adding a VPS a matter of registering it with
 Portainer rather than of editing anything here.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime
 

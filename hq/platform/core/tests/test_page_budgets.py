@@ -1,7 +1,5 @@
 """What a page costs over the bench estate, pinned so a per-row read cannot return."""
 
-from __future__ import annotations
-
 from collections import Counter
 from unittest import mock
 

@@ -1,7 +1,5 @@
 """What each credential can see: derived from the registries, read in one query."""
 
-from __future__ import annotations
-
 from unittest import mock
 
 from django.contrib.auth import get_user_model

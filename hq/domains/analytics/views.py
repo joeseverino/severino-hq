@@ -4,8 +4,6 @@ Every number here is computed in ``application.analytics``; this chooses the
 window, asks once, and renders. Nothing is joined or summed in a template.
 """
 
-from __future__ import annotations
-
 from django.views.generic import TemplateView
 
 from hq.platform.application.analytics import DEFAULT_WINDOW_DAYS, overview

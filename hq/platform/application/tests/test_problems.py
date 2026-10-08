@@ -1,7 +1,5 @@
 """Open problems on the page of the thing they are about, and since when."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from unittest import mock
 

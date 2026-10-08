@@ -1,7 +1,5 @@
 """The secret render reading, and what HQ says when the secrets go stale."""
 
-from __future__ import annotations
-
 import re
 import unittest
 from html import unescape

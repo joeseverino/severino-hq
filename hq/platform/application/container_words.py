@@ -5,8 +5,6 @@ newer one is published. ``containers.Standing`` carries the facts and takes
 these from here, so each phrase has one owner.
 """
 
-from __future__ import annotations
-
 from .images import version
 
 # Whether a newer version is published, apart from what is known against it.

@@ -1,7 +1,5 @@
 """Django forms derived from the capability registry's JSON Schemas."""
 
-from __future__ import annotations
-
 import re
 import secrets
 from typing import Any

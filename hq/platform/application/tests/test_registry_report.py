@@ -1,7 +1,5 @@
 """One image the registry refuses must never cost HQ the readings it holds."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 
 from django.test import TestCase

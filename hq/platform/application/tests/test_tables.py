@@ -1,7 +1,5 @@
 """The list contract's wording: a sort names its order the way a person would."""
 
-from __future__ import annotations
-
 import re
 
 from django.test import SimpleTestCase

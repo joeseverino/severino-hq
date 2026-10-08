@@ -19,8 +19,6 @@ when the link is followed. ``SpeculativeRequestTests`` requests every page
 speculatively and fails on one that writes without being refused.
 """
 
-from __future__ import annotations
-
 import json
 import re
 from collections.abc import Callable, Iterator

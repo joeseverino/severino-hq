@@ -1,7 +1,5 @@
 """Dashboard + audit-log views."""
 
-from __future__ import annotations
-
 from urllib.parse import quote
 
 from django.contrib import messages

@@ -26,8 +26,6 @@ one; this module only offers the substitutions and the switch, and every domain
 reaches them through ``hq_sdk.demo``.
 """
 
-from __future__ import annotations
-
 import hashlib
 from contextlib import contextmanager
 from contextvars import ContextVar

@@ -4,8 +4,6 @@ Each connection grouped by family, what it may do and why, and the evidence
 behind each ability. The API serialises the same view.
 """
 
-from __future__ import annotations
-
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 
@@ -50,7 +48,7 @@ class ConnectionGroup:
     """A permitted spec beside the instances it produced."""
 
     spec: ConnectionSpec
-    connections: tuple["ConnectionView", ...]
+    connections: tuple[ConnectionView, ...]
 
 
 # What proves a connection may perform an ability. Each is a different claim,
@@ -146,7 +144,7 @@ def grant_evidence(
     return "undeclared", ()
 
 
-def connection_authority(states: tuple["ConnectionAbilityState", ...]) -> str:
+def connection_authority(states: tuple[ConnectionAbilityState, ...]) -> str:
     evidence = {state.evidence for state in states}
     if not evidence:
         return "none"

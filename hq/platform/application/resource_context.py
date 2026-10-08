@@ -6,8 +6,6 @@ what may be done to it, where it runs and sends traffic, which services it
 takes part in, how its provider describes it, and when a certificate runs out.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any

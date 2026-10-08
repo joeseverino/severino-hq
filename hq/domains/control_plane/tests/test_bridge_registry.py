@@ -7,8 +7,6 @@ written from the two. These hold the join, the files, and the names the
 controller's constants take.
 """
 
-from __future__ import annotations
-
 import ast
 import json
 from io import StringIO

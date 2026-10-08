@@ -1,7 +1,5 @@
 """Declarative query engine for searchable, filterable list views."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 import shlex
 from typing import Any, Iterable

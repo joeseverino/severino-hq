@@ -7,8 +7,6 @@ controller, after a page rather than during one, and stores them through the
 same ingest as a sweep.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from ..names import normalized_hostname, organisation_name

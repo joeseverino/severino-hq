@@ -6,8 +6,6 @@ tag and its traffic are not things to publish alongside the code that reads
 them.
 """
 
-from __future__ import annotations
-
 from datetime import timedelta
 
 from django.test import TestCase

@@ -21,8 +21,6 @@ Three shapes cover everything a source emits:
   Spans keep a lane across the week so a bar lines up from cell to cell.
 """
 
-from __future__ import annotations
-
 import logging
 import re
 from collections.abc import Callable, Iterable, Mapping

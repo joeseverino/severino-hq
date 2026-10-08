@@ -4,8 +4,6 @@ The claims each declaration makes, the names that are only aliases of another,
 and whether a provider fronts them. Read once per projection.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field, replace
 from typing import Any, NamedTuple
 
@@ -275,8 +273,8 @@ def _aliases(declared, origins) -> dict[str, str]:
 
 
 def runtime_claim(
-    origin: "Origin | None", containers: "dict[tuple[str, str], Any]"
-) -> "Claim | None":
+    origin: Origin | None, containers: dict[tuple[str, str], Any]
+) -> Claim | None:
     """The declaration for the container this name is served from, if there is one.
 
     Matched on what the origin already resolved: a machine and a container on

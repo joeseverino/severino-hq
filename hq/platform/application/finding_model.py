@@ -4,8 +4,6 @@ Every detector module builds its findings from these, and application.findings
 derives, resolves and serves them. Kept apart so a detector can import its
 vocabulary without importing the pipeline that collects it."""
 
-from __future__ import annotations
-
 import re
 import shlex
 from dataclasses import dataclass
@@ -81,7 +79,7 @@ class FindingRule:
     name: str
     title: str
     severity: str
-    detect: Callable[["FindingEstate"], tuple[Finding, ...]]
+    detect: Callable[[FindingEstate], tuple[Finding, ...]]
     # The precise action that resolves a finding of this rule by hand. Required:
     # a finding either offers an operation through the gated queue or says
     # exactly what to do. A finding may state a more specific one.

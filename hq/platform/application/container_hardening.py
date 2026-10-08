@@ -12,8 +12,6 @@ What HQ cannot write, because the answer is not in anything it read, is said
 as a reason instead, naming what is missing.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any, Mapping
 

@@ -21,8 +21,6 @@ validator: what the answer was derived from, then the second it stops holding.
 The header's count and a polled part share it.
 """
 
-from __future__ import annotations
-
 import hashlib
 import re
 import time

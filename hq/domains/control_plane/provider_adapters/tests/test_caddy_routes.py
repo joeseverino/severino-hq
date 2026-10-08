@@ -1,7 +1,5 @@
 """A Caddy route is one hostname and one upstream, never configuration of its own."""
 
-from __future__ import annotations
-
 from django.test import SimpleTestCase
 
 from hq.domains.control_plane.providers import validate_spec

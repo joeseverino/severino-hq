@@ -29,7 +29,7 @@ on:
           input instead of forking this file.
         required: false
         type: string
-        default: '["3.13", "3.14"]'
+        default: '["3.14"]'
 
 permissions:
   contents: read

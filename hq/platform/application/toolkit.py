@@ -10,8 +10,6 @@ reverse, is a silent hole rather than a failure. The strip, the routing, the
 default and the empty state all derive from one tuple.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from .integrations import integration_graph

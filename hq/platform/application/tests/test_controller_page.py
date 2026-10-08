@@ -1,7 +1,5 @@
 """The controller's own page: what HQ knows of it, from what it left behind."""
 
-from __future__ import annotations
-
 import os
 from datetime import timedelta
 from pathlib import Path

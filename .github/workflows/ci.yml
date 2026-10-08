@@ -132,7 +132,7 @@ jobs:
       fail-fast: false
       matrix:
         # `checks:badges` holds this to scripts/toolchain.env: a matrix cannot read it.
-        python: ["3.13", "3.14"]
+        python: ["3.14"]
     env:
       # `mise run tests` walks this list; a leg is one interpreter.
       TEST_PYTHONS: ${{ matrix.python }}

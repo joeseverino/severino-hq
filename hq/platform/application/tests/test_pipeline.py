@@ -1,7 +1,5 @@
 """The release pipeline's structure: what runs where, and what may publish."""
 
-from __future__ import annotations
-
 from contextlib import redirect_stderr, redirect_stdout
 import importlib.util
 import io

@@ -1,7 +1,5 @@
 """What changed, when, and what happened near it: one history, on the audit log."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model

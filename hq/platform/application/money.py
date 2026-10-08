@@ -11,8 +11,6 @@ imports ``hq_sdk`` and nothing else) could not reach it at all. A caller that
 re-derives the quantize with ``Decimal("0.01")`` gets the other rounding mode.
 """
 
-from __future__ import annotations
-
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 CENTS = Decimal("0.01")

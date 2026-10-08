@@ -1,7 +1,5 @@
 """An href built from data someone else wrote is a web address or nothing."""
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse

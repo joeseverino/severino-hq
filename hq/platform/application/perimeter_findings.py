@@ -1,7 +1,5 @@
 """Findings about a machine's edge: ports open to the internet, a perimeter nobody checked, a firewall that is not running, and reach nobody measured."""
 
-from __future__ import annotations
-
 from .finding_model import (
     THEN_CHECK_AGAIN,
     cannot_run_commands,

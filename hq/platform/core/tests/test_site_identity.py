@@ -1,7 +1,5 @@
 """What HQ can work out about its own deployment, it does."""
 
-from __future__ import annotations
-
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from hq.config.settings import site_host

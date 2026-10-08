@@ -10,8 +10,6 @@ opened in six months is a normal state, and a URL that quietly changed meaning
 is the failure this prevents.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass

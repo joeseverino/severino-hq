@@ -32,8 +32,6 @@ closest thing to the caller that HQ can prove, and anything further left is
 attacker-controlled text.
 """
 
-from __future__ import annotations
-
 from functools import lru_cache
 from ipaddress import ip_address, ip_network
 

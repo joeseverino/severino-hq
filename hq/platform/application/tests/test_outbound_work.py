@@ -7,8 +7,6 @@ call does as far as the rule can tell (``hq_sdk.testing.reaches_out``), so a
 request that reached it would be refused.
 """
 
-from __future__ import annotations
-
 import importlib
 import os
 from unittest import mock

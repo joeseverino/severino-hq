@@ -1,7 +1,5 @@
 """The tools page: a typed lookup is a GET, re-reading a stored answer a POST."""
 
-from __future__ import annotations
-
 from unittest import mock
 
 from django.contrib.auth import get_user_model

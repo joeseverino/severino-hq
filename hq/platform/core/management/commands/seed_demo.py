@@ -6,8 +6,6 @@ or doc_id). Safe to run on a fresh DB or one with existing data.
     python manage.py seed_demo
 """
 
-from __future__ import annotations
-
 from datetime import date, timedelta
 from decimal import Decimal
 

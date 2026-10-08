@@ -8,8 +8,6 @@ request; the tests below cover the document's own route and the contract
 client's refusals.
 """
 
-from __future__ import annotations
-
 import importlib.util
 import json
 from unittest import skipUnless

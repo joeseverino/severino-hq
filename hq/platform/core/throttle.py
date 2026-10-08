@@ -21,8 +21,6 @@ the passage of time alone. There is no unlock path to get stuck, and a
 restart cannot forget that an attack is in progress.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from django.conf import settings

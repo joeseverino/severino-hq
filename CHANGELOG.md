@@ -24,6 +24,9 @@ contracts are the public surface.
 
 ### Changed
 
+- HQ runs on Python 3.14 only: `requires-python`, `.python-version`, the test
+  matrix, the plugin-check default and the lint and type targets agree. Modules
+  use deferred annotations.
 - A Cloudflare "Authentication error" under HTTP 401 is a missing permission
   when the token still verifies, and a credential that read any kind is never
   reported as refused outright. Tailscale 403/404 on a scoped read is a missing

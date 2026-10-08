@@ -1,7 +1,5 @@
 """A domain's page says each thing once, in the owner's words."""
 
-from __future__ import annotations
-
 from types import SimpleNamespace
 
 from django.template.loader import render_to_string

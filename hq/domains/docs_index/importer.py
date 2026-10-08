@@ -21,8 +21,6 @@ and upserts DocumentationRecord rows. The Obsidian vault stays the source of
 truth: HQ tracks only metadata and relationships.
 """
 
-from __future__ import annotations
-
 from datetime import date, datetime
 from typing import Any, Iterable
 
@@ -244,7 +242,7 @@ def _legacy_content_slug_from_doc_id(doc_id: str) -> str:
 
 
 def _prune_legacy_content_item_for_record(
-    record: "DocumentationRecord",
+    record: DocumentationRecord,
     stats: dict,
 ) -> None:
     """Remove a stale mirrored ContentItem for records no longer in content."""
@@ -264,7 +262,7 @@ def _prune_legacy_content_item_for_record(
 
 
 def _upsert_content_item(
-    record: "DocumentationRecord",
+    record: DocumentationRecord,
     entry: dict,
     defaults: dict,
     stats: dict,

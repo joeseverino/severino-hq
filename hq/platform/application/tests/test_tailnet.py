@@ -10,8 +10,6 @@ Every pair on the operator's own tailnet is currently allowed (one owner, one
 admin group) so a refusal cannot be observed there and is built here.
 """
 
-from __future__ import annotations
-
 from django.test import TestCase
 from django.utils import timezone
 

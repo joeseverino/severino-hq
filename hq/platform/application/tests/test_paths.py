@@ -1,7 +1,5 @@
 """The request path: each hop from a reading, and a stated reason where none was read."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from ipaddress import ip_network
 from unittest import mock

@@ -10,8 +10,6 @@ Only the leaf certificate and its key move: the same pair that would otherwise
 be pasted into a provider's web form by hand. The root CA key stays where it is.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 

@@ -1,7 +1,5 @@
 """Application-level principals and capability enforcement."""
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -55,7 +53,7 @@ class Capability(StrEnum):
 INTERACTIVE_INTERFACES = frozenset({"web"})
 
 
-def is_interactive(principal: "Principal") -> bool:
+def is_interactive(principal: Principal) -> bool:
     """Whether this act is a person's, rather than a credential's."""
 
     return principal.interface in INTERACTIVE_INTERFACES

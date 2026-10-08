@@ -1,7 +1,5 @@
 """The audit log and one entry in it."""
 
-from __future__ import annotations
-
 from django.urls import reverse
 from django.views.generic import DetailView, ListView
 

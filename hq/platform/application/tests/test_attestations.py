@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from django.test import SimpleTestCase
 
 from ..attestations import CYCLONEDX, SLSA_V02, SLSA_V1, SPDX, github_source, packages_of, provenance_of, reduce

@@ -1,7 +1,5 @@
 """The admission layers: each independent control a request passed, read from what enforces it."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from django.conf import settings
 from django.utils.csp import CSP

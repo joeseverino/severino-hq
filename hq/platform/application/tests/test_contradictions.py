@@ -1,7 +1,5 @@
 """Where two connections disagree, each a finding with the fix HQ can offer."""
 
-from __future__ import annotations
-
 from django.test import TestCase
 from django.utils import timezone
 

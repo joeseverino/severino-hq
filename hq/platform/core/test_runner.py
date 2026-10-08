@@ -24,8 +24,6 @@ pickle its traceback and the real error is replaced by ``cannot pickle
 'traceback' object``. Use ``--parallel=1`` instead, or install it.
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import sys

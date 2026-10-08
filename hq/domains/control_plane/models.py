@@ -1,7 +1,5 @@
 """Desired state and operation queue; credentials live only in the controller."""
 
-from __future__ import annotations
-
 import uuid
 
 from django.conf import settings

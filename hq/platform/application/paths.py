@@ -17,8 +17,6 @@ it is served (``served_at``/``served_port``), or the machine alone where no
 name leads to it.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any

@@ -9,8 +9,6 @@ gets worse or its count changes, never because its wording moved, and setting
 one aside never touches another.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 from datetime import timedelta

@@ -1,7 +1,5 @@
 """Documentation synchronization use case shared by web, MCP, and CLI."""
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, replace
 from datetime import date

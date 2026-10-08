@@ -5,8 +5,6 @@ boundary used by web, Command Center, API, and MCP, so an external write cannot
 quietly acquire different validation or audit behavior in each adapter.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 

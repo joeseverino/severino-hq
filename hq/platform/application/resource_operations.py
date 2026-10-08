@@ -5,8 +5,6 @@ each is checked against the provider's policy, queued atomically and audited
 before the controller runs it.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any

@@ -29,8 +29,6 @@ the read stands is ``asks.read_standing``, which is how any asked-for read is
 followed. This decides when to ask and for what, and nothing about how.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime

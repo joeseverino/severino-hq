@@ -1,7 +1,5 @@
 """SQLite refreshes its planner statistics after a migration and nightly, never on a request."""
 
-from __future__ import annotations
-
 from io import StringIO
 from unittest.mock import patch
 

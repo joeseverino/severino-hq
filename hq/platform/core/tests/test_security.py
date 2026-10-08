@@ -6,8 +6,6 @@ from a declared proxy, an upload cannot choose its response type, are ones
 whose loss is invisible in review of the change that causes it.
 """
 
-from __future__ import annotations
-
 import re
 from types import SimpleNamespace
 from urllib.parse import urlsplit

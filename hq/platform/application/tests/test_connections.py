@@ -6,8 +6,6 @@ machine" or "which domain" is derived from that report, so an estate grows by
 being given a credential rather than by anything here being edited.
 """
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase

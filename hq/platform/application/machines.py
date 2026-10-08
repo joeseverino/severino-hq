@@ -12,8 +12,6 @@ it here, and a declaration is for the printer and the offline CA, which nothing
 will ever sweep and which are still part of the place.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -111,7 +109,7 @@ class Machine:
 
         return self.presence.public_addresses if self.presence is not None else ()
     # What the tailnet says about it, where the tailnet knows it at all.
-    presence: "Presence | None" = None
+    presence: Presence | None = None
 
     @property
     def url(self) -> str:

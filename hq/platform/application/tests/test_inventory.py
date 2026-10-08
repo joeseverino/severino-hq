@@ -6,8 +6,6 @@ the first reconciliation is a no-op. Otherwise adopting a proxy host would
 reset it to HQ's defaults (HSTS off, for one).
 """
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse

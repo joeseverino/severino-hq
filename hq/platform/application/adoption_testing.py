@@ -1,7 +1,5 @@
 """Connections for tests that exercise adoption."""
 
-from __future__ import annotations
-
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection

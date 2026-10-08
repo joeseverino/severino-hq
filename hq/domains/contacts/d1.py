@@ -9,8 +9,6 @@ without email or message); everything else is read from D1 when asked for.
 Uses only the standard library so HQ gains no new dependency.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 import json
 import urllib.error

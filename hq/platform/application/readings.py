@@ -5,8 +5,6 @@ again happens where waiting costs nobody: a request the browser makes after the
 page, or the write that changed the value.
 """
 
-from __future__ import annotations
-
 from datetime import datetime, timedelta, timezone as dt_timezone
 from typing import Any, Callable
 

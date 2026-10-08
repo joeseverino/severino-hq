@@ -1,7 +1,5 @@
 """Readings a controller takes of the machine it runs on and the edges it can see."""
 
-from __future__ import annotations
-
 import re
 from typing import Annotated, Any, Literal
 

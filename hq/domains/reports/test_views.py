@@ -1,7 +1,5 @@
 """Reports: every count opens the list it counts."""
 
-from __future__ import annotations
-
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model

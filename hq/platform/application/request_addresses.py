@@ -1,7 +1,5 @@
 """Every address the reader and HQ answer on, one row each, as the connection page lists them."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from hq.platform.core.network import split_host_port

@@ -1,7 +1,5 @@
 """Readings from the tailnet credential."""
 
-from __future__ import annotations
-
 from .contract import ObservationRecord, ObservationSpec, ReadingPart
 
 # The routes that make a device an exit node: everything, in both families.

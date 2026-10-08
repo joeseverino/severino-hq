@@ -3,8 +3,6 @@
 Idempotent: re-running with the same slug updates the existing record.
 """
 
-from __future__ import annotations
-
 import json
 from datetime import date
 from decimal import Decimal, InvalidOperation

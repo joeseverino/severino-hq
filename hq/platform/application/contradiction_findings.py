@@ -17,8 +17,6 @@ a node as a ``contradiction`` fact; the rules only read those facts, because
 deriving findings costs no query.
 """
 
-from __future__ import annotations
-
 import json
 import shlex
 from collections.abc import Iterable, Mapping

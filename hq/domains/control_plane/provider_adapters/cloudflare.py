@@ -1,7 +1,5 @@
 """Public DNS: the record-type registry, Cloudflare records and the zones they live in."""
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal, get_args

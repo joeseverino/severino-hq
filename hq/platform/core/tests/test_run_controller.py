@@ -1,7 +1,5 @@
 """The controller container: its isolation, the binary it runs, and the environment it reads."""
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 from unittest import skipUnless

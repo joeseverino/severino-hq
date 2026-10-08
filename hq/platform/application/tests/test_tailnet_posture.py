@@ -1,7 +1,5 @@
 """Tailnet posture findings, and port names on the policy page."""
 
-from __future__ import annotations
-
 from unittest import mock
 
 from django.contrib.auth import get_user_model

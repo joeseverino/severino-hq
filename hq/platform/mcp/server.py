@@ -1,7 +1,5 @@
 """Severino HQ MCP tool registration."""
 
-from __future__ import annotations
-
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 

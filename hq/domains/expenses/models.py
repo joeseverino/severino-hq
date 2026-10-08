@@ -1,7 +1,5 @@
 """Expenses."""
 
-from __future__ import annotations
-
 from decimal import Decimal
 
 from django.db import models

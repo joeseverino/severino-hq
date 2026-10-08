@@ -4,8 +4,6 @@ Derived from ``OBSERVATIONS`` at test time, so a reading registered with a new
 ``requires`` fails here until the checked-in list names it.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from django.conf import settings

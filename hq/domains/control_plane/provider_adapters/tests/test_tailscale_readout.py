@@ -1,7 +1,5 @@
 """The tailnet policy's summary counts what its document holds."""
 
-from __future__ import annotations
-
 import json
 
 from django.test import SimpleTestCase

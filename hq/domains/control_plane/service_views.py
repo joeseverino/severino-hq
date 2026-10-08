@@ -1,7 +1,5 @@
 """Services: the catalogue, one service's page, publishing a new one, and the favourites order."""
 
-from __future__ import annotations
-
 from functools import cached_property
 
 from django.contrib import messages

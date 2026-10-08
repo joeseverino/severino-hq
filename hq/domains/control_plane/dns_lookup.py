@@ -15,8 +15,6 @@ already checked is a hostname or an address. No credential travels with it,
 which is what makes the call acceptable here rather than controller work.
 """
 
-from __future__ import annotations
-
 import json
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit

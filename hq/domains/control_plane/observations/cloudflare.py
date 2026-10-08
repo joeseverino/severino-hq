@@ -6,8 +6,6 @@ drops them. A part a reading could not read is declared in its ``parts`` and
 stored as a part refusal, never in a record.
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from typing import Any
 

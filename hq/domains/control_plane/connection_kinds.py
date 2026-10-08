@@ -1,7 +1,5 @@
 """What each kind of connection is called, and how its credential can be held."""
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from types import MappingProxyType
 

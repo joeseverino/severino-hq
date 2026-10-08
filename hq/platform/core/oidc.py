@@ -1,7 +1,5 @@
 """Pocket ID / OIDC authentication integration."""
 
-from __future__ import annotations
-
 from django.conf import settings
 from django.contrib.auth import BACKEND_SESSION_KEY, get_user_model
 from django.core.exceptions import PermissionDenied, SuspiciousOperation

@@ -19,9 +19,8 @@ request, with a ``Progress`` to say what it is doing, the subject it was asked
 about and the principal that asked.
 """
 
-from __future__ import annotations
-
 import inspect
+from annotationlib import Format
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache
@@ -100,7 +99,7 @@ def validate(work: object) -> OutboundWork:
     if work.refuse is not None and not callable(work.refuse):
         raise ImproperlyConfigured(f"Outbound work {work.name!r} refuse is not callable.")
     try:
-        inspect.signature(work.run).bind(None, subject="", principal=None)
+        inspect.signature(work.run, annotation_format=Format.STRING).bind(None, subject="", principal=None)
     except TypeError as exc:
         raise ImproperlyConfigured(
             f"Outbound work {work.name!r} must be run(progress, *, subject, principal)."

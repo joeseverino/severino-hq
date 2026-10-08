@@ -18,8 +18,6 @@ Adding a rule to a model with rows is a migration that fails if a row breaks
 it. ``manage.py constraint_preflight`` counts those rows first, reading only.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from django.core.exceptions import ValidationError

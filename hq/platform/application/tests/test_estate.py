@@ -1,7 +1,5 @@
 """The estate on the surfaces an operator opens first: search, dashboard, queue."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from ipaddress import ip_network
 from unittest import mock

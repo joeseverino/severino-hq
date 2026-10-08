@@ -1,7 +1,5 @@
 """The suite's output shows a test's logs when that test fails, and only then."""
 
-from __future__ import annotations
-
 import io
 import logging
 import unittest

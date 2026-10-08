@@ -1,7 +1,5 @@
 """The endpoint browsers report Content Security Policy violations to."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 import json
 

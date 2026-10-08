@@ -5,8 +5,6 @@ time the same way. ``hq_sdk.ui`` hands these to extensions, and
 ``core.templatetags.value_tags`` owns the one filter that puts them in a page.
 """
 
-from __future__ import annotations
-
 from .timestamps import moment
 
 

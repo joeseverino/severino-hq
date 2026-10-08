@@ -5,8 +5,6 @@ these prove the resolvers rather than the template: what a machine can say about
 its own names, and what it correctly refuses to say.
 """
 
-from __future__ import annotations
-
 from datetime import timedelta
 from types import SimpleNamespace
 

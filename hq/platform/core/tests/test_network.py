@@ -1,7 +1,5 @@
 """The strict Host parse a fail-closed boundary uses."""
 
-from __future__ import annotations
-
 from django.test import SimpleTestCase
 
 from hq.platform.core.network import strict_host

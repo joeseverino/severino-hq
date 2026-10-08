@@ -1,7 +1,5 @@
 """Thin MCP adapters over HQ's canonical application services and safe queries."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from hq.platform.application.dashboard import operating_snapshot

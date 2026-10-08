@@ -1,7 +1,5 @@
 """Who the session says the reader is, and which provider vouched for it."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime
 from django.conf import settings

@@ -11,8 +11,6 @@ Nothing here may stop a sign-in. A picture that cannot be fetched is a picture
 that is not shown.
 """
 
-from __future__ import annotations
-
 import hashlib
 import logging
 from datetime import datetime, timedelta

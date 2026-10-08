@@ -4,8 +4,6 @@ Receipt files are stored OUTSIDE the app and are never exposed via the public
 media URL. The ``ReceiptFileView`` streams the file only to authenticated users.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from django.contrib import messages

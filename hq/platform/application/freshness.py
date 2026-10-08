@@ -8,8 +8,6 @@ with no newer reading, so a surface says it is out of date. Nothing else
 decides either.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 

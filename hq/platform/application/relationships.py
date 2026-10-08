@@ -7,8 +7,6 @@ node stands and ordered by ``topology.relation_rank``. Nothing here derives a
 relationship: an edge is either in the graph or not on the page.
 """
 
-from __future__ import annotations
-
 import json
 from dataclasses import dataclass
 from datetime import datetime
@@ -96,7 +94,7 @@ class Relationships:
         found = self.group(phrase)
         return tuple(item.entity.label for item in found.items) if found else ()
 
-    def without(self, *phrases: str) -> "Relationships":
+    def without(self, *phrases: str) -> Relationships:
         """The same answer less the groups a page already renders elsewhere."""
 
         return Relationships(

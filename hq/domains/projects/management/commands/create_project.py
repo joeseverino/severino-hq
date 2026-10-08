@@ -3,8 +3,6 @@
 Idempotent: re-running with the same slug updates the existing record.
 """
 
-from __future__ import annotations
-
 import json
 
 from django.core.management.base import BaseCommand

@@ -7,8 +7,6 @@ declares. Nothing here calls a registry: "behind" means behind the image
 already pulled onto the machine.
 """
 
-from __future__ import annotations
-
 import shlex
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace

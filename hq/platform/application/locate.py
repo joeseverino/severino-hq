@@ -20,8 +20,6 @@ splits ``2001:db8::1`` into ``2001:db8:`` and ``1``. ``core.network`` parses
 them correctly for the trusted-proxy gate; this reads endpoints through it.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any

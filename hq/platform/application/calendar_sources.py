@@ -7,8 +7,6 @@ the estate is due is one answer whatever window is asked, and what happened is
 one per window.
 """
 
-from __future__ import annotations
-
 from collections import Counter
 from datetime import date, datetime, time, timedelta
 from typing import Any

@@ -10,8 +10,6 @@ Checked against the GitHub App's own reading (``github_estate``), so nothing
 here asks GitHub anything, and a check HQ cannot read says so.
 """
 
-from __future__ import annotations
-
 import json
 import shlex
 from datetime import timedelta

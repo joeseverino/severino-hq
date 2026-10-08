@@ -10,8 +10,6 @@ image, so inside the image these are skipped and the suite runs them on every
 interpreter in the CI matrix.
 """
 
-from __future__ import annotations
-
 import importlib.util
 import string
 import tempfile

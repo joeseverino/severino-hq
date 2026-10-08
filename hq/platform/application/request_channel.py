@@ -1,7 +1,5 @@
 """How a request reached HQ: the channel it arrived on, and the client address the forwarded chain proves."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from hq.platform.core.network import client_ip, is_trusted_proxy, split_host_port

@@ -11,8 +11,6 @@ twice, and no em dash or count that disagrees with its noun ("1 resources",
 "account(s)") in what it says.
 """
 
-from __future__ import annotations
-
 import re
 from io import StringIO
 from collections import deque

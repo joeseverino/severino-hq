@@ -12,8 +12,6 @@ The contract is the MCP tool surface itself, so the two cannot drift:
 A tool that fails writes its message to stderr and exits non-zero.
 """
 
-from __future__ import annotations
-
 import json
 import sys
 

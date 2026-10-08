@@ -1,7 +1,5 @@
 """Findings about domain registrations that are about to lapse."""
 
-from __future__ import annotations
-
 from datetime import timezone as dt_timezone
 
 from .expiry import days_until
